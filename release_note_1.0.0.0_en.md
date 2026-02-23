@@ -1,8 +1,8 @@
-## CollabTrans 1.0.0.0 – Desktop Edition Initial Release
+## Owlangs 1.0.0.0 – Desktop Edition Initial Release
 
 ### Overview (Desktop)
 
-CollabTrans 1.0.0.0 is the first official desktop release based on Owlangs, positioned as a “what-you-see-is-what-you-get translation workbench”. It supports local installation and connects to your own large language model accounts, targeting individual users and small teams that need high‑quality document translation with faithful layout preservation. This release focuses only on the core capabilities of the desktop Standard / Pro editions and does **not** cover the enterprise Web edition.
+Owlangs 1.0.0.0 is the first official desktop release based on Owlangs, positioned as a “what-you-see-is-what-you-get translation workbench”. It supports local installation and connects to your own large language model accounts, targeting individual users and small teams that need high‑quality document translation with faithful layout preservation. This release focuses only on the core capabilities of the desktop Standard / Pro editions and does **not** cover the enterprise Web edition.
 
 ### Core Features of the Desktop Edition
 
@@ -51,4 +51,5 @@ CollabTrans 1.0.0.0 is the first official desktop release based on Owlangs, posi
 
 - **Scope of this release**: Initial launch of core features for the desktop Standard and Pro editions  
 - **Enterprise Web edition**: Multi-user collaboration, domain account integration, and other enterprise features will be released separately as part of the Enterprise edition  
+
 
