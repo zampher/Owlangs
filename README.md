@@ -52,6 +52,34 @@ Owlangs is positioned as a “what-you-see-is-what-you-get translation workbench
 - Business and technical users who must preserve formatting in contracts, technical agreements, and multi-format technical documents  
 - Individual users or small teams who occasionally need to translate large documents but do not want to subscribe to expensive online services  
 
+
+### Edition Comparison
+
+Three editions are available. Differences are summarized below. All editions have no usage caps (e.g. no page or request limits); restrictions are by edition (which formats and which frontend are available).
+
+| Dimension | Standard | Pro | Team |
+|-----------|-------|-----|------|
+| Frontend | Windows desktop | Windows desktop | Web |
+| PDF | ✓ | ✓ | ✓ |
+| DOCX | ✓ | ✓ | ✓ |
+| PNG / JPG / JPEG | ✓ | ✓ | ✓ |
+| TXT | ✓ | ✓ | ✓ |
+| MD | ✓ | ✓ | ✓ |
+| HTML | ✓ | ✓ | ✓ |
+| SRT | ✓ | ✓ | ✓ |
+| PPTX | | ✓ | ✓ |
+| XLSX / CSV | | ✓ | ✓ |
+| EPUB | | ✓ | ✓ |
+| MOBI | | ✓ | ✓ |
+| JSON | | ✓ | ✓ |
+| TS (Qt) | | ✓ | ✓ |
+| PDF workflow: Export DOCX with formulas | ✓ | ✓ | ✓ |
+| Translation usage | Not limited | Not limited | Not limited |
+| User / login | | | ✓ |
+
+
+
 Contact Email: zampher@163.com
 用户交流群：微信
-<img width="756" height="743" alt="wechat" src="https://github.com/user-attachments/assets/85d4277e-9db3-4a49-9ee8-456ed889d245" />
+<img style="max-width: 350px; height: auto;" alt="wechat" src="https://github.com/user-attachments/assets/85d4277e-9db3-4a49-9ee8-456ed889d245" />
+
