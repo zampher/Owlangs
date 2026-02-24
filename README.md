@@ -5,7 +5,8 @@ Owlangs Document Translation
 
 Owlangs is positioned as a “what-you-see-is-what-you-get translation workbench”. It supports local installation and connects to your own large language model accounts, targeting individual users and small teams that need high‑quality document translation with faithful layout preservation. This release focuses only on the core capabilities of the desktop Standard / Pro editions and does **not** cover the enterprise Web edition.
 
-<img width="1279" height="761" alt="Translate2" src="https://github.com/user-attachments/assets/fc71a579-0d2d-4ed1-a970-2e2004ede1af" />
+
+![Translate2](https://github.com/user-attachments/assets/04c38025-9d6c-4bc7-851b-d19a0517bb38)
 
 
 ### Core Features of the Desktop Edition
@@ -50,3 +51,7 @@ Owlangs is positioned as a “what-you-see-is-what-you-get translation workbench
 - Researchers and engineers who need high-quality translations of academic papers and technical white papers  
 - Business and technical users who must preserve formatting in contracts, technical agreements, and multi-format technical documents  
 - Individual users or small teams who occasionally need to translate large documents but do not want to subscribe to expensive online services  
+
+Contact Email: zampher@163.com
+用户交流群：微信
+<img width="756" height="743" alt="wechat" src="https://github.com/user-attachments/assets/85d4277e-9db3-4a49-9ee8-456ed889d245" />
