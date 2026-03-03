@@ -1,3 +1,33 @@
+## Owlangs 1.1.0.0
+
+### New Features:
+1. Added target language for translation: Traditional Chinese.
+2. Supports UI text language switching, supporting (English, Chinese, Japanese, Korean).
+3. Automatically checks for new versions. When a new version is available, displays version information and changelog on the software's homepage.
+4. Added three buttons in the document extraction exclusion management panel:
+- **"Exclude All"**: Sets all text to not be translated. After clicking translate, all segments will be skipped. It can be used with the export function to achieve original format conversion, such as PDF to DOCX.
+- **"Restore Auto-Exclusion"**: Resets user operations, restoring the exclusion state to automatic recognition.
+- **"Clear All Exclusions"**: Clears all "exclusion" marks except for images, so all text will be processed for translation. A side effect is that there may be recognition errors in identifying failed text segment translations.
+5. Supports ARB (JSON) document format (Pro version).
+6. Supports local large language model deployment via Ollama and OpenAI interfaces (Pro version).
+
+### Optimizations:
+1. Optimized LaTeX formula conversion to Word format, can recognize LaTeX formulas within mixed text, increasing conversion success rate.
+2. AI Platform connection test, the orange-red color of prompts was easily misunderstood, optimized the display style.
+3. Optimized software layout for high resolutions.
+4. Optimized identifier recognition, no longer identifying all-uppercase words as identifiers.
+
+### Bug Fixes:
+1. Software failed to start when the installation path contained East Asian characters.
+2. After completing translation, entering Settings and then returning to the homepage, clicking download failed.
+3. PDF translation process, when exporting to docx format, if there is text before an image, the output image becomes text format.
+4. Translation processes created before initially configuring the MinerU or LLM KEY could not be used after configuring the key. Required recreating the process or restarting the software.
+5. When language identification was not excluded during the text extraction stage, many Chinese characters (some containing Japanese) were excluded from translation after translation, causing some segments to remain untranslated.
+
+### Known Issues:
+1. In PDFs, when multiple formulas are mixed within a single paragraph, some formulas are not recognized.
+2. For PDFs with double-column or multi-column formatted literature, a few paragraphs have incorrect order.
+
 ## Owlangs 1.0.0.0 – Desktop Edition Initial Release
 
 ### Overview (Desktop)
