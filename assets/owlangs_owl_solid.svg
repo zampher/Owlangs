@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="256"
+   height="256"
+   viewBox="0 0 256 256"
+   version="1.1"
+   id="svg10"
+   sodipodi:docname="owlangs_owl_solid.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   inkscape:export-filename="owlangs_owl_solid.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs10">
+    <linearGradient
+       id="linearGradient1"
+       inkscape:swatch="gradient">
+      <stop
+         style="stop-color:#1976d2;stop-opacity:1;"
+         offset="0"
+         id="stop1" />
+      <stop
+         style="stop-color:#1976d2;stop-opacity:0;"
+         offset="1"
+         id="stop2" />
+    </linearGradient>
+  </defs>
+  <sodipodi:namedview
+     id="namedview10"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="4.2929689"
+     inkscape:cx="93.059141"
+     inkscape:cy="127.30118"
+     inkscape:window-width="2560"
+     inkscape:window-height="1494"
+     inkscape:window-x="-11"
+     inkscape:window-y="2149"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg10" />
+  <style
+     id="style1">
+    .s { stroke: #1976D2; stroke-width: 10; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .sf { fill: #1976D2; }
+  </style>
+  <!-- Owl head (semi-circle with thicker line, equivalent to two lines) -->
+  <path
+     d="m 36.793113,66.701712 q 92.251467,-83.817198 184.502947,0"
+     class="s"
+     id="path1"
+     style="stroke-width:20"
+     inkscape:highlight-color="#f7e95d" />
+  <!-- Owl face mask -->
+  <!-- Eyes -->
+  <ellipse
+     cx="96.756569"
+     cy="93.327751"
+     class="s"
+     id="circle2"
+     rx="27.675442"
+     ry="27.939064" />
+  <ellipse
+     cx="161.3326"
+     cy="93.327751"
+     class="s"
+     id="circle3"
+     rx="27.675442"
+     ry="27.939064" />
+  <!-- Pupils (small solid dots) -->
+  <ellipse
+     cx="96.756569"
+     cy="93.327751"
+     class="sf"
+     id="circle4"
+     rx="9.2251472"
+     ry="9.3130208"
+     style="stroke-width:1.15862" />
+  <ellipse
+     cx="161.3326"
+     cy="93.327751"
+     class="sf"
+     id="circle5"
+     rx="9.2251472"
+     ry="9.3130208"
+     style="stroke-width:1.15862" />
+  <!-- Beak (sharp triangle - hollow) -->
+  <path
+     d="m 110.90907,119.16124 18.40413,19.23406 18.40412,-19.23406 z"
+     class="s"
+     id="path5"
+     style="stroke-width:4.018;fill:none;fill-opacity:1;stroke-dasharray:none" />
+  <!-- Body outline (minimal) -->
+  <path
+     d="M 64.468555,97.984264 Q 55.243408,149.20588 87.531423,181.80147"
+     class="s"
+     id="path6" />
+  <path
+     d="m 193.62062,97.984264 q 9.22514,51.221616 -23.06288,83.817206"
+     class="s"
+     id="path7" />
+  <!-- Body fill (solid) -->
+  <path
+     d="m 60.149764,139.67081 q -9.924035,29.28844 24.587383,47.99208 l 88.831743,0.14262 q 34.57995,-18.59273 24.7636,-47.91285 z"
+     class="sf"
+     id="body_fill"
+     style="fill:#FFB74D;fill-opacity:1;stroke-width:0.782378" />
+  <!-- Left leg and claws -->
+  <path
+     d="M 87.531423,181.80147 82.91885,195.771"
+     class="s"
+     id="leg_left" />
+  <path
+     d="M 82.91885,195.771 H 75.999989"
+     class="s"
+     id="claw_left1" />
+  <!-- Right leg and claws -->
+  <path
+     d="m 170.55774,181.80147 4.61258,13.96953"
+     class="s"
+     id="leg_right"
+     sodipodi:nodetypes="cc" />
+  <path
+     d="m 175.17032,195.771 h 6.91886"
+     class="s"
+     id="claw_right1" />
+  <!-- Mortarboard tassel (adds asymmetry) -->
+  <path
+     d="m 202,54 12,3 -1.8,32"
+     class="s"
+     id="tassel_line"
+     style="stroke-width:8" />
+  <path
+     d="m 210.3,91.5 6.5,9 -11,2 z"
+     class="sf"
+     id="tassel_knot" />
+  <!-- Document lines (three solid lines) -->
+  <path
+     d="M 55.243408,195.771 H 202.84576"
+     class="s"
+     id="path8"
+     sodipodi:nodetypes="cc" />
+  <path
+     d="M 55.243408,214.39704 H 202.84576"
+     class="s"
+     id="path9"
+     sodipodi:nodetypes="cc"
+     style="stroke-width:20;stroke-dasharray:none" />
+  <path
+     d="M 55.243408,233.02308 H 202.84576"
+     class="s"
+     id="path10" />
+</svg>
