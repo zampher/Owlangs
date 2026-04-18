@@ -4955,6 +4955,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         _showSnackBar('Translation failed: $e', Colors.red);
       }
     } finally {
+      notifier.setTranslating(false);
       notifier.setCurrentOperation(TranslationOperation.none);
     }
   }

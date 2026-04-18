@@ -64,6 +64,34 @@ ALLOWED_DOWNLOAD_TYPES_PDF = ("docx", "html", "md", "pdf")  # markdown_based whe
 _LANG_NORMALIZE = {"zh-cn": "zh", "zh-tw": "zh", "no": "nb"}
 
 
+def _strip_lang_detect_status_downgrade(
+    task_manager_ref: Any,
+    task_id: str,
+    updates: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Language-detection workers emit progress/status='processing'. Draining those updates into
+    task_manager must not downgrade a task that already reached a terminal status (e.g. translation
+    completed), otherwise the frontend poll loop never observes status=='completed'.
+    """
+    if not updates:
+        return updates
+    ts = task_manager_ref.get_task(task_id) or {}
+    cur = str(ts.get("status") or "").lower()
+    if cur not in ("completed", "failed", "cancelled"):
+        return updates
+    new_status = str(updates.get("status") or "").lower()
+    if new_status != "processing":
+        return updates
+    out = {k: v for k, v in updates.items() if k != "status"}
+    logger.debug(
+        LogModule.WORKFLOW,
+        f"[STATUS] Task {task_id}: preserving terminal status={cur}; omitted lang-detect "
+        f"status downgrade (had progress/message keys={list(out.keys())})",
+    )
+    return out
+
+
 def _language_detection_fallback_langdetect_only(
     segments: List[str],
     total_segments: int,
@@ -516,7 +544,10 @@ class StatusService:
                         if msg_filtered:
                             self.task_manager.update_task(task_id, msg_filtered)
                     else:
-                        self.task_manager.update_task(task_id, msg)
+                        merged = _strip_lang_detect_status_downgrade(
+                            self.task_manager, task_id, msg
+                        )
+                        self.task_manager.update_task(task_id, merged)
             task_state = self.task_manager.get_task(task_id)
 
         if task_state is None:
@@ -936,7 +967,10 @@ class StatusService:
                                         if filtered:
                                             task_manager_ref.update_task(task_id, filtered)
                                     else:
-                                        task_manager_ref.update_task(task_id, result)
+                                        merged = _strip_lang_detect_status_downgrade(
+                                            task_manager_ref, task_id, result
+                                        )
+                                        task_manager_ref.update_task(task_id, merged)
                                     if result.get("recommended_language"):
                                         task_manager_ref.update_task(
                                             task_id, {"detected_language": result["recommended_language"]}
