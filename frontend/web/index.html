@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <!-- v8BreakIterator Polyfill for Safari/Firefox compatibility -->
+  <!-- Must be loaded before Flutter to prevent v8BreakIterator errors -->
+  <script>
+    (function() {
+      if (typeof Intl === 'undefined') {
+        window.Intl = {};
+      }
+      if (!Intl.v8BreakIterator) {
+        console.log('[POLYFILL] Adding Intl.v8BreakIterator for Safari/Firefox');
+        Intl.v8BreakIterator = function(locale) {
+          this.locale = locale || 'en';
+          this.text = '';
+          this.pos = 0;
+        };
+        Intl.v8BreakIterator.prototype.adoptText = function(text) {
+          this.text = String(text || '');
+          this.pos = 0;
+        };
+        Intl.v8BreakIterator.prototype.first = function() {
+          this.pos = 0;
+          return 0;
+        };
+        Intl.v8BreakIterator.prototype.next = function() {
+          if (this.pos >= this.text.length) return -1;
+          var remaining = this.text.substring(this.pos);
+          var match = remaining.match(/^[\s\n\r\t]+|^[-,.;:!?()[\]{}'"\/\\]+|^./);
+          if (match) {
+            this.pos += match[0].length;
+            return this.pos;
+          }
+          this.pos++;
+          return this.pos;
+        };
+        Intl.v8BreakIterator.prototype.current = function() {
+          return this.pos;
+        };
+        Intl.v8BreakIterator.prototype.breakType = function() {
+          return 'word';
+        };
+      }
+    })();
+  </script>
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Owlangs - Cross-platform document translation application">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Owlangs">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/x-icon" href="favicon.ico"/>
+
+  <title>Owlangs</title>
+  <link rel="manifest" href="manifest.json">
+  
+  <!-- CSP: Allow Flutter CanvasKit (gstatic), Google Fonts, CDN, and local backend for HTML preview -->
+  <!-- Note: frame-ancestors must be set via HTTP header, not meta tag -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' http://localhost:8800 http://127.0.0.1:8800 https://www.gstatic.com https://s4.zstatic.net https://cdn.jsdelivr.net;
+    style-src 'self' 'unsafe-inline' http://localhost:8800 http://127.0.0.1:8800 https://fonts.googleapis.com https://s4.zstatic.net;
+    img-src 'self' data: blob:;
+    font-src 'self' data: 'unsafe-inline' http://localhost:8800 http://127.0.0.1:8800 https://fonts.gstatic.com;
+    connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* wss: https: https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net;
+    worker-src 'self' blob: https://cdn.jsdelivr.net;
+    frame-src 'self' blob:;
+    media-src 'self';
+    object-src 'none';
+    base-uri 'self';
+    form-action 'self'
+  ">
+  
+  <!-- Google Fonts CSS removed - using local fonts from assets/fonts/ instead -->
+  <!-- This prevents Flutter from trying to load dynamic subset fonts from Google Fonts -->
+  
+  <!-- Font loading using Flutter official mechanism (pubspec.yaml + FontManifest.json) -->
+  <!-- CSS fallback for better CJK character support -->
+  <style>
+    /* System font fallback - Flutter will use fonts from FontManifest.json */
+    html, body {
+      font-family: 'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', 'SimHei', 
+                   'Malgun Gothic', '맑은 고딕', /* Korean fonts */
+                   -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    }
+    
+    /* Force Flutter elements to use system fonts for better CJK support */
+    flt-glass-pane, flt-scene-host, flt-scene, [data-flt-renderer],
+    flt-glass-pane *, flt-scene-host *, flt-scene *, [data-flt-renderer] * {
+      font-family: 'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', 'SimHei', 
+                   'Malgun Gothic', '맑은 고딕', /* Korean fonts */
+                   -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif !important;
+    }
+    
+    /* Map Noto Sans KR to local font file - use actual font from assets/fonts/ */
+    /* Note: Fonts are now in fonts/ directory, which Flutter Web copies to assets/fonts/ */
+    /* This ensures Korean text displays using the local NotoSansKR-Regular.ttf file */
+    @font-face {
+      font-family: 'Noto Sans KR';
+      src: url('assets/fonts/NotoSansKR-Regular.ttf') format('truetype'),
+           local('Malgun Gothic'), local('맑은 고딕'), 
+           local('Apple SD Gothic Neo'), local('Dotum'), local('돋움'), 
+           local('Gulim'), local('굴림'), 
+           local('Segoe UI'), local('Arial');
+      font-display: swap;
+      unicode-range: U+AC00-D7AF, U+1100-11FF, U+3130-318F, U+A960-A97F, U+D7B0-D7FF;
+    }
+    
+    /* Map Noto Sans SC to local font file - use actual font from assets/fonts/ */
+    /* Note: Fonts are now in fonts/ directory, which Flutter Web copies to assets/fonts/ */
+    @font-face {
+      font-family: 'Noto Sans SC';
+      src: url('assets/fonts/NotoSansSC-Regular.ttf') format('truetype'),
+           local('Microsoft YaHei'), local('PingFang SC'), local('SimHei'), 
+           local('Microsoft JhengHei'), local('Segoe UI'), local('Arial');
+      font-display: swap;
+      unicode-range: U+4E00-9FFF, U+3400-4DBF, U+20000-2A6DF, U+2A700-2B73F, U+2B740-2B81F, U+2B820-2CEAF, U+F900-FAFF, U+2F800-2FA1F;
+    }
+    
+    /* Noto Sans HK - Hong Kong Traditional Chinese; use local bundle to avoid network fetch (CanvasKit crash) */
+    @font-face {
+      font-family: 'Noto Sans HK';
+      src: url('assets/fonts/NotoSansHK-Regular.otf') format('opentype'),
+           local('Microsoft JhengHei'), local('PingFang TC'), local('Segoe UI'), local('Arial');
+      font-display: swap;
+      unicode-range: U+4E00-9FFF, U+3400-4DBF, U+20000-2A6DF, U+2F800-2FA1F;
+    }
+    /* Noto Sans JP - Japanese; bundled locally to avoid CDN downloads (CanvasKit crash) */
+    @font-face {
+      font-family: 'Noto Sans JP';
+      src: url('assets/fonts/NotoSansJP-Regular.otf') format('opentype'),
+           local('Yu Gothic Medium'), local('Yu Gothic'), local('游ゴシック Medium'), local('游ゴシック'), 
+           local('Meiryo'), local('メイリオ'), local('MS PGothic'), local('MS ゴシック'), 
+           local('Hiragino Sans'), local('Segoe UI'), local('Arial');
+      font-display: swap;
+      unicode-range: U+3040-309F, U+30A0-30FF, U+FF00-FFEF, U+4E00-9FFF, U+3400-4DBF, U+20000-2A6DF;
+    }
+    
+    /* Fix iframe z-index issue: Ensure preview iframes have lower z-index than dialogs */
+    /* Flutter Web's HtmlElementView creates flt-platform-view elements that may appear above dialogs */
+    flt-platform-view {
+      z-index: 1 !important;
+      position: relative !important;
+    }
+    
+    /* Ensure Flutter dialogs and overlays have higher z-index */
+    /* Flutter's Material dialog uses z-index around 1000-2000 */
+    .flutter-view,
+    [role="dialog"],
+    .overlay {
+      z-index: 2000 !important;
+    }
+    
+    /* Ensure preview iframes can be controlled via pointer-events */
+    iframe[data-preview-iframe="true"],
+    iframe[id*="unified_preview_iframe_"],
+    iframe[id*="html_preview_"],
+    iframe[id*="html_content_preview_"] {
+      z-index: 1 !important;
+      position: relative !important;
+    }
+  </style>
+  
+  <!-- Define formatLog globally so it is available in all inline scripts (avoid ReferenceError if script order changes) -->
+  <script>
+    function formatLog(level, tag, message, data) {
+      var now = new Date();
+      var timestamp = now.toISOString().replace('T', ' ').substring(0, 23);
+      var logMessage = '[' + timestamp + '] [' + level + '] [' + tag + '] ' + message;
+      if (data) {
+        return { message: logMessage, ...data };
+      }
+      return logMessage;
+    }
+  </script>
+  <script>
+    // Smart font loading: Try local fonts first, fallback to network fonts if needed
+    // This allows Flutter to use local fonts from assets/fonts/, but falls back to Google Fonts if local fonts fail
+    (function() {
+      'use strict';
+      
+      // formatLog is defined in a preceding script block (global) for reliable reference
+      
+      // Map of local font files and their expected paths
+      const localFontPaths = {
+        'Noto Sans SC': 'assets/fonts/NotoSansSC-Regular.ttf',
+        'Noto Sans KR': 'assets/fonts/NotoSansKR-Regular.ttf',
+        'Noto Sans HK': 'assets/fonts/NotoSansHK-Regular.otf',
+        'Noto Sans JP': 'assets/fonts/NotoSansJP-Regular.otf',
+        'Noto Sans': 'assets/fonts/NotoSans-Regular.ttf',
+        'Noto Sans Arabic': 'assets/fonts/NotoSansArabic-Regular.ttf',
+        'Noto Sans Bengali': 'assets/fonts/NotoSansBengali-Regular.ttf',
+        'Noto Sans Devanagari': 'assets/fonts/NotoSansDevanagari-Regular.ttf',
+        'Noto Sans Hebrew': 'assets/fonts/NotoSansHebrew-Regular.ttf',
+        'Noto Sans Thai': 'assets/fonts/NotoSansThai-Regular.ttf',
+        'Noto Sans Khmer': 'assets/fonts/NotoSansKhmer-Regular.ttf',
+        'Noto Color Emoji': 'assets/fonts/NotoColorEmoji.ttf',
+        'Noto Sans Symbols': 'assets/fonts/NotoSansSymbols-Regular.ttf',
+        'Roboto': 'assets/fonts/Roboto-Regular.woff2'
+      };
+      
+      // Helper to check if a font family has local font available and return info object
+      function hasLocalFont(fontUrl) {
+        if (!fontUrl || typeof fontUrl !== 'string') return null;
+        
+        let fontFamily = null;
+        let expectedLocalPath = null;
+        
+        // Check if this is a request for a font we have locally.
+        // IMPORTANT: Match specific font names BEFORE the generic 'notosans' catch-all
+        // so NotoSansJP, NotoSansArabic, etc. are not swallowed by the base Noto Sans entry.
+        const lowerUrl = fontUrl.toLowerCase();
+        if (lowerUrl.includes('notosanssc') || lowerUrl.includes('noto-sans-sc') || lowerUrl.includes('notosanscjksc')) {
+          fontFamily = 'Noto Sans SC';
+          expectedLocalPath = localFontPaths['Noto Sans SC'];
+        } else if (lowerUrl.includes('notosanskr') || lowerUrl.includes('noto-sans-kr') || lowerUrl.includes('notosanscjkkr')) {
+          fontFamily = 'Noto Sans KR';
+          expectedLocalPath = localFontPaths['Noto Sans KR'];
+        } else if (lowerUrl.includes('notosanshk') || lowerUrl.includes('noto-sans-hk') || lowerUrl.includes('notosanscjkhk')) {
+          fontFamily = 'Noto Sans HK';
+          expectedLocalPath = localFontPaths['Noto Sans HK'];
+        } else if (lowerUrl.includes('notosansjp') || lowerUrl.includes('noto-sans-jp') || lowerUrl.includes('notosanscjkjp')) {
+          fontFamily = 'Noto Sans JP';
+          expectedLocalPath = localFontPaths['Noto Sans JP'];
+        } else if (lowerUrl.includes('notosansarabic') || lowerUrl.includes('noto-sans-arabic')) {
+          fontFamily = 'Noto Sans Arabic';
+          expectedLocalPath = localFontPaths['Noto Sans Arabic'];
+        } else if (lowerUrl.includes('notosansbengali') || lowerUrl.includes('noto-sans-bengali')) {
+          fontFamily = 'Noto Sans Bengali';
+          expectedLocalPath = localFontPaths['Noto Sans Bengali'];
+        } else if (lowerUrl.includes('notosansdevanagari') || lowerUrl.includes('noto-sans-devanagari')) {
+          fontFamily = 'Noto Sans Devanagari';
+          expectedLocalPath = localFontPaths['Noto Sans Devanagari'];
+        } else if (lowerUrl.includes('notosanshebrew') || lowerUrl.includes('noto-sans-hebrew')) {
+          fontFamily = 'Noto Sans Hebrew';
+          expectedLocalPath = localFontPaths['Noto Sans Hebrew'];
+        } else if (lowerUrl.includes('notosansthai') || lowerUrl.includes('noto-sans-thai')) {
+          fontFamily = 'Noto Sans Thai';
+          expectedLocalPath = localFontPaths['Noto Sans Thai'];
+        } else if (lowerUrl.includes('notosanskhmer') || lowerUrl.includes('noto-sans-khmer')) {
+          fontFamily = 'Noto Sans Khmer';
+          expectedLocalPath = localFontPaths['Noto Sans Khmer'];
+        } else if (lowerUrl.includes('notosanssymbols') || lowerUrl.includes('noto-sans-symbols')) {
+          fontFamily = 'Noto Sans Symbols';
+          expectedLocalPath = localFontPaths['Noto Sans Symbols'];
+        } else if (lowerUrl.includes('notocoloremoji') || lowerUrl.includes('noto-color-emoji')) {
+          fontFamily = 'Noto Color Emoji';
+          expectedLocalPath = localFontPaths['Noto Color Emoji'];
+        } else if (lowerUrl.includes('notosans') || lowerUrl.includes('noto-sans')) {
+          // Generic Noto Sans — MUST be last among Noto Sans variants
+          fontFamily = 'Noto Sans';
+          expectedLocalPath = localFontPaths['Noto Sans'];
+        } else if (lowerUrl.includes('roboto')) {
+          fontFamily = 'Roboto';
+          expectedLocalPath = localFontPaths['Roboto'];
+        }
+        
+        if (fontFamily && expectedLocalPath) {
+          const isCJKFont = fontFamily.includes('KR') || fontFamily.includes('SC') || fontFamily.includes('JP') || fontFamily.includes('HK');
+          return {
+            family: fontFamily,
+            path: expectedLocalPath,
+            isCJK: isCJKFont
+          };
+        }
+        
+        return null;
+      }
+      
+      // Intercept fetch - redirect to local fonts when available
+      if (window.fetch) {
+        const originalFetch = window.fetch;
+        window.fetch = function() {
+          const url = arguments[0];
+          if (typeof url === 'string' && (url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com'))) {
+            // Check if we have a local version of this font
+            const localFontInfo = hasLocalFont(url);
+            if (localFontInfo) {
+              const localPath = localFontInfo.path;
+              const fontFamily = localFontInfo.family;
+              const isCJK = fontFamily.includes('KR') || fontFamily.includes('SC') || fontFamily.includes('JP') || fontFamily.includes('HK');
+              
+              if (isCJK) {
+                const logData = formatLog('INFO', 'Font Loader', 'Redirecting CJK font to local asset', {
+                  family: fontFamily,
+                  url: url,
+                  localPath: localPath
+                });
+                console.info(logData.message, logData);
+              }
+              
+              // Instead of rejecting, redirect to local font file
+              // This ensures Flutter loads the local font instead of failing
+              return originalFetch(localPath, arguments[1]).catch(function(error) {
+                const logData = formatLog('ERROR', 'Font Loader', 'Local font fetch failed', {
+                  localPath: localPath,
+                  error: error?.message || String(error)
+                });
+                console.error(logData.message, logData);
+                // If local font fails, reject the original request
+                return Promise.reject(new Error('Local font available but failed to load: ' + localPath));
+              });
+            }
+            // CRITICAL: Block CDN font downloads that have no local fallback.
+            // Letting them through can crash CanvasKit WASM with
+            // "RuntimeError: memory access out of bounds" in _MakeTypefaceFromData.
+            // Return a 404 so Flutter gracefully skips the font instead of crashing.
+            const logData = formatLog('WARN', 'Font Loader',
+              'Blocking Google Fonts CDN request (no local fallback) to prevent CanvasKit crash',
+              { url: url });
+            console.warn(logData.message, logData);
+            return Promise.resolve(new Response('', { status: 404, statusText: 'Blocked - no local font available' }));
+          }
+          // Log local font file requests to check if paths are correct
+          // Focus on CJK fonts (Korean, Chinese, Japanese)
+          if (typeof url === 'string' && (url.includes('assets/fonts/') || url.includes('fonts/') || url.endsWith('.ttf') || url.endsWith('.woff2') || url.endsWith('.otf'))) {
+            const isLocalRequest = !url.startsWith('http://') && !url.startsWith('https://');
+            if (isLocalRequest) {
+              const isCJKFont = url.includes('NotoSansKR') || url.includes('NotoSansSC') || url.includes('NotoSansJP') || 
+                                url.includes('NotoSansHK') || url.includes('notosanskr') || url.includes('notosanssc');
+              
+              // Try to fetch and log the result
+              return originalFetch.apply(this, arguments).then(
+                function(response) {
+                  if (!response.ok && isCJKFont) {
+                    const logData = formatLog('ERROR', 'Font Loader', 'Failed to load CJK font', {
+                      url: url,
+                      status: response.status,
+                      statusText: response.statusText
+                    });
+                    console.error(logData.message, logData);
+                  }
+                  return response;
+                },
+                function(error) {
+                  if (isCJKFont) {
+                    const errorMsg = error.message || String(error);
+                    const logData = formatLog('ERROR', 'Font Loader', 'CJK font load error', {
+                      url: url,
+                      error: errorMsg
+                    });
+                    console.error(logData.message, logData);
+                  }
+                  throw error;
+                }
+              );
+            }
+          }
+          return originalFetch.apply(this, arguments);
+        };
+      }
+      
+      // Intercept XMLHttpRequest - redirect to local fonts when available
+      if (window.XMLHttpRequest) {
+        const originalOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url) {
+          if (typeof url === 'string' && (url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com'))) {
+            const localFontInfo = hasLocalFont(url);
+            if (localFontInfo) {
+              const localPath = localFontInfo.path;
+              const fontFamily = localFontInfo.family;
+              const isCJK = fontFamily.includes('KR') || fontFamily.includes('SC') || fontFamily.includes('JP') || fontFamily.includes('HK');
+              
+              if (isCJK) {
+                const logData = formatLog('INFO', 'Font Loader', 'Redirecting CJK font (XHR) to local asset', {
+                  family: fontFamily,
+                  url: url
+                });
+                console.info(logData.message, logData);
+              }
+              
+              // Redirect to local font path
+              return originalOpen.call(this, method, localPath);
+            }
+            // Block CDN font downloads that have no local fallback (prevent CanvasKit WASM crash)
+            console.warn(formatLog('WARN', 'Font Loader', 'Blocking Google Fonts XHR (no local fallback)', { url: url }));
+            return originalOpen.call(this, method, 'about:blank');
+          }
+          // Log local font file requests
+          if (typeof url === 'string' && (url.includes('assets/fonts/') || url.includes('fonts/') || url.endsWith('.ttf') || url.endsWith('.woff2') || url.endsWith('.otf'))) {
+            const isLocalRequest = !url.startsWith('http://') && !url.startsWith('https://');
+            if (isLocalRequest && url.includes('NotoSans')) {
+              const logData = formatLog('INFO', 'Font Loader', 'Loading local CJK font via XHR', { url, method });
+              console.info(logData.message, logData);
+            }
+          }
+          return originalOpen.apply(this, arguments);
+        };
+      }
+      
+      // Intercept Request constructor - redirect to local fonts when available
+      if (window.Request) {
+        const originalRequest = window.Request;
+        window.Request = function() {
+          const url = arguments[0];
+          if (typeof url === 'string' && (url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com'))) {
+            const localFontInfo = hasLocalFont(url);
+            if (localFontInfo) {
+              const localPath = localFontInfo.path;
+              const fontFamily = localFontInfo.family;
+              const isCJK = fontFamily.includes('KR') || fontFamily.includes('SC') || fontFamily.includes('JP') || fontFamily.includes('HK');
+              
+              if (isCJK) {
+                const logData = formatLog('INFO', 'Font Loader', 'Redirecting CJK font (Request) to local asset', {
+                  family: fontFamily,
+                  url: url
+                });
+                console.info(logData.message, logData);
+              }
+              
+              // Redirect to local font path
+              const args = Array.from(arguments);
+              args[0] = localPath;
+              return new originalRequest(...args);
+            }
+            // Block CDN font downloads that have no local fallback (prevent CanvasKit WASM crash)
+            console.warn(formatLog('WARN', 'Font Loader', 'Blocking Google Fonts Request (no local fallback)', { url: url }));
+            const blockedArgs = Array.from(arguments);
+            blockedArgs[0] = 'about:blank';
+            return new originalRequest(...blockedArgs);
+          }
+          // Log local font file requests
+          if (typeof url === 'string' && (url.includes('assets/fonts/') || url.includes('fonts/') || url.endsWith('.ttf') || url.endsWith('.woff2') || url.endsWith('.otf'))) {
+            const isLocalRequest = !url.startsWith('http://') && !url.startsWith('https://');
+            if (isLocalRequest && url.includes('NotoSans')) {
+              const logData = formatLog('INFO', 'Font Loader', 'Loading local CJK font via Request', { url });
+              console.info(logData.message, logData);
+            }
+          }
+          return new originalRequest(...arguments);
+        };
+      }
+    })();
+    
+    // fontFallbackBaseUrl is set via initializeEngine() config below
+    // to prevent CDN font downloads that crash CanvasKit WASM.
+    
+    // Log font configuration on startup
+    const initLogData = formatLog('INFO', 'Font Loader', '🚀 Font loader initialized', {
+      fontFallbackBaseUrl: window.fontFallbackBaseUrl,
+      message: 'Local fonts should be loaded from assets/fonts/ directory'
+    });
+    console.log(initLogData.message, initLogData);
+  </script>
+  
+  <!-- KaTeX for LaTeX math formula rendering (using local resources) -->
+  <script>
+    // Set base URL for KaTeX resources (will be set by Flutter app)
+    window.katexBaseUrl = window.katexBaseUrl || 'http://localhost:8800/static/katex';
+  </script>
+  <!-- KaTeX will be loaded dynamically by Flutter widgets that need it -->
+  <script>
+    // Initialize KaTeX auto-render when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+      if (window.renderMathInElement) {
+        // Configure KaTeX to render math blocks
+        window.katexAutoRenderConfig = {
+          delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '\\[', right: '\\]', display: true},
+            {left: '\\(', right: '\\)', display: false},
+            {left: '$', right: '$', display: false}
+          ],
+          throwOnError: false,
+          errorColor: '#cc0000'
+        };
+        console.log('[KaTeX] Auto-render initialized');
+      }
+    });
+  </script>
+  
+  <!-- Placeholder pdfjsLib for pdfx plugin (we don't use pdf.js, but plugin checks for it) -->
+  <script>
+    // Set a minimal placeholder to satisfy pdfx plugin's check
+    // We use browser native iframe for PDF preview, not pdf.js
+    if (!globalThis.pdfjsLib) {
+      globalThis.pdfjsLib = {
+        GlobalWorkerOptions: { workerSrc: '' },
+        getDocument: function() {
+          return { promise: Promise.reject(new Error('pdf.js is not used - using browser native iframe instead')) };
+        }
+      };
+      console.log('[PDF] Placeholder pdfjsLib set for pdfx plugin compatibility');
+    }
+  </script>
+  
+  <!-- Load Flutter -->
+  <script>
+    // Configure Flutter build to support both HTML and CanvasKit renderers
+    // This enables runtime renderer selection via loadEntrypoint({renderer: 'html'})
+    window._flutter = window._flutter || {};
+    window._flutter.buildConfig = {
+      "engineRevision": "cafcda5721a78a7884db92f13c5e89f7643d52dd",
+      "builds": [
+        {"compileTarget": "dart2js", "renderer": "canvaskit", "mainJsPath": "main.dart.js"},
+        {"compileTarget": "dart2js", "renderer": "html", "mainJsPath": "main.dart.js"}
+      ]
+    };
+
+    function loadFlutter() {
+      // Only load Flutter once
+      if (window._flutterScriptLoaded) return;
+      window._flutterScriptLoaded = true;
+
+      const script = document.createElement('script');
+      script.src = 'flutter.js';
+      script.onload = function() {
+        initializeFlutter();
+      };
+      script.onerror = function() {
+        console.error('[FLUTTER] Failed to load flutter.js');
+      };
+      document.head.appendChild(script);
+    }
+
+    function initializeFlutter() {
+      // Wait for Flutter loader to be available
+      function waitForFlutterLoader() {
+        const loader = window._flutter && window._flutter.loader;
+        if (loader) {
+          // Use the new load() API for Flutter 3.38+
+          loader.load({
+            config: {
+              // Use local CanvasKit for offline/LAN support (mainland China cannot access Google CDN)
+              canvasKitBaseUrl: '/canvaskit/',
+              // Point font fallback to a non-existent local path so requests
+              // 404 harmlessly instead of downloading from Google Fonts CDN
+              fontFallbackBaseUrl: '/no-cdn-fonts/',
+            },
+            onEntrypointLoaded: async (engineInitializer) => {
+              const appRunner = await engineInitializer.initializeEngine();
+              await appRunner.runApp();
+            }
+          });
+        } else {
+          // Retry after a short delay
+          setTimeout(waitForFlutterLoader, 10);
+        }
+      }
+      waitForFlutterLoader();
+    }
+    
+    // Load Flutter immediately
+    loadFlutter();
+  </script>
+</head>
+<body>
+</body>
+</html>

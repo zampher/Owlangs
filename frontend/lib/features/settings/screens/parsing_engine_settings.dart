@@ -1,0 +1,318 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../../shared/providers/settings_provider.dart';
+
+// 解析引擎设置状态管理
+final StateNotifierProvider<ParsingEngineSettingsNotifier,
+        ParsingEngineSettings> parsingEngineSettingsProvider =
+    StateNotifierProvider<ParsingEngineSettingsNotifier, ParsingEngineSettings>(
+  (
+    StateNotifierProviderRef<ParsingEngineSettingsNotifier, ParsingEngineSettings> ref,
+  ) =>
+      ParsingEngineSettingsNotifier(),
+);
+
+class ParsingEngineSettings {
+  const ParsingEngineSettings({
+    this.parsingEngine = 'mineru',
+    this.ocrLanguage = 'eng',
+    this.chunkSize = 1000,
+    this.concurrent = 3,
+    this.timeout = 300,
+    this.isTestingEngine = false,
+  });
+  final String parsingEngine;
+  final String ocrLanguage;
+  final int chunkSize;
+  final int concurrent;
+  final int timeout;
+  final bool isTestingEngine;
+
+  ParsingEngineSettings copyWith({
+    String? parsingEngine,
+    String? ocrLanguage,
+    int? chunkSize,
+    int? concurrent,
+    int? timeout,
+    bool? isTestingEngine,
+  }) =>
+      ParsingEngineSettings(
+        parsingEngine: parsingEngine ?? this.parsingEngine,
+        ocrLanguage: ocrLanguage ?? this.ocrLanguage,
+        chunkSize: chunkSize ?? this.chunkSize,
+        concurrent: concurrent ?? this.concurrent,
+        timeout: timeout ?? this.timeout,
+        isTestingEngine: isTestingEngine ?? this.isTestingEngine,
+      );
+}
+
+class ParsingEngineSettingsNotifier
+    extends StateNotifier<ParsingEngineSettings> {
+  ParsingEngineSettingsNotifier() : super(const ParsingEngineSettings());
+
+  void updateParsingEngine(String parsingEngine) {
+    state = state.copyWith(parsingEngine: parsingEngine);
+  }
+
+  void updateOcrLanguage(String ocrLanguage) {
+    state = state.copyWith(ocrLanguage: ocrLanguage);
+  }
+
+  void updateChunkSize(int chunkSize) {
+    state = state.copyWith(chunkSize: chunkSize);
+  }
+
+  void updateConcurrent(int concurrent) {
+    state = state.copyWith(concurrent: concurrent);
+  }
+
+  void updateTimeout(int timeout) {
+    state = state.copyWith(timeout: timeout);
+  }
+
+  Future<void> testEngine() async {
+    state = state.copyWith(isTestingEngine: true);
+
+    // Simulate engine test
+    await Future.delayed(const Duration(seconds: 2));
+
+    state = state.copyWith(isTestingEngine: false);
+  }
+
+  void reset() {
+    state = const ParsingEngineSettings();
+  }
+}
+
+class ParsingEngineSettingsScreen extends ConsumerWidget {
+  const ParsingEngineSettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final GlobalSettings globalSettings = ref.watch(globalSettingsProvider);
+    final GlobalSettingsNotifier globalNotifier =
+        ref.read(globalSettingsProvider.notifier);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          // Parsing Engine Selection
+          _buildParsingEngineSection(context, globalSettings, globalNotifier, ref),
+          const SizedBox(height: 24),
+
+          // OCR Language Settings
+          _buildOcrLanguageSection(context, globalSettings, globalNotifier),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildParsingEngineSection(
+    BuildContext context,
+    GlobalSettings settings,
+    GlobalSettingsNotifier notifier,
+    WidgetRef ref,
+  ) {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    // Hardcoded parser engine codes
+    final List<String> engineCodes = <String>['mineru', 'mineru_local'];
+
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Icon(Icons.build, color: Colors.blue.shade700),
+                const SizedBox(width: 8),
+                Text(
+                  l10n.settingsParsingEngineTitle,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              l10n.settingsParsingEngineSubtitle,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: engineCodes.contains(settings.parsingEngine)
+                  ? settings.parsingEngine
+                  : engineCodes.first,
+              decoration: InputDecoration(
+                labelText: l10n.settingsParsingEngineLabel,
+                border: const OutlineInputBorder(),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              items: engineCodes
+                  .map(
+                    (String code) => DropdownMenuItem<String>(
+                      value: code,
+                      child: Text(
+                        _getParserPlatformDisplayName(l10n, code),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (String? value) =>
+                  notifier.updateParsingEngineSettings(parsingEngine: value),
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            // Formula OCR Toggle
+            SwitchListTile(
+              title: Text(l10n.settingsFormulaOcr),
+              subtitle: Text(l10n.settingsFormulaOcrSubtitle),
+              value: settings.formulaOcr,
+              onChanged: (bool value) =>
+                  notifier.updateParsingEngineSettings(formulaOcr: value),
+              contentPadding: EdgeInsets.zero,
+            ),
+            // Table OCR Toggle
+            SwitchListTile(
+              title: Text(l10n.settingsTableOcr),
+              subtitle: Text(l10n.settingsTableOcrSubtitle),
+              value: settings.tableOcr,
+              onChanged: (bool value) =>
+                  notifier.updateParsingEngineSettings(tableOcr: value),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Get parser platform display names
+  String _getParserPlatformDisplayName(AppLocalizations l10n, String code) {
+    // Try to get from config first, fallback to localized names
+    switch (code) {
+      case 'mineru':
+        return l10n.settingsParsingEngineMineru;
+      case 'mineru_local':
+        return l10n.settingsParsingEngineMineruLocal;
+      default:
+        return code;
+    }
+  }
+
+  Widget _buildOcrLanguageSection(
+    BuildContext context,
+    GlobalSettings settings,
+    GlobalSettingsNotifier notifier,
+  ) {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final List<String> langCodes = <String>[
+      'eng',
+      'chi_sim',
+      'chi_tra',
+      'jpn',
+      'kor',
+      'fra',
+      'deu',
+      'spa',
+      'rus',
+      'ara',
+    ];
+
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Icon(Icons.language, color: Colors.green.shade700),
+                const SizedBox(width: 8),
+                Text(
+                  l10n.settingsOcrLanguageTitle,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              l10n.settingsOcrLanguageSubtitle,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: settings.ocrLanguage,
+              decoration: InputDecoration(
+                labelText: l10n.settingsOcrLanguageLabel,
+                border: const OutlineInputBorder(),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              items: langCodes
+                  .map(
+                    (String code) => DropdownMenuItem<String>(
+                      value: code,
+                      child: Text(_ocrLangDisplayName(l10n, code)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (String? value) =>
+                  notifier.updateParsingEngineSettings(ocrLanguage: value),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _ocrLangDisplayName(AppLocalizations l10n, String code) {
+    switch (code) {
+      case 'eng':
+        return l10n.settingsOcrLangEnglish;
+      case 'chi_sim':
+        return l10n.settingsOcrLangChineseSimplified;
+      case 'chi_tra':
+        return l10n.settingsOcrLangChineseTraditional;
+      case 'jpn':
+        return l10n.settingsOcrLangJapanese;
+      case 'kor':
+        return l10n.settingsOcrLangKorean;
+      case 'fra':
+        return l10n.settingsOcrLangFrench;
+      case 'deu':
+        return l10n.settingsOcrLangGerman;
+      case 'spa':
+        return l10n.settingsOcrLangSpanish;
+      case 'rus':
+        return l10n.settingsOcrLangRussian;
+      case 'ara':
+        return l10n.settingsOcrLangArabic;
+      default:
+        return code;
+    }
+  }
+}

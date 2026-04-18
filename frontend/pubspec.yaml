@@ -1,0 +1,178 @@
+﻿name: owlangs
+description: Owlangs Flutter Frontend - Cross-platform document translation application
+publish_to: 'none'
+version: 1.2.0+0
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  
+  # UI & Icons
+  cupertino_icons: ^1.0.6
+  material_design_icons_flutter: ^7.0.7296
+  
+  # State Management
+  provider: ^6.1.1
+  riverpod: ^2.4.9
+  flutter_riverpod: ^2.4.9
+  
+  # Navigation
+  go_router: ^12.1.3
+  
+  # HTTP & Networking
+  dio: ^5.4.0
+  connectivity_plus: ^5.0.2
+  
+  # Local Storage
+  shared_preferences: ^2.2.2
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  
+  # UI Components
+  flutter_screenutil: ^5.9.0
+  cached_network_image: ^3.3.0
+  shimmer: ^3.0.0
+  flutter_svg: ^2.0.9
+  
+  # File handling
+  file_picker: ^6.1.1
+  path_provider: ^2.1.1
+  permission_handler: ^11.2.0
+  file_saver: ^0.2.12
+  desktop_drop: ^0.7.0
+  
+  # Document viewing (2.9.x fixes Windows pdfium download; 2.4.x uses removed URL)
+  pdfx: ^2.9.2
+  webview_flutter: ^4.4.2
+  webview_flutter_web: ^0.2.2
+
+  # Platform Specific
+  url_launcher: ^6.2.2
+  package_info_plus: ^4.2.0
+  device_info_plus: ^9.1.1
+  window_manager: ^0.3.7
+  
+  # Utils
+  intl: 0.20.2
+  logger: ^2.0.2+1
+  
+  # Code Generation
+  freezed: ^2.4.6
+  json_annotation: ^4.8.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  integration_test:
+    sdk: flutter
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.7
+  freezed: ^2.4.6
+  json_serializable: ^6.7.1
+
+flutter:
+  uses-material-design: true
+  generate: true
+  
+  # Fonts - Using Flutter official mechanism
+  # Fonts are declared here and Flutter will automatically generate FontManifest.json
+  # Note: Using fonts/ instead of assets/fonts/ to match Flutter Web path resolution
+  # Flutter Web loads fonts from build/web/assets/, so fonts/ becomes assets/fonts/ in build output
+  fonts:
+    # Roboto - Material Design default font
+    - family: Roboto
+      fonts:
+        - asset: fonts/Roboto-Regular.woff2
+          weight: 400
+        - asset: fonts/Roboto-Light.woff2
+          weight: 300
+        - asset: fonts/Roboto-Medium.woff2
+          weight: 500
+        - asset: fonts/Roboto-Bold.woff2
+          weight: 700
+        - asset: fonts/Roboto-Italic.woff2
+          weight: 400
+          style: italic
+    # Noto Sans SC - Chinese Simplified support
+    - family: Noto Sans SC
+      fonts:
+        - asset: fonts/NotoSansSC-Regular.ttf
+          weight: 400
+    # Noto Sans - Base font for other languages
+    - family: Noto Sans
+      fonts:
+        - asset: fonts/NotoSans-Regular.ttf
+          weight: 400
+    # Noto Sans KR - Korean support
+    - family: Noto Sans KR
+      fonts:
+        - asset: fonts/NotoSansKR-Regular.ttf
+          weight: 400
+    # Noto Sans HK - Chinese Traditional (Hong Kong) support; bundled to avoid Flutter Web fetching from network (CanvasKit crash)
+    - family: Noto Sans HK
+      fonts:
+        - asset: fonts/NotoSansHK-Regular.otf
+          weight: 400
+    # Noto Sans JP - Japanese support; bundled to avoid Flutter Web fetching from network (CanvasKit crash)
+    - family: Noto Sans JP
+      fonts:
+        - asset: fonts/NotoSansJP-Regular.otf
+          weight: 400
+    # Noto Color Emoji - Emoji support
+    - family: Noto Color Emoji
+      fonts:
+        - asset: fonts/NotoColorEmoji.ttf
+          weight: 400
+    # Noto Sans Symbols - Symbols support
+    - family: Noto Sans Symbols
+      fonts:
+        - asset: fonts/NotoSansSymbols-Regular.ttf
+          weight: 400
+    # Noto Sans Arabic - Arabic script
+    - family: Noto Sans Arabic
+      fonts:
+        - asset: fonts/NotoSansArabic-Regular.ttf
+          weight: 400
+    # Noto Sans Bengali - Bengali script
+    - family: Noto Sans Bengali
+      fonts:
+        - asset: fonts/NotoSansBengali-Regular.ttf
+          weight: 400
+    # Noto Sans Devanagari - Hindi/Marathi/Nepali etc.
+    - family: Noto Sans Devanagari
+      fonts:
+        - asset: fonts/NotoSansDevanagari-Regular.ttf
+          weight: 400
+    # Noto Sans Hebrew - Hebrew script
+    - family: Noto Sans Hebrew
+      fonts:
+        - asset: fonts/NotoSansHebrew-Regular.ttf
+          weight: 400
+    # Noto Sans Thai - Thai script
+    - family: Noto Sans Thai
+      fonts:
+        - asset: fonts/NotoSansThai-Regular.ttf
+          weight: 400
+    # Noto Sans Khmer - Khmer script
+    - family: Noto Sans Khmer
+      fonts:
+        - asset: fonts/NotoSansKhmer-Regular.ttf
+          weight: 400
+  
+  # Assets
+  # Note: Declare as images/, icons/, translations/ (without assets/ prefix)
+  # Flutter Web copies these to build/web/assets/images/, assets/icons/, assets/translations/
+  # Code can still reference as 'assets/images/...' and Flutter will resolve correctly
+  assets:
+    - images/
+    - images/logos/
+    - assets/images/
+    - icons/
+    - translations/

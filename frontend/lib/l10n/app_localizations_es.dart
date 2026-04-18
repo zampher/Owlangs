@@ -1,0 +1,2701 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+import 'app_localizations.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for Spanish Castilian (`es`).
+class AppLocalizationsEs extends AppLocalizations {
+  AppLocalizationsEs([String locale = 'es']) : super(locale);
+
+  @override
+  String get settingsGeneralTitle => 'Configuración General';
+
+  @override
+  String get settingsGeneralDarkModeTitle => 'Modo Oscuro';
+
+  @override
+  String get settingsGeneralDarkModeSubtitle =>
+      'Activar tema oscuro (se aplica inmediatamente)';
+
+  @override
+  String get settingsGeneralLanguageTitle => 'Idioma';
+
+  @override
+  String get settingsGeneralNotificationsTitle => 'Notificaciones';
+
+  @override
+  String get settingsGeneralNotificationsSubtitle =>
+      'Recibir notificaciones para tareas completadas (se aplica inmediatamente)';
+
+  @override
+  String get settingsGeneralAutoSaveTitle => 'Guardado Automático';
+
+  @override
+  String get settingsGeneralAutoSaveSubtitle =>
+      'Guardar automáticamente el trabajo en progreso (se aplica inmediatamente)';
+
+  @override
+  String get settingsGeneralShowAdsTitle => 'Mostrar Anuncios';
+
+  @override
+  String get settingsGeneralShowAdsSubtitle =>
+      'Mostrar marcadores de posición de anuncios en Inicio y en Flujo (almacenado en system.json)';
+
+  @override
+  String get backToHome => 'Volver a Inicio';
+
+  @override
+  String get settingsFontSectionTitle => 'Configuración de Fuente';
+
+  @override
+  String get settingsFontPreviewSizeTitle => 'Tamaño de Fuente de Vista Previa';
+
+  @override
+  String get settingsFontPreviewSizeSubtitle =>
+      'Tamaño de fuente para el texto fuente y objetivo en la vista previa';
+
+  @override
+  String get translationToolbarFilterAll => 'Todos';
+
+  @override
+  String get translationToolbarFilterFailed => 'Fallido';
+
+  @override
+  String get translationToolbarFilterIncluded => 'Incluido';
+
+  @override
+  String get translationToolbarFilterExcluded => 'Excluido';
+
+  @override
+  String get translationToolbarSearchTooltip => 'Buscar (Ctrl+F / Cmd+F)';
+
+  @override
+  String get translationToolbarPrevRetryTooltip =>
+      'Segmento de Reintento Anterior';
+
+  @override
+  String get translationToolbarNextRetryTooltip =>
+      'Segmento de Reintento Siguiente';
+
+  @override
+  String get translationToolbarPreviewTooltip => 'Vista Previa';
+
+  @override
+  String get translationToolbarFormatSettingsTooltip =>
+      'Configuración de Formato';
+
+  @override
+  String get translationToolbarExportTooltip => 'Exportar Documento';
+
+  @override
+  String get translationToolbarPdfPreviewTooltip =>
+      'Vista Previa PDF (Depuración)';
+
+  @override
+  String get translationToolbarCancelButton => 'Cancelar';
+
+  @override
+  String get translationToolbarExitFullscreenTooltip =>
+      'Salir de Pantalla Completa';
+
+  @override
+  String get translationToolbarEnterFullscreenTooltip =>
+      'Entrar en Pantalla Completa';
+
+  @override
+  String get translationToolbarUpload => 'Subir';
+
+  @override
+  String get translationToolbarUploading => 'Subiendo...';
+
+  @override
+  String get translationToolbarFileUploaded => 'Archivo Subido';
+
+  @override
+  String get translationToolbarReextract => 'Re-extraer';
+
+  @override
+  String get translationToolbarReextracting => 'Re-extracción en curso...';
+
+  @override
+  String translationToolbarTokensCount(Object count) {
+    return '$count tokens';
+  }
+
+  @override
+  String get translationToolbarOpenGlossaryTab => 'Abrir pestaña de glosario';
+
+  @override
+  String get translationToolbarHintWaitExtract =>
+      'Por favor, espere a que la Extracción se complete';
+
+  @override
+  String get translationToolbarHintOperationInProgress =>
+      'Una operación está en progreso';
+
+  @override
+  String get translationToolbarGlossary => 'Glosario';
+
+  @override
+  String get translationToolbarConvertHint =>
+      'Sugerencia de conversión de formato';
+
+  @override
+  String get translationToolbarConvert => 'Convertir';
+
+  @override
+  String get translationToolbarHintSaveGlossaryFirst =>
+      'Por favor, guarde el glosario primero (haga clic en Aplicar)';
+
+  @override
+  String get translationToolbarHintUpdatingExcluded =>
+      'Actualizando segmentos excluidos...';
+
+  @override
+  String get translationToolbarStartTranslation => 'Iniciar traducción';
+
+  @override
+  String get translationToolbarTranslateAll => 'Traducir Todo';
+
+  @override
+  String get translationToolbarTranslating => 'Traduciendo...';
+
+  @override
+  String get translationToolbarRetryInProgress => 'Reintento en progreso...';
+
+  @override
+  String get translationToolbarRetryTooltip =>
+      'Reintentar todos los segmentos fallidos o marcados. Esto retraducirá los segmentos que fallaron durante la traducción o fueron marcados manualmente para reintento, usando la plataforma de IA actualmente seleccionada. Los segmentos excluidos y borrados se omitirán.';
+
+  @override
+  String get translationToolbarRetry => 'Reintentar';
+
+  @override
+  String get translationToolbarSwitchToFile => 'Cambiar a Archivo';
+
+  @override
+  String get translationToolbarSwitchToText => 'Cambiar a Texto';
+
+  @override
+  String get translationStatusCompleted => 'Traducción Completada';
+
+  @override
+  String get translationStatusRetry => 'Reintento de Traducción';
+
+  @override
+  String get translationStatusFailed => 'Traducción Fallida';
+
+  @override
+  String get translationStatusCancelled => 'Traducción Cancelada';
+
+  @override
+  String get translationStatusTranslating => 'Traduciendo';
+
+  @override
+  String get translationStatusTranslatingFallback => 'Traduciendo...';
+
+  @override
+  String get translationStatusReady => 'Listo';
+
+  @override
+  String get translationStatusTaskPending => 'Tarea Pendiente';
+
+  @override
+  String get translationStatusProcessing => 'Procesando...';
+
+  @override
+  String translationStatsSuccessOnly(Object success, Object total) {
+    return 'Éxito: $success/$total';
+  }
+
+  @override
+  String translationStatsSuccessFailed(
+      Object fail, Object success, Object total) {
+    return 'Éxito: $success/$total, Fallido: $fail/$total';
+  }
+
+  @override
+  String translationStatsTotal(Object count) {
+    return 'Total: $count | ';
+  }
+
+  @override
+  String translationStatsTranslated(Object count) {
+    return 'Traducido: $count | ';
+  }
+
+  @override
+  String translationStatsPending(Object count) {
+    return 'Pendiente: $count';
+  }
+
+  @override
+  String translationStatsExcluded(Object count) {
+    return ' | Excluido: $count';
+  }
+
+  @override
+  String translationStatsRetryCount(Object count) {
+    return ' | Reintentar: $count';
+  }
+
+  @override
+  String translationStatsCleared(Object count) {
+    return ' | Borrado: $count';
+  }
+
+  @override
+  String translationStatsImages(Object count) {
+    return ' | Imágenes: $count';
+  }
+
+  @override
+  String translationStatsSegment(Object current, Object total) {
+    return 'Segmento: $current / $total';
+  }
+
+  @override
+  String get translationStatsDoubleClickToEdit =>
+      'Haga doble clic en el texto para editar.';
+
+  @override
+  String get translationStatsTranslatedLabel => 'Traducido';
+
+  @override
+  String get translationStatsLoadingContent => 'Cargando contenido...';
+
+  @override
+  String get translationStatsNoContentAvailable =>
+      'No hay contenido disponible.';
+
+  @override
+  String get translationStatsNoSegmentsAvailable =>
+      'No hay segmentos disponibles';
+
+  @override
+  String translationStatsTokenIn(Object count) {
+    return 'Entrada: $count';
+  }
+
+  @override
+  String translationStatsTokenOut(Object count) {
+    return 'Salida: $count';
+  }
+
+  @override
+  String translationStatsTokenTotal(Object count) {
+    return '($count)';
+  }
+
+  @override
+  String get translationLangArabic => 'Árabe';
+
+  @override
+  String get translationLangBengali => 'Bengalí';
+
+  @override
+  String get translationLangCatalan => 'Catalán';
+
+  @override
+  String get translationLangChinese => 'Chino';
+
+  @override
+  String get translationLangChineseTraditional => 'Chino (Tradicional)';
+
+  @override
+  String get translationLangCzech => 'Checo';
+
+  @override
+  String get translationLangCroatian => 'Croata';
+
+  @override
+  String get translationLangDanish => 'Danés';
+
+  @override
+  String get translationLangDutch => 'Neerlandés';
+
+  @override
+  String get translationLangEnglish => 'Inglés';
+
+  @override
+  String get translationLangFilipino => 'Filipino';
+
+  @override
+  String get translationLangFinnish => 'Finés';
+
+  @override
+  String get translationLangFrench => 'Francés';
+
+  @override
+  String get translationLangGerman => 'Alemán';
+
+  @override
+  String get translationLangGreek => 'Griego';
+
+  @override
+  String get translationLangHebrew => 'Hebreo';
+
+  @override
+  String get translationLangHindi => 'Hindi';
+
+  @override
+  String get translationLangItalian => 'Italiano';
+
+  @override
+  String get translationLangJapanese => 'Japonés';
+
+  @override
+  String get translationLangKorean => 'Coreano';
+
+  @override
+  String get translationLangKhmer => 'Jemer';
+
+  @override
+  String get translationLangLithuanian => 'Lituano';
+
+  @override
+  String get translationLangMacedonian => 'Macedonio';
+
+  @override
+  String get translationLangMalay => 'Malayo';
+
+  @override
+  String get translationLangNorwegian => 'Noruego Bokmål';
+
+  @override
+  String get translationLangPolish => 'Polaco';
+
+  @override
+  String get translationLangPortuguese => 'Portugués';
+
+  @override
+  String get translationLangRomanian => 'Rumano';
+
+  @override
+  String get translationLangRussian => 'Ruso';
+
+  @override
+  String get translationLangSlovenian => 'Esloveno';
+
+  @override
+  String get translationLangSpanish => 'Español';
+
+  @override
+  String get translationLangSwedish => 'Sueco';
+
+  @override
+  String get translationLangThai => 'Tailandés';
+
+  @override
+  String get translationLangTurkish => 'Turco';
+
+  @override
+  String get translationLangUkrainian => 'Ucraniano';
+
+  @override
+  String get translationLangUrdu => 'Urdu';
+
+  @override
+  String get translationLangVietnamese => 'Vietnamita';
+
+  @override
+  String get translationExportNoFormats =>
+      'No hay formatos de exportación disponibles';
+
+  @override
+  String get translationExportDialogTitle => 'Exportar Documento';
+
+  @override
+  String get translationExportFormatOptionsTitle =>
+      'Opciones de Formato (solo PDF)';
+
+  @override
+  String get translationExportTableFormatLabel => 'Formato de Tabla:';
+
+  @override
+  String get translationExportTableFormatImage => 'Imagen';
+
+  @override
+  String get translationExportTableFormatHtml => 'HTML';
+
+  @override
+  String get translationExportEquationFormatLabel => 'Formato de Ecuación:';
+
+  @override
+  String get translationExportEquationFormatImage => 'Imagen';
+
+  @override
+  String get translationExportEquationFormatLatex => 'LaTeX';
+
+  @override
+  String get translationLeftPanelExpandTooltip => 'Expandir panel izquierdo';
+
+  @override
+  String get translationLeftPanelCollapseTooltip => 'Contraer panel izquierdo';
+
+  @override
+  String get translationSnackGlossarySaved => 'Glosario guardado';
+
+  @override
+  String get translationSnackTranslationCancelled => 'Traducción cancelada';
+
+  @override
+  String get translationSnackNoLlmpSelected =>
+      'No se seleccionó ninguna Plataforma LLM';
+
+  @override
+  String get translationSnackTextEmpty => 'La entrada de texto está vacía.';
+
+  @override
+  String get translationSnackTextConverted =>
+      'Texto convertido a formato de archivo';
+
+  @override
+  String get translationSnackSourceResplitCompleted =>
+      'Re-división de fuente completada';
+
+  @override
+  String get translationSnackPleaseSelectFileOrText =>
+      'Por favor, seleccione un archivo o ingrese texto primero';
+
+  @override
+  String get translationSnackPleaseSelectFileOrTextWithDot =>
+      'Por favor, seleccione un archivo o ingrese texto primero.';
+
+  @override
+  String get translationSnackPleaseSelectFile =>
+      'Por favor, seleccione un archivo primero';
+
+  @override
+  String get translationSnackPleaseSelectDocumentFirst =>
+      'Por favor, seleccione un documento primero.';
+
+  @override
+  String get translationSnackGlossaryGenerated =>
+      '¡Glosario generado con éxito!';
+
+  @override
+  String get translationSnackGlossaryGenerationCancelled =>
+      'Generación de glosario cancelada';
+
+  @override
+  String get translationSnackGlossaryAppliedToTask =>
+      'Glosario aplicado a la tarea de traducción';
+
+  @override
+  String get translationSnackPreviousTranslationCancelled =>
+      'Traducción anterior cancelada';
+
+  @override
+  String get translationSnackGlossarySavedAndApplied =>
+      'Glosario guardado y aplicado';
+
+  @override
+  String get translationDialogMixedLangTitle => 'Idioma Mixto Detectado';
+
+  @override
+  String translationDialogMixedLangContent(Object distribution) {
+    return 'El documento contiene múltiples idiomas:\n$distribution';
+  }
+
+  @override
+  String get translationDialogMixedLangPromptTitle =>
+      'Para mejorar la calidad de la traducción, puede agregar instrucciones de prompt:';
+
+  @override
+  String get translationDialogMixedLangOption1Title =>
+      'Solo traducir texto en idioma fuente';
+
+  @override
+  String translationDialogMixedLangOption1Subtitle(Object languageName) {
+    return 'Solo traducir texto en idioma $languageName';
+  }
+
+  @override
+  String get translationDialogMixedLangOption2Title =>
+      'Mantener código y términos técnicos sin cambios';
+
+  @override
+  String get translationDialogMixedLangOption2Subtitle =>
+      'Mantener bloques de código, términos técnicos, nombres de funciones y texto en otros idiomas sin cambios';
+
+  @override
+  String get translationDialogMixedLangCancel => 'Cancelar';
+
+  @override
+  String get translationDialogMixedLangSkip => 'Omitir';
+
+  @override
+  String get translationDialogMixedLangApply => 'Aplicar';
+
+  @override
+  String get translationSnackExportStarted =>
+      'La tarea de exportación ha comenzado, por favor espere.';
+
+  @override
+  String get translationSnackPromptUpdated =>
+      'Instrucciones de prompt actualizadas';
+
+  @override
+  String translationSnackFailedToCancel(Object error) {
+    return 'Error al cancelar: $error';
+  }
+
+  @override
+  String translationSnackFailedConvertTextFormat(Object error) {
+    return 'Error al convertir formato de texto: $error';
+  }
+
+  @override
+  String translationSnackFailedConvertText(Object error) {
+    return 'Error al convertir texto: $error';
+  }
+
+  @override
+  String translationSnackFailedResplit(Object error) {
+    return 'Error al re-dividir: $error';
+  }
+
+  @override
+  String get translationSnackRequestFailed => 'Solicitud fallida';
+
+  @override
+  String translationSnackFileImportFailed(Object error) {
+    return 'Error al importar archivo: $error';
+  }
+
+  @override
+  String translationSnackTaskStatus(Object status) {
+    return 'Estado de la tarea: $status';
+  }
+
+  @override
+  String translationSnackFileDownloaded(Object filename) {
+    return 'Archivo descargado: $filename';
+  }
+
+  @override
+  String translationSnackFileSaved(Object filename) {
+    return 'Archivo guardado: $filename';
+  }
+
+  @override
+  String translationSnackFailedDownload(Object error, Object fileType) {
+    return 'Error al descargar $fileType: $error';
+  }
+
+  @override
+  String translationSnackFailedOpenDownload(Object url) {
+    return 'Error al abrir descarga: $url';
+  }
+
+  @override
+  String get translationDialogSwitchToFileTitle => 'Cambiar a Modo Archivo';
+
+  @override
+  String get translationDialogSwitchToFileBody =>
+      'Cambiar al modo archivo borrará su entrada de texto actual. ¿Desea continuar?';
+
+  @override
+  String get translationDialogSwitchToTextTitle => 'Cambiar a Modo Texto';
+
+  @override
+  String get translationDialogSwitchToTextBody =>
+      'Cambiar al modo texto borrará la selección de archivo actual. ¿Desea continuar?';
+
+  @override
+  String get translationSnackAllSegmentsExcludedSkipped =>
+      'Todos los segmentos están excluidos. La traducción se omitirá. Puede exportar el archivo para conversión de formato.';
+
+  @override
+  String get translationDialogCancelButton => 'Cancelar';
+
+  @override
+  String get translationDialogContinueButton => 'Continuar';
+
+  @override
+  String get translationNoLlmAvailableTitle =>
+      'No hay plataforma LLM disponible';
+
+  @override
+  String get translationNoLlmAvailableMessage =>
+      'No hay plataforma LLM configurada y disponible. Para traducir, por favor configure una Clave API de LLM en Configuración primero; si solo necesita conversión de formato, puede continuar.';
+
+  @override
+  String get translationNoLlmConfigureButton => 'Configurar LLM';
+
+  @override
+  String get translationNoLlmContinueFormatOnlyButton =>
+      'Solo conversión de formato';
+
+  @override
+  String get languageMatchWarningTitle =>
+      'Advertencia de Coincidencia de Idioma';
+
+  @override
+  String languageMatchWarningGlossaryBody(
+      Object detectedName, Object targetName) {
+    return 'El idioma fuente detectado ($detectedName) es el mismo que el idioma objetivo ($targetName). ¿Está seguro de que desea continuar con la generación del glosario?';
+  }
+
+  @override
+  String languageMatchWarningTranslationBody(
+      Object detectedName, Object targetName) {
+    return 'El idioma fuente detectado ($detectedName) es el mismo que el idioma objetivo ($targetName). ¿Está seguro de que desea continuar con la traducción?';
+  }
+
+  @override
+  String get translationDialogCancelTaskTitle => 'Cancelar Tarea Actual';
+
+  @override
+  String get translationDialogCancelTaskBody =>
+      'Esto cancelará la tarea de extracción/traducción actual y borrará el archivo seleccionado. ¿Desea continuar?';
+
+  @override
+  String get translationDialogCancelTaskNo => 'No';
+
+  @override
+  String get translationDialogCancelTaskYesCancel => 'Sí, Cancelar';
+
+  @override
+  String get translationQuickSettingsTitle =>
+      'Configuración Rápida de Traducción';
+
+  @override
+  String get quickSettingsTargetLanguage => 'Idioma Objetivo';
+
+  @override
+  String get quickSettingsLanguageSwitchDisabled =>
+      'El cambio de idioma está deshabilitado durante la traducción. Por favor, cambie a la pestaña Extraer para cambiar el idioma objetivo.';
+
+  @override
+  String get quickSettingsParsingPlatform => 'Plataforma de Análisis';
+
+  @override
+  String get quickSettingsTestMineru => 'Probar conexión MinerU';
+
+  @override
+  String get quickSettingsNotConfigured => 'No configurado';
+
+  @override
+  String get quickSettingsApiOk => 'API OK';
+
+  @override
+  String get quickSettingsApiUnavailable => 'API no disponible';
+
+  @override
+  String get quickSettingsNotTestedYet => 'Aún no probado';
+
+  @override
+  String get quickSettingsConnectionSuccessful => 'Conexión exitosa';
+
+  @override
+  String get quickSettingsMineruConnectionFailed => 'Conexión MinerU fallida';
+
+  @override
+  String get quickSettingsOpenMineruSettings => 'Abrir configuración de MinerU';
+
+  @override
+  String get quickSettingsMineruLabel => 'MinerU (mineru)';
+
+  @override
+  String get quickSettingsLlmPlatform => 'Plataforma LLM';
+
+  @override
+  String get quickSettingsTestLlmPlatform => 'Probar plataforma LLM actual';
+
+  @override
+  String get quickSettingsTestFailed => 'Prueba fallida';
+
+  @override
+  String get quickSettingsOpenAiPlatformsSettings =>
+      'Abrir configuración de Plataformas AI';
+
+  @override
+  String get quickSettingsTemperature => 'Temperatura';
+
+  @override
+  String get quickSettingsTemperatureHint =>
+      'Controla la aleatoriedad: Más bajo = más enfocado, Más alto = más creativo';
+
+  @override
+  String get quickSettingsQtTsOptions => 'Opciones de Traducción Qt .ts';
+
+  @override
+  String get quickSettingsQtTsSkipExisting => 'Omitir traducciones existentes';
+
+  @override
+  String get quickSettingsQtTsSkipExistingSubtitle =>
+      'Omitir mensajes que ya tienen traducciones';
+
+  @override
+  String get quickSettingsQtTsTranslateUnfinished =>
+      'Traducir entradas no terminadas';
+
+  @override
+  String get quickSettingsQtTsTranslateUnfinishedSubtitle =>
+      'Traducir mensajes marcados como no terminados (type=\"unfinished\")';
+
+  @override
+  String get quickSettingsQtTsTranslateVanished =>
+      'Traducir entradas desaparecidas';
+
+  @override
+  String get quickSettingsQtTsTranslateVanishedSubtitle =>
+      'Traducir mensajes marcados como desaparecidos (type=\"vanished\")';
+
+  @override
+  String get quickSettingsQtTsTranslateObsolete =>
+      'Traducir entradas obsoletas';
+
+  @override
+  String get quickSettingsQtTsTranslateObsoleteSubtitle =>
+      'Traducir mensajes marcados como obsoletos (type=\"obsolete\")';
+
+  @override
+  String get quickSettingsPrompt => 'Prompt';
+
+  @override
+  String get quickSettingsPromptMode => 'Modo de Prompt';
+
+  @override
+  String get quickSettingsPromptModeOff => 'Apagado (Sin prompt)';
+
+  @override
+  String get quickSettingsPromptModeSimple => 'Simple (Solo estilo)';
+
+  @override
+  String get quickSettingsPromptModeAdvanced => 'Avanzado (Estilo + Nota)';
+
+  @override
+  String get quickSettingsStyle => 'Estilo';
+
+  @override
+  String get quickSettingsStyleLiteral => 'Literal';
+
+  @override
+  String get quickSettingsStyleFluent => 'Fluido';
+
+  @override
+  String get quickSettingsStyleAcademic => 'Académico';
+
+  @override
+  String get quickSettingsStyleBusiness => 'Empresarial';
+
+  @override
+  String get quickSettingsStyleTechnical => 'Técnico';
+
+  @override
+  String get quickSettingsTaskNoteLabel => 'Nota de tarea (instrucción breve)';
+
+  @override
+  String get quickSettingsTaskNoteHint =>
+      'ej. Mantener fórmulas sin modificar; anotar nombres propios';
+
+  @override
+  String get quickSettingsAdRegionF =>
+      'Región F: Parte inferior de Configuración Rápida\n(Rectángulo Mediano 300×250)';
+
+  @override
+  String quickSettingsPlatformMessage(Object label, Object message) {
+    return '$label: $message';
+  }
+
+  @override
+  String quickSettingsPlatformTestFailed(Object error, Object label) {
+    return '$label: Prueba fallida — $error';
+  }
+
+  @override
+  String get homeTagline =>
+      'Basado en IA, Inmersión\nPrivado, Seguro (En desarrollo)\nCompartido en Equipo, Personalizable\n';
+
+  @override
+  String get homeIntro =>
+      'Suba documentos y tradúzcalos a múltiples idiomas con precisión impulsada por IA.\n';
+
+  @override
+  String get homeHowItWorks =>
+      'Cómo funciona: Importar -> Analizar Documento -> Glosario -> Traducir -> Exportar';
+
+  @override
+  String get homeSnackDonorExpired =>
+      'Su código de registro ha expirado. Por favor, regístrese nuevamente para continuar con los beneficios Pro.';
+
+  @override
+  String get commonOk => 'Aceptar';
+
+  @override
+  String get homeAuthErrorTitle => 'Error de Autenticación';
+
+  @override
+  String get homeAuthRetryLogin => 'Reintentar Inicio de Sesión';
+
+  @override
+  String homeAiPlatformsAvailable(Object platforms) {
+    return 'Plataformas de IA disponibles: $platforms';
+  }
+
+  @override
+  String get homeAiPlatformsConfigureNotice =>
+      'Por favor, configure sus plataformas de IA en el panel de configuración antes de usar la aplicación.';
+
+  @override
+  String get homeBackendStatusStarting => 'El backend está iniciándose...';
+
+  @override
+  String get homeBackendStatusConnecting => 'Conectando al backend...';
+
+  @override
+  String get homeBackendStatusConnected => 'Backend conectado';
+
+  @override
+  String get homeBackendStatusDisconnected =>
+      'El backend está desconectado. Por favor, reintente.';
+
+  @override
+  String get homeBackendStatusUnknown => 'Conectando al backend...';
+
+  @override
+  String get homeBackendRetry => 'Reintentar';
+
+  @override
+  String get homeNavTranslate => 'Traducir';
+
+  @override
+  String get homeNavAnonymize => 'Anonimizar';
+
+  @override
+  String get homeNavSettings => 'Configuración';
+
+  @override
+  String get homeNavDonateHelp => 'Donar & Ayuda';
+
+  @override
+  String get homeNavHome => 'Inicio';
+
+  @override
+  String get homeFeatureUnderDevelopment =>
+      'Esta característica está en desarrollo.';
+
+  @override
+  String homeAnonymizeNotSupportedVersion(Object version) {
+    return 'Aún no compatible. Estará disponible en v$version.';
+  }
+
+  @override
+  String get homeAnonymizeInDevelopment =>
+      'La anonimización está en desarrollo y aún no está disponible.';
+
+  @override
+  String get homeScrollLeft => 'Desplazar a la izquierda';
+
+  @override
+  String get homeScrollRight => 'Desplazar a la derecha';
+
+  @override
+  String get homeTabHome => 'Inicio';
+
+  @override
+  String get homeToolbarAdBanner =>
+      'Banner Publicitario de Barra de Herramientas\n(728×90 Leaderboard / 320×50 Móvil)';
+
+  @override
+  String get homeSteps => 'Pasos';
+
+  @override
+  String get homePhaseUpload => 'Subir';
+
+  @override
+  String get homePhaseExtract => 'Extraer';
+
+  @override
+  String get homePhaseGlossary => 'Glosario';
+
+  @override
+  String get homePhaseTranslate => 'Traducir';
+
+  @override
+  String get homePhaseViewer => 'Visor';
+
+  @override
+  String get homePhaseAnonymize => 'Anonimizar';
+
+  @override
+  String get homePhaseDeAnonymize => 'Des-anonimizar';
+
+  @override
+  String get homePhaseExport => 'Exportar';
+
+  @override
+  String get homeRecentActivity => 'Actividad Reciente';
+
+  @override
+  String get homeRecentRefresh => 'Actualizar';
+
+  @override
+  String get homeRecentNoTranslations => 'No hay traducciones recientes';
+
+  @override
+  String get homeRecentNoTranslationsHint => 'Comience subiendo un documento';
+
+  @override
+  String get homeRecentNoAnonymization => 'No hay tareas de anonimización';
+
+  @override
+  String get homeRecentNoAnonymizationHint =>
+      'Intente anonimizar datos sensibles';
+
+  @override
+  String get homeReleaseNotesTitle => 'Notas de la Versión';
+
+  @override
+  String get homeReleaseNotesViewOnGitHub => 'Ver en GitHub';
+
+  @override
+  String get homeActivityTypeAnonymizeTranslate => 'Anonimizar + Traducir';
+
+  @override
+  String get homeActivityTypeTranslation => 'Traducción';
+
+  @override
+  String get homeActivityTypeAnonymization => 'Anonimización';
+
+  @override
+  String get homeActivityTypeActivity => 'Actividad';
+
+  @override
+  String get homeTimeJustNow => 'Justo ahora';
+
+  @override
+  String get homeTimeOneMinuteAgo => 'Hace 1 minuto';
+
+  @override
+  String homeTimeMinutesAgo(Object count) {
+    return 'Hace $count minutos';
+  }
+
+  @override
+  String get homeTimeOneHourAgo => 'Hace 1 hora';
+
+  @override
+  String homeTimeHoursAgo(Object count) {
+    return 'Hace $count horas';
+  }
+
+  @override
+  String get homeTimeOneDayAgo => 'Hace 1 día';
+
+  @override
+  String homeTimeDaysAgo(Object count) {
+    return 'Hace $count días';
+  }
+
+  @override
+  String get homeEditionEnterprise => 'Empresa';
+
+  @override
+  String get homeEditionEnterpriseStatusActivated => 'Activado';
+
+  @override
+  String get homeEditionActivateEnterprise => 'Activar Empresa';
+
+  @override
+  String get homeEditionPro => 'Pro';
+
+  @override
+  String get homeEditionStandard => 'Estándar';
+
+  @override
+  String get homeEditionStandardStatus => 'Siempre disponible';
+
+  @override
+  String homeEditionProStatusTrialRemaining(Object days) {
+    return '$days días restantes';
+  }
+
+  @override
+  String get homeEditionProStatusNotActivated => 'No activado';
+
+  @override
+  String get homeEditionProStatusActivated => 'Activado';
+
+  @override
+  String homeWelcomeDearPro(Object username) {
+    return '¡Estimado Pro, $username! ¿Listo para traducir sus documentos?';
+  }
+
+  @override
+  String homeWelcomeDearStandard(Object username) {
+    return '¡Estimado usuario Estándar, $username! ¿Listo para traducir sus documentos?';
+  }
+
+  @override
+  String get homeWelcomeDearProNoUser =>
+      '¡Estimado Pro! ¿Listo para traducir sus documentos?';
+
+  @override
+  String get homeWelcomeDearStandardNoUser =>
+      '¡Estimado usuario Estándar! ¿Listo para traducir sus documentos?';
+
+  @override
+  String homeWelcomeHello(Object username) {
+    return '¡Hola, $username! ¿Listo para traducir sus documentos?';
+  }
+
+  @override
+  String get homeLoading => 'Cargando...';
+
+  @override
+  String get homeWelcomeGuest => '¡Bienvenido!';
+
+  @override
+  String homeFileNotFound(Object fileName) {
+    return 'Archivo no encontrado: $fileName. Es posible que el archivo haya sido movido o eliminado.';
+  }
+
+  @override
+  String homeFileSelectedMismatch(Object expected, Object selected) {
+    return 'El nombre del archivo seleccionado no coincide: $selected. Esperado: $expected';
+  }
+
+  @override
+  String homeFileLoaded(Object fileName) {
+    return 'Archivo cargado: $fileName';
+  }
+
+  @override
+  String get homeFileSelectionCancelled => 'Selección de archivo cancelada.';
+
+  @override
+  String homeFileLoadFailed(Object error) {
+    return 'Error al cargar el archivo: $error';
+  }
+
+  @override
+  String homeFlowCreateFailed(Object error) {
+    return 'Error al crear el flujo: $error';
+  }
+
+  @override
+  String commonPageNotFound(Object uri) {
+    return 'Página no encontrada: $uri';
+  }
+
+  @override
+  String get commonGoHome => 'Ir al Inicio';
+
+  @override
+  String get commonLogin => 'Iniciar sesión';
+
+  @override
+  String get commonLogout => 'Cerrar sesión';
+
+  @override
+  String get userMenuChangePassword => 'Cambiar contraseña';
+
+  @override
+  String get changePasswordCurrentPasswordLabel => 'Contraseña actual';
+
+  @override
+  String get changePasswordNewPasswordLabel => 'Nueva contraseña';
+
+  @override
+  String get changePasswordConfirmPasswordLabel => 'Confirmar nueva contraseña';
+
+  @override
+  String get changePasswordRequiredError =>
+      'Se requieren la contraseña actual y la nueva contraseña.';
+
+  @override
+  String get changePasswordConfirmMismatchError =>
+      'Las dos nuevas contraseñas no coinciden.';
+
+  @override
+  String get changePasswordSuccessMessage =>
+      'Contraseña cambiada exitosamente.';
+
+  @override
+  String get changePasswordRequirementsTitle => 'Requisitos de la contraseña';
+
+  @override
+  String get changePasswordRequirementLength => '8–128 caracteres';
+
+  @override
+  String get changePasswordRequirementUppercase => 'Al menos 1 letra mayúscula';
+
+  @override
+  String get changePasswordRequirementLowercase => 'Al menos 1 letra minúscula';
+
+  @override
+  String get changePasswordRequirementDigit => 'Al menos 1 dígito';
+
+  @override
+  String get settingsTabsGeneral => 'General';
+
+  @override
+  String get settingsTabsAiPlatforms => 'Plataformas de IA';
+
+  @override
+  String get settingsTabsParsingEngine => 'Motor de Análisis';
+
+  @override
+  String get settingsParsingEngineTitle => 'Motor de Análisis';
+
+  @override
+  String get settingsParsingEngineSubtitle =>
+      'Seleccione el motor de análisis de documentos para la extracción y procesamiento de texto.';
+
+  @override
+  String get settingsParsingEngineLabel => 'Motor de Análisis';
+
+  @override
+  String get settingsParsingEngineMineru => 'MinerU (Nube)';
+
+  @override
+  String get settingsParsingEngineMineruDesc =>
+      'Análisis avanzado de documentos con soporte OCR';
+
+  @override
+  String get settingsParsingEngineMineruLocal => 'MinerU (Local)';
+
+  @override
+  String get settingsParsingEngineMineruLocalDesc =>
+      'MinerU autoalojado; clave API opcional';
+
+  @override
+  String get settingsParsingEnginePdfplumber => 'PDFPlumber';
+
+  @override
+  String get settingsParsingEnginePdfplumberDesc =>
+      'Extracción rápida de texto de PDF';
+
+  @override
+  String get settingsParsingEngineTesseract => 'Tesseract OCR';
+
+  @override
+  String get settingsParsingEngineTesseractDesc =>
+      'Extracción de texto basada en OCR';
+
+  @override
+  String get settingsFormulaOcr => 'OCR de Fórmulas';
+
+  @override
+  String get settingsFormulaOcrSubtitle =>
+      'Habilitar OCR para fórmulas matemáticas';
+
+  @override
+  String get settingsTableOcr => 'OCR de Tablas';
+
+  @override
+  String get settingsTableOcrSubtitle => 'Habilitar OCR para tablas';
+
+  @override
+  String get settingsOcrLanguageTitle => 'Idioma del OCR';
+
+  @override
+  String get settingsOcrLanguageSubtitle =>
+      'Configure el idioma del OCR para el reconocimiento de texto en imágenes y documentos escaneados.';
+
+  @override
+  String get settingsOcrLanguageLabel => 'Idioma del OCR';
+
+  @override
+  String get settingsOcrLangEnglish => 'Inglés';
+
+  @override
+  String get settingsOcrLangChineseSimplified => 'Chino (Simplificado)';
+
+  @override
+  String get settingsOcrLangChineseTraditional => 'Chino (Tradicional)';
+
+  @override
+  String get settingsOcrLangJapanese => 'Japonés';
+
+  @override
+  String get settingsOcrLangKorean => 'Coreano';
+
+  @override
+  String get settingsOcrLangFrench => 'Francés';
+
+  @override
+  String get settingsOcrLangGerman => 'Alemán';
+
+  @override
+  String get settingsOcrLangSpanish => 'Español';
+
+  @override
+  String get settingsOcrLangRussian => 'Ruso';
+
+  @override
+  String get settingsOcrLangArabic => 'Árabe';
+
+  @override
+  String get settingsTabsGlossary => 'Glosario';
+
+  @override
+  String get settingsGlossaryManagementTitle => 'Gestión de Glosarios';
+
+  @override
+  String get settingsGlossaryManagementSubtitle =>
+      'Administre sus entradas de terminología para una calidad de traducción consistente.';
+
+  @override
+  String get settingsGlossarySelectGlossary => 'Seleccionar Glosario';
+
+  @override
+  String get settingsGlossaryCreateGlossary => 'Crear Glosario';
+
+  @override
+  String get settingsGlossaryImportCsv => 'Importar CSV';
+
+  @override
+  String get settingsGlossaryExport => 'Exportar';
+
+  @override
+  String get settingsGlossaryExportAll => 'Exportar Todo';
+
+  @override
+  String get settingsGlossaryDeleteGlossary => 'Eliminar Glosario';
+
+  @override
+  String get settingsGlossarySaveZip => 'Guardar ZIP';
+
+  @override
+  String settingsGlossaryEntriesTitle(Object count) {
+    return 'Entradas del Glosario ($count)';
+  }
+
+  @override
+  String get settingsGlossaryAddEntry => 'Agregar Entrada';
+
+  @override
+  String get settingsGlossaryNoEntriesYet =>
+      'Aún no hay entradas en el glosario.\nAgregue su primera entrada para comenzar.';
+
+  @override
+  String get settingsGlossaryFilterLabel => 'Filtrar:';
+
+  @override
+  String get settingsGlossaryFilterAll => 'Todo';
+
+  @override
+  String get settingsGlossaryFilterUncategorized => 'Sin categoría';
+
+  @override
+  String get settingsGlossaryTableSource => 'Origen';
+
+  @override
+  String get settingsGlossaryTableTarget => 'Destino';
+
+  @override
+  String get settingsGlossaryTableCategory => 'Categoría (Opcional)';
+
+  @override
+  String get settingsGlossaryTableTargetLang => 'Idioma de Destino';
+
+  @override
+  String get settingsGlossaryCategoryHint => 'Categoría';
+
+  @override
+  String get settingsGlossaryUncategorizedDisplay => '(Sin categoría)';
+
+  @override
+  String get settingsGlossaryCopyAction => 'Copiar';
+
+  @override
+  String get settingsGlossaryCopiedToClipboard => 'Copiado al portapapeles';
+
+  @override
+  String get settingsGlossaryDeleteDialogTitle => 'Eliminar Glosario';
+
+  @override
+  String settingsGlossaryDeleteDialogMessage(Object id) {
+    return '¿Está seguro de eliminar este glosario?\nID: $id';
+  }
+
+  @override
+  String get settingsGlossaryCancel => 'Cancelar';
+
+  @override
+  String get settingsGlossaryDelete => 'Eliminar';
+
+  @override
+  String get settingsGlossaryCreateDialogTitle => 'Crear Glosario';
+
+  @override
+  String get settingsGlossaryNameLabel => 'Nombre';
+
+  @override
+  String get settingsGlossaryDescriptionLabel => 'Descripción (opcional)';
+
+  @override
+  String get settingsGlossaryGlobalGlossary => 'Glosario Global';
+
+  @override
+  String get settingsGlossaryGlobalGlossarySubtitle =>
+      'Si está desactivado, será su glosario personal';
+
+  @override
+  String get settingsGlossaryCreate => 'Crear';
+
+  @override
+  String get settingsGlossaryNameRequired => 'El nombre es obligatorio';
+
+  @override
+  String settingsGlossaryCreatedSnack(Object name) {
+    return 'Creado: $name';
+  }
+
+  @override
+  String settingsGlossaryCreateFailedSnack(Object error) {
+    return 'Error al crear: $error';
+  }
+
+  @override
+  String get settingsGlossaryAddEntryDialogTitle =>
+      'Agregar Entrada al Glosario';
+
+  @override
+  String get settingsGlossarySourceTextLabel => 'Texto de Origen';
+
+  @override
+  String get settingsGlossaryTargetTextLabel => 'Texto de Destino';
+
+  @override
+  String get settingsGlossaryCategoryOptionalLabel => 'Categoría (opcional)';
+
+  @override
+  String get settingsGlossaryCategoryOptionalHint =>
+      'Dejar vacío para no clasificar';
+
+  @override
+  String get settingsGlossaryAdd => 'Agregar';
+
+  @override
+  String get settingsGlossarySourceTargetRequired =>
+      'El texto de origen y el texto de destino son obligatorios';
+
+  @override
+  String get settingsGlossaryEntryAddedSnack => 'Entrada agregada';
+
+  @override
+  String settingsGlossaryAddFailedSnack(Object error) {
+    return 'Error: $error';
+  }
+
+  @override
+  String get settingsGlossaryImportDialogTitle => 'Importar CSV al Glosario';
+
+  @override
+  String get settingsGlossaryMergeModeLabel => 'Modo de Fusión';
+
+  @override
+  String get settingsGlossaryMergeUpdate => 'Actualizar (Upsert)';
+
+  @override
+  String get settingsGlossaryMergeAppend => 'Anexar (Solo Nuevos)';
+
+  @override
+  String get settingsGlossaryMergeReplace => 'Reemplazar (Sobrescribir Todo)';
+
+  @override
+  String get settingsGlossaryImport => 'Importar';
+
+  @override
+  String get settingsGlossaryUnableToReadFile => 'No se puede leer el archivo';
+
+  @override
+  String settingsGlossaryImportedSnack(Object count) {
+    return 'Importado: $count elementos';
+  }
+
+  @override
+  String settingsGlossaryImportFailedSnack(Object error) {
+    return 'Error: $error';
+  }
+
+  @override
+  String get settingsGlossaryExportDialogTitle => 'Descargar Glosario CSV';
+
+  @override
+  String get settingsGlossarySaveCsv => 'Guardar CSV';
+
+  @override
+  String get settingsGlossaryDownload => 'Descargar';
+
+  @override
+  String settingsGlossaryDownloadedSnack(Object info) {
+    return 'Descargado: $info';
+  }
+
+  @override
+  String settingsGlossaryExportFailedSnack(Object error) {
+    return 'Error: $error';
+  }
+
+  @override
+  String settingsGlossaryLoadedSnack(Object count) {
+    return 'Cargadas $count entradas';
+  }
+
+  @override
+  String settingsGlossaryLoadFailedSnack(Object error) {
+    return 'Error al cargar: $error';
+  }
+
+  @override
+  String settingsGlossaryDeletedSnack(Object id) {
+    return 'Glosario eliminado: $id';
+  }
+
+  @override
+  String settingsGlossaryDeleteFailedSnack(Object error) {
+    return 'Error al eliminar: $error';
+  }
+
+  @override
+  String settingsGlossaryExportAllFailedSnack(Object error) {
+    return 'Error al exportar todo: $error';
+  }
+
+  @override
+  String get settingsGlossaryEntryUpdatedSnack => 'Entrada actualizada';
+
+  @override
+  String settingsGlossaryUpdateFailedSnack(Object error) {
+    return 'Error al actualizar: $error';
+  }
+
+  @override
+  String get settingsGlossaryEntryDeletedSnack => 'Entrada eliminada';
+
+  @override
+  String settingsGlossaryDeleteEntryFailedSnack(Object error) {
+    return 'Error al eliminar: $error';
+  }
+
+  @override
+  String settingsGlossaryGlossaryDropdownItem(
+      Object count, Object name, Object type) {
+    return '$name ($type) · $count elementos';
+  }
+
+  @override
+  String settingsGlossaryErrorPrefix(Object error) {
+    return 'Error: $error';
+  }
+
+  @override
+  String settingsGlossaryExportedAllSnack(Object info) {
+    return 'Exportado: $info';
+  }
+
+  @override
+  String settingsGlossaryEntryCount(Object count) {
+    return 'Cantidad de entradas: $count';
+  }
+
+  @override
+  String get settingsGlossaryEdit => 'Editar';
+
+  @override
+  String get settingsGlossaryConfirmDeleteEntryTitle => 'Confirmar Eliminación';
+
+  @override
+  String settingsGlossaryConfirmDeleteEntryMessage(Object source) {
+    return '¿Eliminar la entrada \"$source\"?';
+  }
+
+  @override
+  String get settingsGlossaryEditEntryDialogTitle => 'Editar Entrada';
+
+  @override
+  String get settingsGlossaryUpdate => 'Actualizar';
+
+  @override
+  String get settingsGlossaryEntryDeleteFailedSnack =>
+      'Error al eliminar la entrada';
+
+  @override
+  String get glossaryPanelSaveNameHint =>
+      'Ingrese nombre o seleccione existente...';
+
+  @override
+  String get glossaryPanelClearSelection => 'Limpiar selección';
+
+  @override
+  String get glossaryPanelListTitle => 'Glosario';
+
+  @override
+  String get glossaryPanelNoEntries => 'Sin entradas';
+
+  @override
+  String get glossaryPanelOneEntry => '1 entrada';
+
+  @override
+  String glossaryPanelEntriesCount(Object count) {
+    return '$count entradas';
+  }
+
+  @override
+  String get glossaryPanelProcessing => 'Procesando...';
+
+  @override
+  String get glossaryPanelDropCsvHere => 'Suelte el archivo CSV aquí';
+
+  @override
+  String get glossaryPanelNoEntriesHint =>
+      'No hay entradas en el glosario.\nHaga clic en el botón Detectar Glosario para comenzar.\nO seleccione un glosario de la lista para ver sus entradas.\nO arrastre y suelte un archivo CSV aquí.';
+
+  @override
+  String get glossaryWidgetTitle => 'Glosario';
+
+  @override
+  String get glossaryWidgetRefreshTooltip => 'Actualizar lista de glosarios';
+
+  @override
+  String glossaryWidgetGlossariesSelected(Object count) {
+    return '$count glosario seleccionado';
+  }
+
+  @override
+  String glossaryWidgetGlossariesSelectedPlural(Object count) {
+    return '$count glosarios seleccionados';
+  }
+
+  @override
+  String get glossaryWidgetSelectGlossaries => 'Seleccionar Glosarios';
+
+  @override
+  String glossaryWidgetLoadFailed(Object error) {
+    return 'Error al cargar glosarios: $error';
+  }
+
+  @override
+  String get glossaryWidgetNoGlossariesHint =>
+      'No hay glosarios disponibles. Cree uno en Configuración -> Glosario';
+
+  @override
+  String glossaryWidgetTypeCountItems(Object type, Object count) {
+    return '$type · $count elementos';
+  }
+
+  @override
+  String glossaryWidgetTermsExtracted(Object count) {
+    return '$count términos extraídos de la traducción';
+  }
+
+  @override
+  String glossaryWidgetPersonalCreated(Object count) {
+    return '¡Glosario personal creado exitosamente!\nSe agregaron $count términos.';
+  }
+
+  @override
+  String glossaryWidgetPersonalReplaced(Object total) {
+    return '¡Glosario personal reemplazado exitosamente!\nTotal de términos: $total';
+  }
+
+  @override
+  String glossaryWidgetPersonalAppended(
+      Object newCount, Object skipped, Object total) {
+    return 'Se agregaron $newCount términos nuevos al glosario personal.\nSe omitieron $skipped términos existentes.\nTotal de términos: $total';
+  }
+
+  @override
+  String glossaryWidgetPersonalUpdated(
+      Object newCount, Object updatedCount, Object total) {
+    return '¡Glosario personal actualizado exitosamente!\nSe agregaron $newCount términos nuevos, se actualizaron $updatedCount términos existentes.\nTotal de términos: $total';
+  }
+
+  @override
+  String glossaryWidgetAddToPersonalFailed(Object error) {
+    return 'Error al agregar al glosario personal: $error';
+  }
+
+  @override
+  String get settingsTabsTranslation => 'Traducción';
+
+  @override
+  String get settingsTabsAnonymization => 'Anonimización';
+
+  @override
+  String get settingsTabsUserManagement => 'Gestión de Usuarios';
+
+  @override
+  String get settingsUserManagementTitle => 'Modo de Gestión de Usuarios';
+
+  @override
+  String get settingsUserManagementSubtitle =>
+      'Elija la política de inicio de sesión y permisos para el despliegue web. Configuración y Asistente de Configuración son solo para administradores.';
+
+  @override
+  String get settingsUserManagementModeNoLogin =>
+      'No se requiere inicio de sesión';
+
+  @override
+  String get settingsUserManagementModeNoLoginDesc =>
+      'Usar sin iniciar sesión; Configuración y Asistente de Configuración disponibles solo después del inicio de sesión del administrador.';
+
+  @override
+  String get settingsUserManagementModeLdap => 'Inicio de sesión LDAP';
+
+  @override
+  String get settingsUserManagementModeLdapDesc =>
+      'Iniciar sesión con LDAP/AD; Configuración y Asistente de Configuración solo para administrador (grupo de dominio).';
+
+  @override
+  String get settingsUserManagementModeLocal =>
+      'Inicio de sesión de usuario local';
+
+  @override
+  String get settingsUserManagementModeLocalDesc =>
+      'Autenticar contra la lista de usuarios locales en el servidor.';
+
+  @override
+  String get settingsUserManagementInDevelopment => 'En desarrollo';
+
+  @override
+  String get settingsUserManagementSaveSuccess =>
+      'Modo de gestión de usuarios guardado';
+
+  @override
+  String settingsUserManagementSaveFailed(Object message) {
+    return 'Error al guardar: $message';
+  }
+
+  @override
+  String get settingsLdapEnabled => 'Habilitar inicio de sesión LDAP';
+
+  @override
+  String get settingsLdapEnableHint =>
+      'Pruebe la conexión LDAP primero antes de habilitar.';
+
+  @override
+  String get settingsLdapProtocol => 'Protocolo';
+
+  @override
+  String get settingsLdapProtocolLdap => 'LDAP';
+
+  @override
+  String get settingsLdapProtocolLdaps => 'LDAPS';
+
+  @override
+  String get settingsLdapHost =>
+      'Servidor LDAP (coincidir CN/SAN del certificado)';
+
+  @override
+  String get settingsLdapHostPlaceholder => 'ad.ejemplo.com o 192.168.x.x';
+
+  @override
+  String get settingsLdapPort => 'Puerto';
+
+  @override
+  String get settingsLdapPortPlaceholder => '389';
+
+  @override
+  String get settingsLdapBaseDn => 'DN Base de búsqueda de usuarios';
+
+  @override
+  String get settingsLdapBaseDnPlaceholder => 'OU=Usuarios,DC=ejemplo,DC=com';
+
+  @override
+  String get settingsLdapBindDnTemplate => 'Plantilla de DN de enlace';
+
+  @override
+  String settingsLdapBindDnPlaceholder(Object username) {
+    return 'EJEMPLO\\$username o $username@ejemplo.com';
+  }
+
+  @override
+  String get settingsLdapUserFilter => 'Filtro de usuario';
+
+  @override
+  String settingsLdapUserFilterPlaceholder(Object username) {
+    return '(sAMAccountName=$username)';
+  }
+
+  @override
+  String get settingsLdapAdminGroupEnabled =>
+      'Habilitar consulta de grupo de administradores';
+
+  @override
+  String get settingsLdapAdminGroup => 'Nombre del grupo de administradores';
+
+  @override
+  String get settingsLdapAdminGroupPlaceholder => 'Owlangs-Admins';
+
+  @override
+  String get settingsLdapGroupBaseDn => 'DN Base de búsqueda de grupos';
+
+  @override
+  String get settingsLdapGroupBaseDnPlaceholder =>
+      'OU=Grupos,DC=ejemplo,DC=com';
+
+  @override
+  String get settingsLdapTlsVerify => 'Verificar certificado TLS';
+
+  @override
+  String get settingsLdapTlsCacertfile =>
+      'Ruta del archivo del certificado CA de TLS';
+
+  @override
+  String get settingsLdapTlsCacertfilePlaceholder => '/ruta/a/ca.crt';
+
+  @override
+  String get settingsLdapTestConnection => 'Probar conexión LDAP';
+
+  @override
+  String get settingsLdapSaveConfig => 'Guardar configuración LDAP';
+
+  @override
+  String get settingsLdapTestDialogTitle => 'Probar conexión LDAP';
+
+  @override
+  String get settingsLdapTestUsername => 'Nombre de usuario (sin dominio)';
+
+  @override
+  String get settingsLdapTestUsernamePlaceholder => 'usuarioprueba';
+
+  @override
+  String get settingsLdapTestPassword => 'Contraseña';
+
+  @override
+  String get settingsLdapTestPasswordPlaceholder => '********';
+
+  @override
+  String get settingsLdapTestStart => 'Iniciar prueba';
+
+  @override
+  String get settingsLdapTestSuccess =>
+      'Prueba de conexión LDAP exitosa. Ahora puede habilitar LDAP.';
+
+  @override
+  String get settingsLdapTestFailed => 'Prueba de conexión LDAP fallida';
+
+  @override
+  String get settingsLdapConfigSaved => 'Configuración LDAP guardada';
+
+  @override
+  String get settingsLdapEnableRequireTest =>
+      'Por favor, pruebe la conexión LDAP primero antes de habilitar LDAP.';
+
+  @override
+  String get settingsAdminOnlyDialogTitle => 'Solo Administrador';
+
+  @override
+  String get settingsAdminOnlyDialogMessage =>
+      'Configuración y Asistente de Configuración están disponibles solo para administradores. Por favor, inicie sesión con una cuenta de administrador para continuar.';
+
+  @override
+  String get settingsAdminOnlyDialogGoToLogin => 'Ir a Iniciar Sesión';
+
+  @override
+  String get settingsAdminOnlyDialogClose => 'Cerrar';
+
+  @override
+  String get aiPlatformOverview => 'Resumen de Plataformas';
+
+  @override
+  String aiPlatformConfiguredCount(Object configured, Object total) {
+    return 'Configuradas $configured/$total plataformas';
+  }
+
+  @override
+  String get aiPlatformTestApiStatus => 'Probar Estado de la API';
+
+  @override
+  String get aiPlatformTesting => 'Probando...';
+
+  @override
+  String get aiPlatformCategoryLanguageModels => 'Modelos de Lenguaje';
+
+  @override
+  String get aiPlatformCategoryParsingEngines => 'Motores de Análisis';
+
+  @override
+  String aiPlatformConfiguredDragReorder(Object configured, Object total) {
+    return 'Configuradas $configured/$total plataformas (arrastrar para reordenar)';
+  }
+
+  @override
+  String get aiPlatformNotConfigured => 'No configurado';
+
+  @override
+  String get aiPlatformNotTested => 'No probado';
+
+  @override
+  String get aiPlatformApiAvailable => 'API disponible';
+
+  @override
+  String get aiPlatformAvailable => 'Disponible';
+
+  @override
+  String get aiPlatformUnavailable => 'No disponible';
+
+  @override
+  String get aiPlatformConfigure => 'Configurar';
+
+  @override
+  String aiPlatformConfigureTitle(Object name) {
+    return 'Configurar $name';
+  }
+
+  @override
+  String get aiPlatformBasicInformation => 'Información Básica';
+
+  @override
+  String get aiPlatformPlatformName => 'Nombre de la Plataforma';
+
+  @override
+  String get aiPlatformPlatformNameHint =>
+      'ej., Doubao (DeepSeek / Volcano Ark)';
+
+  @override
+  String get aiPlatformApiUrl => 'URL de la API';
+
+  @override
+  String get aiPlatformApiUrlHint =>
+      'ej., https://ark.cn-beijing.volces.com/api/v3';
+
+  @override
+  String get aiPlatformMaxTokens => 'Tokens Máximos';
+
+  @override
+  String get aiPlatformMaxTokensHint => 'ej., 4096';
+
+  @override
+  String get aiPlatformModel => 'Modelo';
+
+  @override
+  String get aiPlatformModelHint => 'ej., deepseek-v3 / llama3.1-70b';
+
+  @override
+  String get aiPlatformApiKey => 'Clave de la API';
+
+  @override
+  String get aiPlatformApiConfiguration => 'Configuración de la API';
+
+  @override
+  String get aiPlatformGetApiKey => 'Obtener Clave de la API';
+
+  @override
+  String get aiPlatformCancel => 'Cancelar';
+
+  @override
+  String get aiPlatformTestConnection => 'Probar Conexión';
+
+  @override
+  String get aiPlatformTestConnectionHint =>
+      'Después de actualizar la configuración, haga clic en \"Probar Conexión\" a continuación para verificar que la plataforma esté disponible.';
+
+  @override
+  String get setupWizardConfigureApiKeyAndTest =>
+      'Conexión no disponible. Por favor, configure la Clave de la API y haga clic en \"Probar Conexión\" para verificar.';
+
+  @override
+  String get setupWizardSaveAndExit => 'Guardar y salir';
+
+  @override
+  String get setupWizardTitle => 'Asistente de Configuración';
+
+  @override
+  String get setupWizardStepWelcome => 'Bienvenido';
+
+  @override
+  String get setupWizardStepMineru => 'PDF / MinerU';
+
+  @override
+  String get setupWizardWelcomeIntro =>
+      'Este asistente le ayudará a completar dos configuraciones clave:';
+
+  @override
+  String get setupWizardWelcomeBody =>
+      '1. Seleccionar y configurar su plataforma LLM principal.\n2. Si necesita traducir PDF/PNG, etc., configurar el motor de análisis MinerU (opcional).\n\nNota: Después de configurar, use \"Probar Conexión\" para verificar.';
+
+  @override
+  String get setupWizardUiLanguageLabel => 'Idioma de la Interfaz';
+
+  @override
+  String get setupWizardMineruQuestion =>
+      '¿Necesita traducir PDF / imágenes en este dispositivo?';
+
+  @override
+  String get setupWizardMineruYes =>
+      'Sí (recomendado; habilita el análisis de documentos MinerU)';
+
+  @override
+  String get setupWizardMineruNo =>
+      'No por ahora (solo traducción LLM para texto plano, etc.)';
+
+  @override
+  String get setupWizardMineruDescription =>
+      'MinerU maneja el análisis de diseño y segmentación para PDF / imágenes.\nIngrese la Clave de la API y la URL de MinerU a continuación, luego haga clic en \"Probar Conexión\" para verificar.';
+
+  @override
+  String get setupWizardMineruSkipped =>
+      'Ha elegido no configurar MinerU. Puede habilitar la traducción de PDF más tarde en Configuración.';
+
+  @override
+  String get setupWizardMineruConfigTitle => 'MinerU (motor de análisis)';
+
+  @override
+  String get setupWizardSelectMineruPlatform => 'Seleccionar Plataforma MinerU';
+
+  @override
+  String get setupWizardMineruCloudOption =>
+      'MinerU (Nube) - Servicio en la nube oficial';
+
+  @override
+  String get setupWizardMineruLocalOption =>
+      'MinerU (Local) - Despliegue autoalojado';
+
+  @override
+  String get setupWizardSelectLlmPlatform => 'Seleccionar plataforma LLM';
+
+  @override
+  String get setupWizardNoLlmPlatforms =>
+      'No hay plataformas LLM en la Configuración de la Plataforma de IA. Agrega una plataforma primero en Configuración.';
+
+  @override
+  String get setupWizardMineruSaved => 'Configuración de MinerU guardada';
+
+  @override
+  String get setupWizardPrevStep => 'Anterior';
+
+  @override
+  String get setupWizardNextStep => 'Siguiente';
+
+  @override
+  String get aiPlatformSave => 'Guardar';
+
+  @override
+  String get aiPlatformList => 'Lista';
+
+  @override
+  String get aiPlatformTemperature => 'Temperatura';
+
+  @override
+  String get aiPlatformThinkingMode => 'Modo de Pensamiento';
+
+  @override
+  String get aiPlatformThinkingDisable => 'Deshabilitar (Recomendado)';
+
+  @override
+  String get aiPlatformThinkingEnable => 'Habilitar';
+
+  @override
+  String get aiPlatformThinkingDefault => 'Predeterminado';
+
+  @override
+  String get aiPlatformThinkingHint =>
+      'Habilita el proceso de razonamiento de IA para una mejor calidad de traducción';
+
+  @override
+  String get aiPlatformPleaseEnterApiKeyFirst =>
+      'Por favor, ingresa primero una clave API';
+
+  @override
+  String get aiPlatformPleaseEnterApiUrlFirst =>
+      'Por favor, ingresa primero la URL de la API';
+
+  @override
+  String get aiPlatformHasApiKey => 'Requiere Clave API';
+
+  @override
+  String get aiPlatformHasApiKeyHint =>
+      'Desmarcar para implementaciones locales sin autenticación API';
+
+  @override
+  String get aiPlatformApiKeyOptionalHint => 'Dejar vacío si no es requerido';
+
+  @override
+  String get optional => 'opcional';
+
+  @override
+  String get aiPlatformConnectionTestSucceeded => 'Prueba de conexión exitosa';
+
+  @override
+  String aiPlatformConnectionTestFailed(Object message) {
+    return 'Prueba de conexión fallida: $message';
+  }
+
+  @override
+  String get aiPlatformNoModelsFound => 'No se encontraron modelos';
+
+  @override
+  String get aiPlatformFailedToLoadModels => 'Error al cargar modelos';
+
+  @override
+  String aiPlatformErrorLoadingModels(Object error) {
+    return 'Error al cargar modelos: $error';
+  }
+
+  @override
+  String get aiPlatformSelectModel => 'Seleccionar Modelo';
+
+  @override
+  String get aiPlatformNoModelsAvailable => 'No hay modelos disponibles';
+
+  @override
+  String get aiPlatformMineruSettings => 'Configuración de MinerU';
+
+  @override
+  String get aiPlatformEnterMineruApiKey => 'Ingresa la Clave API de MinerU';
+
+  @override
+  String get aiPlatformGetMineruApiKey => 'Obtener Clave API de MinerU';
+
+  @override
+  String get aiPlatformModelVersion => 'Versión del Modelo';
+
+  @override
+  String get aiPlatformModelVersionHint => 'vlm';
+
+  @override
+  String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';
+
+  @override
+  String get aiPlatformOcrSettings => 'Configuración de OCR';
+
+  @override
+  String get aiPlatformFormulaOcr => 'OCR de Fórmulas';
+
+  @override
+  String get aiPlatformFormulaOcrSubtitle =>
+      'Habilitar OCR para fórmulas matemáticas';
+
+  @override
+  String get aiPlatformTableOcr => 'OCR de Tablas';
+
+  @override
+  String get aiPlatformTableOcrSubtitle => 'Habilitar OCR para tablas';
+
+  @override
+  String get settingsFontEditSizeTitle => 'Editar Tamaño de Fuente';
+
+  @override
+  String get settingsFontEditSizeSubtitle =>
+      'Tamaño de fuente al editar segmentos traducidos';
+
+  @override
+  String get settingsTranslationTitle => 'Configuración de Traducción';
+
+  @override
+  String get settingsTranslationNotice =>
+      'Estos ajustes se aplicarán solo a nuevas tareas de traducción.';
+
+  @override
+  String get settingsTranslationAutoGlossaryTitle =>
+      'Generar Glosario Automáticamente';
+
+  @override
+  String get settingsTranslationAutoGlossarySubtitle =>
+      'Generar glosario automáticamente después de la traducción (se aplica a nuevas tareas)';
+
+  @override
+  String get settingsTranslationParamsTitle => 'Parámetros de Traducción';
+
+  @override
+  String get settingsTranslationConcurrentTitle => 'Solicitudes Concurrentes';
+
+  @override
+  String get settingsTranslationConcurrentHint =>
+      'Recomendado: 3 (ajustar 1–8 según el modelo y la cuota)';
+
+  @override
+  String get settingsTranslationTimeoutTitle => 'Tiempo de espera (segundos)';
+
+  @override
+  String get settingsTranslationTimeoutHint =>
+      '120 (recomendado: 120-300 segundos)';
+
+  @override
+  String get settingsTranslationRetryTitle => 'Número de Reintentos';
+
+  @override
+  String get settingsTranslationRetryHint =>
+      'Recomendado: 3 (número de reintentos para segmentos fallidos)';
+
+  @override
+  String get settingsTranslationChunkSizeTitle =>
+      'Tamaño del Fragmento (tokens)';
+
+  @override
+  String get settingsTranslationChunkSizeHint =>
+      'Recomendado: 3000 tokens por solicitud (ajustar según el tamaño de contexto del modelo)';
+
+  @override
+  String get settingsExclusionTitle => 'Reglas de Exclusión Predeterminadas';
+
+  @override
+  String get settingsExclusionNotice =>
+      'Activar = excluir automáticamente durante la Extracción; Desactivar = solo detectar (el usuario decide por segmento).';
+
+  @override
+  String get settingsExclusionImageTitle => 'Imagen';
+
+  @override
+  String get settingsExclusionImageSubtitle =>
+      'Marcadores de posición de imagen y contenido de solo imagen';
+
+  @override
+  String get settingsExclusionFormulaTitle => 'Fórmula';
+
+  @override
+  String get settingsExclusionFormulaSubtitle => 'Fórmulas LaTeX / MathML';
+
+  @override
+  String get settingsExclusionReferenceTitle => 'Referencia';
+
+  @override
+  String get settingsExclusionReferenceSubtitle =>
+      'Citas y referencias bibliográficas';
+
+  @override
+  String get settingsExclusionIdentifierTitle => 'Identificador';
+
+  @override
+  String get settingsExclusionIdentifierSubtitle =>
+      'URLs, correos electrónicos, números de serie, fragmentos de código';
+
+  @override
+  String get settingsExclusionStructuralTitle => 'Estructural';
+
+  @override
+  String get settingsExclusionStructuralSubtitle =>
+      'Encabezados, pies de página, notas al pie, números de página';
+
+  @override
+  String get settingsExclusionTableTitle => 'Tabla';
+
+  @override
+  String get settingsExclusionTableSubtitle =>
+      'Contenido de tabla (tablas markdown / PDF)';
+
+  @override
+  String get settingsExclusionLanguageMatchTitle => 'Coincidencia de Idioma';
+
+  @override
+  String get settingsExclusionLanguageMatchSubtitle =>
+      'El idioma de origen coincide con el idioma de destino';
+
+  @override
+  String get settingsLanguageDialogTitle => 'Seleccionar Idioma';
+
+  @override
+  String get settingsUnitPt => 'pt';
+
+  @override
+  String get glossaryGeneratedTabTitle => 'Glosario Generado';
+
+  @override
+  String glossaryErrorRefresh(Object error) {
+    return 'Error al actualizar glosarios: $error';
+  }
+
+  @override
+  String get glossaryWarningNoGenerated =>
+      'No hay glosario generado disponible';
+
+  @override
+  String get glossaryPanelView => 'Ver';
+
+  @override
+  String get glossaryPanelAddToPersonal => 'Agregar a Personal';
+
+  @override
+  String get glossaryPanelNoGlobalGlossaries =>
+      'No hay glosarios globales disponibles';
+
+  @override
+  String get glossaryPanelSelectTitle => 'Seleccionar Glosario';
+
+  @override
+  String get glossaryPanelSelectHint => 'Seleccionar glosario...';
+
+  @override
+  String glossaryPanelSelected(Object name) {
+    return 'Seleccionado: $name';
+  }
+
+  @override
+  String get glossaryPanelSelectConfirm => 'Seleccionar';
+
+  @override
+  String get glossaryPanelMergeToCurrent => 'Fusionar al Glosario Actual';
+
+  @override
+  String glossaryPanelLoadedGlossary(Object name) {
+    return 'Glosario cargado: $name';
+  }
+
+  @override
+  String glossaryPanelLoadFailed(Object error) {
+    return 'Error al cargar glosario: $error';
+  }
+
+  @override
+  String glossaryPanelMergedIntoCurrent(Object glossaryName) {
+    return 'Glosario \"$glossaryName\" fusionado al glosario actual';
+  }
+
+  @override
+  String glossaryPanelMergeFailed(Object error) {
+    return 'Fusión fallida: $error';
+  }
+
+  @override
+  String get glossaryPanelEnterName => 'Ingresa un nombre para el glosario';
+
+  @override
+  String get glossaryPanelSaveDialogHint =>
+      'Ingresa un nombre para el glosario o selecciona uno existente para reemplazar:';
+
+  @override
+  String get glossaryPanelReplaceTitle => 'Reemplazar Glosario Global';
+
+  @override
+  String glossaryPanelReplaceBody(Object glossaryName) {
+    return 'Esto reemplazará todas las entradas en \"$glossaryName\" con las entradas del glosario actual. ¿Continuar?';
+  }
+
+  @override
+  String get glossaryPanelReplaceConfirm => 'Reemplazar';
+
+  @override
+  String glossaryPanelReplacedGlobal(Object name) {
+    return 'Glosario global reemplazado: $name';
+  }
+
+  @override
+  String glossaryPanelSavedAsNewGlobal(Object name) {
+    return 'Guardado como nuevo glosario global: $name';
+  }
+
+  @override
+  String glossaryPanelSaveFailed(Object error) {
+    return 'Error al guardar: $error';
+  }
+
+  @override
+  String get glossaryPanelDetect => 'Detectar Glosario';
+
+  @override
+  String get glossaryPanelEdit => 'Editar';
+
+  @override
+  String get glossaryPanelCreate => 'Crear Glosario';
+
+  @override
+  String get glossaryPanelSelect => 'Seleccionar';
+
+  @override
+  String get glossaryPanelImport => 'Importar';
+
+  @override
+  String get glossaryPanelExport => 'Exportar';
+
+  @override
+  String get glossaryPanelSave => 'Guardar';
+
+  @override
+  String get glossaryPanelAddEntry => 'Agregar Entrada';
+
+  @override
+  String get glossaryPanelClear => 'Limpiar';
+
+  @override
+  String get glossaryPanelApply => 'Aplicar';
+
+  @override
+  String get glossaryPanelColumnSource => 'Origen';
+
+  @override
+  String get glossaryPanelColumnTarget => 'Destino';
+
+  @override
+  String get glossaryPanelColumnActions => 'Acciones';
+
+  @override
+  String get translationStepsUploadTooltipReady => 'Archivo seleccionado';
+
+  @override
+  String get translationStepsUploadTooltipNotReady =>
+      'Selecciona un archivo para comenzar';
+
+  @override
+  String get translationStepsExtractTooltipReady => 'Ver origen extraído';
+
+  @override
+  String get translationStepsExtractTooltipNotReady =>
+      'La extracción estará lista después de la importación';
+
+  @override
+  String get translationStepsGlossaryTooltipSkipped => 'Glosario omitido';
+
+  @override
+  String get translationStepsGlossaryTooltipEnabled => 'Glosario habilitado';
+
+  @override
+  String get translationStepsGlossaryTooltipDisabled =>
+      'Genera o selecciona un glosario para habilitar';
+
+  @override
+  String get translationStepsTranslateTooltipReady => 'Traducción completada';
+
+  @override
+  String get translationStepsTranslateTooltipNotReady =>
+      'Ejecuta la traducción para habilitar';
+
+  @override
+  String get glossaryDialogAddTitle => 'Agregar al Glosario Personal';
+
+  @override
+  String glossaryDialogAddBody(Object termCount) {
+    return 'Esto agregará $termCount términos a tu glosario personal.';
+  }
+
+  @override
+  String get glossaryDialogAddPreviewTitle =>
+      'Vista previa (primeros 5 términos):';
+
+  @override
+  String glossaryDialogAddMoreTerms(Object remainingCount) {
+    return '... y $remainingCount términos más';
+  }
+
+  @override
+  String get glossaryDialogMergeStrategyTitle => 'Estrategia de Fusión:';
+
+  @override
+  String get glossaryDialogMergeUpdateTitle => 'Actualizar (Recomendado)';
+
+  @override
+  String get glossaryDialogMergeUpdateSubtitle =>
+      'Actualizar términos existentes, agregar nuevos';
+
+  @override
+  String get glossaryDialogMergeAppendTitle => 'Anexar';
+
+  @override
+  String get glossaryDialogMergeAppendSubtitle =>
+      'Solo agregar nuevos términos, omitir los existentes';
+
+  @override
+  String get glossaryDialogMergeReplaceTitle => 'Reemplazar';
+
+  @override
+  String get glossaryDialogMergeReplaceSubtitle =>
+      'Reemplazar todo el glosario con estos términos';
+
+  @override
+  String get glossaryDialogCancel => 'Cancelar';
+
+  @override
+  String get glossaryDialogReviewAndAdd => 'Revisar y Agregar';
+
+  @override
+  String get glossaryConfirmAddTitle =>
+      'Confirmar Agregar al Glosario Personal';
+
+  @override
+  String glossaryConfirmAddBody(Object termCount) {
+    return '¿Agregar $termCount términos a tu glosario personal?';
+  }
+
+  @override
+  String get glossaryConfirmAddStrategyUpdate =>
+      'Estrategia: Actualizar términos existentes, agregar nuevos';
+
+  @override
+  String get glossaryConfirmAddStrategyAppend =>
+      'Estrategia: Solo agregar nuevos términos, omitir los existentes';
+
+  @override
+  String get glossaryConfirmAddStrategyReplace =>
+      'Estrategia: Reemplazar todo el glosario';
+
+  @override
+  String get glossaryConfirmAddAutoCreateHint =>
+      'Si tu glosario personal no existe, se creará automáticamente.';
+
+  @override
+  String get glossaryConfirmAddButton => 'Agregar';
+
+  @override
+  String get glossaryExportDialogTitle => 'Guardar Glosario como CSV';
+
+  @override
+  String glossaryExportSuccess(Object filename) {
+    return 'Glosario exportado: $filename';
+  }
+
+  @override
+  String glossaryExportFailed(Object error) {
+    return 'Error al exportar glosario: $error';
+  }
+
+  @override
+  String glossaryCsvValidationFailed(Object errors) {
+    return 'Validación del archivo CSV fallida:\n\n$errors';
+  }
+
+  @override
+  String get glossaryCsvNoValidEntries =>
+      'El archivo CSV no contiene entradas válidas.';
+
+  @override
+  String get glossaryImportDialogTitle => 'Importar Glosario';
+
+  @override
+  String glossaryImportDialogBodyEmpty(Object count) {
+    return 'Se encontraron $count entradas en el archivo.\n\nEl glosario actual está vacío. Las entradas importadas se agregarán.';
+  }
+
+  @override
+  String glossaryImportDialogBody(Object count) {
+    return 'Se encontraron $count entradas en el archivo.\n\nElige cómo importar:';
+  }
+
+  @override
+  String get glossaryImportButtonImport => 'Importar';
+
+  @override
+  String get glossaryImportButtonReplace => 'Reemplazar';
+
+  @override
+  String get glossaryImportButtonMerge => 'Fusionar';
+
+  @override
+  String glossaryImportResult(Object count, Object mode) {
+    return 'Importadas $count entradas ($mode)';
+  }
+
+  @override
+  String glossaryErrorImport(Object error) {
+    return 'Error al importar glosario: $error';
+  }
+
+  @override
+  String get glossaryErrorFileData =>
+      'Error al leer los datos del archivo. Por favor, inténtalo de nuevo.';
+
+  @override
+  String get glossaryErrorFilePath =>
+      'La ruta del archivo no está disponible. Por favor, inténtalo de nuevo.';
+
+  @override
+  String get glossaryErrorOnlyCsv =>
+      'Solo se admiten archivos CSV para la importación de glosarios.';
+
+  @override
+  String get extractFormatConversionFailed => 'La conversión de formato falló.';
+
+  @override
+  String get fileUploadDisabledMessage =>
+      'Selección de archivo deshabilitada (procesamiento en curso)';
+
+  @override
+  String get fileUploadSupportedFormats =>
+      'Soportados: Word (DOCX), PowerPoint (PPTX), Excel (XLSX/CSV), PDF, Markdown, TXT, HTML, SRT, JSON, EPUB, MOBI, Qt TS, PNG, JPEG';
+
+  @override
+  String get fileUploadDropHere => 'Soltar archivo aquí';
+
+  @override
+  String get fileUploadHint =>
+      'Arrastra y suelta el archivo aquí o haz clic para seleccionar';
+
+  @override
+  String get fileUploadCancelTask => 'Cancelar Tarea Actual';
+
+  @override
+  String get exclusionPanelExcludeAll => 'Excluir Todo';
+
+  @override
+  String get exclusionPanelCancelUserExclusion =>
+      'Restaurar Exclusiones Automáticas';
+
+  @override
+  String get exclusionPanelClearAllExclusions =>
+      'Limpiar Todas las Exclusiones';
+
+  @override
+  String get exclusionPanelExclusionByType => 'Exclusión por Tipo:';
+
+  @override
+  String get exclusionPanelStructuralHeader => 'Estructural (Encabezado)';
+
+  @override
+  String get exclusionPanelStructuralFooter => 'Estructural (Pie de página)';
+
+  @override
+  String get exclusionPanelUserExcluded => 'Excluido por el Usuario';
+
+  @override
+  String get exclusionPanelExcluded => 'Excluido';
+
+  @override
+  String get exclusionPanelFilterDisplayMode =>
+      'Modo de Visualización del Filtro:';
+
+  @override
+  String get exclusionPanelRebuild => 'Reconstruir';
+
+  @override
+  String get exclusionPanelPage => 'Página';
+
+  @override
+  String get exclusionPanelRebuildTooltip =>
+      'Mostrar solo segmentos coincidentes en la nueva paginación';
+
+  @override
+  String get exclusionPanelPageTooltip => 'Filtrar dentro de la página actual';
+
+  @override
+  String get exclusionPanelSegmentTypeFilters => 'Filtros de Tipo de Segmento:';
+
+  @override
+  String get exclusionPanelCollapsePanelTooltip => 'Contraer panel';
+
+  @override
+  String get exclusionPanelExclusionControls => 'Controles de Exclusión:';
+
+  @override
+  String exclusionPanelExcludeCategory(Object count, Object name) {
+    return 'Excluir $name ($count)';
+  }
+
+  @override
+  String get exclusionPanelChangeReasonTitle => 'Cambiar Motivo de Exclusión';
+
+  @override
+  String get exclusionPanelCurrentLabel => 'Actual: ';
+
+  @override
+  String get exclusionPanelSelectNewReason => 'Seleccionar nuevo motivo:';
+
+  @override
+  String get exclusionPanelNoneRemoveExclusion =>
+      'Ninguno (Eliminar Exclusión)';
+
+  @override
+  String get exclusionPanelApply => 'Aplicar';
+
+  @override
+  String get exclusionPanelExpandFilterPanel => 'Expandir Panel de Filtros';
+
+  @override
+  String get exclusionPanelCollapseFilterPanel => 'Contraer Panel de Filtros';
+
+  @override
+  String extractToolbarSegments(Object end, Object start, Object total) {
+    return 'Segmentos ($start-$end de $total)';
+  }
+
+  @override
+  String get extractToolbarCancel => 'Cancelar';
+
+  @override
+  String get extractCancelExtractionTitle => 'Cancelar Extracción';
+
+  @override
+  String get extractCancelExtractionContent =>
+      '¿Estás seguro de que quieres cancelar la extracción? Esto no se puede deshacer.';
+
+  @override
+  String get extractCancelExtractionNo => 'No';
+
+  @override
+  String get extractCancelExtractionYes => 'Sí';
+
+  @override
+  String get extractExtractionCancelled => 'Extracción cancelada';
+
+  @override
+  String get extractMineruConfigRequiredTitle =>
+      'Configuración de MinerU Requerida';
+
+  @override
+  String extractMineruConfigRequiredContent(Object error) {
+    return 'Error al conectar con la API de MinerU. Por favor, configura los ajustes de MinerU en la página de Configuración.\n\nDetalles del error:\n$error';
+  }
+
+  @override
+  String get extractOpenSettings => 'Abrir Configuración';
+
+  @override
+  String extractErrorLabel(Object error) {
+    return 'Error: $error';
+  }
+
+  @override
+  String get extractRetry => 'Reintentar';
+
+  @override
+  String get extractTaskTypeDetectIdentifier => 'Detectar Identificador';
+
+  @override
+  String get extractTaskTypeDetectLanguage => 'Detectar Idioma';
+
+  @override
+  String get extractTaskTypeDetectExclusions => 'Detectar Exclusiones';
+
+  @override
+  String get translationStatsTitle => 'Estadísticas de Traducción';
+
+  @override
+  String get translationStatsDocuments => 'Documentos';
+
+  @override
+  String get translationStatsPages => 'Páginas';
+
+  @override
+  String translationStatsLastUpdated(Object date) {
+    return 'Última actualización: $date';
+  }
+
+  @override
+  String get translationStatsLoadFailed => 'Error al cargar estadísticas';
+
+  @override
+  String get translationStatsJustNow => 'Justo ahora';
+
+  @override
+  String get translationStatsOneMinuteAgo => 'Hace 1 minuto';
+
+  @override
+  String translationStatsMinutesAgo(Object count) {
+    return 'Hace $count minutos';
+  }
+
+  @override
+  String get translationStatsOneHourAgo => 'Hace 1 hora';
+
+  @override
+  String translationStatsHoursAgo(Object count) {
+    return 'Hace $count horas';
+  }
+
+  @override
+  String get translationStatsYesterday => 'Ayer';
+
+  @override
+  String translationStatsDaysAgo(Object count) {
+    return 'Hace $count días';
+  }
+
+  @override
+  String get aiPlatformDisplayName => 'Nombre para Mostrar';
+
+  @override
+  String get aiPlatformParserSubtype => 'Subtipo del Analizador';
+
+  @override
+  String get aiPlatformParserSubtypeCloud => 'Nube';
+
+  @override
+  String get aiPlatformParserSubtypeLocal => 'Local';
+}
