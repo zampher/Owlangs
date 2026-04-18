@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ tittle }}</title>
+</head>
+<body>
+
+  {% for sub in subtitles %}
+  <p>
+    <b>{{ sub.index }}</b><br>
+    {{ sub.start }} --> {{ sub.end }}<br>
+    {{ sub.content | safe }}
+  </p>
+  {% else %}
+  <p>No subtitle content to display.</p>
+  {% endfor %}
+
+</body>
+</html>

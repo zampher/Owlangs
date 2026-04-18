@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-bs-theme="auto">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n-title="settingsTitle">Settings - Owlangs</title>
+    <link rel="icon" href="/static/favicon.ico">
+    <link href="/static/bootstrap.css" rel="stylesheet">
+    <link href="/static/bootstrap-icons.css" rel="stylesheet">
+    <link href="/static/pico.css" rel="stylesheet">
+    <style>
+        .settings-nav {
+            background: var(--bs-tertiary-bg);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        .settings-nav .nav-link {
+            color: var(--bs-body-color);
+            border-radius: 6px;
+            margin-bottom: 0.25rem;
+            transition: all 0.2s ease;
+        }
+        .settings-nav .nav-link:hover {
+            background-color: var(--bs-secondary-bg);
+            color: var(--bs-body-color);
+        }
+        .settings-nav .nav-link.active {
+            background-color: var(--bs-primary);
+            color: var(--bs-white);
+        }
+        .settings-content {
+            min-height: 500px;
+        }
+        .settings-section {
+            display: none;
+        }
+        .settings-section.active {
+            display: block;
+        }
+        .section-header {
+            border-bottom: 2px solid var(--bs-border-color);
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .section-header h2 {
+            color: var(--bs-emphasis-color);
+            font-size: 1.5rem;
+            margin: 0;
+        }
+        .section-header p {
+            color: var(--bs-secondary-color);
+            margin: 0.5rem 0 0 0;
+        }
+        .loading-spinner {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+        }
+        /* Improve readability under dark theme */
+        [data-bs-theme="dark"] .form-label,
+        [data-bs-theme="dark"] label {
+            color: var(--bs-emphasis-color);
+        }
+        [data-bs-theme="dark"] .form-text,
+        [data-bs-theme="dark"] small,
+        [data-bs-theme="dark"] .text-muted {
+            color: var(--bs-secondary-color) !important;
+        }
+        [data-bs-theme="dark"] .card {
+            background-color: var(--bs-body-bg);
+            color: var(--bs-body-color);
+        }
+        [data-bs-theme="dark"] .card-header {
+            background-color: var(--bs-secondary-bg);
+            color: var(--bs-emphasis-color);
+        }
+        [data-bs-theme="dark"] table thead th {
+            color: var(--bs-emphasis-color);
+        }
+        /* Fix close button conflicting styles (e.g., Pico.css) making it a white block */
+        .btn-close {
+            background-color: transparent !important;
+            box-shadow: none !important;
+            border: 0 !important;
+            width: 1em;
+            height: 1em;
+            padding: .25rem;
+            background-repeat: no-repeat !important;
+            background-position: center !important;
+        }
+        /* Shared card styles matching AI Platform */
+        .ct-section-card { background-color: var(--bs-tertiary-bg); border: 1px solid var(--bs-border-color); }
+        .ct-section-title { color: var(--bs-emphasis-color); }
+        .ct-section-desc { color: var(--bs-secondary-color); }
+        .ct-badge-muted { background-color: var(--bs-secondary-bg); color: var(--bs-secondary-color); }
+    </style>
+    <script>
+        // Frontend log level control for Settings page (default INFO)
+        (function(){
+            try{
+                const originalDebug = console.debug.bind(console);
+                const originalLog = console.log.bind(console);
+                const setLevel = (level)=>{
+                    const lvl = (level||'INFO').toUpperCase();
+                    if(lvl === 'DEBUG'){
+                        console.debug = originalDebug;
+                        console.log = originalLog;
+                    }else{
+                        console.debug = function(){}; // suppress console.debug
+                        // filter out [DEBUG] tagged console.log
+                        console.log = function(){
+                            try{
+                                if(arguments.length>0 && typeof arguments[0]==='string' && arguments[0].startsWith('[DEBUG]')){
+                                    return;
+                                }
+                            }catch(_){/* ignore */}
+                            return originalLog.apply(console, arguments);
+                        };
+                    }
+                };
+                const saved = localStorage.getItem('frontend_log_level');
+                if(saved){ setLevel(saved); } else { setLevel('INFO'); }
+                fetch('/auth/app-config', {credentials:'include'}).then(r=>r.ok?r.json():null).then(cfg=>{
+                    if(!cfg) return;
+                    const lvl = (cfg.logging && cfg.logging.level) || cfg.logging_level || cfg['logging.level'] || cfg.frontend_log_level;
+                    if(lvl){ setLevel(lvl); }
+                }).catch(()=>{});
+                window.setFrontendLogLevel = (lvl)=>{ localStorage.setItem('frontend_log_level', lvl); setLevel(lvl); };
+            }catch(_){/* no-op */}
+        })();
+    </script>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+  <div class="container-fluid">
+    <div class="d-flex align-items-center justify-content-between w-100">
+      <div class="d-flex align-items-center">
+        <a class="navbar-brand" href="/">Owlangs</a>
+      </div>
+      <a class="btn btn-sm btn-outline-light" href="/" data-i18n="homePageBtn">Home</a>
+    </div>
+  </div>
+</nav>
+
+<main class="container py-4">
+  <h1 class="h4 mb-4" data-i18n="settingsTitle">Settings</h1>
+
+  <div class="row g-4">
+    <!-- <span data-i18n="leftNavigation">Left Navigation</span> -->
+    <aside class="col-md-3">
+      <div class="settings-nav">
+        <nav class="nav flex-column">
+          <a class="nav-link active" href="#" data-section="general">
+            <i class="bi bi-gear me-2"></i><span data-i18n="generalTitle">General</span>
+          </a>
+          <a class="nav-link" href="#" data-section="prompts">
+            <i class="bi bi-chat-text me-2"></i><span data-i18n="promptsTitle">Prompts</span>
+          </a>
+          <a class="nav-link" href="#" data-section="glossary">
+            <i class="bi bi-book me-2"></i><span data-i18n="glossaryTitle">Glossary</span>
+          </a>
+          <a class="nav-link" href="#" data-section="ai-platforms">
+            <i class="bi bi-robot me-2"></i><span data-i18n="aiPlatformTitle">AI Platforms</span>
+          </a>
+          <a class="nav-link" href="#" data-section="parsing-engines">
+            <i class="bi bi-cpu me-2"></i><span data-i18n="parsingEngineTitle">Parsing Engine</span>
+          </a>
+          <a class="nav-link" href="#" data-section="login-settings">
+            <i class="bi bi-shield-lock me-2"></i><span data-i18n="ldapTitle">LDAP</span>
+          </a>
+          <a class="nav-link" href="#" data-section="banner-settings">
+            <i class="bi bi-chat-dots me-2"></i><span data-i18n="bannerTitle">Banner</span>
+          </a>
+          <a class="nav-link" href="#" data-section="web-settings">
+            <i class="bi bi-globe me-2"></i><span data-i18n="webTitle">Web</span>
+          </a>
+          <a class="nav-link" href="#" data-section="users">
+            <i class="bi bi-people me-2"></i><span data-i18n="usersTitle">Users</span>
+          </a>
+          <a class="nav-link" href="#" data-section="anonymization-settings">
+            <i class="bi bi-shield-check me-2"></i><span data-i18n="anonymizationTitle">Anonymization</span>
+          </a>
+          
+        </nav>
+      </div>
+    </aside>
+
+    <!-- <span data-i18n="rightContentArea">Right Content Area</span> -->
+    <div class="col-md-9">
+      <div class="settings-content">
+        
+        <!-- General -->
+        <div class="settings-section active" id="general-section">
+          <div class="section-header">
+            <h2><span data-i18n="generalTitle">General</span></h2>
+            <p data-i18n="generalDescription">Configure basic system settings and default options</p>
+          </div>
+          <div id="general-content">
+            <div class="loading-spinner">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI <span data-i18n="platform">Platform</span> -->
+        <div class="settings-section" id="ai-platforms-section">
+          <div class="section-header">
+            <h2><span data-i18n="aiPlatformTitle">AI <span data-i18n="platform">Platform</span></span></h2>
+            <p data-i18n="aiPlatformDescription">Configure AI translation <span data-i18n="platform">platform</span> API keys and parameters</p>
+          </div>
+          <div id="ai-platforms-content">
+            <div class="loading-spinner">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Parsing Engine -->
+        <div class="settings-section" id="parsing-engines-section">
+          <div class="section-header">
+            <h2><span data-i18n="parsingEngineTitle">Parsing Engine</span></h2>
+            <p data-i18n="parsingEngineDescription">Configure document parsing engine parameters and API settings</p>
+          </div>
+          <div id="parsing-engines-content">
+            <div class="loading-spinner">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Prompts -->
+        <div class="settings-section" id="prompts-section">
+          <div class="section-header">
+            <h2><span data-i18n="promptsTitle">Prompts</span></h2>
+            <p data-i18n="promptsDescription">Manage translation prompts and custom prompts</p>
+          </div>
+          <div id="prompts-content">
+            <div class="loading-spinner">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- <span data-i18n="glossary">Glossary</span> -->
+        <div class="settings-section" id="glossary-section">
+          <div class="section-header">
+            <h2><span data-i18n="glossaryTitle">Glossary</span></h2>
+            <p data-i18n="glossaryDescription">Manage translation <span data-i18n="glossary">glossary</span> and vocabulary</p>
+          </div>
+          <div id="glossary-content">
+            <div class="loading-spinner">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LDAP -->
+        <div class="settings-section" id="login-settings-section">
+          <div class="section-header">
+            <h2><span data-i18n="ldapTitle">LDAP</span></h2>
+            <p data-i18n="ldapDescription">Configure LDAP authentication and parameters</p>
+          </div>
+          <div id="login-settings-content">
+            <div class="loading-spinner">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Banner -->
+        <div class="settings-section" id="banner-settings-section">
+          <div class="section-header">
+            <h2><span data-i18n="bannerTitle">Banner</span></h2>
+            <p data-i18n="bannerDescription">Configure display messages for login page and main page</p>
+          </div>
+          <div id="banner-settings-content">
+            <div class="loading-spinner">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Web -->
+        <div class="settings-section" id="web-settings-section">
+          <div class="section-header">
+            <h2><span data-i18n="webTitle">Web</span></h2>
+            <p data-i18n="webDescription">Configure HTTPS certificates and security settings</p>
+          </div>
+          <div id="web-settings-content">
+            <div class="loading-spinner">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Anonymization -->
+        <div class="settings-section" id="anonymization-settings-section">
+          <div class="section-header">
+            <h2><span data-i18n="anonymizationTitle">Anonymization</span></h2>
+            <p data-i18n="anonymizationDescription">Configure anonymization engine and sensitive information detection settings</p>
+          </div>
+          <div id="anonymization-settings-content">
+            <div class="loading-spinner">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Users -->
+        <div class="settings-section" id="users-section">
+          <div class="section-header">
+            <h2><span data-i18n="usersTitle">Users</span></h2>
+            <p data-i18n="usersDescription">Manage local users, roles and passwords</p>
+          </div>
+          <div id="users-content">
+            <div class="loading-spinner">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        
+
+      </div>
+    </div>
+  </div>
+
+  <!-- <span data-i18n="bottomSaveButton">Bottom Save Button</span> - <span data-i18n="commented">Commented</span>, <span data-i18n="eachSubmoduleHasIndependentSaveButton">because each submodule has its own save button</span> -->
+  <!--
+  <div class="mt-4 text-center">
+    <button id="saveAllBtn" class="btn btn-success btn-lg" data-i18n="saveSettingsBtn">
+      <i class="bi bi-check-circle me-2"></i>Save All Settings
+    </button>
+  </div>
+  -->
+
+
+
+</main>
+
+<script src="/static/bootstrap.bundle.min.js"></script>
+<!-- API Client and Error Handler for unified requests and notifications -->
+<script src="/static/js/api-client.js"></script>
+<script src="/static/js/error-handler.js"></script>
+<script src="/static/settings/settings-core.js?v=20251005"></script>
+<script>
+  // Initialize everything when page loads
+  document.addEventListener('DOMContentLoaded', () => {
+    initSettings();
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Owlangs - Frontend Selection</title>
+    <link href="/static/bootstrap.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/bootstrap-icons.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .frontend-selector {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 3rem;
+            max-width: 600px;
+            width: 90%;
+            text-align: center;
+        }
+        .frontend-option {
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 2rem;
+            margin: 1rem 0;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        .frontend-option:hover {
+            border-color: #007bff;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,123,255,0.15);
+            text-decoration: none;
+            color: inherit;
+        }
+        .frontend-option h3 {
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+        .frontend-option p {
+            color: #666;
+            margin-bottom: 0;
+        }
+        .badge {
+            font-size: 0.8rem;
+            padding: 0.3rem 0.6rem;
+        }
+        .logo {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="frontend-selector">
+        <div class="logo">
+            <i class="bi bi-translate"></i>
+        </div>
+        <h1 class="mb-4">Owlangs</h1>
+        <p class="text-muted mb-4">Choose your preferred frontend interface:</p>
+        
+        <a href="/" class="frontend-option">
+            <h3><i class="bi bi-lightning-charge me-2"></i>Vue Frontend</h3>
+            <p>Modern, responsive interface built with Vue 3 and Element Plus</p>
+            <span class="badge bg-primary">Recommended</span>
+        </a>
+        
+        <a href="/legacy" class="frontend-option">
+            <h3><i class="bi bi-gear me-2"></i>Legacy Frontend</h3>
+            <p>Traditional interface with Bootstrap and vanilla JavaScript</p>
+            <span class="badge bg-secondary">Classic</span>
+        </a>
+        
+        <div class="mt-4">
+            <small class="text-muted">
+                <i class="bi bi-info-circle me-1"></i>
+                You can switch between frontends at any time
+            </small>
+        </div>
+    </div>
+</body>
+</html>
+
+

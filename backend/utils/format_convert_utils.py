@@ -1,0 +1,1874 @@
+# SPDX-FileCopyrightText: 2026 Zampher
+# SPDX-License-Identifier: MPL-2.0
+
+"""Format conversion utilities: HTML to DOCX and Markdown to PDF (via Pandoc)."""
+
+import base64
+import hashlib
+import io
+import mimetypes
+import os
+import re
+import shutil
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from docx import Document
+from docx.oxml.ns import qn
+from logger import unified_logger as logger
+from logger.logger import LogModule
+from utils.latex_repair_payload import extract_latex_error_context
+
+
+def _to_short_path_if_needed(path: Path) -> Path:
+    """On Windows, return 8.3 short path when path contains non-ASCII (e.g. CJK).
+    TeX/kpathsea tools can fail with path encoding; short path avoids that."""
+    if sys.platform != "win32" or not path.exists():
+        return path
+    s = str(path)
+    if all(ord(c) <= 127 for c in s):
+        return path
+    try:
+        import ctypes
+        from ctypes import wintypes
+        buf_size = 0
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        GetShortPathNameW = kernel32.GetShortPathNameW
+        GetShortPathNameW.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+        GetShortPathNameW.restype = wintypes.DWORD
+        needed = GetShortPathNameW(s, None, 0)
+        if needed == 0 or needed > 32767:
+            return path
+        buf = ctypes.create_unicode_buffer(int(needed))
+        if GetShortPathNameW(s, buf, needed) == 0:
+            return path
+        return Path(buf.value)
+    except Exception:
+        return path
+
+
+def _ensure_ascii_path_for_tex(tex_root: Path) -> Path:
+    """Return an ASCII-only path for the TeX root so Pandoc/XeLaTeX subprocesses get paths they can use.
+    Tries 8.3 short path first; if that fails (e.g. 8.3 disabled on volume), creates a directory junction
+    in %%LOCALAPPDATA%%\\OwlangsPdflatex so kpathsea and child processes see ASCII paths."""
+    if sys.platform != "win32" or not tex_root.exists():
+        return tex_root
+    s = str(tex_root)
+    if all(ord(c) <= 127 for c in s):
+        return tex_root
+    short = _to_short_path_if_needed(tex_root)
+    if short != tex_root and all(ord(c) <= 127 for c in str(short)):
+        return short
+    # Short path failed (e.g. 8.3 disabled); create junction in ASCII-only dir
+    import subprocess
+    base = Path(os.environ.get("LOCALAPPDATA", os.environ.get("TEMP", "."))) / "OwlangsPdflatex"
+    base.mkdir(parents=True, exist_ok=True)
+    key = hashlib.sha256(s.encode("utf-8")).hexdigest()[:8]
+    link_path = base / key
+    if link_path.exists():
+        if link_path.is_dir():
+            logger.debug(LogModule.RESTOR, f"[PDF-EXPORT] Using existing junction for TeX root: {link_path}")
+            return link_path
+        link_path.unlink()
+    try:
+        subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link_path), s],
+            check=True,
+            capture_output=True,
+            timeout=10,
+        )
+        logger.info(
+            LogModule.RESTOR,
+            f"[PDF-EXPORT] Created junction for CJK TeX path: {link_path} -> {tex_root}",
+        )
+        return link_path
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+        logger.warning(
+            LogModule.RESTOR,
+            f"[PDF-EXPORT] Junction fallback failed: {e}. PDF export may fail in CJK install path.",
+        )
+        return tex_root
+
+
+def _ensure_xelatex_fmt(pdflatex_root: Path, env: Dict[str, str]) -> None:
+    """Run fmtutil-sys to ensure xelatex.fmt exists before Pandoc invokes xelatex.
+    Avoids 'no appropriate script or program found: fmtutil' and 'Error producing PDF' when the
+    bundle was never initialized. Caller must set TEXMFCNF (incl. web2c) and TEXMFSYSVAR in env."""
+    if sys.platform != "win32":
+        return
+    bin_win = pdflatex_root / "bin" / "windows"
+    fmtutil_sys = bin_win / "fmtutil-sys.exe"
+    if not fmtutil_sys.exists():
+        logger.warning(
+            LogModule.RESTOR,
+            "[PDF-EXPORT] fmtutil-sys.exe not found under bin/windows. "
+            "Ensure 3rdParty pdflatex is fully deployed. PDF export may fail.",
+        )
+        return
+    import subprocess
+    try:
+        logger.info(LogModule.RESTOR, "[PDF-EXPORT] Building xelatex format (first run or missing fmt); running fmtutil-sys")
+        proc = subprocess.run(
+            [str(fmtutil_sys), "--byfmt", "xelatex"],
+            env=env,
+            capture_output=True,
+            timeout=120,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if proc.returncode != 0:
+            logger.warning(
+                LogModule.RESTOR,
+                f"[PDF-EXPORT] fmtutil exit code {proc.returncode}, stderr: {(proc.stderr or '')[:300]}",
+            )
+        else:
+            logger.info(LogModule.RESTOR, "[PDF-EXPORT] fmtutil completed (xelatex format ready)")
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        logger.warning(
+            LogModule.RESTOR,
+            f"[PDF-EXPORT] fmtutil failed: {e}. PDF export may fail.",
+        )
+
+
+def _check_latex_packages_macos() -> bool:
+    """Check if required LaTeX packages are installed on macOS.
+    Returns True if all required packages are available, False otherwise."""
+    if sys.platform != "darwin":
+        return True
+    
+    required_packages = ["titlesec", "xecjk", "ctex", "ragged2e", "hyperref", "graphicx", "etoolbox"]
+    missing_packages = []
+    
+    for package in required_packages:
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["kpsewhich", f"{package}.sty"],
+                capture_output=True,
+                timeout=10,
+            )
+            if result.returncode != 0:
+                missing_packages.append(package)
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            missing_packages.append(package)
+    
+    if missing_packages:
+        logger.warning(
+            LogModule.RESTOR,
+            f"[PDF-EXPORT] Missing LaTeX packages on macOS: {', '.join(missing_packages)}. "
+            "Run: cd 3rdParty/macos && ./install_latex_packages.sh"
+        )
+        return False
+    
+    return True
+
+
+def _get_pandoc_path() -> Optional[Path]:
+    """Get Pandoc executable file path, similar to Redis path detection.
+    
+    Checks multiple possible locations:
+    1. PyInstaller environment (packaged executable)
+    2. Installation directory (production - standard Program Files)
+    3. Development directory (3rdParty/windows/pandoc-*/pandoc.exe)
+    4. Current working directory
+    
+    Returns:
+        Path to pandoc.exe if found, None otherwise
+    """
+    if sys.platform == "win32":
+        # Windows - Check multiple possible locations
+        
+        # 1. Check PyInstaller environment (packaged executable)
+        if hasattr(sys, '_MEIPASS'):
+            # Running from PyInstaller - try to find Pandoc relative to executable
+            exe_path = Path(sys.executable)
+            # Try parent directory (if EXE is in bin/, Pandoc is in ../3rdParty/...)
+            install_base = exe_path.parent.parent
+            # Check for pandoc-* directories
+            pandoc_base = install_base / "3rdParty" / "windows"
+            if pandoc_base.exists():
+                for pandoc_dir in pandoc_base.glob("pandoc-*"):
+                    pandoc_exe = pandoc_dir / "pandoc.exe"
+                    if pandoc_exe.exists():
+                        logger.info(LogModule.TRANS, f"Found Pandoc in installation directory: {pandoc_exe}")
+                        return pandoc_exe
+            # Also check in _MEIPASS (PyInstaller temp directory)
+            meipass_pandoc_base = Path(sys._MEIPASS) / "3rdParty" / "windows"
+            if meipass_pandoc_base.exists():
+                for pandoc_dir in meipass_pandoc_base.glob("pandoc-*"):
+                    pandoc_exe = pandoc_dir / "pandoc.exe"
+                    if pandoc_exe.exists():
+                        logger.info(LogModule.TRANS, f"Found Pandoc in PyInstaller temp directory: {pandoc_exe}")
+                        return pandoc_exe
+        
+        # 2. Check installation directory (production - standard Program Files)
+        install_dir = Path("C:/Program Files/Owlangs")
+        pandoc_base = install_dir / "3rdParty" / "windows"
+        if pandoc_base.exists():
+            for pandoc_dir in pandoc_base.glob("pandoc-*"):
+                pandoc_exe = pandoc_dir / "pandoc.exe"
+                if pandoc_exe.exists():
+                    logger.info(LogModule.TRANS, f"Found Pandoc in installation directory: {pandoc_exe}")
+                    return pandoc_exe
+        
+        # 3. Check development directory
+        dev_pandoc_base = Path(__file__).parent.parent.parent / "3rdParty" / "windows"
+        if dev_pandoc_base.exists():
+            for pandoc_dir in dev_pandoc_base.glob("pandoc-*"):
+                pandoc_exe = pandoc_dir / "pandoc.exe"
+                if pandoc_exe.exists():
+                    logger.info(LogModule.TRANS, f"Found Pandoc in development directory: {pandoc_exe}")
+                    return pandoc_exe
+        
+        # 4. Check current working directory
+        cwd_pandoc_base = Path.cwd() / "3rdParty" / "windows"
+        if cwd_pandoc_base.exists():
+            for pandoc_dir in cwd_pandoc_base.glob("pandoc-*"):
+                pandoc_exe = pandoc_dir / "pandoc.exe"
+                if pandoc_exe.exists():
+                    logger.info(LogModule.TRANS, f"Found Pandoc in current directory: {pandoc_exe}")
+                    return pandoc_exe
+
+    # macOS / non-Windows: GUI or frozen app often has minimal PATH (no Homebrew).
+    # Search explicit locations so packaged app can find user-installed pandoc.
+    if sys.platform == "darwin" or (sys.platform != "win32" and getattr(sys, "frozen", False)):
+        # 1. Current PATH (works in terminal, often empty in .app)
+        found = shutil.which("pandoc")
+        if found:
+            p = Path(found)
+            if p.is_file():
+                logger.info(LogModule.TRANS, f"Found Pandoc via PATH: {p}")
+                return p
+        # 2. macOS Homebrew and common install locations
+        for candidate in (
+            Path("/opt/homebrew/bin/pandoc"),   # Apple Silicon Homebrew
+            Path("/usr/local/bin/pandoc"),      # Intel Homebrew / universal
+            Path(os.path.expanduser("~/.local/bin/pandoc")),
+        ):
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                logger.info(LogModule.TRANS, f"Found Pandoc at: {candidate}")
+                return candidate
+
+    # For other non-Windows platforms, pypandoc will use system PATH
+    return None
+
+
+def _get_xelatex_path() -> Optional[Path]:
+    """Get XeLaTeX executable path for Pandoc PDF engine (e.g. TinyTeX under 3rdParty/windows/pdflatex).
+
+    Returns:
+        Path to xelatex.exe if found, None otherwise.
+    """
+    if sys.platform != "win32":
+        return None
+    # Same search order as pandoc: PyInstaller, Program Files, dev dir, cwd
+    candidates: list[Path] = []
+    if hasattr(sys, "_MEIPASS"):
+        candidates.append(Path(sys._MEIPASS) / "3rdParty" / "windows")
+        candidates.append(Path(sys.executable).parent.parent / "3rdParty" / "windows")
+    candidates.extend([
+        Path("C:/Program Files/Owlangs") / "3rdParty" / "windows",
+        Path(__file__).parent.parent.parent / "3rdParty" / "windows",
+        Path.cwd() / "3rdParty" / "windows",
+    ])
+    for base in candidates:
+        if not base.exists():
+            continue
+        # pdflatex dir contains bin/windows/xelatex.exe (TinyTeX layout)
+        xelatex_exe = base / "pdflatex" / "bin" / "windows" / "xelatex.exe"
+        if xelatex_exe.exists():
+            logger.info(LogModule.TRANS, f"Found XeLaTeX: {xelatex_exe}")
+            return xelatex_exe
+    return None
+
+
+def _apply_font_to_run(run, font_name: str) -> None:
+    """Set run font name and w:eastAsia so Word uses our font for CJK (avoids 等线 default)."""
+    run.font.name = font_name
+    try:
+        r = run._element
+        rPr = r.find(qn("w:rPr"))
+        if rPr is not None:
+            rFonts = rPr.find(qn("w:rFonts"))
+            if rFonts is not None:
+                rFonts.set(qn("w:eastAsia"), font_name)
+    except Exception:
+        pass
+
+
+def _apply_font_to_docx_runs(docx_path: str, font_name: str) -> None:
+    """Open DOCX, set font (name + eastAsia) on every run, save. Overrides Pandoc/Word default (e.g. 等线)."""
+    doc = Document(docx_path)
+    for para in doc.paragraphs:
+        for run in para.runs:
+            _apply_font_to_run(run, font_name)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    for run in para.runs:
+                        _apply_font_to_run(run, font_name)
+    for section in doc.sections:
+        for para in section.header.paragraphs:
+            for run in para.runs:
+                _apply_font_to_run(run, font_name)
+        for para in section.footer.paragraphs:
+            for run in para.runs:
+                _apply_font_to_run(run, font_name)
+    doc.save(docx_path)
+
+
+def convert_html_to_docx(
+    html_content: str,
+    output_path: str,
+    output_dir: Optional[Path] = None,
+    to_lang: Optional[str] = None,
+) -> None:
+    """
+    Convert HTML content to DOCX using Pandoc (via pypandoc). Falls back to basic python-docx output if Pandoc fails.
+    
+    This function adds unified CSS styles (font-size, and font-family when to_lang is given) to the HTML
+    before conversion to ensure consistent appearance in the DOCX output.
+    
+    Args:
+        html_content: HTML content string
+        output_path: Path to output DOCX file
+        output_dir: Optional output directory for saving images (if data URIs need to be converted to files)
+        to_lang: Optional target language name (e.g. "Chinese", "English"); when set, font-family is chosen by language.
+    """
+    if not html_content:
+        raise ValueError("HTML content is empty, cannot generate DOCX.")
+
+    try:
+        import pypandoc
+    except ImportError:
+        logger.error(LogModule.RESTOR, "pypandoc is not installed; cannot convert HTML to DOCX.")
+        raise
+
+    # Try to find pandoc.exe in 3rdParty directory (Windows only)
+    pandoc_path = _get_pandoc_path()
+    if pandoc_path:
+        # Set environment variable for pypandoc to use our pandoc.exe
+        os.environ['PYPANDOC_PANDOC'] = str(pandoc_path)
+        logger.info(LogModule.TRANS, f"[DOCX-EXPORT] Using Pandoc from 3rdParty: {pandoc_path}")
+    else:
+        logger.info(LogModule.TRANS, "[DOCX-EXPORT] Pandoc path not found in 3rdParty, will use system PATH or download")
+
+    try:
+        try:
+            pypandoc.get_pandoc_version()
+        except OSError:
+            # If pandoc_path was set but still not found, try downloading
+            if not pandoc_path:
+                logger.info(LogModule.TRANS, "Pandoc not found, downloading via pypandoc...")
+                pypandoc.download_pandoc()
+            else:
+                # pandoc_path was set but pypandoc still can't find it
+                logger.warning(LogModule.RESTOR,f"Pandoc path was set to {pandoc_path} but pypandoc cannot access it")
+                raise
+
+        sanitized_html = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F]", "", html_content)
+        
+        # CRITICAL: Pandoc may not support data URIs in images, so convert them to file paths
+        # Extract output directory from output_path if not provided
+        if output_dir is None:
+            output_dir = Path(output_path).parent
+        
+        # Create images directory
+        images_dir = output_dir / "images"
+        images_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Find all data URI images and convert them to files
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(sanitized_html, 'html.parser')
+        data_uri_pattern = re.compile(r'data:image/([^;]+);base64,([^"\']+)')
+        images_converted = 0
+        
+        for img in soup.find_all('img'):
+            src = img.get('src', '')
+            if src.startswith('data:image/'):
+                try:
+                    # Parse data URI
+                    match = data_uri_pattern.search(src)
+                    if match:
+                        mime_type = match.group(1)
+                        base64_data = match.group(2)
+                        
+                        # Determine file extension
+                        extension = mimetypes.guess_extension(f"image/{mime_type}") or ".png"
+                        
+                        # Generate unique filename from base64 data
+                        image_id = hashlib.md5(base64_data.encode()).hexdigest()[:8]
+                        image_filename = f"{image_id}{extension}"
+                        image_path = images_dir / image_filename
+                        
+                        # Decode and save image
+                        image_bytes = base64.b64decode(base64_data)
+                        image_path.write_bytes(image_bytes)
+                        
+                        # Update img src to relative path (Pandoc can handle relative paths)
+                        relative_path = f"images/{image_filename}"
+                        img['src'] = relative_path
+                        images_converted += 1
+                        logger.debug(LogModule.RESTOR,f"Converted data URI image to file: {relative_path}")
+                except Exception as img_error:
+                    logger.warning(LogModule.RESTOR,f"Failed to convert data URI image to file: {img_error}, keeping data URI")
+        
+        if images_converted > 0:
+            logger.info(LogModule.TRANS, f"[DOCX-EXPORT] Converted {images_converted} data URI images to files for Pandoc conversion")
+            sanitized_html = str(soup)
+        else:
+            logger.debug(LogModule.RESTOR,"[DOCX-EXPORT] No data URI images found, HTML already uses file paths")
+        
+        # Add unified CSS styles for consistent font size (and font-family when to_lang is set) in DOCX output
+        font_family_css = ""
+        if to_lang:
+            try:
+                from translator.ai_translator.docx_translator import get_font_for_language
+                font_name = get_font_for_language(to_lang)
+                if font_name:
+                    font_family_css = f"\n                font-family: '{font_name}';"
+                    logger.info(LogModule.TRANS, f"[DOCX-EXPORT] to_lang={to_lang}, font_name={font_name}")
+                else:
+                    logger.info(LogModule.TRANS, f"[DOCX-EXPORT] to_lang={to_lang}, font_name=(default)")
+            except Exception as _e:
+                logger.debug(LogModule.RESTOR,f"[DOCX-EXPORT] Could not get font for to_lang={to_lang}: {_e}, using default")
+        font_css = f"""
+        <style>
+            body {{
+                font-size: 14pt;
+                line-height: 1.5;{font_family_css}
+            }}
+            p, li, td, th {{
+                font-size: 14pt;{font_family_css}
+            }}
+            h1 {{
+                font-size: 24pt;{font_family_css}
+            }}
+            h2 {{
+                font-size: 20pt;{font_family_css}
+            }}
+            h3 {{
+                font-size: 18pt;{font_family_css}
+            }}
+            h4 {{
+                font-size: 16pt;{font_family_css}
+            }}
+            h5 {{
+                font-size: 14pt;{font_family_css}
+            }}
+            h6 {{
+                font-size: 12pt;{font_family_css}
+            }}
+        </style>
+        """
+        
+        # Insert CSS into HTML head section
+        if "<head>" in sanitized_html:
+            # Insert CSS after <head> tag
+            sanitized_html = sanitized_html.replace("<head>", f"<head>{font_css}", 1)
+        elif "<html>" in sanitized_html:
+            # If no <head> tag, add one with CSS
+            sanitized_html = sanitized_html.replace("<html>", f"<html><head>{font_css}</head>", 1)
+        else:
+            # If no HTML structure, wrap with HTML and add CSS
+            sanitized_html = f"<!DOCTYPE html><html><head>{font_css}</head><body>{sanitized_html}</body></html>"
+        
+        # Use pypandoc with working directory set to output_dir so relative image paths work
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as temp_html:
+            temp_html.write(sanitized_html)
+            temp_html_path = temp_html.name
+        
+        try:
+            # Convert HTML to DOCX
+            # Set working directory to output_dir so Pandoc can find relative image paths
+            import subprocess
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(str(output_dir))
+                pypandoc.convert_file(
+                    temp_html_path,
+                    "docx",
+                    format="html",
+                    outputfile=output_path,
+                )
+            finally:
+                os.chdir(original_cwd)
+            
+            output_file = Path(output_path)
+            if not output_file.exists() or output_file.stat().st_size == 0:
+                raise ValueError("Pandoc produced an empty DOCX file.")
+            logger.info(LogModule.TRANS, f"[DOCX-EXPORT] Generated DOCX via pandoc: {output_path}")
+            # Post-process: set font on all runs so Word uses our font instead of template default (e.g. 等线)
+            if to_lang and font_family_css:
+                try:
+                    font_name = get_font_for_language(to_lang) if to_lang else None
+                    if font_name:
+                        _apply_font_to_docx_runs(output_path, font_name)
+                        logger.info(LogModule.TRANS, f"[DOCX-EXPORT] Applied font '{font_name}' to all runs in DOCX (post-process)")
+                except Exception as font_err:
+                    logger.warning(LogModule.RESTOR,f"[DOCX-EXPORT] Post-process font apply failed: {font_err}, DOCX keeps Pandoc default font")
+        finally:
+            # Clean up temp HTML file
+            try:
+                os.unlink(temp_html_path)
+            except:
+                pass
+    except Exception as e:
+        logger.error(LogModule.RESTOR,f"[DOCX-EXPORT] Failed to convert HTML to DOCX via pandoc: {e}", exc_info=True)
+        doc = Document()
+        doc.add_paragraph("Owlangs translation could not be rendered from HTML.")
+        doc.save(output_path)
+
+
+def _html_table_block_to_pipe(html_block: str) -> str:
+    """Convert one HTML <table>...</table> block to Pandoc pipe table (markdown).
+    Used so Pandoc can render tables as DOCX tables instead of plain text.
+    """
+    try:
+        from bs4 import BeautifulSoup
+    except Exception:
+        return html_block
+    soup = BeautifulSoup(html_block, "html.parser")
+    table = soup.find("table")
+    if not table:
+        return html_block
+    header_cells: list[str] = []
+    body_rows: list[list[str]] = []
+    thead = table.find("thead")
+    header_row = thead.find("tr") if thead else None
+    if not header_row:
+        header_row = table.find("tr")
+    if header_row:
+        for th in header_row.find_all(["th", "td"]):
+            header_cells.append(th.get_text(strip=True))
+    tbody = table.find("tbody")
+    rows = tbody.find_all("tr") if tbody else table.find_all("tr")[1:]
+    for tr in rows:
+        row_cells = [td.get_text(strip=True) for td in tr.find_all(["td", "th"])]
+        if row_cells:
+            body_rows.append(row_cells)
+    if not header_cells:
+        return html_block
+    if not body_rows:
+        body_rows = [[]]
+    col_count = len(header_cells)
+    normalized = []
+    for row in body_rows:
+        if len(row) < col_count:
+            row = row + [""] * (col_count - len(row))
+        elif len(row) > col_count:
+            row = row[:col_count]
+        normalized.append(row)
+
+    def _escape(c: str) -> str:
+        return c.replace("|", "\\|").replace("\n", " ")
+
+    lines = ["| " + " | ".join(_escape(c) for c in header_cells) + " |"]
+    lines.append("| " + " | ".join("---" for _ in range(col_count)) + " |")
+    for row in normalized:
+        lines.append("| " + " | ".join(_escape(c) for c in row) + " |")
+    return "\n".join(lines)
+
+
+def _html_tables_in_md_to_pipe_tables(md_content: str) -> str:
+    """Replace all HTML <table>...</table> blocks in markdown with pipe tables for Pandoc DOCX."""
+    if "<table" not in md_content.lower():
+        return md_content
+    result: list[str] = []
+    rest = md_content
+    while True:
+        idx = rest.lower().find("<table")
+        if idx < 0:
+            result.append(rest)
+            break
+        result.append(rest[:idx])
+        rest = rest[idx:]
+        depth = 0
+        start = 0
+        i = 0
+        while i < len(rest):
+            if (i + 6 <= len(rest) and rest[i : i + 6].lower() == "<table"
+                    and (i + 6 == len(rest) or rest[i + 6] in "> ")):
+                depth += 1
+                if depth == 1:
+                    start = i
+                i += 1
+            elif i + 8 <= len(rest) and rest[i : i + 8].lower() == "</table>":
+                depth -= 1
+                if depth == 0:
+                    block = rest[start : i + 8]
+                    pipe = _html_table_block_to_pipe(block)
+                    result.append(pipe)
+                    rest = rest[i + 8 :]
+                    break
+                i += 8
+            else:
+                i += 1
+        else:
+            result.append(rest)
+            break
+    return "".join(result)
+
+
+def _is_pipe_table_row(line: str) -> bool:
+    """True if line looks like a pipe table row (header, separator, or body)."""
+    s = line.strip()
+    return len(s) >= 2 and s.startswith("|") and s.endswith("|")
+
+
+def _normalize_pipe_table_separators(md_content: str) -> str:
+    """Normalize pipe table separator lines so Pandoc recognizes them as tables.
+    Layout/translation may produce em dash (—) or en dash (–); Pandoc requires ASCII hyphen (-).
+    """
+    lines = md_content.split("\n")
+    out = []
+    for line in lines:
+        stripped = line.strip()
+        # Pipe table separator: starts with |, contains only | spaces and dashes (and optional colons)
+        if (len(stripped) >= 3 and stripped.startswith("|")
+                and stripped.endswith("|")
+                and not re.search(r"[^\s|\-:—–]", stripped)):
+            # Replace Unicode dashes with ASCII hyphens (at least 3 per column for Pandoc)
+            line = line.replace("\u2014", "---").replace("\u2013", "---")
+        out.append(line)
+    return "\n".join(out)
+
+
+def _ensure_blank_line_before_pipe_tables(md_content: str) -> str:
+    """Ensure a blank line before each pipe table so Pandoc parses it as a table, not paragraph text."""
+    lines = md_content.split("\n")
+    out = []
+    prev_non_empty_was_table = False
+    for line in lines:
+        stripped = line.strip()
+        is_table_row = _is_pipe_table_row(line)
+        if is_table_row and not prev_non_empty_was_table and out:
+            # This line starts a table; previous non-empty line was not a table row -> insert blank
+            if out[-1].strip() != "":
+                out.append("")
+        out.append(line)
+        if stripped:
+            prev_non_empty_was_table = is_table_row
+    return "\n".join(out)
+
+
+def convert_md_to_docx(
+    md_content: str,
+    output_path: str,
+    output_dir: Optional[Path] = None,
+    to_lang: Optional[str] = None,
+) -> bool:
+    """
+    Convert Markdown to DOCX via Pandoc; apply font by target language. Used for pandoc-first DOCX flow.
+
+    Returns:
+        True if conversion succeeded, False if Pandoc is missing or conversion failed (caller should fallback).
+    """
+    if not (md_content and md_content.strip()):
+        logger.debug(LogModule.RESTOR, "[DOCX-EXPORT] convert_md_to_docx: empty md_content, skip")
+        return False
+    try:
+        import pypandoc
+    except ImportError:
+        logger.debug(LogModule.RESTOR, "[DOCX-EXPORT] convert_md_to_docx: pypandoc not installed, skip")
+        return False
+    pandoc_path = _get_pandoc_path()
+    if not pandoc_path:
+        logger.debug(LogModule.RESTOR, "[DOCX-EXPORT] convert_md_to_docx: Pandoc not found in 3rdParty, skip")
+        return False
+    os.environ["PYPANDOC_PANDOC"] = str(pandoc_path)
+    out_dir = output_dir or Path(output_path).parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # Replace HTML tables with pipe tables so Pandoc outputs DOCX tables instead of plain text
+    md_for_pandoc = _html_tables_in_md_to_pipe_tables(md_content)
+    # Normalize separator lines: replace em dash (—) / en dash (–) with ASCII hyphen so Pandoc recognizes tables
+    md_for_pandoc = _normalize_pipe_table_separators(md_for_pandoc)
+    # Ensure blank line before each pipe table so Pandoc parses tables instead of treating as paragraph
+    md_for_pandoc = _ensure_blank_line_before_pipe_tables(md_for_pandoc)
+    # Resolve data URI image refs to files under output_dir so Pandoc can embed them in DOCX
+    images_dir = out_dir / "images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    _data_uri_pattern = re.compile(r"!\[([^\]]*)\]\((data:image/[^)]+)\)")
+
+    def _replace_data_uri(match: re.Match) -> str:
+        alt_text, data_uri = match.group(1), match.group(2)
+        if not data_uri.startswith("data:image/") or "," not in data_uri:
+            return match.group(0)
+        try:
+            header, b64 = data_uri.split(",", 1)
+            mime = header.split(";")[0].split(":")[-1] if ":" in header else "image/png"
+            ext = mimetypes.guess_extension(mime) or ".png"
+            raw = base64.b64decode(b64)
+            name = hashlib.md5(raw[:500]).hexdigest()[:8] + ext
+            path = images_dir / name
+            path.write_bytes(raw)
+            rel = f"./images/{name}"
+            logger.debug(LogModule.RESTOR, f"[DOCX-EXPORT] Resolved data URI image to file: {rel}")
+            return f"![{alt_text}]({rel})"
+        except Exception as e:
+            logger.warning(LogModule.RESTOR, f"[DOCX-EXPORT] Failed to resolve data URI image: {e}")
+            return match.group(0)
+
+    md_for_pandoc = _data_uri_pattern.sub(_replace_data_uri, md_for_pandoc)
+    # Debug: write MD input to output/debug for DOCX export debugging (Pandoc path)
+    try:
+        debug_dir = out_dir / "debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        (debug_dir / "docx_export_input_pandoc.md").write_text(md_for_pandoc, encoding="utf-8")
+        logger.debug(LogModule.RESTOR, f"[DOCX-EXPORT] Wrote Pandoc MD input to {debug_dir / 'docx_export_input_pandoc.md'}")
+    except Exception as e:
+        logger.warning(LogModule.RESTOR, f"[DOCX-EXPORT] Failed to write debug MD for Pandoc: {e}")
+    # Use +hard_line_breaks so single newlines become line breaks (avoid merging references/short segments)
+    pandoc_format = "markdown+pipe_tables+hard_line_breaks"
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+        f.write(md_for_pandoc)
+        temp_md = f.name
+    try:
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(str(out_dir))
+            pypandoc.convert_file(temp_md, "docx", format=pandoc_format, outputfile=output_path)
+        finally:
+            os.chdir(original_cwd)
+        out_file = Path(output_path)
+        if not out_file.exists() or out_file.stat().st_size == 0:
+            logger.warning(LogModule.RESTOR, "[DOCX-EXPORT] convert_md_to_docx: Pandoc produced empty file")
+            return False
+        if to_lang:
+            try:
+                from translator.ai_translator.docx_translator import get_font_for_language
+                font_name = get_font_for_language(to_lang)
+                if font_name:
+                    _apply_font_to_docx_runs(output_path, font_name)
+            except Exception as font_err:
+                logger.warning(LogModule.RESTOR, f"[DOCX-EXPORT] convert_md_to_docx font post-process failed: {font_err}")
+        logger.info(LogModule.TRANS, f"[DOCX-EXPORT] convert_md_to_docx succeeded: {output_path}")
+        return True
+    except Exception as e:
+        logger.warning(LogModule.RESTOR, f"[DOCX-EXPORT] convert_md_to_docx failed: {e}", exc_info=False)
+        return False
+    finally:
+        try:
+            os.unlink(temp_md)
+        except Exception:
+            pass
+
+
+class PdfExportLatexError(RuntimeError):
+    """
+    Raised when Pandoc+XeLaTeX PDF export fails and we can extract a local LaTeX/Markdown context.
+    Intended for callers to surface a segment-level hint to the frontend, instead of auto-repairing.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        stderr: str = "",
+        error_type: str = "unknown",
+        line_no: Optional[int] = None,
+        error_token: str = "",
+        tex_snippet: str = "",
+        md_snippet: str = "",
+        debug_tex_path: Optional[Path] = None,
+        debug_md_path: Optional[Path] = None,
+    ) -> None:
+        super().__init__(message)
+        self.stderr = stderr
+        self.error_type = error_type
+        self.line_no = line_no
+        self.error_token = error_token
+        self.tex_snippet = tex_snippet
+        self.md_snippet = md_snippet
+        self.debug_tex_path = debug_tex_path
+        self.debug_md_path = debug_md_path
+
+
+def convert_md_to_pdf(
+    md_content: str,
+    output_path: str,
+    output_dir: Optional[Path] = None,
+    to_lang: Optional[str] = None,
+    image_block_indices: Optional[List[int]] = None,
+    path_to_block_index: Optional[Dict[str, int]] = None,
+    layout_document: Optional[Any] = None,
+    layout_block_bbox: Optional[Dict[int, Tuple[float, float, float, float]]] = None,
+) -> bool:
+    """
+    Convert Markdown to PDF via Pandoc with XeLaTeX; mainfont is chosen by target language. Used for pandoc-first PDF flow.
+
+    When path_to_block_index and layout_document are provided, only consecutive images on the same row (bbox y overlap) are laid out side-by-side in LaTeX.
+    path_to_block_index maps normalized image paths (filename, lowercase) to layout block indices.
+
+    Returns:
+        True if conversion succeeded, False if conversion failed (e.g. pandoc exit non-zero).
+
+    Raises:
+        RuntimeError: If Pandoc or XeLaTeX is not installed or not found (clear error message and server log for debugging).
+    """
+    if not (md_content and md_content.strip()):
+        logger.debug(LogModule.RESTOR, "[PDF-EXPORT] convert_md_to_pdf: empty md_content, skip")
+        return False
+    pandoc_path = _get_pandoc_path()
+    if not pandoc_path:
+        logger.error(
+            LogModule.RESTOR,
+            "[PDF-EXPORT] Pandoc is required for PDF export but was not found. "
+            "Please install Pandoc and ensure it is available in PATH or in 3rdParty/windows (e.g. pandoc-3.x)."
+        )
+        raise RuntimeError(
+            "Pandoc is required for PDF export but was not found. "
+            "Install Pandoc and ensure it is in PATH or in 3rdParty/windows. See server logs for details."
+        )
+    os.environ["PYPANDOC_PANDOC"] = str(pandoc_path)
+    xelatex_path_orig = _get_xelatex_path()
+    xelatex_path = None
+    pdflatex_root_use = None
+    if xelatex_path_orig:
+        pdflatex_root = xelatex_path_orig.parent.parent.parent
+        pdflatex_root_use = _ensure_ascii_path_for_tex(pdflatex_root)
+        xelatex_path = pdflatex_root_use / "bin" / "windows" / "xelatex.exe"
+        if not xelatex_path.exists():
+            xelatex_path = _to_short_path_if_needed(xelatex_path_orig)
+            pdflatex_root_use = xelatex_path.parent.parent.parent
+    if not xelatex_path:
+        xelatex_in_path = shutil.which("xelatex")
+        
+        # 检查 macOS 上常见的 xelatex 路径
+        if not xelatex_in_path and sys.platform == "darwin":
+            common_paths = [
+                "/Library/TeX/texbin/xelatex",  # MacTeX / BasicTeX
+                "/usr/local/texlive/current/bin/universal-darwin/xelatex",  # TeX Live
+                "/usr/local/texlive/2026/bin/universal-darwin/xelatex",  # TeX Live 2026
+            ]
+            for path in common_paths:
+                if Path(path).exists():
+                    xelatex_in_path = path
+                    logger.info(LogModule.RESTOR, f"[PDF-EXPORT] Found XeLaTeX at: {xelatex_in_path}")
+                    break
+        
+        if not xelatex_in_path:
+            # 根据操作系统提供不同的安装指导
+            if sys.platform == "darwin":
+                install_msg = (
+                    "XeLaTeX is required for PDF export but was not found. "
+                    "Install TeX Live: brew install --cask mactex "
+                    "or TinyTeX: brew install --cask tinytex. "
+                    "After installation, run: cd 3rdParty/macos && ./install_latex_packages.sh "
+                    "to install required LaTeX packages. See server logs for details."
+                )
+            elif sys.platform == "linux":
+                install_msg = (
+                    "XeLaTeX is required for PDF export but was not found. "
+                    "Install TeX Live: sudo apt-get install texlive-xetex texlive-lang-chinese "
+                    "or TinyTeX. See server logs for details."
+                )
+            else:  # Windows
+                install_msg = (
+                    "XeLaTeX is required for PDF export but was not found. "
+                    "Please install XeLaTeX (e.g. TeX Live, TinyTeX) and ensure the xelatex executable is in PATH or in 3rdParty/windows/pdflatex."
+                    "See server logs for details."
+                )
+            logger.error(
+                LogModule.RESTOR,
+                f"[PDF-EXPORT] {install_msg}"
+            )
+            raise RuntimeError(install_msg)
+    pdf_engine = str(xelatex_path) if xelatex_path else (xelatex_in_path if xelatex_in_path else "xelatex")
+    try:
+        from translator.ai_translator.docx_translator import get_font_for_language
+        mainfont = get_font_for_language(to_lang) if to_lang else ("Helvetica Neue" if sys.platform == "darwin" else "Calibri")
+    except Exception:
+        mainfont = "Helvetica Neue" if sys.platform == "darwin" else "Calibri"
+    # CJK languages need xeCJK for proper line breaking (otherwise translated lines overflow)
+    _cjk_codes = ("zh", "chinese", "zh-cn", "zh-tw", "ja", "japanese", "jp", "ko", "korean", "kr")
+    to_lang_lower = (to_lang or "").strip().lower()
+    use_xecjk = any(to_lang_lower.startswith(c) or to_lang_lower == c for c in _cjk_codes)
+    
+    # On macOS, check if required LaTeX packages are installed
+    if sys.platform == "darwin":
+        _check_latex_packages_macos()
+    
+    out_dir = output_dir or Path(output_path).parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # Same table preprocessing as DOCX: HTML->pipe, normalize separators, blank line before tables
+    md_for_pdf = _html_tables_in_md_to_pipe_tables(md_content)
+    md_for_pdf = _normalize_pipe_table_separators(md_for_pdf)
+    md_for_pdf = _ensure_blank_line_before_pipe_tables(md_for_pdf)
+
+    # Remove alt text from all images to prevent pandoc from generating "Figure n: ..." captions
+    # Pattern: ![any alt text](path) -> ![](path)
+    import re
+    import base64
+    import hashlib
+    import mimetypes
+    image_pattern = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
+
+    # Convert data URI image refs to file paths so we can read dimensions and avoid LaTeX default width (stretch)
+    # Rebuilt MD can contain ![](data:image/...;base64,...) when segment content had data URIs and image_data_map
+    # has no entry for that URI; those images were not replaced earlier and would render at default width (stretched)
+    images_dir = out_dir / "images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    data_uri_pattern = re.compile(r'!\[([^\]]*)\]\((data:image/[^)]+)\)')
+
+    def _replace_data_uri_with_file(match):
+        alt_text, data_uri = match.group(1), match.group(2)
+        if not data_uri.startswith("data:image/") or "," not in data_uri:
+            return match.group(0)
+        try:
+            header, b64 = data_uri.split(",", 1)
+            mime = header.split(";")[0].split(":")[-1] if ":" in header else "image/png"
+            ext = mimetypes.guess_extension(mime) or ".png"
+            raw = base64.b64decode(b64)
+            name = hashlib.md5(raw[:500]).hexdigest()[:8] + ext
+            path = images_dir / name
+            path.write_bytes(raw)
+            rel = f"./images/{name}"
+            logger.info(LogModule.RESTOR, f"[PDF-EXPORT] Resolved data URI image to file: {rel}")
+            return f"![{alt_text}]({rel})"
+        except Exception as e:
+            logger.warning(LogModule.RESTOR, f"[PDF-EXPORT] Failed to resolve data URI image: {e}")
+            return match.group(0)
+
+    md_for_pdf = data_uri_pattern.sub(_replace_data_uri_with_file, md_for_pdf)
+
+    # Process images: remove alt text and add size attributes to preserve original dimensions
+    image_refs = image_pattern.findall(md_for_pdf)
+    logger.info(LogModule.RESTOR, f"[PDF-EXPORT] Found {len(image_refs)} image references in markdown before PDF conversion")
+    
+    # Build a mapping of image paths to their dimensions (in cm for LaTeX)
+    # All images from Extract phase use 96 DPI, so use 96 DPI for all images
+    image_sizes = {}
+    # Paths classified as formula/table: never merge side-by-side (used when alt is missing after transforms)
+    formula_or_table_paths = set()
+    max_width_cm = 16.0   # A4 usable width
+    max_height_cm = 22.0  # A4 usable height (~29.7 - margins) so image does not overflow vertically
+    dpi_default = 96.0    # All images use 96 DPI (from Extract phase)
+
+    for alt_text, img_path in image_refs:
+        if img_path in image_sizes:
+            continue  # Already processed
+        # Try to resolve image path (avoid resolve() to prevent long paths)
+        img_file_path = None
+        if img_path.startswith('./') or img_path.startswith('../'):
+            img_file_path = out_dir / img_path.lstrip('./').lstrip('../')
+        elif not os.path.isabs(img_path):
+            img_file_path = out_dir / img_path
+        else:
+            img_file_path = Path(img_path)
+
+        # Determine image type for logging and for side-by-side exclusion (formula/table never merged)
+        is_formula_or_table = alt_text and (
+            "equation" in alt_text.lower() or "formula" in alt_text.lower() or "table" in alt_text.lower()
+        )
+        if is_formula_or_table:
+            formula_or_table_paths.add(img_path)
+        image_type = "formula/table" if is_formula_or_table else "original"
+
+        if img_file_path and img_file_path.exists():
+            try:
+                from PIL import Image
+                pil_image = Image.open(str(img_file_path))
+                img_width_px, img_height_px = pil_image.size
+
+                # Log original dimensions first (before any processing)
+                logger.info(LogModule.RESTOR, f"[PDF-EXPORT] Image original size: path={img_path}, type={image_type}, {img_width_px}x{img_height_px}px")
+
+                # Prefer image metadata DPI when present; otherwise use 96 DPI (from Extract phase)
+                dpi_x = pil_image.info.get('dpi', (None, None))[0] if 'dpi' in pil_image.info else None
+                dpi_y = pil_image.info.get('dpi', (None, None))[1] if 'dpi' in pil_image.info else None
+                if dpi_x and dpi_x > 0 and dpi_y and dpi_y > 0:
+                    dpi = (dpi_x + dpi_y) / 2.0
+                    logger.info(LogModule.RESTOR, f"[PDF-EXPORT] Image DPI from metadata: path={img_path}, DPI={dpi:.1f}")
+                else:
+                    dpi = dpi_default
+                    logger.info(LogModule.RESTOR, f"[PDF-EXPORT] Image using default DPI: path={img_path}, DPI={dpi:.1f}")
+
+                # Convert pixels to cm: 1 inch = 2.54 cm, 1 inch = dpi px
+                width_cm = (img_width_px * 2.54) / dpi
+                height_cm = (img_height_px * 2.54) / dpi
+
+                # Scale to fit within page (both width and height) keeping aspect ratio
+                original_width_cm, original_height_cm = width_cm, height_cm
+                scale_w = max_width_cm / width_cm if width_cm > max_width_cm else 1.0
+                scale_h = max_height_cm / height_cm if height_cm > max_height_cm else 1.0
+                scale = min(scale_w, scale_h, 1.0)
+                if scale < 1.0:
+                    width_cm = width_cm * scale
+                    height_cm = height_cm * scale
+                    logger.info(LogModule.RESTOR, f"[PDF-EXPORT] Image scaled to fit page: path={img_path}, type={image_type}, orig_cm={original_width_cm:.2f}x{original_height_cm:.2f}, final={width_cm:.2f}x{height_cm:.2f}cm")
+
+                image_sizes[img_path] = (width_cm, height_cm, img_width_px, img_height_px, dpi)
+                logger.info(LogModule.RESTOR, f"[PDF-EXPORT] Image final size: path={img_path}, type={image_type}, {img_width_px}x{img_height_px}px @ DPI={dpi:.1f}, size={width_cm:.2f}x{height_cm:.2f}cm")
+            except Exception as img_err:
+                logger.warning(LogModule.RESTOR, f"[PDF-EXPORT] Failed to get image dimensions for {img_path}, type={image_type}: {img_err}")
+        else:
+            # Log when image file is not found (path may be data URI if not resolved earlier)
+            path_preview = img_path[:80] + "..." if isinstance(img_path, str) and len(img_path) > 80 else img_path
+            logger.warning(LogModule.RESTOR, f"[PDF-EXPORT] Image file not found: path={path_preview}, type={image_type}, resolved_path={img_file_path}")
+    
+    # Group consecutive image refs (only whitespace between them) for side-by-side layout
+    # When layout_document + path_to_block_index are provided, only merge runs that are on the same row (bbox y overlap).
+    has_layout = layout_document is not None and path_to_block_index is not None and len(path_to_block_index) >= 2
+    logger.info(
+        LogModule.RESTOR,
+        f"[PDF-EXPORT] Layout for side-by-side: layout_document={layout_document is not None}, "
+        f"path_to_block_index_len={len(path_to_block_index) if path_to_block_index else 0}, has_layout={has_layout}"
+    )
+    # Prefer bbox from Layout extraction phase (layout_block_bbox) so we do not iterate layout_document at export.
+    # Normalize keys to int and bbox to tuple of float (task_state may have been JSON round-trip with string keys/values).
+    block_index_to_bbox: Optional[Dict[int, Tuple[float, float, float, float]]] = None
+    if layout_block_bbox:
+        try:
+            block_index_to_bbox = {}
+            for k, v in layout_block_bbox.items():
+                if v is None or len(v) < 4:
+                    continue
+                bidx = int(k) if not isinstance(k, int) else k
+                block_index_to_bbox[bidx] = (float(v[0]), float(v[1]), float(v[2]), float(v[3]))
+        except (TypeError, ValueError, IndexError) as e:
+            logger.debug(LogModule.RESTOR, f"[PDF-EXPORT] Normalize layout_block_bbox failed: {e}, will build from layout_document")
+            block_index_to_bbox = None
+    if has_layout and not block_index_to_bbox:
+        try:
+            from layout.base import LayoutDocument as _LD
+            if isinstance(layout_document, _LD):
+                block_index_to_bbox = {}
+                for block in layout_document.iter_blocks():
+                    if block.index is not None and hasattr(block, "bbox") and block.bbox:
+                        block_index_to_bbox[block.index] = block.bbox
+                logger.info(LogModule.RESTOR, f"[PDF-EXPORT] Built block_index_to_bbox with {len(block_index_to_bbox)} blocks")
+            else:
+                logger.info(LogModule.RESTOR, f"[PDF-EXPORT] layout_document is not LayoutDocument instance, type={type(layout_document).__name__}")
+        except Exception as e:
+            logger.warning(LogModule.RESTOR, f"[PDF-EXPORT] Failed to build block_index_to_bbox: {e}")
+            block_index_to_bbox = None
+
+    all_matches = list(image_pattern.finditer(md_for_pdf))
+    runs = []
+    i = 0
+    while i < len(all_matches):
+        run = [all_matches[i]]
+        while i + 1 < len(all_matches):
+            gap = md_for_pdf[run[-1].end() : all_matches[i + 1].start()]
+            if not gap.strip():  # only whitespace between
+                run.append(all_matches[i + 1])
+                i += 1
+            else:
+                break
+        runs.append(run)
+        i += 1
+
+    # Total row width for side-by-side (must fit in text block)
+    # Increased from 12.0 to 14.0 to allow wider side-by-side images
+    row_width_cm = 14.0
+    # For runs of 2+ that we do NOT merge, still cap each image width so they don't overflow when laid out
+    constrained_width_cm: Dict[str, float] = {}
+
+    # Replace runs of 2+ images with one LaTeX figure (side-by-side) only when same row if layout provided
+    # Formula images are never merged side-by-side (they are always rendered on separate lines)
+    parts = []
+    pos = 0
+    image_index = 0  # Track position in image_block_indices list
+    for run in runs:
+        parts.append(md_for_pdf[pos : run[0].start()])
+        
+        # Separate formula/table images from regular images in this run
+        # Formula/table images must always be rendered individually, never side-by-side
+        # Use alt text first; fall back to path in formula_or_table_paths (set when building image_sizes)
+        # so we still treat as formula when alt is missing after data-URI or other transforms
+        formula_images = []
+        regular_images = []
+        for m in run:
+            alt_text = m.group(1) or ""
+            img_path = m.group(2)
+            by_alt = alt_text and (
+                "equation" in alt_text.lower() or "formula" in alt_text.lower() or "table" in alt_text.lower()
+            )
+            by_path = img_path in formula_or_table_paths
+            is_formula_or_table = by_alt or by_path
+            if by_path and not by_alt:
+                logger.debug(
+                    LogModule.RESTOR,
+                    f"[PDF-EXPORT] Formula/table image identified by path (alt missing or empty): path={img_path[:60]}..."
+                )
+            if is_formula_or_table:
+                formula_images.append(m)
+            else:
+                regular_images.append(m)
+        
+        # Process formula/table images first - each on a separate line, never side-by-side
+        if formula_images:
+            logger.info(
+                LogModule.RESTOR,
+                f"[PDF-EXPORT] Found {len(formula_images)} formula/table image(s) in run, rendering individually (not side-by-side)"
+            )
+            for j, m in enumerate(formula_images):
+                if j > 0:
+                    parts.append("\n\n")  # Force each formula/table image on its own paragraph
+                parts.append(m.group(0))
+                image_index += 1
+        
+        # Process regular images - can be merged side-by-side if conditions are met
+        if not regular_images:
+            # Only formula images in this run, continue to next run
+            pos = run[-1].end()
+            continue
+        
+        # For regular images: enable side-by-side merge when same row (formula/table images handled separately above)
+        merge_run = len(regular_images) >= 2
+        if merge_run and block_index_to_bbox is not None and image_block_indices is not None:
+            run_block_indices = []
+            # Try path-based matching first, fallback to order-based matching
+            # Only process regular images (formula images already handled above)
+            for m in regular_images:
+                img_path = m.group(2)
+                block_idx = None
+                
+                # Method 1: Try path-based matching
+                if path_to_block_index:
+                    normalized = img_path.replace("./", "").replace("images/", "").replace("images\\", "")
+                    filename = os.path.basename(normalized).lower()
+                    block_idx = path_to_block_index.get(filename)
+                
+                # Method 2: Fallback to order-based matching (use image_index to get block index from image_block_indices)
+                if block_idx is None and image_index < len(image_block_indices):
+                    block_idx = image_block_indices[image_index]
+                    logger.info(
+                        LogModule.RESTOR,
+                        f"[PDF-EXPORT] Using order-based mapping: img_path={img_path}, image_index={image_index}, block_index={block_idx}"
+                    )
+                
+                if block_idx is not None:
+                    run_block_indices.append(block_idx)
+                else:
+                    logger.info(
+                        LogModule.RESTOR,
+                        f"[PDF-EXPORT] Image path not found in mapping: img_path={img_path}, image_index={image_index}, "
+                        f"path_mapping_keys={list(path_to_block_index.keys())[:5] if path_to_block_index else []}, "
+                        f"image_block_indices_len={len(image_block_indices) if image_block_indices else 0}"
+                    )
+                image_index += 1
+            same_row = len(run_block_indices) == len(regular_images)
+            if same_row:
+                for j in range(len(run_block_indices) - 1):
+                    bbox_a = block_index_to_bbox.get(run_block_indices[j])
+                    bbox_b = block_index_to_bbox.get(run_block_indices[j + 1])
+                    if bbox_a is None or bbox_b is None or not _bbox_y_overlap(bbox_a, bbox_b):
+                        same_row = False
+                        logger.info(
+                            LogModule.RESTOR,
+                            f"[PDF-EXPORT] Consecutive images NOT same row (no merge): blocks {run_block_indices[j]}, {run_block_indices[j + 1]}"
+                        )
+                        break
+            merge_run = merge_run and same_row
+            logger.info(
+                LogModule.RESTOR,
+                f"[PDF-EXPORT] Run of {len(regular_images)} regular images: run_block_indices={run_block_indices}, same_row={same_row}, merge_run={merge_run}"
+            )
+        else:
+            # Update image_index even when not merging (only for regular images, formula images already processed)
+            image_index += len(regular_images)
+
+        n_run = len(regular_images)
+        # Same-row merge: LaTeX uses w_frac (e.g. 0.48\\textwidth each) so images are scaled to fit one row; do not split by natural total width
+        width_cm_per = row_width_cm / n_run if n_run >= 2 else None
+        # Constrain width for consecutive regular images that are NOT merged (to prevent Pandoc from auto-laying them side-by-side and overflowing)
+        # Even if layout says different rows, Pandoc may still place them side-by-side, so we constrain width to be safe
+        # Formula images are already handled separately above and never constrained
+        if n_run >= 2 and not merge_run:
+            for m in regular_images:
+                constrained_width_cm[m.group(2)] = width_cm_per
+            if block_index_to_bbox is None or path_to_block_index is None:
+                logger.info(LogModule.RESTOR, f"[PDF-EXPORT] No layout: constrained {n_run} consecutive regular images to {width_cm_per:.2f}cm each")
+            else:
+                logger.info(LogModule.RESTOR, f"[PDF-EXPORT] Layout says different rows but constraining {n_run} consecutive regular images to {width_cm_per:.2f}cm each (prevent Pandoc auto-side-by-side overflow)")
+
+        if merge_run:
+            n = n_run
+            paths = [m.group(2) for m in regular_images]
+            paths_safe = [p.replace("\\", "/").replace("_", "\\_") for p in paths]
+            # Use fraction of \textwidth so total fits regardless of template; leave small gap between images
+            # Increased from 0.46 to 0.48 to allow wider side-by-side images
+            w_frac = min(0.48, 0.95 / n)
+            incl = "".join(
+                f"\\includegraphics[width={w_frac:.2f}\\textwidth,keepaspectratio]{{{p}}}"
+                + ("\\hfill\n  " if j < n - 1 else "")
+                for j, p in enumerate(paths_safe)
+            )
+            latex_block = f"\\begin{{figure}}[h]\n\\centering\n  {incl}\n\\end{{figure}}"
+            parts.append(latex_block)
+            logger.info(LogModule.RESTOR, f"[PDF-EXPORT] Side-by-side figure: {n} regular images (same row), {w_frac:.2f}\\textwidth each")
+        else:
+            # Add regular images individually, each in its own paragraph so Pandoc does not lay them side-by-side
+            for j, m in enumerate(regular_images):
+                if j > 0:
+                    parts.append("\n\n")
+                parts.append(m.group(0))
+        pos = run[-1].end()
+    parts.append(md_for_pdf[pos:])
+    md_for_pdf = "".join(parts)
+
+    # Replace single images: remove alt text and add size attribute. Use constrained width for consecutive (non-merged) runs.
+    def _replace_image_with_size(match):
+        alt_text = match.group(1)
+        img_path = match.group(2)
+        if img_path in constrained_width_cm:
+            w = constrained_width_cm[img_path]
+            return f"![]({img_path}){{width={w:.2f}cm}}"
+        if img_path in image_sizes:
+            width_cm, height_cm, width_px, height_px, dpi = image_sizes[img_path]
+            return f"![]({img_path}){{width={width_cm:.2f}cm}}"
+        return f"![]({img_path})"
+
+    md_for_pdf = image_pattern.sub(_replace_image_with_size, md_for_pdf)
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+        f.write(md_for_pdf)
+        temp_md = f.name
+    import subprocess
+    env = os.environ.copy()
+    if xelatex_path and pdflatex_root_use is not None:
+        env["PATH"] = str(xelatex_path.parent) + os.pathsep + env.get("PATH", "")
+        # TEXMFCNF: dirs for texmf.cnf; include web2c so base config (TEXMFSYSVAR etc.) is read
+        env["TEXMFCNF"] = str(pdflatex_root_use) + os.pathsep + str(pdflatex_root_use / "texmf-dist" / "web2c")
+        env["TEXMFROOT"] = str(pdflatex_root_use)
+        texmfvar = str(pdflatex_root_use / "texmf-var")
+        env["TEXMFVAR"] = texmfvar
+        env["TEXMFSYSVAR"] = texmfvar  # mktexfmt/fmtutil use this; must match bundle texmf-var
+        _ensure_xelatex_fmt(pdflatex_root_use, env)
+    # Geometry: constrain text to page and avoid overflow (default template may use small margins)
+    geometry_opts = "margin=2.5cm"
+    # For CJK (e.g. Chinese): xeCJK enables line breaking so translated text does not overflow
+    cjk_preamble = ""
+    if use_xecjk:
+        # Escape font name for LaTeX (braces in template; escape literal { } in name)
+        cjk_font = mainfont.replace("\\", "").replace("}", "\\}").replace("{", "\\{")
+        cjk_preamble = f"\\usepackage{{xeCJK}}\\setCJKmainfont{{{cjk_font}}}"
+    # ragged2e: better paragraph alignment and line breaks; titlesec: larger title/section fonts
+    # Use etoolbox \AtEndPreamble so section formatting runs last and is not overridden by template
+    # graphicx: control image sizing (pandoc width/height attributes will override defaults)
+    header_includes = (
+        cjk_preamble +
+        "\\usepackage{ragged2e}\\AtBeginDocument{\\RaggedRight}"
+        "\\PassOptionsToPackage{hyphens}{url}\\usepackage{hyperref}\\hypersetup{breaklinks=true}"
+        "\\usepackage{titlesec}"
+        "\\usepackage{graphicx}"
+        "\\usepackage{etoolbox}"
+        "\\makeatletter"
+        "\\renewcommand{\\@maketitle}{\\begin{center}\\LARGE\\bfseries\\@title\\par\\vskip 0.5em\\large\\@author\\par\\vskip 0.3em\\normalsize\\@date\\end{center}\\par\\vskip 1em}"
+        "\\makeatother"
+        "\\AtEndPreamble{"
+        "\\titleformat*{\\section}{\\LARGE\\bfseries}"
+        "\\titleformat*{\\subsection}{\\Large\\bfseries}"
+        "\\titleformat*{\\subsubsection}{\\large\\bfseries}"
+        "}"
+        "\\AtBeginDocument{"
+        "\\sloppy\\setlength{\\emergencystretch}{5em}"
+        "}"
+    )
+    # Input format: +hard_line_breaks so single newlines in markdown become line breaks in PDF
+    # +link_attributes enables image size attributes like {width=XXcm}
+    pandoc_from = "markdown+pipe_tables+hard_line_breaks+link_attributes"
+    header_without_cjk = (
+        "\\usepackage{ragged2e}\\AtBeginDocument{\\RaggedRight}"
+        "\\PassOptionsToPackage{hyphens}{url}\\usepackage{hyperref}\\hypersetup{breaklinks=true}"
+        "\\usepackage{titlesec}"
+        "\\usepackage{graphicx}"
+        "\\usepackage{etoolbox}"
+        "\\makeatletter"
+        "\\renewcommand{\\@maketitle}{\\begin{center}\\LARGE\\bfseries\\@title\\par\\vskip 0.5em\\large\\@author\\par\\vskip 0.3em\\normalsize\\@date\\end{center}\\par\\vskip 1em}"
+        "\\makeatother"
+        "\\AtEndPreamble{"
+        "\\titleformat*{\\section}{\\LARGE\\bfseries}"
+        "\\titleformat*{\\subsection}{\\Large\\bfseries}"
+        "\\titleformat*{\\subsubsection}{\\large\\bfseries}"
+        "}"
+        "\\AtBeginDocument{"
+        "\\sloppy\\setlength{\\emergencystretch}{5em}"
+        "}"
+    )
+    attempts = [(header_includes, "with xeCJK" if use_xecjk else "default")]
+    if use_xecjk:
+        attempts.append((header_without_cjk, "without xeCJK (fallback)"))
+
+    # DEBUG: write intermediate Markdown to a debug directory under out_dir so we
+    # can inspect the exact inputs Pandoc sees when PDF export fails.
+    # Note: generating debug LaTeX requires an extra pandoc run; we only do it on failure.
+    debug_md_path: Optional[Path] = None
+    debug_tex_path: Optional[Path] = None
+
+    try:
+        debug_dir = out_dir / "debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        debug_md_path = debug_dir / (Path(output_path).stem + ".md")
+        try:
+            with open(debug_md_path, "w", encoding="utf-8") as f_md:
+                f_md.write(md_for_pdf)
+            logger.info(
+                LogModule.RESTOR,
+                "[PDF-EXPORT] Wrote debug Markdown to {path}",
+                path=str(debug_md_path),
+            )
+        except Exception as md_err:  # noqa: BLE001
+            logger.debug(
+                LogModule.RESTOR,
+                f"[PDF-EXPORT] Writing debug Markdown failed: {md_err}",
+            )
+    except Exception as tex_err:
+        logger.debug(
+            LogModule.RESTOR,
+            f"[PDF-EXPORT] Writing debug artifacts failed: {tex_err}",
+        )
+
+    try:
+        for current_header, attempt_name in attempts:
+            cmd = [
+                str(pandoc_path),
+                "-f", pandoc_from,
+                temp_md,
+                "-o", output_path,
+                "--pdf-engine=" + pdf_engine,
+                "-V", f"mainfont={mainfont}",
+                "-V", f"geometry={geometry_opts}",
+                "-V", f"papersize=a4",
+                "-V", f"header-includes={current_header}",
+            ]
+            proc = subprocess.run(
+                cmd,
+                cwd=str(out_dir),
+                env=env,
+                capture_output=True,
+                timeout=300,
+                encoding="utf-8",
+                errors="replace",
+            )
+            if proc.returncode == 0:
+                out_file = Path(output_path)
+                if out_file.exists() and out_file.stat().st_size > 0:
+                    if attempt_name.startswith("without"):
+                        logger.info(LogModule.RESTOR, "[PDF-EXPORT] convert_md_to_pdf succeeded without xeCJK (xeCJK.sty not installed); install xecjk for better CJK line breaking")
+                    logger.info(LogModule.TRANS, f"[PDF-EXPORT] convert_md_to_pdf succeeded: {output_path}")
+                    return True
+            stderr = proc.stderr or ""
+            if "xeCJK" in stderr and attempt_name.startswith("with"):
+                logger.info(LogModule.RESTOR, "[PDF-EXPORT] convert_md_to_pdf failed (xeCJK.sty not found), retrying without xeCJK...")
+                continue
+            logger.warning(
+                LogModule.RESTOR,
+                f"[PDF-EXPORT] convert_md_to_pdf pandoc exit code {proc.returncode}, stderr: {stderr[:500]}",
+            )
+            # When PDF export fails, try to extract a small LaTeX context window
+            # around the first reported error line so that downstream components
+            # (or an LLM-based repair) can focus on a local snippet instead of
+            # the entire document.
+            # On failure, generate debug LaTeX (extra pandoc run) if not yet generated.
+            if debug_tex_path is None:
+                try:
+                    debug_tex_path = (out_dir / "debug") / (Path(output_path).stem + ".tex")
+                    tex_cmd = [
+                        str(pandoc_path),
+                        "-f",
+                        pandoc_from,
+                        temp_md,
+                        "-t",
+                        "latex",
+                        "-o",
+                        str(debug_tex_path),
+                        "-V",
+                        f"mainfont={mainfont}",
+                        "-V",
+                        f"geometry={geometry_opts}",
+                        "-V",
+                        "papersize=a4",
+                        "-V",
+                        f"header-includes={current_header}",
+                    ]
+                    tex_proc = subprocess.run(  # noqa: S603
+                        tex_cmd,
+                        cwd=str(out_dir),
+                        env=env,
+                        capture_output=True,
+                        timeout=120,
+                        encoding="utf-8",
+                        errors="replace",
+                    )
+                    if tex_proc.returncode == 0:
+                        logger.info(
+                            LogModule.RESTOR,
+                            "[PDF-EXPORT] Wrote debug LaTeX to {path}",
+                            path=str(debug_tex_path),
+                        )
+                    else:
+                        logger.warning(
+                            LogModule.RESTOR,
+                            "[PDF-EXPORT] Failed to write debug LaTeX (exit={code}), stderr={stderr}",
+                            code=tex_proc.returncode,
+                            stderr=(tex_proc.stderr or "")[:300],
+                        )
+                except Exception as tex_err:  # noqa: BLE001
+                    logger.debug(
+                        LogModule.RESTOR,
+                        f"[PDF-EXPORT] Writing debug LaTeX failed: {tex_err}",
+                    )
+
+            if debug_tex_path is not None and debug_tex_path.exists():
+                ctx = extract_latex_error_context(stderr, debug_tex_path, debug_md_path)
+                if ctx is not None and (ctx.md_snippet or ctx.tex_snippet):
+                    logger.warning(
+                        LogModule.RESTOR,
+                        "[PDF-EXPORT] LaTeX compile context (type={etype}, line={line}, token={tok}, debug_tex={tex_path}, debug_md={md_path})",
+                        etype=ctx.error_type,
+                        line=ctx.line_no,
+                        tok=ctx.error_token or "<none>",
+                        tex_path=str(debug_tex_path),
+                        md_path=str(debug_md_path) if debug_md_path else "<none>",
+                    )
+                    raise PdfExportLatexError(
+                        "Pandoc+XeLaTeX failed to compile the generated LaTeX. See error context for details.",
+                        stderr=stderr,
+                        error_type=ctx.error_type or "unknown",
+                        line_no=ctx.line_no,
+                        error_token=ctx.error_token or "",
+                        tex_snippet=ctx.tex_snippet or "",
+                        md_snippet=ctx.md_snippet or "",
+                        debug_tex_path=debug_tex_path,
+                        debug_md_path=debug_md_path,
+                    )
+        return False
+    except subprocess.TimeoutExpired:
+        logger.warning(LogModule.RESTOR, "[PDF-EXPORT] convert_md_to_pdf: pandoc timed out")
+        return False
+    except Exception as e:
+        # Let callers handle LaTeX compilation failures with extracted context.
+        # They can use it to locate the bad segment and guide users to repair.
+        if isinstance(e, PdfExportLatexError):
+            raise
+        logger.warning(LogModule.RESTOR, f"[PDF-EXPORT] convert_md_to_pdf failed: {e}", exc_info=False)
+        return False
+    finally:
+        try:
+            os.unlink(temp_md)
+        except Exception:
+            pass
+
+
+def get_layout_block_bbox(layout_document: Any) -> Dict[int, Tuple[float, float, float, float]]:
+    """
+    Build mapping from layout block index to bbox (x0, y0, x1, y1) from a LayoutDocument.
+    Intended to be called at Layout extraction / segment recording so export can use cached bbox
+    without iterating layout_document again.
+    """
+    out: Dict[int, Tuple[float, float, float, float]] = {}
+    try:
+        from layout.base import LayoutDocument as _LD
+        if not isinstance(layout_document, _LD):
+            return out
+        for block in layout_document.iter_blocks():
+            if block.index is not None and getattr(block, "bbox", None):
+                out[block.index] = tuple(float(x) for x in block.bbox)
+    except Exception as e:
+        logger.debug(LogModule.RESTOR, f"get_layout_block_bbox failed: {e}")
+    return out
+
+
+def _log_latex_error_context(stderr: str, tex_path: Path, md_path: Optional[Path]) -> None:
+    """
+    Deprecated: use extract_latex_error_context() for context extraction and logging.
+
+    Kept as a no-op shim for backward compatibility in case external callers import it.
+    """
+    _ = (stderr, tex_path, md_path)
+    return None
+
+
+def _bbox_y_overlap(bbox1: Tuple[float, float, float, float], bbox2: Tuple[float, float, float, float], tolerance: float = 2.0) -> bool:
+    """
+    Check if two layout bboxes (x0, y0, x1, y1) overlap in y (same row).
+    Uses tolerance in same units as bbox to handle rounding.
+    Coerces values to float so bbox from JSON (e.g. task_state) with string numbers still works.
+    """
+    y0_1, y1_1 = float(bbox1[1]), float(bbox1[3])
+    y0_2, y1_2 = float(bbox2[1]), float(bbox2[3])
+    return not (y1_1 <= y0_2 - tolerance or y1_2 <= y0_1 - tolerance)
+
+
+def get_image_block_indices_from_layout(
+    segments: List[Dict[str, Any]],
+    layout_document: Any,
+    equation_format: Optional[str] = None,
+    table_body_format: Optional[str] = None,
+) -> Tuple[List[int], Dict[str, int]]:
+    """
+    Build list of layout block indices for each image segment in document order, and a mapping from image paths to block indices.
+    Used to decide which consecutive images are on the same row (bbox y overlap).
+    Only includes blocks that will actually emit an image ref in the current export (e.g. when equation_format=text,
+    equation blocks are excluded so the list matches the order of image refs in the rebuilt markdown).
+
+    Args:
+        segments: List of translation segments (in order)
+        layout_document: LayoutDocument with iter_blocks() and blocks with .index, .bbox, .has_image(), .type
+        equation_format: Optional "text" | "latex" | "image" – when not "image", equation blocks are excluded
+        table_body_format: Optional "html" | "image" – when not "image", table body image blocks are excluded
+
+    Returns:
+        Tuple of (list of block indices in document order, dict mapping normalized image path to block index).
+        The dict uses normalized paths (filename only, lowercase) for matching.
+    """
+    try:
+        from layout.base import LayoutDocument as _LD
+        if not isinstance(layout_document, _LD):
+            logger.info(LogModule.RESTOR, "[PDF-EXPORT] get_image_block_indices_from_layout: layout_document is not LayoutDocument")
+            return ([], {})
+    except Exception as e:
+        logger.info(LogModule.RESTOR, f"[PDF-EXPORT] get_image_block_indices_from_layout: {e}")
+        return ([], {})
+    block_index_to_block: Dict[int, Any] = {}
+    block_index_to_type: Dict[int, str] = {}
+    for block in layout_document.iter_blocks():
+        if block.index is not None:
+            block_index_to_block[block.index] = block
+            block_index_to_type[block.index] = getattr(block, "type", "") or ""
+    image_blocks = [idx for idx, b in block_index_to_block.items() if getattr(b, "has_image", None) and b.has_image()]
+    out: List[int] = []
+    path_to_block_index: Dict[str, int] = {}
+    segs_with_layout = 0
+    eq_fmt = (equation_format or "text").strip().lower()
+    tbl_fmt = (table_body_format or "html").strip().lower()
+    for seg in segments:
+        bidxs = seg.get("layout_block_indices", [])
+        if bidxs:
+            segs_with_layout += 1
+        for bidx in bidxs:
+            block = block_index_to_block.get(bidx)
+            if not block or not getattr(block, "has_image", None) or not block.has_image():
+                continue
+            btype = block_index_to_type.get(bidx, "")
+            # Only include block if current export will emit an image ref for it
+            if btype == "image":
+                include = True
+            elif btype in ("interline_equation", "formula", "equation"):
+                include = eq_fmt == "image"
+            elif btype == "table":
+                include = tbl_fmt == "image"
+            else:
+                include = True
+            if not include:
+                continue
+            out.append(bidx)
+            # Try to extract image path from segment for mapping
+            # Check multiple possible fields: image_path, placeholder_id (may be filename), source_text
+            image_path = seg.get("image_path") or seg.get("source_text", "")
+            placeholder_id = seg.get("placeholder_id", "")
+            
+            # If we have placeholder_id, it might be the filename (e.g., "e077a90c.jpg")
+            # Check if placeholder_id looks like a filename (has extension)
+            if not image_path and placeholder_id:
+                if "." in placeholder_id and any(placeholder_id.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]):
+                    image_path = placeholder_id
+            
+            if image_path:
+                # Normalize path: extract filename, lowercase, remove path separators
+                # Handle markdown image syntax: ![alt](path) -> extract path
+                md_match = re.search(r'!\[([^\]]*)\]\(([^)]+)\)', image_path)
+                if md_match:
+                    image_path = md_match.group(2)
+                # Handle placeholder format: <ph-xxx> -> try to extract filename from placeholder_id
+                if image_path.startswith("<ph-") and placeholder_id:
+                    # placeholder_id might be the filename
+                    if "." in placeholder_id:
+                        image_path = placeholder_id
+                # Extract filename and normalize (handle both ./images/file.jpg and images/file.jpg and file.jpg)
+                # Remove leading ./ and images/ prefix if present
+                normalized = image_path.replace("./", "").replace("images/", "").replace("images\\", "")
+                filename = os.path.basename(normalized).lower()
+                if filename:
+                    path_to_block_index[filename] = bidx
+                    logger.info(
+                        LogModule.RESTOR,
+                        f"[PDF-EXPORT] Mapped image: original={image_path}, placeholder_id={placeholder_id}, normalized_filename={filename}, block_index={bidx}"
+                    )
+            break
+    if not out and segments:
+        logger.info(
+            LogModule.RESTOR,
+            f"[PDF-EXPORT] get_image_block_indices_from_layout: 0 image indices (segments={len(segments)}, "
+            f"segments_with_layout_block_indices={segs_with_layout}, layout_image_blocks={len(image_blocks)})"
+        )
+    logger.info(
+        LogModule.RESTOR,
+        f"[PDF-EXPORT] get_image_block_indices_from_layout: {len(out)} image indices, {len(path_to_block_index)} path mappings"
+    )
+    return (out, path_to_block_index)
+
+
+def group_consecutive_images_for_markdown(
+    md_content: str,
+    image_block_indices: Optional[List[int]] = None,
+    layout_document: Optional[Any] = None,
+    layout_block_bbox: Optional[Dict[int, Tuple[float, float, float, float]]] = None,
+) -> str:
+    """
+    Group consecutive image references (separated only by whitespace) into side-by-side HTML layout.
+    
+    When image_block_indices and layout_document (or layout_block_bbox) are provided, only groups a run of images
+    if their layout bboxes overlap in y (same row); otherwise keeps them stacked.
+    Prefer layout_block_bbox from Layout extraction phase so layout_document is not iterated at export.
+
+    Args:
+        md_content: Markdown content with image references
+        image_block_indices: Optional list of layout block index per image in document order
+        layout_document: Optional LayoutDocument to resolve bbox for same-row check (used when layout_block_bbox not provided)
+        layout_block_bbox: Optional precomputed block index -> bbox from Layout extraction phase
+
+    Returns:
+        Modified markdown with consecutive images grouped in HTML divs only when same row (or always if no layout).
+    """
+    import re
+    # Pattern to match markdown image syntax: ![alt](path)
+    image_pattern = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
+    
+    all_matches = list(image_pattern.finditer(md_content))
+    if len(all_matches) < 2:
+        return md_content  # No consecutive images possible
+    
+    # Prefer bbox from Layout extraction phase; normalize keys to int and bbox to tuple of float (JSON round-trip safe)
+    block_index_to_bbox: Optional[Dict[int, Tuple[float, float, float, float]]] = None
+    if layout_block_bbox:
+        try:
+            block_index_to_bbox = {}
+            for k, v in layout_block_bbox.items():
+                if v is None or len(v) < 4:
+                    continue
+                bidx = int(k) if not isinstance(k, int) else k
+                block_index_to_bbox[bidx] = (float(v[0]), float(v[1]), float(v[2]), float(v[3]))
+        except (TypeError, ValueError, IndexError):
+            block_index_to_bbox = None
+    if block_index_to_bbox is None and layout_document and image_block_indices is not None and len(image_block_indices) >= 2:
+        try:
+            from layout.base import LayoutDocument as _LD
+            if isinstance(layout_document, _LD):
+                block_index_to_bbox = {}
+                for block in layout_document.iter_blocks():
+                    if block.index is not None and hasattr(block, "bbox") and block.bbox:
+                        block_index_to_bbox[block.index] = block.bbox
+        except Exception:
+            block_index_to_bbox = None
+    
+    runs = []
+    i = 0
+    while i < len(all_matches):
+        run = [all_matches[i]]
+        while i + 1 < len(all_matches):
+            gap = md_content[run[-1].end() : all_matches[i + 1].start()]
+            if not gap.strip():  # only whitespace between
+                run.append(all_matches[i + 1])
+                i += 1
+            else:
+                break
+        runs.append(run)
+        i += 1
+    
+    # Build new markdown with HTML divs for runs of 2+ images (only when same row if layout provided)
+    parts = []
+    pos = 0
+    image_index = 0  # global index of image in document order
+    for run in runs:
+        parts.append(md_content[pos : run[0].start()])
+        merge_run = len(run) >= 2
+        if merge_run and block_index_to_bbox is not None and image_block_indices is not None:
+            # Only merge if all images in run have same-row bboxes (pairwise y overlap)
+            run_block_indices = []
+            for j in range(len(run)):
+                idx = image_index + j
+                if idx < len(image_block_indices):
+                    run_block_indices.append(image_block_indices[idx])
+            same_row = True
+            if len(run_block_indices) == len(run):
+                for j in range(len(run_block_indices) - 1):
+                    bbox_a = block_index_to_bbox.get(run_block_indices[j])
+                    bbox_b = block_index_to_bbox.get(run_block_indices[j + 1])
+                    if bbox_a is None or bbox_b is None or not _bbox_y_overlap(bbox_a, bbox_b):
+                        same_row = False
+                        logger.debug(
+                            LogModule.RESTOR,
+                            f"[MD-EXPORT] Consecutive images not merged (different row): blocks {run_block_indices[j]}, {run_block_indices[j + 1]}"
+                        )
+                        break
+            else:
+                same_row = False
+            merge_run = merge_run and same_row
+        image_index += len(run)
+        
+        if merge_run:
+            # Create HTML div with inline-block images for side-by-side layout
+            n = len(run)
+            img_tags = []
+            for m in run:
+                alt_text = m.group(1) or ""
+                img_path = m.group(2)
+                # Escape HTML special chars in alt_text and path
+                alt_escaped = alt_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+                # Escape path for HTML attribute (quote and escape quotes)
+                path_escaped = img_path.replace("&", "&amp;").replace('"', "&quot;")
+                # Use HTML img tag with inline-block for side-by-side
+                # Each image gets (100/n)% width minus margins for spacing
+                width_pct = (100 / n) - 2  # Subtract 2% for margins
+                img_tags.append(f'<img src="{path_escaped}" alt="{alt_escaped}" style="display: inline-block; max-width: {width_pct:.1f}%; margin: 0 1%; vertical-align: top;" />')
+            
+            html_block = f'<div style="text-align: center; margin: 1em 0;">\n' + "\n".join(img_tags) + "\n</div>"
+            parts.append(html_block)
+            logger.info(LogModule.RESTOR, f"[MD-EXPORT] Side-by-side images: {n} images grouped in HTML div (same row)")
+        else:
+            for m in run:
+                parts.append(m.group(0))
+        pos = run[-1].end()
+    parts.append(md_content[pos:])
+    return "".join(parts)
+
+
+#
+# NOTE: Legacy HTML->PDF backend has been removed.
+# If HTML-to-PDF is needed (e.g. MOBI/EPUB workflows), use Pandoc → XeLaTeX.
+
+
+async def convert_html_to_pdf(
+    html_content: str,
+    output_path: str,
+    output_dir: Optional[Path] = None,
+    to_lang: Optional[str] = None,
+) -> None:
+    """
+    Convert HTML content to PDF via Pandoc with XeLaTeX.
+
+    This is used by workflows that naturally produce HTML (e.g. MOBI/EPUB).
+    It intentionally does NOT depend on any browser-based renderer or PyMuPDF.
+    """
+    if not html_content or not html_content.strip():
+        raise ValueError("HTML content is empty, cannot generate PDF.")
+
+    out_dir = output_dir or Path(output_path).parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    pandoc_path = _get_pandoc_path()
+    if not pandoc_path:
+        raise RuntimeError(
+            "Pandoc is required for PDF export but was not found. "
+            "Install Pandoc and ensure it is in PATH or in 3rdParty/windows."
+        )
+    os.environ["PYPANDOC_PANDOC"] = str(pandoc_path)
+
+    xelatex_path_orig = _get_xelatex_path()
+    xelatex_path = None
+    if xelatex_path_orig:
+        pdflatex_root = xelatex_path_orig.parent.parent.parent
+        pdflatex_root_use = _ensure_ascii_path_for_tex(pdflatex_root)
+        xelatex_path = pdflatex_root_use / "bin" / "windows" / "xelatex.exe"
+        if not xelatex_path.exists():
+            xelatex_path = _to_short_path_if_needed(xelatex_path_orig)
+    
+    # 检查 xelatex 是否在 PATH 中
+    xelatex_in_path = shutil.which("xelatex")
+    
+    # 检查 macOS 上常见的 xelatex 路径
+    if not xelatex_in_path and sys.platform == "darwin":
+        common_paths = [
+            "/Library/TeX/texbin/xelatex",  # MacTeX / BasicTeX
+            "/usr/local/texlive/current/bin/universal-darwin/xelatex",  # TeX Live
+            "/usr/local/texlive/2026/bin/universal-darwin/xelatex",  # TeX Live 2026
+        ]
+        for path in common_paths:
+            if Path(path).exists():
+                xelatex_in_path = path
+                logger.info(LogModule.RESTOR, f"[PDF-EXPORT] Found XeLaTeX at: {xelatex_in_path}")
+                break
+    
+    # 如果仍然找不到 xelatex，抛出错误
+    if not xelatex_path and not xelatex_in_path:
+        if sys.platform == "darwin":
+            install_msg = (
+                "XeLaTeX is required for PDF export but was not found. "
+                "Install TeX Live: brew install --cask mactex "
+                "or TinyTeX: brew install --cask tinytex. "
+                "After installation, run: cd 3rdParty/macos && ./install_latex_packages.sh "
+                "to install required LaTeX packages. See server logs for details."
+            )
+        elif sys.platform == "linux":
+            install_msg = (
+                "XeLaTeX is required for PDF export but was not found. "
+                "Install TeX Live: sudo apt-get install texlive-xetex texlive-lang-chinese "
+                "or TinyTeX. See server logs for details."
+            )
+        else:  # Windows
+            install_msg = (
+                "XeLaTeX is required for PDF export but was not found. "
+                "Please install XeLaTeX (e.g. TeX Live, TinyTeX) and ensure the xelatex executable is in PATH or in 3rdParty/windows/pdflatex."
+                "See server logs for details."
+            )
+        logger.error(
+            LogModule.RESTOR,
+            f"[PDF-EXPORT] {install_msg}"
+        )
+        raise RuntimeError(install_msg)
+
+    pdf_engine = str(xelatex_path) if xelatex_path else (xelatex_in_path if xelatex_in_path else "xelatex")
+    try:
+        from translator.ai_translator.docx_translator import get_font_for_language
+
+        mainfont = get_font_for_language(to_lang) if to_lang else ("Helvetica Neue" if sys.platform == "darwin" else "Calibri")
+    except Exception:
+        mainfont = "Helvetica Neue" if sys.platform == "darwin" else "Calibri"
+
+    import tempfile
+    import asyncio
+
+    tmp_html = None
+    try:
+        fd, tmp_html = tempfile.mkstemp(suffix=".html", prefix="owlangs_pdf_")
+        os.close(fd)
+        Path(tmp_html).write_text(html_content, encoding="utf-8", errors="ignore")
+
+        # Use resource-path so relative images can be resolved from output_dir.
+        # Also keep the working directory stable (pandoc reads resources relative to CWD).
+        def _run_pandoc() -> None:
+            import subprocess
+
+            cmd = [
+                str(pandoc_path),
+                tmp_html,
+                "-f",
+                "html",
+                "-o",
+                output_path,
+                "--pdf-engine",
+                pdf_engine,
+                "--resource-path",
+                str(out_dir),
+                "-V",
+                f"mainfont={mainfont}",
+            ]
+            proc = subprocess.run(
+                cmd,
+                cwd=str(out_dir),
+                capture_output=True,
+                text=True,
+            )
+            if proc.returncode != 0:
+                stderr = (proc.stderr or "")[:800]
+                raise RuntimeError(f"Pandoc HTML->PDF failed (code={proc.returncode}): {stderr}")
+
+        await asyncio.to_thread(_run_pandoc)
+
+        out_file = Path(output_path)
+        if not out_file.exists() or out_file.stat().st_size == 0:
+            raise RuntimeError("Pandoc produced an empty PDF file.")
+    finally:
+        try:
+            if tmp_html:
+                os.unlink(tmp_html)
+        except Exception:
+            pass

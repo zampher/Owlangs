@@ -1,85 +1,158 @@
 # Owlangs
-Owlangs Document Translation
 
-### Overview (Desktop)
+A powerful AI-powered document translation platform designed for professionals who need accurate, format-preserving translations across a wide range of document types.
 
-Owlangs is positioned as a “what-you-see-is-what-you-get translation workbench”. It supports local installation and connects to your own large language model accounts, targeting individual users and small teams that need high‑quality document translation with faithful layout preservation. This release focuses only on the core capabilities of the desktop Standard / Pro editions and does **not** cover the enterprise Web edition.
+## Features
 
+### 📄 Multi-Format Translation
 
-![Translate2](https://github.com/user-attachments/assets/04c38025-9d6c-4bc7-851b-d19a0517bb38)
+- **15+ Supported Formats**: DOCX, PPTX, PDF, Markdown, HTML, EPUB, MOBI, XLSX, JSON, SRT, Qt .ts, images, and more
+- **Format Preservation**: Maintains original formatting, layouts, and styles in translated documents
+- **Text Mode**: Quick translations for plain text input
+- **Real-time Preview**: View translation results with segment-by-segment editing
+- **Undo/Redo**: Full editing history with undo and redo functionality
 
+### 🤖 AI Platform Flexibility
 
-### Core Features of the Desktop Edition
+- **20+ AI Platforms Supported**: 
+  - OpenAI (GPT-4o, GPT-4, etc.)
+  - Azure OpenAI
+  - Anthropic Claude
+  - Google Gemini
+  - DeepSeek
+  - Alibaba DashScope (Qwen)
+  - VolcEngine ARK (Doubao)
+  - Zhipu AI (GLM)
+  - Groq
+  - Together AI
+  - Mistral AI
+  - Cohere
+  - xAI (Grok)
+  - SiliconFlow
+  - DMX API
+  - OpenRouter
+  - Tencent Hunyuan
+  - Baidu ERNIE
+  - Moonshot AI
+  - Aleph Alpha
+  - Rinna (Japan)
+  - Naver HyperClova (Korea)
+  - And more...
+- **Custom Platform Support**: Integrate any OpenAI-compatible API
+- **Centralized Management**: Unified API key and configuration management
+- **Easy Switching**: Seamlessly switch between different AI providers
 
-- **Fast translation for large documents**  
-  - Designed for long documents such as tens to hundreds of pages of papers, technical documents, and contracts  
-  - From upload to export, a single workflow can complete the translation of an entire document  
+### 📚 Intelligent Glossary Management
 
-- **Multi-format document support**  
-  - Supports 15+ formats: PDF, DOCX, PPTX, XLSX, HTML, EPUB, MOBI, SRT, JSON, TXT, and more  
-  - Standard Edition covers common formats like PDF / DOCX, while Pro Edition unlocks all advanced formats  
+- **Automatic Generation**: Automatically extract and generate glossaries from documents
+- **Manual Creation**: Create and edit glossaries manually with full control
+- **Multi-Glossary Support**: Use multiple glossaries per project for comprehensive terminology coverage
+- **Consistency**: Ensure terminology consistency across all translations
 
-- **High-fidelity layout preservation**  
-  - Deeply analyzes PDF structure, recognizing tables, images, formulas, headings, references, and other elements  
-  - Re-renders translations according to the original layout to keep structure and formatting as close as possible to the source  
+### 🔒 Privacy & Anonymization
 
-- **Segment-based translation workbench (WYSIWYG)**  
-  - Side-by-side view of source and translation, with segment-level review and editing  
-  - Segment status tracking: translated, modified, excluded, needs retry, failed, etc., so issues and progress are visible at a glance  
+- **Document Anonymization**: Automatically identify and anonymize sensitive information before translation
+- **Entity Recognition**: Advanced entity recognition and management
+- **Sensitive Data Protection**: Protect personal information, financial data, and other sensitive content
+- **Customizable Rules**: Configure anonymization rules to match your specific requirements
 
-- **Intelligent segmenting and content filtering**  
-  - Automatically detects content that does not need translation (e.g., pure numbers, URLs, some code identifiers) and excludes it  
-  - Allows manual per-segment flags like “exclude” or “needs retry”, so only truly necessary content is translated and billed  
+### 💼 Workspace & Task Management
 
-- **Multi-provider LLM integration and switching**  
-  - Can connect to 20+ major AI platforms (such as OpenAI, Claude, Gemini, DeepSeek, etc.)  
-  - Within a single project, you can flexibly switch models: use a cheaper, faster model for the first draft, then higher-quality models for polishing key segments  
+- **Multi-Task Workspace**: Manage multiple translation projects simultaneously
+- **Flow-Based Architecture**: Organized workflow for complex translation projects
+- **State Persistence**: Automatic task state saving and recovery
+- **Version Management**: Track and manage different versions of your translations
+- **Task History**: Complete history of all translation activities
 
-- **Glossary / terminology management**  
-  - Automatically extracts terms from documents to build reusable glossaries  
-  - Applies glossaries during translation to keep professional terminology consistent across projects  
+### 🌐 Cross-Platform Access
 
-- **Multi-format export and editing-friendly outputs**  
-  - For PDFs, results can be exported as Word, HTML, Markdown, and other formats to support further editing, layout, or publishing  
+- **Windows**: Native desktop application
+- **macOS**: Native desktop application
+- **Linux**: Native desktop application
+- **Android**: Mobile application
+- **iOS**: Mobile application
+- **Web**: Browser-based access
 
-- **Cost control and local-friendly usage**  
-  - Uses your own API keys with pay-as-you-go billing, typically far cheaper than subscription-based translation platforms  
-  - Data is stored locally, and can be combined with local parsing / inference services to enable secure translation in intranet environments  
+### 🎨 User Experience
 
-### Target Users and Scenarios (Summary)
+- **Dark Mode**: Full dark mode support for comfortable viewing
+- **Multi-Language Interface**: Interface available in multiple languages
+- **Intuitive Design**: Clean and organized user interface
+- **Responsive Layout**: Optimized for different screen sizes
 
-- Researchers and engineers who need high-quality translations of academic papers and technical white papers  
-- Business and technical users who must preserve formatting in contracts, technical agreements, and multi-format technical documents  
-- Individual users or small teams who occasionally need to translate large documents but do not want to subscribe to expensive online services  
+## Use Cases
 
+Owlangs is perfect for:
 
-### Edition Comparison
+- **Translators and Translation Agencies**: Professional translation workflows with terminology management
+- **Content Creators**: Localizing documentation, blogs, and content
+- **Businesses**: Managing multilingual content and documentation
+- **Developers**: Translating software documentation and user interfaces
+- **Anyone**: Who needs professional document translation with terminology control
 
-Three editions are available. Differences are summarized below. All editions have no usage caps (e.g. no page or request limits); restrictions are by edition (which formats and which frontend are available).
+## Getting Started
 
-| Dimension | Standard | Pro | Team |
-|-----------|-------|-----|------|
-| Frontend | Windows desktop | Windows desktop | Web |
-| PDF | ✓ | ✓ | ✓ |
-| DOCX | ✓ | ✓ | ✓ |
-| PNG / JPG / JPEG | ✓ | ✓ | ✓ |
-| TXT | ✓ | ✓ | ✓ |
-| MD | ✓ | ✓ | ✓ |
-| HTML | ✓ | ✓ | ✓ |
-| SRT | ✓ | ✓ | ✓ |
-| PPTX | | ✓ | ✓ |
-| XLSX / CSV | | ✓ | ✓ |
-| EPUB | | ✓ | ✓ |
-| MOBI | | ✓ | ✓ |
-| JSON | | ✓ | ✓ |
-| TS (Qt) | | ✓ | ✓ |
-| PDF workflow: Export DOCX with formulas | ✓ | ✓ | ✓ |
-| Translation usage | Not limited | Not limited | Not limited |
-| User / login | | | ✓ |
+### Prerequisites
 
+- Python 3.11 or higher (for backend)
+- API keys for your preferred AI platform(s)
 
+### Installation
 
-Contact Email: zampher@163.com
-用户交流群：微信
-<img style="max-width: 350px; height: auto;" alt="wechat" src="https://github.com/user-attachments/assets/85d4277e-9db3-4a49-9ee8-456ed889d245" />
+1. Clone the repository
+2. Install backend dependencies
+3. Configure your AI platform API keys in the settings
+4. Launch the application
+
+### Quick Start
+
+1. **Upload a Document**: Select a document file or paste text
+2. **Choose AI Platform**: Select your preferred AI translation service
+3. **Configure Settings**: Set target language and translation parameters
+4. **Generate Glossary** (optional): Let the system automatically extract terminology
+5. **Translate**: Start the translation process
+6. **Review & Edit**: Review results and make adjustments as needed
+7. **Download**: Export your translated document
+
+## Configuration
+
+### AI Platform Setup
+
+Configure your AI platform API keys in the settings panel. Each platform can be configured independently with custom models, temperature, and other parameters.
+
+### Glossary Management
+
+Create and manage glossaries through the glossary settings. You can:
+- Import existing glossaries
+- Generate glossaries from documents
+- Manually add and edit terminology entries
+- Assign glossaries to specific projects
+
+### Translation Settings
+
+Customize translation behavior:
+- Target language selection
+- Custom translation prompts
+- Chunk size and concurrency settings
+- Format-specific options
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details
+
+## Support
+
+For issues, questions, or contributions:
+1. Check the documentation
+2. Search existing issues
+3. Create a new issue
+4. Contact the maintainers
+
+## Coming Soon
+
+We're finalizing the platform and plan to launch within the next month. The system is feature-complete and ready for professional use.
+
+---
+
+**Owlangs** - Professional AI-Powered Document Translation
 

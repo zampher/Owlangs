@@ -1,0 +1,161 @@
+{
+  "backend": {
+    "app": {
+      "startup": {
+        "completed": "Application startup completed, multi-task state initialized.",
+        "cleanup_task_started": "Conversion file cleanup task started.",
+        "cleanup_task_failed": "Failed to start conversion file cleanup task: {error}",
+        "password_recovery_completed": "Admin password recovery completed successfully.",
+        "password_recovery_failed": "Failed to perform password recovery: {error}",
+        "api_docs": "Service API documentation: {url}",
+        "browser_access": "Please access {url} in your browser"
+      },
+      "shutdown": {
+        "cleanup_temp_dirs": "Cleaning up temporary directories..."
+      }
+    },
+    "translation": {
+      "task": {
+        "no_text_found": "No text content found in the file that needs translation."
+      },
+      "agent": {
+        "prompt_sent": "AI prompt sent to {model}",
+        "response_received": "AI response received from {model}",
+        "error": "AI agent error: {error}"
+      }
+    },
+    "conversion": {
+      "pdf2docx": {
+        "processing": "Processing PDF to DOCX conversion",
+        "page_processed": "Processed page {page_num} of {total_pages}",
+        "completed": "PDF to DOCX conversion completed"
+      }
+    },
+    "font": {
+      "selection": {
+        "applied": "Font applied for language: {language} -> {font}",
+        "fallback_used": "Using fallback font: {font}"
+      }
+    },
+    "logging": {
+      "config": {
+        "level_changed": "Log level changed to: {level}",
+        "console_toggled": "Console output {status}",
+        "file_toggled": "File output {status}",
+        "size_changed": "Max file size set to: {size}MB",
+        "backup_changed": "Backup count set to: {count}"
+      }
+    },
+    "error": {
+      "general": "An error occurred: {error}",
+      "file_not_found": "File not found: {filename}",
+      "permission_denied": "Permission denied: {path}",
+      "invalid_config": "Invalid configuration: {config}",
+      "network_error": "Network error: {error}",
+      "timeout": "Operation timeout: {operation}"
+    },
+        "info": {
+          "general": "Information: {message}",
+          "file_processed": "File processed: {filename}",
+          "user_action": "User action: {action}",
+          "system_status": "System status: {status}"
+        },
+        "user_profile": {
+          "loading_config": "Loading user configuration from file: {file}",
+          "config_loaded": "User {username} configuration loaded successfully",
+          "config_saved": "User {username} configuration saved to: {file}"
+        },
+        "settings": {
+          "global_updated": "Global setting {key} updated by user {user}",
+          "user_updated": "User setting {key} updated by user {user}"
+        },
+        "translation": {
+          "task": {
+            "new_request": "Received new translation request: {filename}",
+            "started": "Background translation task started: file '{filename}', workflow: '{workflow}'",
+            "processing": "Processing '{filename}'...",
+            "completed": "Translation completed, generating temporary result files...",
+            "success": "Translation completed successfully, took {duration:.2f} seconds",
+            "finished": "Background translation task '{filename}' processing completed"
+          },
+          "workflow": {
+            "building_config": "Building {workflow_type} configuration",
+            "markdown_config": "Building MarkdownBasedWorkflow configuration",
+            "txt_config": "Building TXTWorkflow configuration",
+            "json_config": "Building JsonWorkflow configuration",
+            "xlsx_config": "Building XlsxWorkflow configuration",
+            "docx_config": "Building DocxWorkflow configuration",
+            "srt_config": "Building SrtWorkflow configuration",
+            "epub_config": "Building EpubWorkflow configuration",
+            "html_config": "Building HtmlWorkflow configuration"
+          },
+          "glossary": {
+            "extraction_started": "Starting glossary extraction, target language: {lang}",
+            "extraction_completed": "Glossary extraction completed",
+            "user_glossary_failed": "Failed to get user glossary: {error}"
+          },
+          "agent": {
+            "requests_planned": "Planned to send {total} requests, concurrent requests: {concurrent}",
+            "coroutine_completed": "Coroutine completed {count}/{total}",
+            "all_requests_done": "All requests processed. Total unresolved errors: {count}",
+            "token_stats": "Token usage statistics - Input: {input}K(including cached: {cached}K), Output: {output}K(including reasoning: {reasoning}K), Total: {total}K"
+          },
+          "export": {
+            "file_generated": "Successfully generated {file_type} file",
+            "attachments_found": "Found {count} attachments, processing...",
+            "attachment_generated": "Successfully generated attachment '{identifier}' file: {filename}"
+          }
+        },
+    "warning": {
+      "general": "Warning: {message}",
+      "deprecated_feature": "Deprecated feature used: {feature}",
+      "performance_issue": "Performance issue detected: {issue}",
+      "resource_limit": "Resource limit approaching: {resource}"
+    }
+  },
+  "frontend": {
+    "translation": {
+      "task": {
+        "started": "Translation task started",
+        "completed": "Translation task completed",
+        "failed": "Translation task failed: {error}"
+      }
+    },
+    "conversion": {
+      "task": {
+        "started": "Starting conversion task...",
+        "started_with_id": "Conversion task started, ID: {convert_id}",
+        "start_failed": "Conversion start failed: {error}",
+        "completed": "Conversion completed, file generated",
+        "failed": "Conversion failed: {error}",
+        "processing": "Conversion in progress...",
+        "status_check_failed": "Status check failed: {error}",
+        "file_generated": "Converted file generated: {filename}"
+      }
+    },
+    "ui": {
+      "file_upload": {
+        "success": "File uploaded successfully: {filename}",
+        "failed": "File upload failed: {error}",
+        "invalid_format": "Invalid file format: {format}"
+      },
+      "download": {
+        "started": "Download started: {filename}",
+        "completed": "Download completed: {filename}",
+        "failed": "Download failed: {error}"
+      },
+      "notification": {
+        "success": "Operation completed successfully",
+        "error": "Operation failed: {error}",
+        "warning": "Warning: {message}",
+        "info": "Information: {message}"
+      }
+    },
+    "error": {
+      "network": "Network error: {error}",
+      "server": "Server error: {error}",
+      "validation": "Validation error: {error}",
+      "timeout": "Request timeout: {operation}"
+    }
+  }
+}

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{title}}</title>
+    {{pico}}
+    {{katexCss}}
+    {{katexJs}}
+    {{autoRender}}
+    <style>
+        html {
+            padding: 2vh 10vw;
+            font-size: 15px;
+        }
+        /* Use images at their original size; no scaling constraints here. */
+        img {
+            display: block;
+            margin: 1em auto;
+        }
+    </style>
+</head>
+<body>
+
+{{markdown}}
+</body>
+{{renderMathInElement}}
+{{mermaid}}
+<script>
+    setTimeout(()=>{
+        const KatexErrors=document.getElementsByClassName("katex-error")
+        for (const katexError of KatexErrors) {
+            katexError.innerHTML=katexError.title
+        }
+    },200)
+</script>
+<script>
+    mermaid.initialize({
+        securityLevel: 'loose',
+        startOnLoad: true
+    });
+</script>
+
+</html>

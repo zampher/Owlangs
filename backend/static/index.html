@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-bs-theme="auto">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n-title="pageTitle">Owlangs - Interactive Document Translation</title>
+    
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    
+    <!-- Bootstrap CSS -->
+    <link href="/static/bootstrap.css" rel="stylesheet" crossorigin="anonymous">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="/static/bootstrap-icons.css">
+    
+    <!-- Anonymize Module Styles -->
+    <link rel="stylesheet" href="/static/anonymize/styles/anonymize-styles.css">
+    
+    <!-- Main Application Styles -->
+    <link rel="stylesheet" href="/static/components/styles/main.css">
+    
+    <!-- Scroll Priority Styles -->
+    <link rel="stylesheet" href="/static/css/scroll-priority.css">
+    
+    <!-- Dropdown Submenu Styles -->
+    <link rel="stylesheet" href="/static/components/styles/dropdown-submenu.css">
+    
+    <!-- Settings Tabs Styles -->
+    <link rel="stylesheet" href="/static/components/styles/settings-tabs.css">
+</head>
+<body>
+    <div class="container-fluid main-container">
+        <div class="row gx-4">
+            <!-- Left: Settings Panel -->
+            <div class="col-lg-4">
+                <div class="settings-panel">
+                    <!-- Header Component -->
+                    <div id="header-container"></div>
+                    
+                    <form id="translateForm">
+                        <!-- Two-Level Settings Navigation -->
+                        <div id="settings-tabs-container"></div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Right: Task Area -->
+            <div class="col-lg-8">
+                <div class="task-area">
+                    <!-- Task List Header -->
+                    <div id="task-list-header-container"></div>
+                    
+                    <!-- Task cards will be dynamically added here -->
+                    <div id="taskPlaceholder" class="text-center text-muted py-5">
+                        <i class="bi bi-cloud-upload" style="font-size: 3rem;"></i>
+                        <p class="mt-3" data-i18n="uploadPrompt">Click "New Task" to start translation</p>
+                    </div>
+                </div>
+                
+                <!-- Anonymize Module Container -->
+                <div id="anonymizeWorkflowContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="/static/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+    <!-- Split.js -->
+    <script src="/static/split.min.js"></script>
+    <!-- DPI-aware splitter -->
+    <script src="/static/js/dpi-aware-splitter.js?v=202501273100"></script>
+    <!-- Papa Parse -->
+    <script src="/static/papaparse.min.js"></script>
+    <!-- Preview functionality -->
+    <script src="/static/js/preview.js"></script>
+    
+    <!-- Preview Offcanvas with Resizable Panes -->
+    <div class="offcanvas offcanvas-end" data-bs-scroll="true" tabindex="-1" id="previewOffcanvas"
+         aria-labelledby="previewOffcanvasLabel">
+        <div class="offcanvas-header border-bottom">
+            <h5 class="offcanvas-title" id="previewOffcanvasLabel" data-i18n="previewTitle">Preview</h5>
+            <div class="btn-group me-auto ms-4" role="group">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="setBilingualViewBtn"
+                        data-i18n="previewBilingualBtn">Bilingual
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="setTranslatedOnlyViewBtn"
+                        data-i18n="previewTranslatedOnlyBtn">Translation Only
+                </button>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body d-flex flex-column p-2">
+            <div class="preview-split-container flex-grow-1">
+                <div id="originalPreviewContainer" class="preview-pane-wrapper">
+                    <h6 class="text-center text-muted small" data-i18n="previewOriginal">Original</h6>
+                    <div class="preview-pane" id="originalPreviewPane"></div>
+                </div>
+                <div id="translatedPreviewContainer" class="preview-pane-wrapper">
+                    <h6 class="text-center text-muted small" data-i18n="previewTranslated">Translation</h6>
+                    <div class="preview-pane">
+                        <iframe id="translatedPreviewFrame" src="about:blank"></iframe>
+                    </div>
+                </div>
+            </div>
+            <div class="offcanvas-footer mt-2 pt-3 border-top d-flex justify-content-end align-items-center">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="offcanvas" data-i18n="closeBtn">Close
+                </button>
+                <div class="btn-group ms-2">
+                    <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"
+                            aria-expanded="false" id="previewDownloadBtn">
+                        <i class="bi bi-download me-1"></i><span data-i18n="downloadBtn">Download</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" id="previewDownloadMenu">
+                        <!-- Populated by JavaScript -->
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Log i18n support -->
+    <script src="/static/log/log-i18n.js"></script>
+    
+    <!-- API Client and Error Handler -->
+    <script src="/static/js/api-client.js"></script>
+    <script src="/static/js/error-handler.js"></script>
+    
+    <!-- Service Layer -->
+    <script src="/static/js/services/config-service.js"></script>
+    <script src="/static/js/services/user-service.js"></script>
+    <script src="/static/js/services/anonymize-service.js"></script>
+    <script src="/static/js/services/form-service.js"></script>
+    <script src="/static/js/services/translation-service.js"></script>
+    <script src="/static/js/services/event-bus.js"></script>
+    <script src="/static/js/services/notification-service.js"></script>
+    
+    <!-- Settings Tabs Controller -->
+    <script src="/static/components/js/settings-tabs-controller.js"></script>
+    
+    <!-- App Initializer -->
+    <script src="/static/components/js/app-initializer.js"></script>
+    
+    <!-- User Interface Manager -->
+    <script src="/static/components/js/user-interface-manager.js"></script>
+    
+    <!-- Change Password Manager -->
+    <script src="/static/components/js/change-password-manager.js"></script>
+    
+    <!-- Component Loader -->
+    <script src="/static/components/js/component-loader.js"></script>
+    
+    <!-- Task Manager -->
+    <script src="/static/components/js/task-manager.js"></script>
+    
+    <!-- Utility Functions -->
+    <script src="/static/components/js/utils.js"></script>
+    
+    <!-- Anonymize Module Scripts -->
+    <script src="/static/anonymize/scripts/utils/anonymize-module-loader.js"></script>
+    <script src="/static/anonymize/scripts/core/anonymize-core.js"></script>
+    
+    <!-- Cache Busting Utility -->
+    <script src="/static/js/cache-buster.js"></script>
+    
+    <!-- Anonymize UI Modules -->
+    <script src="/static/anonymize/scripts/workflow/anonymize-ui-helpers.js?v=202501273100"></script>
+    <script src="/static/anonymize/scripts/workflow/anonymize-logger.js?v=202501273100"></script>
+    <script src="/static/anonymize/scripts/workflow/anonymize-dom-manager.js?v=202501273100"></script>
+    <script src="/static/anonymize/scripts/workflow/anonymize-file-handler.js?v=202501273100"></script>
+    <script src="/static/anonymize/scripts/workflow/anonymize-lifecycle.js?v=202501273100"></script>
+    <script src="/static/anonymize/scripts/workflow/anonymize-events.js?v=202501273100"></script>
+    <script src="/static/anonymize/scripts/workflow/anonymize-workflow-steps.js?v=202501273100"></script>
+    <script src="/static/anonymize/scripts/workflow/anonymize-entities.js?v=202501273100"></script>
+    <script src="/static/anonymize/scripts/workflow/anonymize-ui.js?v=202501273100"></script>
+    <script src="/static/anonymize/scripts/core/anonymize-manager.js?v=202501273100"></script>
+    
+    <!-- Preview Enhancer -->
+    <script src="/static/anonymize/scripts/preview-enhancer.js?v=202501273100"></script>
+    
+    
+    <!-- Anonymize Quick Settings Module -->
+    <script src="/static/components/js/anonymize-quick-loader.js"></script>
+    <script src="/static/anonymize/scripts/quick-settings/anonymize-quick.js"></script>
+    
+    <!-- Task List Button Handlers -->
+    <script src="/static/components/js/task-button-handlers.js"></script>
+    
+    <!-- Change Password Modal Container -->
+    <div id="changePasswordModalContainer"></div>
+    
+    <!-- Reusable Download Menu Template -->
+    <template id="downloadMenuTemplate">
+        <li class="download-item-html"><a class="dropdown-item" href="#"><i
+                class="bi bi-filetype-html me-2"></i>HTML</a></li>
+        <li class="download-item-md"><a class="dropdown-item" href="#"><i
+                class="bi bi-markdown me-2"></i><span data-i18n="downloadMdEmbedded">Markdown (Embedded Images)</span></a></li>
+        <li class="download-item-md-zip"><a class="dropdown-item" href="#"><i
+                class="bi bi-file-zip me-2"></i><span data-i18n="downloadMdZip">Markdown ZIP</span></a></li>
+        <li class="download-item-txt"><a class="dropdown-item" href="#"><i
+                class="bi bi-filetype-txt me-2"></i>TXT</a></li>
+        <li class="download-item-json"><a class="dropdown-item" href="#"><i
+                class="bi bi-filetype-json me-2"></i>JSON</a></li>
+        <li class="download-item-docx"><a class="dropdown-item" href="#"><i
+                class="bi bi-filetype-docx me-2"></i>DOCX</a></li>
+        <li class="download-item-xlsx"><a class="dropdown-item" href="#"><i
+                class="bi bi-filetype-xlsx me-2"></i>XLSX</a></li>
+        <li class="download-item-csv"><a class="dropdown-item" href="#"><i
+                class="bi bi-filetype-csv me-2"></i>CSV</a></li>
+        <li class="download-item-srt"><a class="dropdown-item" href="#"><i
+                class="bi bi-file-text me-2"></i>SRT</a></li>
+        <li class="download-item-epub"><a class="dropdown-item" href="#"><i
+                class="bi bi-book me-2"></i>EPUB</a></li>
+        <li class="download-item-pdf"><a class="dropdown-item" href="#"><i
+                class="bi bi-filetype-pdf me-2"></i>PDF</a></li>
+    </template>
+    
+    <!-- Debug script (development only) -->
+    <script src="/static/components/js/debug-loader.js"></script>
+    
+    <!-- Anonymize log initializer script -->
+    <script src="/static/anonymize-log-initializer.js"></script>
+    
+    <!-- Diagnose anonymize panel script -->
+    <script src="/static/diagnose-anonymize-panel.js"></script>
+    
+    <!-- Fix anonymize panel script -->
+    <script src="/static/fix-anonymize-panel.js"></script>
+    
+    <!-- Test anonymize initialization script -->
+    <script src="/static/test-anonymize-initialization.js"></script>
+    
+    
+    
+    
+    
+</body>
+</html>
