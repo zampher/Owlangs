@@ -69,8 +69,8 @@ A powerful AI-powered document translation platform designed for professionals w
 - **Windows**: Native desktop application
 - **macOS**: Native desktop application
 - **Linux**: Native desktop application
-- **Android**: Mobile application
-- **iOS**: Mobile application
+- **Android**: Mobile application (TBD)
+- **iOS**: Mobile application (TBD)
 - **Web**: Browser-based access
 
 ### 🎨 User Experience

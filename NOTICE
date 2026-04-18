@@ -1,0 +1,75 @@
+Owlangs
+=====================
+
+This project may contain or be based on source code from the following
+project. Such code remains under its original license.
+
+--------------------------------------------------------------------------------
+DocuTranslate
+--------------------------------------------------------------------------------
+
+  Source: https://github.com/xunbu/docutranslate
+  License: Mozilla Public License Version 2.0 (MPL-2.0)
+  Full license text: see the LICENSE file in the root of this distribution.
+
+  You may obtain a copy of the Mozilla Public License at
+  https://www.mozilla.org/en-US/MPL/2.0/
+
+--------------------------------------------------------------------------------
+MinerU (Parsing Engine Integration)
+--------------------------------------------------------------------------------
+
+  This project integrates with MinerU as an external parsing/OCR service via HTTP API
+  (e.g. cloud endpoint: https://mineru.net/api/v4; local/self-host deployments are also supported).
+
+  Source (open-source project):
+    https://github.com/opendatalab/MinerU
+
+  License:
+    The license of MinerU itself is defined by the upstream MinerU project. This distribution
+    applies MinerU notices for integration usage; MinerU source code is not bundled here.
+
+--------------------------------------------------------------------------------
+Presidio (presidio-analyzer / presidio-anonymizer)
+--------------------------------------------------------------------------------
+
+  Source: https://github.com/microsoft/presidio
+  License: Apache License 2.0
+
+  Usage in this project: used for anonymization entity recognition and anonymization.
+
+--------------------------------------------------------------------------------
+spaCy
+--------------------------------------------------------------------------------
+
+  Source: https://github.com/explosion/spaCy
+  License: MIT
+
+  Usage in this project: spaCy models are used as an NLP component compatible with Presidio.
+
+--------------------------------------------------------------------------------
+Pandoc
+--------------------------------------------------------------------------------
+
+  This project includes Pandoc as a bundled executable (3rdParty/windows/pandoc-3.8.3).
+
+  Source: https://github.com/jgm/pandoc
+  License: GNU General Public License v2 (or later)
+  Full license text: see 3rdParty/windows/pandoc-3.8.3/COPYING.rtf and/or
+    3rdParty/windows/pandoc-3.8.3/COPYRIGHT.txt.
+
+--------------------------------------------------------------------------------
+TeX Live / CTAN Snapshot (XeLaTeX toolchain)
+--------------------------------------------------------------------------------
+
+  This project bundles a TeX Live / CTAN snapshot under 3rdParty/windows/pdflatex
+  for XeLaTeX/PDF generation.
+
+  License:
+    CTAN snapshot licensing conditions vary widely by package; this distribution includes
+    3rdParty/windows/pdflatex/LICENSE.CTAN with snapshot redistribution conditions.
+    For per-package licensing, refer to the license files inside the TeX distribution snapshot.
+
+--------------------------------------------------------------------------------
+For third-party notices related to Flutter/Dart and other build-time
+dependencies, see backend/static/flutter-web/assets/NOTICES when applicable.
