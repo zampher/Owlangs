@@ -133,3 +133,5 @@ first_deploy.bat
 docker-compose.yml
 dev_run_desktop_backend.ps1
 dev_run_web_backend.ps1
+build_win_enterprise.ps1
+full.spec

@@ -12,7 +12,6 @@
 | **Flutter SDK** | 前端 Web / Windows 桌面构建 | 必需 |
 | **.NET 8 SDK** | Launcher（桌面前端启动器） | 打桌面包时必需 |
 | **NuGet** | Flutter Windows 桌面前端构建时还原 C++ 依赖 | 打桌面包时需可用；未安装时 Flutter 会尝试自动下载 |
-| **Inno Setup** | 专业安装器 (.exe) | 可选，无则回退简单打包 |
 | **NSIS** | 备用安装器 | 可选 |
 | **Pandoc / pdflatex** | PDF 流程导出 DOCX | 可选，仅 `-IncludePandoc` 时需事先放置 |
 
@@ -41,7 +40,7 @@ python --version
 
 ```powershell
 # 进入项目根目录
-cd D:\workspace\localrepo\CollabTrans
+cd D:\workspace\localrepo\Owlangs
 
 # 创建虚拟环境（目录名为 .venv）
 python -m venv .venv
@@ -272,7 +271,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
   1. 在问题机器上，进入项目根目录并激活虚拟环境：
      ```powershell
-     cd D:\workspace\localrepo\CollabTrans
+     cd D:\workspace\localrepo\Owlangs
      .\.venv\Scripts\Activate.ps1
      python -m pip install --upgrade pip
      python -m pip install "lxml>=5.4.0,<6.0.0"

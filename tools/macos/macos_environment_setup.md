@@ -76,12 +76,12 @@ python3 --version
 
 为了避免影响系统其他项目，推荐在仓库根目录下使用 Python 3.12 创建独立虚拟环境，并在其中运行后端。
 
-> 以下示例假设仓库路径为 `/Users/xxx/Workspace/Owlangs/CollabTrans`，请根据实际路径替换。
+> 以下示例假设仓库路径为 `/Users/xxx/Workspace/Owlangs/Owlangs`，请根据实际路径替换。
 
 1. 进入仓库根目录：
 
    ```bash
-   cd /Users/xxx/Workspace/Owlangs/CollabTrans
+   cd /Users/xxx/Workspace/Owlangs/Owlangs
    ```
 
 2. 使用 Python 3.12 创建虚拟环境（命名为 `.venv`）：
@@ -110,7 +110,7 @@ python3 --version
    - 推荐在仓库根目录一次性安装（可选用可编辑模式，便于开发）：
 
    ```bash
-   cd /Users/xxx/Workspace/Owlangs/CollabTrans
+   cd /Users/xxx/Workspace/Owlangs/Owlangs
    pip install -e .
    ```
 
@@ -123,7 +123,7 @@ python3 --version
 5. 启动后端服务（本项目已提供专用启动脚本）：
 
    ```bash
-   cd /Users/xxx/Workspace/Owlangs/CollabTrans/backend
+   cd /Users/xxx/Workspace/Owlangs/Owlangs/backend
    python run_app.py
    ```
 
@@ -259,7 +259,7 @@ brew install --cask mactex-no-gui
 本项目已将原来的可选 `docx_equation` extra（一次性安装 `latex2mathml`、`mathml2omml`、`mathml2omml-as` 等依赖）提升为**默认必选依赖**，直接写入 `pyproject.toml` 的 `dependencies` 中。正常情况下，只要按前文在虚拟环境中执行：
 
 ```bash
-cd /Users/xxx/Workspace/Owlangs/CollabTrans
+cd /Users/xxx/Workspace/Owlangs/Owlangs
 source .venv/bin/activate
 pip install -e .
 ```
@@ -458,7 +458,7 @@ flutter doctor
 进入前端目录：
 
 ```bash
-cd /Users/xxx/Workspace/Owlangs/CollabTrans/frontend
+cd /Users/xxx/Workspace/Owlangs/Owlangs/frontend
 flutter clean
 flutter pub get
 cd macos
@@ -493,7 +493,7 @@ flutter config --enable-web
 在前端目录执行：
 
 ```bash
-cd /Users/xxx/Workspace/Owlangs/CollabTrans/frontend
+cd /Users/xxx/Workspace/Owlangs/Owlangs/frontend
 flutter clean
 flutter pub get
 flutter run -d web-server --web-port=8080
@@ -512,7 +512,7 @@ http://localhost:8080
 Web 前端需要后端服务支持。请先启动后端：
 
 ```bash
-cd /Users/xxx/Workspace/Owlangs/CollabTrans
+cd /Users/xxx/Workspace/Owlangs/Owlangs
 source .venv/bin/activate
 python backend/run_app.py
 ```
@@ -543,7 +543,7 @@ python backend/run_app.py
 #### 构建 Web 版（默认）
 
 ```bash
-cd /Users/xxx/Workspace/Owlangs/CollabTrans
+cd /Users/xxx/Workspace/Owlangs/Owlangs
 tools/build/build_macos.sh
 ```
 
@@ -555,7 +555,7 @@ tools/build/build_macos.sh
 #### 构建桌面版
 
 ```bash
-cd /Users/xxx/Workspace/Owlangs/CollabTrans
+cd /Users/xxx/Workspace/Owlangs/Owlangs
 tools/build/build_macos.sh --frontend desktop
 ```
 
