@@ -1,0 +1,114 @@
+{
+  "_schema_version": 1,
+  "auth": {
+    "required": false,
+    "session_timeout": 3600
+  },
+  "parsing_engine": {
+    "default_engine": "mineru",
+    "engines": {
+      "mineru": {
+        "name": "MinerU",
+        "model": "vlm",
+        "api_url": "https://mineru.net/api/v4",
+        "model_version": "vlm"
+      },
+      "docling": {
+        "name": "Docling",
+        "model": "docling",
+        "type": "docling"
+      },
+      "identity": {
+        "name": "Identity",
+        "model": "identity",
+        "type": "identity"
+      }
+    },
+    "default_engine_settings": {
+      "formula_ocr": false,
+      "code_ocr": false,
+      "skip_translate": false
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "console_enabled": true,
+    "file_enabled": true,
+    "max_file_size_mb": 5,
+    "backup_count": 7,
+    "json": false,
+    "filter_health_check_logs": true,
+    "truncate": {
+      "trace": null,
+      "debug": 4000,
+      "info": 2000,
+      "success": 2000,
+      "warning": 2000,
+      "error": 4000
+    },
+    "sampling": {
+      "debug": 1.0,
+      "trace": 1.0
+    },
+    "third_party_loggers": {
+      "presidio-analyzer": {
+        "level": "INFO",
+        "propagate": false,
+        "attach_handlers": [
+          "presidio_entity_collector"
+        ]
+      },
+      "spacy": {
+        "level": "INFO"
+      },
+      "langdetect": {
+        "level": "INFO"
+      }
+    },
+    "content_display": "none",
+    "enable_module_logging": true,
+    "module_logging": {
+      "enabled_modules": {
+        "SYSTEM": "INFO",
+        "EXTRACT": "TRACE",
+        "TRANS": "DEBUG",
+        "CONVERT": "DEBUG",
+        "WORKFLOW": "DEBUG",
+        "EXCLUSION": "TRACE",
+        "EXPORT": "TRACE",
+        "DETECT": "TRACE",
+        "AUTH": "TRACE",
+        "ROUTE": "TRACE",
+        "UPLOAD": "TRACE"
+      },
+      "disabled_modules": {
+        "ANONYMIZ": "TRACE",
+        "ANONY": "TRACE",
+        "RESTOR": "TRACE",
+        "CONFIG": "TRACE"
+      },
+      "default_enabled": false
+    }
+  },
+  "features": {
+    "smart_glossary_matching_enabled": true,
+    "default_language": "en",
+    "show_ads": false,
+    "ai_platform_startup_tests": true
+  },
+  "pdf": {
+    "disable_markdown_fallback": true,
+    "use_reportlab": true,
+    "fallback_to_html": false
+  },
+  "exclusion_defaults": {
+    "image": true,
+    "formula": true,
+    "reference": true,
+    "identifier": true,
+    "structural": false,
+    "table": false,
+    "language_match": false,
+    "language_match_exclusion_detection": false
+  }
+}

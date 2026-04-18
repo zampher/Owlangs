@@ -1,0 +1,44 @@
+{
+  "_schema_version": 1,
+  "ldap": {
+    "enabled": false,
+    "protocol": "ldaps",
+    "host": "adtest2.testldaps.io",
+    "port": 636,
+    "bind_dn_template": "{username}@testldaps.io",
+    "base_dn": "OU=test,DC=testldaps,DC=io",
+    "user_filter": "(sAMAccountName={username})",
+    "tls": {
+      "cacertfile": null,
+      "verify": false
+    },
+    "groups": {
+      "admin_enabled": true,
+      "glossary_enabled": true,
+      "admin_group": "admingrp",
+      "glossary_group": "usergrp",
+      "group_base_dn": "OU=test,DC=testldaps,DC=io"
+    }
+  },
+  "default_user": {
+    "username": "admin"
+  },
+  "session": {
+    "cookie_name": "owlangs_session",
+    "max_age": 604800
+  },
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "db": 0
+  },
+  "security": {
+    "max_login_attempts": 5,
+    "login_attempt_window": 300,
+    "rate_limit_window": 300
+  },
+  "messages": {
+    "login_banner": "Welcome",
+    "usage_message": "Drop file and translate"
+  }
+}

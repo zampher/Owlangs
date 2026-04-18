@@ -1,0 +1,17 @@
+{
+  "_schema_version": 1,
+  "deep_split_defaults": {
+    "pdf": false,
+    "docx": false,
+    "txt": true,
+    "md": true,
+    "html": true,
+    "default": true,
+    "markdown_based": null,
+    "docx_workflow": false,
+    "txt_workflow": true,
+    "html_workflow": true
+  },
+  "language_detection_mode": "sample_100"
+}
+

@@ -1,0 +1,43 @@
+{
+  "_schema_version": 2,
+  "_meta": {
+    "version": 2,
+    "description": "Unified user storage template (structure only).",
+    "migrated_at": "{{TIMESTAMP}}"
+  },
+  "users": {
+    "admin": {
+      "username": "admin",
+      "password_hash": "{{ADMIN_PASSWORD_HASH}}",
+      "role": "super_admin",
+      "display_name": "Administrator",
+      "email": null,
+      "created_at": "{{TIMESTAMP}}",
+      "last_login": null,
+      "is_active": true,
+      "is_system_user": true
+    },
+    "app_admin": {
+      "username": "app_admin",
+      "password_hash": "{{APP_ADMIN_PASSWORD_HASH}}",
+      "role": "app_admin",
+      "display_name": "App Admin",
+      "email": null,
+      "created_at": "{{TIMESTAMP}}",
+      "last_login": null,
+      "is_active": true,
+      "is_system_user": true
+    },
+    "user1": {
+      "username": "user1",
+      "password_hash": "{{USER1_PASSWORD_HASH}}",
+      "role": "user",
+      "display_name": "user1",
+      "email": null,
+      "created_at": "{{TIMESTAMP}}",
+      "last_login": null,
+      "is_active": true,
+      "is_system_user": false
+    }
+  }
+}
