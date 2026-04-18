@@ -63,13 +63,13 @@ dump.rdb
 versions.json
 
 metadata/
-temp/
-scripts/
-glossaries/
+temp
+scripts
+glossaries
 
 # 3rdParty models
-3rdParty/spacy_models/
-3rdParty/
+3rdParty/spacy_models
+3rdParty
 
 node_modules/
 
@@ -120,15 +120,15 @@ configs/static.json
 
 # Claude Code config - user preferences and memories (do not commit)
 CLAUDE.md
-memory/
+memory
 MEMORY.md
 
-test/
-backend/anonymize/
+test
+backend/anonymize
 download_models.spec
-models/
-docs/
-.github/
+/models
+docs
+.github
 first_deploy.bat
 docker-compose.yml
 dev_run_desktop_backend.ps1

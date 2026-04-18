@@ -1,4 +1,4 @@
-# -*- mode: python ; coding: utf-8 -*-
+﻿# -*- mode: python ; coding: utf-8 -*-
 """
 PyInstaller spec for Owlangs macOS App.
 """
@@ -80,8 +80,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName': 'Owlangs',
         'CFBundleDisplayName': 'Owlangs',
-        'CFBundleShortVersionString': '@VERSION_SHORT@',  # Replaced during build
-        'CFBundleVersion': '@VERSION_FULL@',  # Replaced during build
+        'CFBundleShortVersionString': '1.2.0',  # Replaced during build
+        'CFBundleVersion': '1.2.0.0',  # Replaced during build
         'NSHighResolutionCapable': True,
         'LSUIElement': True,  # Hide Dock icon, show only in menu bar
         'LSBackgroundOnly': False,
