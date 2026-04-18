@@ -26,6 +26,7 @@ import '../../tasks/models/flow.dart';
 import 'dart:async';
 import '../../anonymize/providers/anonymize_completion_provider.dart';
 import '../services/tab_background_update_service.dart';
+import '../providers/translation_state_provider.dart';
 import '../providers/translation_state_provider_family.dart';
 import '../providers/exclusion_update_provider.dart';
 import '../providers/excluded_segments_provider.dart';
@@ -3715,6 +3716,17 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
         if (mounted && context.mounted) {
           await _validateAndRefreshExclusionsForTargetLang(currentTargetLang);
         }
+      });
+    }
+
+    // Watch translation operation to clear error message immediately when Re-extract starts.
+    // Global translationStateProvider (TranslationState) has no currentOperation; only flow-scoped family does.
+    final TranslationOperation currentOperation = widget.flowId != null
+        ? ref.watch(translationStateProviderFamily(widget.flowId!).select((s) => s.currentOperation))
+        : TranslationOperation.none;
+    if (currentOperation == TranslationOperation.extracting && prepareErrorMessage.isNotEmpty) {
+      setState(() {
+        prepareErrorMessage = '';
       });
     }
 

@@ -740,6 +740,33 @@ class FormatConversionService:
                     with open(original_file_path, "rb") as f:
                         file_contents = f.read()
 
+                    # CRITICAL: Refresh convert_engine from current global settings so Re-extract
+                    # uses the latest platform configuration (e.g., user switched from local to cloud MinerU)
+                    from backend.config.config_loader import get_unified_config
+                    global_cfg = get_unified_config()
+                    parsing_engine_cfg = global_cfg.parsing_engine if hasattr(global_cfg, 'parsing_engine') else None
+                    
+                    if parsing_engine_cfg and isinstance(parsing_engine_cfg, dict):
+                        current_convert_engine = parsing_engine_cfg.get('convert_engine')
+                        if current_convert_engine:
+                            if isinstance(payload, dict):
+                                payload['convert_engine'] = current_convert_engine
+                                # Also refresh related settings from global config
+                                payload['formula_ocr'] = parsing_engine_cfg.get('formula_ocr', payload.get('formula_ocr', True))
+                                payload['table_ocr'] = parsing_engine_cfg.get('table_ocr', payload.get('table_ocr', True))
+                                payload['model_version'] = parsing_engine_cfg.get('mineru_model_version', payload.get('model_version', 'vlm'))
+                                # Clear cached workflow_config so it gets rebuilt with updated settings
+                                payload['workflow_config'] = None
+                            else:
+                                setattr(payload, 'convert_engine', current_convert_engine)
+                                if hasattr(payload, 'workflow_config'):
+                                    setattr(payload, 'workflow_config', None)
+                            st["payload"] = payload
+                            logger.info(
+                                LogModule.WORKFLOW,
+                                f"[RESPLIT] Updated payload convert_engine to '{current_convert_engine}' from global settings for task {task_id}"
+                            )
+                    
                     # Build workflow config: use stored config if present, else build from task_state payload
                     workflow_config = None
                     if payload:

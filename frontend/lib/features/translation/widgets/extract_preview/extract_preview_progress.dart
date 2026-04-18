@@ -210,6 +210,7 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
           if (mounted) {
             setState(() {
               isPreparing = false;
+              prepareErrorMessage = '';
             });
           }
         });
@@ -507,6 +508,7 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
                 setState(() {
                   isPreparing = false;
                   initialDataLoaded = true;
+                  prepareErrorMessage = '';
                 });
               }
             });
@@ -561,6 +563,7 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
                 setState(() {
                   isPreparing = false;
                   initialDataLoaded = true;
+                  prepareErrorMessage = '';
                 });
               }
             });
@@ -612,6 +615,7 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
                 setState(() {
                   isPreparing = false;
                   initialDataLoaded = true;
+                  prepareErrorMessage = '';
                 });
               }
             });
