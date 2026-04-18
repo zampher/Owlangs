@@ -75,7 +75,8 @@ class AppRouter {
 
           // Auth disabled: allow /login so guest can open it from "admin required" dialog; after login redirect to home
           if (authRequired == false) {
-            final isAuth = authState.maybeWhen(authenticated: (_) => true, orElse: () => false);
+            final isAuth = authState.maybeWhen(
+                authenticated: (_) => true, orElse: () => false);
             if (isAuth && state.uri.path == loginRoute) return homeRoute;
             return null;
           }
@@ -266,7 +267,7 @@ class OwlangsAppBarLeading extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                'Owlangs\nTranslation',
+                'Owlangs',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,

@@ -132,7 +132,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationToolbarGlossary => 'Glossary';
 
   @override
-  String get translationToolbarConvertHint => 'Format conversion hint';
+  String get translationToolbarConvertHint =>
+      'Convert format, exclude all segments, translate, then export from the Convert tab';
 
   @override
   String get translationToolbarConvert => 'Convert';
@@ -796,7 +797,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get homeHowItWorks =>
-      'How it works: Import -> Parse Document -> Glossary -> Translate -> Export';
+      'How it works\nTranslation: Import -> Parse Document -> Glossary -> Translate -> Export\nFile format conversion: Import -> Parse Document -> Convert -> Export';
 
   @override
   String get homeSnackDonorExpired =>

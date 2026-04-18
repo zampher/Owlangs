@@ -335,7 +335,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationToolbarConvertHint.
   ///
   /// In en, this message translates to:
-  /// **'Format conversion hint'**
+  /// **'Convert format, exclude all segments, translate, then export from the Convert tab'**
   String get translationToolbarConvertHint;
 
   /// No description provided for @translationToolbarConvert.
@@ -1472,7 +1472,7 @@ abstract class AppLocalizations {
   /// No description provided for @homeHowItWorks.
   ///
   /// In en, this message translates to:
-  /// **'How it works: Import -> Parse Document -> Glossary -> Translate -> Export'**
+  /// **'How it works\nTranslation: Import -> Parse Document -> Glossary -> Translate -> Export\nFile format conversion: Import -> Parse Document -> Convert -> Export'**
   String get homeHowItWorks;
 
   /// No description provided for @homeSnackDonorExpired.

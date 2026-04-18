@@ -126,7 +126,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationToolbarGlossary => '用語集';
 
   @override
-  String get translationToolbarConvertHint => 'フォーマット変換ヒント';
+  String get translationToolbarConvertHint => '書式変換・全段落除外・翻訳を実行し、「変換」タブから書き出し';
 
   @override
   String get translationToolbarConvert => '変換';
@@ -769,7 +769,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeIntro => 'AIを活用した精度でドキュメントをアップロードし、複数の言語に翻訳します。\n';
 
   @override
-  String get homeHowItWorks => '仕組み: インポート -> ドキュメント解析 -> 用語集 -> 翻訳 -> エクスポート';
+  String get homeHowItWorks =>
+      '仕組み\n翻訳: インポート -> ドキュメント解析 -> 用語集 -> 翻訳 -> エクスポート\nファイル形式変換: インポート -> ドキュメント解析 -> 変換 -> エクスポート';
 
   @override
   String get homeSnackDonorExpired =>

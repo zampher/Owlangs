@@ -184,7 +184,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                         const SizedBox(height: 16),
                         const Text(
-                          'Owlangs Translation',
+                          'Owlangs Translation\n File Format Conversion',
                           style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
@@ -277,8 +277,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               decoration: InputDecoration(
                                 labelText: 'Password',
                                 hintText: 'Please enter password',
-                                prefixIcon: const Icon(Icons.lock,
-                                    color: Colors.black54,),
+                                prefixIcon: const Icon(
+                                  Icons.lock,
+                                  color: Colors.black54,
+                                ),
                                 suffixIcon: IconButton(
                                   icon: Icon(
                                     _obscurePassword

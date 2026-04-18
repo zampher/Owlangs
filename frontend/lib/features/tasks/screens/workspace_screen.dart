@@ -54,7 +54,6 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   /// Seed for owl pose/position in banner ad placeholder; independent from flow.
   int _bannerOwlPoseSeed = 0;
 
-
   // Flag to prevent duplicate flow creation from rapid clicks
   bool _isCreatingFlow = false;
 
@@ -92,9 +91,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       }
 
       // Clear preview tabs and translation state for this flow
-      ref
-          .read(previewTabsProviderFamily(flowId).notifier)
-          .clearAllTabs();
+      ref.read(previewTabsProviderFamily(flowId).notifier).clearAllTabs();
       ref
           .read(translationStateProviderFamily(flowId).notifier)
           .resetTranslation();
@@ -170,183 +167,182 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
 
         return StatefulBuilder(
           builder:
-              (BuildContext context, void Function(void Function()) setState) => AlertDialog(
-              title: Text(l10n.userMenuChangePassword),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  TextField(
-                    controller: currentPasswordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: l10n.changePasswordCurrentPasswordLabel,
-                    ),
+              (BuildContext context, void Function(void Function()) setState) =>
+                  AlertDialog(
+            title: Text(l10n.userMenuChangePassword),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                TextField(
+                  controller: currentPasswordController,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: l10n.changePasswordCurrentPasswordLabel,
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: newPasswordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: l10n.changePasswordNewPasswordLabel,
-                    ),
-                    onChanged: (String value) {
-                      setState(() {
-                        newPasswordValue = value;
-                      });
-                    },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: newPasswordController,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: l10n.changePasswordNewPasswordLabel,
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: confirmPasswordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: l10n.changePasswordConfirmPasswordLabel,
-                    ),
+                  onChanged: (String value) {
+                    setState(() {
+                      newPasswordValue = value;
+                    });
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: confirmPasswordController,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: l10n.changePasswordConfirmPasswordLabel,
                   ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          l10n.changePasswordRequirementsTitle,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: colorScheme.onSurface.withOpacity(0.85),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        buildRequirementRow(
-                          l10n.changePasswordRequirementLength,
-                          hasLength(newPasswordValue),
-                        ),
-                        buildRequirementRow(
-                          l10n.changePasswordRequirementUppercase,
-                          hasUppercase(newPasswordValue),
-                        ),
-                        buildRequirementRow(
-                          l10n.changePasswordRequirementLowercase,
-                          hasLowercase(newPasswordValue),
-                        ),
-                        buildRequirementRow(
-                          l10n.changePasswordRequirementDigit,
-                          hasDigit(newPasswordValue),
-                        ),
-                      ],
-                    ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  if (errorText != null) ...<Widget>[
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        errorText!,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        l10n.changePasswordRequirementsTitle,
                         style: TextStyle(
-                          fontSize: 13,
-                          color: colorScheme.error,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: colorScheme.onSurface.withOpacity(0.85),
                         ),
                       ),
+                      const SizedBox(height: 6),
+                      buildRequirementRow(
+                        l10n.changePasswordRequirementLength,
+                        hasLength(newPasswordValue),
+                      ),
+                      buildRequirementRow(
+                        l10n.changePasswordRequirementUppercase,
+                        hasUppercase(newPasswordValue),
+                      ),
+                      buildRequirementRow(
+                        l10n.changePasswordRequirementLowercase,
+                        hasLowercase(newPasswordValue),
+                      ),
+                      buildRequirementRow(
+                        l10n.changePasswordRequirementDigit,
+                        hasDigit(newPasswordValue),
+                      ),
+                    ],
+                  ),
+                ),
+                if (errorText != null) ...<Widget>[
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      errorText!,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: colorScheme.error,
+                      ),
                     ),
-                  ],
+                  ),
                 ],
-              ),
-              actions: <Widget>[
-                TextButton(
-                  onPressed: isSubmitting
-                      ? null
-                      : () {
-                          Navigator.of(dialogContext).pop();
-                        },
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: isSubmitting
-                      ? null
-                      : () async {
-                          final currentPassword =
-                              currentPasswordController.text.trim();
-                          final newPassword =
-                              newPasswordController.text.trim();
-                          final confirmPassword =
-                              confirmPasswordController.text.trim();
-
-                          if (currentPassword.isEmpty ||
-                              newPassword.isEmpty ||
-                              confirmPassword.isEmpty) {
-                            setState(() {
-                              errorText = l10n.changePasswordRequiredError;
-                            });
-                            return;
-                          }
-                          if (newPassword != confirmPassword) {
-                            setState(() {
-                              errorText =
-                                  l10n.changePasswordConfirmMismatchError;
-                            });
-                            return;
-                          }
-                          if (!hasLength(newPassword) ||
-                              !hasUppercase(newPassword) ||
-                              !hasLowercase(newPassword) ||
-                              !hasDigit(newPassword)) {
-                            setState(() {
-                              errorText =
-                                  '${l10n.changePasswordRequirementsTitle}: ${l10n.changePasswordRequirementLength}, ${l10n.changePasswordRequirementUppercase}, ${l10n.changePasswordRequirementLowercase}, ${l10n.changePasswordRequirementDigit}';
-                            });
-                            return;
-                          }
-
-                          setState(() {
-                            isSubmitting = true;
-                            errorText = null;
-                          });
-
-                          try {
-                            await ConfigService().changeOwnPassword(
-                              currentPassword: currentPassword,
-                              newPassword: newPassword,
-                            );
-                            if (!mounted) {
-                              return;
-                            }
-                            Navigator.of(dialogContext).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  l10n.changePasswordSuccessMessage,
-                                ),
-                              ),
-                            );
-                          } catch (e) {
-                            setState(() {
-                              errorText = e.toString();
-                              isSubmitting = false;
-                            });
-                          }
-                        },
-                  child: isSubmitting
-                      ? SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              colorScheme.primary,
-                            ),
-                          ),
-                        )
-                      : const Text('Save'),
-                ),
               ],
             ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () {
+                        Navigator.of(dialogContext).pop();
+                      },
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () async {
+                        final currentPassword =
+                            currentPasswordController.text.trim();
+                        final newPassword = newPasswordController.text.trim();
+                        final confirmPassword =
+                            confirmPasswordController.text.trim();
+
+                        if (currentPassword.isEmpty ||
+                            newPassword.isEmpty ||
+                            confirmPassword.isEmpty) {
+                          setState(() {
+                            errorText = l10n.changePasswordRequiredError;
+                          });
+                          return;
+                        }
+                        if (newPassword != confirmPassword) {
+                          setState(() {
+                            errorText = l10n.changePasswordConfirmMismatchError;
+                          });
+                          return;
+                        }
+                        if (!hasLength(newPassword) ||
+                            !hasUppercase(newPassword) ||
+                            !hasLowercase(newPassword) ||
+                            !hasDigit(newPassword)) {
+                          setState(() {
+                            errorText =
+                                '${l10n.changePasswordRequirementsTitle}: ${l10n.changePasswordRequirementLength}, ${l10n.changePasswordRequirementUppercase}, ${l10n.changePasswordRequirementLowercase}, ${l10n.changePasswordRequirementDigit}';
+                          });
+                          return;
+                        }
+
+                        setState(() {
+                          isSubmitting = true;
+                          errorText = null;
+                        });
+
+                        try {
+                          await ConfigService().changeOwnPassword(
+                            currentPassword: currentPassword,
+                            newPassword: newPassword,
+                          );
+                          if (!mounted) {
+                            return;
+                          }
+                          Navigator.of(dialogContext).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                l10n.changePasswordSuccessMessage,
+                              ),
+                            ),
+                          );
+                        } catch (e) {
+                          setState(() {
+                            errorText = e.toString();
+                            isSubmitting = false;
+                          });
+                        }
+                      },
+                child: isSubmitting
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            colorScheme.primary,
+                          ),
+                        ),
+                      )
+                    : const Text('Save'),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -445,7 +441,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   Widget _buildLanguageSelector() {
     final globalSettings = ref.watch(globalSettingsProvider);
     final globalNotifier = ref.read(globalSettingsProvider.notifier);
-    
+
     final supportedLanguages = <Map<String, String>>[
       <String, String>{'code': 'en', 'name': 'EN'},
       <String, String>{'code': 'zh', 'name': '中文'},
@@ -453,7 +449,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       <String, String>{'code': 'ko', 'name': '한국어'},
       <String, String>{'code': 'es', 'name': 'ES'},
     ];
-    
+
     return Container(
       height: 36,
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -466,7 +462,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
-          value: supportedLanguages.any((e) => e['code'] == globalSettings.language)
+          value: supportedLanguages
+                  .any((e) => e['code'] == globalSettings.language)
               ? globalSettings.language
               : 'en',
           icon: const Icon(Icons.arrow_drop_down, size: 18),
@@ -476,13 +473,17 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
             fontWeight: FontWeight.w500,
             color: Theme.of(context).colorScheme.onSurface,
           ),
-          items: supportedLanguages.map((lang) => DropdownMenuItem<String>(
-              value: lang['code'],
-              child: Text(
-                lang['name']!,
-                style: const TextStyle(fontSize: 12),
-              ),
-            ),).toList(),
+          items: supportedLanguages
+              .map(
+                (lang) => DropdownMenuItem<String>(
+                  value: lang['code'],
+                  child: Text(
+                    lang['name']!,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              )
+              .toList(),
           onChanged: (String? value) async {
             if (value != null && value != globalSettings.language) {
               await globalNotifier.updateGeneralSettings(language: value);
@@ -586,11 +587,10 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     final notifier = ref.read(tasksProvider.notifier);
     final l10n = AppLocalizations.of(context)!;
     final AIPlatformSettings aiSettings = ref.watch(aiPlatformSettingsProvider);
-    final bool highlightSetupWizardButton =
-        !aiSettings.isLoading &&
-            aiSettings.platforms.values
-                .where((p) => p.platformType == 'llm' && p.isConfigured)
-                .isEmpty;
+    final bool highlightSetupWizardButton = !aiSettings.isLoading &&
+        aiSettings.platforms.values
+            .where((p) => p.platformType == 'llm' && p.isConfigured)
+            .isEmpty;
 
     // Update scroll buttons after layout
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -637,7 +637,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 // Title - flexible so Row does not overflow on narrow windows
                 Flexible(
                   child: Text(
-                    'Owlangs\nTranslation',
+                    'Owlangs',
                     style: TextStyle(
                       fontSize: 18, // Reduced from 28 to 18
                       fontWeight: FontWeight.bold,
@@ -666,8 +666,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                         authenticated: (user) => user.username,
                         orElse: () => 'guest',
                       );
-                      final bool isGuestUser =
-                          !isAuthenticated || displayName.toLowerCase() == 'guest';
+                      final bool isGuestUser = !isAuthenticated ||
+                          displayName.toLowerCase() == 'guest';
                       final Color linkColor = Theme.of(context)
                           .colorScheme
                           .primary
@@ -684,13 +684,14 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                         <String, String>{'code': 'es', 'label': 'Español'},
                       ];
                       final String currentLang = globalSettings.language;
-                      final String currentLabel = languages
-                              .firstWhere(
-                                (Map<String, String> lang) =>
-                                    lang['code'] == currentLang,
-                                orElse: () =>
-                                    const <String, String>{'code': 'en', 'label': 'English'},
-                              )['label'] ??
+                      final String currentLabel = languages.firstWhere(
+                            (Map<String, String> lang) =>
+                                lang['code'] == currentLang,
+                            orElse: () => const <String, String>{
+                              'code': 'en',
+                              'label': 'English'
+                            },
+                          )['label'] ??
                           currentLang;
 
                       return Row(
@@ -795,7 +796,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                                 child: Text(label),
                               );
                             }).toList(),
-                            onSelected: globalNotifier.updateUiLanguageLocalOnly,
+                            onSelected:
+                                globalNotifier.updateUiLanguageLocalOnly,
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: <Widget>[

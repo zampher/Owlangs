@@ -42,7 +42,7 @@
   "translationToolbarHintWaitExtract": "Please wait for Extract to complete",
   "translationToolbarHintOperationInProgress": "An operation is in progress",
   "translationToolbarGlossary": "Glossary",
-  "translationToolbarConvertHint": "Format conversion hint",
+  "translationToolbarConvertHint": "Convert format, exclude all segments, translate, then export from the Convert tab",
   "translationToolbarConvert": "Convert",
   "translationToolbarHintSaveGlossaryFirst": "Please save the glossary first (click Apply)",
   "translationToolbarHintUpdatingExcluded": "Updating excluded segments...",
@@ -243,7 +243,7 @@
 
   "homeTagline": "AI Based, Immersion\nPrivate, Secure(Developing)\nTeam Shared, Customizable\n",
   "homeIntro": "Upload documents and translate them into multiple languages with AI-powered accuracy.\n",
-  "homeHowItWorks": "How it works: Import -> Parse Document -> Glossary -> Translate -> Export",
+  "homeHowItWorks": "How it works\nTranslation: Import -> Parse Document -> Glossary -> Translate -> Export\nFile format conversion: Import -> Parse Document -> Convert -> Export",
 
   "homeSnackDonorExpired": "Your registration code has expired. Please re-register to continue Pro benefits.",
   "commonOk": "OK",

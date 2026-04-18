@@ -127,7 +127,8 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationToolbarGlossary => '용어집';
 
   @override
-  String get translationToolbarConvertHint => '형식 변환 힌트';
+  String get translationToolbarConvertHint =>
+      '형식 변환 후 전체 제외·번역을 실행하고 「변환」 탭에서 내보내기';
 
   @override
   String get translationToolbarConvert => '변환';
@@ -769,7 +770,8 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homeIntro => '문서를 업로드하고 AI 기반 정확도로 여러 언어로 번역하세요.\n';
 
   @override
-  String get homeHowItWorks => '작동 방식: 가져오기 -> 문서 분석 -> 용어집 -> 번역 -> 날짜';
+  String get homeHowItWorks =>
+      '작동 방식\n번역: 가져오기 -> 문서 분석 -> 용어집 -> 번역 -> 내보내기\n파일 형식 변환: 가져오기 -> 문서 분석 -> 변환 -> 내보내기';
 
   @override
   String get homeSnackDonorExpired =>

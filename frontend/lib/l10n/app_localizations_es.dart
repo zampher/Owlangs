@@ -139,7 +139,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get translationToolbarConvertHint =>
-      'Sugerencia de conversión de formato';
+      'Convierte formato, excluye todos los segmentos, traduce y exporta desde la pestaña Convertir';
 
   @override
   String get translationToolbarConvert => 'Convertir';
@@ -817,7 +817,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get homeHowItWorks =>
-      'Cómo funciona: Importar -> Analizar Documento -> Glosario -> Traducir -> Exportar';
+      'Cómo funciona\nTraducción: Importar -> Analizar documento -> Glosario -> Traducir -> Exportar\nConversión de formato: Importar -> Analizar documento -> Convertir -> Exportar';
 
   @override
   String get homeSnackDonorExpired =>

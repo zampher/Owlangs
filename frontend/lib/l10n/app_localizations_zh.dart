@@ -126,7 +126,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationToolbarGlossary => '术语表';
 
   @override
-  String get translationToolbarConvertHint => '格式转换提示';
+  String get translationToolbarConvertHint => '一键：格式转换、全部排除段落并翻译，随后在「转换」标签导出';
 
   @override
   String get translationToolbarConvert => '转换';
@@ -762,7 +762,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeIntro => '上传文档并使用 AI 驱动的准确性将其翻译成多种语言。\n';
 
   @override
-  String get homeHowItWorks => '工作原理：导入->解析文档->术语表->翻译->导出';
+  String get homeHowItWorks =>
+      '工作原理\n翻译：导入 -> 解析文档 -> 术语表 -> 翻译 -> 导出\n文件格式转换：导入 -> 解析文档 -> 转换 -> 导出';
 
   @override
   String get homeSnackDonorExpired => '您的注册码已过期。请重新注册以继续享受 Pro 版权益。';

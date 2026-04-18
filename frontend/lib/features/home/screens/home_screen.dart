@@ -37,7 +37,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String? _releaseUrl; // URL to latest release on GitHub
   String? _releaseNotesZh; // Release notes in Chinese (when update available)
   String? _releaseNotesEn; // Release notes in English (when update available)
-  
+
   // Cache to prevent repeated version checks (once per day)
   static DateTime? _lastVersionCheck;
   static const Duration _versionCheckInterval = Duration(days: 1);
@@ -84,7 +84,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final timeSinceLastCheck = DateTime.now().difference(_lastVersionCheck!);
       if (timeSinceLastCheck < _versionCheckInterval) {
         if (kDebugMode) {
-          print('[HomeScreen] Using cached version data (${timeSinceLastCheck.inMinutes}m ago)');
+          print(
+              '[HomeScreen] Using cached version data (${timeSinceLastCheck.inMinutes}m ago)');
         }
         _applyVersionData(_cachedVersionData!);
         return;
@@ -94,7 +95,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // Load from backend asynchronously (don't block UI)
     _loadVersionFromBackend();
   }
-  
+
   /// Apply version data to state
   void _applyVersionData(Map<String, dynamic> data) {
     // New API shape: { ok, current_version, current_version_type?, latest_version, update_available, release_url, release_notes_zh?, release_notes_en? }
@@ -143,14 +144,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
     }
   }
-  
+
   /// Load version from backend in background
   Future<void> _loadVersionFromBackend() async {
     try {
       if (kDebugMode) {
         print('[HomeScreen] Fetching version from backend...');
       }
-      
+
       // Use shorter timeouts - don't wait too long for GitHub check
       final dio = Dio(
         BaseOptions(
@@ -185,13 +186,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
       if (response.statusCode == 200 && response.data is Map<String, dynamic>) {
         final data = response.data as Map<String, dynamic>;
-        
+
         // Cache the data
         _cachedVersionData = data;
         _lastVersionCheck = DateTime.now();
-        
+
         _applyVersionData(data);
-        
+
         if (kDebugMode) {
           print('[HomeScreen] Version data cached at $_lastVersionCheck');
         }
@@ -216,7 +217,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    
     final AuthState authState = ref.watch(authProvider);
     final cfg = ConfigService();
     final authRequired = cfg.authRequired;
@@ -243,35 +243,47 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     // Auth is required, check auth state
     return authState.when(
-      initial: () => _buildResult(const Center(child: CircularProgressIndicator())),
-      loading: () => _buildResult(const Center(child: CircularProgressIndicator())),
-      authenticated: (UserModel user) => _buildResult(_buildHomeContent(authState)),
-      unauthenticated: () => _buildResult(const Center(child: CircularProgressIndicator())),
-      error: (String message) => _buildResult(Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            Text(AppLocalizations.of(context)!.homeAuthErrorTitle, style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 8),
-            Text(message, style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () { ref.read(authProvider.notifier).clearError(); context.go('/login'); },
-              child: Text(AppLocalizations.of(context)!.homeAuthRetryLogin),
-            ),
-          ],
+      initial: () =>
+          _buildResult(const Center(child: CircularProgressIndicator())),
+      loading: () =>
+          _buildResult(const Center(child: CircularProgressIndicator())),
+      authenticated: (UserModel user) =>
+          _buildResult(_buildHomeContent(authState)),
+      unauthenticated: () =>
+          _buildResult(const Center(child: CircularProgressIndicator())),
+      error: (String message) => _buildResult(
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(AppLocalizations.of(context)!.homeAuthErrorTitle,
+                  style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 8),
+              Text(message,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  ref.read(authProvider.notifier).clearError();
+                  context.go('/login');
+                },
+                child: Text(AppLocalizations.of(context)!.homeAuthRetryLogin),
+              ),
+            ],
+          ),
         ),
-      ),),
+      ),
     );
   }
 
   /// Helper to build Scaffold
   Widget _buildResult(Widget body) => Scaffold(
-      key: _homeScaffoldKey,
-      body: body,
-    );
+        key: _homeScaffoldKey,
+        body: body,
+      );
 
   Widget _buildHomeContent(AuthState authState) {
     final showReleaseNotes = _updateAvailable ?? false;
@@ -283,49 +295,50 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     // Adaptive height: support scrolling when window height is small
     return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) => SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: _buildWelcomeSection(authState),
-                ),
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: SizedBox(
-                    child: showReleaseNotes
-                        ? Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: <Widget>[
-                              const Expanded(child: RecentActivitiesWidget()),
-                              const SizedBox(width: 24),
-                              Expanded(
-                                child: ReleaseNotesWidget(
-                                  releaseNotes: releaseNotesText,
-                                  releaseUrl: _releaseUrl,
-                                ),
+      builder: (BuildContext context, BoxConstraints constraints) =>
+          SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: _buildWelcomeSection(authState),
+              ),
+              const SizedBox(height: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: SizedBox(
+                  child: showReleaseNotes
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            const Expanded(child: RecentActivitiesWidget()),
+                            const SizedBox(width: 24),
+                            Expanded(
+                              child: ReleaseNotesWidget(
+                                releaseNotes: releaseNotesText,
+                                releaseUrl: _releaseUrl,
                               ),
-                            ],
-                          )
-                        : const RecentActivitiesWidget(),
-                  ),
+                            ),
+                          ],
+                        )
+                      : const RecentActivitiesWidget(),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
+      ),
     );
   }
 
   Widget _buildWelcomeSection(AuthState authState) {
     final l10n = AppLocalizations.of(context)!;
     final aiPlatformSettings = ref.watch(aiPlatformSettingsProvider);
-    
+
     final availablePlatforms = aiPlatformSettings.platforms.values
         .where((p) => p.isApiAvailable ?? false)
         .map((p) => p.name)
@@ -359,7 +372,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               children: <Widget>[
                                 Flexible(
                                   child: Text(
-                                    'Owlangs Translation',
+                                    'Owlangs Translation\nFile Format Conversion',
                                     style: TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.bold,
@@ -426,7 +439,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                               GestureDetector(
                                                 onTap: () async {
                                                   final uri = Uri.parse(
-                                                      'https://www.owlangs.org',);
+                                                    'https://www.owlangs.org',
+                                                  );
                                                   if (await canLaunchUrl(uri)) {
                                                     await launchUrl(
                                                       uri,
@@ -447,7 +461,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                                         .primaryContainer,
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                            6,),
+                                                      6,
+                                                    ),
                                                   ),
                                                   child: Text(
                                                     'v$_latestVersion available',
@@ -605,8 +620,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ],
             if (availablePlatforms.isEmpty &&
-                (!kIsWeb || (ref.watch(canAccessAdminSettingsProvider).valueOrNull ?? false)))
-              ...<Widget>[
+                (!kIsWeb ||
+                    (ref.watch(canAccessAdminSettingsProvider).valueOrNull ??
+                        false))) ...<Widget>[
               const SizedBox(height: 16),
               InkWell(
                 onTap: () => context.push('${AppRouter.settingsRoute}?tab=1'),
@@ -692,7 +708,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   /// Pro edition status text: trial remaining / not activated / activated.
   String _proStatusLabel() {
     final l10n = AppLocalizations.of(context)!;
-    if (_donorStatus?.activated ?? false) return l10n.homeEditionProStatusActivated;
+    if (_donorStatus?.activated ?? false)
+      return l10n.homeEditionProStatusActivated;
     if (_trialDaysRemaining != null && _trialDaysRemaining! > 0) {
       return l10n.homeEditionProStatusTrialRemaining(_trialDaysRemaining!);
     }

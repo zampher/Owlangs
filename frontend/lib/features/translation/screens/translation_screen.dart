@@ -419,8 +419,12 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           label: l10n.homePhaseTranslate,
           on: effectiveTranslate,
           onTap: () {
-            final int idx =
-                tabsState.tabs.indexWhere((PreviewTab t) => t.id == 'translate_tab');
+            int idx = tabsState.tabs
+                .indexWhere((PreviewTab t) => t.id == 'translate_tab');
+            if (idx < 0) {
+              idx = tabsState.tabs
+                  .indexWhere((PreviewTab t) => t.id == 'convert_tab');
+            }
             if (idx >= 0) tabsNotifier.switchToTab(idx);
           },
           tooltip: effectiveTranslate
@@ -1742,21 +1746,45 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
             },
           ),
           const SizedBox(width: 8), // Reduced spacing
-          // Convert: always enabled; shows format-conversion hint (no format conversion from this button)
-          Tooltip(
-            message: l10n.translationToolbarConvertHint,
-            child: OutlinedButton.icon(
-              onPressed: () => _showConvertHintDialog(context),
-              icon: const Icon(Icons.transform),
-              label: Text(l10n.translationToolbarConvert),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
+          // Convert: runs format conversion, Exclude All, then Translate All into the Convert tab
+          Builder(
+            builder: (BuildContext context) {
+              final bool hasFileOrText = state.pickedFile != null ||
+                  (_isTextMode && _textController.text.trim().isNotEmpty);
+              final String exclusionKey =
+                  widget.flowId ?? (state.taskId ?? 'translation');
+              final int exclusionInFlight = ref.watch(
+                  exclusionUpdateInFlightProviderFamily(exclusionKey),);
+              final bool isConvertEnabled = hasFileOrText &&
+                  !isOperationInProgress &&
+                  !_isGlossaryEditing &&
+                  !_isUpdatingExcluded &&
+                  exclusionInFlight == 0;
+              final String convertTooltip = !hasFileOrText
+                  ? l10n.translationSnackPleaseSelectFileOrText
+                  : (!isConvertEnabled
+                      ? l10n.translationToolbarHintOperationInProgress
+                      : l10n.translationToolbarConvertHint);
+              return Tooltip(
+                message: convertTooltip,
+                child: OutlinedButton.icon(
+                  onPressed: isConvertEnabled
+                      ? () async {
+                          await _runConvertToolbarAutomation();
+                        }
+                      : null,
+                  icon: const Icon(Icons.transform),
+                  label: Text(l10n.translationToolbarConvert),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    minimumSize: const Size(0, 32),
+                  ),
                 ),
-                minimumSize: const Size(0, 32),
-              ),
-            ),
+              );
+            },
           ),
           const SizedBox(width: 8), // Reduced spacing
           // Translate Button
@@ -2602,23 +2630,79 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     }
   }
 
-  /// Show format-conversion hint dialog (Convert button only shows this; no format conversion from UI).
-  void _showConvertHintDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) => AlertDialog(
-        title: const Text('Convert'),
-        content: const SelectableText(
-          'You can achieve format conversion by excluding all segments in the Extract stage, clicking Translate All, and then exporting in your desired format.',
-          style: TextStyle(fontSize: 18),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
+  /// Runs format conversion, applies Exclude All on the server, then starts translation with the
+  /// result shown in the **Convert** tab (`convert_tab`), not the Translate tab.
+  Future<void> _runConvertToolbarAutomation() async {
+    final dynamic state = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!))
+        : ref.read(translationStateProvider);
+    final dynamic notifier = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!).notifier)
+        : ref.read(translationStateProvider.notifier);
+
+    await _onConvertFormat(state, notifier);
+
+    if (!mounted) return;
+
+    final dynamic stateAfter = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!))
+        : ref.read(translationStateProvider);
+    final String? taskId = stateAfter.taskId as String?;
+    if (taskId == null || taskId.isEmpty) {
+      _translationScreenLog(
+        '_runConvertToolbarAutomation: no taskId after convert',
+        level: LogLevel.warn,
+      );
+      return;
+    }
+
+    try {
+      final Map<String, dynamic> excludeResult =
+          await TranslationService().excludeAllSegments(taskId);
+      if (!mounted) return;
+      final bool ok = excludeResult['success'] as bool? ?? false;
+      if (!ok) {
+        final String msg =
+            excludeResult['message'] as String? ?? 'Exclude all failed';
+        _showSnackBar(msg, Colors.red);
+        return;
+      }
+      final List<dynamic> raw =
+          (excludeResult['excluded_segment_indices'] as List<dynamic>?)
+                  ?.toList() ??
+              <dynamic>[];
+      final Set<int> indices =
+          raw.map((e) => (e is int) ? e : (e as num).toInt()).toSet();
+      final String providerKey = widget.flowId ?? taskId;
+      ref
+          .read(excludedSegmentsProviderFamily(providerKey).notifier)
+          .setExcluded(indices);
+      if (mounted) setState(() {});
+    } catch (e, st) {
+      _translationScreenLog(
+        '_runConvertToolbarAutomation exclude all: $e\n$st',
+        level: LogLevel.error,
+      );
+      if (mounted) {
+        _showSnackBar('Exclude all failed: $e', Colors.red);
+      }
+      return;
+    }
+
+    final l10n = AppLocalizations.of(context)!;
+    final dynamic st = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!))
+        : ref.read(translationStateProvider);
+    final dynamic nt = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!).notifier)
+        : ref.read(translationStateProvider.notifier);
+
+    await _startTranslation(
+      st,
+      nt,
+      translationResultTabId: 'convert_tab',
+      translationResultTitle: l10n.translationToolbarConvert,
+      translationResultIcon: Icons.transform,
     );
   }
 
@@ -3632,7 +3716,13 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     );
   }
 
-  Future<void> _startTranslation(state, notifier) async {
+  Future<void> _startTranslation(
+    state,
+    notifier, {
+    String translationResultTabId = 'translate_tab',
+    String? translationResultTitle,
+    IconData? translationResultIcon,
+  }) async {
     // Prevent re-entry
     if (state.currentOperation != TranslationOperation.none) {
       return;
@@ -3690,6 +3780,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       // This prevents releasing the task when starting a new translation
       // The task should only be released when user explicitly closes the tab
       tabsNotifier.closeTabByIdSilently('translate_tab');
+      tabsNotifier.closeTabByIdSilently('convert_tab');
 
       // 2. Clear translation state (but keep file and other settings)
       notifier.setTranslating(false);
@@ -3834,7 +3925,13 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         return;
       }
       // Continue with updated state (will check re-entry again in recursive call)
-      return _startTranslation(updatedStateDynamic, notifier);
+      return _startTranslation(
+        updatedStateDynamic,
+        notifier,
+        translationResultTabId: translationResultTabId,
+        translationResultTitle: translationResultTitle,
+        translationResultIcon: translationResultIcon,
+      );
     }
 
     if (state.pickedFile == null) {
@@ -3953,10 +4050,16 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     // Create translate tab immediately so progress bar and cancel button can be displayed
     // Use a temporary taskId 'pending' which will be updated once we get the real taskId
     final l10n = AppLocalizations.of(context)!;
+    final String uiResultTitle =
+        translationResultTitle ?? l10n.homePhaseTranslate;
+    final IconData uiResultIcon =
+        translationResultIcon ?? Icons.translate;
     _addTranslationResultTab(
       'pending',
       <String, String>{},
-      title: l10n.homePhaseTranslate,
+      title: uiResultTitle,
+      tabId: translationResultTabId,
+      tabIcon: uiResultIcon,
     );
 
     try {
@@ -4380,7 +4483,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       _addTranslationResultTab(
         taskId,
         <String, String>{},
-        title: l10n.homePhaseTranslate,
+        title: uiResultTitle,
+        tabId: translationResultTabId,
+        tabIcon: uiResultIcon,
       );
 
       // Reload format settings from Flow state after taskId is set
@@ -4828,7 +4933,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         _addTranslationResultTab(
           taskId,
           downloads,
-          title: l10n.homePhaseTranslate,
+          title: uiResultTitle,
+          tabId: translationResultTabId,
+          tabIcon: uiResultIcon,
         );
 
         // Automatically switch to Review phase after translation completes (or fails)
@@ -5277,6 +5384,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     String taskId,
     Map<String, String> downloads, {
     String? title,
+    String tabId = 'translate_tab',
+    IconData tabIcon = Icons.translate,
   }) {
     final l10n = AppLocalizations.of(context)!;
     final PreviewTabsNotifier tabsNotifier = widget.flowId != null
@@ -5313,12 +5422,11 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       workflowType: currentSettings.workflowType,
     );
 
-    // Use fixed ID for Translate tab
     final PreviewTab tab = PreviewTab(
-      id: 'translate_tab',
+      id: tabId,
       type: PreviewTabType.translationResult,
       title: title ?? l10n.homePhaseTranslate,
-      icon: Icons.translate,
+      icon: tabIcon,
       content: previewContent,
       dataRef: <String, dynamic>{
         'taskId': taskId,
