@@ -91,10 +91,47 @@ def _ensure_ascii_path_for_tex(tex_root: Path) -> Path:
         return tex_root
 
 
+def _get_user_texmfvar_dir() -> Path:
+    """Return a user-writable texmf-var directory (outside Program Files).
+    Uses %LOCALAPPDATA%\Owlangs\texmf-var on Windows, ~/.cache/owlangs/texmf-var elsewhere."""
+    if sys.platform == "win32":
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        if local_appdata:
+            return Path(local_appdata) / "Owlangs" / "texmf-var"
+    return Path.home() / ".cache" / "owlangs" / "texmf-var"
+
+
+def _copy_bundled_fmt_if_needed(pdflatex_root: Path, user_texmfvar: Path) -> bool:
+    """Copy pre-built xelatex.fmt from bundle to user texmf-var so fmtutil doesn't need
+    to regenerate it (avoids long first-run times and potential permission issues)."""
+    bundle_fmt = pdflatex_root / "texmf-var" / "web2c" / "xetex" / "xelatex.fmt"
+    user_fmt = user_texmfvar / "web2c" / "xetex" / "xelatex.fmt"
+    if not bundle_fmt.exists():
+        return False
+    if user_fmt.exists():
+        return True
+    try:
+        user_fmt.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(bundle_fmt), str(user_fmt))
+        logger.info(
+            LogModule.RESTOR,
+            f"[PDF-EXPORT] Copied bundled xelatex.fmt to {user_fmt}",
+        )
+        return True
+    except (OSError, shutil.Error) as e:
+        logger.warning(
+            LogModule.RESTOR,
+            f"[PDF-EXPORT] Could not copy bundled xelatex.fmt: {e}. Will let fmtutil regenerate.",
+        )
+        return False
+
+
 def _ensure_xelatex_fmt(pdflatex_root: Path, env: Dict[str, str]) -> None:
-    """Run fmtutil-sys to ensure xelatex.fmt exists before Pandoc invokes xelatex.
-    Avoids 'no appropriate script or program found: fmtutil' and 'Error producing PDF' when the
-    bundle was never initialized. Caller must set TEXMFCNF (incl. web2c) and TEXMFSYSVAR in env."""
+    """Ensure xelatex.fmt exists before Pandoc invokes xelatex.
+    If a usable format file is already present (bundled or previously generated), skip fmtutil
+    to avoid unnecessary work and potential permission/version issues.
+    Only runs fmtutil-sys when the format is actually missing.
+    Caller must set TEXMFCNF (incl. web2c) and TEXMFSYSVAR in env."""
     if sys.platform != "win32":
         return
     bin_win = pdflatex_root / "bin" / "windows"
@@ -106,6 +143,17 @@ def _ensure_xelatex_fmt(pdflatex_root: Path, env: Dict[str, str]) -> None:
             "Ensure 3rdParty pdflatex is fully deployed. PDF export may fail.",
         )
         return
+    user_texmfvar = Path(env.get("TEXMFSYSVAR", str(pdflatex_root / "texmf-var")))
+    user_fmt = user_texmfvar / "web2c" / "xetex" / "xelatex.fmt"
+    # If format already exists and is non-empty, assume it's usable and skip fmtutil
+    if user_fmt.exists() and user_fmt.stat().st_size > 0:
+        logger.info(LogModule.RESTOR, f"[PDF-EXPORT] xelatex.fmt already exists at {user_fmt}, skipping fmtutil")
+        return
+    # No format file: try copying from bundle first, then run fmtutil as last resort
+    if _copy_bundled_fmt_if_needed(pdflatex_root, user_texmfvar):
+        if user_fmt.exists() and user_fmt.stat().st_size > 0:
+            logger.info(LogModule.RESTOR, "[PDF-EXPORT] Using bundled xelatex.fmt, skipping fmtutil")
+            return
     import subprocess
     try:
         logger.info(LogModule.RESTOR, "[PDF-EXPORT] Building xelatex format (first run or missing fmt); running fmtutil-sys")
@@ -120,7 +168,7 @@ def _ensure_xelatex_fmt(pdflatex_root: Path, env: Dict[str, str]) -> None:
         if proc.returncode != 0:
             logger.warning(
                 LogModule.RESTOR,
-                f"[PDF-EXPORT] fmtutil exit code {proc.returncode}, stderr: {(proc.stderr or '')[:300]}",
+                f"[PDF-EXPORT] fmtutil exit code {proc.returncode}, stderr: {(proc.stderr or '')[:500]}",
             )
         else:
             logger.info(LogModule.RESTOR, "[PDF-EXPORT] fmtutil completed (xelatex format ready)")
@@ -202,15 +250,26 @@ def _get_pandoc_path() -> Optional[Path]:
                         logger.info(LogModule.TRANS, f"Found Pandoc in PyInstaller temp directory: {pandoc_exe}")
                         return pandoc_exe
         
-        # 2. Check installation directory (production - standard Program Files)
-        install_dir = Path("C:/Program Files/Owlangs")
-        pandoc_base = install_dir / "3rdParty" / "windows"
-        if pandoc_base.exists():
-            for pandoc_dir in pandoc_base.glob("pandoc-*"):
-                pandoc_exe = pandoc_dir / "pandoc.exe"
-                if pandoc_exe.exists():
-                    logger.info(LogModule.TRANS, f"Found Pandoc in installation directory: {pandoc_exe}")
-                    return pandoc_exe
+        # 2. Check installation directory (production - detect via registry/env/common paths)
+        install_dir = _get_owlangs_install_dir()
+        if install_dir:
+            pandoc_base = install_dir / "3rdParty" / "windows"
+            if pandoc_base.exists():
+                for pandoc_dir in pandoc_base.glob("pandoc-*"):
+                    pandoc_exe = pandoc_dir / "pandoc.exe"
+                    if pandoc_exe.exists():
+                        logger.info(LogModule.TRANS, f"Found Pandoc in installation directory: {pandoc_exe}")
+                        return pandoc_exe
+        # Fallback to legacy hard-coded path for backwards compatibility
+        legacy_dir = Path("C:/Program Files/Owlangs")
+        if legacy_dir.exists():
+            pandoc_base = legacy_dir / "3rdParty" / "windows"
+            if pandoc_base.exists():
+                for pandoc_dir in pandoc_base.glob("pandoc-*"):
+                    pandoc_exe = pandoc_dir / "pandoc.exe"
+                    if pandoc_exe.exists():
+                        logger.info(LogModule.TRANS, f"Found Pandoc in legacy path: {pandoc_exe}")
+                        return pandoc_exe
         
         # 3. Check development directory
         dev_pandoc_base = Path(__file__).parent.parent.parent / "3rdParty" / "windows"
@@ -254,6 +313,56 @@ def _get_pandoc_path() -> Optional[Path]:
     return None
 
 
+def _get_owlangs_install_dir() -> Optional[Path]:
+    """Try to locate the Owlangs installation directory on Windows.
+    Checks env var, registry (Uninstall info), and common hard-coded paths."""
+    if sys.platform != "win32":
+        return None
+    # 1. Environment variable override
+    env_dir = os.environ.get("OWLANGS_HOME")
+    if env_dir:
+        p = Path(env_dir)
+        if p.exists():
+            return p
+    # 2. Registry: look for Uninstall entries with DisplayName containing Owlangs
+    try:
+        import winreg
+        for hive, key_path in [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        ]:
+            try:
+                with winreg.OpenKey(hive, key_path) as uninstall_key:
+                    for i in range(winreg.QueryInfoKey(uninstall_key)[0]):
+                        try:
+                            subkey_name = winreg.EnumKey(uninstall_key, i)
+                            with winreg.OpenKey(uninstall_key, subkey_name) as app_key:
+                                display_name, _ = winreg.QueryValueEx(app_key, "DisplayName")
+                                if "Owlangs" in display_name:
+                                    install_location, _ = winreg.QueryValueEx(app_key, "InstallLocation")
+                                    if install_location and Path(install_location).exists():
+                                        return Path(install_location)
+                        except (OSError, FileNotFoundError):
+                            continue
+            except (OSError, FileNotFoundError):
+                continue
+    except ImportError:
+        pass
+    # 3. Common hard-coded paths (ProgramData first so 3rdParty installed there is found)
+    for candidate in [
+        Path(os.environ.get("PROGRAMDATA", "")) / "Owlangs",
+        Path("C:/Program Files/Owlangs"),
+        Path("C:/Program Files (x86)/Owlangs"),
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Owlangs",
+        Path("C:/Owlangs"),
+        Path("D:/Owlangs"),
+    ]:
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def _get_xelatex_path() -> Optional[Path]:
     """Get XeLaTeX executable path for Pandoc PDF engine (e.g. TinyTeX under 3rdParty/windows/pdflatex).
 
@@ -262,13 +371,15 @@ def _get_xelatex_path() -> Optional[Path]:
     """
     if sys.platform != "win32":
         return None
-    # Same search order as pandoc: PyInstaller, Program Files, dev dir, cwd
+    # Same search order as pandoc: PyInstaller, install dir, dev dir, cwd
     candidates: list[Path] = []
     if hasattr(sys, "_MEIPASS"):
         candidates.append(Path(sys._MEIPASS) / "3rdParty" / "windows")
         candidates.append(Path(sys.executable).parent.parent / "3rdParty" / "windows")
+    install_dir = _get_owlangs_install_dir()
+    if install_dir:
+        candidates.append(install_dir / "3rdParty" / "windows")
     candidates.extend([
-        Path("C:/Program Files/Owlangs") / "3rdParty" / "windows",
         Path(__file__).parent.parent.parent / "3rdParty" / "windows",
         Path.cwd() / "3rdParty" / "windows",
     ])
@@ -1237,7 +1348,10 @@ def convert_md_to_pdf(
         # TEXMFCNF: dirs for texmf.cnf; include web2c so base config (TEXMFSYSVAR etc.) is read
         env["TEXMFCNF"] = str(pdflatex_root_use) + os.pathsep + str(pdflatex_root_use / "texmf-dist" / "web2c")
         env["TEXMFROOT"] = str(pdflatex_root_use)
-        texmfvar = str(pdflatex_root_use / "texmf-var")
+        # Use a user-writable texmf-var (outside Program Files) to avoid permission denied
+        user_texmfvar = _get_user_texmfvar_dir()
+        user_texmfvar.mkdir(parents=True, exist_ok=True)
+        texmfvar = str(user_texmfvar)
         env["TEXMFVAR"] = texmfvar
         env["TEXMFSYSVAR"] = texmfvar  # mktexfmt/fmtutil use this; must match bundle texmf-var
         _ensure_xelatex_fmt(pdflatex_root_use, env)
@@ -1355,12 +1469,14 @@ def convert_md_to_pdf(
                     logger.info(LogModule.TRANS, f"[PDF-EXPORT] convert_md_to_pdf succeeded: {output_path}")
                     return True
             stderr = proc.stderr or ""
+            stdout = proc.stdout or ""
             if "xeCJK" in stderr and attempt_name.startswith("with"):
                 logger.info(LogModule.RESTOR, "[PDF-EXPORT] convert_md_to_pdf failed (xeCJK.sty not found), retrying without xeCJK...")
                 continue
             logger.warning(
                 LogModule.RESTOR,
-                f"[PDF-EXPORT] convert_md_to_pdf pandoc exit code {proc.returncode}, stderr: {stderr[:500]}",
+                f"[PDF-EXPORT] convert_md_to_pdf pandoc exit code {proc.returncode}, "
+                f"stderr: {stderr[:800]}, stdout: {stdout[:800]}",
             )
             # When PDF export fails, try to extract a small LaTeX context window
             # around the first reported error line so that downstream components

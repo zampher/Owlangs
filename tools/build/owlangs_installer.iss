@@ -76,9 +76,15 @@ Source: "LICENSE_EN.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "LICENSE_ZH.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Optional: Pandoc + pdflatex for PDF workflow DOCX/PDF export (included when built with /DINCLUDE_PANDOC=1)
+; Install 3rdParty to {commonappdata} instead of {app} so pdflatex/pandoc can write
+; to texmf-var without requiring admin privileges at runtime.
 #ifdef INCLUDE_PANDOC
-Source: "..\..\build\installer_stage\3rdParty\windows\*"; DestDir: "{app}\3rdParty\windows"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\build\installer_stage\3rdParty\windows\*"; DestDir: "{commonappdata}\Owlangs\3rdParty\windows"; Flags: ignoreversion recursesubdirs createallsubdirs
 #endif
+
+[UninstallDelete]
+; Remove 3rdParty binaries from shared app data on uninstall (config files are kept)
+Type: filesandordirs; Name: "{commonappdata}\Owlangs\3rdParty"
 
 [Icons]
 Name: "{group}\{#MyAppName} Lite"; Filename: "{app}\owlangs.bat"; WorkingDir: "{app}"
@@ -104,7 +110,7 @@ begin
   ConfigDirPage := CreateInputDirPage(wpSelectDir,
     'Configuration Directory', 'Where should configuration files be stored?',
     'Please select the directory where Owlangs configuration files will be stored.' + #13#10 + #13#10 +
-    'The default location is C:\Users\Public\Owlangs, which allows all users to access the configuration.',
+    'The default location is C:\ProgramData\Owlangs, which allows all users to access the configuration.',
     False, '');
   ConfigDirPage.Add('Configuration directory:');
   ConfigDirPage.Values[0] := ExpandConstant('{commonappdata}\Owlangs');

@@ -84,6 +84,10 @@ from layout.registry import load_layout_from_engine_zip
 # Default cloud API base
 MINERU_CLOUD_BASE = 'https://mineru.net/api/v4'
 
+# Returned by MinerULocalBackend.upload* when /file_parse returns ZIP bytes; payload is stored
+# on the backend instance (avoids hex-encoding the entire ZIP into task_id, which doubled RAM use).
+_LOCAL_MINERU_SYNC_TASK_ID = "__LOCAL_MINERU_SYNC__"
+
 
 # Language code mapping for local MinerU
 LOCAL_MINERU_LANG_MAP = {
@@ -130,7 +134,9 @@ class ConverterMineruConfig(X2MarkdownConverterConfig):
 
 
 # HTTP Client Configuration
-timeout = httpx.Timeout(connect=30.0, read=300.0, write=300.0, pool=5.0)
+# Increased connect timeout for large-file SSL handshakes on slow networks.
+# Increased pool timeout to avoid exhaustion during frequent polling.
+timeout = httpx.Timeout(connect=60.0, read=300.0, write=300.0, pool=30.0)
 
 import ssl
 ssl_context = ssl.create_default_context()
@@ -281,7 +287,7 @@ class MinerUCloudBackend(MinerUBackend):
                     response = client.request(method, url, headers=headers, **kwargs)
                     response.raise_for_status()
                     return response
-            except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout) as e:
+            except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, ssl.SSLError) as e:
                 if attempt < 3:
                     wait_s = 2 ** attempt
                     logger.warning(LogModule.CONVERT, f"[MINERU] Request failed (attempt {attempt}), retrying in {wait_s}s: {e}")
@@ -308,7 +314,7 @@ class MinerUCloudBackend(MinerUBackend):
                     response = await client.request(method, url, headers=headers, **kwargs)
                     response.raise_for_status()
                     return response
-            except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout) as e:
+            except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, ssl.SSLError) as e:
                 if attempt < 3:
                     wait_s = 2 ** attempt
                     logger.warning(LogModule.CONVERT, f"[MINERU] Request failed (attempt {attempt}), retrying in {wait_s}s: {e}")
@@ -344,7 +350,7 @@ class MinerUCloudBackend(MinerUBackend):
                     upload_response = client.put(upload_url, content=document.content)
                     upload_response.raise_for_status()
                 return batch_id
-            except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout) as e:
+            except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, ssl.SSLError) as e:
                 if attempt < 3:
                     wait_s = 2 ** attempt
                     logger.warning(LogModule.CONVERT, f"[MINERU] File upload failed (attempt {attempt}), retrying: {e}")
@@ -375,7 +381,7 @@ class MinerUCloudBackend(MinerUBackend):
                     upload_response = await client.put(upload_url, content=document.content)
                     upload_response.raise_for_status()
                 return batch_id
-            except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout) as e:
+            except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, ssl.SSLError) as e:
                 if attempt < 3:
                     wait_s = 2 ** attempt
                     logger.warning(LogModule.CONVERT, f"[MINERU] File upload failed (attempt {attempt}), retrying: {e}")
@@ -388,8 +394,17 @@ class MinerUCloudBackend(MinerUBackend):
     def get_result(self, batch_id: str) -> Tuple[str, bytes]:
         """Poll for result and download ZIP."""
         url = self._get_result_endpoint(batch_id)
+        start_time = time.time()
+        max_wait_seconds = 1800  # 30 minutes max
         
         while True:
+            elapsed = time.time() - start_time
+            if elapsed > max_wait_seconds:
+                raise Exception(
+                    f"MinerU Cloud processing timeout after {max_wait_seconds / 60:.0f} minutes. "
+                    "The file may be too large or the server is overloaded. Please try again later."
+                )
+            
             response = self._make_request_with_retry('GET', url)
             result = response.json()
             
@@ -397,7 +412,8 @@ class MinerUCloudBackend(MinerUBackend):
                 raise Exception(f"Failed to get result: {result.get('msg', 'Unknown error')}")
             
             fileinfo = result["data"]["extract_result"][0]
-            if fileinfo["state"] == "done":
+            state = fileinfo["state"]
+            if state == "done":
                 zip_url = fileinfo["full_zip_url"]
                 # Download ZIP
                 zip_response = self._make_request_with_retry('GET', zip_url)
@@ -406,15 +422,38 @@ class MinerUCloudBackend(MinerUBackend):
                 # Extract markdown
                 markdown_content = self._extract_markdown_from_zip(zip_bytes)
                 return markdown_content, zip_bytes
+            elif state == "failed":
+                raise Exception(
+                    f"MinerU Cloud processing failed: {fileinfo.get('msg', 'Unknown error')}"
+                )
             else:
-                logger.debug(LogModule.CONVERT, f"[MINERU] Task not done yet, waiting... (state: {fileinfo['state']})")
-                time.sleep(3)
+                # Adaptive polling interval: faster at start, slower for long-running tasks
+                if elapsed < 60:
+                    sleep_interval = 3
+                elif elapsed < 300:
+                    sleep_interval = 5
+                else:
+                    sleep_interval = 15
+                logger.debug(
+                    LogModule.CONVERT,
+                    f"[MINERU] Task not done yet, waiting {sleep_interval}s... (state: {state}, elapsed: {elapsed:.0f}s)"
+                )
+                time.sleep(sleep_interval)
     
     async def get_result_async(self, batch_id: str) -> Tuple[str, bytes]:
         """Async poll for result and download ZIP."""
         url = self._get_result_endpoint(batch_id)
+        start_time = time.time()
+        max_wait_seconds = 1800  # 30 minutes max
         
         while True:
+            elapsed = time.time() - start_time
+            if elapsed > max_wait_seconds:
+                raise Exception(
+                    f"MinerU Cloud processing timeout after {max_wait_seconds / 60:.0f} minutes. "
+                    "The file may be too large or the server is overloaded. Please try again later."
+                )
+            
             response = await self._make_request_with_retry_async('GET', url)
             result = response.json()
             
@@ -422,7 +461,8 @@ class MinerUCloudBackend(MinerUBackend):
                 raise Exception(f"Failed to get result: {result.get('msg', 'Unknown error')}")
             
             fileinfo = result["data"]["extract_result"][0]
-            if fileinfo["state"] == "done":
+            state = fileinfo["state"]
+            if state == "done":
                 zip_url = fileinfo["full_zip_url"]
                 # Download ZIP
                 zip_response = await self._make_request_with_retry_async('GET', zip_url)
@@ -431,9 +471,23 @@ class MinerUCloudBackend(MinerUBackend):
                 # Extract markdown
                 markdown_content = self._extract_markdown_from_zip(zip_bytes)
                 return markdown_content, zip_bytes
+            elif state == "failed":
+                raise Exception(
+                    f"MinerU Cloud processing failed: {fileinfo.get('msg', 'Unknown error')}"
+                )
             else:
-                logger.debug(LogModule.CONVERT, f"[MINERU] Task not done yet, waiting... (state: {fileinfo['state']})")
-                await asyncio.sleep(3)
+                # Adaptive polling interval: faster at start, slower for long-running tasks
+                if elapsed < 60:
+                    sleep_interval = 3
+                elif elapsed < 300:
+                    sleep_interval = 5
+                else:
+                    sleep_interval = 15
+                logger.debug(
+                    LogModule.CONVERT,
+                    f"[MINERU] Task not done yet, waiting {sleep_interval}s... (state: {state}, elapsed: {elapsed:.0f}s)"
+                )
+                await asyncio.sleep(sleep_interval)
     
     def _extract_markdown_from_zip(self, zip_bytes: bytes) -> str:
         """Extract markdown from ZIP content."""
@@ -499,6 +553,10 @@ class MinerULocalBackend(MinerUBackend):
     """
     
     API_VERSION = "local-v3.1"
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._pending_sync_zip_bytes: Optional[bytes] = None
     
     def _get_upload_sync_endpoint(self) -> str:
         endpoint = self.api_endpoints.get('upload_sync', '/file_parse')
@@ -555,15 +613,16 @@ class MinerULocalBackend(MinerUBackend):
             body_parts.append('\r\n'.encode('utf-8'))
             body_parts.append(f"{lang}\r\n".encode('utf-8'))
         
-        # Add form fields
+        # Add form fields (v3.1+ style). Older mineru-api builds may reject optional keys;
+        # if local parse fails with 422, try disabling parse_method / return_middle_json in config later.
         form_fields = {
             'formula_enable': str(self.formula).lower(),
             'table_enable': str(self.table).lower(),
             'backend': backend,
             'parse_method': 'auto',
             'return_md': 'true',
-            'return_images': 'true',  # 确保图片被包含在 ZIP 中
-            'return_middle_json': 'true',  # 确保 middle_json (layout) 被包含
+            'return_images': 'true',  # Include images in ZIP
+            'return_middle_json': 'true',  # Include middle_json for layout
             'response_format_zip': str(return_zip).lower(),
         }
         
@@ -655,8 +714,9 @@ class MinerULocalBackend(MinerUBackend):
                         
                 except Exception as e:
                     logger.error(LogModule.CONVERT, f"[MINERU Local] FAILED to save ZIP: {e}")
-                
-                return "__zip__" + zip_bytes.hex()
+
+                self._pending_sync_zip_bytes = zip_bytes
+                return _LOCAL_MINERU_SYNC_TASK_ID
             else:
                 # Got JSON response
                 try:
@@ -688,7 +748,8 @@ class MinerULocalBackend(MinerUBackend):
                 # Got ZIP directly
                 zip_size = len(response.content)
                 logger.info(LogModule.CONVERT, f"[MINERU Local] Async received ZIP response: {zip_size} bytes, content-type={content_type}")
-                return "__zip__" + response.content.hex()
+                self._pending_sync_zip_bytes = response.content
+                return _LOCAL_MINERU_SYNC_TASK_ID
             else:
                 try:
                     result = response.json()
@@ -701,9 +762,21 @@ class MinerULocalBackend(MinerUBackend):
     
     def get_result(self, task_id: str) -> Tuple[str, bytes]:
         """Get parsing result."""
-        # If task_id starts with __zip__, we already have the ZIP content
+        if task_id == _LOCAL_MINERU_SYNC_TASK_ID:
+            zip_bytes = self._pending_sync_zip_bytes
+            self._pending_sync_zip_bytes = None
+            if zip_bytes is None:
+                raise RuntimeError(
+                    "Local MinerU sync ZIP missing after upload; retry conversion or check MinerU logs."
+                )
+            markdown_content = self._extract_markdown_from_zip(zip_bytes)
+            return markdown_content, zip_bytes
+        # Legacy: hex-encoded ZIP in task_id (avoid — doubles memory)
         if task_id.startswith("__zip__"):
-            zip_bytes = bytes.fromhex(task_id[7:])
+            try:
+                zip_bytes = bytes.fromhex(task_id[7:])
+            except ValueError as e:
+                raise ValueError(f"Invalid legacy __zip__ payload in task_id: {e}") from e
             markdown_content = self._extract_markdown_from_zip(zip_bytes)
             return markdown_content, zip_bytes
         
@@ -713,8 +786,20 @@ class MinerULocalBackend(MinerUBackend):
     
     async def get_result_async(self, task_id: str) -> Tuple[str, bytes]:
         """Async get parsing result."""
+        if task_id == _LOCAL_MINERU_SYNC_TASK_ID:
+            zip_bytes = self._pending_sync_zip_bytes
+            self._pending_sync_zip_bytes = None
+            if zip_bytes is None:
+                raise RuntimeError(
+                    "Local MinerU sync ZIP missing after upload; retry conversion or check MinerU logs."
+                )
+            markdown_content = self._extract_markdown_from_zip(zip_bytes)
+            return markdown_content, zip_bytes
         if task_id.startswith("__zip__"):
-            zip_bytes = bytes.fromhex(task_id[7:])
+            try:
+                zip_bytes = bytes.fromhex(task_id[7:])
+            except ValueError as e:
+                raise ValueError(f"Invalid legacy __zip__ payload in task_id: {e}") from e
             markdown_content = self._extract_markdown_from_zip(zip_bytes)
             return markdown_content, zip_bytes
         
@@ -802,20 +887,15 @@ class BackendFactory:
         Create appropriate backend based on base_url and api_endpoints.
         
         Detection logic:
-        1. If base_url starts with 'https://mineru.net' -> Cloud backend
-        2. If api_endpoints contains 'api_version': 'local-v3.1' -> Local backend
-        3. If api_endpoints contains 'upload_sync' or 'upload_async' -> Local backend
-        4. Otherwise -> Cloud backend (default)
+        - https://mineru.net -> Cloud API only (even if api_endpoints accidentally lists local paths).
+        - Any other base_url -> Local MinerU HTTP API (self-hosted).
         """
         base_url = (config.base_url or MINERU_CLOUD_BASE).rstrip('/')
         api_endpoints = config.api_endpoints or {}
         
-        # Detect backend type
-        is_cloud = base_url.startswith('https://mineru.net')
-        api_version = api_endpoints.get('api_version', '')
-        has_local_endpoints = 'upload_sync' in api_endpoints or 'upload_async' in api_endpoints
+        is_cloud_host = base_url.startswith('https://mineru.net')
         
-        if is_cloud and not has_local_endpoints:
+        if is_cloud_host:
             logger.debug(LogModule.CONVERT, f"[MINERU] Using Cloud backend for {base_url}")
             return MinerUCloudBackend(
                 base_url=base_url,
@@ -826,17 +906,16 @@ class BackendFactory:
                 ocr_language=config.ocr_language,
                 api_endpoints=api_endpoints
             )
-        else:
-            logger.debug(LogModule.CONVERT, f"[MINERU] Using Local backend for {base_url}")
-            return MinerULocalBackend(
-                base_url=base_url,
-                mineru_token=config.mineru_token,
-                formula_ocr=config.formula_ocr,
-                table_ocr=config.table_ocr,
-                model_version=config.model_version,
-                ocr_language=config.ocr_language,
-                api_endpoints=api_endpoints
-            )
+        logger.debug(LogModule.CONVERT, f"[MINERU] Using Local backend for {base_url}")
+        return MinerULocalBackend(
+            base_url=base_url,
+            mineru_token=config.mineru_token,
+            formula_ocr=config.formula_ocr,
+            table_ocr=config.table_ocr,
+            model_version=config.model_version,
+            ocr_language=config.ocr_language,
+            api_endpoints=api_endpoints
+        )
 
 
 class ConverterMineru(X2MarkdownConverter):

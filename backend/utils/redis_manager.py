@@ -119,13 +119,21 @@ class LocalRedisManager:
                     unified_logger.info(LogModule.SYSTEM, f"Found Redis in PyInstaller temp directory: {meipass_redis}")
                     return meipass_redis
 
-            # 2. Check installation directory (production - standard Program Files)
-            install_dir = Path("C:/Program Files/Owlangs")
-            redis_dir = install_dir / "3rdParty" / "windows" / "Redis-x64-3.0.504"
-            redis_server = redis_dir / "redis-server.exe"
-            if redis_server.exists():
-                unified_logger.info(LogModule.SYSTEM, f"Found Redis in installation directory: {redis_server}")
-                return redis_server
+            # 2. Check installation directory (production)
+            # Search common install locations including ProgramData (where 3rdParty may be installed)
+            for install_dir in [
+                Path(os.environ.get("PROGRAMDATA", "")) / "Owlangs",
+                Path("C:/Program Files/Owlangs"),
+                Path("C:/Program Files (x86)/Owlangs"),
+                Path(os.environ.get("LOCALAPPDATA", "")) / "Owlangs",
+            ]:
+                if not install_dir.exists():
+                    continue
+                redis_dir = install_dir / "3rdParty" / "windows" / "Redis-x64-3.0.504"
+                redis_server = redis_dir / "redis-server.exe"
+                if redis_server.exists():
+                    unified_logger.info(LogModule.SYSTEM, f"Found Redis in installation directory: {redis_server}")
+                    return redis_server
             
             # 3. Check development directory
             dev_redis_dir = Path(__file__).parent.parent.parent / "3rdParty" / "windows" / "Redis-x64-3.0.504"

@@ -79,8 +79,10 @@ Section "Owlangs Translation" SecCore
     SectionIn RO
     SetRegView 64
     
-    ; Resolve public configuration directory (C:\Users\Public\Owlangs)
-    ExpandEnvStrings $OwlangsConfigDir "%PUBLIC%"
+    ; Resolve shared application data directory (C:\ProgramData\Owlangs)
+    ; 3rdParty binaries are installed here so pdflatex/pandoc can write at runtime
+    ; without requiring admin privileges.
+    ExpandEnvStrings $OwlangsConfigDir "%ALLUSERSPROFILE%"
     StrCpy $OwlangsConfigDir "$OwlangsConfigDir\Owlangs"
     StrCpy $OwlangsConfigsPath "$OwlangsConfigDir\configs"
     
@@ -98,7 +100,7 @@ Section "Owlangs Translation" SecCore
     CreateDirectory "$OwlangsConfigDir\logs"
     
     ; Create models directory for spaCy models
-    ; Models will be downloaded to C:\Users\Public\Owlangs\models\spacy at runtime
+    ; Models will be downloaded to C:\ProgramData\Owlangs\models\spacy at runtime
     CreateDirectory "$OwlangsConfigDir\models"
     CreateDirectory "$OwlangsConfigDir\models\spacy"
     
@@ -178,7 +180,7 @@ Section "Owlangs Translation" SecCore
     ExecWait 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TEMP\owlangs_restore_secrets.ps1"' $0
     Delete "$TEMP\owlangs_restore_secrets.ps1"
     
-    ; After copying configs to C:\Users\Public\Owlangs\configs, remove installer-side config
+    ; After copying configs to C:\ProgramData\Owlangs\configs, remove installer-side config
     ; directory so runtime never treats $INSTDIR\config as a project configs dir.
     IfFileExists "$INSTDIR\config\*.*" 0 +2
     RMDir /r "$INSTDIR\config"
@@ -215,6 +217,24 @@ Section "Owlangs Translation" SecCore
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Owlangs" "NoModify" 1
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Owlangs" "NoRepair" 1
     
+    ; Move 3rdParty from Program Files to ProgramData so pdflatex/pandoc/Redis
+    ; can write at runtime without admin privileges.
+    ; Use PowerShell because NSIS Rename does not reliably move non-empty directories.
+    DetailPrint "Moving 3rdParty to ProgramData..."
+    FileOpen $0 "$TEMP\owlangs_move_3rdparty.ps1" w
+    FileWrite $0 "$$src = '$INSTDIR\3rdParty'$$\r$$\n"
+    FileWrite $0 "$$dst = '$OwlangsConfigDir\3rdParty'$$\r$$\n"
+    FileWrite $0 "if (Test-Path $$src) {$$\r$$\n"
+    FileWrite $0 "  if (Test-Path $$dst) { Remove-Item $$dst -Recurse -Force }$$\r$$\n"
+    FileWrite $0 "  Move-Item $$src $$dst -Force$$\r$$\n"
+    FileWrite $0 "  if (Test-Path $$src) { exit 1 } else { exit 0 }$$\r$$\n"
+    FileWrite $0 "} else { exit 0 }$$\r$$\n"
+    FileClose $0
+    ExecWait 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TEMP\owlangs_move_3rdparty.ps1"' $0
+    Delete "$TEMP\owlangs_move_3rdparty.ps1"
+    IntCmp $0 0 +2
+    DetailPrint "WARNING: Failed to move 3rdParty to ProgramData. PDF/Redis features may require admin rights."
+    
     ; Create uninstaller
     WriteUninstaller "$INSTDIR\uninstall.exe"
 SectionEnd
@@ -240,13 +260,15 @@ LangString DESC_SecCore ${LANG_ENGLISH} "Core Owlangs application files (require
 Section "Uninstall"
     SetRegView 64
     
-    ; Stop Redis if running (check in install directory and common locations)
+    ; Stop Redis if running (check in ProgramData 3rdParty directory)
     DetailPrint "Stopping Redis service if running..."
     ; Write a temporary PowerShell script to gracefully stop Redis and force-kill if still running
     FileOpen $0 "$TEMP\owlangs_stop_redis.ps1" w
-    FileWrite $0 "$$redisCli = '$INSTDIR\3rdParty\windows\Redis-x64-3.0.504\redis-cli.exe'$\r$\n"
+    ExpandEnvStrings $OwlangsConfigDir "%ALLUSERSPROFILE%"
+    StrCpy $OwlangsConfigDir "$OwlangsConfigDir\Owlangs"
+    FileWrite $0 "$$redisCli = '$OwlangsConfigDir\3rdParty\windows\Redis-x64-3.0.504\redis-cli.exe'$\r$\n"
     FileWrite $0 "if (-not (Test-Path $$redisCli)) {$\r$\n"
-    FileWrite $0 "  $$redisCli = '$INSTDIR\3rdParty\windows\redis\redis-cli.exe'$\r$\n"
+    FileWrite $0 "  $$redisCli = '$OwlangsConfigDir\3rdParty\windows\redis\redis-cli.exe'$\r$\n"
     FileWrite $0 "}$\r$\n"
     FileWrite $0 "if (Test-Path $$redisCli) {$\r$\n"
     FileWrite $0 "  Write-Host 'Stopping Redis gracefully...'$\r$\n"
@@ -275,6 +297,12 @@ Section "Uninstall"
     DetailPrint "Removing installation files..."
     RMDir /r "$INSTDIR"
     
+    ; Remove 3rdParty binaries from ProgramData (configs/logs/models are kept)
+    DetailPrint "Removing 3rdParty binaries..."
+    ExpandEnvStrings $OwlangsConfigDir "%ALLUSERSPROFILE%"
+    StrCpy $OwlangsConfigDir "$OwlangsConfigDir\Owlangs"
+    RMDir /r "$OwlangsConfigDir\3rdParty"
+    
     ; Remove shortcuts (created under "all" context = Public Desktop / Public Start Menu)
     DetailPrint "Removing shortcuts..."
     SetShellVarContext all
@@ -286,10 +314,10 @@ Section "Uninstall"
     DetailPrint "Removing registry entries..."
     DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Owlangs"
     
-    ; Remove installed config files from C:\Users\Public\Owlangs\configs
+    ; Remove installed config files from C:\ProgramData\Owlangs\configs
     ; but preserve runtime-generated files like secrets.json
     DetailPrint "Removing installed configuration files..."
-    ExpandEnvStrings $OwlangsConfigDir "%PUBLIC%"
+    ExpandEnvStrings $OwlangsConfigDir "%ALLUSERSPROFILE%"
     StrCpy $OwlangsConfigDir "$OwlangsConfigDir\Owlangs"
     StrCpy $OwlangsConfigsPath "$OwlangsConfigDir\configs"
     
@@ -315,12 +343,12 @@ Section "Uninstall"
     
     ; Note: Runtime-generated files (secrets.json, etc.) are NOT removed
     ; to preserve user API keys and other sensitive data
-    ; Note: Log files in $PUBLIC\Owlangs\logs are NOT removed
+    ; Note: Log files in $OwlangsConfigDir\logs are NOT removed
     ; to preserve log history for troubleshooting
-    ; Note: Model files in $PUBLIC\Owlangs\models are NOT removed
+    ; Note: Model files in $OwlangsConfigDir\models are NOT removed
     ; to preserve downloaded spaCy models (they can be large)
     DetailPrint "Uninstallation completed."
-    DetailPrint "Note: Runtime-generated config files (secrets.json), logs, and models in C:\Users\Public\Owlangs are preserved."
+    DetailPrint "Note: Runtime-generated config files (secrets.json), logs, and models in C:\ProgramData\Owlangs are preserved."
 SectionEnd
 
 
