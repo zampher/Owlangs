@@ -673,7 +673,7 @@ class MinerULocalBackend(MinerUBackend):
                 logger.info(LogModule.CONVERT, f"[MINERU Local] Temp directory: {temp_dir}")
                 
                 # Try to find current task directory (owlangs_*)
-                task_dirs = glob.glob(os.path.join(temp_dir, "owlangs_*"))
+                task_dirs = [d for d in glob.glob(os.path.join(temp_dir, "owlangs_*")) if os.path.isdir(d)]
                 logger.info(LogModule.CONVERT, f"[MINERU Local] Found {len(task_dirs)} task directories: {task_dirs[:3]}")
                 
                 if task_dirs:

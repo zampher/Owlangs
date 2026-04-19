@@ -308,9 +308,9 @@ function Make-WinPackage-Web {
     }
     
     # spaCy models are NOT copied to installation directory
-    # Models should be downloaded to C:\Users\Public\Owlangs\models\spacy at runtime
+    # Models should be downloaded to C:\ProgramData\Owlangs\models\spacy at runtime
     # This avoids permission issues and allows models to be shared across users
-    Write-Host "[$packageType] Skipping spaCy models (will be downloaded to C:\Users\Public\Owlangs\models\spacy at runtime)" -ForegroundColor Gray
+    Write-Host "[$packageType] Skipping spaCy models (will be downloaded to C:\ProgramData\Owlangs\models\spacy at runtime)" -ForegroundColor Gray
     
     # Copy Redis binaries (exclude .pdb, .docx, and other non-runtime files)
     $redisSourceDir = "3rdParty\windows\Redis-x64-3.0.504"

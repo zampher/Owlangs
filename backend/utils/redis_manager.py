@@ -120,11 +120,12 @@ class LocalRedisManager:
                     return meipass_redis
 
             # 2. Check installation directory (production)
-            # Search common install locations including ProgramData (where 3rdParty may be installed)
+            # Search common install locations; install dir first so user can override,
+            # then ProgramData for the new installer layout.
             for install_dir in [
-                Path(os.environ.get("PROGRAMDATA", "")) / "Owlangs",
                 Path("C:/Program Files/Owlangs"),
                 Path("C:/Program Files (x86)/Owlangs"),
+                Path(os.environ.get("PROGRAMDATA", "")) / "Owlangs",
                 Path(os.environ.get("LOCALAPPDATA", "")) / "Owlangs",
             ]:
                 if not install_dir.exists():

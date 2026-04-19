@@ -40,13 +40,13 @@ class ConfigManager:
     def get_user_config_dir() -> Path:
         """Get user configuration directory (persistent storage).
         
-        Uses C:\\Users\\Public\\Owlangs for Windows to ensure all users can access.
+        Uses C:\\ProgramData\\Owlangs for Windows to ensure all users can access.
         Falls back to user's home directory.
         """
-        # Try PUBLIC directory first (all users can access)
-        public_dir = os.environ.get('PUBLIC')
-        if public_dir:
-            config_dir = Path(public_dir) / 'Owlangs' / 'configs'
+        # Try ProgramData directory first (all users can access)
+        program_data = os.environ.get('PROGRAMDATA')
+        if program_data:
+            config_dir = Path(program_data) / 'Owlangs' / 'configs'
         else:
             # Fallback to user's home directory
             config_dir = Path.home() / '.owlangs' / 'configs'
@@ -57,9 +57,9 @@ class ConfigManager:
     @staticmethod
     def get_logs_dir() -> Path:
         """Get logs directory."""
-        public_dir = os.environ.get('PUBLIC')
-        if public_dir:
-            logs_dir = Path(public_dir) / 'Owlangs' / 'logs'
+        program_data = os.environ.get('PROGRAMDATA')
+        if program_data:
+            logs_dir = Path(program_data) / 'Owlangs' / 'logs'
         else:
             logs_dir = Path.home() / '.owlangs' / 'logs'
         logs_dir.mkdir(parents=True, exist_ok=True)
@@ -68,9 +68,9 @@ class ConfigManager:
     @staticmethod
     def get_models_dir() -> Path:
         """Get models directory for spaCy models."""
-        public_dir = os.environ.get('PUBLIC')
-        if public_dir:
-            models_dir = Path(public_dir) / 'Owlangs' / 'models' / 'spacy'
+        program_data = os.environ.get('PROGRAMDATA')
+        if program_data:
+            models_dir = Path(program_data) / 'Owlangs' / 'models' / 'spacy'
         else:
             models_dir = Path.home() / '.owlangs' / 'models' / 'spacy'
         models_dir.mkdir(parents=True, exist_ok=True)

@@ -148,7 +148,7 @@ class AnonymizationSettingsNotifier
 
             // Set fixed models directory for desktop version
             const String fixedModelsDir =
-                r'C:\Users\Public\Owlangs\models\spacy';
+                r'C:\ProgramData\Owlangs\models\spacy';
 
             if (selectedModel != null) {
               languageConfigs[lang] = LanguageModelConfig(
@@ -160,7 +160,7 @@ class AnonymizationSettingsNotifier
             // Update existing configs to use fixed models directory
             final LanguageModelConfig existingConfig = languageConfigs[lang]!;
             const String fixedModelsDir =
-                r'C:\Users\Public\Owlangs\models\spacy';
+                r'C:\ProgramData\Owlangs\models\spacy';
             languageConfigs[lang] =
                 existingConfig.copyWith(modelsDir: fixedModelsDir);
           }

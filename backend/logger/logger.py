@@ -400,7 +400,7 @@ if _get_console_enabled():
     console_handler.addFilter(ModuleInfoFilter())
 
 # Output to file (with size and time rotation)
-# Use unified logs directory path (C:\Users\Public\Owlangs\logs on Windows deployment)
+# Use unified logs directory path (C:\ProgramData\Owlangs\logs on Windows deployment)
 try:
     if _get_file_enabled():
         from utils.path_utils import get_logs_dir

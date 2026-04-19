@@ -28,7 +28,7 @@ default_value = get_default_deep_split("document.txt", "txt")
 配置文件路径优先级：
 1. `{OWLANGS_CONFIG_PATH}/configs/translation_config.json` (如果设置了环境变量)
 2. `{项目根目录}/configs/translation_config.json` (开发环境)
-3. `C:\Users\Public\Owlangs\configs\translation_config.json` (Windows 部署环境)
+3. `C:\ProgramData\Owlangs\configs\translation_config.json` (Windows 部署环境)
 4. 其他系统配置目录
 
 ### 配置文件格式

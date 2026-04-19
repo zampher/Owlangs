@@ -17,16 +17,15 @@ def get_system_data_dir() -> str:
     system = platform.system().lower()
     
     if system == "windows":
-        # Windows: Check for OWLANGS_CONFIG_PATH first (C:\\Users\\Public\\Owlangs)
+        # Windows: Check for OWLANGS_CONFIG_PATH first
         env_dir = os.environ.get("OWLANGS_CONFIG_PATH")
         if env_dir:
             # Use env dir even if it doesn't exist yet (will be created on first use)
             return str(Path(env_dir))
         
-        # Windows default runtime directory (preferred for deployment)
-        # Use this path even if it doesn't exist yet (will be created on first use)
-        win_default = r"C:\Users\Public\Owlangs"
-        return win_default
+        # Windows default: C:\ProgramData\Owlangs (standard shared app data)
+        program_data = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "Owlangs"
+        return str(program_data)
     elif system == "darwin":  # macOS
         # macOS: Use ~/Library/Application Support/Owlangs
         return os.path.join(os.path.expanduser("~"), "Library", "Application Support", "Owlangs")
@@ -110,7 +109,7 @@ def get_configs_dir() -> Path:
     Priority:
     1. OWLANGS_CONFIG_PATH/configs (if env var set)
     2. Project root/configs (development - if exists)
-    3. C:\\Users\\Public\\Owlangs\\configs (Windows deployment - if no project configs)
+    3. C:\\ProgramData\\Owlangs\\configs (Windows deployment - if no project configs)
     4. System config directory (runtime/deployment)
     5. Executable directory/configs (packaged)
     6. Current directory/configs (fallback)
@@ -135,8 +134,7 @@ def get_configs_dir() -> Path:
     
     # 3. Windows default runtime directory (preferred for deployment)
     if os.name == "nt":
-        # Use this path even if it doesn't exist yet (will be created on first use)
-        return Path(r"C:\Users\Public\Owlangs\configs")
+        return Path(get_system_data_dir()) / "configs"
     
     # 4. System config directory (runtime/deployment)
     system_config_dir = Path(get_system_config_dir())
@@ -249,7 +247,7 @@ def get_logs_dir() -> Path:
     
     Priority:
     1. OWLANGS_CONFIG_PATH/logs (if env var set)
-    2. C:\\Users\\Public\\Owlangs\\logs (Windows deployment - preferred)
+    2. C:\\ProgramData\\Owlangs\\logs (Windows deployment - preferred)
     3. Project root/logs (development - if exists)
     4. System data directory/logs (runtime/deployment)
     5. Executable directory/logs (packaged)
@@ -266,8 +264,7 @@ def get_logs_dir() -> Path:
     
     # 2. Windows default runtime directory (preferred for deployment)
     if os.name == "nt":
-        # Use this path even if it doesn't exist yet (will be created on first use)
-        return Path(r"C:\Users\Public\Owlangs\logs")
+        return Path(get_system_data_dir()) / "logs"
     
     # 3. Project root logs directory (development - check if exists)
     proj_root = get_project_root()

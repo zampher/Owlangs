@@ -242,13 +242,13 @@ $env:OWLANGS_SKIP_SPACY = "1"; .\tools\build\build_win.ps1 --full
 ### 配置文件位置
 
 - **Linux**: `/etc/Owlangs/`
-- **Windows**: `C:\Users\Public\Owlangs\`
+- **Windows**: `C:\ProgramData\Owlangs\`
 
 ### 自动配置生成
 
 安装包会自动：
 
-1. **创建配置目录**: `C:\Users\Public\Owlangs\`
+1. **创建配置目录**: `C:\ProgramData\Owlangs\`
 2. **复制模板文件**:
    - `system.json.template` → `system.json` (系统配置)
    - `platforms.json.template` → `platforms.json` (平台配置)
@@ -257,7 +257,7 @@ $env:OWLANGS_SKIP_SPACY = "1"; .\tools\build\build_win.ps1 --full
    - `local.json.template` → `local.json` (本地配置)
    - `app_config.json.template` → `app_config.json` (应用配置)
 3. **设置环境变量**:
-   - `OWLANGS_CONFIG_PATH` = `C:\Users\Public\Owlangs`
+   - `OWLANGS_CONFIG_PATH` = `C:\ProgramData\Owlangs`
    - `DOCUTRANSLATE_PORT` = `8800`
 
 ### 启动脚本功能
@@ -275,7 +275,7 @@ Windows 启动脚本 (`owlangs.bat`, `owlangs-full.bat`) 会：
 
 1. 运行 `install.bat` (需要管理员权限)
 2. 应用程序安装到 `C:\Program Files\Owlangs\Document Agent`
-3. 配置文件创建到 `C:\Users\Public\Owlangs`
+3. 配置文件创建到 `C:\ProgramData\Owlangs`
 4. 桌面和开始菜单快捷方式自动创建
 
 ### 专业安装器使用
@@ -358,7 +358,7 @@ tools/
 
 4. **配置文件未生成**
    - 确保启动脚本有写入权限
-   - 检查 `C:\Users\Public\Owlangs` 目录权限
+   - 检查 `C:\ProgramData\Owlangs` 目录权限
 
 5. **Flutter Windows 构建失败：pdfium 下载（Build step for pdfium failed / Connection was reset）**
    - 原因：构建时需从 GitHub 下载 pdfium 预编译包（pdfx 插件），网络不稳定、代理或防火墙会导致连接重置（如 `CURLE_RECV_ERROR`）。

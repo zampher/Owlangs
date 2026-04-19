@@ -111,7 +111,7 @@ class AppConfig:
         Priority order (same as get_config_file_path):
         1. OWLANGS_CONFIG_PATH/configs (if env var set)
         2. Project root/configs (development - if exists)
-        3. C:\\Users\\Public\\Owlangs\\configs (Windows deployment - if no project configs)
+        3. C:\\ProgramData\\Owlangs\\configs (Windows deployment - if no project configs)
         4. System config directory (runtime/deployment)
         5. Executable directory/configs (packaged)
         6. Current directory/configs (fallback)
@@ -136,7 +136,7 @@ class AppConfig:
             env_dir = os.environ.get("OWLANGS_CONFIG_PATH")
             # Windows default runtime configuration directory
             if not env_dir and os.name == "nt":
-                env_dir = r"C:\\Users\\Public\\Owlangs"
+                env_dir = r"C:\\ProgramData\\Owlangs"
             if env_dir:
                 env_cfg = Path(env_dir) / config_file
                 if env_cfg.exists():

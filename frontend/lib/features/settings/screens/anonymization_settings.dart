@@ -374,7 +374,7 @@ class _AnonymizationSettingsScreenState
                                       decoration: const InputDecoration(
                                         labelText: 'Models Directory',
                                         hintText:
-                                            r'C:\Users\Public\Owlangs\models\spacy',
+                                            r'C:\ProgramData\Owlangs\models\spacy',
                                         border: OutlineInputBorder(),
                                         helperText:
                                             'Fixed path for desktop version',
@@ -396,7 +396,7 @@ class _AnonymizationSettingsScreenState
                                           // for reference (though it won't be saved)
                                           MessageService.showInfo(
                                             context,
-                                            'Selected directory: $selectedDirectory\nNote: Model directory is fixed to C:\\Users\\Public\\Owlangs\\models\\spacy',
+                                            'Selected directory: $selectedDirectory\nNote: Model directory is fixed to C:\\ProgramData\\Owlangs\\models\\spacy',
                                           );
                                         }
                                       } else {

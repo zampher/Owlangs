@@ -2,7 +2,7 @@
 # Single-file executable spec for Owlangs Enterprise Edition
 # This creates a true single-file exe that:
 # 1. Extracts to temp directory on first run
-# 2. Initializes user configs in C:\Users\Public\Owlangs
+# 2. Initializes user configs in C:\ProgramData\Owlangs
 # 3. Starts backend server
 # 4. Opens browser automatically
 

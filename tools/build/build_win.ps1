@@ -1005,7 +1005,7 @@ if exist "%INSTALL_DIR%\3rdParty\windows\Redis-x64-3.0.504\redis-server.exe" (
 )
 
 REM Prepare Windows public configuration directory
-set CONFIG_DIR=C:\Users\Public\Owlangs
+set CONFIG_DIR=C:\ProgramData\Owlangs
 if not exist "%CONFIG_DIR%" (
     mkdir "%CONFIG_DIR%"
     echo Created configuration directory: %CONFIG_DIR%
@@ -1223,7 +1223,7 @@ if errorlevel 1 (
 echo.
 echo Installation completed!
 echo.
-echo Configuration files will be created at: C:\Users\Public\Owlangs
+echo Configuration files will be created at: C:\ProgramData\Owlangs
 echo To start the application, run: %INSTALL_DIR%\$launcherName
 echo Or use the desktop/start menu shortcuts.
 echo.
@@ -1282,7 +1282,7 @@ if exist "%START_MENU%" (
 echo.
 echo Uninstallation completed!
 echo.
-echo Note: Configuration files at C:\Users\Public\Owlangs were not removed.
+echo Note: Configuration files at C:\ProgramData\Owlangs were not removed.
 echo You may delete them manually if no longer needed.
 echo.
 pause
@@ -1297,7 +1297,7 @@ $packageDisplayName - Windows Package
 INSTALLATION:
 1. Run install.bat as Administrator
 2. The application will be installed to C:\Program Files\Owlangs\Document Agent
-3. Configuration files will be created at C:\Users\Public\Owlangs
+3. Configuration files will be created at C:\ProgramData\Owlangs
 4. Desktop and Start Menu shortcuts will be created
 
 USAGE:
@@ -1307,7 +1307,7 @@ USAGE:
 - Access the web interface at: http://localhost:8800
 
 CONFIGURATION:
-- Configuration files are stored in: C:\Users\Public\Owlangs
+- Configuration files are stored in: C:\ProgramData\Owlangs
 - Edit these files to customize the application:
   - system.json: System settings (authentication, parsing engine, logging)
   - platforms.json: AI platform configurations

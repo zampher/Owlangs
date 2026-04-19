@@ -281,7 +281,7 @@ function Make-WinPackage-Desktop {
     New-Item -ItemType Directory -Path "$packageRoot\config" -Force | Out-Null
     New-Item -ItemType Directory -Path "$packageRoot\config\templates" -Force | Out-Null
     # Note: models directory is NOT created in package
-    # Models will be downloaded to C:\Users\Public\Owlangs\models\spacy at runtime
+    # Models will be downloaded to C:\ProgramData\Owlangs\models\spacy at runtime
     
     # Copy executable
     Copy-Item $appBin "$packageRoot\bin\"
@@ -298,7 +298,7 @@ function Make-WinPackage-Desktop {
     
     # Copy spaCy models if they exist in source directory
     # Note: Models in installation directory are for reference only
-    # Actual models should be downloaded to C:\Users\Public\Owlangs\models\spacy at runtime
+    # Actual models should be downloaded to C:\ProgramData\Owlangs\models\spacy at runtime
     $modelsSourceDir = "3rdParty\spacy_models"
     $modelsPackageDir = "$packageRoot\models\spacy"
     if (Test-Path $modelsSourceDir) {
@@ -314,7 +314,7 @@ function Make-WinPackage-Desktop {
                 Copy-Item -Path $modelDir.FullName -Destination $targetDir -Recurse -Force
             }
             Write-Host "[$packageType] Copied $($modelDirs.Count) model(s) to package" -ForegroundColor Green
-            Write-Host "[$packageType] Note: Models in package are for reference. Runtime models are stored in C:\Users\Public\Owlangs\models\spacy" -ForegroundColor Gray
+            Write-Host "[$packageType] Note: Models in package are for reference. Runtime models are stored in C:\ProgramData\Owlangs\models\spacy" -ForegroundColor Gray
         } else {
             Write-Host "[$packageType] No spaCy models found in source directory (models will be downloaded at runtime)" -ForegroundColor Gray
         }

@@ -112,11 +112,12 @@ class UnifiedUserStore:
         else:
             import sys
             if getattr(sys, 'frozen', False):
-                # Windows deployment: use C:\Users\Public\Owlangs\ (writable)
+                # Windows deployment: use shared app data dir (C:\ProgramData\Owlangs)
                 # instead of Program Files which requires admin privileges
                 if os.name == 'nt':
-                    self.file_path = Path(r"C:\Users\Public\Owlangs") / filename
-                    unified_logger.debug(LogModule.AUTH, f"[UnifiedUsers] Using Windows public users file: {self.file_path}")
+                    from backend.utils.path_utils import get_system_data_dir
+                    self.file_path = Path(get_system_data_dir()) / filename
+                    unified_logger.debug(LogModule.AUTH, f"[UnifiedUsers] Using Windows data users file: {self.file_path}")
                 else:
                     # macOS/Linux: use system data dir
                     from backend.utils.path_utils import get_system_data_dir

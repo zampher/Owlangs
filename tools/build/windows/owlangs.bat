@@ -6,7 +6,7 @@ REM This script sets up the Windows environment and launches Owlangs
 REM Note: This script uses RUNTIME configuration files, not template files
 
 REM Set runtime configuration directory for Windows
-set OWLANGS_CONFIG_DIR=C:\Users\Public\Owlangs
+set OWLANGS_CONFIG_DIR=C:\ProgramData\Owlangs
 set OWLANGS_PORT=8800
 
 REM Create config directory if it doesn't exist

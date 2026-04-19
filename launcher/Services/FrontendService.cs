@@ -67,18 +67,14 @@ namespace OwlangsLauncher.Services
             _frontendExePath = FindFrontendExecutable(frontendDir) ?? 
                               Path.Combine(frontendDir, "owlangs.exe");
             
-            // Setup log file path (unified with backend: C:\Users\Public\Owlangs\logs\frontend.log)
-            // Backend uses C:\Users\Public\Owlangs\logs by default on Windows (see backend.utils.path_utils.get_logs_dir).
+            // Setup log file path (unified with backend: C:\ProgramData\Owlangs\logs\frontend.log)
+            // Backend uses C:\ProgramData\Owlangs\logs by default on Windows (see backend.utils.path_utils.get_logs_dir).
             // Use the same directory here so all logs live under a single location.
-            // Direct path: C:\Users\Public\Owlangs\logs\frontend.log
-            var publicOwlangsDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "..",
-                "Public",
+            // Direct path: C:\ProgramData\Owlangs\logs\frontend.log
+            var owlangsDataDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
                 "Owlangs");
-            // Normalize path to resolve ".." segments
-            publicOwlangsDir = Path.GetFullPath(publicOwlangsDir);
-            var logsDir = Path.Combine(publicOwlangsDir, "logs");
+            var logsDir = Path.Combine(owlangsDataDir, "logs");
             Directory.CreateDirectory(logsDir);
             _logFilePath = Path.Combine(logsDir, "frontend.log");
         }

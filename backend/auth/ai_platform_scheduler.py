@@ -102,7 +102,13 @@ async def run_one_round_ai_platform_tests() -> None:
         mineru_local_cfg = platforms_config.get_platform_config("mineru_local")
         if mineru_local_cfg:
             base_url = (getattr(mineru_local_cfg, "url", None) or "").strip().rstrip("/") or "http://localhost:8080/api/v4"
-            api_key = (api_keys.get("mineru_local") or "").strip()
+            # Respect platform config: only require API key if explicitly marked as required
+            requires_api_key = getattr(mineru_local_cfg, "requires_api_key", True)
+            if requires_api_key:
+                api_keys = secrets.get_api_keys()
+                api_key = (api_keys.get("mineru_local") or "").strip()
+            else:
+                api_key = ""
             result = await test_mineru_local_connectivity(base_url, api_key or None)
             update_platform_status("mineru_local", result.get("success", False), result.get("message") or result.get("error"))
     except asyncio.CancelledError:

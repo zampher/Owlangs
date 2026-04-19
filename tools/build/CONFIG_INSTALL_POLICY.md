@@ -17,7 +17,7 @@
 
 ### 2. 安装阶段 (installer.nsi)
 
-- 目标目录：`C:\Users\Public\Owlangs\configs`。
+- 目标目录：`C:\ProgramData\Owlangs\configs`。
 - 用 PowerShell 脚本把 `$INSTDIR\config\` 下**所有文件**复制到上述目录：
   - 使用 **`Copy-Item ... -Force`**，即**强制覆盖**已存在的同名文件。
 - 复制完成后删除 `$INSTDIR\config`，避免运行时误用安装目录下的 config。
@@ -35,6 +35,6 @@
 
 | 文件 | 作用 |
 |------|------|
-| `tools/build/installer.nsi` | 生成 `copy_configs.ps1`，执行 `Copy-Item -Force` 到 `C:\Users\Public\Owlangs\configs` |
+| `tools/build/installer.nsi` | 生成 `copy_configs.ps1`，执行 `Copy-Item -Force` 到 `C:\ProgramData\Owlangs\configs` |
 | `tools/build/build_win_desktop.ps1` | 打包时复制 `configs/*` 到 `config/`，排除 `secrets.json` |
 | `backend/config/secrets_manager.py` | 启动时用模板合并已有 `secrets.json`，保留旧 KEY |

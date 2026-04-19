@@ -5,7 +5,7 @@ REM Owlangs Full - Windows Launcher
 REM This script sets up the Windows environment and launches Owlangs Full
 
 REM Set default configuration directory for Windows
-set OWLANGS_CONFIG_DIR=C:\Users\Public\Owlangs
+set OWLANGS_CONFIG_DIR=C:\ProgramData\Owlangs
 set OWLANGS_PORT=8800
 
 REM Create config directory if it doesn't exist

@@ -219,14 +219,15 @@ Section "Owlangs Translation" SecCore
     
     ; Move 3rdParty from Program Files to ProgramData so pdflatex/pandoc/Redis
     ; can write at runtime without admin privileges.
-    ; Use PowerShell because NSIS Rename does not reliably move non-empty directories.
+    ; Use Copy-Item+Remove-Item because Move-Item is unreliable for large non-empty directories.
     DetailPrint "Moving 3rdParty to ProgramData..."
     FileOpen $0 "$TEMP\owlangs_move_3rdparty.ps1" w
     FileWrite $0 "$$src = '$INSTDIR\3rdParty'$$\r$$\n"
     FileWrite $0 "$$dst = '$OwlangsConfigDir\3rdParty'$$\r$$\n"
     FileWrite $0 "if (Test-Path $$src) {$$\r$$\n"
-    FileWrite $0 "  if (Test-Path $$dst) { Remove-Item $$dst -Recurse -Force }$$\r$$\n"
-    FileWrite $0 "  Move-Item $$src $$dst -Force$$\r$$\n"
+    FileWrite $0 "  if (Test-Path $$dst) { Remove-Item $$dst -Recurse -Force -ErrorAction SilentlyContinue }$$\r$$\n"
+    FileWrite $0 "  Copy-Item $$src $$dst -Recurse -Force$$\r$$\n"
+    FileWrite $0 "  Remove-Item $$src -Recurse -Force -ErrorAction SilentlyContinue$$\r$$\n"
     FileWrite $0 "  if (Test-Path $$src) { exit 1 } else { exit 0 }$$\r$$\n"
     FileWrite $0 "} else { exit 0 }$$\r$$\n"
     FileClose $0

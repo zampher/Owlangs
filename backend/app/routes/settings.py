@@ -329,11 +329,11 @@ async def download_anonymize_model(payload: _AnonDownloadPayload):
         from pathlib import Path
         
         # resolve models_dir - always use deployment directory for Windows
-        # Models should be downloaded to C:\Users\Public\Owlangs\models\spacy
+        # Models should be downloaded to C:\ProgramData\Owlangs\models\spacy
         import os
         from anonymize.model_manager import PresidioModelManager
         if os.name == 'nt':  # Windows
-            # Use deployment directory (C:\Users\Public\Owlangs\models\spacy)
+            # Use deployment directory (C:\ProgramData\Owlangs\models\spacy)
             target_dir = PresidioModelManager.DEPLOYMENT_MODELS_DIR
             # Ensure directory exists
             target_dir.mkdir(parents=True, exist_ok=True)

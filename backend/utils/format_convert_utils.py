@@ -349,11 +349,12 @@ def _get_owlangs_install_dir() -> Optional[Path]:
                 continue
     except ImportError:
         pass
-    # 3. Common hard-coded paths (ProgramData first so 3rdParty installed there is found)
+    # 3. Common hard-coded paths (install dir first so user can override by placing
+    # 3rdParty there; ProgramData fallback for the new installer layout)
     for candidate in [
-        Path(os.environ.get("PROGRAMDATA", "")) / "Owlangs",
         Path("C:/Program Files/Owlangs"),
         Path("C:/Program Files (x86)/Owlangs"),
+        Path(os.environ.get("PROGRAMDATA", "")) / "Owlangs",
         Path(os.environ.get("LOCALAPPDATA", "")) / "Owlangs",
         Path("C:/Owlangs"),
         Path("D:/Owlangs"),
@@ -1354,6 +1355,14 @@ def convert_md_to_pdf(
         texmfvar = str(user_texmfvar)
         env["TEXMFVAR"] = texmfvar
         env["TEXMFSYSVAR"] = texmfvar  # mktexfmt/fmtutil use this; must match bundle texmf-var
+        # Fontconfig: point XeLaTeX to bundled fonts.conf and user-writable cache dir
+        # so it does not fail with "Cannot load default config file" or permission errors.
+        fontconfig_file = pdflatex_root_use / "texmf-var" / "fonts" / "conf" / "fonts.conf"
+        if fontconfig_file.exists():
+            env["FONTCONFIG_FILE"] = str(fontconfig_file)
+            fc_cache_dir = user_texmfvar / "fontconfig-cache"
+            fc_cache_dir.mkdir(parents=True, exist_ok=True)
+            env["FC_CACHEDIR"] = str(fc_cache_dir)
         _ensure_xelatex_fmt(pdflatex_root_use, env)
     # Geometry: constrain text to page and avoid overflow (default template may use small margins)
     geometry_opts = "margin=2.5cm"

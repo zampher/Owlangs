@@ -6,7 +6,7 @@ namespace OwlangsLauncher.Services
     /// <summary>
     /// Simple file logger for the Launcher itself.
     /// Logs to the unified logs directory used by backend/frontend:
-    /// C:\Users\Public\Owlangs\logs\launcher.log
+    /// C:\ProgramData\Owlangs\logs\launcher.log
     /// </summary>
     public static class LauncherLogger
     {
@@ -17,17 +17,13 @@ namespace OwlangsLauncher.Services
         {
             try
             {
-                // Backend uses C:\Users\Public\Owlangs\logs by default on Windows
+                // Backend uses C:\ProgramData\Owlangs\logs by default on Windows
                 // (see backend.utils.path_utils.get_logs_dir). Use the same location here.
-                // Direct path: C:\Users\Public\Owlangs\logs\launcher.log
-                var publicOwlangsDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    "..",
-                    "Public",
+                // Direct path: C:\ProgramData\Owlangs\logs\launcher.log
+                var owlangsDataDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
                     "Owlangs");
-                // Normalize path to resolve ".." segments
-                publicOwlangsDir = Path.GetFullPath(publicOwlangsDir);
-                var logsDir = Path.Combine(publicOwlangsDir, "logs");
+                var logsDir = Path.Combine(owlangsDataDir, "logs");
                 Directory.CreateDirectory(logsDir);
                 _logFilePath = Path.Combine(logsDir, "launcher.log");
             }

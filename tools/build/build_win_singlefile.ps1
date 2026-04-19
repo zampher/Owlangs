@@ -32,7 +32,7 @@ Write-Host "Features:" -ForegroundColor Yellow
 Write-Host "  - Single .exe file (double-click to run)" -ForegroundColor Gray
 Write-Host "  - Auto-initializes user configs" -ForegroundColor Gray
 Write-Host "  - Auto-starts server and opens browser" -ForegroundColor Gray
-Write-Host "  - Configs persisted in C:\Users\Public\Owlangs" -ForegroundColor Gray
+Write-Host "  - Configs persisted in C:\ProgramData\Owlangs" -ForegroundColor Gray
 Write-Host ""
 
 # Sync version
@@ -174,7 +174,7 @@ Owlangs Single-File Edition v$Version
 
 配置文件位置
 ------------
-C:\Users\Public\Owlangs\configs\
+C:\ProgramData\Owlangs\configs\
   - secrets.json    : API 密钥（首次运行需要配置）
   - system.json     : 系统设置
   - platforms.json  : 翻译平台配置
@@ -193,12 +193,12 @@ Owlangs.exe [选项]
 --------
 - 首次运行需要配置 API 密钥，程序会自动提示
 - 关闭窗口即可停止服务
-- 配置文件保存在 C:\Users\Public\Owlangs，重装系统不会丢失
+- 配置文件保存在 C:\ProgramData\Owlangs，重装系统不会丢失
 
 技术支持
 --------
 如有问题，请查看日志文件：
-C:\Users\Public\Owlangs\logs\
+C:\ProgramData\Owlangs\logs\
 "@
 
 $readmePath = Join-Path $buildDir "README.txt"

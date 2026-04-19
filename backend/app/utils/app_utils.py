@@ -26,7 +26,7 @@ def run_app(port: int | None = None):
     # Automatically create secrets.json file on first deployment
     # Configuration file priority:
     # Windows/Linux override:
-    # 0) OWLANGS_CONFIG_PATH env dir if set (Windows default: C:\\Users\\Public\\Owlangs)
+    # 0) OWLANGS_CONFIG_PATH env dir if set (Windows default: C:\\ProgramData\\Owlangs)
     # Linux:
     # 1) /etc/Owlangs/secrets.json (system configuration)
     # Common:
@@ -37,7 +37,7 @@ def run_app(port: int | None = None):
     env_dir = os.environ.get("OWLANGS_CONFIG_PATH")
     # Windows default runtime configuration directory
     if not env_dir and os.name == "nt":
-        env_dir = r"C:\\Users\\Public\\Owlangs"
+        env_dir = r"C:\\ProgramData\\Owlangs"
     secrets_path = None
     if env_dir:
         env_secrets = os.path.join(env_dir, "secrets.json")

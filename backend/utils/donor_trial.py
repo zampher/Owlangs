@@ -28,7 +28,7 @@ _ANCHOR_SECONDARY_DIR_SALT = b"owlangs-trial-2nd-dir-v1"
 
 
 def _get_trial_anchor_path_primary() -> Optional[Path]:
-    """Primary: machine-specific file under system data dir (e.g. C:\\Users\\Public\\Owlangs)."""
+    """Primary: machine-specific file under system data dir (e.g. C:\\ProgramData\\Owlangs)."""
     try:
         from utils.path_utils import get_system_data_dir
         from utils.machine_id import get_machine_id
