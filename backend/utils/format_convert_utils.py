@@ -372,18 +372,23 @@ def _get_xelatex_path() -> Optional[Path]:
     """
     if sys.platform != "win32":
         return None
-    # Same search order as pandoc: PyInstaller, install dir, dev dir, cwd
     candidates: list[Path] = []
+    # 0. ProgramData (preferred for deployed installations - installer moves pdflatex here)
+    program_data = Path(os.environ.get("PROGRAMDATA", "")) / "Owlangs" / "3rdParty" / "windows"
+    if program_data.exists():
+        candidates.append(program_data)
+    # 1. PyInstaller environment (packaged executable)
     if hasattr(sys, "_MEIPASS"):
         candidates.append(Path(sys._MEIPASS) / "3rdParty" / "windows")
         candidates.append(Path(sys.executable).parent.parent / "3rdParty" / "windows")
+    # 2. Installation directory (production)
     install_dir = _get_owlangs_install_dir()
     if install_dir:
         candidates.append(install_dir / "3rdParty" / "windows")
-    candidates.extend([
-        Path(__file__).parent.parent.parent / "3rdParty" / "windows",
-        Path.cwd() / "3rdParty" / "windows",
-    ])
+    # 3. Development directory
+    candidates.append(Path(__file__).parent.parent.parent / "3rdParty" / "windows")
+    # 4. Current working directory
+    candidates.append(Path.cwd() / "3rdParty" / "windows")
     for base in candidates:
         if not base.exists():
             continue

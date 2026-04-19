@@ -76,15 +76,17 @@ Source: "LICENSE_EN.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "LICENSE_ZH.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Optional: Pandoc + pdflatex for PDF workflow DOCX/PDF export (included when built with /DINCLUDE_PANDOC=1)
-; Install 3rdParty to {commonappdata} instead of {app} so pdflatex/pandoc can write
-; to texmf-var without requiring admin privileges at runtime.
+; Pandoc stays in {app}\3rdParty\windows (read-only is fine for DOCX export).
+; pdflatex (TinyTeX/XeLaTeX) goes to {commonappdata} so it can write fmt files
+; and font caches at runtime without admin privileges.
 #ifdef INCLUDE_PANDOC
-Source: "..\..\build\installer_stage\3rdParty\windows\*"; DestDir: "{commonappdata}\Owlangs\3rdParty\windows"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\build\installer_stage\3rdParty\windows\*"; DestDir: "{app}\3rdParty\windows"; Excludes: "pdflatex"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\build\installer_stage\3rdParty\windows\pdflatex"; DestDir: "{commonappdata}\Owlangs\3rdParty\windows\pdflatex"; Flags: ignoreversion recursesubdirs createallsubdirs
 #endif
 
 [UninstallDelete]
-; Remove 3rdParty binaries from shared app data on uninstall (config files are kept)
-Type: filesandordirs; Name: "{commonappdata}\Owlangs\3rdParty"
+; Remove pdflatex binaries from shared app data on uninstall (configs/logs/models are kept)
+Type: filesandordirs; Name: "{commonappdata}\Owlangs\3rdParty\windows\pdflatex"
 
 [Icons]
 Name: "{group}\{#MyAppName} Lite"; Filename: "{app}\owlangs.bat"; WorkingDir: "{app}"
@@ -98,6 +100,9 @@ Name: "{autodesktop}\Owlangs 网页 (localhost:8800)"; Filename: "rundll32.exe";
 Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\Owlangs 控制台"; Filename: "{app}\owlangs.bat"; WorkingDir: "{app}"; Tasks: quicklaunchicon
 
 [Run]
+; Grant Users group Modify permission on Owlangs data directory so the backend
+; (running as a normal user) can read/write configs, logs, models, etc.
+Filename: "{sys}\icacls.exe"; Parameters: "{commonappdata}\Owlangs /grant Users:(OI)(CI)M /T"; StatusMsg: "Setting permissions..."; Flags: runhidden nowait
 Filename: "{app}\owlangs.bat"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 
 [Code]

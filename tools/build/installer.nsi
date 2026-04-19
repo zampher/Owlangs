@@ -80,8 +80,9 @@ Section "Owlangs Translation" SecCore
     SetRegView 64
     
     ; Resolve shared application data directory (C:\ProgramData\Owlangs)
-    ; 3rdParty binaries are installed here so pdflatex/pandoc can write at runtime
-    ; without requiring admin privileges.
+    ; pdflatex (TinyTeX) is moved here so it can write fmt files and font caches
+    ; at runtime without requiring admin privileges. Pandoc and Redis stay in
+    ; $INSTDIR\3rdParty\windows (read-only is fine for them).
     ExpandEnvStrings $OwlangsConfigDir "%ALLUSERSPROFILE%"
     StrCpy $OwlangsConfigDir "$OwlangsConfigDir\Owlangs"
     StrCpy $OwlangsConfigsPath "$OwlangsConfigDir\configs"
@@ -103,6 +104,14 @@ Section "Owlangs Translation" SecCore
     ; Models will be downloaded to C:\ProgramData\Owlangs\models\spacy at runtime
     CreateDirectory "$OwlangsConfigDir\models"
     CreateDirectory "$OwlangsConfigDir\models\spacy"
+    
+    ; Grant Users group Modify permission on Owlangs data directory so the backend
+    ; (running as a normal user) can read/write configs, logs, models, etc.
+    ; (OI)=object inherit, (CI)=container inherit, M=modify, /T=recurse into subdirs.
+    DetailPrint "Setting permissions on $OwlangsConfigDir..."
+    ExecWait 'icacls "$OwlangsConfigDir" /grant Users:(OI)(CI)M /T' $0
+    IntCmp $0 0 +2
+    DetailPrint "WARNING: Failed to set permissions on $OwlangsConfigDir. Config writes may fail for non-admin users."
     
     ; Copy configuration files: FORCE OVERWRITE so that config file version/schema updates
     ; are applied on upgrade. User API keys in secrets.json must be preserved across install/upgrade.
@@ -217,13 +226,13 @@ Section "Owlangs Translation" SecCore
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Owlangs" "NoModify" 1
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Owlangs" "NoRepair" 1
     
-    ; Move 3rdParty from Program Files to ProgramData so pdflatex/pandoc/Redis
-    ; can write at runtime without admin privileges.
-    ; Use Copy-Item+Remove-Item because Move-Item is unreliable for large non-empty directories.
-    DetailPrint "Moving 3rdParty to ProgramData..."
-    FileOpen $0 "$TEMP\owlangs_move_3rdparty.ps1" w
-    FileWrite $0 "$$src = '$INSTDIR\3rdParty'$$\r$$\n"
-    FileWrite $0 "$$dst = '$OwlangsConfigDir\3rdParty'$$\r$$\n"
+    ; Move pdflatex (TinyTeX/XeLaTeX) from Program Files to ProgramData so it can
+    ; write fmt files and font caches at runtime without admin privileges.
+    ; Pandoc and Redis stay in $INSTDIR\3rdParty\windows (read-only is fine for them).
+    DetailPrint "Moving pdflatex to ProgramData..."
+    FileOpen $0 "$TEMP\owlangs_move_pdflatex.ps1" w
+    FileWrite $0 "$$src = '$INSTDIR\3rdParty\windows\pdflatex'$$\r$$\n"
+    FileWrite $0 "$$dst = '$OwlangsConfigDir\3rdParty\windows\pdflatex'$$\r$$\n"
     FileWrite $0 "if (Test-Path $$src) {$$\r$$\n"
     FileWrite $0 "  if (Test-Path $$dst) { Remove-Item $$dst -Recurse -Force -ErrorAction SilentlyContinue }$$\r$$\n"
     FileWrite $0 "  Copy-Item $$src $$dst -Recurse -Force$$\r$$\n"
@@ -231,10 +240,10 @@ Section "Owlangs Translation" SecCore
     FileWrite $0 "  if (Test-Path $$src) { exit 1 } else { exit 0 }$$\r$$\n"
     FileWrite $0 "} else { exit 0 }$$\r$$\n"
     FileClose $0
-    ExecWait 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TEMP\owlangs_move_3rdparty.ps1"' $0
-    Delete "$TEMP\owlangs_move_3rdparty.ps1"
+    ExecWait 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TEMP\owlangs_move_pdflatex.ps1"' $0
+    Delete "$TEMP\owlangs_move_pdflatex.ps1"
     IntCmp $0 0 +2
-    DetailPrint "WARNING: Failed to move 3rdParty to ProgramData. PDF/Redis features may require admin rights."
+    DetailPrint "WARNING: Failed to move pdflatex to ProgramData. PDF export may require admin rights."
     
     ; Create uninstaller
     WriteUninstaller "$INSTDIR\uninstall.exe"
@@ -261,15 +270,13 @@ LangString DESC_SecCore ${LANG_ENGLISH} "Core Owlangs application files (require
 Section "Uninstall"
     SetRegView 64
     
-    ; Stop Redis if running (check in ProgramData 3rdParty directory)
+    ; Stop Redis if running (check in installation directory - Redis stays in Program Files)
     DetailPrint "Stopping Redis service if running..."
     ; Write a temporary PowerShell script to gracefully stop Redis and force-kill if still running
     FileOpen $0 "$TEMP\owlangs_stop_redis.ps1" w
-    ExpandEnvStrings $OwlangsConfigDir "%ALLUSERSPROFILE%"
-    StrCpy $OwlangsConfigDir "$OwlangsConfigDir\Owlangs"
-    FileWrite $0 "$$redisCli = '$OwlangsConfigDir\3rdParty\windows\Redis-x64-3.0.504\redis-cli.exe'$\r$\n"
+    FileWrite $0 "$$redisCli = '$INSTDIR\3rdParty\windows\Redis-x64-3.0.504\redis-cli.exe'$\r$\n"
     FileWrite $0 "if (-not (Test-Path $$redisCli)) {$\r$\n"
-    FileWrite $0 "  $$redisCli = '$OwlangsConfigDir\3rdParty\windows\redis\redis-cli.exe'$\r$\n"
+    FileWrite $0 "  $$redisCli = '$INSTDIR\3rdParty\windows\redis\redis-cli.exe'$\r$\n"
     FileWrite $0 "}$\r$\n"
     FileWrite $0 "if (Test-Path $$redisCli) {$\r$\n"
     FileWrite $0 "  Write-Host 'Stopping Redis gracefully...'$\r$\n"
@@ -298,11 +305,11 @@ Section "Uninstall"
     DetailPrint "Removing installation files..."
     RMDir /r "$INSTDIR"
     
-    ; Remove 3rdParty binaries from ProgramData (configs/logs/models are kept)
-    DetailPrint "Removing 3rdParty binaries..."
+    ; Remove pdflatex binaries from ProgramData (configs/logs/models are kept)
+    DetailPrint "Removing pdflatex binaries..."
     ExpandEnvStrings $OwlangsConfigDir "%ALLUSERSPROFILE%"
     StrCpy $OwlangsConfigDir "$OwlangsConfigDir\Owlangs"
-    RMDir /r "$OwlangsConfigDir\3rdParty"
+    RMDir /r "$OwlangsConfigDir\3rdParty\windows\pdflatex"
     
     ; Remove shortcuts (created under "all" context = Public Desktop / Public Start Menu)
     DetailPrint "Removing shortcuts..."
