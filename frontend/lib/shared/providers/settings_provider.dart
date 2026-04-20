@@ -491,6 +491,23 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
                 Map<String, bool>.from(appConfig['exclusion_defaults'] as Map);
           }
 
+          // Map parsing engine settings from backend (critical: backend is source of truth)
+          if (appConfig.containsKey('parsingEngine')) {
+            backendSettings['parsingEngine'] = appConfig['parsingEngine'];
+          } else if (appConfig.containsKey('translator_convert_engine')) {
+            backendSettings['parsingEngine'] = appConfig['translator_convert_engine'];
+          }
+          if (appConfig.containsKey('formulaOcr')) {
+            backendSettings['formulaOcr'] = appConfig['formulaOcr'];
+          } else if (appConfig.containsKey('translator_formula_ocr')) {
+            backendSettings['formulaOcr'] = appConfig['translator_formula_ocr'];
+          }
+          if (appConfig.containsKey('tableOcr')) {
+            backendSettings['tableOcr'] = appConfig['tableOcr'];
+          } else if (appConfig.containsKey('translator_table_ocr')) {
+            backendSettings['tableOcr'] = appConfig['translator_table_ocr'];
+          }
+
           // Restore UI language from backend or system locale on first run
           String backendUiLanguage = '';
           if (appConfig.containsKey('ui_language') &&

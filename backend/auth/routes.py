@@ -770,6 +770,17 @@ async def get_app_config_api(
         logger.warning(LogModule.AUTH, f"[CONFIG] Failed to load AppConfig: {e}")
         # Continue without AppConfig
     
+    # Map backend snake_case keys to frontend camelCase for parsing engine settings
+    # so the frontend can correctly read the user's chosen convert engine.
+    if 'translator_convert_engine' in config_dict:
+        config_dict['parsingEngine'] = config_dict['translator_convert_engine']
+    elif 'parsing_engine' in config_dict and isinstance(config_dict['parsing_engine'], dict):
+        config_dict['parsingEngine'] = config_dict['parsing_engine'].get('convert_engine', 'mineru')
+    if 'translator_formula_ocr' in config_dict:
+        config_dict['formulaOcr'] = config_dict['translator_formula_ocr']
+    if 'translator_table_ocr' in config_dict:
+        config_dict['tableOcr'] = config_dict['translator_table_ocr']
+    
     # Step 4: Get local configuration (optional, can fail gracefully)
     try:
         from backend.config.local_config import LocalConfig
@@ -834,7 +845,7 @@ async def get_app_config_api(
             'glossary_agent_frequency_penalty', 'glossary_agent_presence_penalty', 'glossary_agent_to_lang',
             'glossary_agent_chunk_size', 'glossary_agent_concurrent',
             # Non-sensitive settings in global configuration
-            'ai_platforms', 'parsing_engine', 'translator_settings', 'default_language', 'default_platform',
+            'ai_platforms', 'parsing_engine', 'parsingEngine', 'formulaOcr', 'tableOcr', 'translator_settings', 'default_language', 'default_platform',
             # User dimension model override
             'translator_platform_models', 'glossary_agent_platform_models',
             # LDAP configuration (non-sensitive part)
@@ -3087,11 +3098,11 @@ async def batch_update_settings(
                         logger.error(LogModule.AUTH, f"Failed to update default_platform: {e}", exc_info=True)
                         raise HTTPException(status_code=400, detail=f"Invalid value for ai_platforms_default_platform: {str(e)}")
                 
-                elif key in ['translator_convert_engine', 'translator_mineru_model_version', 
+                elif key in ['parsingEngine', 'translator_convert_engine', 'translator_mineru_model_version', 
                              'translator_formula_ocr', 'translator_table_ocr', 'translator_skip_translate']:
-                    # Handle parsing_engine fields
+                    # Handle parsing_engine fields (accept both camelCase from frontend and snake_case)
                     parsing_engine_updates = {}
-                    if key == 'translator_convert_engine':
+                    if key in ('parsingEngine', 'translator_convert_engine'):
                         parsing_engine_updates['convert_engine'] = value
                     elif key == 'translator_mineru_model_version':
                         parsing_engine_updates['mineru_model_version'] = value
@@ -3542,9 +3553,9 @@ async def update_single_setting(
                     except Exception as e:
                         logger.error(LogModule.AUTH, f"Failed to update default_platform: {e}", exc_info=True)
                         raise HTTPException(status_code=400, detail=f"Invalid value for ai_platforms_default_platform: {str(e)}")
-                elif key in ['translator_convert_engine', 'translator_mineru_model_version', 'translator_formula_ocr', 'translator_table_ocr', 'translator_skip_translate']:
-                    # Handle fields in parsing_engine
-                    if key == 'translator_convert_engine':
+                elif key in ['parsingEngine', 'translator_convert_engine', 'translator_mineru_model_version', 'translator_formula_ocr', 'translator_table_ocr', 'translator_skip_translate']:
+                    # Handle fields in parsing_engine (accept both camelCase from frontend and snake_case)
+                    if key in ('parsingEngine', 'translator_convert_engine'):
                         global_config.parsing_engine.convert_engine = value
                     elif key == 'translator_mineru_model_version':
                         global_config.parsing_engine.mineru_model_version = value
