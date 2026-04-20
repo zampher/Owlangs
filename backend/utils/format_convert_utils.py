@@ -772,6 +772,95 @@ def _ensure_blank_line_before_pipe_tables(md_content: str) -> str:
     return "\n".join(out)
 
 
+def _sanitize_md_for_pdf(md_content: str) -> str:
+    """Sanitize Markdown before Pandoc PDF conversion.
+
+    Fixes common failure modes:
+    1. Unclosed HTML <div> tags cause Pandoc to emit malformed LaTeX.
+    2. Unicode blackboard-bold letters (ℝ, ℤ, ℕ, etc.) are converted by Pandoc
+       into \symbb{...} which is only valid in math mode.
+    3. Raw LaTeX math commands (\mathbb, \mathcal, \symbb, etc.) appearing
+       outside $...$ math mode are passed verbatim to LaTeX, causing
+       "allowed only in math mode" errors.
+
+    Returns sanitized markdown string.
+    """
+    import re
+
+    # 1. Strip HTML <div> tags (with or without attributes). They have no useful
+    #    effect in PDF output and unclosed ones break Pandoc's LaTeX writer.
+    md_content = re.sub(r'<div\b[^>]*>', '', md_content)
+    md_content = re.sub(r'</div>', '', md_content)
+
+    # 2. Replace Unicode blackboard-bold letters with plain ASCII equivalents.
+    #    Covers both Letterlike Symbols (U+21xx) and Mathematical Alphanumeric
+    #    Symbols (U+1D5xx / U+1D7xx) blocks. Pandoc maps these to \symbb{…}
+    #    which is only valid in math mode.
+    _bb_map = {
+        # Letterlike Symbols
+        '\u2102': 'C', '\u210D': 'H', '\u2115': 'N', '\u2119': 'P',
+        '\u211A': 'Q', '\u211D': 'R', '\u2124': 'Z',
+        # Mathematical Double-Struck Capital A–Y (missing C, H, N, P, Q, R, Z above)
+        '\U0001d538': 'A', '\U0001d539': 'B', '\U0001d53b': 'D',
+        '\U0001d53c': 'E', '\U0001d53d': 'F', '\U0001d53e': 'G',
+        '\U0001d540': 'I', '\U0001d541': 'J', '\U0001d542': 'K',
+        '\U0001d543': 'L', '\U0001d544': 'M', '\U0001d546': 'O',
+        '\U0001d54a': 'S', '\U0001d54b': 'T', '\U0001d54c': 'U',
+        '\U0001d54d': 'V', '\U0001d54e': 'W', '\U0001d54f': 'X',
+        '\U0001d550': 'Y',
+        # Mathematical Double-Struck Small a–z
+        '\U0001d552': 'a', '\U0001d553': 'b', '\U0001d554': 'c',
+        '\U0001d555': 'd', '\U0001d556': 'e', '\U0001d557': 'f',
+        '\U0001d558': 'g', '\U0001d559': 'h', '\U0001d55a': 'i',
+        '\U0001d55b': 'j', '\U0001d55c': 'k', '\U0001d55d': 'l',
+        '\U0001d55e': 'm', '\U0001d55f': 'n', '\U0001d560': 'o',
+        '\U0001d561': 'p', '\U0001d562': 'q', '\U0001d563': 'r',
+        '\U0001d564': 's', '\U0001d565': 't', '\U0001d566': 'u',
+        '\U0001d567': 'v', '\U0001d568': 'w', '\U0001d569': 'x',
+        '\U0001d56a': 'y', '\U0001d56b': 'z',
+        # Mathematical Double-Struck Digits 0–9
+        '\U0001d7d8': '0', '\U0001d7d9': '1', '\U0001d7da': '2',
+        '\U0001d7db': '3', '\U0001d7dc': '4', '\U0001d7dd': '5',
+        '\U0001d7de': '6', '\U0001d7df': '7', '\U0001d7e0': '8',
+        '\U0001d7e1': '9',
+    }
+    _bb_pattern = re.compile('[' + ''.join(_bb_map.keys()) + ']')
+    md_content = _bb_pattern.sub(lambda m: _bb_map[m.group(0)], md_content)
+
+    # 3. Escape raw LaTeX commands that appear OUTSIDE math mode.
+    #    Pandoc's raw_tex extension passes \command verbatim to LaTeX.
+    #    When \command is actually plain text (e.g. \htm from a rewrite rule
+    #    or \hat outside math), LaTeX fails with "Undefined control sequence".
+    #    We double the backslash so Pandoc treats it as literal text.
+    _latex_cmd_re = re.compile(r'(?<!\\)\\[a-zA-Z]+')
+
+    # Math-mode detectors: $$...$$, $...$, \(...\), \[...\]
+    # $...$ requires at least one \command inside to avoid matching ordinary
+    # dollar signs (e.g. price $5, regex end \$) that happen to have another
+    # $ somewhere later in the same line.
+    _math_re = re.compile(
+        r'(?<!\\)\$\$[\s\S]*?(?<!\\)\$\$'                              # $$...$$
+        r'|(?<!\w)(?<!\\)\$(?!\s)[^$\n]*?(?:\\[a-zA-Z]+)[^$\n]*?(?<!\s)(?<!\\)\$(?!\w)'  # $...$ with \cmd
+        r'|\\\([^)]*\\\)'                                               # \(...\)
+        r'|\\\[[^\]]*\\\]'                                             # \[...\]
+    )
+
+    _parts: list[str] = []
+    _last_end = 0
+    for _m in _math_re.finditer(md_content):
+        _before = md_content[_last_end:_m.start()]
+        _before = _latex_cmd_re.sub(lambda mm: '\\' + mm.group(0), _before)
+        _parts.append(_before)
+        _parts.append(_m.group(0))
+        _last_end = _m.end()
+
+    _after = md_content[_last_end:]
+    _after = _latex_cmd_re.sub(lambda mm: '\\' + mm.group(0), _after)
+    _parts.append(_after)
+
+    return ''.join(_parts)
+
+
 def convert_md_to_docx(
     md_content: str,
     output_path: str,
@@ -1016,6 +1105,8 @@ def convert_md_to_pdf(
     md_for_pdf = _html_tables_in_md_to_pipe_tables(md_content)
     md_for_pdf = _normalize_pipe_table_separators(md_for_pdf)
     md_for_pdf = _ensure_blank_line_before_pipe_tables(md_for_pdf)
+    # Sanitize for PDF: strip unclosed HTML divs and replace Unicode math symbols that break LaTeX
+    md_for_pdf = _sanitize_md_for_pdf(md_for_pdf)
 
     # Remove alt text from all images to prevent pandoc from generating "Figure n: ..." captions
     # Pattern: ![any alt text](path) -> ![](path)
