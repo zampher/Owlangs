@@ -364,6 +364,57 @@ def _get_owlangs_install_dir() -> Optional[Path]:
     return None
 
 
+def _is_system_readonly_path(path: Path) -> bool:
+    """Check whether *path* lives under a Windows system directory that is typically read-only
+    for non-elevated users (e.g. C:\Program Files, C:\Windows)."""
+    if sys.platform != "win32":
+        return False
+    try:
+        resolved = path.resolve()
+    except (OSError, ValueError):
+        resolved = path.absolute()
+    lower = str(resolved).lower()
+    system_prefixes = (
+        os.environ.get("PROGRAMFILES", "C:\\Program Files").lower(),
+        os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)").lower(),
+        os.environ.get("WINDIR", "C:\\Windows").lower(),
+        "C:\\Windows",
+        "C:\\Program Files",
+        "C:\\Program Files (x86)",
+    )
+    return any(lower.startswith(p) for p in system_prefixes)
+
+
+def _mirror_pdflatex_to_local(pdflatex_root: Path) -> Optional[Path]:
+    """Mirror the bundled pdflatex directory into %%LOCALAPPDATA%%\Owlangs\3rdParty\windows\pdflatex
+    so that XeLaTeX can write format files, font caches, etc. even when the original bundle
+    resides in a read-only location such as C:\Program Files.
+
+    Returns the path to the mirrored xelatex.exe, or None if mirroring failed."""
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if not local_appdata:
+        return None
+    local_pdflatex = Path(local_appdata) / "Owlangs" / "3rdParty" / "windows" / "pdflatex"
+    local_xelatex = local_pdflatex / "bin" / "windows" / "xelatex.exe"
+    if local_xelatex.exists():
+        return local_xelatex
+    try:
+        local_pdflatex.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(pdflatex_root, local_pdflatex, dirs_exist_ok=True)
+        logger.info(
+            LogModule.TRANS,
+            f"[PDF-EXPORT] Mirrored pdflatex from readonly path '{pdflatex_root}' to '{local_pdflatex}'",
+        )
+        return local_xelatex if local_xelatex.exists() else None
+    except (OSError, shutil.Error) as e:
+        logger.warning(
+            LogModule.TRANS,
+            f"[PDF-EXPORT] Failed to mirror pdflatex to writable path: {e}. "
+            "Will attempt to use the original readonly path (TEXMFVAR redirection may still work).",
+        )
+        return None
+
+
 def _get_xelatex_path() -> Optional[Path]:
     """Get XeLaTeX executable path for Pandoc PDF engine (e.g. TinyTeX under 3rdParty/windows/pdflatex).
 
@@ -389,15 +440,27 @@ def _get_xelatex_path() -> Optional[Path]:
     candidates.append(Path(__file__).parent.parent.parent / "3rdParty" / "windows")
     # 4. Current working directory
     candidates.append(Path.cwd() / "3rdParty" / "windows")
+    found_path: Optional[Path] = None
     for base in candidates:
         if not base.exists():
             continue
         # pdflatex dir contains bin/windows/xelatex.exe (TinyTeX layout)
         xelatex_exe = base / "pdflatex" / "bin" / "windows" / "xelatex.exe"
         if xelatex_exe.exists():
-            logger.info(LogModule.TRANS, f"Found XeLaTeX: {xelatex_exe}")
-            return xelatex_exe
-    return None
+            found_path = xelatex_exe
+            break
+    if found_path is None:
+        return None
+    # If the discovered pdflatex lives in a system/readonly directory (e.g. C:\Program Files),
+    # mirror it to %LOCALAPPDATA% so that subprocesses can write without elevation.
+    pdflatex_root = found_path.parent.parent.parent
+    if _is_system_readonly_path(pdflatex_root):
+        mirrored = _mirror_pdflatex_to_local(pdflatex_root)
+        if mirrored is not None:
+            logger.info(LogModule.TRANS, f"Using mirrored XeLaTeX: {mirrored}")
+            return mirrored
+    logger.info(LogModule.TRANS, f"Found XeLaTeX: {found_path}")
+    return found_path
 
 
 def _apply_font_to_run(run, font_name: str) -> None:
@@ -1085,6 +1148,8 @@ def convert_md_to_pdf(
             )
             raise RuntimeError(install_msg)
     pdf_engine = str(xelatex_path) if xelatex_path else (xelatex_in_path if xelatex_in_path else "xelatex")
+    import tempfile
+    import subprocess
     try:
         from translator.ai_translator.docx_translator import get_font_for_language
         mainfont = get_font_for_language(to_lang) if to_lang else ("Helvetica Neue" if sys.platform == "darwin" else "Calibri")
@@ -1101,6 +1166,18 @@ def convert_md_to_pdf(
     
     out_dir = output_dir or Path(output_path).parent
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Run Pandoc/XeLaTeX from the system temp directory so auxiliary files (.aux, .log, .xdv)
+    # are written to a guaranteed-writable location instead of the possibly-read-only out_dir.
+    temp_work_dir = Path(tempfile.gettempdir())
+    output_path = str(Path(output_path).resolve())
+    # Copy images into temp_work_dir so xelatex (running with cwd=temp_work_dir) can resolve
+    # relative paths like ./images/... used in both markdown and raw LaTeX side-by-side blocks.
+    images_dir = out_dir / "images"
+    if images_dir.exists():
+        temp_images_dir = temp_work_dir / "images"
+        if temp_images_dir.exists():
+            shutil.rmtree(temp_images_dir)
+        shutil.copytree(images_dir, temp_images_dir)
     # Same table preprocessing as DOCX: HTML->pipe, normalize separators, blank line before tables
     md_for_pdf = _html_tables_in_md_to_pipe_tables(md_content)
     md_for_pdf = _normalize_pipe_table_separators(md_for_pdf)
@@ -1434,11 +1511,9 @@ def convert_md_to_pdf(
         return f"![]({img_path})"
 
     md_for_pdf = image_pattern.sub(_replace_image_with_size, md_for_pdf)
-    import tempfile
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
         f.write(md_for_pdf)
         temp_md = f.name
-    import subprocess
     env = os.environ.copy()
     if xelatex_path and pdflatex_root_use is not None:
         env["PATH"] = str(xelatex_path.parent) + os.pathsep + env.get("PATH", "")
@@ -1451,6 +1526,7 @@ def convert_md_to_pdf(
         texmfvar = str(user_texmfvar)
         env["TEXMFVAR"] = texmfvar
         env["TEXMFSYSVAR"] = texmfvar  # mktexfmt/fmtutil use this; must match bundle texmf-var
+        env["TEXMFOUTPUT"] = str(temp_work_dir)  # fallback output dir for TeX security mode
         # Fontconfig: point XeLaTeX to bundled fonts.conf and user-writable cache dir
         # so it does not fail with "Cannot load default config file" or permission errors.
         fontconfig_file = pdflatex_root_use / "texmf-var" / "fonts" / "conf" / "fonts.conf"
@@ -1556,10 +1632,11 @@ def convert_md_to_pdf(
                 "-V", f"geometry={geometry_opts}",
                 "-V", f"papersize=a4",
                 "-V", f"header-includes={current_header}",
+                "--resource-path", str(out_dir),
             ]
             proc = subprocess.run(
                 cmd,
-                cwd=str(out_dir),
+                cwd=str(temp_work_dir),
                 env=env,
                 capture_output=True,
                 timeout=300,
@@ -1608,10 +1685,11 @@ def convert_md_to_pdf(
                         "papersize=a4",
                         "-V",
                         f"header-includes={current_header}",
+                        "--resource-path", str(out_dir),
                     ]
                     tex_proc = subprocess.run(  # noqa: S603
                         tex_cmd,
-                        cwd=str(out_dir),
+                        cwd=str(temp_work_dir),
                         env=env,
                         capture_output=True,
                         timeout=120,
@@ -1974,6 +2052,18 @@ async def convert_html_to_pdf(
 
     out_dir = output_dir or Path(output_path).parent
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Run Pandoc/XeLaTeX from the system temp directory so auxiliary files (.aux, .log, .xdv)
+    # are written to a guaranteed-writable location instead of the possibly-read-only out_dir.
+    temp_work_dir = Path(tempfile.gettempdir())
+    output_path = str(Path(output_path).resolve())
+    # Copy images into temp_work_dir so xelatex (running with cwd=temp_work_dir) can resolve
+    # relative paths like ./images/... used in both markdown and raw LaTeX side-by-side blocks.
+    images_dir = out_dir / "images"
+    if images_dir.exists():
+        temp_images_dir = temp_work_dir / "images"
+        if temp_images_dir.exists():
+            shutil.rmtree(temp_images_dir)
+        shutil.copytree(images_dir, temp_images_dir)
 
     pandoc_path = _get_pandoc_path()
     if not pandoc_path:
@@ -2037,14 +2127,13 @@ async def convert_html_to_pdf(
         raise RuntimeError(install_msg)
 
     pdf_engine = str(xelatex_path) if xelatex_path else (xelatex_in_path if xelatex_in_path else "xelatex")
+    import tempfile
     try:
         from translator.ai_translator.docx_translator import get_font_for_language
 
         mainfont = get_font_for_language(to_lang) if to_lang else ("Helvetica Neue" if sys.platform == "darwin" else "Calibri")
     except Exception:
         mainfont = "Helvetica Neue" if sys.platform == "darwin" else "Calibri"
-
-    import tempfile
     import asyncio
 
     tmp_html = None
@@ -2074,7 +2163,7 @@ async def convert_html_to_pdf(
             ]
             proc = subprocess.run(
                 cmd,
-                cwd=str(out_dir),
+                cwd=str(temp_work_dir),
                 capture_output=True,
                 text=True,
             )

@@ -17,7 +17,7 @@
     "translator_html_insert_mode": "replace",
     "translator_html_separator": " ",
     "translator_json_paths": "",
-    "translator_convert_engine": "",
+    "translator_convert_engine": "mineru",
     "translator_mineru_token": "test_token",
     "translator_mineru_model_version": "vlm",
     "translator_formula_ocr": false,

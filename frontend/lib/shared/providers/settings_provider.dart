@@ -112,7 +112,9 @@ class GlobalSettings {
         defaultPlatform: json['defaultPlatform'] ?? 'openai',
         platformConfigs: Map<String, dynamic>.from(
             json['platformConfigs'] ?? <dynamic, dynamic>{},),
-        parsingEngine: json['parsingEngine'] ?? 'mineru',
+        parsingEngine: (json['parsingEngine'] as String?)?.isNotEmpty == true
+            ? json['parsingEngine']
+            : 'mineru',
         ocrLanguage: json['ocrLanguage'] ?? 'eng',
         formulaOcr: json['formulaOcr'] ?? true,
         tableOcr: json['tableOcr'] ?? true,

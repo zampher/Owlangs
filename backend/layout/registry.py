@@ -70,20 +70,28 @@ def load_layout_from_engine_dir(engine: str, dir_path: Path) -> Optional[LayoutD
     if engine == "mineru":
         from layout.mineru_layout_model import parse_layout_json, parse_content_list_json
         
-        # Try layout.json first (new format)
-        layout_path = dir_path / "layout.json"
-        if layout_path.exists():
+        # Scan recursively for layout files to handle nested directory structures
+        # (e.g., Cloud MinerU vlm output: {filename}/vlm/layout.json or *_middle.json)
+        layout_candidates = list(dir_path.rglob("layout.json"))
+        if layout_candidates:
             try:
-                return parse_layout_json(layout_path)
+                return parse_layout_json(layout_candidates[0])
             except Exception as e:
-                logger.debug(LogModule.LAYOUT, f"Failed to parse layout.json, trying content_list.json: {e}")
+                logger.debug(LogModule.LAYOUT, f"Failed to parse layout.json, trying middle.json: {e}")
         
-        # Fallback to *_content_list.json (legacy format)
-        content_list_files = list(dir_path.glob("*_content_list.json"))
-        if not content_list_files:
-            logger.warning(LogModule.LAYOUT, f"No layout.json or *_content_list.json found in {dir_path}")
-            return None
-        return parse_content_list_json(content_list_files[0])
+        middle_candidates = list(dir_path.rglob("*_middle.json"))
+        if middle_candidates:
+            try:
+                return parse_layout_json(middle_candidates[0])
+            except Exception as e:
+                logger.debug(LogModule.LAYOUT, f"Failed to parse *_middle.json, trying content_list.json: {e}")
+        
+        content_list_files = list(dir_path.rglob("*_content_list.json"))
+        if content_list_files:
+            return parse_content_list_json(content_list_files[0])
+        
+        logger.warning(LogModule.LAYOUT, f"No layout.json, *_middle.json, or *_content_list.json found in {dir_path}")
+        return None
     else:
         logger.warning(LogModule.LAYOUT, f"Directory loading not implemented for engine: {engine}")
         return None

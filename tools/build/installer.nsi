@@ -226,24 +226,26 @@ Section "Owlangs Translation" SecCore
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Owlangs" "NoModify" 1
     WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Owlangs" "NoRepair" 1
     
-    ; Move pdflatex (TinyTeX/XeLaTeX) from Program Files to ProgramData so it can
-    ; write fmt files and font caches at runtime without admin privileges.
+    ; Deploy pdflatex (TinyTeX/XeLaTeX) to ProgramData so it can write fmt files
+    ; and font caches at runtime without admin privileges. We COPY (not move) so
+    ; the source in $INSTDIR remains intact (avoids permission issues when
+    ; non-elevated users cannot delete files under Program Files).
     ; Pandoc and Redis stay in $INSTDIR\3rdParty\windows (read-only is fine for them).
-    DetailPrint "Moving pdflatex to ProgramData..."
-    FileOpen $0 "$TEMP\owlangs_move_pdflatex.ps1" w
+    DetailPrint "Deploying pdflatex to ProgramData..."
+    FileOpen $0 "$TEMP\owlangs_deploy_pdflatex.ps1" w
     FileWrite $0 "$$src = '$INSTDIR\3rdParty\windows\pdflatex'$$\r$$\n"
     FileWrite $0 "$$dst = '$OwlangsConfigDir\3rdParty\windows\pdflatex'$$\r$$\n"
-    FileWrite $0 "if (Test-Path $$src) {$$\r$$\n"
-    FileWrite $0 "  if (Test-Path $$dst) { Remove-Item $$dst -Recurse -Force -ErrorAction SilentlyContinue }$$\r$$\n"
-    FileWrite $0 "  Copy-Item $$src $$dst -Recurse -Force$$\r$$\n"
-    FileWrite $0 "  Remove-Item $$src -Recurse -Force -ErrorAction SilentlyContinue$$\r$$\n"
-    FileWrite $0 "  if (Test-Path $$src) { exit 1 } else { exit 0 }$$\r$$\n"
-    FileWrite $0 "} else { exit 0 }$$\r$$\n"
+    FileWrite $0 "if (-not (Test-Path $$src)) { Write-Host 'Source pdflatex not found, skipping.'; exit 0 }$$\r$$\n"
+    FileWrite $0 "if (Test-Path '$$dst\bin\windows\xelatex.exe') { Write-Host 'pdflatex already deployed.'; exit 0 }$$\r$$\n"
+    FileWrite $0 "Write-Host 'Copying pdflatex to ProgramData...'$$\r$$\n"
+    FileWrite $0 "if (Test-Path $$dst) { Remove-Item $$dst -Recurse -Force -ErrorAction SilentlyContinue }$$\r$$\n"
+    FileWrite $0 "Copy-Item $$src $$dst -Recurse -Force -ErrorAction Stop$$\r$$\n"
+    FileWrite $0 "if (Test-Path '$$dst\bin\windows\xelatex.exe') { Write-Host 'pdflatex deployed successfully.'; exit 0 } else { Write-Error 'Deployment failed.'; exit 1 }$$\r$$\n"
     FileClose $0
-    ExecWait 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TEMP\owlangs_move_pdflatex.ps1"' $0
-    Delete "$TEMP\owlangs_move_pdflatex.ps1"
+    ExecWait 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$TEMP\owlangs_deploy_pdflatex.ps1"' $0
+    Delete "$TEMP\owlangs_deploy_pdflatex.ps1"
     IntCmp $0 0 +2
-    DetailPrint "WARNING: Failed to move pdflatex to ProgramData. PDF export may require admin rights."
+    DetailPrint "WARNING: Failed to deploy pdflatex to ProgramData. PDF export may require admin rights."
     
     ; Create uninstaller
     WriteUninstaller "$INSTDIR\uninstall.exe"

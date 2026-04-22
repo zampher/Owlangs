@@ -232,21 +232,30 @@ def embed_inline_image_from_dir(extracted_dir: str, filename_in_dir: str, encodi
     print(f"Looking for Markdown file at: {md_file_path}...")
     
     if not os.path.exists(md_file_path):
-        # List available files in the extracted directory for debugging
-        available_files = []
+        # Fallback: scan the extracted directory for the first .md file
+        md_candidates = []
         for root, dirs, files in os.walk(extracted_dir):
             for file in files:
-                rel_path = os.path.relpath(os.path.join(root, file), extracted_dir)
-                available_files.append(rel_path)
-                
-        error_msg = (
-            f"MinerU parsing failed: Required file '{filename_in_dir}' not found in extracted directory.\n"
-            f"Full path checked: {md_file_path}\n"
-            f"Available files in directory: {available_files}\n"
-            f"This usually indicates a MinerU API parsing error or extraction issue."
-        )
-        print(f"Error: {error_msg}")
-        raise FileNotFoundError(error_msg)
+                if file.lower().endswith('.md'):
+                    rel_path = os.path.relpath(os.path.join(root, file), extracted_dir)
+                    md_candidates.append(rel_path)
+        if md_candidates:
+            # Prefer 'full.md' if it exists somewhere in the tree, otherwise first .md
+            filename_in_dir = next(
+                (c for c in md_candidates if os.path.basename(c).lower() == 'full.md'),
+                md_candidates[0]
+            )
+            md_file_path = os.path.join(extracted_dir, filename_in_dir)
+            print(f"[FALLBACK] '{filename_in_dir}' not found at root; using scanned markdown file: {md_file_path}")
+        else:
+            error_msg = (
+                f"MinerU parsing failed: No markdown file found in extracted directory.\n"
+                f"Full path checked: {md_file_path}\n"
+                f"Scanned files: {md_candidates}\n"
+                f"This usually indicates a MinerU API parsing error or extraction issue."
+            )
+            print(f"Error: {error_msg}")
+            raise FileNotFoundError(error_msg)
     
     # Read the Markdown file
     with open(md_file_path, 'rb') as f:
@@ -338,7 +347,8 @@ def embed_inline_image_from_dir(extracted_dir: str, filename_in_dir: str, encodi
     # Ensure consistent newline format (use Unix-style \n)
     md_content_with_inline_images = md_content_with_inline_images.replace('\r\n', '\n')
     
-    print(f"Inline image processing completed. Found and processed {len(re.findall(r'!\[(.*?)\]\((.*?)\)', md_content_text))} image references.")
+    _img_ref_count = len(re.findall(r'!\[(.*?)\]\((.*?)\)', md_content_text))
+    print(f"Inline image processing completed. Found and processed {_img_ref_count} image references.")
     
     return md_content_with_inline_images
 

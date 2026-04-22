@@ -59,6 +59,23 @@ if not exist "%OWLANGS_CONFIG_DIR%\app_config.json" (
     echo Copied app_config.json to %OWLANGS_CONFIG_DIR%
 )
 
+REM Deploy pdflatex (TinyTeX/XeLaTeX) to ProgramData if bundled in the package.
+REM This ensures PDF export works even when the application is placed in a
+REM read-only location such as C:\Program Files.
+set "PDLATEX_SRC=%~dp03rdParty\windows\pdflatex"
+set "PDLATEX_DST=%OWLANGS_CONFIG_DIR%\3rdParty\windows\pdflatex"
+if exist "%PDLATEX_SRC%\bin\windows\xelatex.exe" (
+    if not exist "%PDLATEX_DST%\bin\windows\xelatex.exe" (
+        echo Deploying pdflatex to ProgramData for write access...
+        powershell -NoProfile -Command "Copy-Item -Path '%PDLATEX_SRC%' -Destination '%PDLATEX_DST%' -Recurse -Force -ErrorAction SilentlyContinue"
+        if exist "%PDLATEX_DST%\bin\windows\xelatex.exe" (
+            echo pdflatex deployed to %PDLATEX_DST%
+        ) else (
+            echo WARNING: Failed to deploy pdflatex to ProgramData. PDF export may require admin rights.
+        )
+    )
+)
+
 REM Set environment variables for the application
 set DOCUTRANSLATE_PORT=%OWLANGS_PORT%
 set OWLANGS_CONFIG_PATH=%OWLANGS_CONFIG_DIR%

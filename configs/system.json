@@ -5,7 +5,7 @@
     "session_timeout": 3600
   },
   "parsing_engine": {
-    "default_engine": "mineru",
+    "default_engine": "mineru_local",
     "engines": {
       "mineru": {
         "name": "MinerU",

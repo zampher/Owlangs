@@ -676,7 +676,7 @@ function Build-PyInstaller {
 
 # Create Windows installer package
 function Make-WinPackage {
-    param($Version, $IsFull = $false, $IncludeWindowsFrontend = $false)
+    param($Version, $IsFull = $false, $IncludeWindowsFrontend = $false, $IncludePandoc = $false)
 
     $packageType = if ($IsFull) { "full" } else { "lite" }
     $packageNameSuffix = if ($IsFull) { "-full" } else { "" }
@@ -995,6 +995,23 @@ if not exist "%INSTALL_DIR%" (
 REM Copy files
 xcopy /E /I /Y "%~dp0*" "%INSTALL_DIR%\"
 echo Copied application files to %INSTALL_DIR%
+
+REM Deploy pdflatex (TinyTeX/XeLaTeX) to ProgramData for write access.
+REM It does not work reliably under C:\Program Files because XeLaTeX needs
+REM to write fmt files and font caches at runtime.
+set PDLATEX_SRC=%INSTALL_DIR%\3rdParty\windows\pdflatex
+set PDLATEX_DST=C:\ProgramData\Owlangs\3rdParty\windows\pdflatex
+if exist "%PDLATEX_SRC%\bin\windows\xelatex.exe" (
+    if not exist "%PDLATEX_DST%\bin\windows\xelatex.exe" (
+        echo Deploying pdflatex to ProgramData...
+        powershell -NoProfile -Command "Copy-Item -Path '%PDLATEX_SRC%' -Destination '%PDLATEX_DST%' -Recurse -Force -ErrorAction SilentlyContinue"
+        if exist "%PDLATEX_DST%\bin\windows\xelatex.exe" (
+            echo pdflatex deployed to %PDLATEX_DST%
+        ) else (
+            echo WARNING: Failed to deploy pdflatex to ProgramData. PDF export may require admin rights.
+        )
+    )
+)
 
 REM Ensure Redis files are properly copied
 if exist "%INSTALL_DIR%\3rdParty\windows\Redis-x64-3.0.504\redis-server.exe" (
@@ -1362,7 +1379,7 @@ try {
         } finally {
             Remove-Item Env:\OWLANGS_INCLUDE_ANONYMIZE -ErrorAction SilentlyContinue
         }
-        Make-WinPackage $version $false $includeWindowsFrontend $IncludeAnonymize
+        Make-WinPackage -Version $version -IsFull $false -IncludeWindowsFrontend $includeWindowsFrontend -IncludePandoc $IncludePandoc
     }
 
     if ($want_full) {
@@ -1374,7 +1391,7 @@ try {
             Write-Host "[full] Cleaned up existing full package" -ForegroundColor Yellow
         }
         Build-PyInstaller "full.spec" $version
-        Make-WinPackage $version $true
+        Make-WinPackage -Version $version -IsFull $true -IncludeWindowsFrontend $false -IncludePandoc $IncludePandoc
     }
     
     Write-Host "Windows package build completed!" -ForegroundColor Green

@@ -772,7 +772,7 @@ async def get_app_config_api(
     
     # Map backend snake_case keys to frontend camelCase for parsing engine settings
     # so the frontend can correctly read the user's chosen convert engine.
-    if 'translator_convert_engine' in config_dict:
+    if 'translator_convert_engine' in config_dict and config_dict['translator_convert_engine']:
         config_dict['parsingEngine'] = config_dict['translator_convert_engine']
     elif 'parsing_engine' in config_dict and isinstance(config_dict['parsing_engine'], dict):
         config_dict['parsingEngine'] = config_dict['parsing_engine'].get('convert_engine', 'mineru')
