@@ -100,6 +100,11 @@ def _enrich_translation_segments_with_detected_reasons(
             if not detected_reason:
                 continue
 
+            # If user manually retried and successfully translated this segment, don't overlay old reason
+            is_user_translated = seg.get("status") == "translated" and seg.get("modified") is True
+            if is_user_translated:
+                continue
+
             # Attach detected_exclusion_reason without overriding exclusion_reason
             seg["detected_exclusion_reason"] = detected_reason
 

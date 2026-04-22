@@ -156,6 +156,32 @@ class MDTranslateAgent(Agent):
 
         return result
 
+    async def send_prompts_async(
+        self,
+        prompts: list[str],
+        system_prompt: str | None = None,
+        max_concurrent: int | None = None,
+        pre_send_handler=None,
+        result_handler=None,
+        error_result_handler=None,
+        progress_callback=None,
+    ):
+        """Override to save API input/output to task_state for retry debugging."""
+        translated = await super().send_prompts_async(
+            prompts=prompts,
+            system_prompt=system_prompt,
+            max_concurrent=max_concurrent,
+            pre_send_handler=pre_send_handler,
+            result_handler=result_handler,
+            error_result_handler=error_result_handler,
+            progress_callback=progress_callback,
+        )
+        if hasattr(self, 'task_state') and self.task_state:
+            self.task_state['llm_api_input'] = prompts
+            self.task_state['llm_api_output'] = translated
+            self.task_state['llm_api_system_prompt'] = self.system_prompt
+        return translated
+
     def update_glossary_dict(self, update_dict: dict | None):
         if self.glossary_dict is None:
             self.glossary_dict = {}

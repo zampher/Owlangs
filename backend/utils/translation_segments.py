@@ -2916,6 +2916,26 @@ def mark_segment_for_retry(
         return None
     segment["needs_retry"] = True
     
+    # User-initiated retry should override auto-exclusion.
+    # Clear exclusion flags so the segment will actually be retranslated.
+    if segment.get("is_excluded", False):
+        segment["is_excluded"] = False
+        segment["exclusion_reason"] = None
+        logger.info(LogModule.TRANS, f"Cleared auto-exclusion for segment {segment_index} (reason was: {segment.get('exclusion_reason')})")
+    
+    # Also remove from segments_metadata so downstream APIs don't re-attach old detected_exclusion_reason
+    segments_metadata = task_state.get("segments_metadata", {})
+    if segments_metadata:
+        excluded_segments = segments_metadata.get("excluded_segments", {})
+        if str(segment_index) in excluded_segments:
+            del excluded_segments[str(segment_index)]
+        excluded_indices = segments_metadata.get("excluded_segment_indices", [])
+        if segment_index in excluded_indices:
+            excluded_indices.remove(segment_index)
+        detected_reasons = segments_metadata.get("detected_exclusion_reasons", {})
+        if str(segment_index) in detected_reasons:
+            del detected_reasons[str(segment_index)]
+    
     logger.info(LogModule.TRANS, f"Marked segment {segment_index} for retry in task {task_id}")
     return segment
 
@@ -4046,8 +4066,8 @@ async def retranslate_segment(
         logger.warning(LogModule.TRANS,f"Segment index {segment_index} not found in segments for task {task_id}")
         return None
     
-    # Skip if segment is excluded
-    if segment.get("is_excluded", False):
+    # Skip if segment is excluded, unless user explicitly marked it for retry
+    if segment.get("is_excluded", False) and not segment.get("needs_retry", False):
         logger.info(LogModule.TRANS, f"Skipping retranslation of excluded segment {segment_index} for task {task_id}")
         return segment
     
@@ -4350,6 +4370,11 @@ async def retranslate_segment(
                 segment["retry_count"] = segment.get("retry_count", 0) + 1
                 segment["modified"] = True  # Mark as modified to indicate retry was attempted
                 
+                # Clear any remaining exclusion flags after successful retranslation
+                if segment.get("is_excluded", False):
+                    segment["is_excluded"] = False
+                    segment["exclusion_reason"] = None
+                
                 return segment
         
         # Update segment
@@ -4377,6 +4402,13 @@ async def retranslate_segment(
         segment["status"] = "translated"
         # Mark segment as modified so it will be included in document rebuild
         segment["modified"] = True
+        # CRITICAL: Clear old manual modification so get_source_preview doesn't fallback to stale text
+        segment["modified_text"] = None
+        
+        # Clear any remaining exclusion flags after successful retranslation
+        if segment.get("is_excluded", False):
+            segment["is_excluded"] = False
+            segment["exclusion_reason"] = None
         
         logger.info(LogModule.TRANS,
             f"Retranslated segment {segment_index} for task {task_id} using platform '{selected_platform_key}' "
@@ -4469,7 +4501,8 @@ async def retranslate_segments_batch(
             is_excluded = seg.get("is_excluded", False) if isinstance(seg, dict) else getattr(seg, "is_excluded", False)
             status = seg.get("status") if isinstance(seg, dict) else getattr(seg, "status", None)
             
-            if not is_excluded and status != "cleared":
+            needs_retry = seg.get("needs_retry", False) if isinstance(seg, dict) else getattr(seg, "needs_retry", False)
+            if (not is_excluded or needs_retry) and status != "cleared":
                 source_text = seg.get("source_text") if isinstance(seg, dict) else getattr(seg, "source_text", "")
                 if source_text:
                     segments_to_retry.append({
@@ -4891,6 +4924,13 @@ async def retranslate_segments_batch(
         segment["needs_retry"] = False
         segment["status"] = "translated"
         segment["modified"] = True
+        # CRITICAL: Clear old manual modification so get_source_preview doesn't fallback to stale text
+        segment["modified_text"] = None
+        
+        # Clear any remaining exclusion flags after successful retranslation
+        if segment.get("is_excluded", False):
+            segment["is_excluded"] = False
+            segment["exclusion_reason"] = None
         
         result_map[segment_index] = segment
     

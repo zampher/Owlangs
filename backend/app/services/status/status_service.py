@@ -1211,6 +1211,7 @@ class StatusService:
                             "is_failed": is_failed_seg,  # CRITICAL: Get is_failed for failure detection
                             "failure_reason": failure_reason_seg,  # CRITICAL: Get failure_reason for debugging
                             "status": segment.get("status"),  # CRITICAL: Get status (translated, failed, etc.)
+                            "modified": segment.get("modified"),  # CRITICAL: Get modified for user-translated detection
                         }
                         # Debug: Track excluded segments without exclusion_reason
                         if is_excluded_seg and not exclusion_reason_seg and segment_index < 30:
@@ -1888,6 +1889,10 @@ class StatusService:
                     status = translation_info.get("status")
                     if status:
                         seg_obj["status"] = status
+                    # CRITICAL: Copy modified flag so is_user_translated check works
+                    modified = translation_info.get("modified")
+                    if modified is not None:
+                        seg_obj["modified"] = modified
                 # Priority 2: Use excluded_reasons_map from Extract phase (if not in translation_segments)
                 elif idx in excluded_reasons_map:
                     # Segment was excluded during Extract phase - use stored reason
@@ -2096,9 +2101,12 @@ class StatusService:
                 seg_obj["exclusion_reason"] = exclusion_reason
             # CRITICAL: Also include detected_exclusion_reason for all detected types (including non-excluded)
             # This allows frontend to display identifier, language_match, etc. even if not excluded
+            # BUT: If user manually retried and successfully translated this segment, don't overlay old reason
             if idx in detected_reasons_map:
                 detected_reason = detected_reasons_map[idx]
-                seg_obj["detected_exclusion_reason"] = detected_reason
+                is_user_translated = seg_obj.get("status") == "translated" and seg_obj.get("modified") is True
+                if not is_user_translated:
+                    seg_obj["detected_exclusion_reason"] = detected_reason
                 # Also include metadata from detected_exclusion_reasons if available
                 detected_info = segments_metadata_dict.get("detected_exclusion_reasons", {}).get(str(idx), {})
                 if isinstance(detected_info, dict) and "metadata" in detected_info:
@@ -3882,6 +3890,7 @@ class StatusService:
             for seg_idx in range(len(all_segments)):
                 # CRITICAL: Set detected_exclusion_reason for ALL segments (including non-excluded ones)
                 # This allows frontend to display all detected types (identifier, language_match, etc.)
+                # BUT: If user manually retried and successfully translated this segment, don't overlay old reason
                 seg_idx_str = str(seg_idx)
                 if seg_idx_str in detected_exclusion_reasons_dict:
                     detected_reason_info = detected_exclusion_reasons_dict[seg_idx_str]
@@ -3890,7 +3899,12 @@ class StatusService:
                     else:
                         detected_reason_str = str(detected_reason_info)
                     if detected_reason_str:
-                        all_segments[seg_idx]["detected_exclusion_reason"] = detected_reason_str
+                        is_user_translated = (
+                            all_segments[seg_idx].get("status") == "translated"
+                            and all_segments[seg_idx].get("modified") is True
+                        )
+                        if not is_user_translated:
+                            all_segments[seg_idx]["detected_exclusion_reason"] = detected_reason_str
                 
                 if seg_idx in filtered_excluded_segments:
                     # Segment is excluded: set is_excluded=True and exclusion_reason
