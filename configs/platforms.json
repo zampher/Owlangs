@@ -528,7 +528,7 @@
     },
     "mineru_local": {
       "name": "MinerU (Local)",
-      "url": "http://192.168.90.41:8920",
+      "url": "http://localhost:8920",
       "model": "vlm",
       "max_tokens": 4096,
       "temperature": 0.3,
