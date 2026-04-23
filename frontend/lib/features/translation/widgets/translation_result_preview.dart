@@ -192,31 +192,57 @@ class _TranslationResultPreviewState
         return;
       }
 
+      // Build a copyable plain-text report
+      final StringBuffer reportBuffer = StringBuffer();
+      reportBuffer.writeln('公式检测结果（共 ${issues.length} 项）：');
+      reportBuffer.writeln();
+      for (int i = 0; i < issues.length; i++) {
+        final Map<String, dynamic> issue =
+            (issues[i] as Map).cast<String, dynamic>();
+        final int idx = (issue['snippet_index'] as int?) ?? i;
+        final String message = (issue['message'] as String?) ?? '';
+        reportBuffer.writeln('片段 #$idx');
+        reportBuffer.writeln(message);
+        reportBuffer.writeln();
+      }
+      final String reportText = reportBuffer.toString();
+
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('公式检测结果'),
           content: SizedBox(
             width: 600,
-            height: 320,
-            child: ListView.builder(
-              itemCount: issues.length,
-              itemBuilder: (context, index) {
-                final Map<String, dynamic> issue =
-                    (issues[index] as Map).cast<String, dynamic>();
-                final int idx = (issue['snippet_index'] as int?) ?? index;
-                final String message =
-                    (issue['message'] as String?) ?? '';
-                return ListTile(
-                  dense: true,
-                  title: Text('片段 #$idx'),
-                  subtitle: Text(
-                    message,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
+            height: 400,
+            child: Column(
+              children: <Widget>[
+                Expanded(
+                  child: Scrollbar(
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        reportText,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
                   ),
-                );
-              },
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: <Widget>[
+                    TextButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(
+                          ClipboardData(text: reportText),
+                        );
+                        MessageService.showInfo(context, '已复制到剪贴板');
+                      },
+                      icon: const Icon(Icons.copy, size: 16),
+                      label: const Text('复制全部'),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
           actions: <Widget>[
@@ -229,12 +255,24 @@ class _TranslationResultPreviewState
       );
     } catch (e) {
       if (!mounted) return;
+      final String errorText = '请求公式检测时出错：\n$e';
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('公式检测失败'),
-          content: Text('请求公式检测时出错：$e'),
+          content: SizedBox(
+            width: 500,
+            child: SelectableText(errorText),
+          ),
           actions: <Widget>[
+            TextButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: errorText));
+                MessageService.showInfo(context, '已复制到剪贴板');
+              },
+              icon: const Icon(Icons.copy, size: 16),
+              label: const Text('复制错误信息'),
+            ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('关闭'),
@@ -4067,9 +4105,23 @@ class _TranslationResultPreviewState
       return;
     }
     try {
+      // Read user prompt from QuickSettings (same as retry/retranslate)
+      final qs = widget.flowId != null
+          ? ref.read(translationQuickSettingsProviderFamily(widget.flowId!))
+          : ref.read(translationQuickSettingsProvider);
+      final String? userPrompt =
+          (qs.taskNote != null && qs.taskNote!.trim().isNotEmpty)
+              ? qs.taskNote!.trim()
+              : null;
+
       final TranslationService svc = TranslationService();
       final Map<String, dynamic> resp =
-          await svc.repairLatexForSegment(widget.taskId, index, currentText);
+          await svc.repairLatexForSegment(
+            widget.taskId,
+            index,
+            currentText,
+            userPrompt: userPrompt,
+          );
       final String fixed =
           (resp['fixed_text'] as String? ?? '').trimRight();
       final String original =

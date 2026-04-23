@@ -23,6 +23,7 @@ class LatexRepairRequest:
     segment_index: int | None = None
     snippet_index: int | None = None
     llm_config: Optional[Dict[str, Any]] = None
+    user_prompt: Optional[str] = None
 
 
 @dataclass
@@ -31,32 +32,108 @@ class LatexRepairResult:
     notes: str | None = None
 
 
+_ERROR_TYPE_GUIDANCE: dict[str, str] = {
+    "math_bold_outside_math_mode": (
+        "- This error means commands like `\\mathbf{...}`, `\\mathit{...}`, `\\mathcal{...}`, or other math fonts are used in normal text without `$...$` or other math delimiters.\n"
+        "- Locate where bold/math fonts are intended and **wrap those parts in proper LaTeX math**: e.g. `$\\mathbf{x}$`, `$\\mathcal{C}$`.\n"
+        "- Do NOT convert formulas into plain text; keep them as LaTeX math so they render as equations in the final PDF.\n"
+        "- Control-flow keywords and plain-language words (if, then, else, while, for, comments) **must remain outside** math delimiters."
+    ),
+    "bad_math_environment_delimiter": (
+        "- This error means math delimiters are mismatched, such as `\\( ... $$`, `\\[ ... $`, or stray pieces like `\\(\\underset\\) \\(`.\n"
+        "- Repair delimiters so every math expression has a consistent pair: `$...$`, `$$...$$`, `\\(...\\)` or `\\[...\\]`.\n"
+        "- Prefer to **keep the same block style** as the input: inline stays inline, display stays display.\n"
+        "- Keep all non-math words as plain text outside `$...$`. Do not wrap whole sentences inside math."
+    ),
+    "missing_dollar_inserted": (
+        "- This error means XeLaTeX encountered a math command or symbol outside math mode and tried to auto-insert `$`.\n"
+        "- Find the command/symbol that triggered the error (often `^`, `_`, `\\alpha`, `\\sum`, etc.) and wrap it in `$...$`.\n"
+        "- Ensure every `^` (superscript) and `_` (subscript) is inside math mode.\n"
+        "- Check that display math blocks (`$$...$$` or `\\[...\\]`) are properly opened and closed."
+    ),
+    "undefined_control_sequence": (
+        "- This error means a `\\command` is not recognized by XeLaTeX.\n"
+        "- Common causes: typos (`\\ailgn` instead of `\\align`), commands from packages not loaded, or commands invented by translation.\n"
+        "- **Fix typos**: correct misspelled commands to their proper names (`\\align`, `\\frac`, `\\mathbf`, etc.).\n"
+        "- **Replace unsupported commands** with standard LaTeX equivalents.\n"
+        "- If a command is plain text that happens to start with `\\` (e.g. `\\hline` as a word), escape it as `\\\\hline` so it is treated as text.\n"
+        "- Do NOT remove the content; replace the broken command with a valid one or wrap it in `\\text{...}` if it is meant to be text."
+    ),
+    "environment_undefined": (
+        "- This error means a `\\begin{env}...\\end{env}` environment is not recognized.\n"
+        "- Common causes: `\\begin{align}` without `amsmath` package, `\\begin{equation}` typos, or invented environment names.\n"
+        "- **Replace with supported environments**: `align` → `aligned` (if inline) or keep `align` but ensure it is inside `$$...$$`.\n"
+        "- For simple aligned math, use `$$ \\begin{aligned} ... \\end{aligned} $$` instead of raw `\\begin{align}`.\n"
+        "- If the environment is not needed, remove `\\begin{...}` / `\\end{...}` and keep the inner content in `$...$` or `$$...$$`."
+    ),
+    "missing_end_environment": (
+        "- This error means a `\\begin{...}` is missing its matching `\\end{...}`.\n"
+        "- Find the unclosed environment and add the missing `\\end{env}` at the correct position.\n"
+        "- If the `\\begin{...}` itself is accidental (e.g. from corrupted text), remove it and keep the inner content in proper math delimiters."
+    ),
+    "missing_begin_environment": (
+        "- This error means a `\\end{...}` appears without a matching `\\begin{...}`.\n"
+        "- Either remove the stray `\\end{...}` or add the missing `\\begin{...}` before it.\n"
+        "- If the environment is not needed, convert the content to inline math `$...$` or display math `$$...$$`."
+    ),
+    "brace_mismatch": (
+        "- This error means braces `{` and `}` are mismatched.\n"
+        "- Carefully balance every opening `{` with a closing `}`.\n"
+        "- Common cause: nested commands like `\\frac{a}{b}` where one brace is missing.\n"
+        "- Do not add or remove content; only fix brace balance."
+    ),
+    "runaway_argument": (
+        "- This error means a command argument (inside `{...}`) was not properly closed.\n"
+        "- Find the command with the unclosed argument and add the missing `}`.\n"
+        "- Common cause: `\\frac{a{b}` or `\\mathbf{x` missing closing brace."
+    ),
+    "missing_file": (
+        "- This error means a required file or package is missing.\n"
+        "- Since we cannot install packages, remove or replace the command that requires the missing file.\n"
+        "- Use standard LaTeX commands that do not require external packages."
+    ),
+    "double_subscript": (
+        "- This error means a subscript `_` appears twice in a row, e.g. `x_{i_j_k}`.\n"
+        "- Use braces to group nested subscripts: `x_{i_{j_k}}` instead of `x_i_j_k`."
+    ),
+    "double_superscript": (
+        "- This error means a superscript `^` appears twice in a row.\n"
+        "- Use braces to group nested superscripts: `x^{a^{b}}` instead of `x^a^b`."
+    ),
+    "manual_segment_repair": (
+        "- This is a user-initiated formula repair. Inspect the snippet carefully for any LaTeX issues.\n"
+        "- Common problems to watch for:\n"
+        "  * **Unclosed environments**: every `\\begin{xxx}` MUST have a matching `\\end{xxx}`. If `\\end` is missing, add it at the correct position.\n"
+        "  * **Environment in wrong math mode**: environments like `align`, `equation`, `gather` MUST be in display math (`$$...$$` or `\\[...\\]`), NOT in inline math (`$...$`). Either move them to display mode or remove the environment wrapper.\n"
+        "  * **Empty environments**: `\\begin{align}\\end{align}` with nothing inside is useless and often causes renderer errors. Remove it or add meaningful content.\n"
+        "  * **Math commands outside math mode**: commands like `\\sum`, `\\frac`, `\\mathbf` must be inside `$...$` or another math delimiter.\n"
+        "- Do NOT over-correct: if `\\begin{aligned}...\\end{aligned}` is properly closed and inside correct delimiters, leave it alone."
+    ),
+    "environment_in_wrong_mode": (
+        "- A display-only environment (`align`, `equation`, `gather`, etc.) was found inside inline math (`$...$`).\n"
+        "- **Fix**: Move the environment to display math by changing `$...$` to `$$...$$` (or `\\[...\\]`).\n"
+        "- **Alternative**: If the environment is not needed, remove `\\begin{...}` and `\\end{...}` and keep only the inner math content in `$...$`.\n"
+        "- Do NOT leave display environments inside inline delimiters; both KaTeX (HTML) and XeLaTeX (PDF) will reject this."
+    ),
+    "pre_check_failed": (
+        "- This segment failed a pre-export PDF compatibility check.\n"
+        "- Review the segment for broken LaTeX: unmatched delimiters, undefined commands, missing braces, or environment issues.\n"
+        "- Ensure all math is properly wrapped in `$...$`, `$$...$$`, `\\(...\\)`, or `\\[...\\]`.\n"
+        "- Remove or fix any commands that are not standard LaTeX."
+    ),
+}
+
+
 def _build_prompt(req: LatexRepairRequest) -> str:
-    # Add targeted guidance for specific error types so the model focuses on the real root cause.
-    extra_guidance_parts: list[str] = []
-    if req.error_type == "math_bold_outside_math_mode":
-        extra_guidance_parts.append(
-            "- This error usually means commands like `\\mathbf{...}`, `\\mathit{...}`, or other math fonts are used in normal text without `$...$` or other math delimiters.\n"
-            "- In the snippet, locate where bold math is intended (for example short variable names, vectors, or symbols) and **wrap those parts in proper LaTeX math**:\n"
-            "  - e.g. `$\\mathbf{x}$`, `$\\mathbf{v}$`, or similar.\n"
-            "- Do not convert formulas into plain text; keep them as LaTeX math so they can be rendered as equations in the final PDF.\n"
-            "- **Do not introduce new Markdown formatting** (no new `**bold**`, bullet lists, or numbered lists) unless it is already present in the input snippet.\n"
-            "- Keep the overall line structure and pseudo-code style (such as algorithm numbering and step descriptions) as close to the original as possible; only adjust the minimal LaTeX spans needed to fix the error.\n"
-            "- Control-flow keywords and plain-language words such as `if`, `then`, `else`, `while`, `end while`, `for`, and any natural-language comments **must remain outside** math delimiters. Do not move them into `$...$`."
-        )
-    elif req.error_type == "bad_math_environment_delimiter":
-        extra_guidance_parts.append(
-            "- This error usually means math delimiters are opened/closed in a mismatched way, such as `\\( ... $$`, `\\[ ... $`, or stray pieces like `\\(\\underset\\) \\(`.\n"
-            "- Carefully repair the math delimiters so every math expression has a consistent opening and closing pair: either `$...$`, `$$...$$`, `\\(...\\)` or `\\[...\\]`.\n"
-            "- When you rewrite the problematic part, express the math as valid LaTeX (e.g. `$...$`, `\\(...\\)` or `\\[...\\]`), not as plain descriptive text.\n"
-            "- Prefer to **keep the same block style** as the input: if the original used inline math, keep it inline; if it used display math (`$$...$$`), keep display math.\n"
-            "- **Do not reformat the algorithm or paragraph layout** (no extra line breaks, no new list markers); only change the LaTeX around the broken delimiters.\n"
-            "- Keep all non-math words (e.g. natural-language descriptions, comments, and explanations) exactly as plain text outside `$...$`. Do not wrap whole sentences or comments inside math."
+    extra_guidance = _ERROR_TYPE_GUIDANCE.get(req.error_type, "")
+    if not extra_guidance:
+        extra_guidance = (
+            "- Review the segment for common LaTeX issues: unmatched delimiters, undefined commands, missing braces, or environment mismatches.\n"
+            "- Ensure all math is properly wrapped in `$...$`, `$$...$$`, `\\(...\\)`, or `\\[...\\]`.\n"
+            "- Remove or fix any commands that are not standard LaTeX."
         )
 
-    extra_guidance = "\n\n".join(extra_guidance_parts) if extra_guidance_parts else ""
-
-    return f"""You are a LaTeX typesetting expert.
+    prompt = f"""You are a LaTeX typesetting expert.
 The following snippet comes from a document that may contain **formulas or pseudo-code (algorithms with line numbers)**.
 A PDF export failed with a LaTeX error.
 
@@ -78,18 +155,29 @@ Task: Return a corrected **LaTeX snippet** that:
 2. Fixes LaTeX math syntax so that Pandoc + XeLaTeX can compile it successfully.
 3. Uses proper LaTeX math for formulas (`$...$`, `$$...$$`, `\\(...\\)`, or `\\[...\\]`) and does **not** turn formulas into plain descriptive text.
 4. Uses consistent math delimiters without mixing them incorrectly. **Preserve the existing math delimiter style whenever it is already correct** (e.g. keep `$$...$$` as `$$...$$`; keep `\\[...\\]` as `\\[...\\]`; do not rewrite one correct style into another).
-5. Avoids constructs that cause \"Bad math environment delimiter\" or `\\mathbf` outside of math mode.
-6. Preserves the original structural style (including algorithm lines, any leading line numbers like `1:`, separators such as `|`, and line breaks) as much as possible. Do **not** add Markdown constructs such as lists, headings, or `**bold**`.
-7. Do **not** introduce new LaTeX environments that are not already present in the snippet (for example do not wrap the code in `\\begin{{algorithm}}...\\end{{algorithm}}` or other algorithm/align environments if they were not in the input).
-8. If the snippet contains line numbers (for example a pattern like `<integer>:` at the start of logical steps), normalize them so that there is at most **one line number per logical step** and the numbering is monotonic and consistent across the snippet. Do not invent new steps or skip existing ones.
-9. If the snippet represents pseudo-code or an algorithm, apply consistent indentation using a simple, language-agnostic rule: increase indentation level by two spaces after opening a control-flow block (such as lines that clearly start a block with words like `if`, `while`, `for`, or similar), decrease indentation back when the block is closed (lines starting with phrases like `end` or equivalent), and keep `else`-style lines aligned with their matching `if`. Do not guess a specific programming language; just apply indentation based on the visible structure in this snippet.
-10. Keeps every non-math token from the input snippet (including numbers, colons, pipes, words like `then`, `else`, comments, and punctuation) unless it is obviously duplicated or part of a broken LaTeX control sequence. Do **not** drop or hide such tokens inside math.
-11. Does not modify surrounding sections outside this snippet.
+5. Preserves the original structural style (including algorithm lines, any leading line numbers like `1:`, separators such as `|`, and line breaks) as much as possible. Do **not** add Markdown constructs such as lists, headings, or `**bold**`.
+6. Do **not** introduce new LaTeX environments that are not already present in the snippet (for example do not wrap the code in `\\begin{{algorithm}}...\\end{{algorithm}}` or other algorithm/align environments if they were not in the input).
+7. If the snippet contains line numbers, normalize them so there is at most **one line number per logical step** and numbering is monotonic. Do not invent new steps.
+8. If the snippet represents pseudo-code, apply consistent indentation based on control-flow structure (if/while/for/else/end). Do not guess a programming language.
+9. Keeps every non-math token (numbers, colons, pipes, words like then/else, punctuation) unless it is obviously duplicated or part of a broken control sequence. Do **not** drop or hide such tokens inside math.
+10. Does not modify surrounding sections outside this snippet.
+11. **CRITICAL — Environment closure**: Every `\begin{xxx}` MUST have a matching `\end{xxx}` at the correct nesting level. If `\end` is missing, add it. If `\begin` is stray, remove it. Do NOT leave environments half-open.
+12. **CRITICAL — Environment math mode**: Display-only environments (`align`, `equation`, `gather`, `eqnarray`, `multline`, `split`) MUST NOT appear inside inline math (`$...$`). Either change the delimiters to display mode (`$$...$$` or `\[...\]`) or remove the environment wrapper entirely.
+13. **CRITICAL — Empty environments**: An environment with no meaningful content between `\begin` and `\end` (e.g. `\begin{align}\end{align}`) is broken. Remove it or add the intended math content inside it.
 
 {extra_guidance}
 
 Output **only** the corrected LaTeX snippet (pure LaTeX/text lines, no Markdown fences, no explanations).
 """
+
+    # Append user's custom guidance if provided
+    if req.user_prompt:
+        prompt += (
+            f"\n\nAdditional instructions from the user (follow these carefully):\n"
+            f"{req.user_prompt}\n"
+        )
+
+    return prompt
 
 
 def _build_llm_config_from_dict(cfg: Optional[Dict[str, Any]]) -> Optional[LLMConfig]:
@@ -144,5 +232,3 @@ def repair_latex_snippet_with_llm(req: LatexRepairRequest) -> LatexRepairResult:
             fixed_md_snippet=req.original_md_snippet,
             notes=f"LLM repair failed: {e}",
         )
-
-

@@ -2187,6 +2187,77 @@ class OutputGenerator:
                             logger.debug(LogModule.EXPORT, f"[PDF-EXPORT] Rebuild for PDF failed: {rebuild_err}, using export_to_markdown")
                     if not md_content:
                         md_content = workflow.export_to_markdown()
+
+                    # PRE-CHECK: validate LaTeX-containing segments before full export.
+                    # This catches errors early so users don't wait for the entire document
+                    # to compile only to fail on one bad segment.
+                    segs = (task_state.get("translation_segments") or {}).get("segments") or []
+                    if isinstance(segs, list) and segs:
+                        try:
+                            from utils.latex_repair_payload import has_latex_content
+                            from utils.latex_formula_checker import check_segment_pdf_compat
+
+                            latex_segs = [
+                                seg for seg in segs
+                                if isinstance(seg, dict)
+                                and has_latex_content(
+                                    seg.get("modified_text") or seg.get("target_text") or ""
+                                )
+                            ]
+                            # Limit pre-check to avoid excessive pandoc calls on very large docs
+                            _precheck_limit = 30
+                            if len(latex_segs) > _precheck_limit:
+                                logger.info(
+                                    LogModule.EXPORT,
+                                    f"[PDF-EXPORT] Pre-check: {len(latex_segs)} LaTeX segments found, "
+                                    f"limiting pre-check to first {_precheck_limit}",
+                                )
+                                latex_segs = latex_segs[:_precheck_limit]
+
+                            for seg in latex_segs:
+                                seg_idx = seg.get("segment_index", -1)
+                                text = seg.get("modified_text") or seg.get("target_text") or ""
+                                pre_result = check_segment_pdf_compat(text, segment_index=seg_idx)
+                                if not pre_result.passed:
+                                    logger.warning(
+                                        LogModule.EXPORT,
+                                        f"[PDF-EXPORT] Pre-check FAILED for segment {seg_idx}; "
+                                        f"skipping full PDF export to save time. "
+                                        f"Issues: {len(pre_result.issues)}",
+                                    )
+                                    task_state["pdf_export_latex_issue"] = {
+                                        "error_type": "pre_check_failed",
+                                        "segment_index": seg_idx,
+                                        "candidate_segment_indices": [seg_idx],
+                                        "match_basis": "pre_check",
+                                        "message": pre_result.message,
+                                        "stderr_excerpt": (pre_result.stderr or "")[:2000],
+                                    }
+                                    self.task_manager.add_log(
+                                        task_id,
+                                        "warning",
+                                        f"[PDF-EXPORT] Pre-check failed for segment {seg_idx}. "
+                                        f"Please fix this segment before retrying PDF export.",
+                                    )
+                                    ok = False
+                                    raise RuntimeError(
+                                        f"PDF export pre-check failed for segment {seg_idx}. "
+                                        f"Please fix the LaTeX error in this segment and retry."
+                                    )
+                            if latex_segs:
+                                logger.info(
+                                    LogModule.EXPORT,
+                                    f"[PDF-EXPORT] Pre-check passed for {len(latex_segs)} LaTeX segment(s).",
+                                )
+                        except RuntimeError:
+                            raise  # Re-raise our own pre-check failure
+                        except Exception as pre_err:
+                            # Pre-check itself failed (e.g. pandoc not found); log and continue
+                            logger.debug(
+                                LogModule.EXPORT,
+                                f"[PDF-EXPORT] Pre-check encountered an error: {pre_err}; continuing with full export",
+                            )
+
                     try:
                         ok = bool(md_content) and convert_md_to_pdf(
                             md_content,
@@ -2210,33 +2281,227 @@ class OutputGenerator:
                                 match_basis = "unknown"
 
                                 def _best_effort_find_segment_index() -> None:
-                                    nonlocal segment_index
+                                    nonlocal segment_index, match_basis
                                     if not isinstance(segs, list) or not segs:
                                         return
-                                    # 1) Prefer MD snippet line matches
+
+                                    import re as _re
+
+                                    def _seg_text(seg: dict) -> str:
+                                        """Return the best text to search against for a segment."""
+                                        return (
+                                            (seg or {}).get("modified_text")
+                                            or (seg or {}).get("target_text", "")
+                                            or ""
+                                        )
+
+                                    def _strip_line_numbers(snippet: str) -> list[str]:
+                                        """Remove 'N: ' line-number prefixes and filter short lines."""
+                                        out: list[str] = []
+                                        for ln in (snippet or "").splitlines():
+                                            clean = _re.sub(r"^\d+:\s*", "", ln).strip()
+                                            if len(clean) >= 4:
+                                                out.append(clean)
+                                        return out
+
+                                    # 1) MD snippet matches (highest priority)
                                     md_snippet = (e.md_snippet or "").strip()
                                     if md_snippet:
-                                        match_basis = "md_snippet"
-                                        lines = [ln.strip() for ln in md_snippet.splitlines() if len((ln or "").strip()) >= 16]
-                                        for seg in segs:
-                                            t = (seg or {}).get("target_text", "")
-                                            if not t:
-                                                continue
-                                            for ln in lines[:10]:
-                                                if ln and ln in t:
-                                                    segment_index = (seg or {}).get("segment_index")
-                                                    return
-                                    # 2) Fallback: stderr trigger token (e.g. "\mathbf{CR}" after "l.<n> ")
+                                        lines = _strip_line_numbers(md_snippet)
+                                        if lines:
+                                            match_basis = "md_snippet"
+                                            for seg in segs:
+                                                t = _seg_text(seg)
+                                                if not t:
+                                                    continue
+                                                for ln in lines[:10]:
+                                                    if ln and ln in t:
+                                                        segment_index = (seg or {}).get("segment_index")
+                                                        return
+
+                                    # 2) Tex snippet content matches (second priority)
+                                    tex_snippet = (e.tex_snippet or "").strip()
+                                    if tex_snippet:
+                                        lines = _strip_line_numbers(tex_snippet)
+                                        if lines:
+                                            match_basis = "tex_snippet"
+                                            for seg in segs:
+                                                t = _seg_text(seg)
+                                                if not t:
+                                                    continue
+                                                for ln in lines[:10]:
+                                                    if ln and ln in t:
+                                                        segment_index = (seg or {}).get("segment_index")
+                                                        return
+
+                                    # 3) Error token exact match (third priority)
                                     token = (getattr(e, "error_token", "") or "").strip()
                                     if token:
                                         match_basis = f"error_token:{token}"
                                         for seg in segs:
-                                            t = (seg or {}).get("target_text", "")
+                                            t = _seg_text(seg)
                                             if t and token in t:
                                                 segment_index = (seg or {}).get("segment_index")
                                                 return
 
+                                        # 3b) For environment tokens, extract env name and search broadly
+                                        env_match = _re.search(r"\\(begin|end)\{([^}]+)\}", token)
+                                        if env_match:
+                                            env_name = env_match.group(2)
+                                            env_begin = f"\\begin{{{env_name}}}"
+                                            env_end = f"\\end{{{env_name}}}"
+                                            match_basis = f"env_name:{env_name}"
+                                            for seg in segs:
+                                                t = _seg_text(seg)
+                                                if t and (env_begin in t or env_end in t):
+                                                    segment_index = (seg or {}).get("segment_index")
+                                                    return
+
+                                        # 3c) For general commands, try base command without braces/args
+                                        cmd_match = _re.search(r"\\([a-zA-Z]+)", token)
+                                        if cmd_match:
+                                            cmd_base = "\\" + cmd_match.group(1)
+                                            if cmd_base != token:
+                                                match_basis = f"cmd_base:{cmd_base}"
+                                                for seg in segs:
+                                                    t = _seg_text(seg)
+                                                    if t and cmd_base in t:
+                                                        segment_index = (seg or {}).get("segment_index")
+                                                        return
+
+                                    # 4) Error-type heuristics: parse stderr for specific clues
+                                    error_type = getattr(e, "error_type", "") or ""
+                                    stderr = getattr(e, "stderr", "") or ""
+                                    if error_type == "undefined_control_sequence":
+                                        m = _re.search(
+                                            r"Undefined control sequence[.\s]*\\(\w+)",
+                                            stderr,
+                                            _re.IGNORECASE,
+                                        )
+                                        if m:
+                                            undefined_cmd = "\\" + m.group(1)
+                                            match_basis = f"undefined_cmd:{undefined_cmd}"
+                                            for seg in segs:
+                                                t = _seg_text(seg)
+                                                if t and undefined_cmd in t:
+                                                    segment_index = (seg or {}).get("segment_index")
+                                                    return
+
+                                    # 5) Last resort: score segments by how many backslash commands
+                                    # from stderr they contain. Only use if we find >= 2 matches.
+                                    if stderr:
+                                        cmds_in_stderr = set(
+                                            _re.findall(r"\\([a-zA-Z]+)", stderr)
+                                        )
+                                        if cmds_in_stderr:
+                                            best_seg = None
+                                            best_score = 0
+                                            for seg in segs:
+                                                t = _seg_text(seg)
+                                                if not t:
+                                                    continue
+                                                score = sum(
+                                                    1 for cmd in cmds_in_stderr if f"\\{cmd}" in t
+                                                )
+                                                if score > best_score:
+                                                    best_score = score
+                                                    best_seg = seg
+                                            if best_seg and best_score >= 2:
+                                                segment_index = best_seg.get("segment_index")
+                                                match_basis = f"stderr_cmd_score:{best_score}"
+
                                 _best_effort_find_segment_index()
+
+                                # FALLBACK: if best-effort could not locate the bad segment,
+                                # run an automatic per-segment check on all LaTeX-containing
+                                # segments and pick the first one that fails.
+                                diagnosis_entries = []
+                                if segment_index is None:
+                                    try:
+                                        from utils.latex_repair_payload import has_latex_content
+                                        from utils.latex_formula_checker import check_segment_pdf_compat
+
+                                        latex_segs = [
+                                            seg for seg in segs
+                                            if isinstance(seg, dict)
+                                            and has_latex_content(
+                                                seg.get("modified_text") or seg.get("target_text") or ""
+                                            )
+                                        ]
+
+                                        # First, try to reuse cached pdf_compat_results (from batch-test-pdf-compat)
+                                        cached_results = task_state.get("pdf_compat_results")
+                                        has_cache = isinstance(cached_results, dict) and cached_results
+
+                                        for seg in latex_segs:
+                                            seg_idx = seg.get("segment_index", -1)
+                                            text = seg.get("modified_text") or seg.get("target_text") or ""
+                                            preview = (text or "").replace("\n", " ")[:120]
+
+                                            # Prefer cached result to avoid redundant pandoc calls
+                                            if has_cache:
+                                                cached = cached_results.get(str(seg_idx)) or cached_results.get(seg_idx)
+                                                if isinstance(cached, dict):
+                                                    passed = cached.get("passed", False)
+                                                    status = "PASS" if passed else "FAIL"
+                                                    message = cached.get("message", "")
+                                                else:
+                                                    passed = True
+                                                    status = "PASS"
+                                                    message = ""
+                                            else:
+                                                pre = check_segment_pdf_compat(text, segment_index=seg_idx)
+                                                passed = pre.passed
+                                                status = "PASS" if passed else "FAIL"
+                                                message = pre.message
+
+                                            diagnosis_entries.append({
+                                                "segment_index": seg_idx,
+                                                "status": status,
+                                                "preview": preview + ("..." if len(text) > 120 else ""),
+                                                "message": message,
+                                                "from_cache": has_cache,
+                                            })
+
+                                            if not passed and segment_index is None:
+                                                segment_index = seg_idx
+                                                match_basis = "auto_diagnose"
+
+                                        # Build human-readable diagnosis log
+                                        diag_lines = [
+                                            f"Auto-diagnosis: {len(latex_segs)} LaTeX segment(s) checked "
+                                            f"({'cached' if has_cache else 'live'}):"
+                                        ]
+                                        for entry in diagnosis_entries:
+                                            diag_lines.append(
+                                                f"  SEG {entry['segment_index']}: [{entry['status']}] {entry['preview']}"
+                                            )
+                                        if segment_index is not None:
+                                            diag_lines.append(
+                                                f"  >>> FIRST FAILING SEGMENT: {segment_index}"
+                                            )
+                                        else:
+                                            diag_lines.append(
+                                                "  >>> No failing segment found among checked ones."
+                                            )
+
+                                        self.task_manager.add_log(
+                                            task_id,
+                                            "warning",
+                                            "\n".join(diag_lines),
+                                        )
+                                        logger.warning(
+                                            LogModule.EXPORT,
+                                            f"[PDF-EXPORT] Task {task_id}: Auto-diagnosis completed. "
+                                            f"checked={len(latex_segs)}, first_fail={segment_index}, "
+                                            f"cached={has_cache}",
+                                        )
+                                    except Exception as diag_err:
+                                        logger.debug(
+                                            LogModule.EXPORT,
+                                            f"[PDF-EXPORT] Task {task_id}: Auto-diagnosis failed: {diag_err}",
+                                        )
+
                                 if isinstance(segment_index, int) and segment_index >= 0:
                                     candidates.append(segment_index)
                                     for d in (1, 2, 3):
@@ -2255,6 +2520,7 @@ class OutputGenerator:
                                     "stderr_excerpt": (e.stderr or "")[:2000],
                                     "debug_tex_path": str(e.debug_tex_path) if e.debug_tex_path else None,
                                     "debug_md_path": str(e.debug_md_path) if e.debug_md_path else None,
+                                    "diagnosis": diagnosis_entries,
                                 }
                                 self.task_manager.add_log(
                                     task_id,

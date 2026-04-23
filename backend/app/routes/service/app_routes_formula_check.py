@@ -17,66 +17,45 @@ from pydantic import BaseModel
 from backend.app.services.task import task_manager
 from logger import unified_logger as logger
 from logger.logger import LogModule
-from utils.latex_formula_checker import check_snippets_with_pandoc
+from utils.latex_formula_checker import check_snippets_with_pandoc, check_segments_with_katex
 from utils.latex_repair_llm import LatexRepairRequest, repair_latex_snippet_with_llm
 
 router = APIRouter()
 
 
-def _extract_formula_snippets_from_task(task_state: Dict[str, Any]) -> List[str]:
+def _extract_formula_snippets_from_task(task_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Extract formula snippets from task_state for integrity checks.
 
-    This relies on translation_segments metadata (e.g. block_type/is_equation).
-    It is deliberately conservative: only segments clearly marked为公式才参与检查。
+    Uses has_latex_content() to detect segments containing LaTeX math,
+    rather than relying on metadata flags (is_equation / block_type) that
+    are often not set in practice.
+
+    Returns a list of dicts: [{"segment_index": int, "text": str}, ...]
+    so that downstream checkers can report the REAL segment index instead
+    of an arbitrary list position.
     """
-    formula_texts: List[str] = []
+    from utils.latex_repair_payload import has_latex_content
+
+    results: List[Dict[str, Any]] = []
     segs_data = task_state.get("translation_segments") or {}
     segments = segs_data.get("segments") or []
     if not isinstance(segments, list):
-        return formula_texts
+        return results
 
     for seg in segments:
         if not isinstance(seg, dict):
             continue
-        block_type = seg.get("block_type") or ""
-        is_equation = bool(seg.get("is_equation"))
-        if not (is_equation or block_type in ("equation", "formula")):
+        idx = seg.get("segment_index")
+        if not isinstance(idx, int):
             continue
         text = seg.get("target_text") or seg.get("source_text") or ""
         if not text or not str(text).strip():
             continue
-        formula_texts.append(str(text))
+        if has_latex_content(str(text)):
+            results.append({"segment_index": idx, "text": str(text)})
 
-    # Fallback: if没有任何显式标记的公式片段，尝试用简单启发式从段落中找包含 LaTeX 标记的片段，
-    # 例如含有 '$', '\(', '\[', '\frac', '\sum', '\int', '\mathbf', '\underset' 等。
-    if not formula_texts:
-        for seg in segments:
-            if not isinstance(seg, dict):
-                continue
-            text = seg.get("target_text") or seg.get("source_text") or ""
-            if not text or not str(text).strip():
-                continue
-            s = str(text)
-            has_latex_hint = any(
-                hint in s
-                for hint in (
-                    "$",
-                    r"\(",
-                    r"\[",
-                    r"\frac",
-                    r"\sum",
-                    r"\int",
-                    r"\mathbf",
-                    r"\mathcal",
-                    r"\underset",
-                    r"\overset",
-                )
-            )
-            if has_latex_hint:
-                formula_texts.append(s)
-
-    return formula_texts
+    return results
 
 
 class SegmentLatexRepairPayload(BaseModel):
@@ -85,6 +64,7 @@ class SegmentLatexRepairPayload(BaseModel):
     segment_index: int
     text: str
     source_text: Optional[str] = None
+    user_prompt: Optional[str] = None
 
 
 @router.post("/latex-formula-check/{task_id}")
@@ -99,8 +79,8 @@ async def latex_formula_check(task_id: str):
     if task_state is None:
         raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found.")
 
-    formula_texts = _extract_formula_snippets_from_task(task_state)
-    if not formula_texts:
+    formula_data = _extract_formula_snippets_from_task(task_state)
+    if not formula_data:
         logger.info(
             LogModule.RESTOR,
             "[LATEX-CHECK] No formula segments found for task {task_id}; skipping check",
@@ -110,26 +90,48 @@ async def latex_formula_check(task_id: str):
     # Log input snippets (truncate long ones to avoid noisy logs)
     try:
         preview_snippets = [
-            (idx, (txt[:120] + "...") if len(txt) > 120 else txt)
-            for idx, txt in enumerate(formula_texts)
+            (item["segment_index"], (item["text"][:120] + "...") if len(item["text"]) > 120 else item["text"])
+            for item in formula_data
         ]
         logger.info(
             LogModule.RESTOR,
             "[LATEX-CHECK] Running formula check for task {task_id}: snippet_count={count}, previews={previews}",
             task_id=task_id,
-            count=len(formula_texts),
+            count=len(formula_data),
             previews=preview_snippets[:10],
         )
     except Exception:
         # Best-effort logging; do not break the API on logging failure.
         pass
 
-    result = check_snippets_with_pandoc(formula_texts)
+    result = check_snippets_with_pandoc(formula_data)
+
+    # Also run KaTeX (HTML preview) check on all segments that contain math.
+    # This catches errors that Pandoc/XeLaTeX may silently accept but KaTeX rejects.
+    segs_data = []
+    segs_raw = (task_state.get("translation_segments") or {}).get("segments") or []
+    if isinstance(segs_raw, list):
+        for seg in segs_raw:
+            if not isinstance(seg, dict):
+                continue
+            idx = seg.get("segment_index")
+            if not isinstance(idx, int):
+                continue
+            text = seg.get("target_text") or seg.get("source_text") or ""
+            if text and str(text).strip():
+                segs_data.append({"segment_index": idx, "text": str(text)})
+
+    katex_result = check_segments_with_katex(segs_data)
+
+    # Merge Pandoc and KaTeX issues.
+    all_issues = list(result.issues)
+    all_issues.extend(katex_result.issues)
 
     # Build a compact JSON payload for frontend.
     payload = {
         "task_id": task_id,
         "pandoc_available": result.pandoc_available,
+        "katex_available": katex_result.katex_available,
         "snippet_count": len(result.snippets),
         "snippets": [
             {
@@ -145,7 +147,7 @@ async def latex_formula_check(task_id: str):
                 "severity": issue.severity,
                 "raw_stderr": issue.raw_stderr,
             }
-            for issue in result.issues
+            for issue in all_issues
         ],
     }
 
@@ -192,6 +194,7 @@ async def latex_formula_repair_segment(task_id: str, body: SegmentLatexRepairPay
         task_id=task_id,
         segment_index=body.segment_index,
         llm_config=llm_cfg,
+        user_prompt=body.user_prompt,
     )
     llm_result = repair_latex_snippet_with_llm(req)
 

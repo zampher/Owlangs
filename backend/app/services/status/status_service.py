@@ -2162,8 +2162,23 @@ class StatusService:
                     # Last resort: set as unknown
                     seg_obj["exclusion_reason"] = "unknown"
             
+            # Attach has_latex flag so frontend knows whether to show PDF-compat check button
+            try:
+                from utils.latex_repair_payload import has_latex_content
+                _preview_text = seg_obj.get("target_text") or seg_obj.get("text") or seg_obj.get("source_text", "")
+                seg_obj["has_latex"] = has_latex_content(_preview_text)
+            except Exception:
+                seg_obj["has_latex"] = False
+
+            # Attach cached PDF compat result if available
+            _pdf_compat_results = st.get("pdf_compat_results")
+            if isinstance(_pdf_compat_results, dict):
+                _seg_compat = _pdf_compat_results.get(str(idx)) or _pdf_compat_results.get(idx)
+                if _seg_compat is not None:
+                    seg_obj["pdf_compat"] = _seg_compat
+
             segments_with_metadata.append(seg_obj)
-        
+
         # CRITICAL: For MOBI files, insert image placeholder segments
         # Insert them at their calculated positions (based on HTML structure) or at the end if position cannot be determined
         if workflow_type == "mobi" and mobi_image_segments:
@@ -2199,6 +2214,7 @@ class StatusService:
                     "placeholder_id": placeholder_id,
                     "image_path": image_path,
                     "image_data": data_uri,  # Include image data for frontend preview
+                    "has_latex": False,  # Images never contain LaTeX
                 }
                 
                 # Insert at calculated position, or append if position is beyond current segments
@@ -2767,7 +2783,32 @@ class StatusService:
         if image_data_map_for_frontend:
             response["image_data_map"] = image_data_map_for_frontend
             logger.trace(LogModule.WORKFLOW, f"[PREVIEW-API] Task {task_id}: Including {len(image_data_map_for_frontend)} images in response")
-        
+
+        # Build pdf_compat_summary from cached results for quick frontend overview
+        _pdf_compat_results = st.get("pdf_compat_results")
+        if isinstance(_pdf_compat_results, dict) and _pdf_compat_results:
+            _checked = 0
+            _passed = 0
+            _failed = 0
+            _failed_indices = []
+            for _k, _v in _pdf_compat_results.items():
+                if isinstance(_v, dict):
+                    _checked += 1
+                    if _v.get("passed"):
+                        _passed += 1
+                    else:
+                        _failed += 1
+                        try:
+                            _failed_indices.append(int(_k))
+                        except (ValueError, TypeError):
+                            pass
+            response["pdf_compat_summary"] = {
+                "checked_segments": _checked,
+                "passed": _passed,
+                "failed": _failed,
+                "failed_segment_indices": sorted(_failed_indices),
+            }
+
         return JSONResponse(content=response)
     
     @staticmethod

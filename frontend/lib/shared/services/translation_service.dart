@@ -28,9 +28,7 @@ class TranslationService {
         ? AppConfig.longRequestTimeout
         : AppConfig.requestTimeout;
     
-    // 在 Web 平台上，使用相对路径，这样会自动使用当前域名和端口
-    // 在桌面平台上，使用 AppConfig.baseUrl
-    final baseUrl = kIsWeb ? '' : AppConfig.baseUrl;
+    final baseUrl = AppConfig.baseUrl;
     
     return Dio(
       BaseOptions(
@@ -98,12 +96,14 @@ class TranslationService {
     int segmentIndex,
     String text, {
     String? sourceText,
+    String? userPrompt,
   }) async {
     final dio = _buildAuthedDio();
     final body = <String, dynamic>{
       'segment_index': segmentIndex,
       'text': text,
       if (sourceText != null) 'source_text': sourceText,
+      if (userPrompt != null && userPrompt.isNotEmpty) 'user_prompt': userPrompt,
     };
     final resp = await dio.post(
       '/service/latex-formula-repair-segment/$taskId',
@@ -192,9 +192,7 @@ class TranslationService {
     } else {
       // 确保相对路径以 / 开头
       final normalizedPath = url.startsWith('/') ? url : '/$url';
-      // 在 Web 平台上，使用相对路径，这样会自动使用当前域名和端口
-      // 在桌面平台上，使用 AppConfig.baseUrl
-      fullUrl = kIsWeb ? normalizedPath : '${AppConfig.baseUrl}$normalizedPath';
+      fullUrl = '${AppConfig.baseUrl}$normalizedPath';
     }
     try {
       final Response<List<int>> resp = await dio.get<List<int>>(

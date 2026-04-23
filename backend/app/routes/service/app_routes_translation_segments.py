@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Body
 from fastapi.responses import JSONResponse
 from typing import Optional, List, Dict, Any
 import copy
+import time
 
 from backend.app.services.task import task_manager
 from logger import unified_logger as logger
@@ -255,6 +256,15 @@ async def get_translation_segments_api(task_id: str):
     # Enrich segments with detected exclusion reasons so Translate phase filters
     # can display categories like language_match even when segments are not excluded.
     _enrich_translation_segments_with_detected_reasons(task_id, response_data)
+
+    # Attach has_latex flag to each segment so frontend can decide whether to show
+    # the "Test PDF Compatibility" button (only useful for segments with LaTeX).
+    from utils.latex_repair_payload import has_latex_content
+    segments_list = response_data.get("segments", []) if isinstance(response_data, dict) else []
+    for seg in segments_list:
+        if isinstance(seg, dict):
+            text = seg.get("modified_text") or seg.get("target_text") or seg.get("source_text") or ""
+            seg["has_latex"] = has_latex_content(text)
 
     # Include image data map if available so frontend can render placeholders as images
     # Prefer translation-specific image map (placeholder IDs generated during translation)
@@ -930,5 +940,515 @@ async def clear_segment_api(
     return JSONResponse(content={
         "success": True,
         "segment": segment
+    })
+
+
+@router.post(
+    "/translation-segments/{task_id}/{segment_index}/test-pdf-compat",
+    summary="Test PDF compatibility for a single segment",
+    description="Run Pandoc + XeLaTeX on a single segment's target_text to detect LaTeX errors before full export. "
+                "Segments without LaTeX content are skipped (assumed OK).",
+    responses={
+        200: {
+            "description": "PDF compatibility check result.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "passed": True,
+                        "has_latex": True,
+                        "pandoc_available": True,
+                        "message": "PDF compatibility check passed.",
+                        "issues": [],
+                        "stderr": None,
+                    }
+                }
+            }
+        },
+        404: {"description": "Task ID or segment not found."},
+    }
+)
+async def test_segment_pdf_compat_api(
+    task_id: str,
+    segment_index: int,
+):
+    """Test a single segment's PDF compatibility using Pandoc + XeLaTeX dry-run."""
+    logger.info(
+        LogModule.ROUTE,
+        f"[TEST-PDF-COMPAT-API] Request: task_id={task_id}, segment_index={segment_index}"
+    )
+
+    if task_manager.get_task(task_id) is None:
+        logger.warning(LogModule.ROUTE, f"[TEST-PDF-COMPAT-API] Task ID '{task_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
+
+    # Retrieve the segment
+    segments_data = _ts_module().get_translation_segments(task_id)
+    if segments_data is None:
+        raise HTTPException(status_code=404, detail="No translation segments available.")
+
+    if isinstance(segments_data, list):
+        segments_list = segments_data
+    else:
+        segments_list = segments_data.get("segments", []) or []
+
+    segment = None
+    for seg in segments_list:
+        if isinstance(seg, dict) and seg.get("segment_index") == segment_index:
+            segment = seg
+            break
+
+    if segment is None:
+        logger.warning(
+            LogModule.ROUTE,
+            f"[TEST-PDF-COMPAT-API] Segment index {segment_index} not found for task '{task_id}'"
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=f"Segment index {segment_index} not found for task '{task_id}'."
+        )
+
+    # Use modified_text if available, else target_text
+    target_text = segment.get("modified_text") or segment.get("target_text") or ""
+
+    # Run the compatibility check
+    from utils.latex_formula_checker import check_segment_pdf_compat
+
+    result = check_segment_pdf_compat(target_text, segment_index=segment_index)
+
+    # If check failed, try to get LLM repair suggestion automatically
+    repair_suggestion = None
+    if not result.passed:
+        logger.warning(
+            LogModule.ROUTE,
+            f"[TEST-PDF-COMPAT-API] Segment {segment_index} FAILED PDF compat check "
+            f"(issues={len(result.issues)}, has_latex={result.has_latex})"
+        )
+        try:
+            from utils.latex_repair_llm import LatexRepairRequest, repair_latex_snippet_with_llm
+            task_state = task_manager.get_task(task_id)
+            llm_cfg = task_state.get("llm_config_for_repair") if task_state else None
+            if llm_cfg:
+                repair_req = LatexRepairRequest(
+                    error_type="manual_segment_repair",
+                    tex_context=result.stderr or "",
+                    md_context=target_text,
+                    original_md_snippet=target_text,
+                    task_id=task_id,
+                    segment_index=segment_index,
+                    llm_config=llm_cfg,
+                )
+                llm_result = repair_latex_snippet_with_llm(repair_req)
+                if llm_result.fixed_md_snippet and llm_result.fixed_md_snippet.strip() != target_text.strip():
+                    repair_suggestion = llm_result.fixed_md_snippet
+                    logger.info(
+                        LogModule.ROUTE,
+                        f"[TEST-PDF-COMPAT-API] LLM repair suggestion generated for segment {segment_index}"
+                    )
+        except Exception as repair_err:
+            logger.debug(
+                LogModule.ROUTE,
+                f"[TEST-PDF-COMPAT-API] LLM repair suggestion failed for segment {segment_index}: {repair_err}"
+            )
+    else:
+        logger.info(
+            LogModule.ROUTE,
+            f"[TEST-PDF-COMPAT-API] Segment {segment_index} passed PDF compat check "
+            f"(has_latex={result.has_latex}, pandoc={result.pandoc_available})"
+        )
+
+    return JSONResponse(content={
+        "success": True,
+        "passed": result.passed,
+        "has_latex": result.has_latex,
+        "pandoc_available": result.pandoc_available,
+        "message": result.message,
+        "issues": [
+            {
+                "snippet_index": issue.snippet_index,
+                "message": issue.message,
+                "severity": issue.severity,
+                "raw_stderr": issue.raw_stderr,
+            }
+            for issue in result.issues
+        ],
+        "stderr": result.stderr,
+        "repair_suggestion": repair_suggestion,
+    })
+
+
+@router.post(
+    "/translation-segments/{task_id}/batch-test-pdf-compat",
+    summary="Batch test PDF compatibility for all LaTeX-containing segments",
+    description="Run Pandoc + XeLaTeX on all segments that contain LaTeX math/commands. "
+                "Segments without LaTeX are skipped (assumed OK). Returns a summary of passed/failed.",
+    responses={
+        200: {
+            "description": "Batch PDF compatibility check result.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "task_id": "task123",
+                        "total_segments": 100,
+                        "latex_segments_checked": 15,
+                        "passed_count": 14,
+                        "failed_count": 1,
+                        "results": []
+                    }
+                }
+            }
+        },
+        404: {"description": "Task ID not found."},
+    }
+)
+async def batch_test_pdf_compat_api(task_id: str):
+    """Batch test PDF compatibility for all LaTeX-containing segments."""
+    logger.info(
+        LogModule.ROUTE,
+        f"[BATCH-TEST-PDF-COMPAT-API] Request: task_id={task_id}"
+    )
+
+    if task_manager.get_task(task_id) is None:
+        logger.warning(LogModule.ROUTE, f"[BATCH-TEST-PDF-COMPAT-API] Task ID '{task_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
+
+    segments_data = _ts_module().get_translation_segments(task_id)
+    if segments_data is None:
+        raise HTTPException(status_code=404, detail="No translation segments available.")
+
+    if isinstance(segments_data, list):
+        segments_list = segments_data
+    else:
+        segments_list = segments_data.get("segments", []) or []
+
+    from utils.latex_repair_payload import has_latex_content
+    from utils.latex_formula_checker import check_segment_pdf_compat
+
+    total_segments = len(segments_list)
+    latex_segments = []
+    for seg in segments_list:
+        if isinstance(seg, dict):
+            text = seg.get("modified_text") or seg.get("target_text") or ""
+            if has_latex_content(text):
+                latex_segments.append(seg)
+
+    results = []
+    passed_count = 0
+    failed_count = 0
+
+    # Pre-fetch LLM config once for batch repair suggestions
+    task_state_for_repair = task_manager.get_task(task_id)
+    llm_cfg_batch = task_state_for_repair.get("llm_config_for_repair") if task_state_for_repair else None
+    failed_entries_for_repair = []
+
+    for seg in latex_segments:
+        seg_idx = seg.get("segment_index", -1)
+        text = seg.get("modified_text") or seg.get("target_text") or ""
+        result = check_segment_pdf_compat(text, segment_index=seg_idx)
+
+        entry = {
+            "segment_index": seg_idx,
+            "passed": result.passed,
+            "has_latex": result.has_latex,
+            "pandoc_available": result.pandoc_available,
+            "message": result.message,
+            "issues": [
+                {
+                    "snippet_index": issue.snippet_index,
+                    "message": issue.message,
+                    "severity": issue.severity,
+                    "raw_stderr": issue.raw_stderr,
+                }
+                for issue in result.issues
+            ],
+            "stderr": result.stderr,
+            "repair_suggestion": None,
+        }
+        if not result.passed:
+            failed_entries_for_repair.append((entry, text))
+        results.append(entry)
+        if result.passed:
+            passed_count += 1
+        else:
+            failed_count += 1
+
+    # Generate LLM repair suggestions for failed segments (max 3 to avoid long waits)
+    if llm_cfg_batch and failed_entries_for_repair:
+        try:
+            from utils.latex_repair_llm import LatexRepairRequest, repair_latex_snippet_with_llm
+            for entry, text in failed_entries_for_repair[:3]:
+                seg_idx = entry["segment_index"]
+                repair_req = LatexRepairRequest(
+                    error_type="pre_check_failed",
+                    tex_context=entry.get("stderr") or "",
+                    md_context=text,
+                    original_md_snippet=text,
+                    task_id=task_id,
+                    segment_index=seg_idx,
+                    llm_config=llm_cfg_batch,
+                )
+                llm_result = repair_latex_snippet_with_llm(repair_req)
+                if llm_result.fixed_md_snippet and llm_result.fixed_md_snippet.strip() != text.strip():
+                    entry["repair_suggestion"] = llm_result.fixed_md_snippet
+                    logger.info(
+                        LogModule.ROUTE,
+                        f"[BATCH-TEST-PDF-COMPAT-API] Generated repair suggestion for segment {seg_idx}"
+                    )
+        except Exception as repair_err:
+            logger.debug(
+                LogModule.ROUTE,
+                f"[BATCH-TEST-PDF-COMPAT-API] Batch repair suggestion generation failed: {repair_err}"
+            )
+
+    # Cache results in task_state so get_source_preview can attach them to segments
+    try:
+        task_state = task_manager.get_task(task_id)
+        if task_state is not None:
+            pdf_compat_results = {}
+            for entry in results:
+                seg_idx = entry.get("segment_index")
+                if seg_idx is not None:
+                    pdf_compat_results[str(seg_idx)] = {
+                        "passed": entry["passed"],
+                        "has_latex": entry["has_latex"],
+                        "pandoc_available": entry["pandoc_available"],
+                        "message": entry["message"],
+                        "checked_at": time.time(),
+                    }
+            task_state["pdf_compat_results"] = pdf_compat_results
+    except Exception as cache_err:
+        logger.debug(
+            LogModule.ROUTE,
+            f"[BATCH-TEST-PDF-COMPAT-API] Failed to cache results: {cache_err}"
+        )
+
+    logger.info(
+        LogModule.ROUTE,
+        f"[BATCH-TEST-PDF-COMPAT-API] Task {task_id}: "
+        f"total={total_segments}, latex_checked={len(latex_segments)}, "
+        f"passed={passed_count}, failed={failed_count}"
+    )
+
+    return JSONResponse(content={
+        "success": True,
+        "task_id": task_id,
+        "total_segments": total_segments,
+        "latex_segments_checked": len(latex_segments),
+        "passed_count": passed_count,
+        "failed_count": failed_count,
+        "results": results,
+    })
+
+
+@router.post(
+    "/translation-segments/{task_id}/clear-pdf-compat-cache",
+    summary="Clear cached PDF compatibility check results",
+    description="Remove cached pdf_compat_results from task_state. Call this after segments are modified."
+)
+async def clear_pdf_compat_cache_api(task_id: str):
+    """Clear cached PDF compatibility results so next check starts fresh."""
+    logger.info(
+        LogModule.ROUTE,
+        f"[CLEAR-PDF-COMPAT-CACHE-API] Request: task_id={task_id}"
+    )
+
+    if task_manager.get_task(task_id) is None:
+        logger.warning(LogModule.ROUTE, f"[CLEAR-PDF-COMPAT-CACHE-API] Task ID '{task_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
+
+    task_state = task_manager.get_task(task_id)
+    cleared = False
+    if task_state and "pdf_compat_results" in task_state:
+        del task_state["pdf_compat_results"]
+        cleared = True
+        logger.info(
+            LogModule.ROUTE,
+            f"[CLEAR-PDF-COMPAT-CACHE-API] Cleared pdf_compat_results for task {task_id}"
+        )
+    else:
+        logger.info(
+            LogModule.ROUTE,
+            f"[CLEAR-PDF-COMPAT-CACHE-API] No pdf_compat_results to clear for task {task_id}"
+        )
+
+    return JSONResponse(content={
+        "success": True,
+        "cleared": cleared,
+        "message": "PDF compatibility cache cleared." if cleared else "No cache to clear.",
+    })
+
+
+@router.post(
+    "/translation-segments/{task_id}/{segment_index}/repair-for-pdf-export",
+    summary="AI repair a segment for PDF export failure",
+    description="Call LLM to suggest a fix for a segment that caused PDF export to fail. "
+                "Uses pdf_export_latex_issue error context if available, otherwise uses generic repair.",
+    responses={
+        200: {
+            "description": "Repair suggestion returned.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "segment_index": 53,
+                        "original_text": "...",
+                        "fixed_text": "...",
+                        "error_type": "undefined_control_sequence",
+                        "notes": "LLM repair executed successfully.",
+                    }
+                }
+            }
+        },
+        404: {"description": "Task ID or segment not found."},
+    }
+)
+async def repair_for_pdf_export_api(
+    task_id: str,
+    segment_index: int,
+    body: dict = Body(...),
+):
+    """AI repair a segment using LLM, with PDF export error context."""
+    user_prompt = body.get("user_prompt") or body.get("custom_prompt")
+    logger.info(
+        LogModule.ROUTE,
+        f"[REPAIR-FOR-PDF-EXPORT-API] Request: task_id={task_id}, segment_index={segment_index}, has_user_prompt={bool(user_prompt)}"
+    )
+
+    task_state = task_manager.get_task(task_id)
+    if task_state is None:
+        logger.warning(LogModule.ROUTE, f"[REPAIR-FOR-PDF-EXPORT-API] Task ID '{task_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
+
+    # Retrieve the segment
+    segments_data = _ts_module().get_translation_segments(task_id)
+    if segments_data is None:
+        raise HTTPException(status_code=404, detail="No translation segments available.")
+
+    if isinstance(segments_data, list):
+        segments_list = segments_data
+    else:
+        segments_list = segments_data.get("segments", []) or []
+
+    segment = None
+    for seg in segments_list:
+        if isinstance(seg, dict) and seg.get("segment_index") == segment_index:
+            segment = seg
+            break
+
+    if segment is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Segment index {segment_index} not found for task '{task_id}'."
+        )
+
+    target_text = segment.get("modified_text") or segment.get("target_text") or ""
+    if not target_text:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Segment {segment_index} has no text to repair."
+        )
+
+    # Gather error context from pdf_export_latex_issue if available
+    error_type = "manual_segment_repair"
+    tex_context = ""
+    pdf_issue = task_state.get("pdf_export_latex_issue")
+    if isinstance(pdf_issue, dict):
+        # Prefer the error context for this specific segment
+        if pdf_issue.get("segment_index") == segment_index:
+            error_type = pdf_issue.get("error_type") or error_type
+            tex_context = pdf_issue.get("stderr_excerpt", "") or ""
+        else:
+            # If the failing segment is different, still use the error type but not the context
+            error_type = pdf_issue.get("error_type") or error_type
+
+    # Also try to get error context from pdf_compat_results
+    pdf_compat = task_state.get("pdf_compat_results", {})
+    if isinstance(pdf_compat, dict):
+        seg_compat = pdf_compat.get(str(segment_index)) or pdf_compat.get(segment_index)
+        if isinstance(seg_compat, dict) and not seg_compat.get("passed", True):
+            if not tex_context:
+                tex_context = seg_compat.get("message", "")
+
+    from utils.latex_repair_llm import LatexRepairRequest, repair_latex_snippet_with_llm
+
+    llm_cfg = task_state.get("llm_config_for_repair")
+    req = LatexRepairRequest(
+        error_type=error_type,
+        tex_context=tex_context,
+        md_context=target_text,
+        original_md_snippet=target_text,
+        task_id=task_id,
+        segment_index=segment_index,
+        llm_config=llm_cfg,
+        user_prompt=user_prompt,
+    )
+    llm_result = repair_latex_snippet_with_llm(req)
+
+    changed = (llm_result.fixed_md_snippet or "").strip() != target_text.strip()
+
+    logger.info(
+        LogModule.ROUTE,
+        f"[REPAIR-FOR-PDF-EXPORT-API] Repair suggestion for task {task_id}, segment {segment_index}: "
+        f"changed={changed}, error_type={error_type}, notes={llm_result.notes}"
+    )
+
+    return JSONResponse(content={
+        "success": True,
+        "segment_index": segment_index,
+        "original_text": target_text,
+        "fixed_text": llm_result.fixed_md_snippet,
+        "error_type": error_type,
+        "changed": changed,
+        "notes": llm_result.notes,
+    })
+
+
+@router.get(
+    "/pdf-export-status/{task_id}",
+    summary="Get current PDF export status and diagnosis",
+    description="Returns the latest pdf_export_latex_issue, pdf_compat_results, and summary for the task.",
+)
+async def get_pdf_export_status(task_id: str):
+    """Get current PDF export status, including any LaTeX compilation issues and diagnosis."""
+    task_state = task_manager.get_task(task_id)
+    if task_state is None:
+        raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
+
+    pdf_issue = task_state.get("pdf_export_latex_issue")
+    pdf_compat = task_state.get("pdf_compat_results", {})
+
+    # Build summary from pdf_compat_results
+    summary = None
+    if isinstance(pdf_compat, dict) and pdf_compat:
+        _checked = 0
+        _passed = 0
+        _failed = 0
+        _failed_indices = []
+        for _k, _v in pdf_compat.items():
+            if isinstance(_v, dict):
+                _checked += 1
+                if _v.get("passed"):
+                    _passed += 1
+                else:
+                    _failed += 1
+                    try:
+                        _failed_indices.append(int(_k))
+                    except (ValueError, TypeError):
+                        pass
+        summary = {
+            "checked_segments": _checked,
+            "passed": _passed,
+            "failed": _failed,
+            "failed_segment_indices": sorted(_failed_indices),
+        }
+
+    return JSONResponse(content={
+        "success": True,
+        "task_id": task_id,
+        "has_pdf_issue": pdf_issue is not None,
+        "pdf_export_latex_issue": pdf_issue,
+        "pdf_compat_results": pdf_compat,
+        "pdf_compat_summary": summary,
     })
 

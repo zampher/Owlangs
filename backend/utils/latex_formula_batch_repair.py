@@ -15,22 +15,6 @@ from utils.language_utils import get_language_name_from_code
 from utils.llm_client import LLMConfig, LLMMessage, llm_chat
 
 
-_LATEX_HINTS = (
-    "$",
-    r"\(",
-    r"\[",
-    r"\frac",
-    r"\sum",
-    r"\int",
-    r"\mathbf",
-    r"\mathcal",
-    r"\underset",
-    r"\overset",
-    r"\begin{",
-    r"\end{",
-)
-
-
 @dataclass
 class FormulaRepairItem:
     segment_index: int
@@ -108,7 +92,8 @@ def _is_formula_segment(seg: Dict[str, Any]) -> bool:
     text = (seg.get("target_text") or seg.get("source_text") or "").strip()
     if not text:
         return False
-    return any(h in text for h in _LATEX_HINTS)
+    from utils.latex_repair_payload import has_latex_content
+    return has_latex_content(text)
 
 
 def collect_formula_items(task_state: Dict[str, Any]) -> List[FormulaRepairItem]:
