@@ -54,6 +54,8 @@ hiddenimports = [
     'utils.latex_formula_batch_repair',
     'utils.llm_client',
     'utils.extract_segments_debug',
+    'utils.epub_fix',
+    'utils.ebook_metadata',
     'utils.config_manager',
     'backend.utils.resource_utils',
     'backend.utils.redis_manager',
@@ -85,6 +87,8 @@ hiddenimports = [
     'backend.utils.latex_formula_batch_repair',
     'backend.utils.llm_client',
     'backend.utils.extract_segments_debug',
+    'backend.utils.epub_fix',
+    'backend.utils.ebook_metadata',
     # App modules
     'app',
     'app.app_main',

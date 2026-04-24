@@ -129,6 +129,8 @@ hiddenimports = [
     'backend.utils.markdown_chunk_merger',
     'backend.utils.language_detection_utils',
     'backend.utils.language_detector',
+    'backend.utils.epub_fix',
+    'backend.utils.ebook_metadata',
     'backend.utils.latex_formula_checker', 'backend.utils.latex_repair_llm',
     'backend.utils.latex_repair_payload', 'backend.utils.latex_formula_batch_repair',
     'backend.utils.llm_client',
@@ -212,6 +214,9 @@ hiddenimports = [
     'pptx.shapes.table',
     'pptx.shapes.freeform',
     'pptx.text.text',
+    # mobi dependencies (ensure loguru and imghdr are included in frozen build)
+    'loguru',
+    'imghdr',
 ]
 
 # mobi/ebooklib: required for MOBI/EPUB extraction and conversion in frozen build

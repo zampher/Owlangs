@@ -16,6 +16,7 @@ from fastapi.openapi.docs import get_swagger_ui_html, get_swagger_ui_oauth2_redi
 
 from backend import __version__
 from utils.resource_utils import resource_path
+from backend.app.services.system_dependency_service import check_system_dependencies
 
 router = APIRouter()
 
@@ -27,6 +28,38 @@ STATIC_DIR = resource_path("static")
 async def health_check():
     """Health check endpoint for monitoring backend status."""
     return {"status": "ok", "version": __version__}
+
+
+@router.get(
+    "/api/system/dependencies",
+    summary="Check system dependencies",
+    description="Check availability of important third-party dependencies (Pandoc, XeLaTeX, Redis, Calibre, Playwright). Returns installation guidance for missing dependencies.",
+    responses={
+        200: {
+            "description": "Dependency check results",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "platform": {"type": "string"},
+                            "is_macos": {"type": "boolean"},
+                            "all_ok": {"type": "boolean"},
+                            "dependencies": {"type": "array"},
+                            "missing_count": {"type": "integer"},
+                            "missing_required_count": {"type": "integer"},
+                            "missing_optional_count": {"type": "integer"},
+                            "macos_guidance": {"type": "object"},
+                        },
+                    }
+                }
+            }
+        }
+    }
+)
+async def system_dependencies_check():
+    """Check system dependencies and return installation guidance."""
+    return check_system_dependencies()
 
 
 @router.get("/no-cdn-fonts/{path:path}", include_in_schema=False)

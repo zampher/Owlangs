@@ -18,6 +18,7 @@ import '../widgets/recent_activities_widget.dart';
 import '../widgets/release_notes_widget.dart';
 import '../widgets/translation_stats_widget.dart';
 import '../../../shared/services/donor_activation_service.dart';
+import '../../../shared/services/dependency_check_service.dart';
 import 'package:flutter/foundation.dart'
     show kIsWeb, kDebugMode, defaultTargetPlatform;
 import 'package:flutter/foundation.dart' show TargetPlatform;
@@ -57,6 +58,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _loadAppVersion();
     // Load user type for desktop users
     _loadUserType();
+    // Check system dependencies on macOS
+    _checkDependencies();
     // Initialize notification listener after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -64,6 +67,217 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         settingsService.initNotificationListener(context);
       }
     });
+  }
+
+  /// Check system dependencies and show warning dialog if any are missing
+  Future<void> _checkDependencies() async {
+    // Only run on macOS desktop
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.macOS) return;
+
+    final service = DependencyCheckService();
+    final result = await service.checkDependencies();
+    if (result == null || result.allOk || !mounted) return;
+
+    // Delay slightly to let the UI settle
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+
+    _showDependencyDialog(result);
+  }
+
+  /// Show dependency warning dialog
+  void _showDependencyDialog(DependencyCheckResult result) {
+    final missing = result.missingDependencies;
+    final missingRequired = result.missingRequiredDependencies;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      barrierDismissible: missingRequired.isEmpty, // Require action if required deps missing
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Row(
+            children: <Widget>[
+              Icon(
+                Icons.warning_amber_rounded,
+                color: missingRequired.isNotEmpty ? Colors.orange : Colors.blue,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  missingRequired.isNotEmpty
+                      ? 'Dependencies Missing'
+                      : 'Optional Dependencies',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                if (missingRequired.isNotEmpty) ...<Widget>[
+                  Text(
+                    'The following required dependencies are missing:',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                ...missing.map((dep) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.orange.withOpacity(0.1)
+                            : Colors.orange.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.orange.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Row(
+                            children: <Widget>[
+                              Icon(
+                                dep.installed ? Icons.check_circle : Icons.cancel,
+                                color: dep.installed ? Colors.green : Colors.red,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                dep.displayName,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              if (dep.optional) ...<Widget>[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.blue.withOpacity(0.2)
+                                        : Colors.blue.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'Optional',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: Colors.blue,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Required for: ${dep.requiredFor}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.textTheme.bodySmall?.color?.withOpacity(0.8),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Install: ${dep.macosInstall}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontFamily: 'monospace',
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+                if (result.macosGuidance != null) ...<Widget>[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.blue.withOpacity(0.1)
+                          : Colors.blue.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.blue.withOpacity(0.3),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          'Quick Install (Recommended)',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          result.macosGuidance!.message,
+                          style: theme.textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 8),
+                        ...result.macosGuidance!.steps.map((step) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              step,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontFamily: step.startsWith('   ') ? 'monospace' : null,
+                                color: step.startsWith('   ')
+                                    ? theme.colorScheme.primary
+                                    : null,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        if (result.macosGuidance!.latexNote != null) ...<Widget>[
+                          const SizedBox(height: 8),
+                          Text(
+                            result.macosGuidance!.latexNote!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.orange,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            if (missingRequired.isEmpty)
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Dismiss'),
+              ),
+            if (result.macosGuidance != null)
+              ElevatedButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Got it'),
+              ),
+          ],
+        );
+      },
+    );
   }
 
   /// Load license / trial status. If license expired, show prompt once on desktop.

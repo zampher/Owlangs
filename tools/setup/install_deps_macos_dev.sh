@@ -115,6 +115,41 @@ else
   fi
 fi
 
+# 7. Calibre (for MOBI/EPUB export via ebook-convert)
+if [[ "$SKIP_OPTIONAL" == "true" ]]; then
+  echo "[Calibre] Skipped (--skip-optional)"
+else
+  if command -v ebook-convert &>/dev/null || [[ -x "/Applications/calibre.app/Contents/MacOS/ebook-convert" ]] || [[ -x "/Applications/Calibre.app/Contents/MacOS/ebook-convert" ]]; then
+    echo "[Calibre] Already installed (ebook-convert found)"
+  else
+    echo "[Calibre] Installing Calibre..."
+    echo "  Calibre is required for MOBI/EPUB export."
+    brew install --cask calibre
+    echo "[Calibre] Installed. Verify with: ebook-convert --version"
+  fi
+fi
+
+# 8. XeLaTeX (for PDF math rendering via Pandoc)
+if [[ "$SKIP_OPTIONAL" == "true" ]]; then
+  echo "[XeLaTeX] Skipped (--skip-optional)"
+else
+  if command -v xelatex &>/dev/null; then
+    echo "[XeLaTeX] Already installed ($(xelatex --version | head -1))"
+  else
+    echo "[XeLaTeX] Not found. Installing MacTeX (includes XeLaTeX)..."
+    echo "  XeLaTeX is required for PDF export with math formulas."
+    echo "  This is a large download (~4GB). Alternative: brew install --cask mactex-no-gui (smaller, ~1.3GB)"
+    read -r -p "Install MacTeX? This may take a while. [y/N] " response </dev/tty || true
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+      brew install --cask mactex
+      echo "[XeLaTeX] Installed. You may need to add /Library/TeX/texbin to PATH."
+    else
+      echo "[XeLaTeX] Skipped. PDF math rendering will not work."
+      echo "  To install later: brew install --cask mactex"
+    fi
+  fi
+fi
+
 echo ""
 echo "=== Next steps (development) ==="
 echo "  python3 -m venv .venv && source .venv/bin/activate"

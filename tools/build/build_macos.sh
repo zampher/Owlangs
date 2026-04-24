@@ -71,7 +71,10 @@ ensure_venv() {
   else
     echo "[env] numpy already installed, skipping"
   fi
-  python -m pip install . pyinstaller >/dev/null
+
+  # Install core dependencies (docling is not used on macOS)
+  echo "[env] Installing dependencies..."
+  python -m pip install ".[pdf_export]" pyinstaller >/dev/null
 }
 
 get_version() {
@@ -188,8 +191,8 @@ POLYFILL_EOF
 
 build_pyinstaller() {
   local spec_file="$1"
-  echo "[build] pyinstaller -y --clean ${spec_file}"
-  pyinstaller -y --clean "${spec_file}"
+  echo "[build] pyinstaller -y --clean ${spec_file} (build_type=${build_type})"
+  OWLANGS_BUILD_TYPE="${build_type}" pyinstaller -y --clean "${spec_file}"
 }
 
 verify_artifact() {
@@ -660,6 +663,7 @@ This will automatically check and install missing dependencies:
   • Redis (caching & tasks)
   • Pandoc (document conversion)
   • XeLaTeX (PDF math rendering)
+  • Calibre (MOBI/EPUB export)
 
 MANUAL INSTALL
 --------------
@@ -678,6 +682,13 @@ If you prefer manual installation:
    brew install --cask mactex
    # OR: brew install --cask tinytex
 
+5. Calibre (for MOBI/EPUB export)
+   brew install --cask calibre
+
+6. Playwright Chromium (for HTML to PDF)
+   # Run inside Owlangs Python environment after first launch
+   playwright install chromium
+
 CHECK STATUS
 ------------
 To check what's installed:
@@ -692,6 +703,8 @@ TROUBLESHOOTING
 • Translation failed: Configure API KEY
 • Export failed: Install Pandoc
 • PDF export failed: Install XeLaTeX
+• MOBI/EPUB export failed: Install Calibre
+• HTML to PDF failed: Run 'playwright install chromium'
 
 SUPPORT
 -------

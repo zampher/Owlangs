@@ -65,15 +65,6 @@ datas += [
 datas += collect_data_files('pygments')
 datas += collect_data_files('latex2mathml')
 
-# Collect mobi and ebooklib modules/data for MOBI/EPUB support in frozen build
-for _pkg in ['mobi', 'ebooklib']:
-    try:
-        _pkg_datas, _, _pkg_hiddenimports = collect_all(_pkg)
-        datas += _pkg_datas
-        hiddenimports += _pkg_hiddenimports
-    except Exception as e:
-        print(f"Warning: Failed to collect resources for {_pkg}: {e}")
-
 hiddenimports = [
     # macOS launch signal
 
@@ -123,6 +114,8 @@ hiddenimports = [
     'backend.utils.markdown_chunk_merger',
     'backend.utils.language_detection_utils',
     'backend.utils.language_detector',
+    'backend.utils.epub_fix',
+    'backend.utils.ebook_metadata',
     # LaTeX integrity check service routes (utils.latex_formula_checker, utils.latex_repair_llm)
     'backend.utils.latex_formula_checker', 'backend.utils.latex_repair_llm',
     'backend.utils.latex_repair_payload', 'backend.utils.latex_formula_batch_repair',
@@ -236,7 +229,23 @@ hiddenimports = [
     'mobi',
     'ebooklib',
     'ebooklib.epub',
+    # mobi dependencies
+    'loguru',
+    'imghdr',
 ]
+
+# Collect mobi and ebooklib modules/data for MOBI/EPUB support in frozen build
+for _pkg in ['mobi', 'ebooklib']:
+    try:
+        _pkg_datas, _, _pkg_hiddenimports = collect_all(_pkg)
+        datas += _pkg_datas
+        hiddenimports += _pkg_hiddenimports
+        print(f"[PYINSTALLER] Collected {_pkg}: datas={len(_pkg_datas)}, hiddenimports={len(_pkg_hiddenimports)}")
+    except Exception as e:
+        print(f"Warning: Failed to collect resources for {_pkg}: {e}")
+
+# Always exclude docling (not used on macOS)
+_excludes = ["docling", "backend.converter.x2md.converter_docling"]
 
 a = Analysis(
     ['backend/cli.py'],  # Entry point: CLI (Launcher starts server via -i)
@@ -247,7 +256,7 @@ a = Analysis(
     hookspath=[os.getcwd()],  # Use project hook-workflow.py (local backend/workflow), not contrib copy_metadata('workflow')
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["docling","backend.converter.x2md.converter_docling"],
+    excludes=_excludes,
     noarchive=False,
     target_arch='universal2',
     optimize=0,

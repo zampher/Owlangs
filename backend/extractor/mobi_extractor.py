@@ -39,7 +39,9 @@ class MobiExtractor(Extractor):
             # Try using mobi library if available, otherwise fall back to error handling
             try:
                 # Try using mobi library for MOBI files
+                logger.debug(LogModule.EXTRACT, "[MOBI_EXTRACTOR] attempting to import mobi library...")
                 import mobi
+                logger.debug(LogModule.EXTRACT, f"[MOBI_EXTRACTOR] import mobi SUCCESS from {getattr(mobi, '__file__', 'unknown')}")
                 import tempfile
                 import os
                 import shutil
@@ -52,9 +54,12 @@ class MobiExtractor(Extractor):
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.mobi') as tmp:
                         tmp.write(self.file_bytes)
                         temp_file = tmp.name
+                    logger.debug(LogModule.EXTRACT, f"[MOBI_EXTRACTOR] temp mobi file created: {temp_file}, size={len(self.file_bytes)} bytes")
                     
                     # Extract MOBI file - mobi library extracts to a directory
+                    logger.debug(LogModule.EXTRACT, "[MOBI_EXTRACTOR] calling mobi.extract()...")
                     bookpath, epubpath = mobi.extract(temp_file)
+                    logger.debug(LogModule.EXTRACT, f"[MOBI_EXTRACTOR] mobi.extract() returned bookpath={bookpath}, epubpath={epubpath}")
                     
                     # Check what was extracted
                     # bookpath is the directory where files were extracted
@@ -69,8 +74,9 @@ class MobiExtractor(Extractor):
                                 # Verify it's a valid ZIP/EPUB
                                 with zipfile.ZipFile(epubpath, 'r') as zf:
                                     epub_file_path = epubpath
-                            except (zipfile.BadZipFile, Exception):
+                            except (zipfile.BadZipFile, Exception) as zip_err:
                                 # Not a valid EPUB, might be HTML or other format
+                                logger.warning(LogModule.EXTRACT, f"[MOBI_EXTRACTOR] epubpath is invalid EPUB: {epubpath}, error: {zip_err}")
                                 pass
                         
                         # Check if it's an HTML file
@@ -107,7 +113,9 @@ class MobiExtractor(Extractor):
                     # Read the content
                     if epub_file_path:
                         # Read EPUB file
+                        logger.debug(LogModule.EXTRACT, f"[MOBI_EXTRACTOR] reading EPUB: {epub_file_path}")
                         book = epub.read_epub(epub_file_path)
+                        logger.debug(LogModule.EXTRACT, f"[MOBI_EXTRACTOR] EPUB read success, items={len(list(book.get_items()))}")
                     elif html_file_path:
                         # Read HTML file directly - mobi library extracted HTML content
                         # We'll parse it with BeautifulSoup instead of ebooklib
@@ -164,19 +172,19 @@ class MobiExtractor(Extractor):
                             shutil.rmtree(bookpath)
                         except:
                             pass
-            except ImportError:
+            except ImportError as import_err:
                 # mobi library not available
-                logger.error(LogModule.EXTRACT, "MOBI library not installed. Please install it with: pip install mobi")
+                logger.error(LogModule.EXTRACT, f"[MOBI_EXTRACTOR] import mobi FAILED with ImportError: {import_err}", exc_info=True)
                 # Cannot extract MOBI without mobi library
                 return ExtractResult(segments=[])
             except Exception as mobi_error:
                 # mobi library failed
-                logger.error(LogModule.EXTRACT, f"MOBI extraction failed with mobi library: {mobi_error}", exc_info=True)
+                logger.error(LogModule.EXTRACT, f"[MOBI_EXTRACTOR] mobi.extract() or post-processing FAILED: {mobi_error}", exc_info=True)
                 # Try ebooklib as last resort (will likely fail for MOBI)
                 try:
                     book = epub.read_epub(io.BytesIO(self.file_bytes))
                 except Exception as epub_error:
-                    logger.error(LogModule.EXTRACT, f"Failed to read MOBI with ebooklib: {epub_error}")
+                    logger.error(LogModule.EXTRACT, f"[MOBI_EXTRACTOR] Failed to read MOBI with ebooklib fallback: {epub_error}")
                     return ExtractResult(segments=[])
             
             if not book:
