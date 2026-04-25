@@ -47,13 +47,14 @@ try:
     from AppKit import (
         NSApplication, NSStatusBar, NSStatusItem, NSMenu, NSMenuItem,
         NSImage, NSVariableStatusItemLength, NSApplicationActivationPolicyRegular,
-        NSWindow, NSWindowStyleMaskTitled, NSWindowStyleMaskClosable, 
+        NSWindow, NSWindowStyleMaskTitled, NSWindowStyleMaskClosable,
         NSWindowStyleMaskMiniaturizable, NSBackingStoreBuffered,
         NSTextView, NSScrollView, NSMakeSize, NSTextField, NSFont,
         NSColor, NSBezelStyleRounded, NSButton, NSWindowStyleMaskResizable,
         NSView, NSLayoutConstraint, NSLayoutAttributeWidth, NSLayoutAttributeHeight,
         NSLayoutAttributeTop, NSLayoutAttributeLeading, NSLayoutAttributeBottom,
-        NSLayoutAttributeTrailing, NSLayoutRelationEqual, NSLayoutFormatAlignAllLeading
+        NSLayoutAttributeTrailing, NSLayoutRelationEqual, NSLayoutFormatAlignAllLeading,
+        NSAlert
     )
     from PyObjCTools import AppHelper
     log_message("Cocoa frameworks imported successfully")
@@ -716,6 +717,14 @@ class OwlangsDelegate(NSObject):
         self.performSelectorOnMainThread_withObject_waitUntilDone_(
             "startServer:", None, False
         )
+        
+        # Auto-check dependencies on launch
+        if self._should_auto_check_deps():
+            log_message("Auto-checking dependencies on launch...")
+            NSThread.sleepForTimeInterval_(5.0)
+            self.performSelectorOnMainThread_withObject_waitUntilDone_(
+                "checkDependencies:", None, False
+            )
     
     def showMenu(self):
         """Show the status bar menu."""
@@ -832,6 +841,17 @@ class OwlangsDelegate(NSObject):
         except:
             pass
         return False
+    
+    def _should_auto_check_deps(self):
+        """Check if should auto-check dependencies on launch."""
+        try:
+            if PREFERENCES_FILE.exists():
+                import json
+                prefs = json.loads(PREFERENCES_FILE.read_text())
+                return prefs.get("auto_check_deps", True)
+        except:
+            pass
+        return True
     
     def _save_preference(self, key, value):
         """Save a preference."""
@@ -1232,34 +1252,53 @@ class OwlangsDelegate(NSObject):
         if not missing:
             self._show_alert("Dependencies", "All dependencies are installed! ✓\\n\\nHomebrew, Redis, Pandoc, and XeLaTeX are all ready.")
             log_message("All dependencies are installed")
-        else:
-            missing_str = "\\n• ".join([""] + missing)
-            script_path = self.get_dependencies_script_path()
+            return
+        
+        missing_str = "\\n• ".join([""] + missing)
+        script_path = self.get_dependencies_script_path()
+        
+        if script_path and script_path.exists():
+            # Use NSAlert for richer UI (checkbox + multiple buttons)
+            alert = NSAlert.alloc().init()
+            alert.setMessageText_("Missing Dependencies")
+            alert.setInformativeText_(
+                f"The following dependencies are missing:{missing_str}\\n\\n"
+                "You can install them automatically or view the manual guide.\\n"
+                "NOTE: You may be asked to enter your password."
+            )
+            alert.addButtonWithTitle_("Install")
+            alert.addButtonWithTitle_("Help")
+            alert.addButtonWithTitle_("Cancel")
             
-            if script_path and script_path.exists():
-                # Ask user with three buttons: Install, Help, Cancel
-                result = subprocess.run([
-                    'osascript', '-e',
-                    f'display dialog "The following dependencies are missing:{missing_str}\\n\\nYou can try automatic installation.\\nNOTE: You may be asked to enter your password.\\n\\nOr view the manual installation guide." buttons {{"Cancel", "Help", "Install"}} default button "Install" with title "Missing Dependencies"'
-                ], capture_output=True, text=True)
-                
-                if "Install" in result.stdout:
-                    log_message(f"Installing dependencies via {script_path}")
-                    self._install_dependencies(script_path)
-                elif "Help" in result.stdout:
-                    log_message("User opened dependency help")
-                    self._show_dependency_help()
-                else:
-                    log_message("User cancelled dependency installation")
-            else:
-                # Script not found - show help-focused dialog
-                result = subprocess.run([
-                    'osascript', '-e',
-                    f'display dialog "The following dependencies are missing:{missing_str}\\n\\nThe automatic installer script was not found. Please install dependencies manually." buttons {{"Close", "View Help"}} default button "View Help" with title "Missing Dependencies"'
-                ], capture_output=True, text=True)
-                
-                if "View Help" in result.stdout or "Help" in result.stdout:
-                    self._show_dependency_help()
+            # Add "Don't remind me again" checkbox
+            checkbox = NSButton.alloc().initWithFrame_(NSMakeRect(0, 0, 240, 18))
+            checkbox.setButtonType_(3)  # NSSwitchButton
+            checkbox.setTitle_("Don't remind me again on launch")
+            alert.setAccessoryView_(checkbox)
+            
+            result = alert.runModal()
+            
+            if checkbox.state() == 1:
+                self._save_preference("auto_check_deps", False)
+                log_message("User disabled auto dependency check on launch")
+            
+            if result == 1000:      # Install
+                log_message(f"Installing dependencies via {script_path}")
+                self._install_dependencies(script_path)
+            elif result == 1001:    # Help
+                log_message("User opened dependency help")
+                self._show_dependency_help()
+            else:                   # Cancel (1002) or closed
+                log_message("User dismissed dependency dialog")
+        else:
+            # Script not found - show help-focused dialog
+            result = subprocess.run([
+                'osascript', '-e',
+                f'display dialog "The following dependencies are missing:{missing_str}\\n\\nThe automatic installer script was not found. Please install dependencies manually." buttons {{"Close", "View Help"}} default button "View Help" with title "Missing Dependencies"'
+            ], capture_output=True, text=True)
+            
+            if "View Help" in result.stdout or "Help" in result.stdout:
+                self._show_dependency_help()
     
     def _install_dependencies(self, script_path):
         """Run the dependency installation script with real-time progress window and cancel support."""
