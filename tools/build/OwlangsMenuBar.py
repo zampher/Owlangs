@@ -1240,7 +1240,7 @@ class OwlangsDelegate(NSObject):
                 # Ask user with three buttons: Install, Help, Cancel
                 result = subprocess.run([
                     'osascript', '-e',
-                    f'display dialog "The following dependencies are missing:{missing_str}\\n\\nYou can try automatic installation, or view the manual installation guide." buttons {{"Cancel", "Help", "Install"}} default button "Install" with title "Missing Dependencies"'
+                    f'display dialog "The following dependencies are missing:{missing_str}\\n\\nYou can try automatic installation.\\nNOTE: You may be asked to enter your password.\\n\\nOr view the manual installation guide." buttons {{"Cancel", "Help", "Install"}} default button "Install" with title "Missing Dependencies"'
                 ], capture_output=True, text=True)
                 
                 if "Install" in result.stdout:
