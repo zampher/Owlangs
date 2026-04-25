@@ -263,8 +263,6 @@ class InstallWindowController(NSObject):
         self.scroll_view = None
         self.process = None
         self.cancelled = False
-        self.buffer = []
-        self.buffer_lock = threading.Lock()
         self.on_complete = None
         return self
     
@@ -329,30 +327,28 @@ class InstallWindowController(NSObject):
         self.window.makeKeyAndOrderFront_(None)
         self.window.orderFrontRegardless()
         
-        self.appendText_(
+        # Set initial text directly (avoids threading issues during init)
+        init_text = (
             "Owlangs Dependency Installer\n"
             "=" * 50 + "\n"
             "Real-time installation progress will appear below.\n"
             "Click Cancel at any time to abort.\n\n"
         )
+        self.text_view.setString_(init_text)
     
     def appendText_(self, text):
-        with self.buffer_lock:
-            self.buffer.append(text)
+        """Append text to the log view (thread-safe, schedules on main thread)."""
         self.performSelectorOnMainThread_withObject_waitUntilDone_(
-            "flushBuffer", None, False
+            "appendTextOnMainThread:", text, False
         )
     
-    def flushBuffer(self):
-        with self.buffer_lock:
-            buffer_copy = self.buffer[:]
-            self.buffer = []
-        if buffer_copy and self.text_view is not None:
-            text = "".join(buffer_copy)
-            storage = self.text_view.textStorage()
-            end_range = NSMakeRange(storage.length(), 0)
-            self.text_view.replaceCharactersInRange_withString_(end_range, text)
-            self.text_view.scrollRangeToVisible_(NSMakeRange(storage.length(), 0))
+    def appendTextOnMainThread_(self, text):
+        """Actually append text (always runs on main thread)."""
+        if self.text_view is None:
+            return
+        self.text_view.textStorage().mutableString().appendString_(text)
+        storage_len = self.text_view.textStorage().length()
+        self.text_view.scrollRangeToVisible_(NSMakeRange(storage_len, 0))
     
     def setStatus_(self, status):
         if self.status_label is not None:
@@ -380,6 +376,7 @@ class InstallWindowController(NSObject):
         if self.process and self.process.poll() is None:
             self.cancelInstall_(None)
     
+    @objc.python_method
     def runInstall(self, script_path, completion_callback):
         self.on_complete = completion_callback
         self.cancelled = False
@@ -388,6 +385,8 @@ class InstallWindowController(NSObject):
         
         def _install_thread():
             try:
+                output_buffer = []
+                
                 # First attempt without admin
                 self.performSelectorOnMainThread_withObject_waitUntilDone_(
                     "setStatus:", "Installing... (without admin privileges)", False
@@ -405,6 +404,7 @@ class InstallWindowController(NSObject):
                 for line in self.process.stdout:
                     if self.cancelled:
                         break
+                    output_buffer.append(line)
                     self.appendText_(line)
                 
                 self.process.stdout.close()
@@ -425,8 +425,92 @@ class InstallWindowController(NSObject):
                         self.on_complete(True, None)
                     return
                 
-                # Need admin — try with osascript
-                self.appendText_("\n[INFO] Admin privileges may be required.\n")
+                # Analyze failure
+                all_output = "".join(output_buffer).lower()
+                is_tty_issue = (
+                    "sudo: a terminal is required" in all_output or
+                    "password" in all_output or
+                    "non-interactive" in all_output
+                )
+                is_homebrew_root = "running homebrew as root" in all_output
+                
+                if is_tty_issue:
+                    self.appendText_(
+                        "\n[INFO] Homebrew cask requires a password but GUI has no TTY.\n"
+                        "[INFO] Opening Terminal.app to continue installation...\n"
+                    )
+                    self.performSelectorOnMainThread_withObject_waitUntilDone_(
+                        "setStatus:", "Installing in Terminal... please enter your password", False
+                    )
+                    
+                    # Open Terminal.app to run the install script
+                    import tempfile
+                    escaped_path = str(script_path).replace('\\', '\\\\').replace('"', '\\"')
+                    cmd_path = Path(tempfile.gettempdir()) / "owlangs_install.command"
+                    cmd_content = (
+                        f'#!/bin/bash\n'
+                        f'cd "{script_path.parent}"\n'
+                        f'/bin/bash -l "{escaped_path}" install\n'
+                        f'rm -f "{cmd_path}"\n'
+                    )
+                    try:
+                        cmd_path.write_text(cmd_content)
+                        cmd_path.chmod(0o755)
+                        subprocess.Popen(["open", str(cmd_path)])
+                        self.appendText_("[INFO] Terminal opened. Please enter your password when prompted.\n")
+                        self.appendText_("[INFO] This window will auto-detect when installation completes.\n")
+                    except Exception as e:
+                        self.appendText_(f"[ERROR] Could not open Terminal: {e}\n")
+                        self.appendText_(
+                            "[INFO] Please open Terminal and run:\n"
+                            f"  /bin/bash -l {script_path} install\n"
+                        )
+                        if self.on_complete:
+                            self.on_complete(False, "tty_required")
+                        return
+                    
+                    # Poll for completion by checking if xelatex becomes available
+                    self.appendText_("[INFO] Polling for XeLaTeX installation (this may take several minutes)...\n")
+                    for _ in range(600):  # up to 10 minutes
+                        if self.cancelled:
+                            break
+                        time.sleep(1)
+                        # Check if all deps are now satisfied
+                        try:
+                            result = subprocess.run(
+                                ["/bin/bash", "-l", "-c", "command -v xelatex"],
+                                capture_output=True, text=True, timeout=5
+                            )
+                            if result.returncode == 0 and result.stdout.strip():
+                                self.appendText_("\n[SUCCESS] XeLaTeX detected! Installation complete.\n")
+                                self.performSelectorOnMainThread_withObject_waitUntilDone_(
+                                    "setStatus:", "Installation complete ✓", False
+                                )
+                                if self.on_complete:
+                                    self.on_complete(True, None)
+                                return
+                        except Exception:
+                            pass
+                    
+                    if self.cancelled:
+                        self.appendText_("\n[CANCELLED] Installation was cancelled by user.\n")
+                        if self.on_complete:
+                            self.on_complete(False, "cancelled")
+                        return
+                    
+                    self.appendText_(
+                        "\n[INFO] Polling timed out. The Terminal window may still be installing.\n"
+                        "[INFO] You can close this window and check dependencies again later.\n"
+                    )
+                    self.performSelectorOnMainThread_withObject_waitUntilDone_(
+                        "setStatus:", "Install running in Terminal (check later)", False
+                    )
+                    if self.on_complete:
+                        self.on_complete(False, "timeout")
+                    return
+                
+                # Try with osascript admin (for non-cask packages that genuinely need root)
+                self.appendText_("\n[INFO] Retrying with administrator privileges...\n")
                 self.performSelectorOnMainThread_withObject_waitUntilDone_(
                     "setStatus:", "Waiting for administrator password...", False
                 )
@@ -434,7 +518,7 @@ class InstallWindowController(NSObject):
                 escaped_path = str(script_path).replace('\\', '\\\\').replace('"', '\\"')
                 applescript = f'do shell script "/bin/bash -l \\"{escaped_path}\\" install" with administrator privileges'
                 
-                self.appendText_("[INFO] A system password dialog should appear. Please enter your password.\n")
+                self.appendText_("[INFO] A system password dialog should appear.\n")
                 
                 self.process = subprocess.Popen(
                     ["osascript", "-e", applescript],
@@ -444,10 +528,11 @@ class InstallWindowController(NSObject):
                     bufsize=1
                 )
                 
-                # osascript output is buffered; read what we can
+                admin_output = []
                 for line in self.process.stdout:
                     if self.cancelled:
                         break
+                    admin_output.append(line)
                     self.appendText_(line)
                 
                 self.process.stdout.close()
@@ -467,12 +552,24 @@ class InstallWindowController(NSObject):
                     if self.on_complete:
                         self.on_complete(True, None)
                 else:
-                    self.appendText_("\n[ERROR] Installation failed even with admin privileges.\n")
-                    self.performSelectorOnMainThread_withObject_waitUntilDone_(
-                        "setStatus:", "Installation failed", False
-                    )
-                    if self.on_complete:
-                        self.on_complete(False, "admin_install_failed")
+                    admin_err = "".join(admin_output).lower()
+                    if "running homebrew as root" in admin_err:
+                        self.appendText_(
+                            "\n[ERROR] Homebrew refuses to run as root.\n"
+                            "[INFO] Please install XeLaTeX manually from https://www.tug.org/mactex/\n"
+                        )
+                        self.performSelectorOnMainThread_withObject_waitUntilDone_(
+                            "setStatus:", "Manual install required (Homebrew/root conflict)", False
+                        )
+                        if self.on_complete:
+                            self.on_complete(False, "homebrew_root")
+                    else:
+                        self.appendText_("\n[ERROR] Installation failed even with admin privileges.\n")
+                        self.performSelectorOnMainThread_withObject_waitUntilDone_(
+                            "setStatus:", "Installation failed", False
+                        )
+                        if self.on_complete:
+                            self.on_complete(False, "admin_install_failed")
                 
             except subprocess.TimeoutExpired:
                 self.appendText_("\n[ERROR] Installation timed out.\n")
@@ -1181,6 +1278,22 @@ class OwlangsDelegate(NSObject):
                     self._show_alert("Cancelled", "Installation was cancelled. Some dependencies may still be missing.")
                 elif error == "timeout":
                     self._show_alert("Timeout", "Dependency installation took too long. Please try running the script manually.")
+                elif error == "tty_required":
+                    self._show_alert(
+                        "Manual Install Required",
+                        "The automatic installer cannot enter your password in GUI mode.\n\n"
+                        "Please open Terminal and run:\n"
+                        f"/bin/bash -l {script_path} install\n\n"
+                        "Or install XeLaTeX manually from https://www.tug.org/mactex/"
+                    )
+                elif error == "homebrew_root":
+                    self._show_alert(
+                        "Homebrew Conflict",
+                        "Homebrew refuses to run with administrator privileges.\n\n"
+                        "Please open Terminal and run without sudo:\n"
+                        f"/bin/bash -l {script_path} install\n\n"
+                        "Or install XeLaTeX manually from https://www.tug.org/mactex/"
+                    )
                 elif error == "admin_install_failed":
                     self._show_install_failed_dialog("Installation failed even with administrator privileges.")
                 else:
