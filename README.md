@@ -104,6 +104,21 @@ Owlangs is perfect for:
 3. Configure your AI platform API keys in the settings
 4. Launch the application
 
+#### macOS Download Packages
+
+When downloading the macOS release, choose the package that matches your Mac:
+
+| Package | Architecture | Recommended For | File Size |
+|---------|-------------|-----------------|-----------|
+| `Owlangs-{ver}-mac-arm64.dmg` | Apple Silicon (M1/M2/M3/M4) | M-series Macs | ~170 MB |
+| `Owlangs-{ver}-mac-x86_64.dmg` | Intel 64-bit | Intel-based Macs | ~180 MB |
+| `Owlangs-{ver}-mac-universal2.dmg` | Universal (arm64 + x86_64) | Shared across teams / unsure | ~330 MB |
+
+**Choosing the right package:**
+- **arm64** — Best for Apple Silicon Macs. Smallest size, native performance. Does **not** run on Intel Macs.
+- **x86_64** — Best for Intel Macs. Smallest size for Intel. Requires Rosetta 2 on Apple Silicon.
+- **universal2** — Works on **both** Apple Silicon and Intel Macs. Convenient if you distribute the app to multiple users with different Mac models, or are unsure which Mac you have. Roughly double the size.
+
 ### Quick Start
 
 1. **Upload a Document**: Select a document file or paste text

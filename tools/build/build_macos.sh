@@ -7,13 +7,58 @@ set -euo pipefail
 # Build Owlangs macOS app (lite or full) and create DMG by default.
 # Frontend: Web only (Desktop mode removed to simplify architecture)
 #   Web: Backend serves Flutter Web at /; user opens http://localhost:8800 in browser
-#
-# Usage:
-#   tools/build/build_macos.sh              # build lite + Web frontend + DMG (default)
-#   tools/build/build_macos.sh lite         # build lite + Web frontend + DMG
-#   tools/build/build_macos.sh full         # build full + Web frontend + DMG
-#   tools/build/build_macos.sh lite --no-dmg   # build lite only, no DMG
-#   tools/build/build_macos.sh full --no-dmg   # build full only, no DMG
+
+show_usage() {
+  cat <<'EOF'
+Usage: tools/build/build_macos.sh [build-type] [options]
+
+Build Owlangs for macOS (MenuBar launcher + Python backend + Flutter Web frontend).
+
+BUILD TYPE (positional, optional — defaults to 'lite'):
+  lite                   Build lite version (faster, smaller; no LaTeX/Pandoc included)
+  full                   Build full version (includes all translation features)
+
+ARCHITECTURE OPTIONS:
+  --arm64                Build for Apple Silicon (M1/M2/M3). Default if not specified.
+  --x86_64               Build for Intel Macs (requires Rosetta 2 on Apple Silicon host).
+  --universal2           Build a fat binary supporting both arm64 and x86_64 (largest).
+  --all-archs            Build all three architectures sequentially (arm64 → x86_64 → universal2).
+
+OTHER OPTIONS:
+  --no-dmg               Skip DMG creation; keep the .app bundle in dist/.
+  --skip-deps            Skip dependency installation step (use with caution).
+  -h, --help             Show this help message and exit.
+
+EXAMPLES:
+  tools/build/build_macos.sh                         # Default: lite + arm64 + DMG
+  tools/build/build_macos.sh full                    # Full version for arm64
+  tools/build/build_macos.sh --x86_64                # Intel-only build
+  tools/build/build_macos.sh --universal2            # Universal fat binary
+  tools/build/build_macos.sh --all-archs             # Build all three architectures
+  tools/build/build_macos.sh full --no-dmg           # Full build without DMG
+  tools/build/build_macos.sh --all-archs --no-dmg    # All architectures, no DMG
+
+OUTPUT:
+  dist/Owlangs.app                      The signed .app bundle
+  dist/Owlangs-{ver}-mac-{arch}.dmg     Installer DMG (unless --no-dmg)
+
+DEPENDENCIES (host machine):
+  - Python 3.12 (python.org universal2 recommended for cross-arch builds)
+  - Flutter SDK (for Web frontend)
+  - PyInstaller 6.x
+  - Rosetta 2 (only for --x86_64 builds on Apple Silicon)
+EOF
+}
+
+# Quick one-line examples (kept for convenience):
+#   tools/build/build_macos.sh                  # build lite + Web frontend + DMG (default, arm64)
+#   tools/build/build_macos.sh lite             # build lite + Web frontend + DMG (arm64)
+#   tools/build/build_macos.sh full             # build full + Web frontend + DMG (arm64)
+#   tools/build/build_macos.sh --x86_64         # build x86_64 only (smaller, Intel Macs)
+#   tools/build/build_macos.sh --universal2     # build universal2 (Intel + Apple Silicon, largest)
+#   tools/build/build_macos.sh --all-archs      # build arm64 + x86_64 + universal2
+#   tools/build/build_macos.sh lite --no-dmg    # build lite only, no DMG
+#   tools/build/build_macos.sh full --no-dmg    # build full only, no DMG
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 ROOT_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
@@ -27,6 +72,7 @@ fi
 build_type=lite
 want_dmg=true
 skip_deps=false
+build_arch=arm64
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -47,8 +93,25 @@ while [[ $# -gt 0 ]]; do
       skip_deps=true
       shift
       ;;
+    --universal2)
+      build_arch=universal2
+      shift
+      ;;
+    --x86_64)
+      build_arch=x86_64
+      shift
+      ;;
+    --all-archs)
+      build_arch=all
+      shift
+      ;;
+    -h|--help)
+      show_usage
+      exit 0
+      ;;
     *)
       echo "Unknown argument: $1" 1>&2
+      echo "Run 'tools/build/build_macos.sh --help' for usage." 1>&2
       exit 1
       ;;
   esac
@@ -195,6 +258,157 @@ build_pyinstaller() {
   OWLANGS_BUILD_TYPE="${build_type}" pyinstaller -y --clean "${spec_file}"
 }
 
+# Find or prepare a universal2 Python 3.12 for building
+find_universal2_python() {
+  # 1. Check for python.org installed Python 3.12
+  local py312="/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12"
+  if [[ -f "$py312" ]]; then
+    echo "$py312"
+    return 0
+  fi
+
+  # 2. Check cached temporary Python
+  local tmp_dir="/tmp/owlangs_build_py312"
+  if [[ -f "$tmp_dir/Python.framework/Versions/3.12/bin/python3.12" ]]; then
+    echo "$tmp_dir/Python.framework/Versions/3.12/bin/python3.12"
+    return 0
+  fi
+
+  # 3. Try to download and extract python.org universal2 Python 3.12
+  echo "[universal2] Python 3.12 universal2 not found, attempting to download..." >&2
+  mkdir -p "$tmp_dir"
+  local pkg_file="/tmp/python-3.12.10-macos11.pkg"
+
+  if [[ ! -f "$pkg_file" ]]; then
+    echo "[universal2] Downloading Python 3.12.10 universal2 pkg..." >&2
+    if ! curl -fsSL -o "$pkg_file" "https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg" 2>/dev/null; then
+      echo "[universal2] ERROR: Failed to download Python 3.12.10" >&2
+      return 1
+    fi
+  fi
+
+  echo "[universal2] Extracting Python package..." >&2
+  (cd "$tmp_dir" && xar -xf "$pkg_file") || {
+    echo "[universal2] ERROR: Failed to extract pkg with xar" >&2
+    return 1
+  }
+
+  (cd "$tmp_dir/Python_Framework.pkg" && cat Payload | gunzip -c | cpio -i 2>/dev/null) || {
+    echo "[universal2] ERROR: Failed to extract Payload" >&2
+    return 1
+  }
+
+  ln -sf Python_Framework.pkg "$tmp_dir/Python.framework" 2>/dev/null || true
+
+  if [[ -f "$tmp_dir/Python.framework/Versions/3.12/bin/python3.12" ]]; then
+    echo "[universal2] Installing pip for temporary Python..." >&2
+    curl -sS https://bootstrap.pypa.io/get-pip.py | \
+      DYLD_FRAMEWORK_PATH="$tmp_dir" "$tmp_dir/Python.framework/Versions/3.12/bin/python3.12" - >/dev/null 2>&1
+    echo "$tmp_dir/Python.framework/Versions/3.12/bin/python3.12"
+    return 0
+  fi
+
+  echo "[universal2] ERROR: Could not prepare universal2 Python 3.12" >&2
+  echo "[universal2] Please install from: https://www.python.org/downloads/release/python-31210/" >&2
+  return 1
+}
+
+# Build backend for a specific architecture using universal2 Python
+build_backend_for_arch() {
+  local ver="$1"
+  local target_arch="$2"  # arm64 or x86_64
+  local app_name="Owlangs-${ver}-mac"
+
+  echo "[${target_arch}] Building ${target_arch} backend..."
+
+  local uni_py
+  uni_py=$(find_universal2_python) || {
+    echo "[${target_arch}] ERROR: Cannot find universal2 Python 3.12"
+    exit 1
+  }
+  if [[ -z "$uni_py" ]] || [[ ! -f "$uni_py" ]]; then
+    echo "[${target_arch}] ERROR: Cannot find universal2 Python 3.12"
+    exit 1
+  fi
+  echo "[${target_arch}] Using Python: $uni_py"
+
+  local py_dir
+  py_dir=$(cd "$(dirname "$uni_py")/../.." && pwd)
+  export DYLD_FRAMEWORK_PATH="$py_dir"
+
+  local venv_path="/tmp/owlangs_build_${target_arch}_venv"
+  if [[ ! -d "$venv_path" ]]; then
+    if [[ "$target_arch" == "x86_64" ]]; then
+      arch -x86_64 "$uni_py" -m venv "$venv_path"
+    else
+      "$uni_py" -m venv "$venv_path"
+    fi
+  fi
+
+  # shellcheck disable=SC1091
+  source "$venv_path/bin/activate"
+  echo "[${target_arch}] Installing dependencies..."
+
+  if [[ "$target_arch" == "x86_64" ]]; then
+    arch -x86_64 pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org \
+      -e ".[pdf_export]" pyinstaller >/dev/null 2>&1
+    echo "[${target_arch}] Running PyInstaller..."
+    PYI_TARGET_ARCH=x86_64 arch -x86_64 python -m PyInstaller -y --clean macos.spec
+  else
+    pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org \
+      -e ".[pdf_export]" pyinstaller >/dev/null 2>&1
+    echo "[${target_arch}] Running PyInstaller..."
+    PYI_TARGET_ARCH=arm64 pyinstaller -y --clean macos.spec
+  fi
+
+  if [[ ! -f "${ROOT_DIR}/dist/${app_name}" ]]; then
+    echo "[${target_arch}] ERROR: backend build failed"
+    exit 1
+  fi
+
+  # Rename to architecture-specific name (for universal2 merge)
+  mv "${ROOT_DIR}/dist/${app_name}" "${ROOT_DIR}/dist/${app_name}-${target_arch}"
+  echo "[${target_arch}] Backend built: dist/${app_name}-${target_arch}"
+  file "${ROOT_DIR}/dist/${app_name}-${target_arch}"
+
+  # For single-arch builds, restore original filename so app bundling works
+  if [[ "$build_arch" != "universal2" ]]; then
+    mv "${ROOT_DIR}/dist/${app_name}-${target_arch}" "${ROOT_DIR}/dist/${app_name}"
+  fi
+
+  # Re-activate main venv
+  if [[ -d "${ROOT_DIR}/.venv" ]]; then
+    # shellcheck disable=SC1091
+    source "${ROOT_DIR}/.venv/bin/activate"
+  fi
+}
+
+# Build universal2 backend by building arm64 + x86_64 separately and merging with lipo
+build_backend_universal2() {
+  local ver="$1"
+  local app_name="Owlangs-${ver}-mac"
+
+  echo "[universal2] =========================================="
+  echo "[universal2] Building universal2 backend (arm64 + x86_64)"
+  echo "[universal2] =========================================="
+
+  build_backend_for_arch "$ver" "arm64"
+  build_backend_for_arch "$ver" "x86_64"
+
+  # Merge with lipo
+  echo "[universal2] Merging arm64 + x86_64 with lipo..."
+  lipo -create "${ROOT_DIR}/dist/${app_name}-arm64" "${ROOT_DIR}/dist/${app_name}-x86_64" \
+    -output "${ROOT_DIR}/dist/${app_name}"
+  rm -f "${ROOT_DIR}/dist/${app_name}-arm64" "${ROOT_DIR}/dist/${app_name}-x86_64"
+
+  echo "[universal2] Verifying universal2 backend..."
+  file "${ROOT_DIR}/dist/${app_name}"
+
+  echo "[universal2] =========================================="
+  echo "[universal2] Universal2 backend build complete!"
+  echo "[universal2] =========================================="
+}
+
 verify_artifact() {
   local artifact="$1"
   if [[ ! -e "${ROOT_DIR}/dist/${artifact}" ]]; then
@@ -209,23 +423,78 @@ verify_artifact() {
 build_owlangs_app() {
   local backend_binary="$1"
   local ver="$2"
-  
+  local use_universal2="${3:-false}"
+
   echo "[app] Building Owlangs application..."
-  
+
   # Sync version numbers in spec file
   echo "[app] Syncing version numbers..."
   local version_short="${ver%.*}"  # 1.2.0 from 1.2.0.0
   sed -i '' "s/@VERSION_SHORT@/${version_short}/g" "${ROOT_DIR}/menubar_macos.spec"
   sed -i '' "s/@VERSION_FULL@/${ver}/g" "${ROOT_DIR}/menubar_macos.spec"
   echo "[app] Version set to: ${ver} (short: ${version_short})"
-  
-  # Verify pyobjc installation
-  echo "[app] Verifying pyobjc installation..."
-  python -c "import AppKit; import Foundation; print('pyobjc OK')"
-  
-  # Build the app
-  echo "[app] Running PyInstaller..."
-  pyinstaller -y --clean menubar_macos.spec
+
+  if [[ "$use_universal2" == true ]]; then
+    echo "[app] Building universal2 MenuBar..."
+    local uni_py
+    uni_py=$(find_universal2_python) || {
+      echo "[app] ERROR: Cannot find universal2 Python 3.12 for MenuBar build"
+      return 1
+    }
+    local py_dir
+    py_dir=$(cd "$(dirname "$uni_py")/../.." && pwd)
+    export DYLD_FRAMEWORK_PATH="$py_dir"
+
+    local mb_venv="/tmp/owlangs_build_mb_universal2_venv"
+    if [[ ! -d "$mb_venv" ]]; then
+      "$uni_py" -m venv "$mb_venv"
+    fi
+    # shellcheck disable=SC1091
+    source "$mb_venv/bin/activate"
+    pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org \
+      pyinstaller pyobjc pyobjc-framework-Cocoa >/dev/null 2>&1
+    pyinstaller -y --clean menubar_macos.spec
+
+    # Re-activate main venv
+    if [[ -d "${ROOT_DIR}/.venv" ]]; then
+      # shellcheck disable=SC1091
+      source "${ROOT_DIR}/.venv/bin/activate"
+    fi
+  elif [[ "$use_universal2" == "x86_64" ]]; then
+    echo "[app] Building x86_64 MenuBar..."
+    local uni_py
+    uni_py=$(find_universal2_python) || {
+      echo "[app] ERROR: Cannot find universal2 Python 3.12 for MenuBar build"
+      return 1
+    }
+    local py_dir
+    py_dir=$(cd "$(dirname "$uni_py")/../.." && pwd)
+    export DYLD_FRAMEWORK_PATH="$py_dir"
+
+    local mb_venv="/tmp/owlangs_build_mb_x86_venv"
+    if [[ ! -d "$mb_venv" ]]; then
+      arch -x86_64 "$uni_py" -m venv "$mb_venv"
+    fi
+    # shellcheck disable=SC1091
+    source "$mb_venv/bin/activate"
+    arch -x86_64 pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org \
+      pyinstaller pyobjc pyobjc-framework-Cocoa >/dev/null 2>&1
+    PYI_TARGET_ARCH=x86_64 arch -x86_64 python -m PyInstaller -y --clean menubar_macos.spec
+
+    # Re-activate main venv
+    if [[ -d "${ROOT_DIR}/.venv" ]]; then
+      # shellcheck disable=SC1091
+      source "${ROOT_DIR}/.venv/bin/activate"
+    fi
+  else
+    # Verify pyobjc installation
+    echo "[app] Verifying pyobjc installation..."
+    python -c "import AppKit; import Foundation; print('pyobjc OK')"
+
+    # Build the app
+    echo "[app] Running PyInstaller..."
+    pyinstaller -y --clean menubar_macos.spec
+  fi
   
   if [[ ! -d "${ROOT_DIR}/dist/Owlangs.app" ]]; then
     echo "[app] ERROR: Failed to build Owlangs.app" 1>&2
@@ -415,7 +684,7 @@ ENDOFSCRIPT
   <key>CFBundleExecutable</key>
   <string>OwlangsLauncher</string>
   <key>LSMinimumSystemVersion</key>
-  <string>13.0</string>
+  <string>12.0</string>
   <key>CFBundleIconFile</key>
   <string>${icon_file}</string>
   <key>LSMultipleInstancesProhibited</key>
@@ -569,7 +838,7 @@ draw.text((50, y_pos), "System Requirements:", fill='#1d1d1f', font=subtitle_fon
 y_pos += 35
 
 requirements = [
-    "• macOS 13.0 or later",
+    "• macOS 12.0 or later",
     "• 4GB RAM (8GB recommended)",
     "• 2GB free disk space"
 ]
@@ -643,7 +912,7 @@ Use Owlangs.app for better integrated experience.
 
 SYSTEM REQUIREMENTS
 -------------------
-• macOS 13.0 or later
+• macOS 12.0 or later
 • 4GB RAM (8GB recommended)  
 • 2GB free disk space
 
@@ -765,20 +1034,44 @@ main() {
   ver=$(get_version)
 
   build_flutter_web
-  build_pyinstaller "macos.spec"
+
   local app_name="Owlangs-${ver}-mac"
-  if ! verify_artifact "${app_name}"; then
-    exit 1
+
+  if [[ "$build_arch" == "universal2" ]]; then
+    build_backend_universal2 "$ver"
+  elif [[ "$build_arch" == "x86_64" ]]; then
+    build_backend_for_arch "$ver" "x86_64"
+  else
+    build_pyinstaller "macos.spec"
+    if ! verify_artifact "${app_name}"; then
+      exit 1
+    fi
   fi
-  
+
   # Build Owlangs desktop app (recommended way to run)
-  build_owlangs_app "${app_name}" "${ver}"
+  if [[ "$build_arch" == "universal2" ]]; then
+    build_owlangs_app "${app_name}" "${ver}" true
+  elif [[ "$build_arch" == "x86_64" ]]; then
+    build_owlangs_app "${app_name}" "${ver}" "x86_64"
+  else
+    build_owlangs_app "${app_name}" "${ver}"
+  fi
   
   # Also create legacy app bundle for compatibility
   create_app_bundle "${app_name}" "Owlangs-legacy.app"
   
+  # Determine DMG filename based on architecture
+  local dmg_name="Owlangs-${ver}-mac"
+  if [[ "$build_arch" == "x86_64" ]]; then
+    dmg_name="${dmg_name}-x86_64"
+  elif [[ "$build_arch" == "arm64" ]]; then
+    dmg_name="${dmg_name}-arm64"
+  elif [[ "$build_arch" == "universal2" ]]; then
+    dmg_name="${dmg_name}-universal2"
+  fi
+
   if $want_dmg; then
-    create_dmg "Owlangs.app" "Owlangs-${ver}-mac.dmg"
+    create_dmg "Owlangs.app" "${dmg_name}.dmg"
   fi
   echo ""
   echo "=== Build output ==="
@@ -786,9 +1079,19 @@ main() {
   echo "  Legacy launcher: ${ROOT_DIR}/dist/Owlangs-legacy.app"
   echo "  Owlangs.app (recommended): ${ROOT_DIR}/dist/Owlangs.app"
   if $want_dmg; then
-    echo "  Install package (DMG): ${ROOT_DIR}/dist/Owlangs-${ver}-mac.dmg"
+    echo "  Install package (DMG): ${ROOT_DIR}/dist/${dmg_name}.dmg"
   fi
   echo ""
+  if [[ "$build_arch" == "universal2" ]]; then
+    echo ""
+    echo "✅ Universal2 build: Supports both Intel and Apple Silicon Macs"
+  elif [[ "$build_arch" == "x86_64" ]]; then
+    echo ""
+    echo "✅ x86_64 build: For Intel Macs (smaller size)"
+  else
+    echo ""
+    echo "✅ arm64 build: For Apple Silicon Macs"
+  fi
   echo "RECOMMENDED: Use Owlangs.app for best experience"
   echo "  - Stays in Dock when running"
   echo "  - Built-in console window for logs"
@@ -797,5 +1100,54 @@ main() {
   echo ""
   echo "macOS build finished successfully."
 }
+
+# If --all-archs is specified, build all three architectures sequentially
+if [[ "$build_arch" == "all" ]]; then
+  echo "========================================"
+  echo "  Building all architectures"
+  echo "========================================"
+  
+  script_path="$0"
+  other_args=()
+  for arg in "$@"; do
+    [[ "$arg" != "--all-archs" ]] && other_args+=("$arg")
+  done
+  
+  # Build arm64
+  echo ""
+  echo ">>> [1/3] Building arm64..."
+  bash "$script_path" ${other_args[@]+"${other_args[@]}"}
+  mv "${ROOT_DIR}/dist" "${ROOT_DIR}/dist_arm64_build"
+  
+  # Build x86_64
+  echo ""
+  echo ">>> [2/3] Building x86_64..."
+  bash "$script_path" --x86_64 ${other_args[@]+"${other_args[@]}"}
+  mv "${ROOT_DIR}/dist" "${ROOT_DIR}/dist_x86_64_build"
+  
+  # Build universal2
+  echo ""
+  echo ">>> [3/3] Building universal2..."
+  bash "$script_path" --universal2 ${other_args[@]+"${other_args[@]}"}
+  mv "${ROOT_DIR}/dist" "${ROOT_DIR}/dist_universal2_build"
+  
+  # Merge all to final dist
+  echo ""
+  echo ">>> Merging all builds to dist/..."
+  mkdir -p "${ROOT_DIR}/dist"
+  cp -R "${ROOT_DIR}/dist_arm64_build"/* "${ROOT_DIR}/dist/" 2>/dev/null || true
+  cp -R "${ROOT_DIR}/dist_x86_64_build"/* "${ROOT_DIR}/dist/" 2>/dev/null || true
+  cp -R "${ROOT_DIR}/dist_universal2_build"/* "${ROOT_DIR}/dist/" 2>/dev/null || true
+  rm -rf "${ROOT_DIR}/dist_arm64_build" "${ROOT_DIR}/dist_x86_64_build" "${ROOT_DIR}/dist_universal2_build"
+  
+  echo ""
+  echo "========================================"
+  echo "  All architectures built successfully!"
+  echo "========================================"
+  echo ""
+  echo "Output files:"
+  ls -lh "${ROOT_DIR}/dist/"*.dmg 2>/dev/null || true
+  exit 0
+fi
 
 main "$@"

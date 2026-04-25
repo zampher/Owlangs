@@ -29,6 +29,7 @@ a = Analysis(
         ('favicon.png', '.'),
         ('assets/Owlangs.icns', '.'),
         ('assets/owlangs_owl_solid.png', '.'),
+        ('3rdParty/macos', '3rdParty/macos'),
     ] + datas,
     hiddenimports=hiddenimports,
     hookspath=[],
@@ -49,6 +50,10 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+import os
+
+target_arch = os.environ.get('PYI_TARGET_ARCH', None)
+
 exe = EXE(
     pyz, a.scripts, [],
     exclude_binaries=True,
@@ -60,7 +65,7 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=True,
-    target_arch=None,
+    target_arch=target_arch,
     codesign_identity=None,
     entitlements_file=None,
     bundle_identifier='com.owlangs.desktop',
@@ -86,7 +91,7 @@ app = BUNDLE(
         'LSUIElement': True,  # Hide Dock icon, show only in menu bar
         'LSBackgroundOnly': False,
         'LSMultipleInstancesProhibited': True,
-        'LSMinimumSystemVersion': '13.0',
+        'LSMinimumSystemVersion': '12.0',
         'CFBundleDocumentTypes': [],
     },
 )

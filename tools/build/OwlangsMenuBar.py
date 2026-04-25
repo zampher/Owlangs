@@ -364,6 +364,13 @@ class OwlangsDelegate(NSObject):
         open_item.setTarget_(self)
         menu.addItem_(open_item)
         
+        # Check Dependencies
+        check_deps_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "Check Dependencies...", "checkDependencies:", ""
+        )
+        check_deps_item.setTarget_(self)
+        menu.addItem_(check_deps_item)
+        
         menu.addItem_(NSMenuItem.separatorItem())
         
         # Start Server
@@ -641,6 +648,360 @@ class OwlangsDelegate(NSObject):
         elif "No" in result.stdout:
             self._save_preference("auto_start", False)
             log_message("Auto-start disabled")
+    
+    def get_dependencies_script_path(self):
+        """Get path to install_dependencies.sh script."""
+        script_name = "install_dependencies.sh"
+        if getattr(sys, 'frozen', False):
+            bundle_dir = Path(sys._MEIPASS)
+            script_path = bundle_dir / "3rdParty" / "macos" / script_name
+            if script_path.exists():
+                return script_path
+        else:
+            script_path = Path(__file__).resolve().parent.parent.parent / "3rdParty" / "macos" / script_name
+            if script_path.exists():
+                return script_path
+        return None
+    
+    def _check_command_exists(self, cmd):
+        """Check if a command exists, trying multiple methods to handle GUI app PATH limitations."""
+        # Method 1: direct which
+        try:
+            result = subprocess.run(["which", cmd], capture_output=True, text=True)
+            if result.returncode == 0 and result.stdout.strip():
+                return True
+        except Exception:
+            pass
+        
+        # Method 2: bash login shell (loads ~/.bash_profile, ~/.profile, etc.)
+        try:
+            result = subprocess.run(["/bin/bash", "-l", "-c", f"command -v {cmd}"], capture_output=True, text=True)
+            if result.returncode == 0 and result.stdout.strip():
+                return True
+        except Exception:
+            pass
+        
+        # Method 3: zsh login shell (loads ~/.zshrc, ~/.zprofile, etc.)
+        try:
+            result = subprocess.run(["/bin/zsh", "-l", "-c", f"command -v {cmd}"], capture_output=True, text=True)
+            if result.returncode == 0 and result.stdout.strip():
+                return True
+        except Exception:
+            pass
+        
+        # Method 4: check common paths
+        common_paths = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin", "/Library/TeX/texbin"]
+        for p in common_paths:
+            if (Path(p) / cmd).exists():
+                return True
+        
+        return False
+    
+    def _show_dependency_help(self):
+        """Open dependency installation help in default browser."""
+        help_html = '''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Owlangs 依赖安装指南</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 30px 20px; line-height: 1.7; color: #333; background: #fafafa; }
+        h1 { color: #1d1d1f; border-bottom: 3px solid #007AFF; padding-bottom: 12px; margin-bottom: 24px; }
+        h2 { color: #333; margin-top: 32px; font-size: 1.3em; }
+        h3 { color: #007AFF; margin-top: 20px; font-size: 1.1em; }
+        .dep { background: #fff; border-radius: 12px; padding: 20px; margin: 16px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .dep h3 { margin-top: 0; }
+        code { background: #f0f0f5; padding: 2px 8px; border-radius: 6px; font-size: 0.9em; font-family: "SF Mono", Monaco, monospace; }
+        pre { background: #1d1d1f; color: #f5f5f7; padding: 16px; border-radius: 10px; overflow-x: auto; font-size: 0.9em; line-height: 1.5; }
+        a { color: #007AFF; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .note { background: #fffbe6; border-left: 4px solid #ffc107; padding: 14px 18px; margin: 18px 0; border-radius: 0 8px 8px 0; }
+        .note strong { color: #b45309; }
+        .tip { background: #e6f7ff; border-left: 4px solid #007AFF; padding: 14px 18px; margin: 18px 0; border-radius: 0 8px 8px 0; }
+        .tip strong { color: #0056b3; }
+        ul { padding-left: 20px; }
+        li { margin: 8px 0; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 0.9em; text-align: center; }
+    </style>
+</head>
+<body>
+    <h1>📦 Owlangs 依赖安装指南</h1>
+    <p>Owlangs 需要以下第三方依赖才能正常运行。如果自动安装失败，请按照下方步骤手动安装。</p>
+
+    <div class="note">
+        <strong>macOS 12 用户注意：</strong>Homebrew 官方已停止对 macOS 12 的正式支持。如果 Homebrew 命令无法运行，请直接访问各依赖官网下载安装包进行安装。
+    </div>
+
+    <div class="dep">
+        <h3>1. Homebrew（包管理器）</h3>
+        <p>Homebrew 是 macOS 上最常用的包管理器，用于安装 Redis、Pandoc 等工具。</p>
+        <p><strong>官网：</strong><a href="https://brew.sh" target="_blank">https://brew.sh</a></p>
+        <p>在终端中运行以下命令安装：</p>
+        <pre>/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</pre>
+        <p>安装完成后，根据提示将 Homebrew 添加到 PATH（Apple Silicon Mac 通常需要）：</p>
+        <pre>echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile\neval "$(/opt/homebrew/bin/brew shellenv)"</pre>
+    </div>
+
+    <div class="dep">
+        <h3>2. Redis（缓存数据库）</h3>
+        <p>Redis 用于任务队列和缓存，Owlangs 运行时必须启动 Redis 服务。</p>
+        <p><strong>官网：</strong><a href="https://redis.io" target="_blank">https://redis.io</a></p>
+        <p>使用 Homebrew 安装：</p>
+        <pre>brew install redis\nbrew services start redis</pre>
+        <p>验证安装：</p>
+        <pre>redis-server --version</pre>
+    </div>
+
+    <div class="dep">
+        <h3>3. Pandoc（文档格式转换）</h3>
+        <p>Pandoc 用于文档格式转换，如 DOCX、HTML 等。</p>
+        <p><strong>官网下载：</strong><a href="https://pandoc.org/installing.html" target="_blank">https://pandoc.org/installing.html</a></p>
+        <p>使用 Homebrew 安装：</p>
+        <pre>brew install pandoc</pre>
+        <p>或直接从官网下载 .pkg 安装包，双击安装即可。</p>
+        <p>验证安装：</p>
+        <pre>pandoc --version</pre>
+    </div>
+
+    <div class="dep">
+        <h3>4. XeLaTeX（PDF 导出引擎）</h3>
+        <p>XeLaTeX 用于 PDF 导出功能。推荐安装 MacTeX（完整版）或 TinyTeX（轻量版）。</p>
+        <p><strong>MacTeX 官网：</strong><a href="https://www.tug.org/mactex/" target="_blank">https://www.tug.org/mactex/</a></p>
+        <p>使用 Homebrew 安装 MacTeX（约 4GB）：</p>
+        <pre>brew install --cask mactex</pre>
+        <p>安装后需要将 LaTeX 添加到 PATH：</p>
+        <pre>export PATH="/Library/TeX/texbin:$PATH"</pre>
+        <p>添加到 <code>~/.zshrc</code> 或 <code>~/.bash_profile</code> 使其永久生效。</p>
+        <p>如果只需要轻量版，可安装 TinyTeX：</p>
+        <pre>brew install --cask tinytex</pre>
+        <p>验证安装：</p>
+        <pre>xelatex --version</pre>
+    </div>
+
+    <div class="tip">
+        <strong>💡 提示：</strong>安装完所有依赖后，点击 MenuBar 中的 <strong>Check Dependencies</strong> 再次检查，确认所有依赖都已正确安装。
+    </div>
+
+    <div class="footer">
+        Owlangs 文档翻译工具 | 如遇问题请访问 <a href="https://github.com/zampher/owlangs" target="_blank">GitHub</a>
+    </div>
+</body>
+</html>'''
+        
+        try:
+            help_dir = Path.home() / "Library" / "Application Support" / "Owlangs"
+            help_dir.mkdir(parents=True, exist_ok=True)
+            help_path = help_dir / "dependency_help.html"
+            help_path.write_text(help_html, encoding="utf-8")
+            subprocess.run(["open", str(help_path)])
+            log_message(f"Opened dependency help: {help_path}")
+        except Exception as e:
+            log_message(f"Error opening help: {e}")
+            self._show_alert("Error", f"Could not open help document: {e}")
+
+    def checkDependencies_(self, sender):
+        """Check if required dependencies are installed."""
+        log_message("Checking dependencies...")
+        
+        deps = {
+            "Homebrew": "brew",
+            "Redis": "redis-server",
+            "Pandoc": "pandoc",
+            "XeLaTeX": "xelatex",
+        }
+        
+        missing = []
+        installed = []
+        
+        for name, cmd in deps.items():
+            if self._check_command_exists(cmd):
+                installed.append(name)
+            else:
+                missing.append(name)
+                log_message(f"Dependency not found: {name} ({cmd})")
+        
+        if not missing:
+            self._show_alert("Dependencies", "All dependencies are installed! ✓\\n\\nHomebrew, Redis, Pandoc, and XeLaTeX are all ready.")
+            log_message("All dependencies are installed")
+        else:
+            missing_str = "\\n• ".join([""] + missing)
+            script_path = self.get_dependencies_script_path()
+            
+            if script_path and script_path.exists():
+                # Ask user with three buttons: Install, Help, Cancel
+                result = subprocess.run([
+                    'osascript', '-e',
+                    f'display dialog "The following dependencies are missing:{missing_str}\\n\\nYou can try automatic installation, or view the manual installation guide." buttons {{"Cancel", "Help", "Install"}} default button "Install" with title "Missing Dependencies"'
+                ], capture_output=True, text=True)
+                
+                if "Install" in result.stdout:
+                    log_message(f"Installing dependencies via {script_path}")
+                    self._install_dependencies(script_path)
+                elif "Help" in result.stdout:
+                    log_message("User opened dependency help")
+                    self._show_dependency_help()
+                else:
+                    log_message("User cancelled dependency installation")
+            else:
+                # Script not found - show help-focused dialog
+                result = subprocess.run([
+                    'osascript', '-e',
+                    f'display dialog "The following dependencies are missing:{missing_str}\\n\\nThe automatic installer script was not found. Please install dependencies manually." buttons {{"Close", "View Help"}} default button "View Help" with title "Missing Dependencies"'
+                ], capture_output=True, text=True)
+                
+                if "View Help" in result.stdout or "Help" in result.stdout:
+                    self._show_dependency_help()
+    
+    def _install_dependencies(self, script_path):
+        """Run the dependency installation script in background with admin privileges if needed."""
+        try:
+            # Show a notification that installation is starting
+            self._show_notification("Owlangs", "Installing Dependencies", "A password dialog may appear. This may take a few minutes...")
+            
+            # Run the installation script in a background thread
+            def run_install():
+                try:
+                    # First, try running without admin privileges
+                    log_message("Attempting to install dependencies without admin privileges...")
+                    result = subprocess.run(
+                        ["/bin/bash", "-l", str(script_path), "install"],
+                        capture_output=True,
+                        text=True,
+                        timeout=7200  # 120 minutes timeout
+                    )
+                    
+                    if result.returncode == 0:
+                        log_message("Dependencies installed successfully")
+                        self._show_notification("Owlangs", "Success", "Dependencies installed successfully!")
+                        self._show_alert("Success", "All dependencies have been installed successfully!")
+                        return
+                    
+                    # Check if the failure is due to needing admin/sudo privileges
+                    stderr_lower = result.stderr.lower() if result.stderr else ""
+                    stdout_lower = result.stdout.lower() if result.stdout else ""
+                    combined = stderr_lower + stdout_lower
+                    
+                    needs_admin = any(kw in combined for kw in [
+                        "sudo", "administrator", "permission denied", "operation not permitted",
+                        "need sudo access", "requires root", "eacces"
+                    ])
+                    
+                    if not needs_admin:
+                        # Genuine error, not permission related
+                        log_message(f"Dependency installation failed: {result.stderr}")
+                        self._show_install_failed_dialog(result.stderr)
+                        return
+                    
+                    # Need admin privileges - prompt user with native macOS dialog
+                    log_message("Admin privileges required, prompting user...")
+                    escaped_path = str(script_path).replace('\\', '\\\\').replace('"', '\\"')
+                    applescript = f'do shell script "/bin/bash -l \\"{escaped_path}\\" install" with administrator privileges'
+                    
+                    admin_result = subprocess.run(
+                        ["osascript", "-e", applescript],
+                        capture_output=True,
+                        text=True,
+                        timeout=7200
+                    )
+                    
+                    if admin_result.returncode == 0:
+                        log_message("Dependencies installed successfully with admin privileges")
+                        self._show_notification("Owlangs", "Success", "Dependencies installed successfully!")
+                        self._show_alert("Success", "All dependencies have been installed successfully!")
+                    else:
+                        # Check if user cancelled the password dialog
+                        admin_stderr = admin_result.stderr.lower() if admin_result.stderr else ""
+                        if "user canceled" in admin_stderr or "cancel" in admin_stderr:
+                            log_message("User cancelled the administrator password dialog")
+                            self._show_alert("Cancelled", "Installation was cancelled. Some dependencies may still be missing.")
+                        else:
+                            log_message(f"Admin installation failed: {admin_result.stderr}")
+                            self._show_install_failed_dialog(admin_result.stderr)
+                            
+                except subprocess.TimeoutExpired:
+                    log_message("Dependency installation timed out")
+                    self._show_alert("Timeout", "Dependency installation took too long. Please try running the script manually.")
+                except Exception as e:
+                    log_message(f"Error installing dependencies: {e}")
+                    self._show_install_failed_dialog(str(e))
+            
+            thread = threading.Thread(target=run_install, daemon=True)
+            thread.start()
+            
+        except Exception as e:
+            log_message(f"Error starting installation: {e}")
+            self._show_alert("Error", f"Failed to start installation: {e}")
+    
+    def _analyze_install_error(self, error_detail):
+        """Analyze installation error and return user-friendly reason + action."""
+        error_lower = error_detail.lower() if error_detail else ""
+        
+        if "not a tty" in error_lower or "non-interactive" in error_lower:
+            return (
+                "The installer requires an interactive terminal.",
+                "Please open Terminal and run:\n/bin/bash -l install_dependencies.sh install"
+            )
+        elif "root" in error_lower and ("don't run" in error_lower or "do not run" in error_lower):
+            return (
+                "Homebrew cannot be installed as root user.",
+                "Please run without sudo. The installer will ask for your password when needed."
+            )
+        elif "certificate" in error_lower or "ssl" in error_lower or "tls" in error_lower:
+            return (
+                "Network security certificate verification failed.",
+                "Please check your internet connection and try again, or install manually via the guide."
+            )
+        elif "homebrew" in error_lower and ("not found" in error_lower or "command not found" in error_lower):
+            return (
+                "Homebrew is not installed on this Mac.",
+                "Please install Homebrew first from https://brew.sh, then try again."
+            )
+        elif "unsupported" in error_lower or ("macos" in error_lower and "version" in error_lower):
+            return (
+                "Your macOS version may be too old for the latest Homebrew.",
+                "Please install dependencies manually by downloading from their official websites."
+            )
+        elif "permission denied" in error_lower or "eacces" in error_lower:
+            return (
+                "The installer does not have permission to write to the required directories.",
+                "Please click Install again and enter your administrator password when prompted."
+            )
+        elif "timeout" in error_lower:
+            return (
+                "The installation took too long and was cancelled.",
+                "Please check your network connection and try again, or install manually via the guide."
+            )
+        else:
+            return (
+                "The automatic installer encountered an unexpected error.",
+                "You can install dependencies manually by following the guide."
+            )
+    
+    def _show_install_failed_dialog(self, error_detail):
+        """Show a user-friendly dialog when automatic installation fails, offering manual install help."""
+        reason, action = self._analyze_install_error(error_detail)
+        
+        # Write full error log to file for debugging
+        try:
+            log_dir = Path.home() / "Library" / "Application Support" / "Owlangs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_path = log_dir / "install_error.log"
+            with open(log_path, "w") as f:
+                f.write(f"Installation failed at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write("=" * 60 + "\n")
+                f.write(error_detail + "\n")
+        except Exception:
+            pass
+        
+        # Show user-friendly alert (display alert supports longer messages better than dialog)
+        result = subprocess.run([
+            'osascript', '-e',
+            f'display alert "Installation Failed" message "{reason}\\n\\n{action}" buttons {{"Close", "View Help"}} default button "View Help"'
+        ], capture_output=True, text=True)
+        
+        if "View Help" in result.stdout or "Help" in result.stdout:
+            self._show_dependency_help()
     
     def showAbout_(self, sender):
         """Show about dialog."""

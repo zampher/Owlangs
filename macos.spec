@@ -258,11 +258,14 @@ a = Analysis(
     runtime_hooks=[],
     excludes=_excludes,
     noarchive=False,
-    target_arch='universal2',
     optimize=0,
 )
 
 pyz = PYZ(a.pure)
+
+import os
+
+target_arch = os.environ.get('PYI_TARGET_ARCH', None)
 
 exe = EXE(
     pyz,
@@ -282,4 +285,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon='Owlangs.icns',
+    target_arch=target_arch,
 )
