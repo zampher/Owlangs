@@ -264,6 +264,76 @@ class OwlangsDelegate(NSObject):
         self.start_time = None
         return self
     
+    def applicationShouldTerminate_(self, sender):
+        """Called when application is about to terminate. Clean up backend."""
+        log_message("Application is terminating, cleaning up backend...")
+        self._cleanup_backend()
+        return True  # Allow termination
+    
+    def _cleanup_backend(self):
+        """Forcefully stop the backend server and clean up all related processes."""
+        try:
+            # Terminate our tracked subprocess
+            if self.backend_process and self.backend_process.poll() is None:
+                log_message("Terminating backend subprocess...")
+                self.backend_process.terminate()
+                try:
+                    self.backend_process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    log_message("Backend did not terminate gracefully, killing...")
+                    self.backend_process.kill()
+                    self.backend_process.wait(timeout=2)
+            
+            # Kill any process still listening on our port
+            try:
+                result = subprocess.run(
+                    ['lsof', '-ti', f':{PORT}'],
+                    capture_output=True, text=True, timeout=5
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    for pid_str in result.stdout.strip().split('\n'):
+                        pid = pid_str.strip()
+                        if pid:
+                            try:
+                                log_message(f"Killing process {pid} on port {PORT}")
+                                os.kill(int(pid), 9)
+                            except Exception:
+                                pass
+            except Exception as e:
+                log_message(f"Error killing port processes: {e}")
+            
+            # Remove lock file
+            if LOCK_FILE.exists():
+                try:
+                    LOCK_FILE.unlink()
+                    log_message("Lock file removed")
+                except Exception:
+                    pass
+            
+            # Also try to find and kill any OwlangsBackend processes
+            try:
+                result = subprocess.run(
+                    ['pgrep', '-f', 'OwlangsBackend'],
+                    capture_output=True, text=True, timeout=3
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    for pid_str in result.stdout.strip().split('\n'):
+                        pid = pid_str.strip()
+                        if pid and int(pid) != os.getpid():
+                            try:
+                                log_message(f"Killing orphaned OwlangsBackend process {pid}")
+                                os.kill(int(pid), 9)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+            
+            self.is_running = False
+            log_message("Backend cleanup completed")
+            
+        except Exception as e:
+            log_message(f"Error during backend cleanup: {e}")
+    
     def applicationDidFinishLaunching_(self, notification):
         """Called when application finishes launching."""
         log_message("Application did finish launching")
@@ -1068,6 +1138,32 @@ if __name__ == "__main__":
     
     lock_fd = None
     lock_file = None
+    _delegate = None
+    
+    def _signal_handler(signum, frame):
+        """Handle SIGTERM/SIGINT by cleaning up backend and exiting."""
+        log_message(f"Received signal {signum}, shutting down...")
+        if _delegate is not None:
+            _delegate._cleanup_backend()
+        # Clean up lock file
+        try:
+            if lock_fd:
+                import fcntl
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                os.close(lock_fd)
+        except:
+            pass
+        try:
+            if lock_file and lock_file.exists():
+                lock_file.unlink()
+        except:
+            pass
+        sys.exit(0)
+    
+    # Register signal handlers
+    import signal
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
     
     try:
         lock_fd, lock_file = check_single_instance()
@@ -1078,6 +1174,7 @@ if __name__ == "__main__":
         
         # Create delegate
         delegate = OwlangsDelegate.alloc().init()
+        _delegate = delegate
         app.setDelegate_(delegate)
         
         log_message("Running app...")
@@ -1088,6 +1185,9 @@ if __name__ == "__main__":
         log_message(traceback.format_exc())
     finally:
         log_message("Cleaning up...")
+        # Cleanup backend if delegate still exists
+        if _delegate is not None:
+            _delegate._cleanup_backend()
         try:
             if lock_fd:
                 import fcntl
