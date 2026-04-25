@@ -1,9 +1,11 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+.eggs/
 # Only ignore top-level build directory, keep tools/build etc.
 /build/
 dist/
+dist_*_build/
 wheels/
 *.egg-info
 tests/resource/

@@ -249,6 +249,247 @@ class LogWindowController(NSObject):
         log_message("Log window hidden")
 
 
+class InstallWindowController(NSObject):
+    """Window showing real-time dependency installation progress with cancel support."""
+    
+    def init(self):
+        self = objc.super(InstallWindowController, self).init()
+        if self is None:
+            return None
+        self.window = None
+        self.text_view = None
+        self.status_label = None
+        self.cancel_button = None
+        self.scroll_view = None
+        self.process = None
+        self.cancelled = False
+        self.buffer = []
+        self.buffer_lock = threading.Lock()
+        self.on_complete = None
+        return self
+    
+    def showWindow(self):
+        if self.window is not None:
+            self.window.makeKeyAndOrderFront_(None)
+            self.window.orderFrontRegardless()
+            return
+        self._createWindow()
+    
+    def _createWindow(self):
+        frame = NSMakeRect(100, 100, 720, 480)
+        style = (
+            NSWindowStyleMaskTitled |
+            NSWindowStyleMaskClosable |
+            NSWindowStyleMaskMiniaturizable
+        )
+        self.window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+            frame, style, NSBackingStoreBuffered, False
+        )
+        self.window.setTitle_("Installing Dependencies")
+        self.window.setDelegate_(self)
+        self.window.setReleasedWhenClosed_(False)
+        
+        # Status label
+        self.status_label = NSTextField.alloc().initWithFrame_(NSMakeRect(20, 430, 680, 24))
+        self.status_label.setStringValue_("Preparing installation...")
+        self.status_label.setBezeled_(False)
+        self.status_label.setDrawsBackground_(False)
+        self.status_label.setEditable_(False)
+        self.status_label.setSelectable_(False)
+        self.status_label.setFont_(NSFont.boldSystemFontOfSize_(13))
+        self.window.contentView().addSubview_(self.status_label)
+        
+        # Scroll view for logs
+        self.scroll_view = NSScrollView.alloc().initWithFrame_(NSMakeRect(20, 60, 680, 360))
+        self.scroll_view.setHasVerticalScroller_(True)
+        self.scroll_view.setHasHorizontalScroller_(True)
+        self.scroll_view.setAutohidesScrollers_(False)
+        
+        content_size = self.scroll_view.contentSize()
+        self.text_view = NSTextView.alloc().initWithFrame_(
+            NSMakeRect(0, 0, content_size.width, content_size.height)
+        )
+        self.text_view.setEditable_(False)
+        self.text_view.setSelectable_(True)
+        self.text_view.setFont_(NSFont.fontWithName_size_("Menlo", 11))
+        self.text_view.setBackgroundColor_(NSColor.blackColor())
+        self.text_view.setTextColor_(NSColor.greenColor())
+        self.text_view.setInsertionPointColor_(NSColor.greenColor())
+        self.scroll_view.setDocumentView_(self.text_view)
+        self.window.contentView().addSubview_(self.scroll_view)
+        
+        # Cancel button
+        self.cancel_button = NSButton.alloc().initWithFrame_(NSMakeRect(20, 16, 100, 28))
+        self.cancel_button.setTitle_("Cancel")
+        self.cancel_button.setBezelStyle_(NSBezelStyleRounded)
+        self.cancel_button.setTarget_(self)
+        self.cancel_button.setAction_("cancelInstall:")
+        self.window.contentView().addSubview_(self.cancel_button)
+        
+        self.window.makeKeyAndOrderFront_(None)
+        self.window.orderFrontRegardless()
+        
+        self.appendText_(
+            "Owlangs Dependency Installer\n"
+            "=" * 50 + "\n"
+            "Real-time installation progress will appear below.\n"
+            "Click Cancel at any time to abort.\n\n"
+        )
+    
+    def appendText_(self, text):
+        with self.buffer_lock:
+            self.buffer.append(text)
+        self.performSelectorOnMainThread_withObject_waitUntilDone_(
+            "flushBuffer", None, False
+        )
+    
+    def flushBuffer(self):
+        with self.buffer_lock:
+            buffer_copy = self.buffer[:]
+            self.buffer = []
+        if buffer_copy and self.text_view is not None:
+            text = "".join(buffer_copy)
+            storage = self.text_view.textStorage()
+            end_range = NSMakeRange(storage.length(), 0)
+            self.text_view.replaceCharactersInRange_withString_(end_range, text)
+            self.text_view.scrollRangeToVisible_(NSMakeRange(storage.length(), 0))
+    
+    def setStatus_(self, status):
+        if self.status_label is not None:
+            self.status_label.setStringValue_(status)
+    
+    def cancelInstall_(self, sender):
+        if self.cancelled:
+            return
+        self.cancelled = True
+        self.appendText_("\n[INFO] Cancelling installation...\n")
+        if self.process and self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait(timeout=2)
+        self.setStatus_("Installation cancelled")
+        self.cancel_button.setEnabled_(False)
+        log_message("User cancelled dependency installation")
+    
+    def windowWillClose_(self, notification):
+        if self.window:
+            self.window.orderOut_(None)
+        if self.process and self.process.poll() is None:
+            self.cancelInstall_(None)
+    
+    def runInstall(self, script_path, completion_callback):
+        self.on_complete = completion_callback
+        self.cancelled = False
+        if self.cancel_button is not None:
+            self.cancel_button.setEnabled_(True)
+        
+        def _install_thread():
+            try:
+                # First attempt without admin
+                self.performSelectorOnMainThread_withObject_waitUntilDone_(
+                    "setStatus:", "Installing... (without admin privileges)", False
+                )
+                self.appendText_("[INFO] Starting installation (no admin)...\n\n")
+                
+                self.process = subprocess.Popen(
+                    ["/bin/bash", "-l", str(script_path), "install"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+                
+                for line in self.process.stdout:
+                    if self.cancelled:
+                        break
+                    self.appendText_(line)
+                
+                self.process.stdout.close()
+                rc = self.process.wait()
+                
+                if self.cancelled:
+                    self.appendText_("\n[CANCELLED] Installation was cancelled by user.\n")
+                    if self.on_complete:
+                        self.on_complete(False, "cancelled")
+                    return
+                
+                if rc == 0:
+                    self.appendText_("\n[SUCCESS] All dependencies installed successfully!\n")
+                    self.performSelectorOnMainThread_withObject_waitUntilDone_(
+                        "setStatus:", "Installation complete ✓", False
+                    )
+                    if self.on_complete:
+                        self.on_complete(True, None)
+                    return
+                
+                # Need admin — try with osascript
+                self.appendText_("\n[INFO] Admin privileges may be required.\n")
+                self.performSelectorOnMainThread_withObject_waitUntilDone_(
+                    "setStatus:", "Waiting for administrator password...", False
+                )
+                
+                escaped_path = str(script_path).replace('\\', '\\\\').replace('"', '\\"')
+                applescript = f'do shell script "/bin/bash -l \\"{escaped_path}\\" install" with administrator privileges'
+                
+                self.appendText_("[INFO] A system password dialog should appear. Please enter your password.\n")
+                
+                self.process = subprocess.Popen(
+                    ["osascript", "-e", applescript],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+                
+                # osascript output is buffered; read what we can
+                for line in self.process.stdout:
+                    if self.cancelled:
+                        break
+                    self.appendText_(line)
+                
+                self.process.stdout.close()
+                rc = self.process.wait()
+                
+                if self.cancelled:
+                    self.appendText_("\n[CANCELLED] Installation was cancelled by user.\n")
+                    if self.on_complete:
+                        self.on_complete(False, "cancelled")
+                    return
+                
+                if rc == 0:
+                    self.appendText_("\n[SUCCESS] All dependencies installed successfully!\n")
+                    self.performSelectorOnMainThread_withObject_waitUntilDone_(
+                        "setStatus:", "Installation complete ✓", False
+                    )
+                    if self.on_complete:
+                        self.on_complete(True, None)
+                else:
+                    self.appendText_("\n[ERROR] Installation failed even with admin privileges.\n")
+                    self.performSelectorOnMainThread_withObject_waitUntilDone_(
+                        "setStatus:", "Installation failed", False
+                    )
+                    if self.on_complete:
+                        self.on_complete(False, "admin_install_failed")
+                
+            except subprocess.TimeoutExpired:
+                self.appendText_("\n[ERROR] Installation timed out.\n")
+                self.performSelectorOnMainThread_withObject_waitUntilDone_(
+                    "setStatus:", "Installation timed out", False
+                )
+                if self.on_complete:
+                    self.on_complete(False, "timeout")
+            except Exception as e:
+                self.appendText_(f"\n[ERROR] {e}\n")
+                if self.on_complete:
+                    self.on_complete(False, str(e))
+        
+        t = threading.Thread(target=_install_thread, daemon=True)
+        t.start()
+
+
 class OwlangsDelegate(NSObject):
     """Menu bar and application delegate."""
     
@@ -924,80 +1165,28 @@ class OwlangsDelegate(NSObject):
                     self._show_dependency_help()
     
     def _install_dependencies(self, script_path):
-        """Run the dependency installation script in background with admin privileges if needed."""
+        """Run the dependency installation script with real-time progress window and cancel support."""
         try:
-            # Show a notification that installation is starting
-            self._show_notification("Owlangs", "Installing Dependencies", "A password dialog may appear. This may take a few minutes...")
+            # Create and show the install progress window
+            if not hasattr(self, 'install_window') or self.install_window is None:
+                self.install_window = InstallWindowController.alloc().init()
+            self.install_window.showWindow()
             
-            # Run the installation script in a background thread
-            def run_install():
-                try:
-                    # First, try running without admin privileges
-                    log_message("Attempting to install dependencies without admin privileges...")
-                    result = subprocess.run(
-                        ["/bin/bash", "-l", str(script_path), "install"],
-                        capture_output=True,
-                        text=True,
-                        timeout=7200  # 120 minutes timeout
-                    )
-                    
-                    if result.returncode == 0:
-                        log_message("Dependencies installed successfully")
-                        self._show_notification("Owlangs", "Success", "Dependencies installed successfully!")
-                        self._show_alert("Success", "All dependencies have been installed successfully!")
-                        return
-                    
-                    # Check if the failure is due to needing admin/sudo privileges
-                    stderr_lower = result.stderr.lower() if result.stderr else ""
-                    stdout_lower = result.stdout.lower() if result.stdout else ""
-                    combined = stderr_lower + stdout_lower
-                    
-                    needs_admin = any(kw in combined for kw in [
-                        "sudo", "administrator", "permission denied", "operation not permitted",
-                        "need sudo access", "requires root", "eacces"
-                    ])
-                    
-                    if not needs_admin:
-                        # Genuine error, not permission related
-                        log_message(f"Dependency installation failed: {result.stderr}")
-                        self._show_install_failed_dialog(result.stderr)
-                        return
-                    
-                    # Need admin privileges - prompt user with native macOS dialog
-                    log_message("Admin privileges required, prompting user...")
-                    escaped_path = str(script_path).replace('\\', '\\\\').replace('"', '\\"')
-                    applescript = f'do shell script "/bin/bash -l \\"{escaped_path}\\" install" with administrator privileges'
-                    
-                    admin_result = subprocess.run(
-                        ["osascript", "-e", applescript],
-                        capture_output=True,
-                        text=True,
-                        timeout=7200
-                    )
-                    
-                    if admin_result.returncode == 0:
-                        log_message("Dependencies installed successfully with admin privileges")
-                        self._show_notification("Owlangs", "Success", "Dependencies installed successfully!")
-                        self._show_alert("Success", "All dependencies have been installed successfully!")
-                    else:
-                        # Check if user cancelled the password dialog
-                        admin_stderr = admin_result.stderr.lower() if admin_result.stderr else ""
-                        if "user canceled" in admin_stderr or "cancel" in admin_stderr:
-                            log_message("User cancelled the administrator password dialog")
-                            self._show_alert("Cancelled", "Installation was cancelled. Some dependencies may still be missing.")
-                        else:
-                            log_message(f"Admin installation failed: {admin_result.stderr}")
-                            self._show_install_failed_dialog(admin_result.stderr)
-                            
-                except subprocess.TimeoutExpired:
-                    log_message("Dependency installation timed out")
+            def on_complete(success, error):
+                if success:
+                    self._show_notification("Owlangs", "Success", "Dependencies installed successfully!")
+                    self._show_alert("Success", "All dependencies have been installed successfully!")
+                elif error == "cancelled":
+                    self._show_notification("Owlangs", "Cancelled", "Installation was cancelled.")
+                    self._show_alert("Cancelled", "Installation was cancelled. Some dependencies may still be missing.")
+                elif error == "timeout":
                     self._show_alert("Timeout", "Dependency installation took too long. Please try running the script manually.")
-                except Exception as e:
-                    log_message(f"Error installing dependencies: {e}")
-                    self._show_install_failed_dialog(str(e))
+                elif error == "admin_install_failed":
+                    self._show_install_failed_dialog("Installation failed even with administrator privileges.")
+                else:
+                    self._show_install_failed_dialog(error or "Unknown installation error.")
             
-            thread = threading.Thread(target=run_install, daemon=True)
-            thread.start()
+            self.install_window.runInstall(script_path, on_complete)
             
         except Exception as e:
             log_message(f"Error starting installation: {e}")
