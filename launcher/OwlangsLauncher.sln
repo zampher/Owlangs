@@ -4,7 +4,7 @@ VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "launcher", "launcher", "{740C5202-8AD2-6D86-0CA9-F95B1A2D697C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OwlangsLauncher", "launcher\OwlangsLauncher.csproj", "{A80A226E-4EB2-208C-DDC7-D74B484DD6EE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OwlangsLauncher", "OwlangsLauncher.csproj", "{A80A226E-4EB2-208C-DDC7-D74B484DD6EE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
