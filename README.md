@@ -104,6 +104,12 @@ Owlangs is perfect for:
 3. Configure your AI platform API keys in the settings
 4. Launch the application
 
+#### Windows Download Packages
+
+| Package | Architecture | Recommended For | File Size |
+|---------|-------------|-----------------|-----------|
+| `Owlangs-Installer-{ver}.exe` | x64 (64-bit) | Windows 10/11 | ~180 MB |
+
 #### macOS Download Packages
 
 When downloading the macOS release, choose the package that matches your Mac:
