@@ -125,6 +125,13 @@ When downloading the macOS release, choose the package that matches your Mac:
 - **x86_64** — Best for Intel Macs. Smallest size for Intel. Requires Rosetta 2 on Apple Silicon.
 - **universal2** — Works on **both** Apple Silicon and Intel Macs. Convenient if you distribute the app to multiple users with different Mac models, or are unsure which Mac you have. Roughly double the size.
 
+#### Alternative Download (Baidu Netdisk)
+
+If the GitHub release download is slow, you can also download from Baidu Netdisk:
+
+- **Link**: https://pan.baidu.com/s/1w_ZIBnD5lFVl8XjbUG_1aw
+- **Extraction Code**: `78rp`
+
 ### Quick Start
 
 1. **Upload a Document**: Select a document file or paste text
