@@ -169,6 +169,12 @@ For issues, questions, or contributions:
 3. Create a new issue
 4. Contact the maintainers
 
+## Community
+
+欢迎加入技术交流微信群：
+
+![WeChat Help](WeChat_Help_技术交流微信群.png)
+
 ## Coming Soon
 
 We're finalizing the platform and plan to launch within the next month. The system is feature-complete and ready for professional use.
