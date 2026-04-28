@@ -180,7 +180,7 @@ For issues, questions, or contributions:
 
 欢迎加入技术交流微信群：
 
-![WeChat Help](WeChat_Help_技术交流微信群.png)
+<img src="WeChat_Help_技术交流微信群.png" alt="WeChat Help" width="280">
 
 ## Coming Soon
 
