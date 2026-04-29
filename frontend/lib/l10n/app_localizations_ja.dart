@@ -1132,6 +1132,21 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsTableOcrSubtitle => '表のOCRを有効にします';
 
   @override
+  String get settingsAnonymizationNewTaskNotice => '変更は新規タスクにのみ適用されます';
+
+  @override
+  String get settingsParsingEngineNewTaskNotice => '変更は新規タスクにのみ適用されます';
+
+  @override
+  String get settingsPdfSplitMaxPages => 'PDF分割最大ページ数';
+
+  @override
+  String get settingsPdfSplitMaxWorkers => 'PDF分割並列数';
+
+  @override
+  String get settingsRequestRetryCount => 'リクエスト再試行回数';
+
+  @override
   String get settingsOcrLanguageTitle => 'OCR言語';
 
   @override

@@ -1120,6 +1120,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTableOcrSubtitle => '为表格启用OCR';
 
   @override
+  String get settingsAnonymizationNewTaskNotice => '更改仅对新任务生效';
+
+  @override
+  String get settingsParsingEngineNewTaskNotice => '更改仅对新任务生效';
+
+  @override
+  String get settingsPdfSplitMaxPages => 'PDF分片页数';
+
+  @override
+  String get settingsPdfSplitMaxWorkers => 'PDF分片并行数';
+
+  @override
+  String get settingsRequestRetryCount => '请求重试次数';
+
+  @override
   String get settingsOcrLanguageTitle => 'OCR语言';
 
   @override

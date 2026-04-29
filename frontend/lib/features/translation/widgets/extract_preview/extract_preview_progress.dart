@@ -82,6 +82,9 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
     isPreparing = true;
     prepareProgress = 0.0;
     simulatedProgressPercent = 0; // Reset simulated progress
+    extractPdfPartCurrent = 0;
+    extractPdfPartTotal = 0;
+    lastExtractPdfPartCurrent = 0;
     // Get current chunk size from global settings for status display
     final globalSettings = ref.read(globalSettingsProvider);
     final chunkSize = globalSettings.chunkSize;
@@ -391,11 +394,44 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
             // Use backend progress if it's >= 90%, otherwise use the higher of backend or simulated progress
             // Simulated progress increases by 1% per second up to 90%
             final backendProgressPercent = progress.clamp(0, 100);
-            final effectiveProgressPercent = backendProgressPercent >= 90
-                ? backendProgressPercent
-                : (backendProgressPercent > simulatedProgressPercent
-                    ? backendProgressPercent
-                    : simulatedProgressPercent);
+
+            // Check for PDF split extraction phase
+            final dynamic partCurrentRaw = status['extract_pdf_part_current'];
+            final dynamic partTotalRaw = status['extract_pdf_part_total'];
+            final int? partCurrent = partCurrentRaw is int ? partCurrentRaw : (partCurrentRaw is num ? partCurrentRaw.toInt() : null);
+            final int? partTotal = partTotalRaw is int ? partTotalRaw : (partTotalRaw is num ? partTotalRaw.toInt() : null);
+            final bool isPdfSplitPhase = partCurrent != null &&
+                partTotal != null &&
+                partCurrent > 0 &&
+                partTotal > 0 &&
+                message.toLowerCase().startsWith('extracting pdf');
+
+            int effectiveProgressPercent;
+            if (isPdfSplitPhase) {
+              // Reset progress when a new PDF part starts
+              if (lastExtractPdfPartCurrent > 0 && partCurrent != lastExtractPdfPartCurrent) {
+                prepareProgress = 0.0;
+                simulatedProgressPercent = 0;
+              }
+              extractPdfPartCurrent = partCurrent;
+              extractPdfPartTotal = partTotal;
+              lastExtractPdfPartCurrent = partCurrent;
+
+              // Backend only reports overall 0-25% progress at each part boundary,
+              // which maps to nearly 100% for the current part. To give meaningful
+              // per-part feedback, we reset to 0% at part start and rely on
+              // simulated progress (1%/sec up to 90%).
+              effectiveProgressPercent = simulatedProgressPercent;
+            } else {
+              // Not in PDF split phase; clear part markers
+              extractPdfPartCurrent = 0;
+              extractPdfPartTotal = 0;
+              effectiveProgressPercent = backendProgressPercent >= 90
+                  ? backendProgressPercent
+                  : (backendProgressPercent > simulatedProgressPercent
+                      ? backendProgressPercent
+                      : simulatedProgressPercent);
+            }
 
             prepareProgress = effectiveProgressPercent / 100.0;
 

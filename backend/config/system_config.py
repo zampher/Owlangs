@@ -73,6 +73,10 @@ class PdfConfig:
     disable_markdown_fallback: bool = True  # If true, PDF files will not use markdown-based extraction as fallback
     use_reportlab: bool = False  # If true, use ReportLab for direct PDF generation (high-fidelity), otherwise use HTML → PDF
     fallback_to_html: bool = True  # If ReportLab fails, fallback to HTML → PDF
+    pdf_split_enabled: bool = True  # If true, large PDFs will be split before conversion
+    pdf_split_max_pages: int = 100  # Maximum pages per PDF split chunk
+    pdf_split_max_workers: int = 2  # Max concurrent workers for split PDF conversion
+    request_retry_count: int = 2  # Number of retries for MinerU API requests
 
 
 @dataclass

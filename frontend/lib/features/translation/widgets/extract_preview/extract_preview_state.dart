@@ -253,6 +253,11 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
   /// Simulated progress that increases by 1% per second up to 90%
   int simulatedProgressPercent = 0;
 
+  /// PDF split extraction part tracking (e.g. Part 3/12)
+  int extractPdfPartCurrent = 0;
+  int extractPdfPartTotal = 0;
+  int lastExtractPdfPartCurrent = 0;
+
   // ============================================================================
   // Translation Progress (Translate Phase)
   // ============================================================================
@@ -384,6 +389,9 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
     prepareInFlight = false;
     initialDataLoaded = false;
     simulatedProgressPercent = 0;
+    extractPdfPartCurrent = 0;
+    extractPdfPartTotal = 0;
+    lastExtractPdfPartCurrent = 0;
     // Translation phase state
     isTranslating = false;
     translationProgress = 0;

@@ -75,7 +75,11 @@ class UnifiedConfig:
             'formula_ocr': self.system.parsing_engine.default_engine_settings.get('formula_ocr', False),
             'table_ocr': self.system.parsing_engine.default_engine_settings.get('table_ocr', True),
             'skip_translate': self.system.parsing_engine.default_engine_settings.get('skip_translate', False),
-            'engines': self.system.parsing_engine.engines
+            'engines': self.system.parsing_engine.engines,
+            'pdf_split_enabled': self.system.pdf.pdf_split_enabled,
+            'pdf_split_max_pages': self.system.pdf.pdf_split_max_pages,
+            'pdf_split_max_workers': self.system.pdf.pdf_split_max_workers,
+            'request_retry_count': self.system.pdf.request_retry_count,
         }
     
     @property
@@ -183,6 +187,10 @@ class UnifiedConfig:
             config_dict['translator_formula_ocr'] = parsing_engine['formula_ocr']
             config_dict['translator_table_ocr'] = parsing_engine['table_ocr']
             config_dict['translator_skip_translate'] = parsing_engine['skip_translate']
+            config_dict['translator_pdf_split_enabled'] = parsing_engine['pdf_split_enabled']
+            config_dict['translator_pdf_split_max_pages'] = parsing_engine['pdf_split_max_pages']
+            config_dict['translator_pdf_split_max_workers'] = parsing_engine['pdf_split_max_workers']
+            config_dict['translator_request_retry_count'] = parsing_engine['request_retry_count']
         
         return config_dict
     
@@ -208,6 +216,14 @@ class UnifiedConfig:
                 self.system.parsing_engine.default_engine_settings['skip_translate'] = parsing_data['skip_translate']
             if 'engines' in parsing_data:
                 self.system.parsing_engine.engines.update(parsing_data['engines'])
+            if 'pdf_split_enabled' in parsing_data:
+                self.system.pdf.pdf_split_enabled = bool(parsing_data['pdf_split_enabled'])
+            if 'pdf_split_max_pages' in parsing_data:
+                self.system.pdf.pdf_split_max_pages = int(parsing_data['pdf_split_max_pages'])
+            if 'pdf_split_max_workers' in parsing_data:
+                self.system.pdf.pdf_split_max_workers = int(parsing_data['pdf_split_max_workers'])
+            if 'request_retry_count' in parsing_data:
+                self.system.pdf.request_retry_count = int(parsing_data['request_retry_count'])
         
         # Handle AI platforms
         if 'ai_platforms' in data:

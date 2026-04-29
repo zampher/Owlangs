@@ -1170,6 +1170,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTableOcrSubtitle => 'Enable OCR for tables';
 
   @override
+  String get settingsAnonymizationNewTaskNotice =>
+      'Changes apply to new tasks only';
+
+  @override
+  String get settingsParsingEngineNewTaskNotice =>
+      'Changes apply to new tasks only';
+
+  @override
+  String get settingsPdfSplitMaxPages => 'PDF Split Max Pages';
+
+  @override
+  String get settingsPdfSplitMaxWorkers => 'PDF Split Max Workers';
+
+  @override
+  String get settingsRequestRetryCount => 'Request Retry Count';
+
+  @override
   String get settingsOcrLanguageTitle => 'OCR Language';
 
   @override

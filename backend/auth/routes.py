@@ -3099,7 +3099,9 @@ async def batch_update_settings(
                         raise HTTPException(status_code=400, detail=f"Invalid value for ai_platforms_default_platform: {str(e)}")
                 
                 elif key in ['parsingEngine', 'translator_convert_engine', 'translator_mineru_model_version', 
-                             'translator_formula_ocr', 'translator_table_ocr', 'translator_skip_translate']:
+                             'translator_formula_ocr', 'translator_table_ocr', 'translator_skip_translate',
+                             'translator_pdf_split_enabled', 'translator_pdf_split_max_pages',
+                             'translator_pdf_split_max_workers', 'translator_request_retry_count']:
                     # Handle parsing_engine fields (accept both camelCase from frontend and snake_case)
                     parsing_engine_updates = {}
                     if key in ('parsingEngine', 'translator_convert_engine'):
@@ -3112,6 +3114,14 @@ async def batch_update_settings(
                         parsing_engine_updates['table_ocr'] = value
                     elif key == 'translator_skip_translate':
                         parsing_engine_updates['skip_translate'] = value
+                    elif key == 'translator_pdf_split_enabled':
+                        parsing_engine_updates['pdf_split_enabled'] = value
+                    elif key == 'translator_pdf_split_max_pages':
+                        parsing_engine_updates['pdf_split_max_pages'] = value
+                    elif key == 'translator_pdf_split_max_workers':
+                        parsing_engine_updates['pdf_split_max_workers'] = value
+                    elif key == 'translator_request_retry_count':
+                        parsing_engine_updates['request_retry_count'] = value
                     
                     if parsing_engine_updates:
                         # Update parsing engine via update_from_dict

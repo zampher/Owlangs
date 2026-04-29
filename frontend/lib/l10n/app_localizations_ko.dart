@@ -1130,6 +1130,21 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsTableOcrSubtitle => '표에 대한 OCR 활성화';
 
   @override
+  String get settingsAnonymizationNewTaskNotice => '변경 사항은 새 작업에만 적용됩니다';
+
+  @override
+  String get settingsParsingEngineNewTaskNotice => '변경 사항은 새 작업에만 적용됩니다';
+
+  @override
+  String get settingsPdfSplitMaxPages => 'PDF 분할 최대 페이지';
+
+  @override
+  String get settingsPdfSplitMaxWorkers => 'PDF 분할 병렬 수';
+
+  @override
+  String get settingsRequestRetryCount => '요청 재시도 횟수';
+
+  @override
   String get settingsOcrLanguageTitle => 'OCR 언어';
 
   @override

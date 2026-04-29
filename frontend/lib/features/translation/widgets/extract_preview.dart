@@ -3093,68 +3093,87 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
           // Progress info and Cancel button (shown when preparing Extract phase)
           if (isPreparing && !isTranslating) ...<Widget>[
             const SizedBox(width: 6), // Further reduced spacing
-            // Task type label (e.g., "Detect Identifier", "Detect Language")
-            if (prepareTaskType.isNotEmpty) ...<Widget>[
-              Text(
-                prepareTaskType,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.green.shade700,
-                ),
-              ),
-              const SizedBox(width: 6),
-            ],
-            SizedBox(
-              width: 200,
-              height: 4, // Reduced from default to 4
-              child: LinearProgressIndicator(
-                value: prepareProgress == 0.0 ? null : prepareProgress,
-                backgroundColor: Colors.grey.shade300,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  Colors.green.shade700,
-                ),
-                minHeight: 4, // Reduced from 6 to 4
-              ),
-            ),
-            const SizedBox(width: 4), // Further reduced spacing
-            Text(
-              prepareProgress > 0 ? '${(prepareProgress * 100).toInt()}%' : '',
-              style: TextStyle(
-                fontSize: 10, // Further reduced from 11 to 10
-                fontWeight: FontWeight.w600,
-                color: Colors.green.shade700,
-              ),
-            ),
-            if (prepareStatus.isNotEmpty) ...<Widget>[
-              const SizedBox(width: 4), // Further reduced spacing
-              Flexible(
-                child: Text(
-                  prepareStatus == 'Extraction cancelled'
-                      ? AppLocalizations.of(context)!.extractExtractionCancelled
-                      : prepareStatus,
-                  style: TextStyle(
-                    fontSize: 10, // Reduced from 11 to 10
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                // Task type label (e.g., "Detect Identifier", "Detect Language")
+                if (prepareTaskType.isNotEmpty) ...<Widget>[
+                  Text(
+                    prepareTaskType,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.green.shade700,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
+                  const SizedBox(width: 6),
+                ],
+                // PDF split part label shown left of the progress bar
+                if (extractPdfPartCurrent > 0 && extractPdfPartTotal > 0) ...<Widget>[
+                  Text(
+                    'Part $extractPdfPartCurrent/$extractPdfPartTotal',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.green.shade700,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                SizedBox(
+                  width: 200,
+                  height: 4, // Reduced from default to 4
+                  child: LinearProgressIndicator(
+                    value: prepareProgress == 0.0 ? null : prepareProgress,
+                    backgroundColor: Colors.grey.shade300,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Colors.green.shade700,
+                    ),
+                    minHeight: 4, // Reduced from 6 to 4
+                  ),
                 ),
-              ),
-            ],
-            const SizedBox(width: 4), // Further reduced spacing
-            OutlinedButton(
-              onPressed: _handleCancelExtraction,
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 6, // Further reduced from 8
-                  vertical: 2, // Further reduced from 4
+                const SizedBox(width: 4), // Further reduced spacing
+                // Cancel button placed right next to the progress bar
+                OutlinedButton(
+                  onPressed: _handleCancelExtraction,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6, // Further reduced from 8
+                      vertical: 2, // Further reduced from 4
+                    ),
+                    minimumSize: const Size(0, 28), // Increased button height
+                  ),
+                  child: Text(
+                    AppLocalizations.of(context)!.extractToolbarCancel,
+                    style: const TextStyle(fontSize: 10),
+                  ), // Further reduced font size
                 ),
-                minimumSize: const Size(0, 28), // Increased button height
-              ),
-              child: Text(
-                AppLocalizations.of(context)!.extractToolbarCancel,
-                style: const TextStyle(fontSize: 10),
-              ), // Further reduced font size
+                const SizedBox(width: 4), // Further reduced spacing
+                Text(
+                  prepareProgress > 0 ? '${(prepareProgress * 100).toInt()}%' : '',
+                  style: TextStyle(
+                    fontSize: 10, // Further reduced from 11 to 10
+                    fontWeight: FontWeight.w600,
+                    color: Colors.green.shade700,
+                  ),
+                ),
+                if (prepareStatus.isNotEmpty) ...<Widget>[
+                  const SizedBox(width: 4), // Further reduced spacing
+                  Flexible(
+                    child: Text(
+                      prepareStatus == 'Extraction cancelled'
+                          ? AppLocalizations.of(context)!.extractExtractionCancelled
+                          : prepareStatus,
+                      style: TextStyle(
+                        fontSize: 10, // Reduced from 11 to 10
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ],
           // Translation progress bar (shown when translating)

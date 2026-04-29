@@ -46,6 +46,10 @@ class SettingsService {
     'translator_formula_ocr': 'global',
     'translator_table_ocr': 'global',
     'translator_skip_translate': 'global',
+    'translator_pdf_split_enabled': 'global',
+    'translator_pdf_split_max_pages': 'global',
+    'translator_pdf_split_max_workers': 'global',
+    'translator_request_retry_count': 'global',
 
     // User settings (all users)
     'temperature': 'user',

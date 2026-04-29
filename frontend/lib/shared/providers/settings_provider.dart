@@ -48,6 +48,9 @@ class GlobalSettings {
     this.parsingChunkSize = 1000,
     this.parsingConcurrent = 3,
     this.parsingTimeout = 300,
+    this.pdfSplitMaxPages = 100,
+    this.pdfSplitMaxWorkers = 2,
+    this.requestRetryCount = 2,
 
     // Glossary
     this.useGlobalGlossary = false,
@@ -121,6 +124,9 @@ class GlobalSettings {
         parsingChunkSize: json['parsingChunkSize'] ?? 1000,
         parsingConcurrent: json['parsingConcurrent'] ?? 3,
         parsingTimeout: json['parsingTimeout'] ?? 300,
+        pdfSplitMaxPages: json['pdfSplitMaxPages'] ?? 100,
+        pdfSplitMaxWorkers: json['pdfSplitMaxWorkers'] ?? 2,
+        requestRetryCount: json['requestRetryCount'] ?? 2,
         useGlobalGlossary: json['useGlobalGlossary'] ?? false,
         globalGlossaryFile: json['globalGlossaryFile'] ?? '',
         glossaryGenerateEnable: json['glossaryGenerateEnable'] ?? true,
@@ -189,6 +195,9 @@ class GlobalSettings {
   final int parsingChunkSize;
   final int parsingConcurrent;
   final int parsingTimeout;
+  final int pdfSplitMaxPages;
+  final int pdfSplitMaxWorkers;
+  final int requestRetryCount;
 
   // Glossary Settings (新任务生效)
   final bool useGlobalGlossary;
@@ -250,6 +259,9 @@ class GlobalSettings {
     int? parsingChunkSize,
     int? parsingConcurrent,
     int? parsingTimeout,
+    int? pdfSplitMaxPages,
+    int? pdfSplitMaxWorkers,
+    int? requestRetryCount,
 
     // Glossary
     bool? useGlobalGlossary,
@@ -311,6 +323,9 @@ class GlobalSettings {
         parsingChunkSize: parsingChunkSize ?? this.parsingChunkSize,
         parsingConcurrent: parsingConcurrent ?? this.parsingConcurrent,
         parsingTimeout: parsingTimeout ?? this.parsingTimeout,
+        pdfSplitMaxPages: pdfSplitMaxPages ?? this.pdfSplitMaxPages,
+        pdfSplitMaxWorkers: pdfSplitMaxWorkers ?? this.pdfSplitMaxWorkers,
+        requestRetryCount: requestRetryCount ?? this.requestRetryCount,
 
         // Glossary
         useGlobalGlossary: useGlobalGlossary ?? this.useGlobalGlossary,
@@ -369,6 +384,9 @@ class GlobalSettings {
         'parsingChunkSize': parsingChunkSize,
         'parsingConcurrent': parsingConcurrent,
         'parsingTimeout': parsingTimeout,
+        'pdfSplitMaxPages': pdfSplitMaxPages,
+        'pdfSplitMaxWorkers': pdfSplitMaxWorkers,
+        'requestRetryCount': requestRetryCount,
         'useGlobalGlossary': useGlobalGlossary,
         'globalGlossaryFile': globalGlossaryFile,
         'glossaryGenerateEnable': glossaryGenerateEnable,
@@ -508,6 +526,17 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
             backendSettings['tableOcr'] = appConfig['tableOcr'];
           } else if (appConfig.containsKey('translator_table_ocr')) {
             backendSettings['tableOcr'] = appConfig['translator_table_ocr'];
+          }
+
+          // Map PDF split settings from backend
+          if (appConfig.containsKey('translator_pdf_split_max_pages')) {
+            backendSettings['pdfSplitMaxPages'] = appConfig['translator_pdf_split_max_pages'];
+          }
+          if (appConfig.containsKey('translator_pdf_split_max_workers')) {
+            backendSettings['pdfSplitMaxWorkers'] = appConfig['translator_pdf_split_max_workers'];
+          }
+          if (appConfig.containsKey('translator_request_retry_count')) {
+            backendSettings['requestRetryCount'] = appConfig['translator_request_retry_count'];
           }
 
           // Restore UI language from backend or system locale on first run
@@ -661,6 +690,9 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     int? parsingChunkSize,
     int? parsingConcurrent,
     int? parsingTimeout,
+    int? pdfSplitMaxPages,
+    int? pdfSplitMaxWorkers,
+    int? requestRetryCount,
   }) async {
     // 1. Immediately update local state
     state = state.copyWith(
@@ -671,6 +703,9 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
       parsingChunkSize: parsingChunkSize,
       parsingConcurrent: parsingConcurrent,
       parsingTimeout: parsingTimeout,
+      pdfSplitMaxPages: pdfSplitMaxPages,
+      pdfSplitMaxWorkers: pdfSplitMaxWorkers,
+      requestRetryCount: requestRetryCount,
     );
 
     // 2. Save entire state to local cache (for app restart recovery)
@@ -696,6 +731,15 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     }
     if (tableOcr != null) {
       await _settingsService.saveSetting('', 'translator_table_ocr', tableOcr);
+    }
+    if (pdfSplitMaxPages != null) {
+      await _settingsService.saveSetting('', 'translator_pdf_split_max_pages', pdfSplitMaxPages);
+    }
+    if (pdfSplitMaxWorkers != null) {
+      await _settingsService.saveSetting('', 'translator_pdf_split_max_workers', pdfSplitMaxWorkers);
+    }
+    if (requestRetryCount != null) {
+      await _settingsService.saveSetting('', 'translator_request_retry_count', requestRetryCount);
     }
   }
 

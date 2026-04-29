@@ -10,6 +10,7 @@ import '../models/language_model_config.dart';
 import '../models/anonymization_settings_state.dart';
 import '../widgets/anonymization_status_bar.dart';
 import '../../../shared/utils/message_service.dart';
+import '../../../l10n/app_localizations.dart';
 
 // Language names mapping (English Name (Local Name))
 const Map<String, String> LANGUAGES = <String, String>{
@@ -201,6 +202,15 @@ class _AnonymizationSettingsScreenState
                               ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          AppLocalizations.of(context)!.settingsAnonymizationNewTaskNotice,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                            fontStyle: FontStyle.italic,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         // Language Selector

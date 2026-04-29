@@ -125,7 +125,8 @@ class ConverterMineruConfig(X2MarkdownConverterConfig):
     # PDF split configuration (for large PDFs exceeding MinerU limits)
     pdf_split_enabled: bool = True
     pdf_split_max_pages: int = 100
-    pdf_split_max_workers: int = 1  # V1=serial; future max=3 for concurrent Cloud calls
+    pdf_split_max_workers: int = 2  # Max concurrent workers for split PDF conversion
+    request_retry_count: int = 2  # Number of retries for MinerU API requests
 
     def gethash(self) -> Hashable:
         return (
@@ -185,7 +186,8 @@ class MinerUBackend(ABC):
         table_ocr: bool = True,
         model_version: str = "vlm",
         ocr_language: str = "auto",
-        api_endpoints: Optional[Dict[str, str]] = None
+        api_endpoints: Optional[Dict[str, str]] = None,
+        retry_count: int = 2,
     ):
         self.base_url = base_url.rstrip('/')
         self.mineru_token = (mineru_token or "").strip()
@@ -194,6 +196,7 @@ class MinerUBackend(ABC):
         self.model_version = model_version
         self.ocr_language = ocr_language or "auto"
         self.api_endpoints = api_endpoints or {}
+        self.retry_count = max(0, int(retry_count))
     
     def _get_auth_header(self) -> Dict[str, str]:
         """Get authorization header if token is available."""
@@ -288,14 +291,15 @@ class MinerUCloudBackend(MinerUBackend):
         headers['Content-Type'] = 'application/json'
         headers.update(self._get_auth_header())
         
-        for attempt in range(1, 4):
+        max_attempts = self.retry_count + 1
+        for attempt in range(1, max_attempts + 1):
             try:
                 with httpx.Client(trust_env=False, timeout=timeout, verify=False, limits=limits, proxy=None, mounts={'http://': None, 'https://': None}) as client:
                     response = client.request(method, url, headers=headers, **kwargs)
                     response.raise_for_status()
                     return response
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, ssl.SSLError) as e:
-                if attempt < 3:
+                if attempt < max_attempts:
                     wait_s = 2 ** attempt
                     logger.warning(LogModule.CONVERT, f"[MINERU] Request failed (attempt {attempt}), retrying in {wait_s}s: {e}")
                     time.sleep(wait_s)
@@ -315,14 +319,15 @@ class MinerUCloudBackend(MinerUBackend):
         headers['Content-Type'] = 'application/json'
         headers.update(self._get_auth_header())
         
-        for attempt in range(1, 4):
+        max_attempts = self.retry_count + 1
+        for attempt in range(1, max_attempts + 1):
             try:
                 async with httpx.AsyncClient(trust_env=False, timeout=timeout, verify=False, limits=limits, proxy=None, mounts={'http://': None, 'https://': None}) as client:
                     response = await client.request(method, url, headers=headers, **kwargs)
                     response.raise_for_status()
                     return response
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, ssl.SSLError) as e:
-                if attempt < 3:
+                if attempt < max_attempts:
                     wait_s = 2 ** attempt
                     logger.warning(LogModule.CONVERT, f"[MINERU] Request failed (attempt {attempt}), retrying in {wait_s}s: {e}")
                     await asyncio.sleep(wait_s)
@@ -351,21 +356,22 @@ class MinerUCloudBackend(MinerUBackend):
         upload_url = result["data"]["file_urls"][0]
         
         # Upload file directly to pre-signed URL
-        for attempt in range(1, 4):
+        max_attempts = self.retry_count + 1
+        for attempt in range(1, max_attempts + 1):
             try:
                 with httpx.Client(trust_env=False, timeout=timeout, verify=False, limits=limits, proxy=None, mounts={'http://': None, 'https://': None}) as client:
                     upload_response = client.put(upload_url, content=document.content)
                     upload_response.raise_for_status()
                 return batch_id
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, ssl.SSLError) as e:
-                if attempt < 3:
+                if attempt < max_attempts:
                     wait_s = 2 ** attempt
                     logger.warning(LogModule.CONVERT, f"[MINERU] File upload failed (attempt {attempt}), retrying: {e}")
                     time.sleep(wait_s)
                 else:
                     raise
         
-        raise Exception("Failed to upload file after 3 attempts")
+        raise Exception(f"Failed to upload file after {max_attempts} attempts")
     
     async def upload_async(self, document: Document) -> str:
         """Async upload document to cloud MinerU."""
@@ -382,21 +388,22 @@ class MinerUCloudBackend(MinerUBackend):
         upload_url = result["data"]["file_urls"][0]
         
         # Upload file directly to pre-signed URL
-        for attempt in range(1, 4):
+        max_attempts = self.retry_count + 1
+        for attempt in range(1, max_attempts + 1):
             try:
                 async with httpx.AsyncClient(trust_env=False, timeout=timeout, verify=False, limits=limits, proxy=None, mounts={'http://': None, 'https://': None}) as client:
                     upload_response = await client.put(upload_url, content=document.content)
                     upload_response.raise_for_status()
                 return batch_id
             except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, ssl.SSLError) as e:
-                if attempt < 3:
+                if attempt < max_attempts:
                     wait_s = 2 ** attempt
                     logger.warning(LogModule.CONVERT, f"[MINERU] File upload failed (attempt {attempt}), retrying: {e}")
                     await asyncio.sleep(wait_s)
                 else:
                     raise
         
-        raise Exception("Failed to upload file after 3 attempts")
+        raise Exception(f"Failed to upload file after {max_attempts} attempts")
     
     def get_result(self, batch_id: str) -> Tuple[str, bytes]:
         """Poll for result and download ZIP."""
@@ -911,7 +918,8 @@ class BackendFactory:
                 table_ocr=config.table_ocr,
                 model_version=config.model_version,
                 ocr_language=config.ocr_language,
-                api_endpoints=api_endpoints
+                api_endpoints=api_endpoints,
+                retry_count=config.request_retry_count,
             )
         logger.debug(LogModule.CONVERT, f"[MINERU] Using Local backend for {base_url}")
         return MinerULocalBackend(
@@ -921,7 +929,8 @@ class BackendFactory:
             table_ocr=config.table_ocr,
             model_version=config.model_version,
             ocr_language=config.ocr_language,
-            api_endpoints=api_endpoints
+            api_endpoints=api_endpoints,
+            retry_count=config.request_retry_count,
         )
 
 
@@ -1017,17 +1026,15 @@ class ConverterMineru(X2MarkdownConverter):
 
     def _convert_split_pdf(self, original_document: Document, pdf_parts: List[bytes]) -> MarkdownDocument:
         """
-        Convert split PDF parts sequentially and merge results.
-        V1: serial execution. Future: support up to 3 concurrent workers.
+        Convert split PDF parts with controlled concurrency and merge results.
         """
         from utils.layout_merger import merge_layout_documents
         from utils.mineru_zip_merger import merge_mineru_zips
+        from concurrent.futures import ThreadPoolExecutor
 
-        merged_markdown_parts: List[str] = []
-        merged_layout_docs: List[LayoutDocument] = []
-        merged_zip_bytes: List[bytes] = []
+        max_workers = getattr(self.config, "pdf_split_max_workers", 2)
 
-        for i, part_bytes in enumerate(pdf_parts):
+        def _process_part(i: int, part_bytes: bytes) -> Tuple[int, str, bytes, Optional[LayoutDocument]]:
             self.logger.info(LogModule.WORKFLOW, f"[MINERU SPLIT] Processing part {i + 1}/{len(pdf_parts)}")
             if self.progress_callback:
                 self.progress_callback(i + 1, len(pdf_parts), f"Extracting PDF part {i + 1}/{len(pdf_parts)}...")
@@ -1054,15 +1061,26 @@ class ConverterMineru(X2MarkdownConverter):
                 except Exception as e:
                     self.logger.warning(LogModule.WORKFLOW, f"[MINERU Local] Failed to embed images for part {i + 1}: {e}")
 
-            merged_markdown_parts.append(markdown_content)
-            merged_zip_bytes.append(zip_bytes)
-
-            # Parse layout
             layout_doc = load_layout_from_engine_zip("mineru", zip_bytes)
-            if layout_doc:
-                merged_layout_docs.append(layout_doc)
-            else:
+            if not layout_doc:
                 self.logger.warning(LogModule.WORKFLOW, f"[MINERU SPLIT] No layout document parsed for part {i + 1}")
+
+            return i, markdown_content, zip_bytes, layout_doc
+
+        results: List[Tuple[int, str, bytes, Optional[LayoutDocument]]] = []
+        if max_workers > 1 and len(pdf_parts) > 1:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(_process_part, i, part) for i, part in enumerate(pdf_parts)]
+                results = [f.result() for f in futures]
+        else:
+            results = [_process_part(i, part) for i, part in enumerate(pdf_parts)]
+
+        # Sort by index to preserve order
+        results.sort(key=lambda x: x[0])
+
+        merged_markdown_parts = [r[1] for r in results]
+        merged_zip_bytes = [r[2] for r in results]
+        merged_layout_docs = [r[3] for r in results if r[3] is not None]
 
         # Merge markdown
         final_markdown = "\n\n".join(merged_markdown_parts)
@@ -1156,18 +1174,14 @@ class ConverterMineru(X2MarkdownConverter):
 
     async def _convert_split_pdf_async(self, original_document: Document, pdf_parts: List[bytes]) -> MarkdownDocument:
         """
-        Async convert split PDF parts and merge results.
-        V1: serial execution via asyncio.to_thread for each part.
-        Future: use asyncio.gather with Semaphore(3) for concurrent Cloud calls.
+        Async convert split PDF parts with controlled concurrency and merge results.
         """
         from utils.layout_merger import merge_layout_documents
         from utils.mineru_zip_merger import merge_mineru_zips
 
-        merged_markdown_parts: List[str] = []
-        merged_layout_docs: List[LayoutDocument] = []
-        merged_zip_bytes: List[bytes] = []
+        max_workers = getattr(self.config, "pdf_split_max_workers", 2)
 
-        for i, part_bytes in enumerate(pdf_parts):
+        async def _process_part(i: int, part_bytes: bytes) -> Tuple[int, str, bytes, Optional[LayoutDocument]]:
             self.logger.info(LogModule.WORKFLOW, f"[MINERU SPLIT] Processing part {i + 1}/{len(pdf_parts)} (async)")
             if self.progress_callback:
                 self.progress_callback(i + 1, len(pdf_parts), f"Extracting PDF part {i + 1}/{len(pdf_parts)}...")
@@ -1178,7 +1192,6 @@ class ConverterMineru(X2MarkdownConverter):
                 stem=f"{original_document.stem}_part{i + 1}"
             )
 
-            # Process each part in a thread to keep the async loop responsive
             task_id = await self.upload_async(part_doc)
             markdown_content, zip_bytes = await self.backend.get_result_async(task_id)
 
@@ -1196,15 +1209,32 @@ class ConverterMineru(X2MarkdownConverter):
                 except Exception as e:
                     self.logger.warning(LogModule.WORKFLOW, f"[MINERU Local] Failed to embed images for part {i + 1} (async): {e}")
 
-            merged_markdown_parts.append(markdown_content)
-            merged_zip_bytes.append(zip_bytes)
-
-            # Parse layout
             layout_doc = load_layout_from_engine_zip("mineru", zip_bytes)
-            if layout_doc:
-                merged_layout_docs.append(layout_doc)
-            else:
+            if not layout_doc:
                 self.logger.warning(LogModule.WORKFLOW, f"[MINERU SPLIT] No layout document parsed for part {i + 1} (async)")
+
+            return i, markdown_content, zip_bytes, layout_doc
+
+        results: List[Tuple[int, str, bytes, Optional[LayoutDocument]]] = []
+        if max_workers > 1 and len(pdf_parts) > 1:
+            semaphore = asyncio.Semaphore(max_workers)
+
+            async def _process_with_limit(i: int, part_bytes: bytes) -> Tuple[int, str, bytes, Optional[LayoutDocument]]:
+                async with semaphore:
+                    return await _process_part(i, part_bytes)
+
+            results = await asyncio.gather(*[_process_with_limit(i, part) for i, part in enumerate(pdf_parts)])
+        else:
+            results = []
+            for i, part in enumerate(pdf_parts):
+                results.append(await _process_part(i, part))
+
+        # Sort by index to preserve order
+        results.sort(key=lambda x: x[0])
+
+        merged_markdown_parts = [r[1] for r in results]
+        merged_zip_bytes = [r[2] for r in results]
+        merged_layout_docs = [r[3] for r in results if r[3] is not None]
 
         # Merge markdown
         final_markdown = "\n\n".join(merged_markdown_parts)

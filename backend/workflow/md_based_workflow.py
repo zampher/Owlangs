@@ -446,6 +446,8 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
                         progress = min(25, int((current / total) * 25))
                         self._task_state["progress"] = progress
                         self._task_state["message"] = f"Extracting PDF... {current}/{total} parts ({progress}%)"
+                        self._task_state["extract_pdf_part_current"] = current
+                        self._task_state["extract_pdf_part_total"] = total
                 
                 converter.progress_callback = _extract_progress_callback
             
@@ -456,6 +458,12 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
             
             if self.config.logger:
                 self.config.logger.debug(LogModule.WORKFLOW, "Conversion completed successfully")
+            
+            # Clear PDF split part markers so frontend doesn't keep showing part info
+            # in later stages (e.g. Detect Language, Translation)
+            if hasattr(self, "_task_state") and self._task_state is not None:
+                self._task_state.pop("extract_pdf_part_current", None)
+                self._task_state.pop("extract_pdf_part_total", None)
                 
             if hasattr(converter,"attachments"):
                 for attachment in converter.attachments:
@@ -493,11 +501,17 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
         if convert_config is None and convert_engine != "identity":
             if convert_engine in ("mineru", "mineru_local"):
                 from converter.x2md.converter_mineru import ConverterMineruConfig
+                from backend.config.config_loader import get_unified_config
+                pdf_cfg = get_unified_config().system.pdf
                 # Use default values if not provided in config
                 convert_config = ConverterMineruConfig(
                     mineru_token="",  # Will be injected from local config
                     formula_ocr=True,
-                    model_version="vlm"
+                    model_version="vlm",
+                    pdf_split_enabled=pdf_cfg.pdf_split_enabled,
+                    pdf_split_max_pages=pdf_cfg.pdf_split_max_pages,
+                    pdf_split_max_workers=pdf_cfg.pdf_split_max_workers,
+                    request_retry_count=pdf_cfg.request_retry_count,
                 )
             elif convert_engine == "docling":
                 from converter.x2md.converter_docling import ConverterDoclingConfig

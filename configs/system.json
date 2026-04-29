@@ -25,9 +25,9 @@
       }
     },
     "default_engine_settings": {
-      "formula_ocr": false,
-      "code_ocr": false,
-      "skip_translate": false
+      "formula_ocr": true,
+      "skip_translate": false,
+      "table_ocr": true
     }
   },
   "logging": {
@@ -99,7 +99,11 @@
   "pdf": {
     "disable_markdown_fallback": true,
     "use_reportlab": true,
-    "fallback_to_html": false
+    "fallback_to_html": false,
+    "pdf_split_enabled": true,
+    "pdf_split_max_pages": 150,
+    "pdf_split_max_workers": 3,
+    "request_retry_count": 2
   },
   "exclusion_defaults": {
     "image": true,

@@ -2123,6 +2123,36 @@ abstract class AppLocalizations {
   /// **'Enable OCR for tables'**
   String get settingsTableOcrSubtitle;
 
+  /// No description provided for @settingsAnonymizationNewTaskNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Changes apply to new tasks only'**
+  String get settingsAnonymizationNewTaskNotice;
+
+  /// No description provided for @settingsParsingEngineNewTaskNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Changes apply to new tasks only'**
+  String get settingsParsingEngineNewTaskNotice;
+
+  /// No description provided for @settingsPdfSplitMaxPages.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF Split Max Pages'**
+  String get settingsPdfSplitMaxPages;
+
+  /// No description provided for @settingsPdfSplitMaxWorkers.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF Split Max Workers'**
+  String get settingsPdfSplitMaxWorkers;
+
+  /// No description provided for @settingsRequestRetryCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Request Retry Count'**
+  String get settingsRequestRetryCount;
+
   /// No description provided for @settingsOcrLanguageTitle.
   ///
   /// In en, this message translates to:

@@ -196,6 +196,71 @@ class ParsingEngineSettingsScreen extends ConsumerWidget {
                   notifier.updateParsingEngineSettings(tableOcr: value),
               contentPadding: EdgeInsets.zero,
             ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            Text(
+              l10n.settingsParsingEngineNewTaskNotice,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(height: 12),
+            // PDF Split Max Pages
+            TextFormField(
+              decoration: InputDecoration(
+                labelText: l10n.settingsPdfSplitMaxPages,
+                border: const OutlineInputBorder(),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              keyboardType: TextInputType.number,
+              initialValue: settings.pdfSplitMaxPages.toString(),
+              onChanged: (String value) {
+                final int? parsed = int.tryParse(value);
+                if (parsed != null && parsed > 0) {
+                  notifier.updateParsingEngineSettings(pdfSplitMaxPages: parsed);
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            // PDF Split Max Workers
+            TextFormField(
+              decoration: InputDecoration(
+                labelText: l10n.settingsPdfSplitMaxWorkers,
+                border: const OutlineInputBorder(),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              keyboardType: TextInputType.number,
+              initialValue: settings.pdfSplitMaxWorkers.toString(),
+              onChanged: (String value) {
+                final int? parsed = int.tryParse(value);
+                if (parsed != null && parsed > 0) {
+                  notifier.updateParsingEngineSettings(pdfSplitMaxWorkers: parsed);
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            // Request Retry Count
+            TextFormField(
+              decoration: InputDecoration(
+                labelText: l10n.settingsRequestRetryCount,
+                border: const OutlineInputBorder(),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              keyboardType: TextInputType.number,
+              initialValue: settings.requestRetryCount.toString(),
+              onChanged: (String value) {
+                final int? parsed = int.tryParse(value);
+                if (parsed != null && parsed >= 0) {
+                  notifier.updateParsingEngineSettings(requestRetryCount: parsed);
+                }
+              },
+            ),
           ],
         ),
       ),

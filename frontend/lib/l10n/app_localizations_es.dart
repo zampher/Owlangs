@@ -1192,6 +1192,24 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsTableOcrSubtitle => 'Habilitar OCR para tablas';
 
   @override
+  String get settingsAnonymizationNewTaskNotice =>
+      'Los cambios solo se aplican a tareas nuevas';
+
+  @override
+  String get settingsParsingEngineNewTaskNotice =>
+      'Los cambios solo se aplican a tareas nuevas';
+
+  @override
+  String get settingsPdfSplitMaxPages => 'Páginas máximas por división PDF';
+
+  @override
+  String get settingsPdfSplitMaxWorkers =>
+      'Trabajadores máximos para división PDF';
+
+  @override
+  String get settingsRequestRetryCount => 'Número de reintentos de solicitud';
+
+  @override
   String get settingsOcrLanguageTitle => 'Idioma del OCR';
 
   @override

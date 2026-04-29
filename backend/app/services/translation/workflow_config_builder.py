@@ -379,6 +379,9 @@ class WorkflowConfigBuilder:
                 ocr_language = "auto"
             else:
                 ocr_language = str(ocr_language).strip()
+            from backend.config.config_loader import get_unified_config
+            unified = get_unified_config()
+            pdf_cfg = unified.system.pdf
             logger.debug(LogModule.CONFIG, f"Creating ConverterMineruConfig: API Key={'***' if mineru_token else 'empty'}, formula_ocr={formula_ocr}, model_version={model_version}, ocr_language={ocr_language}")
             if not mineru_token:
                 logger.warning(LogModule.CONFIG, "[WARNING] MinerU API Key is empty! Conversion will fail. Please configure MinerU API Key in Settings -> AI Platform -> MinerU.")
@@ -387,6 +390,10 @@ class WorkflowConfigBuilder:
                 formula_ocr=formula_ocr,
                 model_version=model_version,
                 ocr_language=ocr_language,
+                pdf_split_enabled=pdf_cfg.pdf_split_enabled,
+                pdf_split_max_pages=pdf_cfg.pdf_split_max_pages,
+                pdf_split_max_workers=pdf_cfg.pdf_split_max_workers,
+                request_retry_count=pdf_cfg.request_retry_count,
             )
         elif convert_engine == 'mineru_local':
             from converter.x2md.converter_mineru import ConverterMineruConfig
@@ -402,6 +409,7 @@ class WorkflowConfigBuilder:
                 ocr_language = "auto"
             else:
                 ocr_language = str(ocr_language).strip()
+            pdf_cfg = unified.system.pdf
             logger.debug(LogModule.CONFIG, f"Creating ConverterMineruConfig (local): base_url={base_url}, model_version={model_version}, ocr_language={ocr_language}")
             table_ocr = getattr(payload, 'table_ocr', True)
             converter_config = ConverterMineruConfig(
@@ -410,7 +418,11 @@ class WorkflowConfigBuilder:
                 table_ocr=table_ocr,
                 model_version=model_version,
                 ocr_language=ocr_language,
-                base_url=base_url.strip().rstrip('/')
+                base_url=base_url.strip().rstrip('/'),
+                pdf_split_enabled=pdf_cfg.pdf_split_enabled,
+                pdf_split_max_pages=pdf_cfg.pdf_split_max_pages,
+                pdf_split_max_workers=pdf_cfg.pdf_split_max_workers,
+                request_retry_count=pdf_cfg.request_retry_count,
             )
         elif convert_engine == 'docling':
             converter_config = ConverterDoclingConfig(
