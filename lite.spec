@@ -70,15 +70,25 @@ datas = [
     ('./backend/config/templates/default_profile.json', 'backend/config/templates/'),  # Default user profile template
     ('./setup_secrets.py', '.'),  # Sensitive configuration initialization script
     ('./setup_first_deploy.py', '.'),  # First deployment setup script
-    # Redis executable and configuration files
-    ('./3rdParty/windows/Redis-x64-3.0.504/redis-server.exe', '3rdParty/windows/Redis-x64-3.0.504/redis-server.exe'),
-    ('./3rdParty/windows/Redis-x64-3.0.504/redis.windows.conf', '3rdParty/windows/Redis-x64-3.0.504/redis.windows.conf'),
-    ('./3rdParty/windows/Redis-x64-3.0.504/redis.windows-service.conf', '3rdParty/windows/Redis-x64-3.0.504/redis.windows-service.conf'),
+]
+
+# Redis executable and configuration files (Windows only)
+if sys.platform.startswith('win'):
+    redis_files = [
+        ('./3rdParty/windows/Redis-x64-3.0.504/redis-server.exe', '3rdParty/windows/Redis-x64-3.0.504/redis-server.exe'),
+        ('./3rdParty/windows/Redis-x64-3.0.504/redis.windows.conf', '3rdParty/windows/Redis-x64-3.0.504/redis.windows.conf'),
+        ('./3rdParty/windows/Redis-x64-3.0.504/redis.windows-service.conf', '3rdParty/windows/Redis-x64-3.0.504/redis.windows-service.conf'),
+    ]
+    for src, dst in redis_files:
+        if os.path.exists(src):
+            datas.append((src, dst))
+
+datas.extend([
     # Only include necessary pygments data, exclude large files
     *collect_data_files('pygments', include_py_files=False),  # Only include data files, not Python files
     # latex2mathml: unimathsymbols.txt required for LaTeX->MathML->OMML in frozen build
     *collect_data_files('latex2mathml'),
-]
+])
 
 # Optional: bundle Pandoc on Windows for HTML->DOCX export (document_rebuild._get_pandoc_path)
 # Use os.getcwd() because PyInstaller exec() may not set __file__ in spec namespace
