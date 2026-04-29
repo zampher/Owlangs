@@ -433,6 +433,22 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
             
             converter = converter_class(convert_config)
             
+            # Set up progress callback for split-PDF extraction
+            if (
+                convert_engine in ("mineru", "mineru_local")
+                and hasattr(converter, "progress_callback")
+                and hasattr(self, "_task_state")
+                and self._task_state is not None
+            ):
+                def _extract_progress_callback(current: int, total: int, message: str) -> None:
+                    if self._task_state is not None:
+                        # Map split progress to 0-25% overall range
+                        progress = min(25, int((current / total) * 25))
+                        self._task_state["progress"] = progress
+                        self._task_state["message"] = f"Extracting PDF... {current}/{total} parts ({progress}%)"
+                
+                converter.progress_callback = _extract_progress_callback
+            
             if self.config.logger:
                 self.config.logger.debug(LogModule.WORKFLOW, f"Starting conversion with {convert_engine} engine...")
             

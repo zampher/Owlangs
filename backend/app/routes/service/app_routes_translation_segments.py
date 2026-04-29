@@ -5,7 +5,7 @@
 API routes for translation segments management.
 """
 
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Query
 from fastapi.responses import JSONResponse
 from typing import Optional, List, Dict, Any
 import copy
@@ -185,9 +185,16 @@ def _enrich_translation_segments_with_detected_reasons(
         404: {"description": "Task ID not found or no segments available."}
     }
 )
-async def get_translation_segments_api(task_id: str):
-    """Get translation segments for a task."""
-    logger.debug(LogModule.ROUTE, f"[TRANSLATION-SEGMENTS-API] Get segments request: task_id={task_id}")
+async def get_translation_segments_api(
+    task_id: str,
+    offset: int = Query(0, ge=0, description="Offset for pagination (0-based)"),
+    limit: int = Query(0, ge=0, description="Max segments to return (0 = no limit)"),
+):
+    """Get translation segments for a task. Supports optional pagination for large documents."""
+    logger.debug(
+        LogModule.ROUTE,
+        f"[TRANSLATION-SEGMENTS-API] Get segments request: task_id={task_id}, offset={offset}, limit={limit}"
+    )
     
     if task_manager.get_task(task_id) is None:
         logger.warning(LogModule.ROUTE, f"[TRANSLATION-SEGMENTS-API] Task ID '{task_id}' not found")
@@ -205,29 +212,33 @@ async def get_translation_segments_api(task_id: str):
                   "This may be an older task or a format conversion task without translation."
         )
 
-    # Create a defensive copy before mutating
-    response_data = copy.deepcopy(segments_data)
-    
-    # CRITICAL: Handle backward compatibility - segments_data might be a list (old format) or dict (new format)
-    # If it's a list, convert to dict format for consistency
-    if isinstance(response_data, list):
+    # Build response data with shallow copy instead of deep copy for performance.
+    # Deep copying 10k+ segments on every poll is extremely expensive.
+    if isinstance(segments_data, dict):
+        # Shallow copy: copy the container dict and segment list, but share inner dicts
+        # We will clone individual segment dicts only when we need to mutate them.
         response_data = {
-            "segments": response_data,
+            "segments": list(segments_data.get("segments", [])),
+            "metadata": dict(segments_data.get("metadata", {})),
+        }
+    elif isinstance(segments_data, list):
+        response_data = {
+            "segments": list(segments_data),
             "metadata": {}
         }
+    else:
+        # Fallback for unexpected types
+        response_data = copy.deepcopy(segments_data)
 
     # CRITICAL: Filter out segments with None segment_index to prevent frontend TypeError
-    # Frontend expects segment_index to be int, not None
     if isinstance(response_data, dict) and "segments" in response_data:
         segments_list = response_data.get("segments", [])
         if segments_list:
-            # Filter out segments with None segment_index
             valid_segments = []
             invalid_count = 0
             for seg in segments_list:
                 if isinstance(seg, dict):
                     segment_index = seg.get("segment_index")
-                    # Only include segments with valid (non-None) segment_index
                     if segment_index is not None:
                         valid_segments.append(seg)
                     else:
@@ -238,7 +249,6 @@ async def get_translation_segments_api(task_id: str):
                             f"Segment keys: {list(seg.keys())}"
                         )
                 else:
-                    # Include non-dict segments (backward compatibility)
                     valid_segments.append(seg)
             
             if invalid_count > 0:
@@ -248,10 +258,20 @@ async def get_translation_segments_api(task_id: str):
                     f"Valid segments: {len(valid_segments)}"
                 )
             
+            total_valid = len(valid_segments)
             response_data["segments"] = valid_segments
-            # Update metadata total_segments if present
             if "metadata" in response_data and isinstance(response_data["metadata"], dict):
-                response_data["metadata"]["total_segments"] = len(valid_segments)
+                response_data["metadata"]["total_segments"] = total_valid
+            
+            # Apply pagination after filtering
+            if limit > 0:
+                paginated = valid_segments[offset:offset + limit]
+                response_data["segments"] = paginated
+                if "metadata" in response_data and isinstance(response_data["metadata"], dict):
+                    response_data["metadata"]["offset"] = offset
+                    response_data["metadata"]["limit"] = limit
+                    response_data["metadata"]["returned_segments"] = len(paginated)
+                    response_data["metadata"]["total_segments"] = total_valid
 
     # Enrich segments with detected exclusion reasons so Translate phase filters
     # can display categories like language_match even when segments are not excluded.

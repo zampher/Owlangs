@@ -185,18 +185,27 @@ class TranslationService:
             raise HTTPException(status_code=500, detail=f"Failed to write file to disk: {str(e)}")
         
         # Reject PDFs exceeding page limit (MinerU cannot handle very large files)
+        # Exception: mineru/mineru_local engines support automatic PDF splitting in ConverterMineru.
         if original_filename.lower().endswith(".pdf"):
             page_count = _get_pdf_page_count(file_contents)
             if page_count > PDF_MAX_PAGES:
-                if os.path.exists(temp_dir):
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-                self.task_manager.cleanup_task_resources(task_id)
-                from fastapi import HTTPException
-                logger.warning(
-                    LogModule.WORKFLOW,
-                    f"[TRANSLATION-SERVICE] Rejected PDF: task_id={task_id}, pages={page_count}, max={PDF_MAX_PAGES}"
-                )
-                raise HTTPException(status_code=400, detail=_pdf_too_large_detail(page_count))
+                convert_engine = getattr(payload, 'convert_engine', 'mineru') or 'mineru'
+                if convert_engine in ("mineru", "mineru_local"):
+                    logger.info(
+                        LogModule.WORKFLOW,
+                        f"[TRANSLATION-SERVICE] Large PDF allowed for splitting: task_id={task_id}, "
+                        f"pages={page_count}, engine={convert_engine}, will be split by ConverterMineru"
+                    )
+                else:
+                    if os.path.exists(temp_dir):
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                    self.task_manager.cleanup_task_resources(task_id)
+                    from fastapi import HTTPException
+                    logger.warning(
+                        LogModule.WORKFLOW,
+                        f"[TRANSLATION-SERVICE] Rejected PDF: task_id={task_id}, pages={page_count}, max={PDF_MAX_PAGES}"
+                    )
+                    raise HTTPException(status_code=400, detail=_pdf_too_large_detail(page_count))
         
         # Update task state with all necessary fields
         task_state.update({

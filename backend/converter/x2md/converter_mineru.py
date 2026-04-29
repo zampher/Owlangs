@@ -38,7 +38,7 @@ import glob
 import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Hashable, Literal, Optional, Dict, Any, Tuple, List
+from typing import Hashable, Literal, Optional, Dict, Any, Tuple, List, Callable
 from pathlib import Path
 
 import httpx
@@ -122,6 +122,10 @@ class ConverterMineruConfig(X2MarkdownConverterConfig):
     base_url: Optional[str] = None
     # API endpoint configuration (from platforms.json)
     api_endpoints: Optional[Dict[str, str]] = None
+    # PDF split configuration (for large PDFs exceeding MinerU limits)
+    pdf_split_enabled: bool = True
+    pdf_split_max_pages: int = 100
+    pdf_split_max_workers: int = 1  # V1=serial; future max=3 for concurrent Cloud calls
 
     def gethash(self) -> Hashable:
         return (
@@ -129,7 +133,10 @@ class ConverterMineruConfig(X2MarkdownConverterConfig):
             self.table_ocr,
             self.model_version, 
             (self.ocr_language or "auto"), 
-            self.base_url or MINERU_CLOUD_BASE
+            self.base_url or MINERU_CLOUD_BASE,
+            self.pdf_split_enabled,
+            self.pdf_split_max_pages,
+            self.pdf_split_max_workers,
         )
 
 
@@ -927,6 +934,8 @@ class ConverterMineru(X2MarkdownConverter):
         self.backend = BackendFactory.create_backend(config)
         self.attachments: list[AttachMent] = []
         self.layout_document: LayoutDocument | None = None
+        # Optional callback for split-PDF progress reporting: (current_part, total_parts, message)
+        self.progress_callback: Optional[Callable[[int, int, str], None]] = None
         
         if hasattr(config, 'logger') and config.logger:
             if config.mineru_token:
@@ -956,10 +965,30 @@ class ConverterMineru(X2MarkdownConverter):
         """Convert document to markdown."""
         self.logger.info(LogModule.WORKFLOW, f"Converting document with MinerU, backend: {type(self.backend).__name__}")
         time1 = time.time()
-        
+
+        # Check if PDF splitting is needed
+        if (
+            document.suffix == ".pdf"
+            and getattr(self.config, "pdf_split_enabled", True)
+        ):
+            from utils.pdf_splitter import split_pdf_by_pages
+            max_pages = getattr(self.config, "pdf_split_max_pages", 100)
+            pdf_parts = split_pdf_by_pages(document.content, max_pages_per_split=max_pages)
+            if len(pdf_parts) > 1:
+                result = self._convert_split_pdf(document, pdf_parts)
+                self.logger.info(LogModule.WORKFLOW, f"Split PDF converted, time taken: {time.time() - time1:.2f}s")
+                return result
+
+        # Fallback to single-file conversion
+        result = self._convert_single(document)
+        self.logger.info(LogModule.WORKFLOW, f"Document converted, time taken: {time.time() - time1:.2f}s")
+        return result
+
+    def _convert_single(self, document: Document) -> MarkdownDocument:
+        """Original single-file conversion logic."""
         task_id = self.upload(document)
         markdown_content, zip_bytes = self.backend.get_result(task_id)
-        
+
         # Process result
         if zip_bytes:
             self.attachments.append(AttachMent("mineru", Document.from_bytes(
@@ -969,24 +998,97 @@ class ConverterMineru(X2MarkdownConverter):
                 self.layout_document = load_layout_from_engine_zip("mineru", zip_bytes)
             except Exception as e:
                 self.logger.debug(LogModule.WORKFLOW, f"[LAYOUT] Failed to parse MinerU layout: {e}")
-            
+
             # For Local MinerU, embed images from ZIP
             if isinstance(self.backend, MinerULocalBackend):
                 try:
-                    # Find the markdown file path in ZIP
                     md_file_path = self._find_md_file_in_zip(zip_bytes)
                     if md_file_path:
                         self.logger.info(LogModule.WORKFLOW, f"[MINERU Local] Embedding images from {md_file_path}")
                         markdown_content = embed_inline_image_from_zip(
-                            zip_bytes, 
-                            filename_in_zip=md_file_path, 
+                            zip_bytes,
+                            filename_in_zip=md_file_path,
                             encoding="utf-8"
                         )
                 except Exception as e:
                     self.logger.warning(LogModule.WORKFLOW, f"[MINERU Local] Failed to embed images: {e}")
-        
-        self.logger.info(LogModule.WORKFLOW, f"Document converted, time taken: {time.time() - time1:.2f}s")
+
         return MarkdownDocument.from_bytes(content=markdown_content.encode("utf-8"), suffix=".md", stem=document.stem)
+
+    def _convert_split_pdf(self, original_document: Document, pdf_parts: List[bytes]) -> MarkdownDocument:
+        """
+        Convert split PDF parts sequentially and merge results.
+        V1: serial execution. Future: support up to 3 concurrent workers.
+        """
+        from utils.layout_merger import merge_layout_documents
+        from utils.mineru_zip_merger import merge_mineru_zips
+
+        merged_markdown_parts: List[str] = []
+        merged_layout_docs: List[LayoutDocument] = []
+        merged_zip_bytes: List[bytes] = []
+
+        for i, part_bytes in enumerate(pdf_parts):
+            self.logger.info(LogModule.WORKFLOW, f"[MINERU SPLIT] Processing part {i + 1}/{len(pdf_parts)}")
+            if self.progress_callback:
+                self.progress_callback(i + 1, len(pdf_parts), f"Extracting PDF part {i + 1}/{len(pdf_parts)}...")
+
+            part_doc = Document.from_bytes(
+                content=part_bytes,
+                suffix=".pdf",
+                stem=f"{original_document.stem}_part{i + 1}"
+            )
+
+            task_id = self.backend.upload(part_doc)
+            markdown_content, zip_bytes = self.backend.get_result(task_id)
+
+            # For Local backend: embed inline images before merging
+            if isinstance(self.backend, MinerULocalBackend):
+                try:
+                    md_file_path = self._find_md_file_in_zip(zip_bytes)
+                    if md_file_path:
+                        markdown_content = embed_inline_image_from_zip(
+                            zip_bytes,
+                            filename_in_zip=md_file_path,
+                            encoding="utf-8"
+                        )
+                except Exception as e:
+                    self.logger.warning(LogModule.WORKFLOW, f"[MINERU Local] Failed to embed images for part {i + 1}: {e}")
+
+            merged_markdown_parts.append(markdown_content)
+            merged_zip_bytes.append(zip_bytes)
+
+            # Parse layout
+            layout_doc = load_layout_from_engine_zip("mineru", zip_bytes)
+            if layout_doc:
+                merged_layout_docs.append(layout_doc)
+            else:
+                self.logger.warning(LogModule.WORKFLOW, f"[MINERU SPLIT] No layout document parsed for part {i + 1}")
+
+        # Merge markdown
+        final_markdown = "\n\n".join(merged_markdown_parts)
+
+        # Merge layout documents
+        if merged_layout_docs:
+            self.layout_document = merge_layout_documents(merged_layout_docs)
+            self.logger.info(
+                LogModule.WORKFLOW,
+                f"[MINERU SPLIT] Merged layout: {self.layout_document.page_count} pages, "
+                f"{sum(1 for _ in self.layout_document.iter_blocks())} blocks"
+            )
+
+        # Build merged ZIP
+        zip_parts_with_layout = list(zip(merged_zip_bytes, merged_layout_docs))
+        merged_zip = merge_mineru_zips(zip_parts_with_layout, self.layout_document, final_markdown)
+        self.attachments.append(AttachMent("mineru", Document.from_bytes(
+            content=merged_zip, suffix=".zip", stem="mineru"
+        )))
+        self.logger.info(LogModule.WORKFLOW, f"[MINERU SPLIT] Merged ZIP size: {len(merged_zip)} bytes")
+
+        return MarkdownDocument.from_bytes(
+            content=final_markdown.encode("utf-8"),
+            suffix=".md",
+            stem=original_document.stem
+        )
     
     def _find_md_file_in_zip(self, zip_bytes: bytes) -> Optional[str]:
         """Find the markdown file path in ZIP."""
@@ -1001,10 +1103,30 @@ class ConverterMineru(X2MarkdownConverter):
         """Async convert document to markdown."""
         self.logger.info(LogModule.WORKFLOW, f"Converting document with MinerU (async), backend: {type(self.backend).__name__}")
         time1 = time.time()
-        
+
+        # Check if PDF splitting is needed
+        if (
+            document.suffix == ".pdf"
+            and getattr(self.config, "pdf_split_enabled", True)
+        ):
+            from utils.pdf_splitter import split_pdf_by_pages
+            max_pages = getattr(self.config, "pdf_split_max_pages", 100)
+            pdf_parts = split_pdf_by_pages(document.content, max_pages_per_split=max_pages)
+            if len(pdf_parts) > 1:
+                result = await self._convert_split_pdf_async(document, pdf_parts)
+                self.logger.info(LogModule.WORKFLOW, f"Split PDF converted (async), time taken: {time.time() - time1:.2f}s")
+                return result
+
+        # Fallback to single-file conversion
+        result = await self._convert_single_async(document)
+        self.logger.info(LogModule.WORKFLOW, f"Document converted (async), time taken: {time.time() - time1:.2f}s")
+        return result
+
+    async def _convert_single_async(self, document: Document) -> MarkdownDocument:
+        """Original single-file async conversion logic."""
         task_id = await self.upload_async(document)
         markdown_content, zip_bytes = await self.backend.get_result_async(task_id)
-        
+
         # Process result
         if zip_bytes:
             self.attachments.append(AttachMent("mineru", Document.from_bytes(
@@ -1014,7 +1136,7 @@ class ConverterMineru(X2MarkdownConverter):
                 self.layout_document = load_layout_from_engine_zip("mineru", zip_bytes)
             except Exception as e:
                 self.logger.debug(LogModule.WORKFLOW, f"[LAYOUT] Failed to parse MinerU layout (async): {e}")
-            
+
             # For Local MinerU, embed images from ZIP
             if isinstance(self.backend, MinerULocalBackend):
                 try:
@@ -1023,15 +1145,92 @@ class ConverterMineru(X2MarkdownConverter):
                         self.logger.info(LogModule.WORKFLOW, f"[MINERU Local] Embedding images from {md_file_path}")
                         markdown_content = await asyncio.to_thread(
                             embed_inline_image_from_zip,
-                            zip_bytes, 
-                            filename_in_zip=md_file_path, 
+                            zip_bytes,
+                            filename_in_zip=md_file_path,
                             encoding="utf-8"
                         )
                 except Exception as e:
                     self.logger.warning(LogModule.WORKFLOW, f"[MINERU Local] Failed to embed images (async): {e}")
-        
-        self.logger.info(LogModule.WORKFLOW, f"Document converted (async), time taken: {time.time() - time1:.2f}s")
+
         return MarkdownDocument.from_bytes(content=markdown_content.encode("utf-8"), suffix=".md", stem=document.stem)
+
+    async def _convert_split_pdf_async(self, original_document: Document, pdf_parts: List[bytes]) -> MarkdownDocument:
+        """
+        Async convert split PDF parts and merge results.
+        V1: serial execution via asyncio.to_thread for each part.
+        Future: use asyncio.gather with Semaphore(3) for concurrent Cloud calls.
+        """
+        from utils.layout_merger import merge_layout_documents
+        from utils.mineru_zip_merger import merge_mineru_zips
+
+        merged_markdown_parts: List[str] = []
+        merged_layout_docs: List[LayoutDocument] = []
+        merged_zip_bytes: List[bytes] = []
+
+        for i, part_bytes in enumerate(pdf_parts):
+            self.logger.info(LogModule.WORKFLOW, f"[MINERU SPLIT] Processing part {i + 1}/{len(pdf_parts)} (async)")
+            if self.progress_callback:
+                self.progress_callback(i + 1, len(pdf_parts), f"Extracting PDF part {i + 1}/{len(pdf_parts)}...")
+
+            part_doc = Document.from_bytes(
+                content=part_bytes,
+                suffix=".pdf",
+                stem=f"{original_document.stem}_part{i + 1}"
+            )
+
+            # Process each part in a thread to keep the async loop responsive
+            task_id = await self.upload_async(part_doc)
+            markdown_content, zip_bytes = await self.backend.get_result_async(task_id)
+
+            # For Local backend: embed inline images before merging
+            if isinstance(self.backend, MinerULocalBackend):
+                try:
+                    md_file_path = self._find_md_file_in_zip(zip_bytes)
+                    if md_file_path:
+                        markdown_content = await asyncio.to_thread(
+                            embed_inline_image_from_zip,
+                            zip_bytes,
+                            filename_in_zip=md_file_path,
+                            encoding="utf-8"
+                        )
+                except Exception as e:
+                    self.logger.warning(LogModule.WORKFLOW, f"[MINERU Local] Failed to embed images for part {i + 1} (async): {e}")
+
+            merged_markdown_parts.append(markdown_content)
+            merged_zip_bytes.append(zip_bytes)
+
+            # Parse layout
+            layout_doc = load_layout_from_engine_zip("mineru", zip_bytes)
+            if layout_doc:
+                merged_layout_docs.append(layout_doc)
+            else:
+                self.logger.warning(LogModule.WORKFLOW, f"[MINERU SPLIT] No layout document parsed for part {i + 1} (async)")
+
+        # Merge markdown
+        final_markdown = "\n\n".join(merged_markdown_parts)
+
+        # Merge layout documents
+        if merged_layout_docs:
+            self.layout_document = merge_layout_documents(merged_layout_docs)
+            self.logger.info(
+                LogModule.WORKFLOW,
+                f"[MINERU SPLIT] Merged layout (async): {self.layout_document.page_count} pages, "
+                f"{sum(1 for _ in self.layout_document.iter_blocks())} blocks"
+            )
+
+        # Build merged ZIP
+        zip_parts_with_layout = list(zip(merged_zip_bytes, merged_layout_docs))
+        merged_zip = merge_mineru_zips(zip_parts_with_layout, self.layout_document, final_markdown)
+        self.attachments.append(AttachMent("mineru", Document.from_bytes(
+            content=merged_zip, suffix=".zip", stem="mineru"
+        )))
+        self.logger.info(LogModule.WORKFLOW, f"[MINERU SPLIT] Merged ZIP size (async): {len(merged_zip)} bytes")
+
+        return MarkdownDocument.from_bytes(
+            content=final_markdown.encode("utf-8"),
+            suffix=".md",
+            stem=original_document.stem
+        )
     
     def support_format(self) -> list[str]:
         return [".pdf", ".doc", ".docx", ".ppt", ".pptx", ".png", ".jpg", ".jpeg"]
