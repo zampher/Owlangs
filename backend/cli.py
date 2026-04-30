@@ -59,6 +59,10 @@ if getattr(sys, "frozen", False):
         "latex_formula_batch_repair",
         "llm_client",
         "extract_segments_debug",
+        # PDF split/merge: dynamic imports in converter_mineru.py
+        "pdf_splitter",
+        "layout_merger",
+        "mineru_zip_merger",
     )
     for _sub in _utils_submodules:
         _mod = getattr(_backend_utils, _sub, None)
