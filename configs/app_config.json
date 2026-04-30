@@ -37,7 +37,7 @@
     "translator_chunk_token_size": 5000,
     "translator_concurrent": 10,
     "translator_connect_timeout": 15,
-    "translator_timeout": 120,
+    "translator_timeout": 150,
     "translator_retry": 2,
     "platform_api_keys": {},
     "platform_models": {},

@@ -87,7 +87,7 @@ class GenerateGlossaryRequest(BaseModel):
     thinking: ThinkingMode = Field(default="disable", description="Thinking mode for the Agent.",
                                    examples=["default", "enable", "disable"])
     concurrent: int = Field(default=3, description="Number of concurrent requests.")
-    timeout: int = Field(default=30, description="Time to wait for API response (seconds).")
+    timeout: int = Field(default=120, description="Time to wait for API response (seconds).")
     retry: int = Field(default=5, description="Maximum retry count after a chunk fails.")
     chunk_size: int = Field(default=0, description="Chunk size for text splitting (characters). 0 means unset, will be loaded from user settings.")
     custom_prompt: Optional[str] = Field(None, description="User-defined prompt for glossary generation.")

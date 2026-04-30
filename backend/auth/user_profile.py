@@ -52,7 +52,7 @@ class UserProfile:
     translator_presence_penalty: float = 0.0
     chunk_size: int = 4000
     concurrent: int = 10
-    timeout: int = 30
+    timeout: int = 120
     retry: int = 5
     
     # Glossary settings (user personalization part)

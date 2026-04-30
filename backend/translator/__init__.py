@@ -3,6 +3,6 @@ default_params = {
     "chunk_size": 0,  # 0 means unset, will be loaded from user settings
     "concurrent": 10,
     "temperature": 0.3,
-    "timeout": 30,
+    "timeout": 120,
     "retry": 5
 }

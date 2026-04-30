@@ -106,8 +106,8 @@ class TranslationService:
             "api_type": api_type,
             "temperature": getattr(payload, "temperature", 0.3) if hasattr(payload, "temperature") else 0.3,
             "concurrent": getattr(payload, "concurrent", 1) if hasattr(payload, "concurrent") else 1,
-            "connect_timeout": 5,
-            "timeout": getattr(payload, "timeout", 30) if hasattr(payload, "timeout") else 30,
+            "connect_timeout": getattr(payload, "connect_timeout", 15) if hasattr(payload, "connect_timeout") else 15,
+            "timeout": getattr(payload, "timeout", 120) if hasattr(payload, "timeout") else 120,
             "thinking": getattr(payload, "thinking", "default") if hasattr(payload, "thinking") else "default",
             "retry": getattr(payload, "retry", 3) if hasattr(payload, "retry") else 3,
         }

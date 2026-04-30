@@ -194,7 +194,7 @@ def _build_llm_config_from_dict(cfg: Optional[Dict[str, Any]]) -> Optional[LLMCo
         temperature=float(cfg.get("temperature", 0.1)),
         concurrent=int(cfg.get("concurrent", 1)),
         connect_timeout=int(cfg.get("connect_timeout", 5)),
-        timeout=int(cfg.get("timeout", 30)),
+        timeout=int(cfg.get("timeout", 120)),
         thinking=str(cfg.get("thinking", "default")),
         retry=int(cfg.get("retry", 3)),
         max_tokens=cfg.get("max_tokens"),

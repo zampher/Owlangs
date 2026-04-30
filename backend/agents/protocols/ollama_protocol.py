@@ -127,6 +127,12 @@ class OllamaProtocol(LLMProtocol):
             "eval_count": 50
         }
         """
+        # Check for Ollama error responses first (e.g., {"error": "model 'xxx' not found"})
+        # Ollama returns HTTP 200 with error body when model is missing
+        if "error" in response_data:
+            error_msg = response_data["error"]
+            raise ValueError(f"Ollama API error: {error_msg}")
+        
         # Validate response structure
         if "message" not in response_data:
             raise ValueError(f"Invalid Ollama response: missing 'message'. Response: {response_data}")

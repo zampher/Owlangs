@@ -165,8 +165,8 @@ class WorkflowConfigBuilder:
         else:
             timeout = getattr(payload, 'timeout', 1200)
         
-        # Log timeout value for debugging (especially for EPUB/MOBI workflows)
-        logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Extracted timeout={timeout}s from payload (type={type(payload).__name__})")
+        # Log timeout value for diagnostics (especially for EPUB/MOBI workflows)
+        logger.info(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Extracted timeout={timeout}s from payload (type={type(payload).__name__})")
 
         # Concurrent: prefer app_config.translator_concurrent (same priority as chunk_size), then payload, then default
         concurrent = self._get_concurrent_from_config_or_payload(payload)

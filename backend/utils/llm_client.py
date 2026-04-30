@@ -32,7 +32,7 @@ class LLMConfig:
     temperature: float = 0.1
     concurrent: int = 1
     connect_timeout: int = 5
-    timeout: int = 30
+    timeout: int = 120
     thinking: str = "default"
     retry: int = 3
     max_tokens: Optional[int] = None

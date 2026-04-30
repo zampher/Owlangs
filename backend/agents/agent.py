@@ -51,7 +51,7 @@ class AgentConfig:
     temperature: float = 0.3
     concurrent: int = 30
     connect_timeout: int = 15  # HTTP connect timeout (seconds), configurable via app_config.translator_connect_timeout
-    timeout: int = 30  # Unit (seconds), this value is the read value in httpx.TimeOut, not the total timeout time
+    timeout: int = 120  # Unit (seconds), this value is the read value in httpx.TimeOut, not the total timeout time
     thinking: ThinkingMode = "default"
     retry: int = 5
     max_tokens: int | None = None  # Max tokens for API response (None means use platform default)
@@ -703,6 +703,10 @@ class Agent:
             else:
                 # Legacy response parsing
                 if self.api_type == "ollama":
+                    # Check for Ollama error responses first (e.g., {"error": "model 'xxx' not found"})
+                    if "error" in response_data:
+                        error_msg = response_data["error"]
+                        raise ValueError(f"Ollama API error: {error_msg}")
                     if "message" not in response_data or "content" not in response_data.get("message", {}):
                         raise ValueError(f"Invalid Ollama API response format: {response_data}")
                     result = response_data["message"]["content"]
@@ -1193,6 +1197,10 @@ class Agent:
             else:
                 # Legacy response parsing
                 if self.api_type == "ollama":
+                    # Check for Ollama error responses first (e.g., {"error": "model 'xxx' not found"})
+                    if "error" in response_data:
+                        error_msg = response_data["error"]
+                        raise ValueError(f"Ollama API error: {error_msg}")
                     if "message" not in response_data or "content" not in response_data.get("message", {}):
                         raise ValueError(f"Invalid Ollama API response format: {response_data}")
                     result = response_data["message"]["content"]
