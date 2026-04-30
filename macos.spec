@@ -200,7 +200,7 @@ hiddenimports = [
     'pptx.shapes.base',
     'pptx.shapes.group',
     'pptx.shapes.autoshape',
-    'pptx.shapes.table',
+    'pptx.table',
     'pptx.shapes.freeform',
     'pptx.text.text',
     # MOBI/EPUB: exporter, ir, translator, extractor, agents, glossary, third-party mobi/ebooklib
