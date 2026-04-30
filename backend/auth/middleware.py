@@ -39,8 +39,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         # Paths that don't require authentication
         self.exempt_paths = {
+            "/",
             "/login",
-            "/logout", 
+            "/logout",
             "/static",
             "/i18n",
             "/docs",
@@ -48,7 +49,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/openapi.json",
             "/favicon.ico",
             "/export",
-            "/preview"
+            "/preview",
+            "/select",
+            "/legacy",
         }
         
         # API paths that don't require authentication (SPA gets JSON, not 302).

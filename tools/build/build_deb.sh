@@ -200,11 +200,11 @@ make_deb() {
   fi
 
   rm -rf "${pkg_root}"
-  mkdir -p "${pkg_root}/DEBIAN" "${pkg_root}/opt/Owlangs" "${pkg_root}/usr/bin" "${pkg_root}/etc/default" "${pkg_root}/etc/Owlangs" "${pkg_root}/lib/systemd/system"
+  mkdir -p "${pkg_root}/DEBIAN" "${pkg_root}/opt/Owlangs" "${pkg_root}/usr/bin" "${pkg_root}/etc/default" "${pkg_root}/etc/Owlangs/configs" "${pkg_root}/lib/systemd/system"
 
   install -m755 "${appbin}" "${pkg_root}/opt/Owlangs/Owlangs"
 
-  # Install configuration templates to /etc/Owlangs
+  # Install configuration templates to /etc/Owlangs/configs (matches path_utils.py logic)
   local config_templates=(
     "system.json.template"
     "platforms.json.template"
@@ -217,14 +217,14 @@ make_deb() {
   )
   for tmpl in "${config_templates[@]}"; do
     if [[ -f "${ROOT_DIR}/configs/${tmpl}" ]]; then
-      install -m644 "${ROOT_DIR}/configs/${tmpl}" "${pkg_root}/etc/Owlangs/"
+      install -m644 "${ROOT_DIR}/configs/${tmpl}" "${pkg_root}/etc/Owlangs/configs/"
     fi
   done
   # Also copy existing config files if present
   for tmpl in "${config_templates[@]}"; do
     local cfg_name="${tmpl%.template}"
     if [[ -f "${ROOT_DIR}/configs/${cfg_name}" ]]; then
-      install -m640 "${ROOT_DIR}/configs/${cfg_name}" "${pkg_root}/etc/Owlangs/"
+      install -m640 "${ROOT_DIR}/configs/${cfg_name}" "${pkg_root}/etc/Owlangs/configs/"
     fi
   done
 
@@ -321,26 +321,27 @@ install -d -m 755 "$CFG_DIR"
 chown root:owlangs "$CFG_DIR" || true
 chmod 2755 "$CFG_DIR" || true
 
-# Create configs subdirectory (for PyInstaller bundled templates)
+# Create configs subdirectory (for actual config files)
 install -d -m 755 "$CFG_SUBDIR" || true
 chown root:owlangs "$CFG_SUBDIR" || true
 chmod 2755 "$CFG_SUBDIR" || true
 
-# Initialize config files from templates (if missing)
+# Initialize config files from templates in configs subdirectory (if missing)
 for tmpl in system.json.template platforms.json.template ui.json.template secrets.json.template local.json.template local_users.json.template static.json.template translation_config.json.template; do
   cfg_name="${tmpl%.template}"
-  if [[ ! -f "$CFG_DIR/$cfg_name" && -f "$CFG_DIR/$tmpl" ]]; then
-    cp -f "$CFG_DIR/$tmpl" "$CFG_DIR/$cfg_name"
-    chmod 660 "$CFG_DIR/$cfg_name" || true
-    echo "Created $CFG_DIR/$cfg_name from template"
+  if [[ ! -f "$CFG_SUBDIR/$cfg_name" && -f "$CFG_SUBDIR/$tmpl" ]]; then
+    cp -f "$CFG_SUBDIR/$tmpl" "$CFG_SUBDIR/$cfg_name"
+    chmod 660 "$CFG_SUBDIR/$cfg_name" || true
+    chown root:owlangs "$CFG_SUBDIR/$cfg_name" || true
+    echo "Created $CFG_SUBDIR/$cfg_name from template"
   fi
 done
 
-# Set permissions on config files
+# Set permissions on config files in configs subdirectory
 for cfg in system.json platforms.json ui.json secrets.json local.json local_users.json static.json translation_config.json; do
-  if [[ -f "$CFG_DIR/$cfg" ]]; then
-    chown root:owlangs "$CFG_DIR/$cfg" || true
-    chmod 660 "$CFG_DIR/$cfg" || true
+  if [[ -f "$CFG_SUBDIR/$cfg" ]]; then
+    chown root:owlangs "$CFG_SUBDIR/$cfg" || true
+    chmod 660 "$CFG_SUBDIR/$cfg" || true
   fi
 done
 

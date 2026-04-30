@@ -15,7 +15,7 @@ try:
     from pptx.shapes.base import BaseShape
     from pptx.shapes.group import GroupShape
     from pptx.shapes.autoshape import Shape
-    from pptx.shapes.table import Table
+    from pptx.table import Table
     from pptx.shapes.freeform import FreeformBuilder
     from pptx.enum.shapes import MSO_SHAPE_TYPE
     from pptx.enum.text import MSO_ANCHOR, PP_ALIGN

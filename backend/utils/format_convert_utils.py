@@ -92,7 +92,7 @@ def _ensure_ascii_path_for_tex(tex_root: Path) -> Path:
 
 
 def _get_user_texmfvar_dir() -> Path:
-    """Return a user-writable texmf-var directory (outside Program Files).
+    r"""Return a user-writable texmf-var directory (outside Program Files).
     Uses %LOCALAPPDATA%\Owlangs\texmf-var on Windows, ~/.cache/owlangs/texmf-var elsewhere."""
     if sys.platform == "win32":
         local_appdata = os.environ.get("LOCALAPPDATA")
@@ -365,7 +365,7 @@ def _get_owlangs_install_dir() -> Optional[Path]:
 
 
 def _is_system_readonly_path(path: Path) -> bool:
-    """Check whether *path* lives under a Windows system directory that is typically read-only
+    r"""Check whether *path* lives under a Windows system directory that is typically read-only
     for non-elevated users (e.g. C:\Program Files, C:\Windows)."""
     if sys.platform != "win32":
         return False
@@ -386,7 +386,7 @@ def _is_system_readonly_path(path: Path) -> bool:
 
 
 def _mirror_pdflatex_to_local(pdflatex_root: Path) -> Optional[Path]:
-    """Mirror the bundled pdflatex directory into %%LOCALAPPDATA%%\Owlangs\3rdParty\windows\pdflatex
+    r"""Mirror the bundled pdflatex directory into %%LOCALAPPDATA%%\Owlangs\3rdParty\windows\pdflatex
     so that XeLaTeX can write format files, font caches, etc. even when the original bundle
     resides in a read-only location such as C:\Program Files.
 
@@ -836,7 +836,7 @@ def _ensure_blank_line_before_pipe_tables(md_content: str) -> str:
 
 
 def _sanitize_md_for_pdf(md_content: str) -> str:
-    """Sanitize Markdown before Pandoc PDF conversion.
+    r"""Sanitize Markdown before Pandoc PDF conversion.
 
     Fixes common failure modes:
     1. Unclosed HTML <div> tags cause Pandoc to emit malformed LaTeX.

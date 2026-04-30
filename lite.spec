@@ -221,7 +221,7 @@ hiddenimports = [
     'pptx.shapes.base',
     'pptx.shapes.group',
     'pptx.shapes.autoshape',
-    'pptx.shapes.table',
+    'pptx.table',
     'pptx.shapes.freeform',
     'pptx.text.text',
     # mobi dependencies (ensure loguru and imghdr are included in frozen build)

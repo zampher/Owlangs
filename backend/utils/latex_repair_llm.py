@@ -133,7 +133,7 @@ def _build_prompt(req: LatexRepairRequest) -> str:
             "- Remove or fix any commands that are not standard LaTeX."
         )
 
-    prompt = f"""You are a LaTeX typesetting expert.
+    prompt = rf"""You are a LaTeX typesetting expert.
 The following snippet comes from a document that may contain **formulas or pseudo-code (algorithms with line numbers)**.
 A PDF export failed with a LaTeX error.
 
