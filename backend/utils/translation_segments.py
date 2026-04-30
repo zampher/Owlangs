@@ -4133,15 +4133,24 @@ async def retranslate_segment(
         # Get platform API credentials
         base_url = platform_config_obj.url or ''
         model_id = platform_config_obj.model or ''
-        
+
+        # Check if platform requires API key (Ollama, local deployments don't)
+        requires_api_key = getattr(platform_config_obj, 'requires_api_key', True)
+
         # Get API key from secrets manager
         api_key = secrets_manager.get_api_keys().get(selected_platform_key, '')
-        
-        if not base_url or not api_key:
+
+        # Validate platform configuration
+        # For platforms that don't require API key (e.g., Ollama), only check base_url
+        if not base_url:
+            raise ValueError(
+                f"Platform '{selected_platform_key}' is not properly configured: base_url is missing"
+            )
+
+        if requires_api_key and not api_key:
             raise ValueError(
                 f"Platform '{selected_platform_key}' is not properly configured "
-                f"(base_url: {'provided' if base_url else 'missing'}, "
-                f"api_key: {'provided' if api_key else 'missing'})"
+                f"(requires_api_key=True but api_key is missing)"
             )
         
         # CRITICAL: Get translation settings from multiple sources (priority order):
@@ -4553,17 +4562,27 @@ async def retranslate_segments_batch(
                 setattr(self, key, value)
     
     platform_config_obj = PlatformConfigObj(platform_config_dict)
-    
+
     # Get platform API credentials
     base_url = platform_config_obj.url or ''
     model_id = platform_config_obj.model or ''
+
+    # Check if platform requires API key (Ollama, local deployments don't)
+    requires_api_key = getattr(platform_config_obj, 'requires_api_key', True)
+
     api_key = secrets_manager.get_api_keys().get(selected_platform_key, '')
-    
-    if not base_url or not api_key:
+
+    # Validate platform configuration
+    # For platforms that don't require API key (e.g., Ollama), only check base_url
+    if not base_url:
+        raise ValueError(
+            f"Platform '{selected_platform_key}' is not properly configured: base_url is missing"
+        )
+
+    if requires_api_key and not api_key:
         raise ValueError(
             f"Platform '{selected_platform_key}' is not properly configured "
-            f"(base_url: {'provided' if base_url else 'missing'}, "
-            f"api_key: {'provided' if api_key else 'missing'})"
+            f"(requires_api_key=True but api_key is missing)"
         )
     
     # CRITICAL: Get translation settings from multiple sources (priority order):

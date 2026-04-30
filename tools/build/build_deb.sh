@@ -322,9 +322,9 @@ chown root:owlangs "$CFG_DIR" || true
 chmod 2755 "$CFG_DIR" || true
 
 # Create configs subdirectory (for actual config files)
-install -d -m 755 "$CFG_SUBDIR" || true
+install -d -m 775 "$CFG_SUBDIR" || true
 chown root:owlangs "$CFG_SUBDIR" || true
-chmod 2755 "$CFG_SUBDIR" || true
+chmod 2775 "$CFG_SUBDIR" || true
 
 # Initialize config files from templates in configs subdirectory (if missing)
 for tmpl in system.json.template platforms.json.template ui.json.template secrets.json.template local.json.template local_users.json.template static.json.template translation_config.json.template; do
