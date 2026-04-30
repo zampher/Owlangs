@@ -224,6 +224,14 @@ hiddenimports = [
     'pptx.table',
     'pptx.shapes.freeform',
     'pptx.text.text',
+    # layout module: used by layout_merger and mineru_zip_merger
+    'layout',
+    'layout.base',
+    'layout.mineru_layout_model',
+    # pdf_splitter, layout_merger, mineru_zip_merger: dynamic imports in converter_mineru.py
+    'backend.utils.pdf_splitter',
+    'backend.utils.layout_merger',
+    'backend.utils.mineru_zip_merger',
     # mobi dependencies (ensure loguru and imghdr are included in frozen build)
     'loguru',
     'imghdr',
