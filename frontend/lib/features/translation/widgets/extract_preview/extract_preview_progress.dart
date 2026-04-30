@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/services/anonymize_service.dart';
@@ -257,6 +257,30 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
         final sourcePreview = status['source_preview'] as Map<String, dynamic>?;
         final previewReady = sourcePreview?['ready'] == true;
         final hasSegments = allSegments.isNotEmpty;
+
+        // Web-only: warn user if the document has too many pages
+        // Check on every polling tick so we catch it as soon as backend reports it
+        if (kIsWeb && !hasShownLargeFileWarning) {
+          final int pageCount = (status['page_count'] as int?) ?? 0;
+          AppLogger.log(
+            'ExtractPreview',
+            '[LARGE-FILE-WARN] polling tick: pageCount=$pageCount, threshold=500, willShow=${pageCount > 500}, taskId=${extractWidget.taskId}',
+            level: LogLevel.info,
+          );
+          if (pageCount > 500) {
+            hasShownLargeFileWarning = true;
+            AppLogger.log(
+              'ExtractPreview',
+              '[LARGE-FILE-WARN] Showing large-file warning for $pageCount pages, taskId=${extractWidget.taskId}',
+              level: LogLevel.warn,
+            );
+            MessageService.showWarning(
+              context,
+              'This document has $pageCount pages. Large documents may cause the browser to run out of memory. '
+              'For files over 500 pages, please use the desktop application.',
+            );
+          }
+        }
 
         // CRITICAL: Extract polling should NOT handle translation progress.
         // However, extraction steps (e.g. "Detect Language") also report

@@ -184,28 +184,31 @@ class TranslationService:
             from fastapi import HTTPException
             raise HTTPException(status_code=500, detail=f"Failed to write file to disk: {str(e)}")
         
-        # Reject PDFs exceeding page limit (MinerU cannot handle very large files)
-        # Exception: mineru/mineru_local engines support automatic PDF splitting in ConverterMineru.
+        # Compute page count early for both validation and frontend warning
+        page_count = 0
         if original_filename.lower().endswith(".pdf"):
             page_count = _get_pdf_page_count(file_contents)
-            if page_count > PDF_MAX_PAGES:
-                convert_engine = getattr(payload, 'convert_engine', 'mineru') or 'mineru'
-                if convert_engine in ("mineru", "mineru_local"):
-                    logger.info(
-                        LogModule.WORKFLOW,
-                        f"[TRANSLATION-SERVICE] Large PDF allowed for splitting: task_id={task_id}, "
-                        f"pages={page_count}, engine={convert_engine}, will be split by ConverterMineru"
-                    )
-                else:
-                    if os.path.exists(temp_dir):
-                        shutil.rmtree(temp_dir, ignore_errors=True)
-                    self.task_manager.cleanup_task_resources(task_id)
-                    from fastapi import HTTPException
-                    logger.warning(
-                        LogModule.WORKFLOW,
-                        f"[TRANSLATION-SERVICE] Rejected PDF: task_id={task_id}, pages={page_count}, max={PDF_MAX_PAGES}"
-                    )
-                    raise HTTPException(status_code=400, detail=_pdf_too_large_detail(page_count))
+        
+        # Reject PDFs exceeding page limit (MinerU cannot handle very large files)
+        # Exception: mineru/mineru_local engines support automatic PDF splitting in ConverterMineru.
+        if page_count > PDF_MAX_PAGES:
+            convert_engine = getattr(payload, 'convert_engine', 'mineru') or 'mineru'
+            if convert_engine in ("mineru", "mineru_local"):
+                logger.info(
+                    LogModule.WORKFLOW,
+                    f"[TRANSLATION-SERVICE] Large PDF allowed for splitting: task_id={task_id}, "
+                    f"pages={page_count}, engine={convert_engine}, will be split by ConverterMineru"
+                )
+            else:
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                self.task_manager.cleanup_task_resources(task_id)
+                from fastapi import HTTPException
+                logger.warning(
+                    LogModule.WORKFLOW,
+                    f"[TRANSLATION-SERVICE] Rejected PDF: task_id={task_id}, pages={page_count}, max={PDF_MAX_PAGES}"
+                )
+                raise HTTPException(status_code=400, detail=_pdf_too_large_detail(page_count))
         
         # Update task state with all necessary fields
         task_state.update({
@@ -234,6 +237,16 @@ class TranslationService:
                 "ready": False,
             },
         })
+        
+        # Store page_count early so the frontend can show large-file warnings
+        # before format conversion completes.
+        if page_count > 0:
+            task_state["page_count"] = page_count
+            logger.info(
+                LogModule.WORKFLOW,
+                f"[TRANSLATION-SERVICE] Stored page_count={page_count} in task_state, "
+                f"task_id={task_id}"
+            )
         
         self.task_manager.add_log(task_id, "info", f"Created temporary directory: {temp_dir}")
         

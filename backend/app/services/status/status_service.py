@@ -664,6 +664,14 @@ class StatusService:
                 except Exception as e:
                     logger.warning(LogModule.WORKFLOW, f"[STATUS] Failed to extract page count from layout_document: {e}")
         
+        # If layout_document is not available, check if page_count was stored
+        # early in task_state (e.g. by translation_service on task creation).
+        if page_count == 0:
+            early_page_count = task_state.get("page_count")
+            if early_page_count:
+                page_count = int(early_page_count)
+                logger.trace(LogModule.WORKFLOW, f"Using early page_count={page_count} from task_state for task {task_id}")
+        
         # Extract page count for other document formats
         if page_count == 0:
             page_count = self._extract_page_count_from_document(
@@ -5221,6 +5229,9 @@ class StatusService:
                 page_count = self._get_pptx_page_count(task_state)
             elif workflow_type == 'xlsx':
                 page_count = self._get_xlsx_page_count(task_state)
+            elif workflow_type == 'pdf':
+                # For PDF, page_count may have been stored early in task_state
+                page_count = task_state.get("page_count", 0)
             elif workflow_type in ['txt', 'markdown_based', 'html', 'md']:
                 # For text-based formats, estimate pages based on content length
                 page_count = self._estimate_text_pages(task_state)

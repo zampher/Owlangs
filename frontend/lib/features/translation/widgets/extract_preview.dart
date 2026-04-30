@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/services/translation_service.dart';
@@ -1200,6 +1200,34 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
   /// [forceReload] If true, force reload even if segments are already loaded (e.g., after resplit)
   Future<void> _loadInitialData({bool forceReload = false}) async {
     try {
+      // Web-only: warn user if the document has too many pages.
+      // This check is placed BEFORE the early-return so we don't miss it
+      // when segments are already loaded (e.g. on polling re-entry).
+      if (kIsWeb && !hasShownLargeFileWarning) {
+        final TranslationService svc = TranslationService();
+        final Map<String, dynamic> status = await svc.getStatus(widget.taskId);
+        if (mounted) {
+          final int pageCount = (status['page_count'] as int?) ?? 0;
+          _log(
+            '[LARGE-FILE-WARN] _loadInitialData: pageCount=$pageCount, '
+            'threshold=500, willShow=${pageCount > 500}, taskId=${widget.taskId}',
+            level: LogLevel.info,
+          );
+          if (pageCount > 500) {
+            hasShownLargeFileWarning = true;
+            _log(
+              '[LARGE-FILE-WARN] Showing large-file warning for $pageCount pages, taskId=${widget.taskId}',
+              level: LogLevel.warn,
+            );
+            MessageService.showWarning(
+              context,
+              'This document has $pageCount pages. Large documents may cause the browser to run out of memory. '
+              'For files over 500 pages, please use the desktop application.',
+            );
+          }
+        }
+      }
+
       // Skip loading if segments were already restored from cache (unless forceReload is true)
       // forceReload is used when resplit completes to ensure chunks are regenerated with new chunk_size
       if (!forceReload && allSegments.isNotEmpty && allSeparators.isNotEmpty) {
@@ -3026,6 +3054,94 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                 ],
               ),
             ),
+          // Progress info and Cancel button (shown when preparing Extract phase)
+          if (isPreparing && !isTranslating) ...<Widget>[
+            const SizedBox(width: 12),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                // Progress bar is placed FIRST so its position never shifts
+                // when surrounding text changes.
+                SizedBox(
+                  width: 200,
+                  height: 4, // Reduced from default to 4
+                  child: LinearProgressIndicator(
+                    value: prepareProgress == 0.0 ? null : prepareProgress,
+                    backgroundColor: Colors.grey.shade300,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Colors.green.shade700,
+                    ),
+                    minHeight: 4, // Reduced from 6 to 4
+                  ),
+                ),
+                const SizedBox(width: 4), // Further reduced spacing
+                // Cancel button placed right next to the progress bar
+                OutlinedButton(
+                  onPressed: _handleCancelExtraction,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6, // Further reduced from 8
+                      vertical: 2, // Further reduced from 4
+                    ),
+                    minimumSize: const Size(0, 28), // Increased button height
+                  ),
+                  child: Text(
+                    AppLocalizations.of(context)!.extractToolbarCancel,
+                    style: const TextStyle(fontSize: 10),
+                  ), // Further reduced font size
+                ),
+                const SizedBox(width: 4), // Further reduced spacing
+                Text(
+                  prepareProgress > 0 ? '${(prepareProgress * 100).toInt()}%' : '',
+                  style: TextStyle(
+                    fontSize: 10, // Further reduced from 11 to 10
+                    fontWeight: FontWeight.w600,
+                    color: Colors.green.shade700,
+                  ),
+                ),
+                // Task type label (e.g., "Detect Identifier", "Detect Language")
+                if (prepareTaskType.isNotEmpty) ...<Widget>[
+                  const SizedBox(width: 6),
+                  Text(
+                    prepareTaskType,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.green.shade700,
+                    ),
+                  ),
+                ],
+                // PDF split part label
+                if (extractPdfPartCurrent > 0 && extractPdfPartTotal > 0) ...<Widget>[
+                  const SizedBox(width: 6),
+                  Text(
+                    'Part $extractPdfPartCurrent/$extractPdfPartTotal',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.green.shade700,
+                    ),
+                  ),
+                ],
+                if (prepareStatus.isNotEmpty) ...<Widget>[
+                  const SizedBox(width: 4), // Further reduced spacing
+                  Flexible(
+                    child: Text(
+                      prepareStatus == 'Extraction cancelled'
+                          ? AppLocalizations.of(context)!.extractExtractionCancelled
+                          : prepareStatus,
+                      style: TextStyle(
+                        fontSize: 10, // Reduced from 11 to 10
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
           const Spacer(),
           // Segments statistics (moved to the right side for free expansion)
           if (initialDataLoaded && !isPreparing && allSegments.isNotEmpty)
@@ -3090,92 +3206,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                 minHeight: 28,
               ),
             ),
-          // Progress info and Cancel button (shown when preparing Extract phase)
-          if (isPreparing && !isTranslating) ...<Widget>[
-            const SizedBox(width: 6), // Further reduced spacing
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: <Widget>[
-                // Task type label (e.g., "Detect Identifier", "Detect Language")
-                if (prepareTaskType.isNotEmpty) ...<Widget>[
-                  Text(
-                    prepareTaskType,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.green.shade700,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                ],
-                // PDF split part label shown left of the progress bar
-                if (extractPdfPartCurrent > 0 && extractPdfPartTotal > 0) ...<Widget>[
-                  Text(
-                    'Part $extractPdfPartCurrent/$extractPdfPartTotal',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.green.shade700,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                ],
-                SizedBox(
-                  width: 200,
-                  height: 4, // Reduced from default to 4
-                  child: LinearProgressIndicator(
-                    value: prepareProgress == 0.0 ? null : prepareProgress,
-                    backgroundColor: Colors.grey.shade300,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      Colors.green.shade700,
-                    ),
-                    minHeight: 4, // Reduced from 6 to 4
-                  ),
-                ),
-                const SizedBox(width: 4), // Further reduced spacing
-                // Cancel button placed right next to the progress bar
-                OutlinedButton(
-                  onPressed: _handleCancelExtraction,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6, // Further reduced from 8
-                      vertical: 2, // Further reduced from 4
-                    ),
-                    minimumSize: const Size(0, 28), // Increased button height
-                  ),
-                  child: Text(
-                    AppLocalizations.of(context)!.extractToolbarCancel,
-                    style: const TextStyle(fontSize: 10),
-                  ), // Further reduced font size
-                ),
-                const SizedBox(width: 4), // Further reduced spacing
-                Text(
-                  prepareProgress > 0 ? '${(prepareProgress * 100).toInt()}%' : '',
-                  style: TextStyle(
-                    fontSize: 10, // Further reduced from 11 to 10
-                    fontWeight: FontWeight.w600,
-                    color: Colors.green.shade700,
-                  ),
-                ),
-                if (prepareStatus.isNotEmpty) ...<Widget>[
-                  const SizedBox(width: 4), // Further reduced spacing
-                  Flexible(
-                    child: Text(
-                      prepareStatus == 'Extraction cancelled'
-                          ? AppLocalizations.of(context)!.extractExtractionCancelled
-                          : prepareStatus,
-                      style: TextStyle(
-                        fontSize: 10, // Reduced from 11 to 10
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ],
           // Translation progress bar (shown when translating)
           if (isTranslating) ...<Widget>[
             const SizedBox(width: 6), // Further reduced spacing

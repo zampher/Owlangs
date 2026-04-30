@@ -329,6 +329,9 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
   /// Track if MinerU settings dialog has been shown for this error
   bool hasShownMineruSettingsDialog = false;
 
+  /// Track if large file warning has been shown (Web only)
+  bool hasShownLargeFileWarning = false;
+
   /// Image data map: {placeholder_id: {"data": "data:image/jpeg;base64,...", "alt": "title"}}
   Map<String, Map<String, String>> imageDataMap =
       <String, Map<String, String>>{};
@@ -412,6 +415,7 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
     lastRefreshTrigger = null;
     lastToolbarLogTaskId = null;
     hasShownMineruSettingsDialog = false;
+    hasShownLargeFileWarning = false;
     imageDataMap = <String, Map<String, String>>{};
     // Search state
     isSearchBoxVisible = false;
