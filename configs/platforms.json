@@ -183,7 +183,7 @@
       "requires_api_key": true
     },
     "volcengine_ark": {
-      "name": "VolcEngine ARK (鏂硅垷)",
+      "name": "VolcEngine ARK",
       "url": "https://ark.cn-beijing.volces.com/api/v3",
       "model": "doubao-seed-1-6",
       "max_tokens": 32768,

@@ -99,12 +99,18 @@ class OllamaProtocol(LLMProtocol):
         }
         
         # Ollama uses 'num_predict' instead of 'max_tokens'
-        # Set minimum num_predict to 4096 for thinking-capable models (e.g., Qwen3)
-        # These models use significant tokens for reasoning before outputting content
-        MIN_NUM_PREDICT = 4096
+        # Dynamic minimum based on model type:
+        # - Thinking models (Qwen3, DeepSeek-R1, etc.) need more tokens for reasoning
+        # - Non-thinking models can use smaller minimum
+        model_lower = model.lower()
+        is_thinking_model = any(name in model_lower for name in ['qwen3', 'deepseek-r1', 'r1', 'thinking'])
+        MIN_NUM_PREDICT = 8192 if is_thinking_model else 4096
+
         if max_tokens is not None and max_tokens > 0:
+            # Use user's config if provided, but ensure minimum for model type
             data["options"]["num_predict"] = max(max_tokens, MIN_NUM_PREDICT)
         else:
+            # Default to minimum for model type
             data["options"]["num_predict"] = MIN_NUM_PREDICT
         
         # CRITICAL: Set num_ctx to prevent Ollama from silently truncating long prompts.

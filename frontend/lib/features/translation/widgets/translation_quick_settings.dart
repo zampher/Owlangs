@@ -1231,7 +1231,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${p.name} (${p.key})',
+                        p.name,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
