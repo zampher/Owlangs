@@ -607,7 +607,11 @@ class Agent:
         user_prompt: str,
         raw_response: str,
     ) -> None:
-        """Write one debug file per LLM call (request + raw response) under temp for troubleshooting."""
+        """Write one debug file per LLM call (request + raw response) under temp for troubleshooting.
+        
+        Uses append mode so that multiple calls with the same chunk_index (e.g. main body + textbox)
+        are all preserved in the same file instead of overwriting each other.
+        """
         task_id = getattr(self, "task_id", None) or getattr(self, "_task_id", None)
         if not task_id:
             return
@@ -615,7 +619,13 @@ class Agent:
             tmp_dir = Path(tempfile.gettempdir()) / "owlangs_llm_api_debug"
             tmp_dir.mkdir(parents=True, exist_ok=True)
             path = tmp_dir / f"{task_id}_llm_chunk_{chunk_index}.txt"
+            
+            from datetime import datetime
+            timestamp = datetime.now().isoformat()
+            
             lines = [
+                f"\n{'='*80}",
+                f"CALL TIMESTAMP: {timestamp}",
                 f"Task ID: {task_id}",
                 f"Chunk index: {chunk_index}",
                 "--- System prompt (full) ---",
@@ -624,11 +634,14 @@ class Agent:
                 user_prompt,
                 "--- Raw LLM response content (full) ---",
                 raw_response if raw_response else "(empty)",
+                f"{'='*80}\n",
             ]
-            path.write_text("\n".join(lines), encoding="utf-8", errors="replace")
+            # Append instead of overwrite so multiple stages (main body, textbox, etc.) are preserved
+            with path.open("a", encoding="utf-8", errors="replace") as f:
+                f.write("\n".join(lines))
             unified_logger.debug(
                 LogModule.TRANS,
-                f"[AGENT] Wrote LLM call debug file: {path}",
+                f"[AGENT] Wrote/appended LLM call debug file: {path}",
             )
         except Exception as e:
             unified_logger.debug(
@@ -720,13 +733,16 @@ class Agent:
             chunk_info = f"[Chunk #{chunk_index}] " if chunk_index is not None else ""
             
             # Log detailed response info when result is suspiciously short or finish_reason indicates issues
-            if not result or len(result) < 10 or finish_reason not in ["stop", "length"]:
+            # Also log when finish_reason is 'length' (output truncated) to help diagnose partial translations
+            if not result or len(result) < 10 or finish_reason not in ["stop", "length"] or finish_reason == "length":
                 unified_logger.warning(
                     LogModule.TRANS,
                     f"{chunk_info}API response issue detected\n"
                     f"  API URL: {endpoint}\n"
                     f"  Model: {self.model_id}\n"
                     f"  Finish reason: {finish_reason}\n"
+                    f"  Input tokens: {input_tokens}\n"
+                    f"  Output tokens: {output_tokens}\n"
                     f"  Result length: {len(result) if result else 0}\n"
                     f"  Result preview: {str(result)[:500] if result else 'None'}\n"
                     f"  Full response_data (first 2000 chars): {str(response_data)[:2000]}"
@@ -1427,6 +1443,7 @@ class Agent:
             pre_send_handler,
             result_handler,
             error_result_handler,
+            chunk_index: int | None = None,
     ) -> Any:
         result = self.send(
             client,
@@ -1435,6 +1452,7 @@ class Agent:
             pre_send_handler=pre_send_handler,
             result_handler=result_handler,
             error_result_handler=error_result_handler,
+            chunk_index=chunk_index,
         )
         count.add()
         return result

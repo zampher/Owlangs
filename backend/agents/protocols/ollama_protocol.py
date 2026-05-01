@@ -107,6 +107,15 @@ class OllamaProtocol(LLMProtocol):
         else:
             data["options"]["num_predict"] = MIN_NUM_PREDICT
         
+        # CRITICAL: Set num_ctx to prevent Ollama from silently truncating long prompts.
+        # Ollama defaults to a small context window (often 2048 or 4096). If the prompt
+        # exceeds this, Ollama silently drops older messages, causing partial translations
+        # (e.g., only 34/98 segments translated). We set a generous default (16384);
+        # Ollama automatically clamps it to the model's architectural maximum.
+        # Users with limited VRAM can override via their Ollama Modelfile.
+        DEFAULT_NUM_CTX = 16384
+        data["options"]["num_ctx"] = DEFAULT_NUM_CTX
+        
         return headers, data
     
     def parse_response(self, response_data: Dict[str, Any]) -> Tuple[str, str, int, int]:
