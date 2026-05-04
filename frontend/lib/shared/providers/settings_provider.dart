@@ -75,11 +75,9 @@ class GlobalSettings {
     // Detailed Translation Parameters
     this.temperature = 0.3,
     this.thinking = 'disable',
-    this.concurrent = 10,
     this.timeout =
         120, // Changed from 30 to 120 seconds (2 minutes) for better reliability
     this.retry = 3,
-    this.chunkSize = 0, // 0 means unset, will be loaded from backend
     this.customPrompt,
 
     // Anonymization
@@ -147,12 +145,9 @@ class GlobalSettings {
         usePrompt: json['usePrompt'] ?? false,
         temperature: (json['temperature'] ?? 0.3).toDouble(),
         thinking: json['thinking'] ?? 'disable',
-        concurrent: json['translationConcurrent'] ?? 3,
         timeout:
             json['translationTimeout'] ?? 120, // Changed from 30 to 120 seconds
         retry: json['retry'] ?? 3,
-        chunkSize: json['translationChunkSize'] ??
-            0, // 0 means unset, will be loaded from backend
         customPrompt: json['customPrompt'],
         anonymizationEngine: json['anonymizationEngine'] ?? 'presidio',
         entityTypes: List<String>.from(
@@ -222,11 +217,14 @@ class GlobalSettings {
   // Detailed Translation Parameters (新任务生效)
   final double temperature;
   final String thinking;
-  final int concurrent;
   final int timeout;
   final int retry;
-  final int chunkSize;
   final String? customPrompt;
+
+  /// DEPRECATED: chunkSize and concurrent are now per-platform settings.
+  /// Kept for backward compatibility (always returns 0).
+  int get concurrent => 0;
+  int get chunkSize => 0;
 
   // Anonymization Settings (新任务生效)
   final String anonymizationEngine;
@@ -286,10 +284,8 @@ class GlobalSettings {
     // Detailed Translation Parameters
     double? temperature,
     String? thinking,
-    int? concurrent,
     int? timeout,
     int? retry,
-    int? chunkSize,
     String? customPrompt,
 
     // Anonymization
@@ -353,10 +349,8 @@ class GlobalSettings {
         // Detailed Translation Parameters
         temperature: temperature ?? this.temperature,
         thinking: thinking ?? this.thinking,
-        concurrent: concurrent ?? this.concurrent,
         timeout: timeout ?? this.timeout,
         retry: retry ?? this.retry,
-        chunkSize: chunkSize ?? this.chunkSize,
         customPrompt: customPrompt ?? this.customPrompt,
 
         // Anonymization
@@ -403,10 +397,8 @@ class GlobalSettings {
         'usePrompt': usePrompt,
         'temperature': temperature,
         'thinking': thinking,
-        'translationConcurrent': concurrent,
         'translationTimeout': timeout,
         'retry': retry,
-        'translationChunkSize': chunkSize,
         'customPrompt': customPrompt,
         'anonymizationEngine': anonymizationEngine,
         'entityTypes': entityTypes,
@@ -462,30 +454,6 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
         if (appConfig != null) {
           // Map backend fields to frontend fields
           final backendSettings = <String, dynamic>{};
-
-          // Map chunk_size from backend to translationChunkSize for frontend
-          // Priority: Always use backend value if available (backend is source of truth)
-          // Check both chunk_size (mapped) and translator_chunk_token_size (original)
-          int? backendChunkSize;
-          if (appConfig.containsKey('chunk_size')) {
-            backendChunkSize = appConfig['chunk_size'] is int
-                ? appConfig['chunk_size'] as int
-                : null;
-          } else if (appConfig.containsKey('translator_chunk_token_size')) {
-            backendChunkSize = appConfig['translator_chunk_token_size'] is int
-                ? appConfig['translator_chunk_token_size'] as int
-                : null;
-          }
-
-          // Always use backend value if available (backend is source of truth)
-          if (backendChunkSize != null && backendChunkSize != 0) {
-            backendSettings['translationChunkSize'] = backendChunkSize;
-          }
-
-          // Map concurrent from backend to translationConcurrent for frontend
-          if (appConfig.containsKey('concurrent')) {
-            backendSettings['translationConcurrent'] = appConfig['concurrent'];
-          }
 
           // Map timeout from backend to translationTimeout for frontend
           if (appConfig.containsKey('timeout')) {
@@ -784,10 +752,8 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     bool? usePrompt,
     double? temperature,
     String? thinking,
-    int? concurrent,
     int? timeout,
     int? retry,
-    int? chunkSize,
     String? customPrompt,
   }) async {
     // 1. Immediately update local state (for fast UI response)
@@ -799,10 +765,8 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
       usePrompt: usePrompt,
       temperature: temperature,
       thinking: thinking,
-      concurrent: concurrent,
       timeout: timeout,
       retry: retry,
-      chunkSize: chunkSize,
       customPrompt: customPrompt,
     );
 
@@ -844,17 +808,11 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     if (thinking != null) {
       await _settingsService.saveSetting('', 'thinking', thinking);
     }
-    if (concurrent != null) {
-      await _settingsService.saveSetting('', 'concurrent', concurrent);
-    }
     if (timeout != null) {
       await _settingsService.saveSetting('', 'timeout', timeout);
     }
     if (retry != null) {
       await _settingsService.saveSetting('', 'retry', retry);
-    }
-    if (chunkSize != null && chunkSize != 0) {
-      await _settingsService.saveSetting('', 'chunkSize', chunkSize);
     }
     if (customPrompt != null) {
       await _settingsService.saveSetting('', 'customPrompt', customPrompt);

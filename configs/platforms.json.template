@@ -2,7 +2,7 @@
   "_schema_version": 1,
   "default_platform": "ollama",
   "platforms": {
-     "local": {
+    "local": {
       "name": "Local (OpenAI API)",
       "url": "http://localhost:8080/v1",
       "model": "",
@@ -20,7 +20,9 @@
       "token_link": "Obtain API key from your provider",
       "api_endpoints": {},
       "parser_subtype": null,
-      "api_protocol": "openai"
+      "api_protocol": "openai",
+      "chunk_size": 4000,
+      "concurrent": 2
     },
     "ollama": {
       "name": "Local (Ollama)",
@@ -40,7 +42,9 @@
       "token_link": "https://ollama.com",
       "api_endpoints": {},
       "parser_subtype": null,
-      "api_protocol": "ollama"
+      "api_protocol": "ollama",
+      "chunk_size": 2500,
+      "concurrent": 1
     },
     "anthropic_local": {
       "name": "Local (Anthropic)",
@@ -59,7 +63,9 @@
       "description": "Connect to a locally hosted Anthropic Claude API server. Set the base URL to your local Claude API endpoint (e.g., http://localhost:8081). API key is optional for local deployments. Supports Claude 3 series models for high-quality translation with exceptional reasoning capabilities.",
       "token_link": "https://github.com/anthropics/anthropic-cookbook/tree/main/misc/local-server",
       "api_endpoints": {},
-      "api_protocol": "anthropic"
+      "api_protocol": "anthropic",
+      "chunk_size": 8000,
+      "concurrent": 2
     },
     "openai": {
       "name": "OpenAI",
@@ -79,7 +85,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "azure": {
       "name": "Azure OpenAI",
@@ -99,7 +107,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "anthropic": {
       "name": "Anthropic Claude",
@@ -119,7 +129,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "anthropic",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 16000,
+      "concurrent": 5
     },
     "google": {
       "name": "Google Gemini",
@@ -139,7 +151,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "deepseek": {
       "name": "DeepSeek",
@@ -159,7 +173,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "dashscope": {
       "name": "Alibaba DashScope",
@@ -179,7 +195,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "volcengine_ark": {
       "name": "VolcEngine ARK (鏂硅垷)",
@@ -199,7 +217,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "zhipu": {
       "name": "Zhipu AI",
@@ -219,7 +239,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "groq": {
       "name": "Groq",
@@ -239,7 +261,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "together": {
       "name": "Together AI",
@@ -259,7 +283,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "mistral": {
       "name": "Mistral AI",
@@ -279,7 +305,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "cohere": {
       "name": "Cohere",
@@ -299,7 +327,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "xai": {
       "name": "xAI",
@@ -319,7 +349,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "siliconflow": {
       "name": "SiliconFlow",
@@ -339,7 +371,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "dmxapi": {
       "name": "DMX API",
@@ -359,7 +393,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "openrouter": {
       "name": "OpenRouter",
@@ -379,7 +415,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "hunyuan": {
       "name": "Hunyuan",
@@ -399,7 +437,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "baidu": {
       "name": "Baidu ERNIE",
@@ -419,7 +459,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "moonshot": {
       "name": "Moonshot AI",
@@ -439,7 +481,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "aleph_alpha": {
       "name": "Aleph Alpha (Germany)",
@@ -459,7 +503,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "rinna": {
       "name": "Rinna (Japan)",
@@ -479,7 +525,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "naver": {
       "name": "Naver HyperClova (Korea)",
@@ -499,7 +547,9 @@
       "api_endpoints": {},
       "parser_subtype": null,
       "api_protocol": "openai",
-      "requires_api_key": true
+      "requires_api_key": true,
+      "chunk_size": 8000,
+      "concurrent": 10
     },
     "mineru": {
       "name": "MinerU (Cloud)",

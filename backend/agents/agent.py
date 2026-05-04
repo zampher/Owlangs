@@ -429,7 +429,7 @@ class Agent:
                 is_critical_error = True
                 error_message = "Insufficient balance or quota exceeded on LLM platform. Please check your account and add funds."
         elif status_code == 401:
-            if any(keyword in response_lower for keyword in ["invalid api key", "authentication", "令牌已过期", "验证不正确"]):
+            if any(keyword in response_lower for keyword in ["invalid api key", "authentication", "词元密钥已过期", "验证不正确"]):
                 is_critical_error = True
                 error_message = "Invalid API key or authentication failed. Please check your API key in Settings."
         elif status_code == 404:

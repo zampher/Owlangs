@@ -1802,6 +1802,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get aiPlatformMaxTokensHint => '例：4096';
 
   @override
+  String get aiPlatformChunkSize => 'チャンクサイズ';
+
+  @override
+  String get aiPlatformChunkSizeHint => '例：3000';
+
+  @override
+  String get aiPlatformConcurrent => '同時リクエスト数';
+
+  @override
+  String get aiPlatformConcurrentHint => '例：5';
+
+  @override
   String get aiPlatformModel => 'モデル';
 
   @override

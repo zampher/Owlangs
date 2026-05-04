@@ -1884,6 +1884,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get aiPlatformMaxTokensHint => 'ej., 4096';
 
   @override
+  String get aiPlatformChunkSize => 'Tamaño de Fragmento';
+
+  @override
+  String get aiPlatformChunkSizeHint => 'ej., 3000';
+
+  @override
+  String get aiPlatformConcurrent => 'Solicitudes Concurrentes';
+
+  @override
+  String get aiPlatformConcurrentHint => 'ej., 5';
+
+  @override
   String get aiPlatformModel => 'Modelo';
 
   @override

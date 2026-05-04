@@ -61,8 +61,8 @@ class AppConfig:
     translator_top_p: float = 1.0
     translator_frequency_penalty: float = 0.0
     translator_presence_penalty: float = 0.0
-    translator_chunk_token_size: int = 8000  # Total token count (text content + system prompt + overhead). System automatically calculates text portion size.
-    translator_concurrent: int = 15
+    translator_chunk_token_size: int = 8000  # DEPRECATED: Use per-platform chunk_size in platforms.json instead. This global field is kept as backward-compat fallback when a platform lacks its own chunk_size.
+    translator_concurrent: int = 15  # DEPRECATED: Use per-platform concurrent in platforms.json instead. This global field is kept as backward-compat fallback when a platform lacks its own concurrent.
     translator_connect_timeout: int = 15  # HTTP connect timeout (seconds) to reduce first-attempt ConnectTimeout
     translator_timeout: int = 120
     translator_retry: int = 2

@@ -85,40 +85,9 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
     extractPdfPartCurrent = 0;
     extractPdfPartTotal = 0;
     lastExtractPdfPartCurrent = 0;
-    // Get current chunk size from global settings for status display
-    final globalSettings = ref.read(globalSettingsProvider);
-    final chunkSize = globalSettings.chunkSize;
-    prepareStatus = 'Preparing... (chunk size: $chunkSize)';
+    prepareStatus = 'Preparing...';
     prepareTaskType = '';
     prepareErrorMessage = '';
-
-    // Check if chunk_size has changed since last load
-    // If changed, force reload to get new chunks
-    if (lastKnownChunkSize != null && lastKnownChunkSize != chunkSize) {
-      if (kDebugMode) {
-        AppLogger.log(
-          'ExtractPreview',
-          'Chunk size changed from $lastKnownChunkSize to $chunkSize, will force reload',
-        );
-      }
-      // Clear existing data to force reload
-      setState(() {
-        allSegments = <String>[];
-        allChunks = <String>[];
-        allSeparators = <String>[];
-        initialDataLoaded = false;
-      });
-      // Force reload initial data with new chunk_size
-      // Note: _loadInitialData is still in main State class, will be moved later
-      // Access via this since Mixin is mixed into State class
-      // Fire and forget - don't await here as this is not an async function
-      (this as dynamic)
-          .loadInitialDataForMixin(forceReload: true)
-          .catchError((e) {
-        AppLogger.log('ExtractPreview', 'Error loading initial data: $e');
-      });
-    }
-    lastKnownChunkSize = chunkSize;
 
     prepareTimer = Timer.periodic(const Duration(seconds: 1), (t) async {
       // Don't stop polling if we haven't loaded segments yet, even if initialDataLoaded is true
@@ -140,11 +109,8 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
           if (currentBackendProgress < simulatedProgressPercent) {
             setState(() {
               prepareProgress = simulatedProgressPercent / 100.0;
-              // Get current chunk size from global settings for status display
-              final globalSettings = ref.read(globalSettingsProvider);
-              final chunkSize = globalSettings.chunkSize;
               prepareStatus =
-                  'Preparing... ($simulatedProgressPercent%) (chunk size: $chunkSize)';
+                  'Preparing... (\$simulatedProgressPercent%)';
             });
           }
         }
@@ -470,18 +436,11 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
               }
             }
 
-            // Get current chunk size from global settings for status display
-            final globalSettings = ref.read(globalSettingsProvider);
-            final chunkSize = globalSettings.chunkSize;
             if (message.isNotEmpty) {
-              // If message already contains chunk size info, use it as-is
-              // Otherwise, append chunk size info
-              prepareStatus = message.contains('chunk size')
-                  ? message
-                  : '$message (chunk size: $chunkSize)';
+              prepareStatus = message;
             } else {
               prepareStatus =
-                  'Preparing... ($effectiveProgressPercent%) (chunk size: $chunkSize)';
+                  'Preparing... (\$effectiveProgressPercent%)';
             }
 
             // Set task type for display (localized for known task types)
@@ -502,38 +461,8 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
           }
         }
 
-        // Check if chunk_size has changed (e.g., after resplit)
-        final globalSettings = ref.read(globalSettingsProvider);
-        final currentChunkSize = globalSettings.chunkSize;
-        if (lastKnownChunkSize != null &&
-            lastKnownChunkSize != currentChunkSize) {
-          if (kDebugMode) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Chunk size changed from $lastKnownChunkSize to $currentChunkSize during polling, forcing reload',
-            );
-          }
-          // Reset scroll controllers to prevent ScrollPosition errors
-          if (segmentsScrollController.hasClients) {
-            segmentsScrollController.jumpTo(0);
-          }
-          if (chunksScrollController.hasClients) {
-            chunksScrollController.jumpTo(0);
-          }
-          // Clear existing data and force reload
-          setState(() {
-            allSegments = <String>[];
-            allChunks = <String>[];
-            allSeparators = <String>[];
-            initialDataLoaded = false;
-          });
-          // Note: _loadInitialData is still in main State class, will be moved later
-          // Access via this since Mixin is mixed into State class
-          await (this as dynamic).loadInitialDataForMixin(forceReload: true);
-          lastKnownChunkSize = currentChunkSize;
-          prepareInFlight = false;
-          return;
-        }
+        prepareInFlight = false;
+        return;
 
         // If preview is ready but we don't have segments yet, reload initial data
         // This handles the case where preview becomes ready after conversion completes
@@ -581,10 +510,7 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
             if (mounted) {
               setState(() {
                 prepareProgress = 0.9;
-                // Get current chunk size from global settings for status display
-                final globalSettings = ref.read(globalSettingsProvider);
-                final chunkSize = globalSettings.chunkSize;
-                prepareStatus = 'Loading segments... (chunk size: $chunkSize)';
+                prepareStatus = 'Loading segments...';
                 prepareTaskType = '';
                 initialDataLoaded = true;
               });
@@ -636,10 +562,7 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
             if (mounted) {
               setState(() {
                 prepareProgress = 0.9;
-                // Get current chunk size from global settings for status display
-                final globalSettings = ref.read(globalSettingsProvider);
-                final chunkSize = globalSettings.chunkSize;
-                prepareStatus = 'Loading segments... (chunk size: $chunkSize)';
+                prepareStatus = 'Loading segments...';
                 prepareTaskType = '';
                 initialDataLoaded = true;
               });
@@ -688,10 +611,7 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
             if (mounted) {
               setState(() {
                 prepareProgress = 0.9;
-                // Get current chunk size from global settings for status display
-                final globalSettings = ref.read(globalSettingsProvider);
-                final chunkSize = globalSettings.chunkSize;
-                prepareStatus = 'Loading segments... (chunk size: $chunkSize)';
+                prepareStatus = 'Loading segments...';
                 prepareTaskType = '';
               });
             }

@@ -222,20 +222,20 @@ class GlossaryManagementService {
     }
   }
 
-  /// 获取认证令牌
+  /// 获取认证词元密钥
   static String _getAuthToken() {
     try {
       final ConfigService configService = ConfigService();
       final String? authHeader = configService.authorizationHeader;
       if (authHeader != null && authHeader.isNotEmpty) {
-        // 从 "Bearer token" 格式中提取令牌
+        // 从 "Bearer token" 格式中提取词元密钥
         if (authHeader.startsWith('Bearer ')) {
           return authHeader.substring(7);
         }
         return authHeader;
       }
 
-      // 如果没有令牌，返回空字符串
+      // 如果没有词元密钥，返回空字符串
       return '';
     } catch (e) {
       print('❌ Error getting auth token: $e');

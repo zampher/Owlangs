@@ -1781,10 +1781,22 @@ class AppLocalizationsZh extends AppLocalizations {
       'e.g., https://ark.cn-beijing.volces.com/api/v3';
 
   @override
-  String get aiPlatformMaxTokens => '最大令牌数';
+  String get aiPlatformMaxTokens => '最大词元数';
 
   @override
   String get aiPlatformMaxTokensHint => '例如，4096';
+
+  @override
+  String get aiPlatformChunkSize => '分块大小（词元）';
+
+  @override
+  String get aiPlatformChunkSizeHint => '例如，3000';
+
+  @override
+  String get aiPlatformConcurrent => '并发请求数';
+
+  @override
+  String get aiPlatformConcurrentHint => '例如，5';
 
   @override
   String get aiPlatformModel => '模型';
@@ -2021,10 +2033,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTranslationRetryHint => '推荐：3（失败片段的重试次数）';
 
   @override
-  String get settingsTranslationChunkSizeTitle => '分块大小（令牌）';
+  String get settingsTranslationChunkSizeTitle => '分块大小（词元）';
 
   @override
-  String get settingsTranslationChunkSizeHint => '推荐：每个请求3000令牌（根据模型上下文大小调整）';
+  String get settingsTranslationChunkSizeHint => '推荐：每个请求3000词元（根据模型上下文大小调整）';
 
   @override
   String get settingsExclusionTitle => '默认排除规则';

@@ -32,6 +32,8 @@ class AIPlatformConfig:
     description: Optional[str] = None
     token_link: Optional[str] = None
     api_endpoints: Dict[str, str] = field(default_factory=dict)
+    chunk_size: int = 3000  # Per-platform chunk size (tokens). Overrides global app_config setting.
+    concurrent: int = 5  # Per-platform concurrent requests. Overrides global app_config setting.
 
 
 @dataclass

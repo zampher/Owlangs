@@ -17,7 +17,7 @@ def _format_test_error(status_code: int, response_text: str) -> str:
         return "Insufficient balance or quota exceeded on LLM platform. Please check your account."
     if status_code == 401 and any(
         k in text_lower
-        for k in ("invalid api key", "authentication", "unauthorized", "令牌已过期", "验证不正确")
+        for k in ("invalid api key", "authentication", "unauthorized", "词元密钥已过期", "验证不正确")
     ):
         return "Invalid API key or authentication failed. Please check your API key in Settings."
     return f"API returned status {status_code}: {response_text[:500]}"

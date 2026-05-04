@@ -112,7 +112,9 @@ class UnifiedConfig:
                 'token_link': platform.token_link,
                 'requires_api_key': bool(platform.requires_api_key),
                 'api_protocol': platform.api_protocol,
-                'api_endpoints': dict(platform.api_endpoints) if platform.api_endpoints else {}
+                'api_endpoints': dict(platform.api_endpoints) if platform.api_endpoints else {},
+                'chunk_size': int(platform.chunk_size) if platform.chunk_size is not None else 3000,
+                'concurrent': int(platform.concurrent) if platform.concurrent is not None else 5,
             }
         platforms_dict['default_platform'] = self.platforms.default_platform
         return platforms_dict
@@ -149,7 +151,9 @@ class UnifiedConfig:
                 'description': platform_obj.description,
                 'token_link': platform_obj.token_link,
                 'requires_api_key': platform_obj.requires_api_key,
-                'api_endpoints': platform_obj.api_endpoints
+                'api_endpoints': platform_obj.api_endpoints,
+                'chunk_size': int(platform_obj.chunk_size) if platform_obj.chunk_size is not None else 3000,
+                'concurrent': int(platform_obj.concurrent) if platform_obj.concurrent is not None else 5,
             }
         return None
     

@@ -308,9 +308,6 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
   /// Total estimated input tokens
   int? totalEstimatedInputTokens;
 
-  /// Track last known chunk_size to detect changes
-  int? lastKnownChunkSize;
-
   /// Track last view size to detect size changes
   Size? lastViewSize;
 
@@ -410,7 +407,6 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
     progressInFlight = false;
     currentPollingWorkflowId = null;
     totalEstimatedInputTokens = null;
-    lastKnownChunkSize = null;
     lastViewSize = null;
     lastRefreshTrigger = null;
     lastToolbarLogTaskId = null;

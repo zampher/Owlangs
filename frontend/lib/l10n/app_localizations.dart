@@ -3290,6 +3290,30 @@ abstract class AppLocalizations {
   /// **'e.g., 4096'**
   String get aiPlatformMaxTokensHint;
 
+  /// No description provided for @aiPlatformChunkSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Chunk Size'**
+  String get aiPlatformChunkSize;
+
+  /// No description provided for @aiPlatformChunkSizeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g., 3000'**
+  String get aiPlatformChunkSizeHint;
+
+  /// No description provided for @aiPlatformConcurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'Concurrent Requests'**
+  String get aiPlatformConcurrent;
+
+  /// No description provided for @aiPlatformConcurrentHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g., 5'**
+  String get aiPlatformConcurrentHint;
+
   /// No description provided for @aiPlatformModel.
   ///
   /// In en, this message translates to:

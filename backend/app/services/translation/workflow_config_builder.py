@@ -79,19 +79,43 @@ class WorkflowConfigBuilder:
 
     def _get_concurrent_from_config_or_payload(self, payload: Any) -> int:
         """
-        Get concurrent value: app_config.translator_concurrent (priority), then payload, then default_params.
-        Ensures configs/app_config.json translator_concurrent threshold is applied.
+        Get concurrent value with priority:
+        1. Payload explicit concurrent (user override per task)
+        2. Selected platform's config concurrent
+        3. Global app_config.json translator_concurrent (backward compat)
+        4. default_params
         """
+        # Priority 1: Payload explicit override
+        payload_val = payload.get('concurrent', None) if isinstance(payload, dict) else getattr(payload, 'concurrent', None)
+        if payload_val is not None and payload_val > 0:
+            logger.info(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={payload_val} from payload (explicit override)")
+            return int(payload_val)
+        
+        # Priority 2: Selected platform's config
+        platform_key = payload.get('platform_key') if isinstance(payload, dict) else getattr(payload, 'platform_key', None)
+        if platform_key:
+            try:
+                from backend.config.platforms_config import get_platforms_config
+                platforms_config = get_platforms_config()
+                platform_cfg = platforms_config.platforms.get(platform_key)
+                if platform_cfg and hasattr(platform_cfg, 'concurrent'):
+                    platform_concurrent = platform_cfg.concurrent
+                    if platform_concurrent is not None and platform_concurrent > 0:
+                        logger.info(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={platform_concurrent} from platform '{platform_key}' config")
+                        return int(platform_concurrent)
+            except Exception as e:
+                logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Failed to get concurrent from platform config: {e}")
+        
+        # Priority 3: Global app_config.json (backward compatibility)
         concurrent = None
         try:
             from backend.config.app_config import get_app_config, AppConfig
-            import json
             try:
                 app_config = get_app_config()
                 if hasattr(app_config, 'translator_concurrent'):
                     concurrent = app_config.translator_concurrent
-            except Exception as e1:
-                logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Failed to get concurrent from app_config: {e1}")
+            except Exception:
+                pass
             if concurrent is None or concurrent <= 0:
                 try:
                     cfg_path = AppConfig._resolve_app_config_path("app_config.json")
@@ -99,16 +123,18 @@ class WorkflowConfigBuilder:
                         with open(cfg_path, 'r', encoding='utf-8-sig') as f:
                             data = json.load(f)
                             concurrent = data.get('translator_concurrent')
-                except Exception as e2:
-                    logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Failed to read concurrent from app_config.json: {e2}")
+                except Exception:
+                    pass
             if concurrent is not None and concurrent > 0:
+                logger.info(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={concurrent} from app_config.json (backward compat)")
                 return int(concurrent)
         except Exception as e:
-            logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Fallback concurrent from payload/default: {e}")
-        payload_val = payload.get('concurrent', None) if isinstance(payload, dict) else getattr(payload, 'concurrent', None)
-        if payload_val is not None and payload_val > 0:
-            return int(payload_val)
-        return int(default_params.get("concurrent", 10))
+            logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Failed to get concurrent from app_config: {e}")
+        
+        # Priority 4: default_params
+        default_concurrent = int(default_params.get("concurrent", 10))
+        logger.info(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={default_concurrent} from default_params")
+        return default_concurrent
 
     def _get_connect_timeout_from_config_or_payload(self, payload: Any) -> int:
         """Get connect_timeout from app_config.translator_connect_timeout (priority), then payload, then default 15."""

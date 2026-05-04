@@ -657,6 +657,8 @@ class AIPlatformInfo {
     this.lastTestError,
     this.requiresApiKey = true,
     this.apiProtocol = 'openai',
+    this.chunkSize = 3000,
+    this.concurrent = 5,
   });
 
   factory AIPlatformInfo.fromJson(
@@ -716,6 +718,8 @@ class AIPlatformInfo {
           : null,
       requiresApiKey: requiresApiKey,
       apiProtocol: apiProtocol,
+      chunkSize: _toInt(json['chunk_size'], 3000),
+      concurrent: _toInt(json['concurrent'], 5),
     );
   }
 
@@ -758,6 +762,8 @@ class AIPlatformInfo {
   final String? lastTestError;
   final bool requiresApiKey;
   final String apiProtocol;
+  final int chunkSize;
+  final int concurrent;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'name': name,
@@ -778,6 +784,8 @@ class AIPlatformInfo {
         'api_protocol': apiProtocol,
         'requires_api_key': requiresApiKey,
         'api_endpoints': apiEndpoints,
+        'chunk_size': chunkSize,
+        'concurrent': concurrent,
         // Intentionally exclude lastTestError from persisted JSON
       };
 
@@ -804,6 +812,8 @@ class AIPlatformInfo {
     String? lastTestError,
     bool? requiresApiKey,
     String? apiProtocol,
+    int? chunkSize,
+    int? concurrent,
   }) =>
       AIPlatformInfo(
         key: key,
@@ -830,5 +840,7 @@ class AIPlatformInfo {
         lastTestError: lastTestError,
         requiresApiKey: requiresApiKey ?? this.requiresApiKey,
         apiProtocol: apiProtocol ?? this.apiProtocol,
+        chunkSize: chunkSize ?? this.chunkSize,
+        concurrent: concurrent ?? this.concurrent,
       );
 }

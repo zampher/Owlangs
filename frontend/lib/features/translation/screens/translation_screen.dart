@@ -81,6 +81,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
   bool _isLeftPanelCollapsed = false; // Track left panel collapse state
   bool _hasShownLanguageWarning =
       false; // Track if language match warning has been shown for current task
+  bool _hasRefreshedPlatformStatus =
+      false; // Track if platform status has been refreshed after LLM test
   bool _isGlossaryEditing = false; // Track if glossary is in editing state
   bool _isUpdatingExcluded =
       false; // Track if excluded segments are being updated
@@ -2172,9 +2174,6 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       }
 
       final TranslationService svc = TranslationService();
-      // Use current global chunk size
-      final GlobalSettings globalSettings = ref.read(globalSettingsProvider);
-      final int chunk = globalSettings.chunkSize;
       if (state.taskId == null) {
         if (mounted) {
           _showSnackBar(
@@ -2202,7 +2201,6 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
 
       await svc.resplitSource(
         state.taskId!,
-        chunkSize: chunk,
         excludedSegmentIndices: excludedIndices,
         sourceLang: sourceLang,
       );
@@ -3728,6 +3726,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       return;
     }
 
+    // Reset per-translation flags
+    _hasRefreshedPlatformStatus = false;
+
     // Check if there's an ongoing translation task
     final bool hasOngoingTranslation = state.isTranslating ||
         state.currentOperation == TranslationOperation.translating ||
@@ -4288,12 +4289,11 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
             translationParams['model_id'] ??
             'gpt-4o',
         // Core controls expected at top-level
+        // chunk_size and concurrent are now per-platform settings, read by backend from platforms.json
         'temperature': translationParams['temperature'],
         'thinking': translationParams['thinking'],
-        'concurrent': translationParams['concurrent'],
         'timeout': translationParams['timeout'],
         'retry': translationParams['retry'],
-        'chunk_size': translationParams['chunk_size'],
         // Platform routing (optional for backend)
         'platform_key': defaultPlatform,
         // Prompt settings from Quick Settings
@@ -4545,7 +4545,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
 
       final Map<String, dynamic> statusResp = await svc.pollUntilDone(
         taskId,
-        onUpdate: (Map<String, dynamic> st) {
+        onUpdate: (Map<String, dynamic> st) async {
           notifier.setStatusText((st['status'] ?? '').toString());
           // Safely extract progress, handling null and invalid types
           final dynamic progressValue = st['progress'];
@@ -4555,6 +4555,20 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                   ? (int.tryParse(progressValue) ?? 0).clamp(0, 100)
                   : 0);
           notifier.setProgress(progress);
+
+          // Refresh platform status if backend signals it has changed
+          // (e.g. LLM connectivity test failed during translation start)
+          if (!_hasRefreshedPlatformStatus &&
+              st['platform_status_changed'] == true) {
+            _hasRefreshedPlatformStatus = true;
+            try {
+              final aiPlatformNotifier =
+                  ref.read(aiPlatformSettingsProvider.notifier);
+              await aiPlatformNotifier.refreshPlatformStatus();
+            } catch (e) {
+              // Silently ignore refresh errors
+            }
+          }
 
           // Check language match warning (only once per task).
           // Skip for image files: OCR result language often matches target; warning is not useful.

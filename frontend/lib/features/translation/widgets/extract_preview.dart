@@ -369,7 +369,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
       // CRITICAL: Reload chunks with updated exclusion state
       // Get current chunk_size from global settings
       final GlobalSettings globalSettings = ref.read(globalSettingsProvider);
-      final int currentChunkSize = globalSettings.chunkSize;
 
       // Get excluded segment indices from Flow-level state
       final List<int> excludedIndices = widget.flowId != null
@@ -394,14 +393,13 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
 
       if (isPdfFile) {
         _log(
-          '[ExtractPreview] PDF file detected, calling getLayoutExtract API: taskId=${widget.taskId}, chunkSize=$currentChunkSize, excludedIndices=${excludedIndices.length}, targetLang=$targetLang',
+          '[ExtractPreview] PDF file detected, calling getLayoutExtract API: taskId=${widget.taskId}, excludedIndices=${excludedIndices.length}, targetLang=$targetLang',
           level: LogLevel.info,
         );
 
         final Map<String, dynamic> updatedLayoutData =
             await svc.getLayoutExtract(
           widget.taskId,
-          chunkSize: currentChunkSize,
           excludedSegmentIndices: excludedIndices,
           targetLang: targetLang,
         );
@@ -741,7 +739,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
 
       // Reload chunks with updated exclusion state
       final GlobalSettings globalSettings = ref.read(globalSettingsProvider);
-      final int currentChunkSize = globalSettings.chunkSize;
 
       // CRITICAL: Pass current excluded minus header indices so backend keeps other exclusions (e.g. language_match).
       // When flowId is null we must not pass [] or backend re-detects and re-excludes all, flipping Language Match checkbox.
@@ -776,14 +773,13 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
 
       if (isPdfFile) {
         _log(
-          '[ExtractPreview] PDF file detected, calling getLayoutExtract API for headers: taskId=${widget.taskId}, chunkSize=$currentChunkSize, excludedIndices=${excludedIndices.length}, targetLang=$targetLang',
+          '[ExtractPreview] PDF file detected, calling getLayoutExtract API for headers: taskId=${widget.taskId}, excludedIndices=${excludedIndices.length}, targetLang=$targetLang',
           level: LogLevel.info,
         );
 
         final Map<String, dynamic> updatedLayoutData =
             await svc.getLayoutExtract(
           widget.taskId,
-          chunkSize: currentChunkSize,
           excludedSegmentIndices: excludedIndices,
           targetLang: targetLang,
         );
@@ -951,7 +947,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
 
       // Reload chunks with updated exclusion state
       final GlobalSettings globalSettings = ref.read(globalSettingsProvider);
-      final int currentChunkSize = globalSettings.chunkSize;
 
       // CRITICAL: Pass current excluded minus footer indices so backend keeps other exclusions (e.g. language_match).
       // When flowId is null we must not pass [] or backend re-detects and re-excludes all, flipping Language Match checkbox.
@@ -986,14 +981,13 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
 
       if (isPdfFile) {
         _log(
-          '[ExtractPreview] PDF file detected, calling getLayoutExtract API for footers: taskId=${widget.taskId}, chunkSize=$currentChunkSize, excludedIndices=${excludedIndices.length}, targetLang=$targetLang',
+          '[ExtractPreview] PDF file detected, calling getLayoutExtract API for footers: taskId=${widget.taskId}, excludedIndices=${excludedIndices.length}, targetLang=$targetLang',
           level: LogLevel.info,
         );
 
         final Map<String, dynamic> updatedLayoutData =
             await svc.getLayoutExtract(
           widget.taskId,
-          chunkSize: currentChunkSize,
           excludedSegmentIndices: excludedIndices,
           targetLang: targetLang,
         );
@@ -1390,12 +1384,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
           // Get current chunk_size from global settings to ensure chunks are regenerated with current setting
           final GlobalSettings globalSettings =
               ref.read(globalSettingsProvider);
-          final int currentChunkSize = globalSettings.chunkSize;
-          if (kDebugMode) {
-            _log(
-              '[ExtractPreview] Using chunk_size=$currentChunkSize from global settings for regenerating chunks',
-            );
-          }
           // Get target language from Quick Settings for language match detection
           final TranslationQuickSettings qs = widget.flowId != null
               ? ref.read(translationQuickSettingsProviderFamily(widget.flowId!))
@@ -1490,7 +1478,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
           try {
             layoutData = await svc.getLayoutExtract(
               widget.taskId,
-              chunkSize: currentChunkSize,
               excludedSegmentIndices: excludedIndices,
               targetLang:
                   latestTargetLang, // Use latest value instead of cached value
@@ -1521,7 +1508,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                 try {
                   layoutData = await svc.getLayoutExtract(
                     widget.taskId,
-                    chunkSize: currentChunkSize,
                     excludedSegmentIndices: excludedIndices,
                     targetLang: latestTargetLang,
                   );
@@ -1729,10 +1715,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
               );
             }
 
-            // Update last known chunk size (use global settings)
-            final GlobalSettings globalSettings =
-                ref.read(globalSettingsProvider);
-            lastKnownChunkSize = globalSettings.chunkSize;
 
             setState(() {
               initialDataLoaded = true;
@@ -2246,7 +2228,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
           // Get current chunk_size from global settings
           final GlobalSettings globalSettings =
               ref.read(globalSettingsProvider);
-          final int currentChunkSize = globalSettings.chunkSize;
 
           // Get target language from Quick Settings for language match detection
           final TranslationQuickSettings qs = widget.flowId != null
@@ -2666,8 +2647,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
               level: LogLevel.info,
             );
 
-            // Update last known chunk size
-            lastKnownChunkSize = currentChunkSize;
 
             if (kDebugMode) {
               _log(
@@ -2867,16 +2846,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
       _loadInitialData(forceReload: forceReload);
 
   Widget _buildToolbar() {
-    // Use chunk_size from global settings
-    final int chunkSize = ref.watch(globalSettingsProvider).chunkSize;
-
-    // Log chunk_size and token info for debugging (only once per taskId)
-    if (kDebugMode && lastToolbarLogTaskId != widget.taskId) {
-      _log('[ExtractPreview] [CHUNK_SIZE] _buildToolbar - '
-          'chunkSize=$chunkSize (from global settings), '
-          'taskId=${widget.taskId}');
-      lastToolbarLogTaskId = widget.taskId;
-    }
 
     return Container(
       decoration: BoxDecoration(
@@ -3801,26 +3770,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
     }
     lastRefreshTrigger = refreshTrigger;
 
-    // Watch global settings to detect chunk_size changes in real-time
-    // This ensures chunks are refreshed immediately when chunk_size changes
-    final GlobalSettings globalSettings = ref.watch(globalSettingsProvider);
-    final int currentChunkSize = globalSettings.chunkSize;
-
-    // Check if chunk_size has changed since last load
-    if (lastKnownChunkSize != null && lastKnownChunkSize != currentChunkSize) {
-      if (kDebugMode) {
-        _log(
-          '[ExtractPreview] build() detected chunk_size change from $lastKnownChunkSize to $currentChunkSize, scheduling refresh',
-        );
-      }
-      // Schedule refresh after build completes
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          refreshChunks();
-          lastKnownChunkSize = currentChunkSize;
-        }
-      });
-    }
 
     // CRITICAL: Watch workflowId to detect when translation starts
     // When translation starts (workflowId becomes available), stop Extract phase polling
@@ -4347,8 +4296,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                                                                         // Get current chunk_size from global settings
                                                                         final GlobalSettings globalSettings =
                                                                             ref.read(globalSettingsProvider);
-                                                                        final int currentChunkSize =
-                                                                            globalSettings.chunkSize;
 
                                                                         // Get excluded segment indices from Flow-level state
                                                                         final List<int> excludedIndices = widget.flowId !=
@@ -4367,7 +4314,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                                                                                 : null;
 
                                                                         _log(
-                                                                          '[ExtractPreview] Reloading layout data after exclusion: taskId=${widget.taskId}, chunkSize=$currentChunkSize, excludedIndices=${excludedIndices.length}, targetLang=$targetLang',
+                                                                          '[ExtractPreview] Reloading layout data after exclusion: taskId=${widget.taskId}, excludedIndices=${excludedIndices.length}, targetLang=$targetLang',
                                                                           level:
                                                                               LogLevel.info,
                                                                         );
@@ -4378,8 +4325,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                                                                             await svc.getLayoutExtract(
                                                                           widget
                                                                               .taskId,
-                                                                          chunkSize:
-                                                                              currentChunkSize,
                                                                           excludedSegmentIndices:
                                                                               excludedIndices,
                                                                           targetLang:
@@ -4568,8 +4513,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                                                                         // Get current chunk_size from global settings
                                                                         final GlobalSettings globalSettings =
                                                                             ref.read(globalSettingsProvider);
-                                                                        final int currentChunkSize =
-                                                                            globalSettings.chunkSize;
 
                                                                         // Get excluded segment indices from Flow-level state
                                                                         final List<int> excludedIndices = widget.flowId !=
@@ -4594,8 +4537,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                                                                             await svc.getLayoutExtract(
                                                                           widget
                                                                               .taskId,
-                                                                          chunkSize:
-                                                                              currentChunkSize,
                                                                           excludedSegmentIndices:
                                                                               excludedIndices,
                                                                           targetLang:

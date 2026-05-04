@@ -802,6 +802,8 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
   late TextEditingController _modelController;
   late TextEditingController _maxTokensController;
   late TextEditingController _temperatureController;
+  late TextEditingController _chunkSizeController;
+  late TextEditingController _concurrentController;
   late String _thinkingMode; // "enable", "disable", "default"
   late String _apiProtocol; // "openai", "ollama", "anthropic"
   late bool _hasApiKey; // Whether platform has API key (if false, API key is optional)
@@ -824,6 +826,10 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
         TextEditingController(text: widget.platformInfo.maxTokens.toString());
     _temperatureController =
         TextEditingController(text: widget.platformInfo.temperature.toString());
+    _chunkSizeController =
+        TextEditingController(text: widget.platformInfo.chunkSize.toString());
+    _concurrentController =
+        TextEditingController(text: widget.platformInfo.concurrent.toString());
     _thinkingMode = widget.platformInfo.thinkingMode;
     _apiProtocol = widget.platformInfo.apiProtocol;
     _hasApiKey = widget.platformInfo.requiresApiKey;
@@ -837,6 +843,8 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
     _modelController.dispose();
     _maxTokensController.dispose();
     _temperatureController.dispose();
+    _chunkSizeController.dispose();
+    _concurrentController.dispose();
     super.dispose();
   }
 
@@ -913,6 +921,20 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
                   ),
                   const SizedBox(height: 12),
                   _buildTemperatureField(),
+                  const SizedBox(height: 12),
+                  _buildTextField(
+                    'Chunk Size',
+                    _chunkSizeController,
+                    keyboardType: TextInputType.number,
+                    hintText: 'Tokens per chunk (e.g. 2500 for Ollama, 8000 for OpenAI)',
+                  ),
+                  const SizedBox(height: 12),
+                  _buildTextField(
+                    'Concurrent Requests',
+                    _concurrentController,
+                    keyboardType: TextInputType.number,
+                    hintText: 'Max parallel requests (e.g. 1 for Ollama, 10 for cloud)',
+                  ),
                   if (widget.platformInfo.thinkingModeSupported) ...<Widget>[
                     const SizedBox(height: 12),
                     _buildThinkingModeField(),
@@ -1650,6 +1672,8 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
     if (current.platformType != 'parser') {
       baseUpdates['maxTokens'] = int.tryParse(_maxTokensController.text) ?? current.maxTokens;
       baseUpdates['temperature'] = double.tryParse(_temperatureController.text) ?? current.temperature;
+      baseUpdates['chunkSize'] = int.tryParse(_chunkSizeController.text) ?? current.chunkSize;
+      baseUpdates['concurrent'] = int.tryParse(_concurrentController.text) ?? current.concurrent;
       baseUpdates['thinkingMode'] = current.thinkingModeSupported ? _thinkingMode : current.thinkingMode;
     }
     
@@ -1671,6 +1695,8 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
       apiKey: baseUpdates['apiKey'] as String,
       maxTokens: baseUpdates['maxTokens'] as int? ?? current.maxTokens,
       temperature: baseUpdates['temperature'] as double? ?? current.temperature,
+      chunkSize: baseUpdates['chunkSize'] as int? ?? current.chunkSize,
+      concurrent: baseUpdates['concurrent'] as int? ?? current.concurrent,
       thinkingMode: baseUpdates['thinkingMode'] as String? ?? current.thinkingMode,
       apiProtocol: baseUpdates['apiProtocol'] as String,
       requiresApiKey: baseUpdates['requiresApiKey'] as bool,

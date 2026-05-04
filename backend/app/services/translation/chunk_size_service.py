@@ -23,8 +23,11 @@ class ChunkSizeService:
         fallback: int = 3000
     ) -> int:
         """
-        Get chunk_size from global user profile (priority) or payload.
-        Always prioritize global user profile over payload to ensure consistency with frontend global settings.
+        Get chunk_size with priority:
+        1. Payload explicit chunk_size (user override per task)
+        2. Selected platform's config chunk_size
+        3. Global app_config.json translator_chunk_token_size (backward compat)
+        4. Fallback value
         
         Args:
             payload: Payload object (dict or object)
@@ -34,43 +37,6 @@ class ChunkSizeService:
         Returns:
             chunk_size value (never returns 0, always returns fallback if unset)
         """
-        # Priority 1: Get from app_config.json (translator_chunk_token_size) - matches frontend global settings
-        chunk_size = None
-        try:
-            from backend.config.app_config import get_app_config, AppConfig
-            import json
-            from pathlib import Path
-            
-            # Try method 1: Use get_app_config() to get the loaded config object
-            try:
-                app_config = get_app_config()
-                if hasattr(app_config, 'translator_chunk_token_size'):
-                    chunk_size = app_config.translator_chunk_token_size
-            except Exception as e1:
-                if task_id:
-                    logger.debug(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Failed to get from app_config object: {e1}")
-            
-            # Try method 2: Directly read from app_config.json file using unified path resolution
-            if not chunk_size or chunk_size == 0:
-                try:
-                    cfg_path = AppConfig._resolve_app_config_path("app_config.json")
-                    if cfg_path.exists():
-                        with open(cfg_path, 'r', encoding='utf-8-sig') as f:
-                            data = json.load(f)
-                            chunk_size = data.get('translator_chunk_token_size')
-                except Exception as e2:
-                    if task_id:
-                        logger.debug(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Failed to read from app_config.json: {e2}")
-            
-            if chunk_size and chunk_size != 0:
-                if task_id:
-                    logger.info(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={chunk_size} from app_config.json (translator_chunk_token_size, priority)")
-                return chunk_size
-        except Exception as e:
-            if task_id:
-                logger.warning(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Failed to get chunk_size from app_config.json: {e}", exc_info=True)
-        
-        # Priority 2: Get from payload if global profile not available or is 0
         # Helper function to get payload attribute (supports both dict and object)
         def _get_payload_attr(key: str, default=None):
             if isinstance(payload, dict):
@@ -78,17 +44,67 @@ class ChunkSizeService:
             else:
                 return getattr(payload, key, default)
         
-        chunk_size = _get_payload_attr('chunk_size', 0)
-        
-        # If chunk_size from payload is 0 or None, use fallback
-        if chunk_size == 0 or chunk_size is None:
-            chunk_size = fallback
+        # Priority 1: Payload explicit override
+        payload_chunk_size = _get_payload_attr('chunk_size', 0)
+        if payload_chunk_size and payload_chunk_size != 0:
             if task_id:
-                logger.warning(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: chunk_size is 0 or None, using fallback value {fallback}")
-        elif task_id:
-            logger.debug(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={chunk_size} from payload")
+                logger.info(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={payload_chunk_size} from payload (explicit override)")
+            return int(payload_chunk_size)
         
-        return chunk_size
+        # Priority 2: Selected platform's config
+        platform_key = _get_payload_attr('platform_key')
+        if platform_key:
+            try:
+                from backend.config.platforms_config import get_platforms_config
+                platforms_config = get_platforms_config()
+                platform_cfg = platforms_config.platforms.get(platform_key)
+                if platform_cfg and hasattr(platform_cfg, 'chunk_size'):
+                    platform_chunk_size = platform_cfg.chunk_size
+                    if platform_chunk_size and platform_chunk_size != 0:
+                        if task_id:
+                            logger.info(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={platform_chunk_size} from platform '{platform_key}' config")
+                        return int(platform_chunk_size)
+            except Exception as e:
+                if task_id:
+                    logger.debug(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Failed to get chunk_size from platform config: {e}")
+        
+        # Priority 3: Global app_config.json (backward compatibility)
+        try:
+            from backend.config.app_config import get_app_config, AppConfig
+            import json
+            
+            try:
+                app_config = get_app_config()
+                if hasattr(app_config, 'translator_chunk_token_size'):
+                    chunk_size = app_config.translator_chunk_token_size
+                    if chunk_size and chunk_size != 0:
+                        if task_id:
+                            logger.info(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={chunk_size} from app_config.json (backward compat)")
+                        return int(chunk_size)
+            except Exception:
+                pass
+            
+            # Try direct file read as fallback
+            try:
+                cfg_path = AppConfig._resolve_app_config_path("app_config.json")
+                if cfg_path.exists():
+                    with open(cfg_path, 'r', encoding='utf-8-sig') as f:
+                        data = json.load(f)
+                        chunk_size = data.get('translator_chunk_token_size')
+                        if chunk_size and chunk_size != 0:
+                            if task_id:
+                                logger.info(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={chunk_size} from app_config.json file (backward compat)")
+                            return int(chunk_size)
+            except Exception:
+                pass
+        except Exception as e:
+            if task_id:
+                logger.debug(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Failed to get chunk_size from app_config: {e}")
+        
+        # Priority 4: Fallback
+        if task_id:
+            logger.warning(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: No chunk_size found in payload, platform config, or app_config. Using fallback={fallback}")
+        return fallback
 
 
 # Global singleton instance

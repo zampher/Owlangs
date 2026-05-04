@@ -1520,9 +1520,6 @@ class _AnonymizeScreenState extends ConsumerState<AnonymizeScreen> {
   Future<void> _onResplitSource(state) async {
     try {
       final svc = TranslationService();
-      // Use current global chunk size
-      final globalSettings = ref.read(globalSettingsProvider);
-      final chunk = globalSettings.chunkSize;
       if (state.taskId == null) {
         if (mounted) {
           MessageService.showWarning(
@@ -1532,7 +1529,7 @@ class _AnonymizeScreenState extends ConsumerState<AnonymizeScreen> {
         }
         return;
       }
-      await svc.resplitSource(state.taskId!, chunkSize: chunk);
+      await svc.resplitSource(state.taskId!);
       // trigger preview widgets to refresh
       if (mounted) {
         setState(() {});
@@ -1838,8 +1835,8 @@ class _AnonymizeScreenState extends ConsumerState<AnonymizeScreen> {
         return;
       }
 
-      final globalSettings = ref.read(globalSettingsProvider);
-      final batchSize = globalSettings.concurrent.clamp(1, 100);
+      // Per-platform concurrent is now read by backend from platforms.json
+      final batchSize = 5;
 
       final dynamic translationNotifier = widget.flowId != null
           ? ref.read(translationStateProviderFamily(widget.flowId!).notifier)

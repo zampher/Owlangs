@@ -73,6 +73,8 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   late TextEditingController _llmApiKeyController;
   late TextEditingController _llmMaxTokensController;
   late TextEditingController _llmTemperatureController;
+  late TextEditingController _llmChunkSizeController;
+  late TextEditingController _llmConcurrentController;
   String _llmThinkingMode = 'disable';
   String _llmApiProtocol = 'openai';  // API protocol: openai, ollama, anthropic
   bool _llmHasApiKey = true;  // Whether platform has API key (if false, API key is optional)
@@ -168,6 +170,8 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _llmApiKeyController = TextEditingController();
     _llmMaxTokensController = TextEditingController(text: '4096');
     _llmTemperatureController = TextEditingController(text: '0.3');
+    _llmChunkSizeController = TextEditingController(text: '3000');
+    _llmConcurrentController = TextEditingController(text: '5');
   }
 
   @override
@@ -191,6 +195,8 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _llmApiKeyController.dispose();
     _llmMaxTokensController.dispose();
     _llmTemperatureController.dispose();
+    _llmChunkSizeController.dispose();
+    _llmConcurrentController.dispose();
     super.dispose();
   }
 
@@ -330,6 +336,8 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _llmApiKeyController.text = p.apiKey ?? '';
     _llmMaxTokensController.text = p.maxTokens.toString();
     _llmTemperatureController.text = p.temperature.toString();
+    _llmChunkSizeController.text = p.chunkSize.toString();
+    _llmConcurrentController.text = p.concurrent.toString();
     _llmThinkingMode = p.thinkingMode;
     _llmApiProtocol = p.apiProtocol;
     _llmHasApiKey = p.requiresApiKey;
@@ -1565,6 +1573,30 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         ),
         const SizedBox(height: 12),
         _buildLlmTemperatureField(platform),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _llmChunkSizeController,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: l10n.aiPlatformChunkSize,
+            hintText: l10n.aiPlatformChunkSizeHint,
+            border: const OutlineInputBorder(),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _llmConcurrentController,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: l10n.aiPlatformConcurrent,
+            hintText: l10n.aiPlatformConcurrentHint,
+            border: const OutlineInputBorder(),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+        ),
         if (platform.thinkingModeSupported) ...<Widget>[
           const SizedBox(height: 12),
           _buildLlmThinkingModeField(l10n),
@@ -2253,6 +2285,8 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           int.tryParse(_llmMaxTokensController.text) ?? current.maxTokens,
       temperature: double.tryParse(_llmTemperatureController.text) ??
           current.temperature,
+      chunkSize: int.tryParse(_llmChunkSizeController.text) ?? current.chunkSize,
+      concurrent: int.tryParse(_llmConcurrentController.text) ?? current.concurrent,
       thinkingMode: current.thinkingModeSupported
           ? _llmThinkingMode
           : current.thinkingMode,

@@ -228,9 +228,6 @@ mixin ExtractPreviewLanguageMatchMixin<T extends ConsumerStatefulWidget>
         level: LogLevel.info,
       );
 
-      final GlobalSettings globalSettings = ref.read(globalSettingsProvider);
-      final int currentChunkSize = globalSettings.chunkSize;
-
       // Get excluded segment indices from excludedSegmentsProviderFamily
       // CRITICAL: Use the same provider that exclusion handlers update for consistency
       final String providerKey = extractWidget.flowId ?? extractWidget.taskId;
@@ -240,14 +237,13 @@ mixin ExtractPreviewLanguageMatchMixin<T extends ConsumerStatefulWidget>
 
       AppLogger.log(
         'ExtractPreview',
-        'Calling getLayoutExtract API: taskId=${extractWidget.taskId}, chunkSize=$currentChunkSize, excludedIndices=${excludedIndices.length}, targetLang=$targetLang',
+        'Calling getLayoutExtract API: taskId=${extractWidget.taskId}, excludedIndices=${excludedIndices.length}, targetLang=$targetLang',
         level: LogLevel.info,
       );
 
       final TranslationService svc = TranslationService();
       final Map<String, dynamic> layoutData = await svc.getLayoutExtract(
         extractWidget.taskId,
-        chunkSize: currentChunkSize,
         excludedSegmentIndices: excludedIndices,
         targetLang: targetLang,
       );

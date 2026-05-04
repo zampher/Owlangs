@@ -72,6 +72,137 @@ class TranslationService:
         self.source_preview_service = SourcePreviewService(task_manager)
         self.translation_segment_service = TranslationSegmentService(task_manager)
     
+    async def _test_llm_connectivity(self, payload: Any, task_id: str, task_state: Dict[str, Any]) -> bool:
+        """
+        Test LLM platform connectivity before starting translation.
+        
+        Reuses the existing test_ai_platform_connectivity logic from auth/ai_platform_service,
+        which handles different platform types (OpenAI, Ollama, Anthropic, Google, etc.).
+        
+        Returns True if connection is successful or if test is skipped (e.g. missing config).
+        Returns False if connection fails; task_state is updated to 'failed' accordingly.
+        """
+        base_url = getattr(payload, "base_url", None) if hasattr(payload, "base_url") else None
+        model_id = getattr(payload, "model_id", None) if hasattr(payload, "model_id") else None
+        api_key = getattr(payload, "api_key", None) if hasattr(payload, "api_key") else None
+        
+        if not base_url or not model_id:
+            logger.warning(
+                LogModule.WORKFLOW,
+                f"[LLM-TEST] Task {task_id}: Missing base_url or model_id, skipping connectivity test"
+            )
+            return True
+        
+        # Determine platform type (api_protocol) for test_ai_platform_connectivity
+        platform_type = "openai"  # default fallback
+        try:
+            from backend.app.services.platform.platform_service import platform_service
+            platform_key = platform_service.determine_platform_key(base_url, model_id)
+            detected_type = platform_service.get_api_protocol(base_url, model_id, platform_key)
+            if detected_type:
+                platform_type = detected_type
+        except Exception as e:
+            logger.warning(
+                LogModule.WORKFLOW,
+                f"[LLM-TEST] Task {task_id}: Failed to determine platform type: {e}, using default 'openai'"
+            )
+        
+        logger.info(
+            LogModule.WORKFLOW,
+            f"[LLM-TEST] Task {task_id}: Testing connectivity to {platform_type} platform "
+            f"at {base_url} with model {model_id}"
+        )
+        
+        # Determine platform key for updating QuickSettings/Settings status
+        platform_key_for_status = None
+        try:
+            from backend.app.services.platform.platform_service import platform_service
+            platform_key_for_status = platform_service.determine_platform_key(base_url, model_id)
+        except Exception:
+            pass
+        if not platform_key_for_status:
+            platform_key_for_status = platform_type  # fallback to api_protocol
+        
+        try:
+            from backend.auth.ai_platform_service import test_ai_platform_connectivity
+            result = await test_ai_platform_connectivity(
+                platform_type=platform_type,
+                base_url=base_url,
+                model_name=model_id,
+                api_key=api_key or "",
+                detect_max_tokens=False,  # Keep test fast; max_tokens detection is optional
+            )
+            
+            # Update QuickSettings / Settings LLM status regardless of success/failure
+            try:
+                from backend.config.ai_platform_status import update_platform_status
+                update_platform_status(
+                    platform_key_for_status,
+                    result.get("success", False),
+                    result.get("error"),
+                )
+                # Signal frontend that platform status has changed so it can refresh
+                task_state["platform_status_changed"] = True
+                logger.debug(
+                    LogModule.WORKFLOW,
+                    f"[LLM-TEST] Task {task_id}: Updated platform status for '{platform_key_for_status}' "
+                    f"to isApiAvailable={result.get('success', False)}"
+                )
+            except Exception as status_err:
+                logger.warning(
+                    LogModule.WORKFLOW,
+                    f"[LLM-TEST] Task {task_id}: Failed to update platform status: {status_err}"
+                )
+            
+            if result.get("success"):
+                logger.info(
+                    LogModule.WORKFLOW,
+                    f"[LLM-TEST] Task {task_id}: Connectivity test passed - {result.get('message', 'OK')}"
+                )
+                return True
+            else:
+                error_msg = result.get("error", "Unknown error")
+                user_message = result.get("message", error_msg)
+                logger.error(
+                    LogModule.WORKFLOW,
+                    f"[LLM-TEST] Task {task_id}: Connectivity test failed - {error_msg}"
+                )
+                task_state["status"] = "failed"
+                task_state["error"] = error_msg
+                task_state["message"] = f"LLM platform connection test failed: {user_message}"
+                task_state["llm_error"] = error_msg
+                self.task_manager.update_task(task_id, {
+                    "status": "failed",
+                    "error": error_msg,
+                    "message": f"LLM platform connection test failed: {user_message}",
+                })
+                return False
+                
+        except Exception as e:
+            logger.error(
+                LogModule.WORKFLOW,
+                f"[LLM-TEST] Task {task_id}: Connectivity test threw exception: {e}",
+                exc_info=True,
+            )
+            error_msg = str(e)
+            # Also update status on exception
+            try:
+                from backend.config.ai_platform_status import update_platform_status
+                update_platform_status(platform_key_for_status, False, error_msg)
+                task_state["platform_status_changed"] = True
+            except Exception:
+                pass
+            task_state["status"] = "failed"
+            task_state["error"] = error_msg
+            task_state["message"] = f"LLM platform connection test failed: {error_msg}"
+            task_state["llm_error"] = error_msg
+            self.task_manager.update_task(task_id, {
+                "status": "failed",
+                "error": error_msg,
+                "message": f"LLM platform connection test failed: {error_msg}",
+            })
+            return False
+
     def _build_llm_config_for_repair(self, payload: Any) -> Dict[str, Any]:
         """
         Build LLM config for formula repair from payload.
@@ -843,6 +974,15 @@ class TranslationService:
                     logger.warning(LogModule.TRANS, f"[TRANSLATION-SERVICE] Task {task_id}: ensure_translation_segments (all-excluded) failed: {seg_err}")
                 self._sync_workflow_attachments(task_id, workflow, task_state, reason="post_translate")
             else:
+                # Test LLM connectivity before starting translation
+                connectivity_ok = await self._test_llm_connectivity(payload, task_id, task_state)
+                if not connectivity_ok:
+                    logger.error(
+                        LogModule.WORKFLOW,
+                        f"[TRANSLATION-SERVICE] Task {task_id}: LLM connectivity test failed, aborting translation"
+                    )
+                    return
+                
                 logger.info(LogModule.WORKFLOW, f"[TRANSLATION-SERVICE] Task {task_id}: About to call execute_translate")
                 await self.workflow_executor.execute_translate(task_id, workflow, payload, original_filename, temp_dir, task_state)
                 logger.info(LogModule.TRANS, f"[TRANSLATION-SERVICE] Task {task_id}: execute_translate returned successfully (including _after_translate completion)")

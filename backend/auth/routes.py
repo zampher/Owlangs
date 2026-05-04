@@ -3148,6 +3148,10 @@ async def batch_update_settings(
                                     model=p_val.get('model', ''),
                                     max_tokens=p_val.get('max_tokens', 4096),
                                     temperature=float(p_val.get('temperature', 0.3)),
+                                    temperature_min=float(p_val.get('temperature_min', 0.0)),
+                                    temperature_max=float(p_val.get('temperature_max', 2.0)),
+                                    thinking_mode_supported=p_val.get('thinking_mode_supported', False),
+                                    thinking_mode=p_val.get('thinking_mode', 'disable'),
                                     recommended_tokens=p_val.get('recommended_tokens'),
                                     performance_note=p_val.get('performance_note'),
                                     platform_type=p_val.get('platform_type', 'llm'),
@@ -3156,6 +3160,9 @@ async def batch_update_settings(
                                     requires_api_key=p_val.get('requires_api_key', True),
                                     description=p_val.get('description'),
                                     token_link=p_val.get('token_link'),
+                                    api_endpoints=p_val.get('api_endpoints') if p_val.get('api_endpoints') is not None else {},
+                                    chunk_size=int(p_val.get('chunk_size', 3000)) if p_val.get('chunk_size') is not None else None,
+                                    concurrent=int(p_val.get('concurrent', 5)) if p_val.get('concurrent') is not None else None,
                                 )
                                 platforms_config.update_platform_config(p_key, cfg)
                                 logger.info(LogModule.AUTH, f"[AI_PLATFORMS] Updated platform '{p_key}': url={cfg.url}, model={cfg.model}")
@@ -3260,6 +3267,25 @@ async def batch_update_settings(
                     except Exception as e:
                         logger.warning(LogModule.AUTH, f"[SETTINGS] Failed to sync {backend_key} to app_config.json: {e}")
                         # Continue even if sync fails (user profile is still saved)
+                    
+                    # Also sync chunk_size and concurrent to the default platform config (per-platform settings)
+                    if backend_key in ['chunk_size', 'concurrent']:
+                        try:
+                            platforms_config = get_platforms_config()
+                            default_platform = platforms_config.default_platform
+                            if default_platform:
+                                platform_cfg = platforms_config.get_platform_config(default_platform)
+                                if platform_cfg:
+                                    if backend_key == 'chunk_size':
+                                        platform_cfg.chunk_size = int(value) if value else 3000
+                                        logger.info(LogModule.AUTH, f"[SETTINGS] Synced chunk_size={value} to platform '{default_platform}' config")
+                                    elif backend_key == 'concurrent':
+                                        platform_cfg.concurrent = int(value) if value else 5
+                                        logger.info(LogModule.AUTH, f"[SETTINGS] Synced concurrent={value} to platform '{default_platform}' config")
+                                    if save_platforms_config():
+                                        logger.info(LogModule.AUTH, f"[SETTINGS] Saved platforms.json after syncing {backend_key}")
+                        except Exception as e:
+                            logger.warning(LogModule.AUTH, f"[SETTINGS] Failed to sync {backend_key} to platforms.json: {e}")
             
             # Save app_config.json if any settings were synced
             if app_config_needs_save:

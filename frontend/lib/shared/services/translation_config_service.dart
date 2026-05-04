@@ -52,10 +52,8 @@ class TranslationConfigService {
         'model_id': platformInfo['model'] ?? 'gpt-4o',
         'temperature': 0.3, // Will be overridden by global settings
         'thinking': 'disable', // Will be overridden by global settings
-        'concurrent': 3, // Will be overridden by global settings
         'timeout': 30, // Will be overridden by global settings
         'retry': 3, // Will be overridden by global settings
-        'chunk_size': 0, // 0 means unset, will be loaded from global settings
         'custom_prompt': null, // Will be overridden by global settings
       };
 
@@ -73,10 +71,8 @@ class TranslationConfigService {
       <String, dynamic>{
         'temperature': settings.temperature,
         'thinking': settings.thinking,
-        'concurrent': settings.concurrent,
         'timeout': settings.timeout,
         'retry': settings.retry,
-        'chunk_size': settings.chunkSize,
         'custom_prompt': settings.customPrompt,
       };
 
@@ -87,10 +83,8 @@ class TranslationConfigService {
         'model_id': 'gpt-4o',
         'temperature': 0.3,
         'thinking': 'disable',
-        'concurrent': 3,
         'timeout': 30,
         'retry': 3,
-        'chunk_size': 3000,
         'custom_prompt': null,
       };
 

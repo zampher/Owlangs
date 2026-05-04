@@ -713,33 +713,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                   Row(
                     children: <Widget>[
                       Expanded(
-                        child: _buildConcurrentField(
-                          globalSettings,
-                          globalNotifier,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
                         child: _buildTimeoutField(
                           globalSettings,
                           globalNotifier,
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: _buildRetryField(globalSettings, globalNotifier),
-                      ),
                       const SizedBox(width: 16),
                       Expanded(
-                        child: _buildChunkSizeField(
-                          globalSettings,
-                          globalNotifier,
-                        ),
+                        child: _buildRetryField(globalSettings, globalNotifier),
                       ),
                     ],
                   ),
@@ -942,38 +923,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   // Removed: _buildTemperatureSlider (moved to Quick Settings)
   // Removed: _buildThinkingDropdown (moved to AI Platform Settings)
 
-  Widget _buildConcurrentField(
-    GlobalSettings settings,
-    GlobalSettingsNotifier notifier,
-  ) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            AppLocalizations.of(context)!.settingsTranslationConcurrentTitle,
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(height: 8),
-          TextFormField(
-            initialValue: settings.concurrent.toString(),
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              border: const OutlineInputBorder(),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              hintText:
-                  AppLocalizations.of(context)!.settingsTranslationConcurrentHint,
-            ),
-            onChanged: (String value) {
-              final int? intValue = int.tryParse(value);
-              if (intValue != null && intValue > 0) {
-                notifier.updateTranslationSettings(concurrent: intValue);
-              }
-            },
-          ),
-        ],
-      );
-
   Widget _buildTimeoutField(
     GlobalSettings settings,
     GlobalSettingsNotifier notifier,
@@ -1038,35 +987,4 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         ],
       );
 
-  Widget _buildChunkSizeField(
-    GlobalSettings settings,
-    GlobalSettingsNotifier notifier,
-  ) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            AppLocalizations.of(context)!.settingsTranslationChunkSizeTitle,
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(height: 8),
-          TextFormField(
-            initialValue: settings.chunkSize.toString(),
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              border: const OutlineInputBorder(),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              hintText: AppLocalizations.of(context)!
-                  .settingsTranslationChunkSizeHint,
-            ),
-            onChanged: (String value) {
-              final int? intValue = int.tryParse(value);
-              if (intValue != null && intValue > 0) {
-                notifier.updateTranslationSettings(chunkSize: intValue);
-              }
-            },
-          ),
-        ],
-      );
 }

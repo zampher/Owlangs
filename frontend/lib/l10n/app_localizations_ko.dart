@@ -1803,6 +1803,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get aiPlatformMaxTokensHint => '예: 4096';
 
   @override
+  String get aiPlatformChunkSize => '청크 크기';
+
+  @override
+  String get aiPlatformChunkSizeHint => '예: 3000';
+
+  @override
+  String get aiPlatformConcurrent => '동시 요청 수';
+
+  @override
+  String get aiPlatformConcurrentHint => '예: 5';
+
+  @override
   String get aiPlatformModel => '모델';
 
   @override
