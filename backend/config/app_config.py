@@ -57,7 +57,6 @@ class AppConfig:
     translator_custom_language: str = ""
     translator_custom_prompt: str = ""
     translator_temperature: float = 0.3
-    translator_max_tokens: int = 16000  # DEPRECATED: Use translator_chunk_token_size instead. This field is kept for backward compatibility only.
     translator_top_p: float = 1.0
     translator_frequency_penalty: float = 0.0
     translator_presence_penalty: float = 0.0
@@ -76,8 +75,6 @@ class AppConfig:
     glossary_agent_platform_custom_baseurl: str = ""
     glossary_agent_config_choice: str = "same"
     glossary_agent_thinking_mode: str = "disable"
-    glossary_agent_temperature: float = 0.3
-    glossary_agent_max_tokens: int = 4000
     glossary_agent_top_p: float = 1.0
     glossary_agent_frequency_penalty: float = 0.0
     glossary_agent_presence_penalty: float = 0.0

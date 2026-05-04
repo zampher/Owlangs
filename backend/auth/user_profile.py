@@ -46,7 +46,6 @@ class UserProfile:
     translator_custom_prompt: str = ""
     translator_platform_type: str = "deepseek"
     translator_temperature: float = 0.3
-    translator_max_tokens: int = 4000
     translator_top_p: float = 1.0
     translator_frequency_penalty: float = 0.0
     translator_presence_penalty: float = 0.0
@@ -60,8 +59,6 @@ class UserProfile:
     glossary_agent_config_choice: str = "same"
     glossary_agent_platform_type: str = "deepseek"
     glossary_agent_thinking_mode: str = "disable"
-    glossary_agent_temperature: float = 0.3
-    glossary_agent_max_tokens: int = 4000
     glossary_agent_top_p: float = 1.0
     glossary_agent_frequency_penalty: float = 0.0
     glossary_agent_presence_penalty: float = 0.0
