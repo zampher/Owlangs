@@ -48,6 +48,7 @@ _TRANSLATION_PHASE_PREFIXES = (
     "Sending translation",
     "Generating output",
     "Translation completed",
+    "Translation initialized",
 )
 
 # Allowed download file types per workflow for on-demand links (status response).
@@ -861,9 +862,28 @@ class StatusService:
                 # If we have segments, run language detection (in background for large files so status returns quickly)
                 if segments_for_lang and len(segments_for_lang) > 0:
                     total_segments = len(segments_for_lang)
+                    # Do not start this worker while translation is active: it overwrites progress/message with
+                    # "Detect Language: …%". Translation tasks reuse segment caches and would otherwise hit 100%
+                    # before chunk callbacks, breaking the progress bar (see workflow_executor translation phase).
+                    fresh_live = self.task_manager.get_task(task_id) or {}
+                    skip_detect_start = str(fresh_live.get("message") or "").startswith(
+                        _TRANSLATION_PHASE_PREFIXES
+                    )
                     with _language_detection_lock:
                         already_running = task_id in _language_detection_tasks
-                    if already_running:
+                    if skip_detect_start and not already_running:
+                        logger.info(
+                            LogModule.WORKFLOW,
+                            f"[STATUS] Task {task_id}: skip language-detection worker start "
+                            f"(translation phase active)",
+                        )
+                        for key in ("language_distribution", "is_multilingual", "detected_language"):
+                            if key in fresh_live:
+                                task_state[key] = fresh_live[key]
+                        language_distribution = task_state.get("language_distribution")
+                        is_multilingual = task_state.get("is_multilingual", False)
+                        detected_language = task_state.get("detected_language")
+                    elif already_running:
                         # Detection already in progress; copy only updated fields from fresh task_state
                         # into our response copy so we do not mutate the original (e.g. payload must stay)
                         fresh = self.task_manager.get_task(task_id)

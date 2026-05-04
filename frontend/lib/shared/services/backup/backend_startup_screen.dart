@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/app_config.dart';
-import '../../providers/backend_provider.dart';
+import 'backend_provider.dart';
 
 class BackendStartupScreen extends ConsumerWidget {
   const BackendStartupScreen({super.key});

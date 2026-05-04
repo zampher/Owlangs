@@ -143,49 +143,62 @@ class WorkflowExecutor:
             # CRITICAL: If translation is 100% complete, update progress to 100%
             # Note: We do NOT set status=completed here, as _after_translate still needs to run
             # to check translation success/failure and perform necessary post-processing
-            if completed == total and percent >= 100:
-                old_progress = task_state.get("progress", 0)
+            # All chunks finished — use counts only (translator percent can lag on last chunk).
+            if total and completed >= total:
                 task_state["progress"] = 100
                 task_state["message"] = "Translation completed, performing post-processing..."
                 flow_id = task_state.get("flow_id", "N/A")
                 logger.info(
                     LogModule.TRANS,
-                    f"[WORKFLOW-EXECUTOR] Translation 100% complete: task_id={task_id}, flow_id={flow_id}, {completed}/{total} chunks, "
-                    f"updating progress to 100% (status remains 'processing' until _after_translate completes)"
+                    f"[WORKFLOW-EXECUTOR] Translation 100% complete: task_id={task_id}, flow_id={flow_id}, "
+                    f"{completed}/{total} chunks (translator_percent_arg={percent}), "
+                    f"updating progress to 100% (status remains 'processing' until _after_translate completes)",
                 )
                 last_logged_progress['completed'] = completed
                 last_logged_progress['mapped_percent'] = 100
                 return
             
-            # Map translation progress (0%-100%) to overall progress (10%-90%)
-            mapped_percent = 10 + int(percent * 0.8)  # Map 0-100 to 10-90
-            # CRITICAL: Update task_state immediately to ensure progress is visible to API calls
-            old_progress = task_state.get("progress", 0)
-            # Ensure progress never decreases (monotonically increasing).
-            # Previous phases (Extract, Detect Language) may have already set a higher value.
-            if mapped_percent < old_progress:
-                task_state["message"] = f"Translating... {completed}/{total} chunks ({mapped_percent}%)"
-                logger.debug(LogModule.TRANS, f"[WORKFLOW-EXECUTOR] Translation progress mapped to {mapped_percent}% but current progress is {old_progress}%, keeping current progress to avoid frontend confusion")
+            # Map chunk completion to overall progress band 10–90%. Message uses chunk ratio (N/M as %),
+            # not the translator's internal percent argument.
+            if total:
+                mapped_percent = 10 + int(80.0 * completed / total)
+                chunk_pct = min(100, int(100.0 * completed / total))
             else:
-                task_state["progress"] = mapped_percent
-                task_state["message"] = f"Translating... {completed}/{total} chunks ({mapped_percent}%)"
-            
+                mapped_percent = 10
+                chunk_pct = 0
+            task_state["progress"] = mapped_percent
+            task_state["message"] = (
+                f"Translating... {completed}/{total} chunks ({chunk_pct}%)"
+            )
+
             # Log INFO when progress actually changes (changed from DEBUG to INFO for visibility)
-            if (completed != last_logged_progress['completed'] or 
-                mapped_percent != last_logged_progress['mapped_percent']):
-                # Get flow_id from task_state if available (for debugging)
+            if (completed != last_logged_progress['completed'] or
+                    mapped_percent != last_logged_progress['mapped_percent']):
                 flow_id = task_state.get("flow_id", "N/A")
-                effective_progress = task_state.get('progress', mapped_percent)
-                logger.info(LogModule.TRANS, f"[WORKFLOW-EXECUTOR] Translation progress: task_id={task_id}, flow_id={flow_id}, {completed}/{total} chunks ({mapped_percent}%), old_progress={old_progress}, effective_progress={effective_progress}")
+                effective_progress = task_state.get("progress", mapped_percent)
+                logger.info(
+                    LogModule.TRANS,
+                    f"[WORKFLOW-EXECUTOR] Translation progress: task_id={task_id}, flow_id={flow_id}, "
+                    f"{completed}/{total} chunks (chunk%={chunk_pct}, mapped={mapped_percent}%), "
+                    f"translator_percent_arg={percent}, effective_progress={effective_progress}",
+                )
                 last_logged_progress['completed'] = completed
                 last_logged_progress['mapped_percent'] = mapped_percent
         
         # Set status to "processing" when starting to send requests to AI platform
         task_state["status"] = "processing"
         task_state["message"] = "Sending translation requests to AI platform..."
-        # NOTE: Do NOT force reset progress to 10 here. Previous phases (Extract/Detect Language)
-        # may have already set a higher progress value. The translation_progress_callback
-        # will ensure progress only moves forward (monotonically increasing).
+        # Translation chunk progress is mapped to overall 10-90% (see translation_progress_callback).
+        # Extract / language detection often end at 100%. Reset so the first chunk can raise progress
+        # from 10; get_status also skips starting language detection while these message prefixes are set.
+        prev_progress = task_state.get("progress", 0)
+        if prev_progress > 90:
+            task_state["progress"] = 10
+            logger.info(
+                LogModule.WORKFLOW,
+                f"[WORKFLOW-EXECUTOR] Reset progress to 10% for translation phase "
+                f"(was {prev_progress}% from prior phase), task_id={task_id}",
+            )
         logger.info(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Set status to 'processing' for task {task_id} (starting AI platform requests), current_progress={task_state.get('progress', 0)}")
         
         # Execute the translation with optional progress callback
