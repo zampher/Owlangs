@@ -688,8 +688,9 @@ class OwlangsDelegate(NSObject):
             if image:
                 # Use 20x20 for better visibility in menu bar
                 image.setSize_(NSMakeSize(20, 20))
-                # Enable template mode for proper dark mode support
+                # Template mode = gray when stopped, original color when running
                 image.setTemplate_(True)
+                self.status_icon = image
                 self.status_item.setImage_(image)
                 log_message(f"Icon loaded: {icon_path}")
             else:
@@ -914,6 +915,11 @@ class OwlangsDelegate(NSObject):
         # Enable/disable menu items
         self.start_menu_item.setEnabled_(not self.is_running)
         self.stop_menu_item.setEnabled_(self.is_running)
+        
+        # Toggle icon color: gray (template) when stopped, original color when running
+        if self.status_icon is not None:
+            self.status_icon.setTemplate_(not self.is_running)
+            self.status_item.setImage_(self.status_icon)
         
         log_message(f"Menu updated: {status_text}")
     
