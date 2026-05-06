@@ -1,12 +1,12 @@
 # Owlangs
 
-A powerful AI-powered document translation platform designed for professionals who need accurate, format-preserving translations across a wide range of document types.
+A powerful AI-powered document translation platform designed for professionals who need accurate, format-preserving translations across a wide range of document types. **You can run it fully on-premise** (local backend, Ollama, or other OpenAI-compatible endpoints) or connect to cloud AI providers.
 
 ## Features
 
 ### 📄 Multi-Format Translation
 
-- **15+ Supported Formats**: DOCX, PPTX, PDF, Markdown, HTML, EPUB, MOBI, XLSX, JSON, SRT, Qt .ts, images, and more
+- **15+ Supported Formats**: DOCX, PPTX, PDF, Markdown, HTML, EPUB, MOBI, XLSX, JSON, SRT, Qt `.ts`, images, and more
 - **Format Preservation**: Maintains original formatting, layouts, and styles in translated documents
 - **Text Mode**: Quick translations for plain text input
 - **Real-time Preview**: View translation results with segment-by-segment editing
@@ -14,32 +14,11 @@ A powerful AI-powered document translation platform designed for professionals w
 
 ### 🤖 AI Platform Flexibility
 
-- **20+ AI Platforms Supported**: 
-  - OpenAI (GPT-4o, GPT-4, etc.)
-  - Azure OpenAI
-  - Anthropic Claude
-  - Google Gemini
-  - DeepSeek
-  - Alibaba DashScope (Qwen)
-  - VolcEngine ARK (Doubao)
-  - Zhipu AI (GLM)
-  - Groq
-  - Together AI
-  - Mistral AI
-  - Cohere
-  - xAI (Grok)
-  - SiliconFlow
-  - DMX API
-  - OpenRouter
-  - Tencent Hunyuan
-  - Baidu ERNIE
-  - Moonshot AI
-  - Aleph Alpha
-  - Rinna (Japan)
-  - Naver HyperClova (Korea)
-  - And more...
-- **Custom Platform Support**: Integrate any OpenAI-compatible API
-- **Centralized Management**: Unified API key and configuration management
+- **27+ Preconfigured Platform Profiles** in `configs/platforms.json`, including major cloud APIs **and self-hosted options**:
+  - **Local / self-hosted**: OpenAI-compatible (`local`), **Ollama**, optional Anthropic-compatible local, **MinerU** / **Mineru_local** for parsing pipelines
+  - **Cloud examples**: OpenAI, Azure OpenAI, Anthropic, Google Gemini, DeepSeek, DashScope, VolcEngine ARK, Zhipu, Groq, Together, Mistral, Cohere, xAI, SiliconFlow, DMX API, OpenRouter, Tencent Hunyuan, Baidu, Moonshot, Aleph Alpha, Rinna, Naver, and more
+- **Custom Platform Support**: Integrate any OpenAI-compatible API via the `local` profile (base URL + model + optional API key)
+- **Centralized Management**: Unified API key and configuration management in settings
 - **Easy Switching**: Seamlessly switch between different AI providers
 
 ### 📚 Intelligent Glossary Management
@@ -67,11 +46,11 @@ A powerful AI-powered document translation platform designed for professionals w
 ### 🌐 Cross-Platform Access
 
 - **Windows**: Native desktop application
-- **macOS**: Native desktop application
+- **macOS**: Native desktop application (including menu bar workflows where packaged)
 - **Linux**: Native desktop application
 - **Android**: Mobile application (TBD)
 - **iOS**: Mobile application (TBD)
-- **Web**: Browser-based access
+- **Web**: Browser-based access to the bundled Flutter Web UI
 
 ### 🎨 User Experience
 
@@ -82,27 +61,44 @@ A powerful AI-powered document translation platform designed for professionals w
 
 ## Use Cases
 
-Owlangs is perfect for:
+Owlangs is suitable for:
 
 - **Translators and Translation Agencies**: Professional translation workflows with terminology management
 - **Content Creators**: Localizing documentation, blogs, and content
 - **Businesses**: Managing multilingual content and documentation
 - **Developers**: Translating software documentation and user interfaces
-- **Anyone**: Who needs professional document translation with terminology control
+- **Air-gapped or privacy-sensitive environments**: On-premise deployment with local LLMs (e.g. Ollama) and local parsing when configured
 
 ## Getting Started
 
 ### Prerequisites
 
-- Python 3.11 or higher (for backend)
-- API keys for your preferred AI platform(s)
+- **Python 3.11+** (see `pyproject.toml` for the exact constraint)
+- **Redis** (recommended for sessions; configure in `configs/local.json` if not using defaults)
+- API keys for your chosen cloud AI provider(s), **or** a running **Ollama** / OpenAI-compatible local service for fully offline-capable translation stacks
 
 ### Installation
 
 1. Clone the repository
-2. Install backend dependencies
-3. Configure your AI platform API keys in the settings
-4. Launch the application
+2. Create a virtual environment and install backend dependencies (`pip install -e .` or follow your internal packaging guide)
+3. Copy `configs/*.json.template` to `configs/*.json` where needed and set secrets (see **Configuration** below)
+4. Configure AI platforms in the web UI or edit `configs/platforms.json`
+5. Launch the backend (e.g. `python -m backend.cli -i`) and open the app in the browser
+
+### Default login (first self-hosted install)
+
+When **`configs/local_users.json` has no users yet**, the backend creates a default super-admin on startup:
+
+| Field | Default |
+|--------|---------|
+| Username | `admin` (overridable via `DEFAULT_USERNAME` / auth config) |
+| Password | `Changeme` |
+
+**Change this password immediately after first login.** If your installer ships a pre-populated `local_users.json`, use the credentials provided with that release instead.
+
+For deployment paths, config file layout, and a Chinese-language operations guide, see **[backend/config/README.md](backend/config/README.md)**.
+
+Default local URL (typical dev / packaged launcher): **http://127.0.0.1:8800** (port may vary).
 
 #### Windows Download Packages
 
@@ -121,6 +117,7 @@ When downloading the macOS release, choose the package that matches your Mac:
 | `Owlangs-{ver}-mac-universal2.dmg` | Universal (arm64 + x86_64) | Shared across teams / unsure | ~330 MB |
 
 **Choosing the right package:**
+
 - **arm64** — Best for Apple Silicon Macs. Smallest size, native performance. Does **not** run on Intel Macs.
 - **x86_64** — Best for Intel Macs. Smallest size for Intel. Requires Rosetta 2 on Apple Silicon.
 - **universal2** — Works on **both** Apple Silicon and Intel Macs. Convenient if you distribute the app to multiple users with different Mac models, or are unsure which Mac you have. Roughly double the size.
@@ -132,10 +129,10 @@ If the GitHub release download is slow, you can also download from Baidu Netdisk
 - **Link**: https://pan.baidu.com/s/1w_ZIBnD5lFVl8XjbUG_1aw
 - **Extraction Code**: `78rp`
 
-### Quick Start
+### Quick Start (using the app)
 
 1. **Upload a Document**: Select a document file or paste text
-2. **Choose AI Platform**: Select your preferred AI translation service
+2. **Choose AI Platform**: Select your preferred AI translation service (cloud or local)
 3. **Configure Settings**: Set target language and translation parameters
 4. **Generate Glossary** (optional): Let the system automatically extract terminology
 5. **Translate**: Start the translation process
@@ -144,13 +141,17 @@ If the GitHub release download is slow, you can also download from Baidu Netdisk
 
 ## Configuration
 
+- **System, platforms, secrets, and users** live under **`configs/`** (see templates `*.json.template`). Do not commit real `secrets.json` or production `local_users.json`.
+- Detailed field notes, feature flags (e.g. DOCX math repair), and Chinese documentation: **[backend/config/README.md](backend/config/README.md)**
+
 ### AI Platform Setup
 
-Configure your AI platform API keys in the settings panel. Each platform can be configured independently with custom models, temperature, and other parameters.
+Configure API keys and endpoints in the settings UI or edit `configs/platforms.json`. Local profiles (`local`, `ollama`, etc.) support deployment without cloud keys when your service does not require authentication.
 
 ### Glossary Management
 
 Create and manage glossaries through the glossary settings. You can:
+
 - Import existing glossaries
 - Generate glossaries from documents
 - Manually add and edit terminology entries
@@ -159,9 +160,10 @@ Create and manage glossaries through the glossary settings. You can:
 ### Translation Settings
 
 Customize translation behavior:
+
 - Target language selection
 - Custom translation prompts
-- Chunk size and concurrency settings
+- Chunk size and concurrency (also configurable per platform in `platforms.json`)
 - Format-specific options
 
 ## License
@@ -171,7 +173,8 @@ MIT License - see [LICENSE](LICENSE) file for details
 ## Support
 
 For issues, questions, or contributions:
-1. Check the documentation
+
+1. Check the documentation under `backend/config/` and repository docs
 2. Search existing issues
 3. Create a new issue
 4. Contact the maintainers
@@ -182,11 +185,6 @@ For issues, questions, or contributions:
 
 <img src="WeChat_Help_技术交流微信群.png" alt="WeChat Help" width="280">
 
-## Coming Soon
-
-We're finalizing the platform and plan to launch within the next month. The system is feature-complete and ready for professional use.
-
 ---
 
-**Owlangs** - Professional AI-Powered Document Translation
-
+**Owlangs** — Professional AI-powered document translation, cloud or on-premise.
