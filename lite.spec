@@ -143,6 +143,12 @@ hiddenimports = [
     'backend.utils.ebook_metadata',
     'backend.utils.latex_formula_checker', 'backend.utils.latex_repair_llm',
     'backend.utils.latex_repair_payload', 'backend.utils.latex_formula_batch_repair',
+    # Pandoc/DOCX math normalize & fragment repair (becc134; imported by format_convert_utils, md2docx_exporter, fragment services)
+    'backend.utils.math_md_normalize',
+    'backend.utils.docx_md_normalize',
+    'backend.utils.docx_algorithm_latex_wrap',
+    'backend.utils.docx_math_fragment_check',
+    'backend.utils.docx_math_fragment_llm_repair',
     'backend.utils.llm_client',
     'backend.utils.extract_segments_debug',
     # Ensure app module is imported

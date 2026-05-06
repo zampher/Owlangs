@@ -119,6 +119,12 @@ hiddenimports = [
     # LaTeX integrity check service routes (utils.latex_formula_checker, utils.latex_repair_llm)
     'backend.utils.latex_formula_checker', 'backend.utils.latex_repair_llm',
     'backend.utils.latex_repair_payload', 'backend.utils.latex_formula_batch_repair',
+    # Pandoc/DOCX math normalize & fragment repair (formula export pipeline)
+    'backend.utils.math_md_normalize',
+    'backend.utils.docx_md_normalize',
+    'backend.utils.docx_algorithm_latex_wrap',
+    'backend.utils.docx_math_fragment_check',
+    'backend.utils.docx_math_fragment_llm_repair',
     # LLM client used by latex repair
     'backend.utils.llm_client',
     'backend.utils.extract_segments_debug',
