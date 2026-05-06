@@ -1650,6 +1650,22 @@ class DownloadService:
                                         _tf = tempfile.NamedTemporaryFile(mode="wb", suffix=".docx", delete=False)
                                         _tf.close()
                                         if convert_md_to_docx(md_content, _tf.name, output_dir=None, to_lang=to_lang):
+                                            try:
+                                                from utils.docx_math_fragment_check import (
+                                                    apply_docx_math_fragment_issues_to_task_state,
+                                                )
+
+                                                apply_docx_math_fragment_issues_to_task_state(
+                                                    task_state,
+                                                    task_id=task_id,
+                                                    task_manager=self.task_manager,
+                                                )
+                                            except Exception as frag_err:
+                                                logger.warning(
+                                                    LogModule.EXPORT,
+                                                    f"[DOWNLOAD] Task {task_id}: DOCX fragment math check failed: {frag_err}",
+                                                    exc_info=False,
+                                                )
                                             filename = f"{file_stem}_translated.docx"
                                             media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Exported DOCX via Pandoc (formulas preserved, font by language)")

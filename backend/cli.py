@@ -50,6 +50,9 @@ if getattr(sys, "frozen", False):
         "table_utils",
         "image_placeholder_utils",
         "format_convert_utils",
+        "math_md_normalize",
+        "docx_md_normalize",
+        "docx_algorithm_latex_wrap",
         "markdown_chunk_merger",
         "language_detection_utils",
         # LaTeX integrity check routes (used by app.routes.service.app_routes_formula_check)
@@ -57,6 +60,8 @@ if getattr(sys, "frozen", False):
         "latex_repair_llm",
         "latex_repair_payload",
         "latex_formula_batch_repair",
+        "docx_math_fragment_check",
+        "docx_math_fragment_llm_repair",
         "llm_client",
         "extract_segments_debug",
         # PDF split/merge: dynamic imports in converter_mineru.py

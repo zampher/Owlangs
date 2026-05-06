@@ -80,6 +80,10 @@ done
 - 管理员和普通用户使用相同模板
 - 权限控制通过UI层面实现，而非配置层面
 
+### system.json `features`（节选）
+
+- **`auto_docx_math_fragment_llm_repair`**（默认 `false`）：在翻译结束后的后处理阶段，对 **`markdown_based`** 任务（如 PDF/MD 等）若已配置有效的 **`llm_config_for_repair`**，是否**自动**执行一轮 Pandoc 片段级 DOCX 检测并用 LLM 按 stderr 修复问题片段。关闭时仍可在客户端使用「AI 修复 DOCX 公式」**手动**触发（对应接口 `POST /service/translation-segments/{task_id}/repair-docx-math-fragments`）。
+
 ## 配置更新流程
 
 1. **修改模板**: 更新 `templates/default_profile.json` 文件

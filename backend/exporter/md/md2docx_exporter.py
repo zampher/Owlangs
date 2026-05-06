@@ -7,6 +7,7 @@ Markdown to DOCX exporter.
 Converts MarkdownDocument to DOCX format using python-docx library.
 """
 
+import html
 import re
 from dataclasses import dataclass
 from io import BytesIO
@@ -22,12 +23,32 @@ from docx.enum.text import WD_BREAK
 
 from logger import unified_logger as logger
 from logger.logger import LogModule
+from utils.math_md_normalize import (
+    TEX_LATEX_FENCE_LANGS,
+    extract_display_math_inner_from_tex_fence_body,
+    parse_opening_markdown_fence_language,
+)
 from exporter.md.base import MDExporter, MDExporterConfig
 from ir.document import Document
 from ir.markdown_document import MarkdownDocument
 
 if TYPE_CHECKING:
     from layout.base import LayoutDocument
+
+# Split patterns for _add_formatted_runs_for_text: LaTeX display \[...\], $$...$$, inline \(...\), $...$, then markdown.
+_TEX_SPLIT_PARTS_MULTILINE = (
+    r"(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[\s\S]*?\$\$|\$[^$]*?\$|"
+    r"\*\*.*?\*\*|\*.*?\*|`.*?`|\[.*?\]\(.*?\))"
+)
+_TEX_SPLIT_PARTS_SINGLE_LINE_INLINE = (
+    r"(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|"
+    r"\*\*.*?\*\*|\*.*?\*|`.*?`|\[.*?\]\(.*?\))"
+)
+# Inline HTML from translators/rebuild: <sup>n</sup>, <sub>n</sub> inside prose (author affiliations, etc.)
+_HTML_SUP_SUB_TAGS = re.compile(
+    r"(<sup>\s*[\s\S]*?</sup>|<sub>\s*[\s\S]*?</sub>)",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -78,8 +99,6 @@ class MD2DOCXExporter(MDExporter):
         # Equation format: "text"/"latex" (render as LaTeX formula) or "image" (render as image)
         self.equation_format = config.equation_format if config.equation_format else "text"
         self.debug_output_dir: Optional[Path] = getattr(config, "debug_output_dir", None) or None
-        # Log once per export when OMML fallback is used (latex2mathml/mathml2omml missing)
-        self._omml_fallback_logged = False
 
     def _set_run_east_asia_font(self, run, font_name: str | None = None) -> None:
         """Set w:eastAsia so CJK text uses our font. Word uses eastAsia for East Asian chars;
@@ -94,6 +113,59 @@ class MD2DOCXExporter(MDExporter):
                     rFonts.set(qn('w:eastAsia'), name)
         except Exception:
             pass
+
+    @staticmethod
+    def _html_sup_sub_inner_to_plain(fragment: str) -> str:
+        """Decode entities, strip nested HTML tags (tag names start with a letter; avoids eating '<2>' literals)."""
+        t = html.unescape(fragment.strip())
+        t = re.sub(r"</?[A-Za-z][A-Za-z0-9-]*[^>]*>", "", t)
+        return t.strip()
+
+    def _apply_default_body_font(self, run) -> None:
+        run.font.name = self.font_name
+        run.font.size = Pt(self.font_size)
+        self._set_run_east_asia_font(run)
+
+    def _add_runs_with_html_sup_sub(self, para, text: str) -> None:
+        """Add paragraph runs; interpret <sup>/<sub> as Word superscript/subscript."""
+        if not text:
+            return
+        clean = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]", "", text)
+        if not clean:
+            return
+        lower = clean.lower()
+        if "<sup" not in lower and "<sub" not in lower:
+            run = para.add_run(clean)
+            self._apply_default_body_font(run)
+            return
+        pos = 0
+        for m in _HTML_SUP_SUB_TAGS.finditer(clean):
+            if m.start() > pos:
+                run = para.add_run(clean[pos : m.start()])
+                self._apply_default_body_font(run)
+            tag = m.group(0)
+            sm = re.search(r"<sup>\s*([\s\S]*?)\s*</sup>", tag, re.IGNORECASE)
+            if sm:
+                inner = self._html_sup_sub_inner_to_plain(sm.group(1))
+                if inner:
+                    run = para.add_run(inner)
+                    self._apply_default_body_font(run)
+                    run.font.superscript = True
+            else:
+                bm = re.search(r"<sub>\s*([\s\S]*?)\s*</sub>", tag, re.IGNORECASE)
+                if bm:
+                    inner = self._html_sup_sub_inner_to_plain(bm.group(1))
+                    if inner:
+                        run = para.add_run(inner)
+                        self._apply_default_body_font(run)
+                        run.font.subscript = True
+                else:
+                    run = para.add_run(tag)
+                    self._apply_default_body_font(run)
+            pos = m.end()
+        if pos < len(clean):
+            run = para.add_run(clean[pos:])
+            self._apply_default_body_font(run)
 
     def export(self, document: MarkdownDocument) -> Document:
         """Convert MarkdownDocument to DOCX Document."""
@@ -327,16 +399,32 @@ class MD2DOCXExporter(MDExporter):
                         i += 1
                 continue
             
-            # Handle code blocks (```code```)
+            # Handle code blocks (```code```); ```tex / ```latex with a single $$...$$ body → OMML not code
             elif line.startswith('```'):
-                code_lines = []
+                fence_lang = parse_opening_markdown_fence_language(line)
+                code_lines: List[str] = []
                 i += 1
                 while i < len(lines) and not lines[i].strip().startswith('```'):
                     code_lines.append(lines[i])
                     i += 1
-                if code_lines:
-                    self._add_code_block(docx_doc, '\n'.join(code_lines))
-            
+                code_text = '\n'.join(code_lines)
+                if (
+                    fence_lang in TEX_LATEX_FENCE_LANGS
+                    and self.equation_format != "image"
+                ):
+                    inner = extract_display_math_inner_from_tex_fence_body(code_text)
+                    if inner is not None:
+                        logger.info(
+                            LogModule.EXPORT,
+                            "[DOCX-EQUATION] Fenced tex/latex block rendered as display math (OMML), "
+                            "not as code block",
+                        )
+                        self._add_math_formula(docx_doc, inner, display_mode=True)
+                    elif code_text.strip():
+                        self._add_code_block(docx_doc, code_text)
+                elif code_text.strip():
+                    self._add_code_block(docx_doc, code_text)
+
             # Handle list items (- or *)
             elif line.lstrip().startswith('-') or line.lstrip().startswith('*'):
                 list_items = []
@@ -500,12 +588,10 @@ class MD2DOCXExporter(MDExporter):
             return  # Skip if text becomes empty after cleaning
         
         para = docx_doc.add_paragraph()
-        run = para.add_run(clean_text)
-        run.font.name = self.font_name
-        run.font.size = Pt(self.font_size)
-        self._set_run_east_asia_font(run)
-        run.bold = bold
-        run.italic = italic
+        self._add_runs_with_html_sup_sub(para, clean_text)
+        for run in para.runs:
+            run.bold = bold
+            run.italic = italic
     
     def _add_paragraph_with_formatting(self, docx_doc: DocxDocument, text: str, skip_inline_math: bool = False):
         """Add a paragraph with inline markdown formatting.
@@ -660,7 +746,7 @@ class MD2DOCXExporter(MDExporter):
         # When text contains newlines: if we have inline math ($...$), parse whole paragraph
         # so that $...$ spanning multiple lines is matched; otherwise split by line.
         if '\n' in text:
-            if not skip_inline_math and '$' in text:
+            if not skip_inline_math and self._paragraph_needs_tex_processing(text):
                 self._add_formatted_runs_for_text(para, text, skip_inline_math, allow_multiline_math=True)
             else:
                 line_list = text.split('\n')
@@ -677,25 +763,32 @@ class MD2DOCXExporter(MDExporter):
     def _add_formatted_runs_for_text(self, para, text: str, skip_inline_math: bool = False, allow_multiline_math: bool = False):
         """Add runs to an existing paragraph. When allow_multiline_math is True, $...$ may span newlines."""
         import re
-        # Parse inline formatting: **bold**, *italic*, `code`, [link](url), $math$
+        # Parse inline formatting: **bold**, *italic*, `code`, [link](url), LaTeX math
         if skip_inline_math:
             parts = re.split(r'(\*\*.*?\*\*|\*.*?\*|`.*?`|\[.*?\]\(.*?\))', text)
         elif allow_multiline_math:
-            # Allow newline inside $...$ so multiline formula in one paragraph is matched
-            parts = re.split(r'(\$\$[^$]*?\$\$|\$[^$]*?\$|\*\*.*?\*\*|\*.*?\*|`.*?`|\[.*?\]\(.*?\))', text)
+            parts = re.split(_TEX_SPLIT_PARTS_MULTILINE, text)
         else:
-            parts = re.split(r'(\$\$.*?\$\$|\$[^$\n]+?\$|\*\*.*?\*\*|\*.*?\*|`.*?`|\[.*?\]\(.*?\))', text)
+            parts = re.split(_TEX_SPLIT_PARTS_SINGLE_LINE_INLINE, text)
         
         for part in parts:
             if not part:
                 continue
             
+            # LaTeX display math: \[ ... \]
+            if part.startswith("\\[") and part.endswith("\\]") and len(part) > 4:
+                latex_content = part[2:-2].strip()
+                self._add_inline_math(para, latex_content, display_mode=True)
+            # LaTeX inline math: \( ... \)
+            elif part.startswith("\\(") and part.endswith("\\)") and len(part) > 4:
+                latex_content = part[2:-2].strip()
+                self._add_inline_math(para, latex_content, display_mode=False)
             # LaTeX block math: $$formula$$
-            if part.startswith('$$') and part.endswith('$$') and len(part) > 4:
+            elif part.startswith('$$') and part.endswith('$$') and len(part) > 4:
                 latex_content = part[2:-2].strip()
                 self._add_inline_math(para, latex_content, display_mode=True)
             
-            # LaTeX inline math: $formula$
+            # LaTeX inline math: $formula$ (not $$)
             elif part.startswith('$') and part.endswith('$') and len(part) > 2 and not part.startswith('$$'):
                 latex_content = part[1:-1].strip()
                 self._add_inline_math(para, latex_content, display_mode=False)
@@ -744,7 +837,7 @@ class MD2DOCXExporter(MDExporter):
                         run.font.color.rgb = RGBColor(0x00, 0x00, 0xFF)  # Blue
                         run.font.underline = True
             
-            # Regular text
+            # Regular text (may contain HTML <sup>/<sub> from rebuild/translator)
             else:
                 clean_part = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]', '', part)
                 if clean_part:
@@ -754,51 +847,59 @@ class MD2DOCXExporter(MDExporter):
                                 run_br = para.add_run()
                                 run_br.add_break(WD_BREAK.LINE)
                             if chunk:
-                                run = para.add_run(chunk)
-                                run.font.name = self.font_name
-                                run.font.size = Pt(self.font_size)
-                                self._set_run_east_asia_font(run)
+                                self._add_runs_with_html_sup_sub(para, chunk)
                     else:
-                        run = para.add_run(clean_part)
-                        run.font.name = self.font_name
-                        run.font.size = Pt(self.font_size)
-                        self._set_run_east_asia_font(run)
+                        self._add_runs_with_html_sup_sub(para, clean_part)
     
     def _add_inline_math(self, para, latex: str, display_mode: bool = False):
-        """Add an inline LaTeX formula to an existing paragraph."""
-        latex_preview = (latex or "")[:80] + ("..." if len(latex or "") > 80 else "")
+        """Add LaTeX math to an existing paragraph as OMML (same normalization as _add_math_formula).
+
+        Repair/snippets often still contain $$...$$ or \\tag {...}; passing raw strings to latex2mathml
+        causes failures and LaTeX-as-text OMML fallback that looks like unconverted LaTeX in Word.
+        """
+        latex_clean, tag_text = self._normalize_formula_latex(latex)
+        if not latex_clean:
+            return
+        latex_preview = latex_clean[:80] + ("..." if len(latex_clean) > 80 else "")
         try:
             logger.info(
                 LogModule.EXPORT,
                 f"[DOCX-EQUATION] Attempting LaTeX->OMML: display={display_mode}, preview={latex_preview!r}",
             )
-            # Convert LaTeX to OMML
-            omml_xml = self._latex_to_omml(latex)
+            omml_xml = self._latex_to_omml(latex_clean)
             if omml_xml is not None:
-                # Create a run and insert OMML math element
                 run = para.add_run()
-                run._element.append(omml_xml)
+                if display_mode:
+                    math_para = OxmlElement("m:oMathPara")
+                    math_para.set(qn("m:oMathParaPr"), "")
+                    math_para.append(omml_xml)
+                    run._element.append(math_para)
+                else:
+                    run._element.append(omml_xml)
+                if tag_text:
+                    run_tag = para.add_run(f" ({tag_text})")
+                    run_tag.font.size = Pt(self.font_size)
+                    run_tag.font.color.rgb = RGBColor(0x40, 0x40, 0x40)
+                    self._set_run_east_asia_font(run_tag)
             else:
                 logger.warning(
                     LogModule.EXPORT,
                     f"[DOCX-EQUATION] LaTeX->OMML returned None, showing as [latex]: preview={latex_preview!r}",
                 )
-                # Fallback: display LaTeX code
-                run = para.add_run(f'[{latex}]')
-                run.font.name = 'Courier New'
+                run = para.add_run(f"[{latex_clean}]")
+                run.font.name = "Courier New"
                 run.font.size = Pt(self.font_size - 1)
-                run.font.color.rgb = RGBColor(0x00, 0x80, 0x00)  # Dark green
+                run.font.color.rgb = RGBColor(0x00, 0x80, 0x00)
                 run.italic = True
         except Exception as e:
             logger.warning(
                 LogModule.EXPORT,
                 f"[DOCX-EQUATION] LaTeX->OMML exception, showing as [latex]: preview={latex_preview!r}, error={type(e).__name__}: {e}",
             )
-            # Fallback: display LaTeX code
-            run = para.add_run(f'[{latex}]')
-            run.font.name = 'Courier New'
+            run = para.add_run(f"[{latex_clean}]")
+            run.font.name = "Courier New"
             run.font.size = Pt(self.font_size - 1)
-            run.font.color.rgb = RGBColor(0x00, 0x80, 0x00)  # Dark green
+            run.font.color.rgb = RGBColor(0x00, 0x80, 0x00)
             run.italic = True
     
     def _add_code_block(self, docx_doc: DocxDocument, code: str):
@@ -830,7 +931,9 @@ class MD2DOCXExporter(MDExporter):
             if not clean_item:
                 continue  # Skip empty items after cleaning
             
-            para = docx_doc.add_paragraph(clean_item, style='List Bullet')
+            para = docx_doc.add_paragraph(style='List Bullet')
+            skip_tex = not self._paragraph_needs_tex_processing(clean_item)
+            self._add_formatted_runs_for_text(para, clean_item, skip_inline_math=skip_tex)
             for run in para.runs:
                 run.font.name = self.font_name
                 run.font.size = Pt(self.font_size)
@@ -844,9 +947,11 @@ class MD2DOCXExporter(MDExporter):
         if not clean_text:
             return  # Skip if text becomes empty after cleaning
         
-        para = docx_doc.add_paragraph(clean_text, style='Quote')
+        para = docx_doc.add_paragraph(style='Quote')
         para.paragraph_format.left_indent = Inches(0.5)
         para.paragraph_format.first_line_indent = Inches(-0.25)
+        skip_tex = not self._paragraph_needs_tex_processing(clean_text)
+        self._add_formatted_runs_for_text(para, clean_text, skip_inline_math=skip_tex)
         
         for run in para.runs:
             run.font.name = self.font_name
@@ -875,7 +980,7 @@ class MD2DOCXExporter(MDExporter):
         tag_text = tag_match.group(1).strip() if tag_match else None
         s = re.sub(r"\\tag\s*\*?\s*\{[^}]*\}", "", s)
 
-        # For block-level display formulas (this helper is only used from _add_math_formula
+        # For block-level display formulas (used from _add_math_formula, _add_inline_math,
         # and tests), encourage proper lower-limit layout for sum-like operators by
         # inserting \limits when there is only a subscript and no superscript.
         def _maybe_add_limits(expr: str) -> str:
@@ -900,7 +1005,92 @@ class MD2DOCXExporter(MDExporter):
 
         s = _maybe_add_limits(s)
         return (s.strip(), tag_text if (tag_text and tag_text.strip()) else None)
-    
+
+    # Math font commands whose argument is often split by OCR/repair (e.g. \mathbf{C R}).
+    _SANITIZE_SYMBOL_FONT_CMDS: Tuple[str, ...] = (
+        "mathbf",
+        "mathrm",
+        "mathcal",
+        "mathbb",
+        "mathit",
+        "mathsf",
+        "mathtt",
+        "mathscr",
+        "mathfrak",
+    )
+    @staticmethod
+    def _sanitize_latex_for_latex2mathml(s: str) -> str:
+        """Fix spacing/OCR patterns that often break latex2mathml (repair outputs, PDF OCR).
+
+        Applied as a second-pass attempt in _latex_to_omml when the original string fails.
+        """
+        if not s:
+            return s
+        t = s
+        # Merge spaced multi-letter tokens inside font wrappers: \mathbf{C R} -> \mathbf{CR}
+        for cmd in MD2DOCXExporter._SANITIZE_SYMBOL_FONT_CMDS:
+
+            def _merge_spaced_symbol_arg(m: re.Match, c: str = cmd) -> str:
+                inner = m.group(1)
+                return f"\\{c}{{{''.join(inner.split())}}}"
+
+            t = re.sub(
+                rf"\\{cmd}\{{\s*([A-Za-z0-9](?:\s+[A-Za-z0-9])+)\s*\}}",
+                _merge_spaced_symbol_arg,
+                t,
+            )
+        # Tighten single-token braces: \mathrm { c } -> \mathrm{c}
+        for cmd in MD2DOCXExporter._SANITIZE_SYMBOL_FONT_CMDS:
+
+            def _tight_single(m: re.Match, c: str = cmd) -> str:
+                return f"\\{c}{{{m.group(1)}}}"
+
+            t = re.sub(rf"\\{cmd}\{{\s*([A-Za-z0-9])\s*\}}", _tight_single, t)
+        # OCR: \text { w h e r e } -> \text{where} (spaced Latin letters only)
+        t = re.sub(
+            r"\\text\s*\{\s*((?:[A-Za-z]\s+)+[A-Za-z])\s*\}",
+            lambda m: "\\text{" + "".join(m.group(1).split()) + "}",
+            t,
+        )
+        # Common accents: \bar {x} -> \bar{x}
+        for acc in (
+            "bar",
+            "hat",
+            "tilde",
+            "acute",
+            "grave",
+            "vec",
+            "dot",
+            "ddot",
+            "breve",
+            "check",
+        ):
+            t = re.sub(rf"\\{acc}\s*\{{", rf"\\{acc}{{", t)
+        # \sum_ { ... } -> \sum_{...} (and prod/int/common operators)
+        t = re.sub(
+            r"(\\(?:sum|prod|int|oint|iint|iiint|iiiint|bigcup|bigcap|bigoplus|bigotimes|bigodot))"
+            r"\s*_\s*\{",
+            r"\1_{",
+            t,
+        )
+        # Superscript / subscript open brace: ^{ T} -> ^{T}, _{ i} -> _{i}
+        t = re.sub(r"\^\s*\{", "^{", t)
+        t = re.sub(r"_\s*\{", "_{", t)
+        t = re.sub(r"\\left\s+", r"\\left", t)
+        t = re.sub(r"\\right\s+", r"\\right", t)
+        if "\n" not in t:
+            t = re.sub(r"[ \t]+", " ", t).strip()
+        return t
+
+    @staticmethod
+    def _latex_fragment_for_log(s: str, max_chars: int = 12000) -> str:
+        """Full LaTeX for diagnostics (OMML fallback / latex2mathml failures); avoid megabyte logs."""
+        if not s:
+            return ""
+        if len(s) <= max_chars:
+            return s
+        return s[:max_chars] + f"\n... [truncated, total_chars={len(s)}]"
+
     def _add_math_formula(self, docx_doc: DocxDocument, latex: str, display_mode: bool = False):
         """Add a LaTeX formula as Word math equation using OMML.
         
@@ -948,6 +1138,21 @@ class MD2DOCXExporter(MDExporter):
         run.font.color.rgb = RGBColor(0x00, 0x80, 0x00)  # Dark green
         run.italic = True
 
+    @staticmethod
+    def _paragraph_needs_tex_processing(text: str) -> bool:
+        """True if paragraph may contain LaTeX math (must not use skip_inline_math)."""
+        if not text:
+            return False
+        if "$" in text:
+            return True
+        if "\\[" in text or "\\]" in text:
+            return True
+        if "\\(" in text or "\\)" in text:
+            return True
+        if "\\begin{" in text:
+            return True
+        return False
+
     def _find_markdown_images_in_line(self, line: str) -> List[Tuple[int, int, str, str]]:
         """Find all markdown image refs in a line. Uses scan for data URI (avoids regex on very long base64).
         Returns list of (start, end, alt_text, image_src) spanning the full ![alt](src) segment."""
@@ -978,6 +1183,32 @@ class MD2DOCXExporter(MDExporter):
         for m in pat.finditer(line):
             result.append((m.start(), m.end(), (m.group(1) or ""), m.group(2)))
         return result
+
+    @staticmethod
+    def _count_markdown_display_math_blocks(lines: List[str]) -> int:
+        """Count $$ display math blocks using the same open/close rules as _markdown_to_docx_with_layout.
+
+        Each block starts at a line whose stripped content begins with $$. Multi-line blocks count once.
+        """
+        n = 0
+        i = 0
+        while i < len(lines):
+            line = lines[i].rstrip()
+            if not line:
+                i += 1
+                continue
+            if line.strip().startswith("$$"):
+                n += 1
+                latex_content = line.strip()[2:].strip()
+                if not latex_content.endswith("$$"):
+                    i += 1
+                    while i < len(lines):
+                        next_line = lines[i].strip()
+                        if next_line.endswith("$$"):
+                            break
+                        i += 1
+            i += 1
+        return n
 
     def _markdown_to_docx_with_layout(self, md_content: str, docx_doc: DocxDocument):
         """Convert markdown to DOCX using layout_document for formula detection.
@@ -1019,6 +1250,18 @@ class MD2DOCXExporter(MDExporter):
         # Process markdown content, replacing $$...$$ with formulas from layout
         # Split content into lines for processing
         lines = md_content.split('\n')
+
+        n_md_blocks = self._count_markdown_display_math_blocks(lines)
+        n_layout_blocks = len(equation_blocks)
+        if n_layout_blocks > 0 and n_md_blocks != n_layout_blocks:
+            logger.warning(
+                LogModule.EXPORT,
+                "[DOCX-EQUATION] Display math block count mismatch: "
+                f"markdown_display_math_blocks={n_md_blocks} layout_interline_equation={n_layout_blocks}. "
+                "Disabling layout→markdown formula substitution (use LaTeX from each $$ block) "
+                "to avoid cumulative drift after segment repairs or extra $$ insertions.",
+            )
+            equation_blocks = []
         
         i = 0
         equation_index = 0  # Track which equation we're at
@@ -1086,15 +1329,31 @@ class MD2DOCXExporter(MDExporter):
                 i += 1
                 continue
             
-            # Handle code blocks (```code```)
+            # Handle code blocks (```code```); ```tex / ```latex with a single $$...$$ body → OMML not code
             elif line.startswith('```'):
-                code_lines = []
+                fence_lang = parse_opening_markdown_fence_language(line)
+                code_lines: List[str] = []
                 i += 1
                 while i < len(lines) and not lines[i].strip().startswith('```'):
                     code_lines.append(lines[i])
                     i += 1
-                if code_lines:
-                    self._add_code_block(docx_doc, '\n'.join(code_lines))
+                code_text = '\n'.join(code_lines)
+                if (
+                    fence_lang in TEX_LATEX_FENCE_LANGS
+                    and self.equation_format != "image"
+                ):
+                    inner = extract_display_math_inner_from_tex_fence_body(code_text)
+                    if inner is not None:
+                        logger.info(
+                            LogModule.EXPORT,
+                            "[DOCX-EQUATION] Fenced tex/latex block rendered as display math (OMML), "
+                            "not as code block",
+                        )
+                        self._add_math_formula(docx_doc, inner, display_mode=True)
+                    elif code_text.strip():
+                        self._add_code_block(docx_doc, code_text)
+                elif code_text.strip():
+                    self._add_code_block(docx_doc, code_text)
                 if i < len(lines):
                     i += 1  # skip closing ```
                 continue
@@ -1261,7 +1520,7 @@ class MD2DOCXExporter(MDExporter):
                 if not para_text or para_text == "$$":
                     continue
                 # When rebuilt MD has $...$ (mixed formula from markdown_rebuild), render inline math
-                skip_inline_math = "$" not in para_text
+                skip_inline_math = not self._paragraph_needs_tex_processing(para_text)
                 self._add_paragraph_with_formatting(docx_doc, para_text, skip_inline_math=skip_inline_math)
                 continue
             
@@ -1285,24 +1544,38 @@ class MD2DOCXExporter(MDExporter):
             return None
         latex_preview = latex_clean[:80] + "..." if len(latex_clean) > 80 else latex_clean
         fail_reason = None
-        # Prefer real conversion: LaTeX -> MathML -> OMML
-        try:
-            import latex2mathml.converter
-            mathml_str = latex2mathml.converter.convert(latex_clean)
-            if not mathml_str or not mathml_str.strip():
+        mathml_str = None
+        # LaTeX -> MathML: prefer sanitized when it differs (repair/OCR spacing breaks latex2mathml often)
+        sanitized = self._sanitize_latex_for_latex2mathml(latex_clean)
+        attempts: List[Tuple[str, str]] = []
+        if sanitized and sanitized != latex_clean:
+            attempts.append((sanitized, "sanitized"))
+        attempts.append((latex_clean, "original"))
+
+        import latex2mathml.converter
+
+        for attempt_tex, attempt_label in attempts:
+            try:
+                m = latex2mathml.converter.convert(attempt_tex)
+                if m and m.strip():
+                    mathml_str = m
+                    if attempt_label == "sanitized" and sanitized != latex_clean:
+                        logger.info(
+                            LogModule.EXPORT,
+                            f"[DOCX-EQUATION] latex2mathml used sanitized input, preview={latex_preview!r}",
+                        )
+                    break
                 fail_reason = "latex2mathml returned empty"
                 logger.warning(
                     LogModule.EXPORT,
-                    f"[DOCX-EQUATION] {fail_reason}, latex_preview={latex_preview!r}",
+                    f"[DOCX-EQUATION] {fail_reason}, attempt={attempt_label}, preview={latex_preview!r}",
                 )
-                mathml_str = None
-        except Exception as e:
-            fail_reason = f"latex2mathml failed: {type(e).__name__}: {e}"
-            logger.warning(
-                LogModule.EXPORT,
-                f"[DOCX-EQUATION] {fail_reason}, latex_preview={latex_preview!r}",
-            )
-            mathml_str = None
+            except Exception as e:
+                fail_reason = f"latex2mathml failed: {type(e).__name__}: {e}"
+                logger.warning(
+                    LogModule.EXPORT,
+                    f"[DOCX-EQUATION] {fail_reason}, attempt={attempt_label}, preview={latex_preview!r}",
+                )
         def _parse_omml_to_element(omml_str: str):
             """Parse OMML string to lxml element; return first child or None."""
             from lxml import etree
@@ -1372,17 +1645,20 @@ class MD2DOCXExporter(MDExporter):
                 pass
             except Exception as e:
                 logger.debug(LogModule.EXPORT, f"[DOCX-EQUATION] mathml2omml_as not used: {e}")
-        # Fallback: embed LaTeX as plain text in m:t so something appears in Word
-        if not getattr(self, "_omml_fallback_logged", False):
-            self._omml_fallback_logged = True
-            root_cause = fail_reason or "unknown (latex2mathml/mathml2omml not used or conversion failed)"
-            logger.info(
-                LogModule.EXPORT,
-                f"[DOCX-EQUATION] Using LaTeX-as-text fallback. Root cause: {root_cause}",
+        # Fallback: embed LaTeX as plain text in m:t (Word shows formula box with raw LaTeX-like glyphs)
+        san_extra = ""
+        if sanitized and sanitized != latex_clean:
+            san_extra = (
+                "\n[DOCX-EQUATION] OMML_FALLBACK sanitized_attempt_was_chars="
+                f"{len(sanitized)}\n{self._latex_fragment_for_log(sanitized)}"
             )
-        logger.info(
+        logger.warning(
             LogModule.EXPORT,
-            f"[DOCX-EQUATION] LaTeX-as-text fallback for this formula: preview={latex_preview!r}, reason={repr(fail_reason or 'unknown')}",
+            "[DOCX-EQUATION] OMML_FALLBACK_LATEX_AS_TEXT reason=%r latex_chars=%s\nfull_latex=\n%s%s",
+            fail_reason or "unknown",
+            len(latex_clean),
+            self._latex_fragment_for_log(latex_clean),
+            san_extra,
         )
         try:
             omath = OxmlElement("m:oMath")
@@ -1709,9 +1985,6 @@ class MD2DOCXExporter(MDExporter):
                 # Clean text to remove NULL bytes and control characters that are not XML compatible
                 clean_cell_text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]', '', cell_text)
                 cell.paragraphs[0].clear()
-                if clean_cell_text:  # Only add run if there's content after cleaning
-                    run = cell.paragraphs[0].add_run(clean_cell_text)
-                    run.font.name = self.font_name
-                    run.font.size = Pt(self.font_size)
-                    self._set_run_east_asia_font(run)
+                if clean_cell_text:
+                    self._add_runs_with_html_sup_sub(cell.paragraphs[0], clean_cell_text)
 

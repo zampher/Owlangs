@@ -46,10 +46,14 @@ _ERROR_TYPE_GUIDANCE: dict[str, str] = {
         "- Keep all non-math words as plain text outside `$...$`. Do not wrap whole sentences inside math."
     ),
     "missing_dollar_inserted": (
-        "- This error means XeLaTeX encountered a math command or symbol outside math mode and tried to auto-insert `$`.\n"
-        "- Find the command/symbol that triggered the error (often `^`, `_`, `\\alpha`, `\\sum`, etc.) and wrap it in `$...$`.\n"
-        "- Ensure every `^` (superscript) and `_` (subscript) is inside math mode.\n"
-        "- Check that display math blocks (`$$...$$` or `\\[...\\]`) are properly opened and closed."
+        "- This error means XeLaTeX hit `^`, `_`, or a math-only command where it could not open math mode, or the **superscript/subscript "
+        "argument is syntactically broken** (very common after translation/OCR).\n"
+        "- **Wrap** any expression using `^`, `_`, `\\theta`, `\\sum`, Greek letters, etc. in **balanced** inline math `$...$` or display `$$...$$`.\n"
+        "- **Mangled superscripts (CRITICAL)**: If you see patterns like `^{\\{\\prime\\}{[}...` or mixed `{`, `}`, `[`, `]` inside one `^{...}`, the braces are wrong. "
+        "Rewrite as valid math, e.g. prime + arguments: `$x^{\\prime}(t,\\theta_d)$` or `$x'(t,\\theta_d)$` — use **one** balanced `{...}` for the whole superscript, or split into separate factors.\n"
+        "- Do **not** use `[` / `]` as fake grouping inside `^{...}`; use commas, `\\,`, or `\\left[ ... \\right]` only when you mean brackets.\n"
+        "- Subscripts: use `\\theta_{d}` **inside** `$...$`, not a corrupted mix like `\\theta\\_\\{d\\}` with stray backslashes or braces.\n"
+        "- Ensure display math (`$$...$$` / `\\[...\\]`) is fully closed before the next paragraph."
     ),
     "undefined_control_sequence": (
         "- This error means a `\\command` is not recognized by XeLaTeX.\n"
@@ -107,6 +111,10 @@ _ERROR_TYPE_GUIDANCE: dict[str, str] = {
         "  * **Environment in wrong math mode**: environments like `align`, `equation`, `gather` MUST be in display math (`$$...$$` or `\\[...\\]`), NOT in inline math (`$...$`). Either move them to display mode or remove the environment wrapper.\n"
         "  * **Empty environments**: `\\begin{align}\\end{align}` with nothing inside is useless and often causes renderer errors. Remove it or add meaningful content.\n"
         "  * **Math commands outside math mode**: commands like `\\sum`, `\\frac`, `\\mathbf` must be inside `$...$` or another math delimiter.\n"
+        "  * **Missing $ / broken `^{...}`**: PDF export often fails with `Missing $ inserted` when superscripts nest `\\{`, `}`, `[` incorrectly. "
+        "Rewrite to clean math (e.g. `$f^{\\prime}(t,\\theta_d)$`); never leave `[` as an unescaped delimiter inside a superscript block.\n"
+        "  * **\\tag vs \\[...\\]**: Do **not** use `\\tag{n}` inside `\\[...\\]`. Use `\\begin{equation}...\\end{equation}`, or remove `\\tag` and write `(n)` in text.\n"
+        "  * **Markdown leakage**: Remove stray ``` fences; fix corrupted theta like `$\\textbackslash theta` → `$\\theta_0^{*}$` or equivalent valid math.\n"
         "- Do NOT over-correct: if `\\begin{aligned}...\\end{aligned}` is properly closed and inside correct delimiters, leave it alone."
     ),
     "environment_in_wrong_mode": (
@@ -119,7 +127,33 @@ _ERROR_TYPE_GUIDANCE: dict[str, str] = {
         "- This segment failed a pre-export PDF compatibility check.\n"
         "- Review the segment for broken LaTeX: unmatched delimiters, undefined commands, missing braces, or environment issues.\n"
         "- Ensure all math is properly wrapped in `$...$`, `$$...$$`, `\\(...\\)`, or `\\[...\\]`.\n"
+        "- Pay special attention to **corrupted superscripts** (`^{...}` with mixed brackets) that pass HTML preview but break XeLaTeX.\n"
+        "- **\\tag + \\[...\\] (CRITICAL for PDF)**: If you see `\\[ ... \\tag{n} ... \\]`, rewrite: use `\\begin{equation}...\\end{equation}` with `\\tag` **or** drop `\\tag` and keep `(n)` in the surrounding text. Do **not** leave `\\tag` inside raw `\\[...\\]`.\n"
         "- Remove or fix any commands that are not standard LaTeX."
+    ),
+    "docx_texmath_failure": (
+        "- Pandoc converted this Markdown fragment to DOCX but **texmath** (OMML) reported errors on **display math**.\n"
+        "- Typical causes: `\\tag{...}` preceded by comma-separated clauses (`unexpected control sequence \\tag`), "
+        "unbalanced `{` `}` (often inside `\\mathrm{...}` or `\\triangleright{...}`), "
+        "or `\\begin{array}` / `\\left\\{` without matching `\\end{array}` / `\\right.`.\n"
+        "- **If stderr mentions `unexpected \\tag`**: rewrite comma-separated constraints before `\\tag` using `\\quad` between clauses, "
+        "or split into separate display blocks; ensure nothing after the last comma looks like an unfinished subformula.\n"
+        "- **Brace mismatch**: balance every `{`/`}`; close environments before `\\tag`.\n"
+        "- Goal: the same segment text, processed like DOCX export (normalized Markdown math), must convert to DOCX **without** "
+        "`Could not convert TeX math` warnings in Pandoc stderr.\n"
+        "- Preserve segment meaning and non-math wording; fix LaTeX structure only.\n"
+        "- **CRITICAL — single segment boundary**: stderr may mention several equations or line numbers from Pandoc's trace; "
+        "**only repair math that appears in the snippet** between the markers above. Do **not** prepend or paste another equation "
+        "(e.g. an objective `\\min ... \\tag{56}`) unless that exact equation text is already part of the snippet. "
+        "Do **not** output multiple distinct `\\tag{n}` blocks whose numbers were not all present in the original snippet.\n"
+    ),
+    "eqno_in_math_mode": (
+        "- XeLaTeX: `! You can't use \\eqno' in math mode` (often reported at a closing `\\]`).\n"
+        "- **Cause**: `\\tag{...}` inside **unnumbered** display `\\[...\\]`; the kernel then hits `\\eqno` in an illegal position.\n"
+        "- **Fix** (pick one): (1) Replace the block with `\\begin{equation} ... \\end{equation}` and keep `\\tag{n}` if numbering is required; "
+        "(2) Remove `\\tag{n}` from inside display math and write the label as plain text `(n)` after the equation; "
+        "(3) Use `$$\\begin{aligned} ... \\end{aligned}$$` without `\\tag` when numbering is optional.\n"
+        "- After fixing, ensure **no** `\\tag` remains inside `\\[...\\]`."
     ),
 }
 
@@ -130,6 +164,8 @@ def _build_prompt(req: LatexRepairRequest) -> str:
         extra_guidance = (
             "- Review the segment for common LaTeX issues: unmatched delimiters, undefined commands, missing braces, or environment mismatches.\n"
             "- Ensure all math is properly wrapped in `$...$`, `$$...$$`, `\\(...\\)`, or `\\[...\\]`.\n"
+            "- **If stderr mentions \\eqno / \\tag with \\]**: never keep `\\tag{...}` inside `\\[...\\]`; use `equation`/`gather` or drop `\\tag`.\n"
+            "- Remove Markdown artifacts (` ``` ` fences) and literal `\\textbackslash` placeholders where real math was intended.\n"
             "- Remove or fix any commands that are not standard LaTeX."
         )
 
@@ -139,7 +175,7 @@ A PDF export failed with a LaTeX error.
 
 Error type: {req.error_type}
 
-LaTeX context (around the error):
+Diagnostic context (LaTeX log around the error, or Pandoc/texmath stderr for DOCX):
 ```tex
 {req.tex_context}
 ```
@@ -161,9 +197,11 @@ Task: Return a corrected **LaTeX snippet** that:
 8. If the snippet represents pseudo-code, apply consistent indentation based on control-flow structure (if/while/for/else/end). Do not guess a programming language.
 9. Keeps every non-math token (numbers, colons, pipes, words like then/else, punctuation) unless it is obviously duplicated or part of a broken control sequence. Do **not** drop or hide such tokens inside math.
 10. Does not modify surrounding sections outside this snippet.
-11. **CRITICAL — Environment closure**: Every `\begin{xxx}` MUST have a matching `\end{xxx}` at the correct nesting level. If `\end` is missing, add it. If `\begin` is stray, remove it. Do NOT leave environments half-open.
+11. **CRITICAL — Environment closure**: Every `\begin{{xxx}}` MUST have a matching `\end{{xxx}}` at the correct nesting level. If `\end` is missing, add it. If `\begin` is stray, remove it. Do NOT leave environments half-open.
 12. **CRITICAL — Environment math mode**: Display-only environments (`align`, `equation`, `gather`, `eqnarray`, `multline`, `split`) MUST NOT appear inside inline math (`$...$`). Either change the delimiters to display mode (`$$...$$` or `\[...\]`) or remove the environment wrapper entirely.
-13. **CRITICAL — Empty environments**: An environment with no meaningful content between `\begin` and `\end` (e.g. `\begin{align}\end{align}`) is broken. Remove it or add the intended math content inside it.
+13. **CRITICAL — Empty environments**: An environment with no meaningful content between `\begin` and `\end` (e.g. `\begin{{align}}\end{{align}}`) is broken. Remove it or add the intended math content inside it.
+14. **CRITICAL — Superscript/bracket corruption (XeLaTeX)**: If superscripts contain mangled brace/bracket mixes (common after translation), **rewrite the entire formula** as standard balanced math inside one pair of dollar signs (derivative style: x with prime and arguments such as t and theta sub d). Never use raw square brackets as grouping inside a superscript; use commas or proper `` \\left[ ... \\right] `` for brackets.
+15. **CRITICAL — \\tag and display math (PDF / \\eqno errors)**: Do **not** put `\\tag{{...}}` inside `\\[...\\]`. Pandoc often emits that shape; XeLaTeX may then fail with `You can't use \\eqno' in math mode` at the closing `\\]`. Rewrite as `\\begin{{equation}}...\\end{{equation}}` (with `\\tag` if needed), or use `$$...$$` / `\\[...\\]` **without** `\\tag` and add the number as plain text `(n)` in the sentence.
 
 {extra_guidance}
 

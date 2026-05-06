@@ -171,6 +171,9 @@ def _detect_error_type(stderr: str) -> str:
         return "math_bold_outside_math_mode"
     if "missing $ inserted" in lowered:
         return "missing_dollar_inserted"
+    # e.g. "! You can't use \eqno' in math mode" at \] when \tag is inside \[...\]
+    if "eqno" in lowered and "math mode" in lowered:
+        return "eqno_in_math_mode"
     if "undefined control sequence" in lowered:
         return "undefined_control_sequence"
     if "environment" in lowered and "undefined" in lowered:

@@ -773,4 +773,28 @@ class TranslationService {
     _segmentsRequests.remove(taskId);
     return (resp.data as Map).cast<String, dynamic>();
   }
+
+  /// LLM repair for segments that fail Pandoc DOCX fragment math (texmath / OMML path).
+  Future<Map<String, dynamic>> repairDocxMathFragments(
+    String taskId, {
+    bool refreshCheckFirst = true,
+    bool recheckAfter = true,
+    int? maxSegments,
+  }) async {
+    final dio = _buildAuthedDio(useLongTimeout: true);
+    final Map<String, dynamic> body = <String, dynamic>{
+      'refresh_check_first': refreshCheckFirst,
+      'recheck_after': recheckAfter,
+    };
+    if (maxSegments != null) {
+      body['max_segments'] = maxSegments;
+    }
+    final resp = await dio.post(
+      '/service/translation-segments/$taskId/repair-docx-math-fragments',
+      data: body,
+    );
+    _segmentsCache.remove(taskId);
+    _segmentsRequests.remove(taskId);
+    return (resp.data as Map).cast<String, dynamic>();
+  }
 }

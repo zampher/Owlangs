@@ -56,6 +56,7 @@ class TranslationResultToolbar extends ConsumerWidget {
     this.onNextSearchMatch,
     this.onPreviousSearchMatch,
     this.onCheckPdfFormulas,
+    this.onRepairDocxMath,
   });
 
   final String taskId;
@@ -97,6 +98,8 @@ class TranslationResultToolbar extends ConsumerWidget {
   final VoidCallback? onPreviousSearchMatch;
   // PDF 公式检测按钮回调（仅在 PDF 流程中可见）
   final VoidCallback? onCheckPdfFormulas;
+  /// DOCX / texmath LLM repair（markdown_based 流程）
+  final VoidCallback? onRepairDocxMath;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -408,6 +411,22 @@ class TranslationResultToolbar extends ConsumerWidget {
                 ), // Further reduced button size
               ),
               const SizedBox(width: 3), // Further reduced spacing
+              if (onRepairDocxMath != null) ...<Widget>[
+                IconButton(
+                  icon: const Icon(
+                    Icons.auto_fix_high,
+                    size: 16,
+                  ),
+                  tooltip: 'AI 修复 DOCX 公式（Pandoc/texmath）',
+                  onPressed: onRepairDocxMath,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                ),
+                const SizedBox(width: 3),
+              ],
             ],
             // PDF Preview button (Debug mode only)
             if (kDebugMode &&

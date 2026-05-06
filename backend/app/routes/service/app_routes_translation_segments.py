@@ -1424,6 +1424,57 @@ async def repair_for_pdf_export_api(
     })
 
 
+@router.post(
+    "/translation-segments/{task_id}/repair-docx-math-fragments",
+    summary="AI repair segments that fail Pandoc DOCX fragment math check",
+    description=(
+        "Runs per-segment Pandoc markdown→docx smoke tests (unless refresh_check_first=false with cached "
+        "docx_math_fragment_issues), sends each failing segment plus Pandoc/texmath stderr to the LLM, "
+        "writes repaired target_text back into translation_segments, then optionally re-runs the fragment checks."
+    ),
+)
+async def repair_docx_math_fragments_api(
+    task_id: str,
+    body: Dict[str, Any] = Body(default_factory=dict),
+):
+    """Batch repair using LLM + Pandoc stderr from DOCX fragment checks."""
+    payload = body if isinstance(body, dict) else {}
+    task_state = task_manager.get_task(task_id)
+    if task_state is None:
+        raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
+
+    llm_cfg = task_state.get("llm_config_for_repair")
+    if not llm_cfg or not llm_cfg.get("base_url") or not llm_cfg.get("model_id"):
+        raise HTTPException(
+            status_code=400,
+            detail="llm_config_for_repair is missing or incomplete (need base_url and model_id).",
+        )
+
+    from utils.docx_math_fragment_llm_repair import repair_docx_math_fragments_with_llm
+
+    refresh = bool(payload.get("refresh_check_first", True))
+    recheck = bool(payload.get("recheck_after", True))
+    max_raw = payload.get("max_segments")
+    max_segments = int(max_raw) if max_raw is not None else None
+
+    result = repair_docx_math_fragments_with_llm(
+        task_state,
+        task_id,
+        llm_cfg,
+        refresh_check_first=refresh,
+        recheck_after=recheck,
+        max_segments=max_segments,
+    )
+
+    logger.info(
+        LogModule.ROUTE,
+        f"[REPAIR-DOCX-MATH-FRAGMENTS-API] task_id={task_id} success={result.get('success')} "
+        f"updated={result.get('segments_updated')} issues_after={result.get('issues_after')}",
+    )
+
+    return JSONResponse(content=result)
+
+
 @router.get(
     "/pdf-export-status/{task_id}",
     summary="Get current PDF export status and diagnosis",

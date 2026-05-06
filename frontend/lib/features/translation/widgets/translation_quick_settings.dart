@@ -779,9 +779,11 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
       <String, String>{'code': 'devanagari',  'native': 'Devanagari (देवनागरी)'},
     ];
 
-    // Normalize sourceLang to valid MinerU code (handle legacy 'zh' -> 'auto')
-    final String normalizedSourceLang =
-        settings.sourceLang == 'zh' ? 'auto' : settings.sourceLang;
+    final Set<String> mineruCodes = languageEntries
+        .map((Map<String, String> e) => e['code']!)
+        .toSet();
+    final String effectiveSourceLang =
+        _coerceMineruOcrSourceLang(settings.sourceLang, mineruCodes);
 
     return _wrapQuickSettingSection(
       context,
@@ -794,7 +796,10 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           DropdownButtonFormField<String>(
-            initialValue: normalizedSourceLang,
+            key: ValueKey<String>(
+              'mineruOcr:${settings.sourceLang}|$effectiveSourceLang',
+            ),
+            initialValue: effectiveSourceLang,
             isExpanded: true,
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
@@ -820,6 +825,36 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Maps persisted/UI language codes to MinerU OCR tokens and guarantees a valid dropdown value.
+  static String _coerceMineruOcrSourceLang(String raw, Set<String> mineruCodes) {
+    final String trimmed = raw.trim();
+    String mapped = trimmed.isEmpty ? 'auto' : trimmed;
+    // Translation target codes and ISO-style aliases are not valid MinerU OCR codes.
+    switch (mapped) {
+      case 'zh':
+      case 'zh-CN':
+      case 'zh-Hans':
+        mapped = 'auto';
+        break;
+      case 'zh-TW':
+      case 'zh-Hant':
+        mapped = 'chinese_cht';
+        break;
+      case 'ja':
+        mapped = 'japan';
+        break;
+      case 'ko':
+        mapped = 'korean';
+        break;
+      default:
+        break;
+    }
+    if (mineruCodes.contains(mapped)) {
+      return mapped;
+    }
+    return 'auto';
   }
 
   /// Returns localized language label + " (native)" for dropdown display.

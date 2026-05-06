@@ -119,6 +119,21 @@ class _TranslationResultPreviewState
   /// TaskId for which we already fetched on-demand download links (so we only fetch once per task).
   String? _lastTaskIdForOnDemandDownloadsFetch;
 
+  /// Backend task id for API calls. When [TranslationResultPreview.flowId] is set, prefer
+  /// [TranslationState.taskId] over the tab's embedded [TranslationResultPreview.taskId] so
+  /// export URLs stay valid after re-submit if the tab widget was not rebuilt with the new id.
+  String _apiTaskId() {
+    if (widget.flowId != null) {
+      final dynamic st =
+          ref.read(translationStateProviderFamily(widget.flowId!));
+      final String? tid = st.taskId as String?;
+      if (tid != null && tid.isNotEmpty && tid != 'pending') {
+        return tid;
+      }
+    }
+    return widget.taskId;
+  }
+
   // Cached item heights for accurate scroll calculation (kept for backward compatibility)
   @override
   double? cachedSourceItemHeight;
@@ -147,10 +162,10 @@ class _TranslationResultPreviewState
       <int, Map<String, dynamic>>{};
 
   Future<void> _checkPdfFormulas(BuildContext context) async {
-    if (widget.taskId == 'pending') return;
+    if (_apiTaskId() == 'pending') return;
     try {
       final svc = TranslationService();
-      final result = await svc.checkLatexFormulas(widget.taskId);
+      final result = await svc.checkLatexFormulas(_apiTaskId());
       if (!mounted) return;
 
       final bool pandocAvailable = result['pandoc_available'] == true;
@@ -282,6 +297,68 @@ class _TranslationResultPreviewState
       );
     }
   }
+
+  /// Manual trigger: LLM repair for Pandoc DOCX fragment math (texmath) failures.
+  Future<void> _repairDocxMathFragments(BuildContext context) async {
+    if (_apiTaskId() == 'pending') return;
+    final ScaffoldMessengerState? messenger =
+        ScaffoldMessenger.maybeOf(context);
+    messenger?.showSnackBar(
+      const SnackBar(
+        content: Text('正在调用 AI 按 DOCX 路径修复公式片段，请稍候…'),
+        duration: Duration(seconds: 12),
+      ),
+    );
+    try {
+      final Map<String, dynamic> result =
+          await TranslationService().repairDocxMathFragments(_apiTaskId());
+      if (!mounted) return;
+      messenger?.hideCurrentSnackBar();
+      ref.read(translationRefreshProvider.notifier).state++;
+      final bool success = result['success'] == true;
+      final int updated = (result['segments_updated'] as num?)?.toInt() ?? 0;
+      final int issuesAfter =
+          (result['issues_after'] as num?)?.toInt() ?? -1;
+      final String err = result['error']?.toString() ?? '';
+      final String msg = result['message']?.toString() ?? '';
+      await showDialog<void>(
+        context: context,
+        builder: (BuildContext ctx) => AlertDialog(
+          title: Text(success ? 'DOCX 公式修复完成' : 'DOCX 公式修复'),
+          content: SelectableText(
+            success
+                ? '已更新片段数: $updated\n仍存疑片段数: $issuesAfter\n（0 表示当前片段级 Pandoc 检测无告警）'
+                : (msg.isNotEmpty
+                    ? msg
+                    : (err.isNotEmpty ? err : '请求失败')),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger?.hideCurrentSnackBar();
+      await showDialog<void>(
+        context: context,
+        builder: (BuildContext ctx) => AlertDialog(
+          title: const Text('DOCX 公式修复失败'),
+          content: SelectableText('$e'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   // Global detected exclusion reason counts from Extract phase (if available).
   // This allows Translate phase Segment Type Filters to align with Extract's
   // detected categories such as language_match, identifier, etc.
@@ -389,11 +466,11 @@ class _TranslationResultPreviewState
   /// Token usage is only loaded when translation is completed (called once when status changes to completed)
   Future<void> _loadTaskStatus() async {
     // Skip if taskId is 'pending' (not yet submitted)
-    if (widget.taskId == 'pending') return;
+    if (_apiTaskId() == 'pending') return;
 
     try {
       final TranslationService svc = TranslationService();
-      final Map<String, dynamic> status = await svc.getStatus(widget.taskId);
+      final Map<String, dynamic> status = await svc.getStatus(_apiTaskId());
       final String currentStatus =
           (status['status'] ?? '').toString().toLowerCase();
 
@@ -417,7 +494,7 @@ class _TranslationResultPreviewState
         // Set default formats to backend defaults (html for table, text for equation)
         // without showing dialog
         final formatNotifier = ref.read(
-          formatSettingsProviderFamily(widget.taskId).notifier,
+          formatSettingsProviderFamily(_apiTaskId()).notifier,
         );
         if (hasTables) {
           formatNotifier.setTableFormat('html'); // Backend default
@@ -502,8 +579,8 @@ class _TranslationResultPreviewState
 
   Future<void> _loadSourcePreview() async {
     if (_loadingSourcePreview ||
-        widget.taskId.isEmpty ||
-        widget.taskId == 'pending') {
+        _apiTaskId().isEmpty ||
+        _apiTaskId() == 'pending') {
       return;
     }
     setState(() {
@@ -512,7 +589,7 @@ class _TranslationResultPreviewState
     try {
       final TranslationService svc = TranslationService();
       final Map<String, dynamic> res =
-          await svc.getSourcePreview(widget.taskId, limit: 50);
+          await svc.getSourcePreview(_apiTaskId(), limit: 50);
       // Try both 'segments' and 'items' keys for compatibility
       final List<dynamic>? segmentsList =
           res['segments'] as List? ?? res['items'] as List?;
@@ -616,18 +693,18 @@ class _TranslationResultPreviewState
   /// Poll translation status to detect completion and reload content
   void _startTranslationStatusPolling() {
     _translationStatusTimer?.cancel();
-    if (widget.taskId == 'pending') return;
+    if (_apiTaskId() == 'pending') return;
 
     _translationStatusTimer =
         Timer.periodic(const Duration(seconds: 2), (Timer t) async {
-      if (!mounted || widget.taskId == 'pending') {
+      if (!mounted || _apiTaskId() == 'pending') {
         t.cancel();
         return;
       }
 
       try {
         final TranslationService svc = TranslationService();
-        final Map<String, dynamic> status = await svc.getStatus(widget.taskId);
+        final Map<String, dynamic> status = await svc.getStatus(_apiTaskId());
         final String currentStatus =
             (status['status'] ?? '').toString().toLowerCase();
 
@@ -947,7 +1024,7 @@ class _TranslationResultPreviewState
       final int fetchLimit = maxIndex - minIndex + 1;
 
       final Map<String, dynamic> sourcePreview = await svc.getSourcePreview(
-        widget.taskId,
+        _apiTaskId(),
         offset: fetchOffset,
         limit: fetchLimit,
       );
@@ -1023,7 +1100,7 @@ class _TranslationResultPreviewState
 
     // Fetch source segments from source-preview API (paginated)
     final Map<String, dynamic> sourcePreview = await svc.getSourcePreview(
-      widget.taskId,
+      _apiTaskId(),
       offset: offset,
       limit: limit,
     );
@@ -1133,7 +1210,7 @@ class _TranslationResultPreviewState
     try {
       final TranslationService svc = TranslationService();
       final Map<String, dynamic> segmentsData =
-          await svc.getTranslationSegments(widget.taskId);
+          await svc.getTranslationSegments(_apiTaskId());
       final List<dynamic>? segments =
           segmentsData['segments'] as List<dynamic>?;
 
@@ -1274,7 +1351,7 @@ class _TranslationResultPreviewState
     try {
       final TranslationService svc = TranslationService();
       final Map<String, dynamic> segmentsData =
-          await svc.getTranslationSegments(widget.taskId);
+          await svc.getTranslationSegments(_apiTaskId());
       final List<dynamic>? segments =
           segmentsData['segments'] as List<dynamic>?;
 
@@ -1400,7 +1477,7 @@ class _TranslationResultPreviewState
 
   Future<void> _loadTranslationContent({bool forceRefreshSegments = false}) async {
     // Skip if taskId is 'pending' (not yet submitted)
-    if (widget.taskId == 'pending') {
+    if (_apiTaskId() == 'pending') {
       setState(() {
         _isLoading = false;
         _loadingError = null;
@@ -1422,7 +1499,7 @@ class _TranslationResultPreviewState
       // This works for all workflow types including TS files
       try {
         final Map<String, dynamic> segmentsData = await svc.getTranslationSegments(
-          widget.taskId,
+          _apiTaskId(),
           forceRefresh: forceRefreshSegments,
         );
         final List<dynamic>? segments =
@@ -1460,7 +1537,7 @@ class _TranslationResultPreviewState
             // First, get total count and first page
             final Map<String, dynamic> firstPageRes =
                 await svc.getSourcePreview(
-              widget.taskId,
+              _apiTaskId(),
               limit: defaultSegmentPreviewLimit,
             );
             final int totalSegments = firstPageRes['total_segments'] as int? ??
@@ -1495,7 +1572,7 @@ class _TranslationResultPreviewState
               while (offset < totalSegments) {
                 final Map<String, dynamic> nextPageRes =
                     await svc.getSourcePreview(
-                  widget.taskId,
+                  _apiTaskId(),
                   offset: offset,
                   limit: defaultSegmentPreviewLimit,
                 );
@@ -1975,7 +2052,7 @@ class _TranslationResultPreviewState
           try {
             final TranslationService svc = TranslationService();
             final Map<String, dynamic> status =
-                await svc.getStatus(widget.taskId);
+                await svc.getStatus(_apiTaskId());
             final String taskStatus = status['status'] as String? ?? 'unknown';
             final String taskMessage = status['message'] as String? ?? '';
             final String taskError = status['error'] as String? ?? '';
@@ -2240,7 +2317,7 @@ class _TranslationResultPreviewState
 
       final TranslationService svc = TranslationService();
       await svc.updateTranslationSegment(
-        widget.taskId,
+        _apiTaskId(),
         index,
         targetText: newText,
         modifiedBy: 'user', // TODO: Get actual user ID
@@ -2266,7 +2343,7 @@ class _TranslationResultPreviewState
 
       // Record revision in undo/redo history
       final TranslationSegmentsUndoRedoNotifier undoRedoNotifier =
-          ref.read(translationSegmentsUndoRedoProvider(widget.taskId).notifier);
+          ref.read(translationSegmentsUndoRedoProvider(_apiTaskId()).notifier);
       undoRedoNotifier.pushRevision(index, newText, oldText: oldText);
     } catch (e) {
       AppLogger.log(
@@ -2284,7 +2361,7 @@ class _TranslationResultPreviewState
   /// Initialize undo/redo history for all loaded segments
   void _initializeUndoRedoHistory() {
     final TranslationSegmentsUndoRedoNotifier undoRedoNotifier =
-        ref.read(translationSegmentsUndoRedoProvider(widget.taskId).notifier);
+        ref.read(translationSegmentsUndoRedoProvider(_apiTaskId()).notifier);
     for (var i = 0; i < _targetParagraphs.length; i++) {
       undoRedoNotifier.initializeSegment(i, _targetParagraphs[i]);
     }
@@ -2294,7 +2371,7 @@ class _TranslationResultPreviewState
   Future<void> _handleGlobalUndo() async {
     try {
       final TranslationSegmentsUndoRedoNotifier undoRedoNotifier =
-          ref.read(translationSegmentsUndoRedoProvider(widget.taskId).notifier);
+          ref.read(translationSegmentsUndoRedoProvider(_apiTaskId()).notifier);
       final GlobalRevisionOperation? operation = undoRedoNotifier.globalUndo();
 
       if (operation == null) {
@@ -2307,7 +2384,7 @@ class _TranslationResultPreviewState
       // Save the undo result to backend
       final TranslationService svc = TranslationService();
       await svc.updateTranslationSegment(
-        widget.taskId,
+        _apiTaskId(),
         operation.segmentIndex,
         targetText: operation.oldText,
         modifiedBy: 'user',
@@ -2360,7 +2437,7 @@ class _TranslationResultPreviewState
   Future<void> _handleGlobalRedo() async {
     try {
       final TranslationSegmentsUndoRedoNotifier undoRedoNotifier =
-          ref.read(translationSegmentsUndoRedoProvider(widget.taskId).notifier);
+          ref.read(translationSegmentsUndoRedoProvider(_apiTaskId()).notifier);
       final GlobalRevisionOperation? operation = undoRedoNotifier.globalRedo();
 
       if (operation == null) {
@@ -2373,7 +2450,7 @@ class _TranslationResultPreviewState
       // Save the redo result to backend
       final TranslationService svc = TranslationService();
       await svc.updateTranslationSegment(
-        widget.taskId,
+        _apiTaskId(),
         operation.segmentIndex,
         targetText: operation.newText,
         modifiedBy: 'user',
@@ -2426,7 +2503,7 @@ class _TranslationResultPreviewState
   Future<void> _handleUndo(int segmentIndex) async {
     try {
       final TranslationSegmentsUndoRedoNotifier undoRedoNotifier =
-          ref.read(translationSegmentsUndoRedoProvider(widget.taskId).notifier);
+          ref.read(translationSegmentsUndoRedoProvider(_apiTaskId()).notifier);
       final String? previousText = undoRedoNotifier.undo(segmentIndex);
 
       if (previousText == null) {
@@ -2439,7 +2516,7 @@ class _TranslationResultPreviewState
       // Save the undo result to backend
       final TranslationService svc = TranslationService();
       await svc.updateTranslationSegment(
-        widget.taskId,
+        _apiTaskId(),
         segmentIndex,
         targetText: previousText,
         modifiedBy: 'user',
@@ -2489,7 +2566,7 @@ class _TranslationResultPreviewState
   Future<void> _handleRedo(int segmentIndex) async {
     try {
       final TranslationSegmentsUndoRedoNotifier undoRedoNotifier =
-          ref.read(translationSegmentsUndoRedoProvider(widget.taskId).notifier);
+          ref.read(translationSegmentsUndoRedoProvider(_apiTaskId()).notifier);
       final String? nextText = undoRedoNotifier.redo(segmentIndex);
 
       if (nextText == null) {
@@ -2502,7 +2579,7 @@ class _TranslationResultPreviewState
       // Save the redo result to backend
       final TranslationService svc = TranslationService();
       await svc.updateTranslationSegment(
-        widget.taskId,
+        _apiTaskId(),
         segmentIndex,
         targetText: nextText,
         modifiedBy: 'user',
@@ -2568,7 +2645,7 @@ class _TranslationResultPreviewState
       }
 
       final TranslationService svc = TranslationService();
-      await svc.markSegmentForRetry(widget.taskId, index);
+      await svc.markSegmentForRetry(_apiTaskId(), index);
 
       // Only call setState if widget is still mounted and state needs sync
       // (Child widget already updated its local state, so this is just for consistency)
@@ -2609,7 +2686,7 @@ class _TranslationResultPreviewState
       }
 
       final TranslationService svc = TranslationService();
-      await svc.unmarkSegmentForRetry(widget.taskId, index);
+      await svc.unmarkSegmentForRetry(_apiTaskId(), index);
 
       // Only call setState if widget is still mounted and state needs sync
       // (Child widget already updated its local state, so this is just for consistency)
@@ -2705,7 +2782,7 @@ class _TranslationResultPreviewState
       // Batch call API for all matching segments
       final TranslationService svc = TranslationService();
       final List<Future<Map<String, dynamic>>> excludeFutures = matchingIndices
-          .map((idx) => svc.excludeSegment(widget.taskId, idx))
+          .map((idx) => svc.excludeSegment(_apiTaskId(), idx))
           .toList();
       final List<Map<String, dynamic>> results =
           await Future.wait(excludeFutures);
@@ -2810,11 +2887,11 @@ class _TranslationResultPreviewState
       }
 
       final TranslationService svc = TranslationService();
-      await svc.clearSegment(widget.taskId, index);
+      await svc.clearSegment(_apiTaskId(), index);
 
       // Record revision in undo/redo history
       final TranslationSegmentsUndoRedoNotifier undoRedoNotifier =
-          ref.read(translationSegmentsUndoRedoProvider(widget.taskId).notifier);
+          ref.read(translationSegmentsUndoRedoProvider(_apiTaskId()).notifier);
       undoRedoNotifier.pushRevision(index, '', oldText: oldText);
 
       // Update modified segments map
@@ -2842,7 +2919,7 @@ class _TranslationResultPreviewState
         // Restore from backend
         final TranslationService svc = TranslationService();
         final Map<String, dynamic> segmentsData =
-            await svc.getTranslationSegments(widget.taskId);
+            await svc.getTranslationSegments(_apiTaskId());
         final List<dynamic>? segments =
             segmentsData['segments'] as List<dynamic>?;
         if (segments != null) {
@@ -2875,9 +2952,9 @@ class _TranslationResultPreviewState
       // Try to get the old text from undo/redo history
       String? restoredText;
       final TranslationSegmentsUndoRedoNotifier undoRedoNotifier =
-          ref.read(translationSegmentsUndoRedoProvider(widget.taskId).notifier);
+          ref.read(translationSegmentsUndoRedoProvider(_apiTaskId()).notifier);
       final TranslationSegmentsUndoRedoState undoRedoState =
-          ref.read(translationSegmentsUndoRedoProvider(widget.taskId));
+          ref.read(translationSegmentsUndoRedoProvider(_apiTaskId()));
 
       // Look for the most recent clear operation in globalPast
       // Find the last operation for this segment where newText is empty
@@ -2897,7 +2974,7 @@ class _TranslationResultPreviewState
         try {
           final TranslationService svc = TranslationService();
           final Map<String, dynamic> segmentsData =
-              await svc.getTranslationSegments(widget.taskId);
+              await svc.getTranslationSegments(_apiTaskId());
           final List<dynamic>? segments =
               segmentsData['segments'] as List<dynamic>?;
           if (segments != null) {
@@ -2949,7 +3026,7 @@ class _TranslationResultPreviewState
 
       // Update segment via API
       final TranslationSegmentsService segmentsService =
-          TranslationSegmentsService(widget.taskId, ref);
+          TranslationSegmentsService(_apiTaskId(), ref);
       await segmentsService.updateSegment(
         index,
         restoredText,
@@ -3030,7 +3107,7 @@ class _TranslationResultPreviewState
       final TranslationService svc = TranslationService();
       final List<Future<Map<String, dynamic>>> unexcludeFutures =
           matchingIndices
-              .map((idx) => svc.unexcludeSegment(widget.taskId, idx))
+              .map((idx) => svc.unexcludeSegment(_apiTaskId(), idx))
               .toList();
       final List<Map<String, dynamic>> results =
           await Future.wait(unexcludeFutures);
@@ -3152,8 +3229,8 @@ class _TranslationResultPreviewState
     if (confirmed != true) return;
 
     try {
-      // Get real taskId from state if widget.taskId is 'pending'
-      String? taskIdToCancel = widget.taskId;
+      // Get real taskId from state if _apiTaskId() is 'pending'
+      String? taskIdToCancel = _apiTaskId();
       if (taskIdToCancel == 'pending' && widget.flowId != null) {
         final TranslationStateFamily translationState =
             ref.read(translationStateProviderFamily(widget.flowId!));
@@ -3251,7 +3328,7 @@ class _TranslationResultPreviewState
       // Call retranslation API
       final TranslationService svc = TranslationService();
       final Map<String, dynamic> response = await svc.retranslateSegment(
-        widget.taskId,
+        _apiTaskId(),
         index,
         platformKey: selectedPlatform,
       );
@@ -3611,18 +3688,18 @@ class _TranslationResultPreviewState
         stateDownloadsNonEmpty ? stateDownloads : widget.downloads;
 
     // When completed/failed with empty downloads (e.g. restored flow), fetch status once to get on-demand links.
-    if (widget.taskId != 'pending' &&
+    if (_apiTaskId() != 'pending' &&
         widget.flowId != null &&
         translationNotifier != null &&
         (effectiveDownloads == null || effectiveDownloads.isEmpty) &&
-        _lastTaskIdForOnDemandDownloadsFetch != widget.taskId) {
+        _lastTaskIdForOnDemandDownloadsFetch != _apiTaskId()) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _lastTaskIdForOnDemandDownloadsFetch == widget.taskId) {
+        if (!mounted || _lastTaskIdForOnDemandDownloadsFetch == _apiTaskId()) {
           return;
         }
-        _lastTaskIdForOnDemandDownloadsFetch = widget.taskId;
+        _lastTaskIdForOnDemandDownloadsFetch = _apiTaskId();
         TranslationService()
-            .getStatus(widget.taskId)
+            .getStatus(_apiTaskId())
             .then((Map<String, dynamic> status) {
           final dynamic dv = status['downloads'];
           if (dv != null && dv is Map && dv.isNotEmpty && mounted) {
@@ -3649,7 +3726,7 @@ class _TranslationResultPreviewState
               valueListenable: _selectedExclusionFiltersNotifier,
               builder: (context, selectedFilters, _) =>
                   TranslationResultToolbar(
-                taskId: widget.taskId,
+                taskId: _apiTaskId(),
                 flowId: widget.flowId,
                 translationState: translationState,
                 tokenUsage: tokenUsage,
@@ -3682,6 +3759,9 @@ class _TranslationResultPreviewState
                 onCheckPdfFormulas: (widget.fileName != null &&
                         widget.fileName!.toLowerCase().endsWith('.pdf'))
                     ? () => _checkPdfFormulas(context)
+                    : null,
+                onRepairDocxMath: (widget.workflowType == 'markdown_based')
+                    ? () => _repairDocxMathFragments(context)
                     : null,
                 // Filter buttons state (for toolbar filter buttons)
                 selectedFilters: selectedFilters,
@@ -4057,7 +4137,7 @@ class _TranslationResultPreviewState
     final bool isDocxWorkflow = resolvedWorkflowType == 'docx';
 
     return TranslationComparisonPanel(
-      taskId: widget.taskId,
+      taskId: _apiTaskId(),
       isLoading: _isLoading,
       loadingError: _loadingError,
       sourceParagraphs: _sourceParagraphs,
@@ -4117,7 +4197,7 @@ class _TranslationResultPreviewState
       final TranslationService svc = TranslationService();
       final Map<String, dynamic> resp =
           await svc.repairLatexForSegment(
-            widget.taskId,
+            _apiTaskId(),
             index,
             currentText,
             userPrompt: userPrompt,
@@ -4178,7 +4258,7 @@ class _TranslationResultPreviewState
 
       // Apply fix by updating the segment on backend, then refresh segments.
       await TranslationService()
-          .updateTranslationSegment(widget.taskId, index, targetText: fixed);
+          .updateTranslationSegment(_apiTaskId(), index, targetText: fixed);
 
       // Invalidate local metadata cache for this segment
       _allSegmentsMetadata[index] ??= <String, dynamic>{};
@@ -4240,7 +4320,7 @@ class _TranslationResultPreviewState
           : ref.read(previewTabsProvider.notifier);
 
       final PreviewTab pdfTab = PreviewTab(
-        id: 'pdf_preview_${widget.taskId}_${DateTime.now().millisecondsSinceEpoch}',
+        id: 'pdf_preview_${_apiTaskId()}_${DateTime.now().millisecondsSinceEpoch}',
         type: PreviewTabType.translationResult,
         title: pdfType == 'original' ? 'Original PDF (Debug)' : 'PDF Viewer',
         icon: pdfType == 'original' ? Icons.bug_report : Icons.picture_as_pdf,
@@ -4249,7 +4329,7 @@ class _TranslationResultPreviewState
           pdfType: pdfType,
         ),
         dataRef: <String, dynamic>{
-          'taskId': widget.taskId,
+          'taskId': _apiTaskId(),
           'flowId': widget.flowId,
           'downloads': widget.downloads,
         },
@@ -4291,7 +4371,7 @@ class _TranslationResultPreviewState
     if (pdfType == 'original' && kDebugMode) {
       final TranslationService svc = TranslationService();
       // Build debug URL for original PDF
-      final String debugUrl = svc.buildDebugUrl(widget.taskId, 'original-pdf');
+      final String debugUrl = svc.buildDebugUrl(_apiTaskId(), 'original-pdf');
       relativeUrl = debugUrl;
     } else {
       // Translated PDF (default)
@@ -4331,7 +4411,7 @@ class _TranslationResultPreviewState
   /// View Translation Preview (HTML format using unified_preview.dart)
   Future<void> _viewTranslationPreview() async {
     _translationResultLog(
-      '[Preview] _viewTranslationPreview called, taskId=${widget.taskId}, flowId=${widget.flowId}',
+      '[Preview] _viewTranslationPreview called, taskId=${_apiTaskId()}, flowId=${widget.flowId}',
       level: LogLevel.info,
     );
 
@@ -4379,7 +4459,7 @@ class _TranslationResultPreviewState
 
       try {
         final TranslationService svc = TranslationService();
-        final Map<String, dynamic> status = await svc.getStatus(widget.taskId);
+        final Map<String, dynamic> status = await svc.getStatus(_apiTaskId());
         final Map<String, dynamic>? statusDownloads =
             status['downloads'] as Map<String, dynamic>?;
 
@@ -4404,8 +4484,8 @@ class _TranslationResultPreviewState
           // Building download URL directly...
 
           // Try MD first, then HTML
-          final String mdUrl = svc.buildDownloadUrl(widget.taskId, 'md');
-          final String htmlUrl = svc.buildDownloadUrl(widget.taskId, 'html');
+          final String mdUrl = svc.buildDownloadUrl(_apiTaskId(), 'md');
+          final String htmlUrl = svc.buildDownloadUrl(_apiTaskId(), 'html');
 
           // Add to downloads map (will be validated when actually downloading)
           downloads['md'] = mdUrl;
@@ -4454,7 +4534,7 @@ class _TranslationResultPreviewState
       // Use TranslationPreviewTabWidget (with toolbar) like the original implementation
       final TranslationPreviewTabWidget previewContent =
           TranslationPreviewTabWidget(
-        taskId: widget.taskId,
+        taskId: _apiTaskId(),
         flowId: widget.flowId,
         downloads: downloads,
         onDownload: widget.onDownload,
@@ -4468,7 +4548,7 @@ class _TranslationResultPreviewState
         icon: Icons.preview,
         content: previewContent,
         dataRef: <String, dynamic>{
-          'taskId': widget.taskId,
+          'taskId': _apiTaskId(),
           'downloads': downloads,
           'flowId': widget.flowId,
         },
@@ -4532,7 +4612,7 @@ class _TranslationResultPreviewState
       final TranslationService svc = TranslationService();
       Map<String, dynamic> status;
       try {
-        status = await svc.getStatus(widget.taskId);
+        status = await svc.getStatus(_apiTaskId());
       } catch (e) {
         // Gracefully handle 404 when task has been released
         final errorString = e.toString();
@@ -4571,7 +4651,7 @@ class _TranslationResultPreviewState
 
       // Get current format settings from provider
       final formatSettings = ref.read(
-        formatSettingsProviderFamily(widget.taskId),
+        formatSettingsProviderFamily(_apiTaskId()),
       );
       // Create state variables for dialog with current settings or defaults
       var tableFormat = formatSettings.getTableFormat();
@@ -4681,7 +4761,7 @@ class _TranslationResultPreviewState
                   onPressed: () async {
                     // Apply settings to provider first
                     final formatNotifier = ref.read(
-                      formatSettingsProviderFamily(widget.taskId).notifier,
+                      formatSettingsProviderFamily(_apiTaskId()).notifier,
                     );
                     if (hasTables) {
                       formatNotifier.setTableFormat(tableFormat);
@@ -4703,7 +4783,7 @@ class _TranslationResultPreviewState
                     Navigator.of(context, rootNavigator: true).pop();
                     // Apply settings to provider
                     final formatNotifier = ref.read(
-                      formatSettingsProviderFamily(widget.taskId).notifier,
+                      formatSettingsProviderFamily(_apiTaskId()).notifier,
                     );
                     if (hasTables) {
                       formatNotifier.setTableFormat(tableFormat);
@@ -4758,7 +4838,7 @@ class _TranslationResultPreviewState
     Map<String, dynamic>? status;
     try {
       final TranslationService svc = TranslationService();
-      status = await svc.getStatus(widget.taskId);
+      status = await svc.getStatus(_apiTaskId());
     } catch (e) {
       // If status fetch fails, continue without format options
       status = null;
@@ -4879,7 +4959,7 @@ class _TranslationResultPreviewState
         builder: (BuildContext context, WidgetRef ref, Widget? child) {
           // Get current format settings from provider (watch for changes)
           final formatSettings = ref.watch(
-            formatSettingsProviderFamily(widget.taskId),
+            formatSettingsProviderFamily(_apiTaskId()),
           );
           String tableFormat = formatSettings.getTableFormat();
           String equationFormat = formatSettings.getEquationFormat();
@@ -4931,7 +5011,7 @@ class _TranslationResultPreviewState
                                           ref
                                               .read(
                                                 formatSettingsProviderFamily(
-                                                        widget.taskId,)
+                                                        _apiTaskId(),)
                                                     .notifier,
                                               )
                                               .setTableFormat(value);
@@ -4953,7 +5033,7 @@ class _TranslationResultPreviewState
                                           ref
                                               .read(
                                                 formatSettingsProviderFamily(
-                                                        widget.taskId,)
+                                                        _apiTaskId(),)
                                                     .notifier,
                                               )
                                               .setTableFormat(value);
@@ -4999,7 +5079,7 @@ class _TranslationResultPreviewState
                                           ref
                                               .read(
                                                 formatSettingsProviderFamily(
-                                                        widget.taskId,)
+                                                        _apiTaskId(),)
                                                     .notifier,
                                               )
                                               .setEquationFormat(value);
@@ -5021,7 +5101,7 @@ class _TranslationResultPreviewState
                                           ref
                                               .read(
                                                 formatSettingsProviderFamily(
-                                                        widget.taskId,)
+                                                        _apiTaskId(),)
                                                     .notifier,
                                               )
                                               .setEquationFormat(value);
@@ -5138,7 +5218,7 @@ class _TranslationResultPreviewState
 
     try {
       final TranslationService svc = TranslationService();
-      var downloadUrl = svc.buildDownloadUrl(widget.taskId, fileType);
+      var downloadUrl = svc.buildDownloadUrl(_apiTaskId(), fileType);
       final Uri uri = Uri.parse(downloadUrl);
       final Map<String, String> queryParams =
           Map<String, String>.from(uri.queryParameters);
@@ -5149,7 +5229,7 @@ class _TranslationResultPreviewState
           fileType == 'docx' ||
           fileType == 'pdf') {
         final formatSettings = ref.read(
-          formatSettingsProviderFamily(widget.taskId),
+          formatSettingsProviderFamily(_apiTaskId()),
         );
         queryParams['table_body_format'] =
             tableFormat ?? formatSettings.getTableFormat();

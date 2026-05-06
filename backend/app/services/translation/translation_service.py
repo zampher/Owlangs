@@ -10,6 +10,7 @@ Handles translation task processing, workflow management, and task lifecycle.
 import asyncio
 import io
 import os
+from functools import partial
 import shutil
 import tempfile
 import time
@@ -1090,6 +1091,98 @@ class TranslationService:
                     logger.warning(
                         LogModule.RESTOR,
                         f"[FORMULA-REPAIR] Auto repair failed (task {task_id}): {fr_err}",
+                        exc_info=False,
+                    )
+
+                # Markdown-based: optional auto LLM repair for Pandoc DOCX / texmath fragment failures
+                try:
+                    from backend.config.system_config import get_system_config
+
+                    _sys = get_system_config()
+                    if workflow_type != "markdown_based":
+                        if _sys.features.auto_docx_math_fragment_llm_repair:
+                            logger.debug(
+                                LogModule.RESTOR,
+                                "[DOCX-MATH-LLM-REPAIR] Skip auto repair: "
+                                f"workflow_type={workflow_type} (requires markdown_based) task_id={task_id}",
+                            )
+                    elif _sys.features.auto_docx_math_fragment_llm_repair:
+                        llm_docx = task_state.get("llm_config_for_repair")
+                        if (
+                            isinstance(llm_docx, dict)
+                            and llm_docx.get("base_url")
+                            and llm_docx.get("model_id")
+                        ):
+                            try:
+                                if int(task_state.get("progress", 0) or 0) >= 100:
+                                    task_state["progress"] = 95
+                                task_state["status"] = "processing"
+                                task_state["message"] = (
+                                    "Post-processing: DOCX formula repair (LLM)..."
+                                )
+                                self.task_manager.update_task(
+                                    task_id,
+                                    {
+                                        "status": "processing",
+                                        "progress": task_state.get("progress", 95),
+                                        "message": task_state["message"],
+                                    },
+                                )
+                            except Exception:
+                                pass
+
+                            from utils.docx_math_fragment_llm_repair import (
+                                repair_docx_math_fragments_with_llm,
+                            )
+
+                            docx_summary = await asyncio.to_thread(
+                                partial(
+                                    repair_docx_math_fragments_with_llm,
+                                    task_state,
+                                    task_id,
+                                    llm_docx,
+                                    refresh_check_first=True,
+                                    recheck_after=True,
+                                    max_segments=None,
+                                ),
+                            )
+                            logger.info(
+                                LogModule.RESTOR,
+                                "[DOCX-MATH-LLM-REPAIR] Auto post-translate finished "
+                                "(task_id={tid}, success={ok}, updated={u}, issues_after={ia})",
+                                tid=task_id,
+                                ok=docx_summary.get("success"),
+                                u=docx_summary.get("segments_updated"),
+                                ia=docx_summary.get("issues_after"),
+                            )
+                        else:
+                            _has_b = (
+                                bool((llm_docx or {}).get("base_url"))
+                                if isinstance(llm_docx, dict)
+                                else False
+                            )
+                            _has_m = (
+                                bool((llm_docx or {}).get("model_id"))
+                                if isinstance(llm_docx, dict)
+                                else False
+                            )
+                            logger.warning(
+                                LogModule.RESTOR,
+                                "[DOCX-MATH-LLM-REPAIR] Skip auto repair: llm_config_for_repair incomplete "
+                                f"(need base_url and model_id on translation payload). task_id={task_id} "
+                                f"has_dict={isinstance(llm_docx, dict)} has_base_url={_has_b} has_model_id={_has_m}",
+                            )
+                    else:
+                        logger.debug(
+                            LogModule.RESTOR,
+                            "[DOCX-MATH-LLM-REPAIR] Skip auto repair: "
+                            "auto_docx_math_fragment_llm_repair=false in system config (cached). task_id=%s",
+                            task_id,
+                        )
+                except Exception as docx_repair_err:  # noqa: BLE001
+                    logger.warning(
+                        LogModule.RESTOR,
+                        f"[DOCX-MATH-LLM-REPAIR] Auto repair failed (task {task_id}): {docx_repair_err}",
                         exc_info=False,
                     )
 

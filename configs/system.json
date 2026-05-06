@@ -94,7 +94,8 @@
     "smart_glossary_matching_enabled": true,
     "default_language": "en",
     "show_ads": false,
-    "ai_platform_startup_tests": true
+    "ai_platform_startup_tests": true,
+    "auto_docx_math_fragment_llm_repair": true
   },
   "pdf": {
     "disable_markdown_fallback": true,

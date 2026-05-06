@@ -11,7 +11,6 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from logger import unified_logger as logger
 from logger.logger import LogModule
-from utils.language_utils import get_language_name_from_code
 from utils.llm_client import LLMConfig, LLMMessage, llm_chat
 
 
@@ -125,9 +124,9 @@ def _chunk_items(items: List[FormulaRepairItem], batch_size: int) -> Iterable[Li
 
 def _build_prompt(items: List[FormulaRepairItem]) -> str:
     # Follow the same SEG-tag structure used by translation to maximize success rate.
-    # Input and output MUST preserve marker lines exactly.
-    to_lang_name = get_language_name_from_code("zh")
-    header = f"""# Task
+    # Input and output MUST preserve marker lines exactly. (Plain string: avoid f-string
+    # interpreting LaTeX braces like \\theta_{d} in the instructions.)
+    header = """# Task
 Normalize and repair LaTeX math formatting inside each segment for PDF export (Pandoc + XeLaTeX).
 
 # Segment Format (CRITICAL)
@@ -157,6 +156,21 @@ Rules:
     while keeping the rest of that step's content on the same line (unless a newline already exists).
   - If multiple steps are on one physical line, split them into separate lines at their markers.
 - For code/pseudo-code, apply consistent indentation based on control-flow structure (e.g. while/for/if/else/end), without changing the logic or moving tokens into math mode.
+
+# XeLaTeX PDF failures: Missing $ and mangled superscripts
+Whole-document PDF often fails with "Missing $ inserted" when superscripts are corrupted after translation
+(e.g. nested braces and square brackets inside one ^{...} block, or patterns like superscript{\\{...\\}[}...).
+- Rewrite as **clean, balanced** inline math, e.g. $f^\\prime(t,\\theta_d)$ or $f'(t,\\theta_d)$; keep every `^` and `_` **inside** $...$ or $$...$$.
+- Do not use raw `[` / `]` as grouping inside a superscript; separate arguments with commas, or use \\left[ ... \\right] for true brackets.
+- Use \\prime or ASCII apostrophe for derivatives; avoid garbled `\\{` / `\\}` sequences in superscripts.
+
+# XeLaTeX PDF failures: \\eqno / \\tag inside \\[...\\]
+Whole-document compile may fail with `You can't use \\eqno' in math mode` at a closing `\\]` when **\\tag{n}** appears inside **\\[...\\]** (common Pandoc output).
+- **Never** leave `\\tag{...}` inside `\\[...\\]`. Rewrite to one of:
+  - `\\begin{equation} ... \\end{equation}` (keep `\\tag{n}` if equation numbers are required), or
+  - display math **without** `\\tag`, and put `(n)` as plain text after the formula in the same segment.
+- Strip Markdown code fences (```) if they leaked into the segment; they are not valid LaTeX.
+- Replace corrupted placeholders like `\\textbackslash theta` with valid math, e.g. `$\\theta_0^{*}$`.
 
 # Output
 Return ONLY the repaired segments with the SAME [SEG n] / [/SEG n] markers.

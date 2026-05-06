@@ -804,6 +804,27 @@ class OutputGenerator:
                                 "filename": f"{file_stem}_translated.docx",
                             }
                             self.task_manager.add_log(task_id, "success", "DOCX file generated via Pandoc (formulas preserved).")
+                            try:
+                                from utils.docx_math_fragment_check import (
+                                    apply_docx_math_fragment_issues_to_task_state,
+                                )
+
+                                frag_summary = apply_docx_math_fragment_issues_to_task_state(
+                                    task_state,
+                                    task_id=task_id,
+                                    task_manager=self.task_manager,
+                                )
+                                logger.info(
+                                    LogModule.EXPORT,
+                                    f"[OUTPUT-GENERATOR] Task {task_id}: DOCX fragment math check "
+                                    f"segments={frag_summary.checked_segments} issues={len(frag_summary.issues)}",
+                                )
+                            except Exception as frag_err:
+                                logger.warning(
+                                    LogModule.EXPORT,
+                                    f"[OUTPUT-GENERATOR] Task {task_id}: DOCX fragment math check failed: {frag_err}",
+                                    exc_info=False,
+                                )
                             return
                         self.task_manager.add_log(task_id, "info", "Pandoc DOCX output missing, falling back to export_to_docx/save_as_docx.")
                 except Exception as pandoc_err:

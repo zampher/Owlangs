@@ -19,6 +19,9 @@ from docx.oxml.ns import qn
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from utils.latex_repair_payload import extract_latex_error_context
+from utils.docx_algorithm_latex_wrap import wrap_bare_latex_for_docx_algorithms
+from utils.docx_md_normalize import normalize_docx_markdown_sup_sub
+from utils.math_md_normalize import normalize_md_math_for_pandoc_export
 
 
 def _to_short_path_if_needed(path: Path) -> Path:
@@ -939,6 +942,9 @@ def convert_md_to_docx(
     if not (md_content and md_content.strip()):
         logger.debug(LogModule.RESTOR, "[DOCX-EXPORT] convert_md_to_docx: empty md_content, skip")
         return False
+    md_content = normalize_md_math_for_pandoc_export(md_content)
+    md_content = normalize_docx_markdown_sup_sub(md_content)
+    md_content = wrap_bare_latex_for_docx_algorithms(md_content)
     try:
         import pypandoc
     except ImportError:
@@ -991,7 +997,8 @@ def convert_md_to_docx(
     except Exception as e:
         logger.warning(LogModule.RESTOR, f"[DOCX-EXPORT] Failed to write debug MD for Pandoc: {e}")
     # Use +hard_line_breaks so single newlines become line breaks (avoid merging references/short segments)
-    pandoc_format = "markdown+pipe_tables+hard_line_breaks"
+    # +raw_html so remaining <sup>/<sub> etc. pass through to DOCX OMML when not normalized to Unicode
+    pandoc_format = "markdown+pipe_tables+hard_line_breaks+raw_html"
     import tempfile
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
         f.write(md_for_pandoc)
@@ -1082,6 +1089,7 @@ def convert_md_to_pdf(
     if not (md_content and md_content.strip()):
         logger.debug(LogModule.RESTOR, "[PDF-EXPORT] convert_md_to_pdf: empty md_content, skip")
         return False
+    md_content = normalize_md_math_for_pandoc_export(md_content)
     pandoc_path = _get_pandoc_path()
     if not pandoc_path:
         logger.error(

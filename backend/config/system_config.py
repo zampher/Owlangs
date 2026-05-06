@@ -65,6 +65,9 @@ class FeaturesConfig:
     default_language: str = "en"
     show_ads: bool = False  # When True, show AD placeholders on home and in Flow
     ai_platform_startup_tests: bool = True  # When True, run AI platform connectivity tests at startup
+    # When True, after translation completes (markdown_based), run Pandoc-per-segment DOCX check
+    # and LLM repair for failing LaTeX fragments (uses llm_config_for_repair).
+    auto_docx_math_fragment_llm_repair: bool = False
 
 
 @dataclass
@@ -249,6 +252,8 @@ class SystemConfig:
             # Default show_ads to False for existing configs that do not have the key
             if 'show_ads' not in features_data:
                 features_data['show_ads'] = False
+            if 'auto_docx_math_fragment_llm_repair' not in features_data:
+                features_data['auto_docx_math_fragment_llm_repair'] = False
             self.features = FeaturesConfig(**features_data)
         
         if 'pdf' in data:
