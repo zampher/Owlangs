@@ -524,11 +524,26 @@ async def test_ai_platform_connectivity(
                 "message": err_msg,
             }
 
-    except httpx.TimeoutException:
-        err = "Connection timeout - please check your network and API endpoint"
+    except httpx.TimeoutException as e:
+        err = (
+            f"LLM endpoint timeout ({base_url!r}, {platform_type}): {e!s}. "
+            "Check network latency and the API URL in translator settings."
+        )
+        logger.warning(
+            LogModule.AUTH,
+            f"[TEST_AI_PLATFORM] Timeout url={base_url!r} platform={platform_type}: {e}",
+        )
         return {"success": False, "error": err, "message": err}
-    except httpx.ConnectError:
-        err = "Connection failed - please check the API URL"
+    except httpx.ConnectError as e:
+        err = (
+            f"Cannot connect to LLM endpoint {base_url!r} ({platform_type}): {e!s}. "
+            "This is not an Owlangs HTTP route failure — start Ollama or your LLM service, "
+            "or correct base_url/model in settings."
+        )
+        logger.error(
+            LogModule.AUTH,
+            f"[TEST_AI_PLATFORM] ConnectError url={base_url!r} platform={platform_type}: {e}",
+        )
         return {"success": False, "error": err, "message": err}
     except Exception as e:
         err = f"Test failed: {e}"

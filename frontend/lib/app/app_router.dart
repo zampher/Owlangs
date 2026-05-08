@@ -10,6 +10,7 @@ import '../shared/services/config_service.dart';
 import '../features/auth/screens/login_screen.dart';
 // import '../features/home/screens/home_screen.dart';
 import '../features/translation/screens/translation_screen.dart';
+import '../features/translation/screens/translation_queue_screen.dart';
 import '../features/tasks/screens/workspace_screen.dart';
 import '../features/anonymization/screens/anonymize_screen.dart';
 import '../features/settings/screens/settings_screen.dart';
@@ -37,6 +38,7 @@ class AppRouter {
   static const String loginRoute = '/login';
   static const String homeRoute = '/';
   static const String translationRoute = '/translation';
+  static const String translationQueueRoute = '/translation-queue';
   static const String anonymizeRoute = '/anonymize';
   static const String settingsRoute = '/settings';
   static const String donateRoute = '/donate';
@@ -124,12 +126,23 @@ class AppRouter {
                 const WorkspaceScreen(),
           ),
 
-          // Translation Route
+          // Translation Route (optional ?execution_mode=queued)
           GoRoute(
             path: translationRoute,
             name: 'translation',
+            builder: (BuildContext context, GoRouterState state) {
+              final String? q = state.uri.queryParameters['execution_mode'];
+              final String mode =
+                  (q == 'queued') ? 'queued' : 'immediate';
+              return TranslationScreen(executionMode: mode);
+            },
+          ),
+
+          GoRoute(
+            path: translationQueueRoute,
+            name: 'translation_queue',
             builder: (BuildContext context, GoRouterState state) =>
-                const TranslationScreen(),
+                const TranslationQueueScreen(),
           ),
 
           // Anonymization Route

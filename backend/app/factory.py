@@ -98,6 +98,7 @@ async def lifespan(app: FastAPI):
     # Initialize variables for shutdown cleanup
     _ai_platform_task = None
     _version_check_task = None
+    _stash_cleanup_task = None
     
     # Startup
     unified_logger.info(LogModule.SYSTEM, "[STARTUP] Application lifespan startup initiated")
@@ -348,6 +349,47 @@ async def lifespan(app: FastAPI):
         print("[INFO] [STARTUP] Daily version check task started")
     except Exception as e:
         print(f"[WARNING] [STARTUP] Failed to schedule update check task: {e}")
+
+    # In-process translation queue workers (execution_mode=queued)
+    try:
+        from backend.app.services.translation.translation_execution_queue import (
+            start_translation_execution_queue,
+        )
+
+        await start_translation_execution_queue()
+        print("[INFO] [STARTUP] Translation execution queue started")
+    except Exception as e:
+        print(f"[WARNING] [STARTUP] Failed to start translation execution queue: {e}")
+
+    try:
+        from backend.app.services.translation.translation_result_stash import cleanup_expired
+
+        n0 = cleanup_expired()
+        if n0:
+            print(f"[INFO] [STARTUP] Translation result stash: removed {n0} expired entr(y/ies)")
+
+        async def _stash_cleanup_loop():
+            while True:
+                try:
+                    await asyncio.sleep(3600)
+                    n = cleanup_expired()
+                    if n:
+                        unified_logger.info(
+                            LogModule.SYSTEM,
+                            f"[RESULT-STASH] Periodic cleanup removed {n} expired stash(es)",
+                        )
+                except asyncio.CancelledError:
+                    break
+                except Exception as loop_err:
+                    unified_logger.warning(
+                        LogModule.SYSTEM,
+                        f"[RESULT-STASH] Cleanup loop error: {loop_err}",
+                    )
+
+        _stash_cleanup_task = asyncio.create_task(_stash_cleanup_loop())
+        print("[INFO] [STARTUP] Translation result stash hourly cleanup started")
+    except Exception as e:
+        print(f"[WARNING] [STARTUP] Failed to schedule result stash cleanup: {e}")
     
     yield
     
@@ -376,6 +418,16 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
 
+    try:
+        if _stash_cleanup_task is not None and not _stash_cleanup_task.done():
+            _stash_cleanup_task.cancel()
+            try:
+                await _stash_cleanup_task
+            except asyncio.CancelledError:
+                pass
+    except Exception:
+        pass
+
     # Cleanup Redis if it was initialized
     try:
         from utils.redis_manager import _redis_manager
@@ -383,6 +435,15 @@ async def lifespan(app: FastAPI):
             _redis_manager.cleanup()
     except Exception as e:
         pass  # Redis cleanup failed
+
+    try:
+        from backend.app.services.translation.translation_execution_queue import (
+            stop_translation_execution_queue,
+        )
+
+        await stop_translation_execution_queue()
+    except Exception:
+        pass
     
     # Cleanup any other resources
     try:

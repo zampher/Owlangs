@@ -119,7 +119,6 @@ hiddenimports = [
     'backend.utils.utils',
     'backend.utils.language_utils',
     'backend.utils.path_utils',
-    'backend.utils.resource_utils',
     'backend.utils.font_utils',
     'backend.utils.pagination',
     'backend.utils.document_rebuild',
@@ -169,6 +168,10 @@ hiddenimports = [
     'backend.app.models.anonymize',
     'backend.app.models.service',
     'backend.app.models.translation_segment',
+    # Frozen runtime: PyInstaller may resolve translation services via backend.app.services path
+    'backend.app.services.translation.translation_execution_queue',
+    'backend.app.services.translation.translation_queue_utils',
+    'backend.app.services.translation.translation_result_stash',
     'app.services',
     'app.services.task',
     'app.services.version_service',
@@ -185,6 +188,9 @@ hiddenimports = [
     'app.services.translation.source_preview_service',
     'app.services.translation.translation_segment_service',
     'app.services.translation.chunk_size_service',
+    'app.services.translation.translation_execution_queue',
+    'app.services.translation.translation_queue_utils',
+    'app.services.translation.translation_result_stash',
                 # Platform service
                 'app.services.platform',
                 'app.services.platform.platform_service',

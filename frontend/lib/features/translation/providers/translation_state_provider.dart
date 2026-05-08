@@ -1,11 +1,15 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Translation screen state
+import 'translation_state_provider_family.dart' show TranslationOperation;
+
+/// Translation screen state (standalone `/translation` route without [flowId]).
+/// Fields mirror [TranslationStateFamily] where the translation UI reads them.
 class TranslationState {
   const TranslationState({
     this.pickedFile,
     this.isTranslating = false,
+    this.currentOperation = TranslationOperation.none,
     this.taskId,
     this.progress = 0,
     this.statusText = '',
@@ -17,9 +21,12 @@ class TranslationState {
     this.successCount,
     this.failCount,
     this.totalSegments,
+    this.tokenUsage,
+    this.excludedSegmentIndices = const <int>{},
   });
   final PlatformFile? pickedFile;
   final bool isTranslating;
+  final TranslationOperation currentOperation;
   final String? taskId;
   final int progress;
   final String statusText;
@@ -28,14 +35,16 @@ class TranslationState {
   final DateTime? startTime;
   final DateTime? endTime;
   final Duration? totalDuration;
-  // Translation statistics
   final int? successCount;
   final int? failCount;
   final int? totalSegments;
+  final Map<String, int>? tokenUsage;
+  final Set<int> excludedSegmentIndices;
 
   TranslationState copyWith({
     PlatformFile? pickedFile,
     bool? isTranslating,
+    TranslationOperation? currentOperation,
     String? taskId,
     int? progress,
     String? statusText,
@@ -47,13 +56,18 @@ class TranslationState {
     int? successCount,
     int? failCount,
     int? totalSegments,
+    Map<String, int>? tokenUsage,
+    Set<int>? excludedSegmentIndices,
     bool clearSuccessCount = false,
     bool clearFailCount = false,
     bool clearTotalSegments = false,
+    bool clearTokenUsage = false,
+    bool clearExcludedSegmentIndices = false,
   }) =>
       TranslationState(
         pickedFile: pickedFile ?? this.pickedFile,
         isTranslating: isTranslating ?? this.isTranslating,
+        currentOperation: currentOperation ?? this.currentOperation,
         taskId: taskId ?? this.taskId,
         progress: progress ?? this.progress,
         statusText: statusText ?? this.statusText,
@@ -67,6 +81,11 @@ class TranslationState {
         failCount: clearFailCount ? null : (failCount ?? this.failCount),
         totalSegments:
             clearTotalSegments ? null : (totalSegments ?? this.totalSegments),
+        tokenUsage:
+            clearTokenUsage ? null : (tokenUsage ?? this.tokenUsage),
+        excludedSegmentIndices: clearExcludedSegmentIndices
+            ? const <int>{}
+            : (excludedSegmentIndices ?? this.excludedSegmentIndices),
       );
 }
 
@@ -89,6 +108,10 @@ class TranslationStateNotifier extends StateNotifier<TranslationState> {
 
   void setTranslating(bool isTranslating) {
     state = state.copyWith(isTranslating: isTranslating);
+  }
+
+  void setCurrentOperation(TranslationOperation op) {
+    state = state.copyWith(currentOperation: op);
   }
 
   void setTaskId(String? taskId) {
@@ -129,11 +152,26 @@ class TranslationStateNotifier extends StateNotifier<TranslationState> {
     int? successCount,
     int? failCount,
     int? totalSegments,
+    Map<String, int>? tokenUsage,
   }) {
     state = state.copyWith(
       successCount: successCount,
       failCount: failCount,
       totalSegments: totalSegments,
+      tokenUsage: tokenUsage,
+    );
+  }
+
+  void setExcludedSegmentIndices(Set<int> indices) {
+    state = state.copyWith(excludedSegmentIndices: indices);
+  }
+
+  void addExcludedSegmentIndices(Set<int> indices) {
+    state = state.copyWith(
+      excludedSegmentIndices: <int>{
+        ...state.excludedSegmentIndices,
+        ...indices,
+      },
     );
   }
 

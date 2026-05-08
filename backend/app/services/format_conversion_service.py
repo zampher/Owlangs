@@ -27,6 +27,7 @@ from translator import default_params
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from exclusion.core import ExclusionReason
+from backend.config.platforms_config import platform_type_uses_llm_chunk_concurrent
 
 if TYPE_CHECKING:
     from backend.app.services.translation import TranslationService
@@ -70,7 +71,11 @@ class FormatConversionService:
                 from backend.config.platforms_config import get_platforms_config
                 platforms_config = get_platforms_config()
                 platform_cfg = platforms_config.platforms.get(platform_key)
-                if platform_cfg and hasattr(platform_cfg, 'chunk_size'):
+                if (
+                    platform_cfg
+                    and hasattr(platform_cfg, "chunk_size")
+                    and platform_type_uses_llm_chunk_concurrent(platform_cfg.platform_type)
+                ):
                     platform_chunk_size = platform_cfg.chunk_size
                     if platform_chunk_size and platform_chunk_size != 0:
                         logger.info(LogModule.WORKFLOW, f"{log_prefix} Using chunk_size={platform_chunk_size} from platform '{platform_key}' config")
@@ -594,7 +599,11 @@ class FormatConversionService:
                         from backend.config.platforms_config import get_platforms_config
                         platforms_config = get_platforms_config()
                         platform_cfg = platforms_config.platforms.get(platform_key)
-                        if platform_cfg and hasattr(platform_cfg, 'chunk_size'):
+                        if (
+                            platform_cfg
+                            and hasattr(platform_cfg, "chunk_size")
+                            and platform_type_uses_llm_chunk_concurrent(platform_cfg.platform_type)
+                        ):
                             platform_chunk_size = platform_cfg.chunk_size
                             if platform_chunk_size and platform_chunk_size != 0:
                                 chunk_size = int(platform_chunk_size)

@@ -11,6 +11,15 @@ from logger import unified_logger as logger
 from logger.logger import LogModule
 
 
+def platform_type_uses_llm_chunk_concurrent(platform_type: Optional[str]) -> bool:
+    """
+    Per-platform chunk_size / concurrent in platforms.json apply only to LLM translation platforms.
+
+    Parser platforms (e.g. MinerU) do not use these fields; omit them from disk and from resolution.
+    """
+    return (platform_type or "llm") == "llm"
+
+
 @dataclass
 class AIPlatformConfig:
     """AI Platform configuration (API keys stored separately in secrets.json)"""
@@ -148,7 +157,12 @@ class PlatformsConfig:
                 if platform_key == 'default_platform':
                     continue
                 if isinstance(platform_data, dict):
-                    self.platforms[platform_key] = AIPlatformConfig(**platform_data)
+                    pdata = dict(platform_data)
+                    ptype = pdata.get("platform_type", "llm")
+                    if not platform_type_uses_llm_chunk_concurrent(ptype):
+                        pdata.pop("chunk_size", None)
+                        pdata.pop("concurrent", None)
+                    self.platforms[platform_key] = AIPlatformConfig(**pdata)
     
     def get_config_dict(self) -> Dict[str, Any]:
         """Get configuration dictionary"""
@@ -158,10 +172,14 @@ class PlatformsConfig:
             'platforms': {}
         }
         
-        # Convert platforms to dictionary format
+        # Convert platforms to dictionary format (omit LLM-only keys for parser/converter platforms)
         for platform_key, platform_config in self.platforms.items():
-            config_dict['platforms'][platform_key] = asdict(platform_config)
-        
+            plat_dict = asdict(platform_config)
+            if not platform_type_uses_llm_chunk_concurrent(platform_config.platform_type):
+                plat_dict.pop("chunk_size", None)
+                plat_dict.pop("concurrent", None)
+            config_dict["platforms"][platform_key] = plat_dict
+
         return config_dict
     
     def get_platform_config(self, platform: str) -> Optional[AIPlatformConfig]:

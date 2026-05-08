@@ -813,7 +813,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeBackendRetry => '再試行';
 
   @override
-  String get homeNavTranslate => '翻訳';
+  String get homeNavTranslate => 'イマーシブ翻訳';
+
+  @override
+  String get homeNavTranslationQueue => '翻訳キュー';
 
   @override
   String get homeNavAnonymize => '匿名化';
@@ -826,6 +829,60 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get homeNavHome => 'ホーム';
+
+  @override
+  String get translationQueueTitle => '翻訳キュー';
+
+  @override
+  String get translationQueueHint => 'タスクは自動更新されます。完了後にダウンロードできます。';
+
+  @override
+  String get translationQueueEmpty => '翻訳タスクはありません。';
+
+  @override
+  String get translationQueueNewQueuedTask => 'キューに新規翻訳';
+
+  @override
+  String get translationQueuedStarted => 'キューに追加しました。ここで進捗を確認できます。';
+
+  @override
+  String get translationQueueRefresh => '更新';
+
+  @override
+  String get translationQueueCancel => 'キャンセル';
+
+  @override
+  String get translationQueueRelease => '一覧から削除';
+
+  @override
+  String get translationQueueDownloads => 'ダウンロード';
+
+  @override
+  String get translationQueueDownloadMdEmbedded => 'MD（埋め込み）';
+
+  @override
+  String get translationQueueDownloadMdZip => 'MD（ZIP）';
+
+  @override
+  String get translationQueueExecutionModeQueued => 'キュー';
+
+  @override
+  String get translationQueueExecutionModeImmediate => '即時';
+
+  @override
+  String translationQueuePositionLabel(Object position) {
+    return 'キュー順 #$position';
+  }
+
+  @override
+  String translationQueueLoadFailed(Object error) {
+    return 'タスクの読み込みに失敗しました: $error';
+  }
+
+  @override
+  String translationQueueActionFailed(Object error) {
+    return '操作に失敗しました: $error';
+  }
 
   @override
   String get homeFeatureUnderDevelopment => 'この機能は開発中です。';

@@ -1,0 +1,529 @@
+// SPDX-FileCopyrightText: 2026 Zampher
+// SPDX-License-Identifier: MPL-2.0
+
+import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:file_saver/file_saver.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../app/app_router.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../../shared/services/translation_service.dart';
+import '../../../shared/utils/message_service.dart';
+
+/// Lists backend translation tasks (immediate + queued + stashed) with polling.
+class TranslationQueueScreen extends ConsumerStatefulWidget {
+  const TranslationQueueScreen({super.key});
+
+  @override
+  ConsumerState<TranslationQueueScreen> createState() =>
+      _TranslationQueueScreenState();
+}
+
+class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen> {
+  final TranslationService _svc = TranslationService();
+  Timer? _pollTimer;
+  List<Map<String, dynamic>> _tasks = <Map<String, dynamic>>[];
+  bool _loading = false;
+  String? _loadError;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refresh());
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  /// When task was evicted from memory, list API still exposes [stashed_file_types].
+  /// Build relative download URLs so buttons appear even before GET /status returns stash payload.
+  static void _mergeDownloadsFromStashMeta(Map<String, dynamic> row) {
+    final dynamic existing = row['downloads'];
+    final bool hasDownloads = existing is Map && existing.isNotEmpty;
+    if (hasDownloads) {
+      return;
+    }
+    final dynamic fts = row['stashed_file_types'];
+    if (fts is! List<dynamic> || fts.isEmpty) {
+      return;
+    }
+    final String tid = row['task_id']?.toString() ?? '';
+    if (tid.isEmpty) {
+      return;
+    }
+    final Map<String, dynamic> built = <String, dynamic>{};
+    for (final dynamic ft in fts) {
+      final String k = ft.toString();
+      if (k.isEmpty) {
+        continue;
+      }
+      built[k] = '/service/download/$tid/$k';
+    }
+    if (built.isNotEmpty) {
+      row['downloads'] = built;
+    }
+  }
+
+  Future<void> _refresh() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+    try {
+      final Map<String, dynamic> listResp =
+          await _svc.listTranslationTasks(limit: 50);
+      final List<dynamic> raw =
+          (listResp['tasks'] as List<dynamic>?) ?? <dynamic>[];
+      final List<Map<String, dynamic>> enriched =
+          await Future.wait(raw.map((dynamic t) async {
+        final Map<String, dynamic> row =
+            Map<String, dynamic>.from(t as Map<dynamic, dynamic>);
+        _mergeDownloadsFromStashMeta(row);
+        final String id = row['task_id']?.toString() ?? '';
+        if (id.isEmpty) return row;
+        try {
+          final Map<String, dynamic> st = await _svc.getStatus(id);
+          row['status'] = st['status'] ?? row['status'];
+          row['progress'] = st['progress'] ?? row['progress'];
+          row['message'] = st['message'] ?? row['message'];
+          final dynamic sd = st['downloads'];
+          if (sd is Map && sd.isNotEmpty) {
+            row['downloads'] = Map<String, dynamic>.from(sd);
+          } else {
+            _mergeDownloadsFromStashMeta(row);
+          }
+        } catch (_) {
+          // Keep list row; retain stash-derived download URLs when GET /status fails
+          _mergeDownloadsFromStashMeta(row);
+        }
+        return row;
+      }));
+      if (!mounted) return;
+      setState(() {
+        _tasks = enriched;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = e.toString();
+      });
+    }
+  }
+
+  Future<void> _cancel(String taskId) async {
+    try {
+      await _svc.cancelTask(taskId);
+      await _refresh();
+    } catch (e) {
+      if (mounted) {
+        MessageService.showWarning(
+          context,
+          AppLocalizations.of(context)!.translationQueueActionFailed(e),
+        );
+      }
+    }
+  }
+
+  Future<void> _release(String taskId) async {
+    try {
+      await _svc.releaseTask(taskId);
+      await _refresh();
+    } catch (e) {
+      if (mounted) {
+        MessageService.showWarning(
+          context,
+          AppLocalizations.of(context)!.translationQueueActionFailed(e),
+        );
+      }
+    }
+  }
+
+  /// Backend exposes two Markdown downloads: `md` (default embed_images) and `md_zip` (?embed_images=false).
+  static int _downloadFormatSortOrder(String formatKey) {
+    const List<String> preferred = <String>[
+      'docx',
+      'html',
+      'md',
+      'md_zip',
+      'pdf',
+      'epub',
+      'mobi',
+      'txt',
+      'json',
+    ];
+    final int idx = preferred.indexOf(formatKey);
+    return idx >= 0 ? idx : 100 + formatKey.hashCode.abs() % 9000;
+  }
+
+  static String _fileExtensionForDownloadFormat(String formatKey) {
+    if (formatKey == 'md_zip') {
+      return 'zip';
+    }
+    return formatKey;
+  }
+
+  static String _downloadFormatButtonLabel(
+    String formatKey,
+    AppLocalizations l10n,
+  ) {
+    switch (formatKey) {
+      case 'md':
+        return l10n.translationQueueDownloadMdEmbedded;
+      case 'md_zip':
+        return l10n.translationQueueDownloadMdZip;
+      default:
+        return formatKey.toUpperCase();
+    }
+  }
+
+  MimeType _mimeForExtension(String ext) {
+    switch (ext.toLowerCase()) {
+      case 'docx':
+        return MimeType.microsoftWord;
+      case 'pdf':
+        return MimeType.pdf;
+      case 'html':
+      case 'htm':
+      case 'md':
+      case 'txt':
+      case 'json':
+      case 'zip':
+      case 'xlsx':
+      case 'xls':
+      default:
+        return MimeType.other;
+    }
+  }
+
+  Future<void> _saveDownloadedBytes({
+    required List<int> bytes,
+    required String filename,
+    required String ext,
+  }) async {
+    if (kIsWeb) {
+      await FileSaver.instance.saveFile(
+        name: filename.replaceAll(RegExp(r'\.[^.]+$'), ''),
+        bytes: bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
+        ext: ext,
+        mimeType: _mimeForExtension(ext),
+      );
+    } else {
+      final String? path = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save file',
+        fileName: filename,
+        type: FileType.custom,
+        allowedExtensions: <String>[ext],
+      );
+      if (path != null) {
+        await File(path).writeAsBytes(bytes, flush: true);
+      }
+    }
+  }
+
+  Future<void> _download(
+    String taskId,
+    String fileType,
+    String relativeUrl,
+    String? originalFilename,
+  ) async {
+    try {
+      final List<int> bytes = await _svc.downloadFile(relativeUrl);
+      final String baseName = (originalFilename != null &&
+              originalFilename.trim().isNotEmpty)
+          ? _stripExtension(originalFilename.trim())
+          : 'download';
+      final String safeTask = taskId.length > 6 ? taskId.substring(0, 8) : taskId;
+      final String ext = _fileExtensionForDownloadFormat(fileType);
+      final String filename = '${baseName}_$safeTask.$ext';
+      await _saveDownloadedBytes(
+        bytes: bytes,
+        filename: filename,
+        ext: ext,
+      );
+      if (mounted) {
+        final AppLocalizations l10n = AppLocalizations.of(context)!;
+        MessageService.showInfo(
+          context,
+          '${l10n.translationQueueDownloads}: ${_downloadFormatButtonLabel(fileType, l10n)}',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showWarning(
+          context,
+          AppLocalizations.of(context)!.translationQueueActionFailed(e),
+        );
+      }
+    }
+  }
+
+  String _stripExtension(String name) {
+    final int dot = name.lastIndexOf('.');
+    if (dot <= 0) return name;
+    return name.substring(0, dot);
+  }
+
+  bool _canCancel(String? status) {
+    final String s = (status ?? '').toLowerCase();
+    return s == 'queued' ||
+        s == 'processing' ||
+        s == 'pending' ||
+        s == 'running';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final ThemeData theme = Theme.of(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.translationQueueTitle),
+        leadingWidth: 220,
+        leading: Row(
+          children: <Widget>[
+            IconButton(
+              tooltip: l10n.homeNavHome,
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => context.go(AppRouter.homeRoute),
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          IconButton(
+            tooltip: l10n.translationQueueRefresh,
+            icon: _loading
+                ? SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  )
+                : const Icon(Icons.refresh),
+            onPressed: _loading ? null : _refresh,
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => context.push(
+          '${AppRouter.translationRoute}?execution_mode=queued',
+        ),
+        icon: const Icon(Icons.add),
+        label: Text(l10n.translationQueueNewQueuedTask),
+      ),
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Text(
+                l10n.translationQueueHint,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            if (_loadError != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  l10n.translationQueueLoadFailed(_loadError!),
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ),
+            Expanded(
+              child: _tasks.isEmpty && _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _tasks.isEmpty
+                      ? Center(child: Text(l10n.translationQueueEmpty))
+                      : ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 88),
+                      itemCount: _tasks.length,
+                      itemBuilder: (BuildContext context, int index) {
+                        final Map<String, dynamic> row = _tasks[index];
+                        final String taskId =
+                            row['task_id']?.toString() ?? '';
+                        final String name =
+                            row['original_filename']?.toString() ??
+                                taskId;
+                        final String status =
+                            row['status']?.toString() ?? '';
+                        final dynamic progressRaw = row['progress'];
+                        final int progress = progressRaw is num
+                            ? progressRaw.toInt().clamp(0, 100)
+                            : 0;
+                        final String? mode =
+                            row['execution_mode']?.toString();
+                        final dynamic qp = row['queue_position'];
+                        final Map<String, dynamic>? downloads = row['downloads']
+                                is Map
+                            ? Map<String, dynamic>.from(
+                                row['downloads'] as Map<dynamic, dynamic>,
+                              )
+                            : null;
+                        final List<MapEntry<String, dynamic>> downloadEntries =
+                            downloads == null || downloads.isEmpty
+                                ? <MapEntry<String, dynamic>>[]
+                                : (downloads.entries.toList()
+                                  ..sort(
+                                    (MapEntry<String, dynamic> a,
+                                            MapEntry<String, dynamic> b) =>
+                                        _downloadFormatSortOrder(a.key).compareTo(
+                                          _downloadFormatSortOrder(b.key),
+                                        ),
+                                  ));
+
+                        final bool inMemory = row['in_memory'] != false;
+
+                        return Card(
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  name,
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: <Widget>[
+                                    Chip(
+                                      label: Text(
+                                        '$status · $progress%',
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                      visualDensity: VisualDensity.compact,
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    if (mode == 'queued')
+                                      Chip(
+                                        label: Text(
+                                          l10n.translationQueueExecutionModeQueued,
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                        visualDensity: VisualDensity.compact,
+                                        materialTapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                      )
+                                    else if (mode == 'immediate')
+                                      Chip(
+                                        label: Text(
+                                          l10n.translationQueueExecutionModeImmediate,
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                        visualDensity: VisualDensity.compact,
+                                        materialTapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                    if (qp != null && qp is num && qp > 0)
+                                      Chip(
+                                        label: Text(
+                                          l10n.translationQueuePositionLabel(
+                                            qp.toInt(),
+                                          ),
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                        visualDensity: VisualDensity.compact,
+                                        materialTapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                  ],
+                                ),
+                                if ((row['message']?.toString() ?? '')
+                                    .isNotEmpty) ...<Widget>[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    row['message'].toString(),
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                                if (downloadEntries.isNotEmpty) ...<Widget>[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    l10n.translationQueueDownloads,
+                                    style: theme.textTheme.labelMedium,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 4,
+                                    children: downloadEntries.map(
+                                      (MapEntry<String, dynamic> e) {
+                                        final String ft = e.key;
+                                        final String url = e.value.toString();
+                                        return OutlinedButton(
+                                          onPressed: () => _download(
+                                            taskId,
+                                            ft,
+                                            url,
+                                            name,
+                                          ),
+                                          child: Text(
+                                            _downloadFormatButtonLabel(ft, l10n),
+                                          ),
+                                        );
+                                      },
+                                    ).toList(),
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: <Widget>[
+                                    if (_canCancel(status) && inMemory)
+                                      TextButton(
+                                        onPressed: () => _cancel(taskId),
+                                        child: Text(l10n.translationQueueCancel),
+                                      ),
+                                    TextButton(
+                                      onPressed: () => _release(taskId),
+                                      child: Text(l10n.translationQueueRelease),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

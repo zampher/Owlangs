@@ -501,6 +501,42 @@ class StatusService:
         self._update_progress(task_id, operation, total, total, base_progress, progress_range)
         
         return results
+
+    def _stash_only_status_payload(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Build status JSON when the task is no longer in memory but stashed outputs exist.
+        Matches download_service stash fallback so GET /service/status and GET /service/download agree.
+        """
+        from backend.app.services.translation.translation_result_stash import (
+            get_stashed_file_path,
+            load_meta,
+        )
+
+        meta = load_meta(task_id)
+        if not meta:
+            return None
+        files_map = meta.get("files") or {}
+        if not isinstance(files_map, dict) or not files_map:
+            return None
+        downloads: Dict[str, str] = {}
+        for file_type in list(files_map.keys()):
+            path = get_stashed_file_path(task_id, file_type)
+            if path and os.path.isfile(path):
+                downloads[file_type] = f"/service/download/{task_id}/{file_type}"
+        if not downloads:
+            return None
+        return {
+            "task_id": task_id,
+            "status": "completed",
+            "message": "Translated outputs available for download.",
+            "progress": 100,
+            "original_filename": meta.get("original_filename"),
+            "download_ready": True,
+            "downloads": downloads,
+            "attachments": {},
+            "in_memory": False,
+            "results_stashed": True,
+        }
     
     async def get_status(self, task_id: str):
         """
@@ -517,6 +553,9 @@ class StatusService:
         """
         task_state = self.task_manager.get_task(task_id)
         if task_state is None:
+            stash_payload = self._stash_only_status_payload(task_id)
+            if stash_payload is not None:
+                return JSONResponse(content=stash_payload)
             raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
 
         # Drain progress from language detection worker (multiprocessing) so response has latest progress.
@@ -552,6 +591,9 @@ class StatusService:
             task_state = self.task_manager.get_task(task_id)
 
         if task_state is None:
+            stash_payload = self._stash_only_status_payload(task_id)
+            if stash_payload is not None:
+                return JSONResponse(content=stash_payload)
             raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
         # Create a copy for response (to avoid modifying original)
         task_state = task_state.copy()
@@ -750,34 +792,51 @@ class StatusService:
                 downloads["pdf"] = f"/service/download/{task_id}/pdf"
                 logger.info(LogModule.WORKFLOW, f"[STATUS] Added PDF download link for task {task_id}: layout-based PDF available (will be generated on-demand)")
         
-        # When task is completed but no files were pre-generated (on-demand generation), add download links
-        # so the frontend shows Export/Download buttons; files will be generated when user clicks.
+        # Completed tasks: merge full on-demand export palette (docx/html/md[/pdf]) even when some formats
+        # are already materialized under downloadable_files — otherwise the queue only showed one button.
         status_lower = (task_state.get("status") or "").lower()
-        if status_lower == "completed" and not downloads:
-            if not workflow_type:
+        if status_lower == "completed":
+            wt = workflow_type
+            if not wt:
                 segs_data = task_state.get("translation_segments")
                 if isinstance(segs_data, dict):
                     meta = segs_data.get("metadata", {})
                     if isinstance(meta, dict):
-                        workflow_type = meta.get("workflow_type")
-            if not workflow_type and original_filename:
+                        wt = meta.get("workflow_type")
+            if not wt and original_filename:
                 ext = (original_filename or "").lower().split(".")[-1] if "." in (original_filename or "") else ""
                 if ext == "md":
-                    workflow_type = "markdown_based"
+                    wt = "markdown_based"
                 elif ext == "txt":
-                    workflow_type = "txt"
-            # For PDF translation tasks, ensure on-demand links when metadata is missing (e.g. race at completion)
-            if not workflow_type and is_pdf_file:
-                workflow_type = "markdown_based"
-            if workflow_type == "markdown_based":
+                    wt = "txt"
+            if not wt and is_pdf_file:
+                wt = "markdown_based"
+            if wt == "markdown_based":
                 allowed = ALLOWED_DOWNLOAD_TYPES_PDF if (is_pdf_file and has_layout_for_pdf and not is_format_conversion) else ALLOWED_DOWNLOAD_TYPES["markdown_based"]
+                before_ct = len(downloads)
                 for ft in allowed:
-                    downloads[ft] = f"/service/download/{task_id}/{ft}"
-                logger.info(LogModule.WORKFLOW, f"[STATUS] Task {task_id}: added on-demand download links for markdown_based (status=completed): {list(downloads.keys())}")
-            elif workflow_type == "txt":
+                    downloads.setdefault(ft, f"/service/download/{task_id}/{ft}")
+                # Second MD export: images as files inside a ZIP (same route, embed_images=false)
+                downloads.setdefault(
+                    "md_zip",
+                    f"/service/download/{task_id}/md?embed_images=false",
+                )
+                if len(downloads) > before_ct:
+                    logger.info(
+                        LogModule.WORKFLOW,
+                        f"[STATUS] Task {task_id}: merged on-demand palette for markdown_based (status=completed): {list(downloads.keys())}",
+                    )
+            elif wt == "txt":
+                before_ct = len(downloads)
                 for ft in ALLOWED_DOWNLOAD_TYPES["txt"]:
-                    downloads[ft] = f"/service/download/{task_id}/{ft}"
-                logger.info(LogModule.WORKFLOW, f"[STATUS] Task {task_id}: added on-demand download links for txt workflow: {list(downloads.keys())}")
+                    downloads.setdefault(ft, f"/service/download/{task_id}/{ft}")
+                if len(downloads) > before_ct:
+                    logger.info(
+                        LogModule.WORKFLOW,
+                        f"[STATUS] Task {task_id}: merged on-demand palette for txt (status=completed): {list(downloads.keys())}",
+                    )
+            if wt:
+                workflow_type = wt
         
         attachments = {}
         if task_state.get("download_ready") and task_state.get("attachment_files"):

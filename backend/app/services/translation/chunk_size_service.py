@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 from logger import unified_logger as logger
 from logger.logger import LogModule
+from backend.config.platforms_config import platform_type_uses_llm_chunk_concurrent
 
 
 class ChunkSizeService:
@@ -58,7 +59,11 @@ class ChunkSizeService:
                 from backend.config.platforms_config import get_platforms_config
                 platforms_config = get_platforms_config()
                 platform_cfg = platforms_config.platforms.get(platform_key)
-                if platform_cfg and hasattr(platform_cfg, 'chunk_size'):
+                if (
+                    platform_cfg
+                    and hasattr(platform_cfg, "chunk_size")
+                    and platform_type_uses_llm_chunk_concurrent(platform_cfg.platform_type)
+                ):
                     platform_chunk_size = platform_cfg.chunk_size
                     if platform_chunk_size and platform_chunk_size != 0:
                         if task_id:

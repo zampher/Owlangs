@@ -241,11 +241,43 @@
   "homeBackendStatusDisconnected": "バックエンドから切断されました。再試行してください。",
   "homeBackendStatusUnknown": "バックエンドに接続中...",
   "homeBackendRetry": "再試行",
-  "homeNavTranslate": "翻訳",
+  "homeNavTranslate": "イマーシブ翻訳",
+  "homeNavTranslationQueue": "翻訳キュー",
   "homeNavAnonymize": "匿名化",
   "homeNavSettings": "設定",
   "homeNavDonateHelp": "寄付＆ヘルプ",
   "homeNavHome": "ホーム",
+  "translationQueueTitle": "翻訳キュー",
+  "translationQueueHint": "タスクは自動更新されます。完了後にダウンロードできます。",
+  "translationQueueEmpty": "翻訳タスクはありません。",
+  "translationQueueNewQueuedTask": "キューに新規翻訳",
+  "translationQueuedStarted": "キューに追加しました。ここで進捗を確認できます。",
+  "translationQueueRefresh": "更新",
+  "translationQueueCancel": "キャンセル",
+  "translationQueueRelease": "一覧から削除",
+  "translationQueueDownloads": "ダウンロード",
+  "translationQueueDownloadMdEmbedded": "MD（埋め込み）",
+  "translationQueueDownloadMdZip": "MD（ZIP）",
+  "translationQueueExecutionModeQueued": "キュー",
+  "translationQueueExecutionModeImmediate": "即時",
+  "translationQueuePositionLabel": "キュー順 #{position}",
+  "@translationQueuePositionLabel": {
+    "placeholders": {
+      "position": {}
+    }
+  },
+  "translationQueueLoadFailed": "タスクの読み込みに失敗しました: {error}",
+  "@translationQueueLoadFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "translationQueueActionFailed": "操作に失敗しました: {error}",
+  "@translationQueueActionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "homeFeatureUnderDevelopment": "この機能は開発中です。",
   "homeAnonymizeNotSupportedVersion": "まだサポートされていません。v{version}で利用可能になります。",
   "homeAnonymizeInDevelopment": "匿名化は開発中で、まだ利用できません。",

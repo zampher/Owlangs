@@ -7,12 +7,17 @@ Translation routes.
 Handles translation task submission, cancellation, and resource release.
 """
 
-from fastapi import APIRouter, HTTPException, Body
+from typing import Any, Dict, List
+
+from auth.models import User
+from auth.routes import get_current_user
+from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
 from backend.app.models.service import TranslateServiceRequest
 from backend.app.services.task import task_manager
 from backend.app.services.translation import TranslationService
+from backend.app.services.translation.translation_queue_utils import queue_position_for_task
 from logger import unified_logger as logger
 from logger.logger import LogModule
 
@@ -43,7 +48,10 @@ Receive a JSON request containing file content (Base64 encoded) and workflow par
         500: {"description": "Unknown error occurred while starting background task."},
     }
 )
-async def service_translate(request: TranslateServiceRequest = Body(..., description="Detailed parameters and file content for translation task.")):
+async def service_translate(
+    request: TranslateServiceRequest = Body(..., description="Detailed parameters and file content for translation task."),
+    user: User = Depends(get_current_user),
+):
     """Submit a translation task."""
     import base64
     import binascii
@@ -95,18 +103,22 @@ async def service_translate(request: TranslateServiceRequest = Body(..., descrip
             else unified_config.smart_glossary_matching_enabled
         )
         
+        owner_username = user.username if user.is_authenticated else None
         logger.info(
             LogModule.ROUTE,
             f"[IMPORT] Starting translation task: task_id={task_id}, filename={request.file_name}, "
-            f"file_size={len(file_contents)} bytes, smart_glossary={effective_smart_glossary}"
+            f"file_size={len(file_contents)} bytes, smart_glossary={effective_smart_glossary}, "
+            f"execution_mode={request.execution_mode}, owner_username={owner_username!r}"
         )
-        
+
         # Use TranslationService instead of app_routes_service function
         response_data = await translation_service.start_translation_task(
             task_id=task_id,
             payload=request.payload,
             file_contents=file_contents,
-            original_filename=request.file_name
+            original_filename=request.file_name,
+            execution_mode=request.execution_mode,
+            owner_username=owner_username,
         )
         
         logger.info(LogModule.ROUTE, f"[IMPORT] Translation task started successfully: task_id={task_id}, response={response_data}")
@@ -137,6 +149,61 @@ async def service_translate(request: TranslateServiceRequest = Body(..., descrip
             exc_info=True
         )
         raise HTTPException(status_code=500, detail=f"Failed to start translation task: {str(e)}")
+
+
+@router.get(
+    "/tasks",
+    summary="List translation tasks (in-memory and stashed results)",
+    description="""
+Returns recent translation tasks. Includes in-process tasks and, for each user, on-disk stashed
+outputs (see translation result stash) when the in-memory task is gone.
+
+Authenticated users only see tasks they submitted. Unauthenticated / guest sessions see all tasks.
+""",
+)
+async def list_translation_tasks(
+    limit: int = 50,
+    user: User = Depends(get_current_user),
+):
+    """List translation tasks visible to the current viewer."""
+    limit = max(1, min(limit, 500))
+    all_tasks = task_manager.get_all_tasks()
+    guest_view = not user.is_authenticated
+    items: List[Dict[str, Any]] = []
+    for tid, st in all_tasks.items():
+        if not guest_view:
+            if st.get("owner_username") != user.username:
+                continue
+        row: Dict[str, Any] = {
+            "task_id": tid,
+            "status": st.get("status"),
+            "message": st.get("message"),
+            "progress": st.get("progress"),
+            "original_filename": st.get("original_filename"),
+            "execution_mode": st.get("execution_mode"),
+            "is_processing": st.get("is_processing"),
+            "download_ready": st.get("download_ready"),
+            "task_start_time": st.get("task_start_time"),
+            "queued_at": st.get("queued_at"),
+            "owner_username": st.get("owner_username"),
+            "in_memory": True,
+        }
+        qp = queue_position_for_task(all_tasks, tid)
+        if qp is not None:
+            row["queue_position"] = qp
+        items.append(row)
+    memory_ids = {x["task_id"] for x in items}
+    try:
+        from backend.app.services.translation.translation_result_stash import list_summaries_visible_to_user
+
+        for row in list_summaries_visible_to_user(guest_view, user.username):
+            if row.get("task_id") not in memory_ids:
+                items.append(row)
+    except Exception as e:
+        logger.warning(LogModule.ROUTE, f"[TASKS] Failed to merge stashed results: {e}")
+    items.sort(key=lambda x: float(x.get("task_start_time") or 0.0), reverse=True)
+    items = items[:limit]
+    return JSONResponse(content={"tasks": items, "limit": limit})
 
 
 @router.post(
@@ -173,16 +240,28 @@ async def service_release_task(task_id: str):
     """Release task resources."""
     import os
     import shutil
-    
+
+    from backend.app.services.translation.translation_result_stash import delete_task_stash, load_meta
+
     logger.info(LogModule.ROUTE, f"[RELEASE-TASK] Release task resources request: task_id={task_id}")
-    
-    if task_manager.get_task(task_id) is None:
+
+    task_state = task_manager.get_task(task_id)
+
+    if task_state is None:
+        if load_meta(task_id):
+            delete_task_stash(task_id)
+            logger.info(LogModule.ROUTE, f"[RELEASE-TASK] Removed stashed results only: task_id={task_id}")
+            return JSONResponse(
+                content={
+                    "released": True,
+                    "message": f"Stashed results for task '{task_id}' were removed.",
+                }
+            )
         logger.warning(LogModule.ROUTE, f"[RELEASE-TASK] Task ID '{task_id}' not found")
         return JSONResponse(status_code=404, content={"released": False, "message": f"Task ID '{task_id}' not found."})
-    
-    task_state = task_manager.get_task(task_id)
+
     message_parts = []
-    
+
     if task_state and task_state.get("is_processing") and task_state.get("current_task_ref"):
         try:
             # Task is in progress, will try to cancel before release
@@ -204,7 +283,10 @@ async def service_release_task(task_id: str):
             except Exception as e:
                 message_parts.append(f"Error cleaning up temporary files: {e}.")
                 logger.warning(LogModule.ROUTE, f"[RELEASE-TASK] Failed to clean up temp directory for task {task_id}: {e}")
-    
+
+    if delete_task_stash(task_id):
+        message_parts.append("Cached translation outputs removed.")
+
     task_manager.cleanup_task_resources(task_id)
     message_parts.append(f"Resources for task '{task_id}' have been released.")
     logger.info(LogModule.ROUTE, f"[RELEASE-TASK] Task resources released successfully: task_id={task_id}")

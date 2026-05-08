@@ -841,7 +841,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeBackendRetry => 'Retry';
 
   @override
-  String get homeNavTranslate => 'Translate';
+  String get homeNavTranslate => 'Immersive translate';
+
+  @override
+  String get homeNavTranslationQueue => 'Translation queue';
 
   @override
   String get homeNavAnonymize => 'Anonymize';
@@ -854,6 +857,62 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get homeNavHome => 'Home';
+
+  @override
+  String get translationQueueTitle => 'Translation queue';
+
+  @override
+  String get translationQueueHint =>
+      'Tasks refresh automatically. Downloads appear when a task completes.';
+
+  @override
+  String get translationQueueEmpty => 'No translation tasks yet.';
+
+  @override
+  String get translationQueueNewQueuedTask => 'New queued translation';
+
+  @override
+  String get translationQueuedStarted =>
+      'Task added to the queue. Track it here.';
+
+  @override
+  String get translationQueueRefresh => 'Refresh';
+
+  @override
+  String get translationQueueCancel => 'Cancel task';
+
+  @override
+  String get translationQueueRelease => 'Remove from list';
+
+  @override
+  String get translationQueueDownloads => 'Downloads';
+
+  @override
+  String get translationQueueDownloadMdEmbedded => 'MD (embedded)';
+
+  @override
+  String get translationQueueDownloadMdZip => 'MD (ZIP)';
+
+  @override
+  String get translationQueueExecutionModeQueued => 'Queued';
+
+  @override
+  String get translationQueueExecutionModeImmediate => 'Immediate';
+
+  @override
+  String translationQueuePositionLabel(Object position) {
+    return 'Queue #$position';
+  }
+
+  @override
+  String translationQueueLoadFailed(Object error) {
+    return 'Failed to load tasks: $error';
+  }
+
+  @override
+  String translationQueueActionFailed(Object error) {
+    return 'Action failed: $error';
+  }
 
   @override
   String get homeFeatureUnderDevelopment =>

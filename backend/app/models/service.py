@@ -429,6 +429,10 @@ class TranslateServiceRequest(BaseModel):
     file_content: str = Field(..., description="Base64 encoded file content.", examples=["JVBERi0xLjQK..."])
     payload: TranslatePayload = Field(..., description="Payload containing workflow type and corresponding parameters.")
     smart_glossary_matching: Optional[bool] = Field(None, description="Override system smart glossary matching switch. If null, use global config.")
+    execution_mode: Literal["immediate", "queued"] = Field(
+        default="immediate",
+        description="immediate: start processing now (legacy). queued: wait for in-process worker pool.",
+    )
 
     class Config:
         json_schema_extra = {

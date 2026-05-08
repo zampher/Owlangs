@@ -881,15 +881,26 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               ],
             ),
             actions: <Widget>[
-              // Translate button
+              // Immersive translate (flow tab)
               _buildActionButton(
                 icon: Icons.translate,
                 label: l10n.homeNavTranslate,
+                width: 92,
+                maxLabelLines: 2,
                 onPressed: _isCreatingFlow
                     ? null
                     : () => _createFlowWithProtection(
                           TaskFlow.translate,
                         ),
+              ),
+              const SizedBox(width: 4),
+              // Translation queue (list + poll + download)
+              _buildActionButton(
+                icon: Icons.queue_play_next_outlined,
+                label: l10n.homeNavTranslationQueue,
+                width: 92,
+                maxLabelLines: 2,
+                onPressed: () => context.push(AppRouter.translationQueueRoute),
               ),
               const SizedBox(width: 4),
               // Anonymize button - visible only for Pro users on Web
@@ -1297,49 +1308,56 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     VoidCallback? onPressed,
     double? width,
     bool highlight = false,
-  }) =>
-      Card(
-        elevation: highlight ? 4 : 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(4),
-          side: highlight
-              ? BorderSide(color: Colors.orange.shade400, width: 2)
-              : const BorderSide(color: Colors.transparent, width: 0),
-        ),
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(4),
-          child: Container(
-            key: key,
-            width: width ?? 70,
-            height: 70,
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Icon(
-                  icon,
-                  color: Theme.of(context).colorScheme.primary,
-                  size: 32, // Match Quick Start icon size
+    int maxLabelLines = 1,
+    double? height,
+  }) {
+    final double boxHeight =
+        height ?? (maxLabelLines > 1 ? 84 : 70);
+    return Card(
+      elevation: highlight ? 4 : 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(4),
+        side: highlight
+            ? BorderSide(color: Colors.orange.shade400, width: 2)
+            : const BorderSide(color: Colors.transparent, width: 0),
+      ),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          key: key,
+          width: width ?? 70,
+          height: boxHeight,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(
+                icon,
+                color: Theme.of(context).colorScheme.primary,
+                size: 32, // Match Quick Start icon size
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  height: maxLabelLines > 1 ? 1.15 : null,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+                textAlign: TextAlign.center,
+                softWrap: true,
+                maxLines: maxLabelLines,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 // Deprecated placeholder tile removed in favor of _SelectablePhase

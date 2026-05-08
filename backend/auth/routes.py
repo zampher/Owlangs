@@ -3140,8 +3140,25 @@ async def batch_update_settings(
                             if not isinstance(p_val, dict):
                                 logger.warning(LogModule.AUTH, f"Invalid platform config for {p_key}, skipping")
                                 continue
-                            from backend.config.platforms_config import AIPlatformConfig
+                            from backend.config.platforms_config import (
+                                AIPlatformConfig,
+                                platform_type_uses_llm_chunk_concurrent,
+                            )
                             try:
+                                _pt = p_val.get('platform_type', 'llm')
+                                if platform_type_uses_llm_chunk_concurrent(_pt):
+                                    _cs = (
+                                        int(p_val['chunk_size'])
+                                        if p_val.get('chunk_size') is not None
+                                        else 3000
+                                    )
+                                    _cc = (
+                                        int(p_val['concurrent'])
+                                        if p_val.get('concurrent') is not None
+                                        else 5
+                                    )
+                                else:
+                                    _cs, _cc = 3000, 5
                                 cfg = AIPlatformConfig(
                                     name=p_val.get('name', ''),
                                     url=p_val.get('url', ''),
@@ -3154,15 +3171,15 @@ async def batch_update_settings(
                                     thinking_mode=p_val.get('thinking_mode', 'disable'),
                                     recommended_tokens=p_val.get('recommended_tokens'),
                                     performance_note=p_val.get('performance_note'),
-                                    platform_type=p_val.get('platform_type', 'llm'),
+                                    platform_type=_pt,
                                     parser_subtype=p_val.get('parser_subtype'),
                                     api_protocol=p_val.get('api_protocol', 'openai'),
                                     requires_api_key=p_val.get('requires_api_key', True),
                                     description=p_val.get('description'),
                                     token_link=p_val.get('token_link'),
                                     api_endpoints=p_val.get('api_endpoints') if p_val.get('api_endpoints') is not None else {},
-                                    chunk_size=int(p_val.get('chunk_size', 3000)) if p_val.get('chunk_size') is not None else None,
-                                    concurrent=int(p_val.get('concurrent', 5)) if p_val.get('concurrent') is not None else None,
+                                    chunk_size=_cs,
+                                    concurrent=_cc,
                                 )
                                 platforms_config.update_platform_config(p_key, cfg)
                                 logger.info(LogModule.AUTH, f"[AI_PLATFORMS] Updated platform '{p_key}': url={cfg.url}, model={cfg.model}")
@@ -3268,14 +3285,18 @@ async def batch_update_settings(
                         logger.warning(LogModule.AUTH, f"[SETTINGS] Failed to sync {backend_key} to app_config.json: {e}")
                         # Continue even if sync fails (user profile is still saved)
                     
-                    # Also sync chunk_size and concurrent to the default platform config (per-platform settings)
+                    # Also sync chunk_size and concurrent to the default LLM platform (per-platform settings)
                     if backend_key in ['chunk_size', 'concurrent']:
                         try:
+                            from backend.config.platforms_config import platform_type_uses_llm_chunk_concurrent
+
                             platforms_config = get_platforms_config()
                             default_platform = platforms_config.default_platform
                             if default_platform:
                                 platform_cfg = platforms_config.get_platform_config(default_platform)
-                                if platform_cfg:
+                                if platform_cfg and platform_type_uses_llm_chunk_concurrent(
+                                    platform_cfg.platform_type
+                                ):
                                     if backend_key == 'chunk_size':
                                         platform_cfg.chunk_size = int(value) if value else 3000
                                         logger.info(LogModule.AUTH, f"[SETTINGS] Synced chunk_size={value} to platform '{default_platform}' config")

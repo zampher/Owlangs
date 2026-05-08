@@ -16,6 +16,7 @@ from logger.logger import LogModule
 from backend.app.services.platform.platform_service import platform_service
 from backend.app.services.translation.chunk_size_service import chunk_size_service
 from backend.app.services.translation.prompt_service import prompt_service
+from backend.config.platforms_config import platform_type_uses_llm_chunk_concurrent
 from translator import default_params
 
 # Translator configs
@@ -98,7 +99,11 @@ class WorkflowConfigBuilder:
                 from backend.config.platforms_config import get_platforms_config
                 platforms_config = get_platforms_config()
                 platform_cfg = platforms_config.platforms.get(platform_key)
-                if platform_cfg and hasattr(platform_cfg, 'concurrent'):
+                if (
+                    platform_cfg
+                    and hasattr(platform_cfg, "concurrent")
+                    and platform_type_uses_llm_chunk_concurrent(platform_cfg.platform_type)
+                ):
                     platform_concurrent = platform_cfg.concurrent
                     if platform_concurrent is not None and platform_concurrent > 0:
                         logger.info(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={platform_concurrent} from platform '{platform_key}' config")

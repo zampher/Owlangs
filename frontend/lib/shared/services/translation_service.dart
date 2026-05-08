@@ -46,10 +46,12 @@ class TranslationService {
 
   /// 提交翻译任务
   /// fileBytes: 原文件字节；fileName: 原文件名；payload: 工作流及参数
+  /// execution_mode: `immediate` (default) or `queued` (FIFO worker pool).
   Future<Map<String, dynamic>> submitTask({
     required List<int> fileBytes,
     required String fileName,
     required Map<String, dynamic> payload,
+    String executionMode = 'immediate',
   }) async {
     // Use long timeout for file upload and translation task submission
     final dio = _buildAuthedDio(useLongTimeout: true);
@@ -57,6 +59,7 @@ class TranslationService {
       'file_content': base64Encode(fileBytes),
       'file_name': fileName,
       'payload': payload,
+      'execution_mode': executionMode,
     };
     final resp = await dio.post(
       '/service/translate',
@@ -67,6 +70,20 @@ class TranslationService {
       ),
     );
     return (resp.data as Map).cast<String, dynamic>();
+  }
+
+  /// List translation tasks for the current session (in-memory + stashed outputs).
+  Future<Map<String, dynamic>> listTranslationTasks({int limit = 50}) async {
+    final dio = _buildAuthedDio();
+    final resp = await dio.get<Map<String, dynamic>>(
+      '/service/tasks',
+      queryParameters: <String, dynamic>{'limit': limit},
+    );
+    final data = resp.data;
+    if (data == null) {
+      return <String, dynamic>{'tasks': <dynamic>[], 'limit': limit};
+    }
+    return data;
   }
 
   /// 查询任务状态

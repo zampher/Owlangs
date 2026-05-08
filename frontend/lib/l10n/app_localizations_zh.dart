@@ -804,7 +804,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeBackendRetry => '重试';
 
   @override
-  String get homeNavTranslate => '翻译';
+  String get homeNavTranslate => '沉浸式翻译';
+
+  @override
+  String get homeNavTranslationQueue => '翻译队列';
 
   @override
   String get homeNavAnonymize => '匿名化';
@@ -817,6 +820,60 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get homeNavHome => '主页';
+
+  @override
+  String get translationQueueTitle => '翻译队列';
+
+  @override
+  String get translationQueueHint => '列表会自动刷新，完成后可下载译文。';
+
+  @override
+  String get translationQueueEmpty => '暂无翻译任务。';
+
+  @override
+  String get translationQueueNewQueuedTask => '新建队列翻译';
+
+  @override
+  String get translationQueuedStarted => '任务已加入队列，可在此查看进度。';
+
+  @override
+  String get translationQueueRefresh => '刷新';
+
+  @override
+  String get translationQueueCancel => '取消任务';
+
+  @override
+  String get translationQueueRelease => '从列表移除';
+
+  @override
+  String get translationQueueDownloads => '下载';
+
+  @override
+  String get translationQueueDownloadMdEmbedded => 'MD（内嵌图片）';
+
+  @override
+  String get translationQueueDownloadMdZip => 'MD（ZIP 图片包）';
+
+  @override
+  String get translationQueueExecutionModeQueued => '队列';
+
+  @override
+  String get translationQueueExecutionModeImmediate => '即时';
+
+  @override
+  String translationQueuePositionLabel(Object position) {
+    return '排队位置 #$position';
+  }
+
+  @override
+  String translationQueueLoadFailed(Object error) {
+    return '加载任务失败：$error';
+  }
+
+  @override
+  String translationQueueActionFailed(Object error) {
+    return '操作失败：$error';
+  }
 
   @override
   String get homeFeatureUnderDevelopment => '此功能正在开发中。';

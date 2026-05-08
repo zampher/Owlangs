@@ -258,11 +258,43 @@
   "homeBackendStatusUnknown": "Connecting to backend...",
   "homeBackendRetry": "Retry",
 
-  "homeNavTranslate": "Translate",
+  "homeNavTranslate": "Immersive translate",
+  "homeNavTranslationQueue": "Translation queue",
   "homeNavAnonymize": "Anonymize",
   "homeNavSettings": "Settings",
   "homeNavDonateHelp": "Donate & Help",
   "homeNavHome": "Home",
+  "translationQueueTitle": "Translation queue",
+  "translationQueueHint": "Tasks refresh automatically. Downloads appear when a task completes.",
+  "translationQueueEmpty": "No translation tasks yet.",
+  "translationQueueNewQueuedTask": "New queued translation",
+  "translationQueuedStarted": "Task added to the queue. Track it here.",
+  "translationQueueRefresh": "Refresh",
+  "translationQueueCancel": "Cancel task",
+  "translationQueueRelease": "Remove from list",
+  "translationQueueDownloads": "Downloads",
+  "translationQueueDownloadMdEmbedded": "MD (embedded)",
+  "translationQueueDownloadMdZip": "MD (ZIP)",
+  "translationQueueExecutionModeQueued": "Queued",
+  "translationQueueExecutionModeImmediate": "Immediate",
+  "translationQueuePositionLabel": "Queue #{position}",
+  "@translationQueuePositionLabel": {
+    "placeholders": {
+      "position": {}
+    }
+  },
+  "translationQueueLoadFailed": "Failed to load tasks: {error}",
+  "@translationQueueLoadFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "translationQueueActionFailed": "Action failed: {error}",
+  "@translationQueueActionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "homeFeatureUnderDevelopment": "This feature is under development.",
   "homeAnonymizeNotSupportedVersion": "Not supported yet. Will be available in v{version}.",
   "homeAnonymizeInDevelopment": "Anonymization is in development and not yet available.",

@@ -14,7 +14,7 @@ from functools import partial
 import shutil
 import tempfile
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from pathlib import Path
 
 from logger import unified_logger as logger
@@ -72,6 +72,97 @@ class TranslationService:
         self.output_generator = OutputGenerator(task_manager)
         self.source_preview_service = SourcePreviewService(task_manager)
         self.translation_segment_service = TranslationSegmentService(task_manager)
+
+    def _collect_failed_segment_indices_for_retry(self, task_state: Dict[str, Any]) -> List[int]:
+        """Indices that need batch retranslation (aligned with frontend Retry filters)."""
+        out: List[int] = []
+        data = task_state.get("translation_segments") or {}
+        segments = data.get("segments") if isinstance(data, dict) else data
+        if not isinstance(segments, list):
+            return out
+        for seg in segments:
+            if not isinstance(seg, dict):
+                continue
+            idx = seg.get("segment_index")
+            if idx is None:
+                continue
+            is_failed = seg.get("is_failed", False)
+            needs_retry = seg.get("needs_retry", False)
+            is_excluded = seg.get("is_excluded", False)
+            status = seg.get("status")
+            if (is_failed or needs_retry) and not is_excluded and status != "cleared":
+                try:
+                    out.append(int(idx))
+                except (TypeError, ValueError):
+                    continue
+        return out
+
+    async def _queue_auto_retry_failed_segments(
+        self,
+        task_id: str,
+        task_state: Dict[str, Any],
+        payload: Any,
+    ) -> None:
+        """
+        Queued tasks have no immersive UI: batch-retry failed segments automatically,
+        same API as frontend ``retranslateSegmentsBatch``, up to payload.retry rounds.
+        """
+        from utils.translation_segments import retranslate_segments_batch
+
+        retry_raw = getattr(payload, "retry", None)
+        if retry_raw is None and isinstance(payload, dict):
+            retry_raw = payload.get("retry")
+        try:
+            max_rounds = int(retry_raw) if retry_raw is not None else 3
+        except (TypeError, ValueError):
+            max_rounds = 3
+        max_rounds = max(1, min(max_rounds, 10))
+
+        platform_key = getattr(payload, "ai_platform", None) or getattr(payload, "platform_type", None)
+        if isinstance(payload, dict):
+            platform_key = platform_key or payload.get("ai_platform") or payload.get("platform_type")
+
+        to_lang = getattr(payload, "to_lang", None) or getattr(payload, "target_language", None)
+        if isinstance(payload, dict) and not to_lang:
+            to_lang = payload.get("to_lang") or payload.get("target_language")
+
+        for attempt in range(max_rounds):
+            indices = self._collect_failed_segment_indices_for_retry(task_state)
+            if not indices:
+                logger.info(
+                    LogModule.TRANS,
+                    f"[QUEUE-AUTO-RETRY] task={task_id} no failed segments left before round {attempt + 1}",
+                )
+                break
+            logger.info(
+                LogModule.TRANS,
+                f"[QUEUE-AUTO-RETRY] task={task_id} round {attempt + 1}/{max_rounds} "
+                f"batch-retry count={len(indices)}",
+            )
+            task_state["message"] = f"Auto-retry failed segments ({attempt + 1}/{max_rounds})..."
+            try:
+                self.task_manager.update_task(
+                    task_id,
+                    {"message": task_state["message"], "status": "processing"},
+                )
+            except Exception:
+                pass
+            try:
+                await retranslate_segments_batch(
+                    task_id,
+                    indices,
+                    platform_key=platform_key,
+                    task_state=task_state,
+                    user_prompt=None,
+                    to_lang_from_frontend=to_lang,
+                )
+            except Exception as exc:
+                logger.error(
+                    LogModule.TRANS,
+                    f"[QUEUE-AUTO-RETRY] task={task_id} round {attempt + 1} error: {exc}",
+                    exc_info=True,
+                )
+                break
     
     async def _test_llm_connectivity(self, payload: Any, task_id: str, task_state: Dict[str, Any]) -> bool:
         """
@@ -244,12 +335,73 @@ class TranslationService:
             "retry": getattr(payload, "retry", 3) if hasattr(payload, "retry") else 3,
         }
     
+    async def _run_translation_task_wrapper(
+        self,
+        task_id: str,
+        payload: Any,
+        file_contents: bytes,
+        original_filename: str,
+        temp_dir: str,
+    ) -> None:
+        """Shared wrapper around process_translation_task with exception handling."""
+        try:
+            await self.process_translation_task(
+                task_id=task_id,
+                payload=payload,
+                file_contents=file_contents,
+                original_filename=original_filename,
+                temp_dir=temp_dir,
+            )
+        except NotImplementedError as not_impl_error:
+            task_state = self.task_manager.get_task(task_id)
+            if task_state and task_state.get("status") not in ["completed"]:
+                logger.warning(
+                    LogModule.WORKFLOW,
+                    f"Non-critical NotImplementedError in background task {task_id} (Windows limitation): {not_impl_error}",
+                )
+                if task_state.get("status") not in ["failed"]:
+                    self.task_manager.add_log(
+                        task_id,
+                        "warning",
+                        f"Non-critical cleanup error (Windows limitation): {str(not_impl_error)}",
+                    )
+            else:
+                logger.warning(
+                    LogModule.WORKFLOW,
+                    f"[PLAYWRIGHT] Task {task_id}: NotImplementedError during cleanup (Windows asyncio limitation, non-critical): {not_impl_error}",
+                )
+        except Exception as e:
+            logger.error(LogModule.WORKFLOW, f"Uncaught exception in background task {task_id}: {e}", exc_info=True)
+            task_state = self.task_manager.get_task(task_id)
+            if task_state and task_state.get("status") not in ["completed", "failed"]:
+                error_text = str(e)
+                if (
+                    "UNEXPECTED_EOF_WHILE_READING" in error_text
+                    or "EOF occurred in violation of protocol" in error_text
+                ):
+                    error_with_hint = (
+                        f"{error_text}. Please check your network and try disabling VPN/proxy, then retry."
+                    )
+                else:
+                    error_with_hint = error_text
+                task_state["status"] = "failed"
+                task_state["error"] = error_text
+                llm_error = task_state.get("llm_error")
+                if llm_error:
+                    task_state["message"] = f"Translation failed: {llm_error}"
+                else:
+                    task_state["message"] = f"Task error: {error_with_hint}"
+                self.task_manager.add_log(task_id, "error", f"Uncaught exception: {error_text}")
+    
     async def start_translation_task(
         self,
         task_id: str,
         payload: Any,
         file_contents: bytes,
-        original_filename: str
+        original_filename: str,
+        *,
+        execution_mode: str = "immediate",
+        owner_username: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Start a translation task in the background.
@@ -259,6 +411,8 @@ class TranslationService:
             payload: Task payload (workflow config, translation params, etc.)
             file_contents: File content bytes
             original_filename: Original filename
+            execution_mode: ``immediate`` runs as today; ``queued`` waits for in-process workers.
+            owner_username: Authenticated username for task list filtering; None for guest submissions.
             
         Returns:
             Response dictionary with task_id and status
@@ -344,7 +498,7 @@ class TranslationService:
         
         # Update task state with all necessary fields
         task_state.update({
-            "is_processing": True,
+            "is_processing": execution_mode != "queued",
             "status_message": "Task initializing...",
             "error_flag": False,
             "download_ready": False,
@@ -368,6 +522,8 @@ class TranslationService:
                 "total_segments": 0,
                 "ready": False,
             },
+            "execution_mode": execution_mode,
+            "owner_username": owner_username,
         })
         
         # Store page_count early so the frontend can show large-file warnings
@@ -382,54 +538,49 @@ class TranslationService:
         
         self.task_manager.add_log(task_id, "info", f"Created temporary directory: {temp_dir}")
         
-        # Start background processing task
+        if execution_mode == "queued":
+            task_state["queued_translation_payload"] = payload
+            task_state["queued_at"] = time.time()
+            task_state["status"] = "queued"
+            task_state["progress"] = 0
+            task_state["message"] = "Waiting in queue..."
+            self.task_manager.add_log(task_id, "info", "Task queued for background execution")
+            try:
+                from backend.app.services.translation.translation_execution_queue import enqueue_translation_task
+
+                await enqueue_translation_task(task_id)
+            except Exception as e:
+                logger.error(
+                    LogModule.WORKFLOW,
+                    f"[TRANSLATION-SERVICE] Failed to enqueue task: task_id={task_id}, error={e}",
+                    exc_info=True,
+                )
+                self.task_manager.cleanup_task_resources(task_id)
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                from fastapi import HTTPException
+
+                raise HTTPException(status_code=500, detail=f"Failed to enqueue translation task: {str(e)}")
+            return {
+                "task_started": True,
+                "task_id": task_id,
+                "execution_mode": "queued",
+                "message": "Translation task accepted and queued.",
+            }
+        
+        # Start background processing task (immediate mode)
         try:
             async def _task_wrapper():
-                """Wrapper to handle uncaught exceptions in background tasks."""
-                try:
-                    await self.process_translation_task(
-                        task_id=task_id,
-                        payload=payload,
-                        file_contents=file_contents,
-                        original_filename=original_filename,
-                        temp_dir=temp_dir
-                    )
-                except NotImplementedError as not_impl_error:
-                    # Windows asyncio limitation - Playwright cleanup errors are non-critical
-                    task_state = self.task_manager.get_task(task_id)
-                    if task_state and task_state.get("status") not in ["completed"]:
-                        logger.warning(LogModule.WORKFLOW, f"Non-critical NotImplementedError in background task {task_id} (Windows limitation): {not_impl_error}")
-                        if task_state.get("status") not in ["failed"]:
-                            self.task_manager.add_log(task_id, "warning", f"Non-critical cleanup error (Windows limitation): {str(not_impl_error)}")
-                    else:
-                        logger.warning(LogModule.WORKFLOW, f"[PLAYWRIGHT] Task {task_id}: NotImplementedError during cleanup (Windows asyncio limitation, non-critical): {not_impl_error}")
-                except Exception as e:
-                    logger.error(LogModule.WORKFLOW, f"Uncaught exception in background task {task_id}: {e}", exc_info=True)
-                    task_state = self.task_manager.get_task(task_id)
-                    if task_state and task_state.get("status") not in ["completed", "failed"]:
-                        error_text = str(e)
-                        # Append user-friendly hint for common SSL EOF issues (network / proxy related)
-                        if (
-                            "UNEXPECTED_EOF_WHILE_READING" in error_text
-                            or "EOF occurred in violation of protocol" in error_text
-                        ):
-                            error_with_hint = (
-                                f"{error_text}. Please check your network and try disabling VPN/proxy, then retry."
-                            )
-                        else:
-                            error_with_hint = error_text
-                        task_state["status"] = "failed"
-                        task_state["error"] = error_text
-                        # Preserve LLM platform error (e.g., 404, 401, balance) if available
-                        llm_error = task_state.get("llm_error")
-                        if llm_error:
-                            task_state["message"] = f"Translation failed: {llm_error}"
-                        else:
-                            task_state["message"] = f"Task error: {error_with_hint}"
-                        self.task_manager.add_log(task_id, "error", f"Uncaught exception: {error_text}")
-            
+                await self._run_translation_task_wrapper(
+                    task_id=task_id,
+                    payload=payload,
+                    file_contents=file_contents,
+                    original_filename=original_filename,
+                    temp_dir=temp_dir,
+                )
+
             task_ref = asyncio.create_task(_task_wrapper())
-            
+
             def task_done_callback(task):
                 """Callback to handle task completion and log any exceptions."""
                 try:
@@ -444,16 +595,17 @@ class TranslationService:
                     logger.info(LogModule.WORKFLOW, f"Background task {task_id} cancellation detected in callback")
                 except Exception as callback_error:
                     logger.warning(LogModule.WORKFLOW, f"Error in task done callback for {task_id}: {callback_error}")
-            
+
             task_ref.add_done_callback(task_done_callback)
             task_state["current_task_ref"] = task_ref
             task_state["is_processing"] = True
             task_state["started_at"] = asyncio.get_event_loop().time()
-            
+
             return {
                 "task_started": True,
                 "task_id": task_id,
-                "message": "Translation task started successfully, please wait..."
+                "execution_mode": "immediate",
+                "message": "Translation task started successfully, please wait...",
             }
         except Exception as e:
             # Clean up on error
@@ -468,6 +620,85 @@ class TranslationService:
             from fastapi import HTTPException
             raise HTTPException(status_code=500, detail=f"Failed to start translation task: {str(e)}")
     
+    async def process_queued_task(self, task_id: str) -> None:
+        """
+        Picked up by queue workers: transition from ``queued`` to the same background
+        processing path as immediate mode, awaiting completion so the worker slot is released.
+        """
+        task_state = self.task_manager.get_task(task_id)
+        if not task_state:
+            logger.info(
+                LogModule.WORKFLOW,
+                f"[TRANSLATION-SERVICE] Queued runner: task {task_id} no longer exists (released or cancelled)",
+            )
+            return
+        if task_state.get("status") != "queued":
+            logger.info(
+                LogModule.WORKFLOW,
+                f"[TRANSLATION-SERVICE] Queued runner: task {task_id} has status {task_state.get('status')!r}, skip",
+            )
+            return
+        payload = task_state.get("queued_translation_payload")
+        original_filename = task_state.get("original_filename")
+        temp_dir = task_state.get("temp_dir")
+        original_file_path = task_state.get("original_file_path")
+        if payload is None or not original_filename or not temp_dir or not original_file_path:
+            logger.error(
+                LogModule.WORKFLOW,
+                f"[TRANSLATION-SERVICE] Queued runner: incomplete state for task_id={task_id}",
+            )
+            task_state["status"] = "failed"
+            task_state["message"] = "Internal error: queued task payload missing"
+            return
+        try:
+            with open(original_file_path, "rb") as f:
+                file_contents = f.read()
+        except Exception as e:
+            logger.error(
+                LogModule.WORKFLOW,
+                f"[TRANSLATION-SERVICE] Queued runner: failed to read file for task_id={task_id}: {e}",
+                exc_info=True,
+            )
+            task_state["status"] = "failed"
+            task_state["message"] = f"Failed to read uploaded file: {e}"
+            return
+
+        task_state["status_message"] = "Task initializing..."
+        task_state["message"] = "Translation in progress..."
+        self.task_manager.add_log(task_id, "info", "Queue worker started processing")
+
+        async def _task_wrapper():
+            await self._run_translation_task_wrapper(
+                task_id=task_id,
+                payload=payload,
+                file_contents=file_contents,
+                original_filename=original_filename,
+                temp_dir=temp_dir,
+            )
+
+        task_ref = asyncio.create_task(_task_wrapper())
+
+        def task_done_callback(task):
+            try:
+                if task.done() and not task.cancelled():
+                    exc = task.exception()
+                    if exc:
+                        logger.warning(
+                            LogModule.WORKFLOW,
+                            f"Background task {task_id} (queued) completed with exception: {exc}",
+                        )
+            except Exception as callback_error:
+                logger.warning(
+                    LogModule.WORKFLOW,
+                    f"Error in task done callback for {task_id}: {callback_error}",
+                )
+
+        task_ref.add_done_callback(task_done_callback)
+        task_state["current_task_ref"] = task_ref
+        task_state["is_processing"] = True
+        task_state["started_at"] = asyncio.get_event_loop().time()
+        await task_ref
+
     async def process_translation_task(
         self,
         task_id: str,
@@ -1185,6 +1416,17 @@ class TranslationService:
                         f"[DOCX-MATH-LLM-REPAIR] Auto repair failed (task {task_id}): {docx_repair_err}",
                         exc_info=False,
                     )
+
+                # Queue mode: auto batch-retry failed segments (no immersive Retry UI)
+                if task_state.get("execution_mode") == "queued":
+                    try:
+                        await self._queue_auto_retry_failed_segments(task_id, task_state, payload)
+                    except Exception as auto_retry_err:
+                        logger.error(
+                            LogModule.TRANS,
+                            f"[QUEUE-AUTO-RETRY] task={task_id} fatal: {auto_retry_err}",
+                            exc_info=True,
+                        )
 
                 # Mark translation as completed after post-processing steps.
                 task_state["status"] = "completed"
@@ -2410,20 +2652,29 @@ class TranslationService:
         task_state = self.task_manager.get_task(task_id)
         if not task_state:
             raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
-        
+
+        if task_state.get("status") == "queued":
+            task_state.pop("queued_translation_payload", None)
+            temp_dir = task_state.get("temp_dir")
+            if temp_dir and os.path.isdir(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            self.task_manager.cleanup_task_resources(task_id)
+            logger.info(LogModule.WORKFLOW, f"[TRANSLATION-SERVICE] Cancelled queued task {task_id} (removed from queue)")
+            return {"cancelled": True, "message": f"Task '{task_id}' has been cancelled (removed from queue)."}
+
         if not task_state.get("is_processing"):
             raise HTTPException(status_code=400, detail=f"Task '{task_id}' is not currently processing.")
-        
+
         # Cancel the background task
         task_ref = task_state.get("current_task_ref")
         if task_ref and not task_ref.done():
             task_ref.cancel()
             self.task_manager.add_log(task_id, "info", "Task cancellation requested")
-        
+
         # Update task state
         task_state["is_processing"] = False
         task_state["status"] = "cancelled"
         task_state["message"] = "Task cancelled by user"
-        
+
         return {"cancelled": True, "message": f"Task '{task_id}' has been cancelled."}
 

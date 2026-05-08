@@ -241,11 +241,43 @@
   "homeBackendStatusDisconnected": "后端已断开连接。请重试。",
   "homeBackendStatusUnknown": "正在连接到后端...",
   "homeBackendRetry": "重试",
-  "homeNavTranslate": "翻译",
+  "homeNavTranslate": "沉浸式翻译",
+  "homeNavTranslationQueue": "翻译队列",
   "homeNavAnonymize": "匿名化",
   "homeNavSettings": "设置",
   "homeNavDonateHelp": "捐赠与帮助",
   "homeNavHome": "主页",
+  "translationQueueTitle": "翻译队列",
+  "translationQueueHint": "列表会自动刷新，完成后可下载译文。",
+  "translationQueueEmpty": "暂无翻译任务。",
+  "translationQueueNewQueuedTask": "新建队列翻译",
+  "translationQueuedStarted": "任务已加入队列，可在此查看进度。",
+  "translationQueueRefresh": "刷新",
+  "translationQueueCancel": "取消任务",
+  "translationQueueRelease": "从列表移除",
+  "translationQueueDownloads": "下载",
+  "translationQueueDownloadMdEmbedded": "MD（内嵌图片）",
+  "translationQueueDownloadMdZip": "MD（ZIP 图片包）",
+  "translationQueueExecutionModeQueued": "队列",
+  "translationQueueExecutionModeImmediate": "即时",
+  "translationQueuePositionLabel": "排队位置 #{position}",
+  "@translationQueuePositionLabel": {
+    "placeholders": {
+      "position": {}
+    }
+  },
+  "translationQueueLoadFailed": "加载任务失败：{error}",
+  "@translationQueueLoadFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "translationQueueActionFailed": "操作失败：{error}",
+  "@translationQueueActionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "homeFeatureUnderDevelopment": "此功能正在开发中。",
   "homeAnonymizeNotSupportedVersion": "尚未支持。将在 v{version} 版本中提供。",
   "homeAnonymizeInDevelopment": "匿名化功能正在开发中，尚不可用。",

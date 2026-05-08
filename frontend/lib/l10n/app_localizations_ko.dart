@@ -813,7 +813,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homeBackendRetry => '재시도';
 
   @override
-  String get homeNavTranslate => '번역';
+  String get homeNavTranslate => '몰입형 번역';
+
+  @override
+  String get homeNavTranslationQueue => '번역 대기열';
 
   @override
   String get homeNavAnonymize => '익명화';
@@ -826,6 +829,60 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get homeNavHome => '홈';
+
+  @override
+  String get translationQueueTitle => '번역 대기열';
+
+  @override
+  String get translationQueueHint => '작업이 자동으로 새로 고칩니다. 완료 후 다운로드할 수 있습니다.';
+
+  @override
+  String get translationQueueEmpty => '번역 작업이 없습니다.';
+
+  @override
+  String get translationQueueNewQueuedTask => '대기열에 새 번역';
+
+  @override
+  String get translationQueuedStarted => '대기열에 추가되었습니다. 여기서 진행 상황을 확인하세요.';
+
+  @override
+  String get translationQueueRefresh => '새로 고침';
+
+  @override
+  String get translationQueueCancel => '작업 취소';
+
+  @override
+  String get translationQueueRelease => '목록에서 제거';
+
+  @override
+  String get translationQueueDownloads => '다운로드';
+
+  @override
+  String get translationQueueDownloadMdEmbedded => 'MD(임베드)';
+
+  @override
+  String get translationQueueDownloadMdZip => 'MD(ZIP)';
+
+  @override
+  String get translationQueueExecutionModeQueued => '대기열';
+
+  @override
+  String get translationQueueExecutionModeImmediate => '즉시';
+
+  @override
+  String translationQueuePositionLabel(Object position) {
+    return '대기 순번 #$position';
+  }
+
+  @override
+  String translationQueueLoadFailed(Object error) {
+    return '작업을 불러오지 못했습니다: $error';
+  }
+
+  @override
+  String translationQueueActionFailed(Object error) {
+    return '작업 실패: $error';
+  }
 
   @override
   String get homeFeatureUnderDevelopment => '이 기능은 개발 중입니다.';

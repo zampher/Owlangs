@@ -861,7 +861,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeBackendRetry => 'Reintentar';
 
   @override
-  String get homeNavTranslate => 'Traducir';
+  String get homeNavTranslate => 'Traducción inmersiva';
+
+  @override
+  String get homeNavTranslationQueue => 'Cola de traducción';
 
   @override
   String get homeNavAnonymize => 'Anonimizar';
@@ -874,6 +877,62 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get homeNavHome => 'Inicio';
+
+  @override
+  String get translationQueueTitle => 'Cola de traducción';
+
+  @override
+  String get translationQueueHint =>
+      'Las tareas se actualizan automáticamente. Descargue cuando finalicen.';
+
+  @override
+  String get translationQueueEmpty => 'Aún no hay tareas de traducción.';
+
+  @override
+  String get translationQueueNewQueuedTask => 'Nueva traducción en cola';
+
+  @override
+  String get translationQueuedStarted =>
+      'Tarea añadida a la cola. Consulte el progreso aquí.';
+
+  @override
+  String get translationQueueRefresh => 'Actualizar';
+
+  @override
+  String get translationQueueCancel => 'Cancelar tarea';
+
+  @override
+  String get translationQueueRelease => 'Quitar de la lista';
+
+  @override
+  String get translationQueueDownloads => 'Descargas';
+
+  @override
+  String get translationQueueDownloadMdEmbedded => 'MD (incrustado)';
+
+  @override
+  String get translationQueueDownloadMdZip => 'MD (ZIP)';
+
+  @override
+  String get translationQueueExecutionModeQueued => 'En cola';
+
+  @override
+  String get translationQueueExecutionModeImmediate => 'Inmediato';
+
+  @override
+  String translationQueuePositionLabel(Object position) {
+    return 'Posición en cola #$position';
+  }
+
+  @override
+  String translationQueueLoadFailed(Object error) {
+    return 'Error al cargar tareas: $error';
+  }
+
+  @override
+  String translationQueueActionFailed(Object error) {
+    return 'Error en la acción: $error';
+  }
 
   @override
   String get homeFeatureUnderDevelopment =>

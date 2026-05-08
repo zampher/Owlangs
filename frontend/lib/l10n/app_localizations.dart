@@ -1550,8 +1550,14 @@ abstract class AppLocalizations {
   /// No description provided for @homeNavTranslate.
   ///
   /// In en, this message translates to:
-  /// **'Translate'**
+  /// **'Immersive translate'**
   String get homeNavTranslate;
+
+  /// No description provided for @homeNavTranslationQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation queue'**
+  String get homeNavTranslationQueue;
 
   /// No description provided for @homeNavAnonymize.
   ///
@@ -1576,6 +1582,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Home'**
   String get homeNavHome;
+
+  /// No description provided for @translationQueueTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation queue'**
+  String get translationQueueTitle;
+
+  /// No description provided for @translationQueueHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks refresh automatically. Downloads appear when a task completes.'**
+  String get translationQueueHint;
+
+  /// No description provided for @translationQueueEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No translation tasks yet.'**
+  String get translationQueueEmpty;
+
+  /// No description provided for @translationQueueNewQueuedTask.
+  ///
+  /// In en, this message translates to:
+  /// **'New queued translation'**
+  String get translationQueueNewQueuedTask;
+
+  /// No description provided for @translationQueuedStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Task added to the queue. Track it here.'**
+  String get translationQueuedStarted;
+
+  /// No description provided for @translationQueueRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get translationQueueRefresh;
+
+  /// No description provided for @translationQueueCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel task'**
+  String get translationQueueCancel;
+
+  /// No description provided for @translationQueueRelease.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from list'**
+  String get translationQueueRelease;
+
+  /// No description provided for @translationQueueDownloads.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads'**
+  String get translationQueueDownloads;
+
+  /// No description provided for @translationQueueDownloadMdEmbedded.
+  ///
+  /// In en, this message translates to:
+  /// **'MD (embedded)'**
+  String get translationQueueDownloadMdEmbedded;
+
+  /// No description provided for @translationQueueDownloadMdZip.
+  ///
+  /// In en, this message translates to:
+  /// **'MD (ZIP)'**
+  String get translationQueueDownloadMdZip;
+
+  /// No description provided for @translationQueueExecutionModeQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued'**
+  String get translationQueueExecutionModeQueued;
+
+  /// No description provided for @translationQueueExecutionModeImmediate.
+  ///
+  /// In en, this message translates to:
+  /// **'Immediate'**
+  String get translationQueueExecutionModeImmediate;
+
+  /// No description provided for @translationQueuePositionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Queue #{position}'**
+  String translationQueuePositionLabel(Object position);
+
+  /// No description provided for @translationQueueLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load tasks: {error}'**
+  String translationQueueLoadFailed(Object error);
+
+  /// No description provided for @translationQueueActionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Action failed: {error}'**
+  String translationQueueActionFailed(Object error);
 
   /// No description provided for @homeFeatureUnderDevelopment.
   ///

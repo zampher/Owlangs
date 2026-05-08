@@ -252,11 +252,43 @@
   "homeBackendStatusDisconnected": "El backend está desconectado. Por favor, reintente.",
   "homeBackendStatusUnknown": "Conectando al backend...",
   "homeBackendRetry": "Reintentar",
-  "homeNavTranslate": "Traducir",
+  "homeNavTranslate": "Traducción inmersiva",
+  "homeNavTranslationQueue": "Cola de traducción",
   "homeNavAnonymize": "Anonimizar",
   "homeNavSettings": "Configuración",
   "homeNavDonateHelp": "Donar & Ayuda",
   "homeNavHome": "Inicio",
+  "translationQueueTitle": "Cola de traducción",
+  "translationQueueHint": "Las tareas se actualizan automáticamente. Descargue cuando finalicen.",
+  "translationQueueEmpty": "Aún no hay tareas de traducción.",
+  "translationQueueNewQueuedTask": "Nueva traducción en cola",
+  "translationQueuedStarted": "Tarea añadida a la cola. Consulte el progreso aquí.",
+  "translationQueueRefresh": "Actualizar",
+  "translationQueueCancel": "Cancelar tarea",
+  "translationQueueRelease": "Quitar de la lista",
+  "translationQueueDownloads": "Descargas",
+  "translationQueueDownloadMdEmbedded": "MD (incrustado)",
+  "translationQueueDownloadMdZip": "MD (ZIP)",
+  "translationQueueExecutionModeQueued": "En cola",
+  "translationQueueExecutionModeImmediate": "Inmediato",
+  "translationQueuePositionLabel": "Posición en cola #{position}",
+  "@translationQueuePositionLabel": {
+    "placeholders": {
+      "position": {}
+    }
+  },
+  "translationQueueLoadFailed": "Error al cargar tareas: {error}",
+  "@translationQueueLoadFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "translationQueueActionFailed": "Error en la acción: {error}",
+  "@translationQueueActionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "homeFeatureUnderDevelopment": "Esta característica está en desarrollo.",
   "homeAnonymizeNotSupportedVersion": "Aún no compatible. Estará disponible en v{version}.",
   "homeAnonymizeInDevelopment": "La anonimización está en desarrollo y aún no está disponible.",

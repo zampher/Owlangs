@@ -8,12 +8,15 @@ Handles file download endpoints for translation results.
 """
 
 from typing import Optional
+
 from fastapi import APIRouter, Path as FastApiPath, Query as FastApiQuery
 from fastapi.responses import FileResponse
 
 from backend.app.services.download import DownloadService
 from backend.app.services.download.output_generator import get_ebook_converters_availability
 from backend.app.services.task import task_manager
+from logger import unified_logger as logger
+from logger.logger import LogModule
 
 router = APIRouter()
 
@@ -57,7 +60,7 @@ async def service_download_file_route(
         ebook_engine: Optional[str] = FastApiQuery(None, description="For epub/mobi: 'pandoc' or 'calibre'. Only used when both converters are available; choose which path to use for export.", examples=["pandoc", "calibre"]),
 ):
     """Download translation result files."""
-    return await download_service.download_file(
+    resp = await download_service.download_file(
         task_id=task_id,
         file_type=file_type,
         table_body_format=table_body_format,
@@ -65,6 +68,19 @@ async def service_download_file_route(
         embed_images=embed_images,
         ebook_engine=ebook_engine,
     )
+    try:
+        if isinstance(resp, FileResponse):
+            path = getattr(resp, "path", None)
+            ts = task_manager.get_task(task_id)
+            if path and ts:
+                from backend.app.services.translation.translation_result_stash import (
+                    record_generated_result,
+                )
+
+                record_generated_result(task_id, file_type, path, ts)
+    except Exception as e:
+        logger.warning(LogModule.ROUTE, f"[DOWNLOAD-STASH] Record stash failed task_id={task_id}: {e}", exc_info=True)
+    return resp
 
 
 @router.get(

@@ -25,7 +25,9 @@ from fastapi.responses import FileResponse, Response
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from app.services.task import TaskManager
-from app.services.download.pdf_generator import PDFGenerator
+
+# Relative import avoids circular import via app.services.download.__init__
+from .pdf_generator import ENABLE_LAYOUT_PDF_GENERATION, PDFGenerator
 
 # Media type mapping for different file types
 MEDIA_TYPES = {
@@ -104,6 +106,217 @@ def _get_image_layout_for_grouping(
     return (indices if indices else None, path_to_block_index if path_to_block_index else None, layout_doc)
 
 
+def _pandoc_pdf_file_response_from_md(
+    task_state: Dict[str, Any],
+    task_id: str,
+    md_content: str,
+    equation_format: Optional[str],
+    table_body_format: Optional[str],
+) -> FileResponse:
+    """
+    Export Markdown to PDF via Pandoc + XeLaTeX (same pipeline as OutputGenerator).
+    Shared by revision-download and stash-less rebuild paths.
+    """
+    if not md_content or not str(md_content).strip():
+        raise HTTPException(
+            status_code=500,
+            detail="Markdown content is empty; cannot export PDF.",
+        )
+    output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
+    output_dir.mkdir(exist_ok=True)
+    file_stem = task_state.get("original_filename_stem", "translated")
+    pdf_file_path = output_dir / f"{file_stem}_translated.pdf"
+    to_lang, _ = _get_to_lang_and_docx_font(task_state)
+    if not to_lang:
+        to_lang = "zh"
+    image_data_map = task_state.get("image_data_map") or {}
+    if image_data_map:
+        from utils.image_placeholder_utils import _replace_placeholders_with_images
+
+        resolved_md, _ = _replace_placeholders_with_images(md_content, image_data_map, output_dir=output_dir)
+    else:
+        resolved_md = md_content
+    try:
+        from utils.format_convert_utils import PdfExportLatexError, convert_md_to_pdf
+
+        _img_bidx, _path_to_bidx, _layout = _get_image_layout_for_grouping(
+            task_state, equation_format=equation_format, table_body_format=table_body_format
+        )
+        try:
+            ok = convert_md_to_pdf(
+                resolved_md,
+                str(pdf_file_path),
+                output_dir=output_dir,
+                to_lang=to_lang,
+                image_block_indices=_img_bidx,
+                path_to_block_index=_path_to_bidx,
+                layout_document=_layout if _path_to_bidx else None,
+                layout_block_bbox=task_state.get("layout_block_bbox"),
+            )
+        except Exception as e:
+            if isinstance(e, PdfExportLatexError):
+                segs = (task_state.get("translation_segments") or {}).get("segments") or []
+                segment_index = None
+                candidates: list[int] = []
+                match_basis = "unknown"
+
+                def _best_effort_find_segment_index() -> None:
+                    nonlocal segment_index, match_basis
+                    if not isinstance(segs, list) or not segs:
+                        return
+                    md_snippet = (e.md_snippet or "").strip()
+                    if md_snippet:
+                        match_basis = "md_snippet"
+                        lines = [ln.strip() for ln in md_snippet.splitlines() if len((ln or "").strip()) >= 16]
+                        for seg in segs:
+                            t = (seg or {}).get("target_text", "")
+                            if not t:
+                                continue
+                            for ln in lines[:10]:
+                                if ln and ln in t:
+                                    segment_index = (seg or {}).get("segment_index")
+                                    return
+                    token = (getattr(e, "error_token", "") or "").strip()
+                    if token:
+                        match_basis = f"error_token:{token}"
+                        for seg in segs:
+                            t = (seg or {}).get("target_text", "")
+                            if t and token in t:
+                                segment_index = (seg or {}).get("segment_index")
+                                return
+
+                _best_effort_find_segment_index()
+                if isinstance(segment_index, int) and segment_index >= 0:
+                    candidates.append(segment_index)
+                    for d in (1, 2, 3):
+                        if segment_index - d >= 0:
+                            candidates.append(segment_index - d)
+                task_state["pdf_export_latex_issue"] = {
+                    "error_type": e.error_type,
+                    "line_no": e.line_no,
+                    "segment_index": segment_index,
+                    "candidate_segment_indices": candidates,
+                    "match_basis": match_basis,
+                    "error_token": getattr(e, "error_token", "") or "",
+                    "md_snippet": e.md_snippet,
+                    "tex_snippet": e.tex_snippet,
+                    "stderr_excerpt": (e.stderr or "")[:2000],
+                    "debug_tex_path": str(e.debug_tex_path) if e.debug_tex_path else None,
+                    "debug_md_path": str(e.debug_md_path) if e.debug_md_path else None,
+                }
+                hint = f" Suspected bad segment: {segment_index}." if segment_index is not None else ""
+                upstream = f" It may be caused by an earlier segment near: {candidates}." if candidates else ""
+                raise HTTPException(
+                    status_code=500,
+                    detail="PDF generation failed due to a LaTeX compilation error."
+                    + hint
+                    + upstream
+                    + " Please use the segment 'Fix formula' action and retry export. Check server logs for details.",
+                )
+            raise
+
+        if ok and pdf_file_path.exists():
+            logger.info(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] PDF generated via pandoc (MD → XeLaTeX → PDF) task_id={task_id}",
+            )
+            filename = pdf_file_path.name
+            media_type = MEDIA_TYPES.get("pdf", "application/pdf")
+            return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
+        raise HTTPException(
+            status_code=500,
+            detail="PDF generation via Pandoc failed (Pandoc/XeLaTeX may be missing or conversion error). Check server logs.",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Pandoc PDF path failed: {e}",
+            exc_info=True,
+        )
+        message = str(e) or "PDF generation via Pandoc failed (see server logs for details)."
+        raise HTTPException(
+            status_code=500,
+            detail=message,
+        )
+
+
+def _markdown_based_html_file_response_from_segments(
+    task_state: Dict[str, Any],
+    task_id: str,
+    equation_format: Optional[str],
+    table_body_format: Optional[str],
+) -> Optional[FileResponse]:
+    """
+    Build translated HTML via MarkdownBasedWorkflow + rebuilt segments (on-demand download).
+    Used when no pre-generated HTML file exists (e.g. queue mode / DOCX-only cache).
+    """
+    from utils.document_rebuild import rebuild_markdown_document_from_segments
+    from workflow.md_based_workflow import MarkdownBasedWorkflow, MarkdownBasedWorkflowConfig
+    from exporter.md.md2html_exporter import MD2HTMLExporterConfig
+    from exporter.md.md2docx_exporter import MD2DOCXExporterConfig
+    from translator.ai_translator.md_translator import MDTranslatorConfig
+
+    rebuilt_doc = rebuild_markdown_document_from_segments(
+        task_state,
+        file_stem=task_state.get("original_filename_stem"),
+        equation_format=equation_format,
+        table_body_format=table_body_format,
+    )
+    if not rebuilt_doc or not getattr(rebuilt_doc, "content", None):
+        return None
+    payload_for_export = task_state.get("payload")
+    to_lang, docx_font_name = _get_to_lang_and_docx_font(task_state, payload_for_export)
+    _img_bidx, _path_to_bidx, _layout = _get_image_layout_for_grouping(
+        task_state, equation_format=equation_format, table_body_format=table_body_format
+    )
+    original_filename = task_state.get("original_filename", "")
+    is_pdf_source = original_filename.lower().endswith(".pdf")
+    html_config = MD2HTMLExporterConfig(
+        preserve_line_breaks=is_pdf_source,
+        layout_block_bbox=task_state.get("layout_block_bbox"),
+        image_block_indices=_img_bidx,
+        layout_document=_layout if _img_bidx else None,
+    )
+    docx_config_kwargs: dict = {"font_name": docx_font_name}
+    layout_doc = task_state.get("layout_document")
+    if layout_doc is not None and is_pdf_source:
+        try:
+            from layout.base import LayoutDocument as _LD
+
+            if isinstance(layout_doc, _LD):
+                docx_config_kwargs["layout_document"] = layout_doc
+        except Exception:
+            pass
+    if table_body_format:
+        docx_config_kwargs["table_body_format"] = table_body_format
+    existing_img_map = task_state.get("image_data_map")
+    if isinstance(existing_img_map, dict):
+        docx_config_kwargs["image_data_map"] = existing_img_map
+    docx_config_kwargs["debug_output_dir"] = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output" / "debug"
+    docx_config = MD2DOCXExporterConfig(**docx_config_kwargs)
+    translator_config = MDTranslatorConfig(skip_translate=True)
+    workflow_config = MarkdownBasedWorkflowConfig(
+        convert_engine="identity",
+        converter_config=None,
+        translator_config=translator_config,
+        html_exporter_config=html_config,
+        docx_exporter_config=docx_config,
+    )
+    workflow = MarkdownBasedWorkflow(workflow_config)
+    workflow.document_translated = rebuilt_doc
+    html_content = workflow.export_to_html()
+    temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".html", delete=False, encoding="utf-8")
+    temp_file.write(html_content)
+    temp_file.close()
+    file_stem = task_state.get("original_filename_stem", "translated")
+    filename = f"{file_stem}_translated.html"
+    media_type = MEDIA_TYPES.get("html", "text/html; charset=utf-8")
+    logger.info(LogModule.EXPORT, f"[DOWNLOAD] HTML from segments on-demand task_id={task_id}")
+    return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+
+
 class DownloadService:
     """Service for handling file downloads."""
     
@@ -146,6 +359,23 @@ class DownloadService:
         # Get task state from task manager
         task_state = self.task_manager.get_task(task_id)
         if not task_state:
+            from backend.app.services.translation.translation_result_stash import (
+                get_stashed_file_path,
+                load_meta,
+            )
+
+            stashed = get_stashed_file_path(task_id, file_type)
+            if stashed and os.path.isfile(stashed):
+                meta = load_meta(task_id)
+                stem = Path((meta or {}).get("original_filename") or "translated").stem
+                ext = Path(stashed).suffix or ""
+                filename = f"{stem}_translated{ext}"
+                media_type = MEDIA_TYPES.get(file_type, "application/octet-stream")
+                logger.info(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] Task {task_id}: Serving stashed {file_type} from disk (no in-memory task)",
+                )
+                return FileResponse(path=stashed, media_type=media_type, filename=filename)
             raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
         
         # Check if task has failed
@@ -1790,64 +2020,86 @@ class DownloadService:
                                         detail="High-fidelity PDF generation requires layout information, which is not available for this task. Please ensure the file was processed with a layout-aware converter (e.g., MinerU)."
                                     )
                         
-                            # Always generate PDF via layout (Pandoc+XeLaTeX). No pre-generated PDF fallback so errors surface for fixing.
-                            # Generate PDF using layout-based method (high-fidelity)
-                            # If format parameters were provided, workflow.document_translated was already updated with new format
-                            try:
-                                output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
-                                output_dir.mkdir(exist_ok=True)
-                                # Pass both format parameters to PDF generator
-                                await self.pdf_generator.generate(workflow, output_dir, file_stem, task_state, task_id, table_body_format=table_body_format, equation_format=equation_format)
-                                gen_pdf = task_state.get("downloadable_files", {}).get("pdf")
-                                if gen_pdf:
-                                    # Handle both string and dict formats for backward compatibility
-                                    pdf_path = gen_pdf.get("path", "") if isinstance(gen_pdf, dict) else str(gen_pdf)
-                                    if pdf_path and os.path.exists(pdf_path):
-                                        filename = os.path.basename(pdf_path) or f"{file_stem}_translated.pdf"
+                            # Revision PDF: match OutputGenerator — Pandoc MD→PDF by default.
+                            # Layout ReportLab/HTML path only runs when ENABLE_LAYOUT_PDF_GENERATION is True (see pdf_generator.py).
+                            _pdf_stem = file_stem
+                            output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
+                            output_dir.mkdir(exist_ok=True)
+
+                            if ENABLE_LAYOUT_PDF_GENERATION:
+                                try:
+                                    await self.pdf_generator.generate(
+                                        workflow,
+                                        output_dir,
+                                        _pdf_stem,
+                                        task_state,
+                                        task_id,
+                                        table_body_format=table_body_format,
+                                        equation_format=equation_format,
+                                    )
+                                    gen_pdf = task_state.get("downloadable_files", {}).get("pdf")
+                                    if gen_pdf:
+                                        pdf_path = gen_pdf.get("path", "") if isinstance(gen_pdf, dict) else str(gen_pdf)
+                                        if pdf_path and os.path.exists(pdf_path):
+                                            filename = os.path.basename(pdf_path) or f"{file_stem}_translated.pdf"
+                                            media_type = MEDIA_TYPES.get(file_type, "application/pdf")
+                                            return FileResponse(path=pdf_path, media_type=media_type, filename=filename)
+
+                                    pdf_file_path = output_dir / f"{file_stem}_translated.pdf"
+                                    if pdf_file_path.exists():
+                                        filename = f"{file_stem}_translated.pdf"
                                         media_type = MEDIA_TYPES.get(file_type, "application/pdf")
-                                        return FileResponse(path=pdf_path, media_type=media_type, filename=filename)
-                            
-                                # Also check if PDF file exists in output_dir (in case task_state wasn't updated)
-                                pdf_file_path = output_dir / f"{file_stem}_translated.pdf"
-                                if pdf_file_path.exists():
-                                    filename = f"{file_stem}_translated.pdf"
-                                    media_type = MEDIA_TYPES.get(file_type, "application/pdf")
-                                    return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
-                            except NotImplementedError as not_impl_error:
-                                # Windows asyncio limitation - check if PDF was still generated
-                                logger.warning(LogModule.EXPORT, f"[DOWNLOAD] NotImplementedError during PDF generation (Windows asyncio limitation): {not_impl_error}")
-                                # Check if PDF was generated despite the error
-                                output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
-                                pdf_file_path = output_dir / f"{file_stem}_translated.pdf"
-                                gen_pdf = task_state.get("downloadable_files", {}).get("pdf")
-                            
-                                if gen_pdf and os.path.exists(gen_pdf.get("path", "")):
-                                    filename = os.path.basename(gen_pdf["path"]) or f"{file_stem}_translated.pdf"
-                                    media_type = MEDIA_TYPES.get(file_type, "application/pdf")
-                                    logger.info(LogModule.EXPORT, f"[DOWNLOAD] PDF generated successfully despite NotImplementedError")
-                                    return FileResponse(path=gen_pdf["path"], media_type=media_type, filename=filename)
-                                elif pdf_file_path.exists():
-                                    filename = f"{file_stem}_translated.pdf"
-                                    media_type = MEDIA_TYPES.get(file_type, "application/pdf")
-                                    logger.info(LogModule.EXPORT, f"[DOWNLOAD] PDF generated successfully despite NotImplementedError (found in output_dir)")
-                                    return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
-                                else:
+                                        return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
+                                except NotImplementedError as not_impl_error:
+                                    logger.warning(
+                                        LogModule.EXPORT,
+                                        f"[DOWNLOAD] NotImplementedError during PDF generation (Windows asyncio limitation): {not_impl_error}",
+                                    )
+                                    output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
+                                    pdf_file_path = output_dir / f"{file_stem}_translated.pdf"
+                                    gen_pdf = task_state.get("downloadable_files", {}).get("pdf")
+
+                                    if gen_pdf and os.path.exists(gen_pdf.get("path", "")):
+                                        filename = os.path.basename(gen_pdf["path"]) or f"{file_stem}_translated.pdf"
+                                        media_type = MEDIA_TYPES.get(file_type, "application/pdf")
+                                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] PDF generated successfully despite NotImplementedError")
+                                        return FileResponse(path=gen_pdf["path"], media_type=media_type, filename=filename)
+                                    if pdf_file_path.exists():
+                                        filename = f"{file_stem}_translated.pdf"
+                                        media_type = MEDIA_TYPES.get(file_type, "application/pdf")
+                                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] PDF generated successfully despite NotImplementedError (found in output_dir)")
+                                        return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
                                     logger.error(LogModule.EXPORT, f"[DOWNLOAD] PDF was not generated despite NotImplementedError")
                                     raise HTTPException(
                                         status_code=500,
-                                        detail="PDF generation failed due to platform limitations. Please try again or contact support."
+                                        detail="PDF generation failed due to platform limitations. Please try again or contact support.",
                                     )
-                            except Exception as _pdf_e:
-                                logger.error(LogModule.EXPORT, f"PDF generation on download failed: {_pdf_e}", exc_info=True)
+                                except Exception as _pdf_e:
+                                    logger.error(LogModule.EXPORT, f"PDF generation on download failed: {_pdf_e}", exc_info=True)
+                                    raise HTTPException(
+                                        status_code=500,
+                                        detail=f"High-fidelity PDF generation failed: {str(_pdf_e)}",
+                                    )
+
                                 raise HTTPException(
                                     status_code=500,
-                                    detail=f"High-fidelity PDF generation failed: {str(_pdf_e)}"
+                                    detail="PDF generation failed. Please try again or contact support.",
                                 )
-                        
-                            # If we reach here, PDF was not generated
-                            raise HTTPException(
-                                status_code=500,
-                                detail="PDF generation failed. Please try again or contact support."
+
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Revision PDF task {task_id}: Pandoc MD→PDF "
+                                f"(ENABLE_LAYOUT_PDF_GENERATION=False; same pipeline as translation export)",
+                            )
+                            md_raw = workflow.export_to_markdown()
+                            if isinstance(md_raw, bytes):
+                                md_raw = md_raw.decode("utf-8", errors="replace")
+                            return _pandoc_pdf_file_response_from_md(
+                                task_state,
+                                task_id,
+                                md_raw or "",
+                                equation_format,
+                                table_body_format,
                             )
                     
                         else:
@@ -2152,122 +2404,40 @@ class DownloadService:
                     # Prefer pandoc path (MD → XeLaTeX → PDF) when we have rebuilt MD from segments
                     rebuilt_md = task_state.pop("_rebuilt_md_for_pdf", None)
                     if rebuilt_md and rebuilt_md.strip():
-                        output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
-                        output_dir.mkdir(exist_ok=True)
-                        file_stem = task_state.get("original_filename_stem", "translated")
-                        pdf_file_path = output_dir / f"{file_stem}_translated.pdf"
-                        to_lang, _ = _get_to_lang_and_docx_font(task_state)
-                        if not to_lang:
-                            to_lang = "zh"
-                        # Resolve image placeholders (e.g. ![Table](layoutimg3)) to real files under output_dir/images so pandoc can embed them
-                        image_data_map = task_state.get("image_data_map") or {}
-                        if image_data_map:
-                            from utils.image_placeholder_utils import _replace_placeholders_with_images
-                            resolved_md, _ = _replace_placeholders_with_images(rebuilt_md, image_data_map, output_dir=output_dir)
-                        else:
-                            resolved_md = rebuilt_md
-                        try:
-                            from utils.format_convert_utils import convert_md_to_pdf
-                            _img_bidx, _path_to_bidx, _layout = _get_image_layout_for_grouping(
-                                task_state, equation_format=equation_format, table_body_format=table_body_format
-                            )
-                            try:
-                                ok = convert_md_to_pdf(
-                                    resolved_md, str(pdf_file_path), output_dir=output_dir, to_lang=to_lang,
-                                    image_block_indices=_img_bidx, path_to_block_index=_path_to_bidx, layout_document=_layout if _path_to_bidx else None,
-                                    layout_block_bbox=task_state.get("layout_block_bbox"),
+                        return _pandoc_pdf_file_response_from_md(
+                            task_state,
+                            task_id,
+                            rebuilt_md,
+                            equation_format,
+                            table_body_format,
+                        )
+
+                    # Rebuild Markdown from segments + Pandoc (same as revision download when layout PDF is off)
+                    try:
+                        rebuilt_doc = rebuild_markdown_document_from_segments(
+                            task_state,
+                            file_stem=task_state.get("original_filename_stem"),
+                            equation_format=equation_format,
+                            table_body_format=table_body_format,
+                        )
+                        if rebuilt_doc and getattr(rebuilt_doc, "content", None):
+                            raw = rebuilt_doc.content
+                            md_text = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+                            if md_text.strip():
+                                return _pandoc_pdf_file_response_from_md(
+                                    task_state,
+                                    task_id,
+                                    md_text,
+                                    equation_format,
+                                    table_body_format,
                                 )
-                            except Exception as e:
-                                from utils.format_convert_utils import PdfExportLatexError
+                    except Exception as pdf_seg_err:
+                        logger.error(
+                            LogModule.EXPORT,
+                            f"[DOWNLOAD] PDF on-demand: rebuild+pandoc failed task_id={task_id}: {pdf_seg_err}",
+                            exc_info=True,
+                        )
 
-                                if isinstance(e, PdfExportLatexError):
-                                    segs = (task_state.get("translation_segments") or {}).get("segments") or []
-                                    segment_index = None
-                                    candidates: list[int] = []
-                                    match_basis = "unknown"
-
-                                    def _best_effort_find_segment_index() -> None:
-                                        nonlocal segment_index
-                                        if not isinstance(segs, list) or not segs:
-                                            return
-                                        md_snippet = (e.md_snippet or "").strip()
-                                        if md_snippet:
-                                            match_basis = "md_snippet"
-                                            lines = [ln.strip() for ln in md_snippet.splitlines() if len((ln or "").strip()) >= 16]
-                                            for seg in segs:
-                                                t = (seg or {}).get("target_text", "")
-                                                if not t:
-                                                    continue
-                                                for ln in lines[:10]:
-                                                    if ln and ln in t:
-                                                        segment_index = (seg or {}).get("segment_index")
-                                                        return
-                                        token = (getattr(e, "error_token", "") or "").strip()
-                                        if token:
-                                            match_basis = f"error_token:{token}"
-                                            for seg in segs:
-                                                t = (seg or {}).get("target_text", "")
-                                                if t and token in t:
-                                                    segment_index = (seg or {}).get("segment_index")
-                                                    return
-
-                                    _best_effort_find_segment_index()
-                                    if isinstance(segment_index, int) and segment_index >= 0:
-                                        # Include the detected segment and a small upstream window because
-                                        # LaTeX errors can surface a few lines later than the true cause.
-                                        candidates.append(segment_index)
-                                        for d in (1, 2, 3):
-                                            if segment_index - d >= 0:
-                                                candidates.append(segment_index - d)
-                                    task_state["pdf_export_latex_issue"] = {
-                                        "error_type": e.error_type,
-                                        "line_no": e.line_no,
-                                        "segment_index": segment_index,
-                                        "candidate_segment_indices": candidates,
-                                        "match_basis": match_basis,
-                                        "error_token": getattr(e, "error_token", "") or "",
-                                        "md_snippet": e.md_snippet,
-                                        "tex_snippet": e.tex_snippet,
-                                        "stderr_excerpt": (e.stderr or "")[:2000],
-                                        "debug_tex_path": str(e.debug_tex_path) if e.debug_tex_path else None,
-                                        "debug_md_path": str(e.debug_md_path) if e.debug_md_path else None,
-                                    }
-                                    hint = f" Suspected bad segment: {segment_index}." if segment_index is not None else ""
-                                    upstream = f" It may be caused by an earlier segment near: {candidates}." if candidates else ""
-                                    raise HTTPException(
-                                        status_code=500,
-                                        detail="PDF generation failed due to a LaTeX compilation error." + hint + upstream
-                                        + " Please use the segment 'Fix formula' action and retry export. Check server logs for details.",
-                                    )
-                                raise
-
-                            if ok and pdf_file_path.exists():
-                                logger.info(LogModule.EXPORT, f"[DOWNLOAD] PDF generated via pandoc (MD → XeLaTeX → PDF)")
-                                filename = pdf_file_path.name
-                                media_type = MEDIA_TYPES.get(file_type, "application/pdf")
-                                return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
-                            raise HTTPException(
-                                status_code=500,
-                                detail="PDF generation via Pandoc failed (Pandoc/XeLaTeX may be missing or conversion error). Check server logs."
-                            )
-                        except HTTPException:
-                            # Propagate existing HTTP errors (detail already suitable for frontend).
-                            raise
-                        except Exception as e:
-                            # Surface the concrete Pandoc/XeLaTeX error message to the frontend
-                            # so users can diagnose missing dependencies (Pandoc, XeLaTeX, TinyTeX path, etc.).
-                            logger.error(
-                                LogModule.EXPORT,
-                                f"[DOWNLOAD] Pandoc PDF path failed: {e}",
-                                exc_info=True,
-                            )
-                            message = str(e) or "PDF generation via Pandoc failed (see server logs for details)."
-                            raise HTTPException(
-                                status_code=500,
-                                detail=message,
-                            )
-                
-                    # PDF uses pandoc only (no ReportLab fallback); if we reach here we have no rebuilt MD
                     raise HTTPException(
                         status_code=500,
                         detail="PDF export requires rebuilt Markdown from translation segments. Ensure the task has completed translation and layout data is available, then try again."
@@ -2717,6 +2887,34 @@ class DownloadService:
                                         detail=f"Task '{task_id}' does not support downloading '{file_type}' type files. "
                                                f"MD file not found and cannot be regenerated (no segments or HTML available).")
         
+            elif file_type == "html":
+                html_info = task_state.get("downloadable_files", {}).get("html")
+                html_path = ""
+                if html_info:
+                    html_path = html_info.get("path", "") if isinstance(html_info, dict) else str(html_info)
+                if html_path and os.path.exists(html_path):
+                    filename = html_info.get("filename") or os.path.basename(html_path)
+                    media_type = MEDIA_TYPES.get(file_type, "text/html; charset=utf-8")
+                    logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using pre-generated html: {html_path}")
+                    return FileResponse(path=html_path, media_type=media_type, filename=filename)
+                if workflow_type == "markdown_based":
+                    html_resp = _markdown_based_html_file_response_from_segments(
+                        task_state,
+                        task_id,
+                        equation_format,
+                        table_body_format,
+                    )
+                    if html_resp is not None:
+                        return html_resp
+                    logger.error(
+                        LogModule.EXPORT,
+                        f"[DOWNLOAD] Task {task_id}: markdown_based HTML on-demand failed (no rebuilt document)",
+                    )
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Could not generate HTML from translation segments for this task.",
+                    )
+
             # For other file types (HTML, DOCX, etc.), check if format parameters are provided
             # If format parameters are provided, regenerate the file with the new format
             # Otherwise, use the pre-generated file

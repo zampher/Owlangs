@@ -63,8 +63,15 @@ void _translationScreenLog(String message, {LogLevel level = LogLevel.debug}) {
 
 class TranslationScreen extends ConsumerStatefulWidget {
   // Optional per-flow scope
-  const TranslationScreen({super.key, this.flowId});
+  const TranslationScreen({
+    super.key,
+    this.flowId,
+    this.executionMode = 'immediate',
+  });
   final String? flowId;
+
+  /// Backend `TranslateServiceRequest.execution_mode`: `immediate` or `queued`.
+  final String executionMode;
 
   @override
   ConsumerState<TranslationScreen> createState() => _TranslationScreenState();
@@ -4442,12 +4449,23 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         fileBytes: bytes,
         fileName: state.pickedFile!.name,
         payload: payload,
+        executionMode: widget.executionMode,
       );
       final String? taskId = submitResp['task_id']?.toString();
       if (taskId == null) {
         throw Exception('No task_id returned');
       }
       notifier.setTaskId(taskId);
+
+      // Standalone queued submit: go to queue page without blocking on pollUntilDone.
+      if (widget.executionMode == 'queued' && widget.flowId == null) {
+        if (mounted) {
+          final AppLocalizations l10n = AppLocalizations.of(context)!;
+          MessageService.showInfo(context, l10n.translationQueuedStarted);
+          context.go(AppRouter.translationQueueRoute);
+        }
+        return;
+      }
 
       // CRITICAL: Set taskId as workflowId in flow context for translation progress tracking
       // This allows ExtractPreview to detect when translation starts and switch to translation progress polling

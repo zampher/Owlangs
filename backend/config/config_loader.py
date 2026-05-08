@@ -14,7 +14,7 @@ from backend.logger.logger import LogModule
 
 # Import all config modules
 from .system_config import get_system_config, SystemConfig, ExclusionDefaultsConfig
-from .platforms_config import get_platforms_config, PlatformsConfig
+from .platforms_config import get_platforms_config, PlatformsConfig, platform_type_uses_llm_chunk_concurrent
 from .ui_config import get_ui_config, UIConfig
 from .secrets_manager import get_secrets_manager
 from .local_config import LocalConfig
@@ -113,9 +113,14 @@ class UnifiedConfig:
                 'requires_api_key': bool(platform.requires_api_key),
                 'api_protocol': platform.api_protocol,
                 'api_endpoints': dict(platform.api_endpoints) if platform.api_endpoints else {},
-                'chunk_size': int(platform.chunk_size) if platform.chunk_size is not None else 3000,
-                'concurrent': int(platform.concurrent) if platform.concurrent is not None else 5,
             }
+            if platform_type_uses_llm_chunk_concurrent(platform.platform_type):
+                platforms_dict[key]['chunk_size'] = (
+                    int(platform.chunk_size) if platform.chunk_size is not None else 3000
+                )
+                platforms_dict[key]['concurrent'] = (
+                    int(platform.concurrent) if platform.concurrent is not None else 5
+                )
         platforms_dict['default_platform'] = self.platforms.default_platform
         return platforms_dict
     
@@ -134,7 +139,7 @@ class UnifiedConfig:
         """Get AI platform configuration (for backward compatibility)"""
         platform_obj = self.platforms.get_platform_config(platform)
         if platform_obj:
-            return {
+            base = {
                 'name': platform_obj.name,
                 'url': platform_obj.url,
                 'model': platform_obj.model,
@@ -152,9 +157,15 @@ class UnifiedConfig:
                 'token_link': platform_obj.token_link,
                 'requires_api_key': platform_obj.requires_api_key,
                 'api_endpoints': platform_obj.api_endpoints,
-                'chunk_size': int(platform_obj.chunk_size) if platform_obj.chunk_size is not None else 3000,
-                'concurrent': int(platform_obj.concurrent) if platform_obj.concurrent is not None else 5,
             }
+            if platform_type_uses_llm_chunk_concurrent(platform_obj.platform_type):
+                base['chunk_size'] = (
+                    int(platform_obj.chunk_size) if platform_obj.chunk_size is not None else 3000
+                )
+                base['concurrent'] = (
+                    int(platform_obj.concurrent) if platform_obj.concurrent is not None else 5
+                )
+            return base
         return None
     
     @property
