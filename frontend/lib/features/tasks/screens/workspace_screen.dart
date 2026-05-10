@@ -894,6 +894,20 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                         ),
               ),
               const SizedBox(width: 4),
+              // Queued translation: standalone flow (same entry as task queue "new" button)
+              _buildActionButton(
+                icon: Icons.playlist_add,
+                label: l10n.translationQueueNewQueuedTask,
+                width: 92,
+                maxLabelLines: 2,
+                onPressed: () {
+                  final int ts = DateTime.now().millisecondsSinceEpoch;
+                  context.push(
+                    '${AppRouter.translationRoute}?execution_mode=queued&t=$ts',
+                  );
+                },
+              ),
+              const SizedBox(width: 4),
               // Translation queue (list + poll + download)
               _buildActionButton(
                 icon: Icons.queue_play_next_outlined,

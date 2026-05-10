@@ -171,10 +171,19 @@ if ($param1 -eq "--check") {
     # Check tools/installer.nsi (DisplayVersion)
     $allMatch = (Check-FileVersion -FilePath "tools\build\installer.nsi" -Pattern 'DisplayVersion"\s*"([^"]+)"' -ExpectedVersion $sourceVersion -Description "tools/build/installer.nsi (DisplayVersion)") -and $allMatch
 
-    # Check menubar_macos.spec (macOS menu bar app)
-    $shortVersion = "$($versionInfo.Major).$($versionInfo.Minor).$($versionInfo.Patch)"
-    $allMatch = (Check-FileVersion -FilePath "menubar_macos.spec" -Pattern "'CFBundleShortVersionString':\s*'([^']*)'" -ExpectedVersion $shortVersion -Description "menubar_macos.spec (CFBundleShortVersionString)") -and $allMatch
-    $allMatch = (Check-FileVersion -FilePath "menubar_macos.spec" -Pattern "'CFBundleVersion':\s*'([^']*)'" -ExpectedVersion $sourceVersion -Description "menubar_macos.spec (CFBundleVersion)") -and $allMatch
+    # menubar_macos.spec: keep @VERSION_SHORT@ / @VERSION_FULL@ placeholders only.
+    # build_macos.sh injects versions at package time and restores placeholders afterward — do not sync literal semver here.
+    if (Test-Path "menubar_macos.spec") {
+        $mb = Get-Content "menubar_macos.spec" -Raw
+        $hasShort = $mb -match "'CFBundleShortVersionString':\s*'@VERSION_SHORT@'"
+        $hasFull = $mb -match "'CFBundleVersion':\s*'@VERSION_FULL@'"
+        if ($hasShort -and $hasFull) {
+            Write-Host "  OK: menubar_macos.spec (placeholders for macOS PyInstaller build)" -ForegroundColor Green
+        } else {
+            Write-Host "  EXPECTED: menubar_macos.spec uses '@VERSION_SHORT@' and '@VERSION_FULL@' — not synced from backend/__init__.py (see tools/build/build_macos.sh)" -ForegroundColor Yellow
+            $allMatch = $false
+        }
+    }
 
     # Check backend/static/flutter-web/version.json (version from source, build_number may be CI override)
     $versionJsonExpectedVersion = $sourceVersion
@@ -251,16 +260,7 @@ if ($param1 -eq "--check") {
         $updatedCount++
     }
 
-    # Update menubar_macos.spec (macOS menu bar app bundle version)
-    # CFBundleShortVersionString: X.Y.Z (no 4th segment)
-    $shortVersion = "$($versionInfo.Major).$($versionInfo.Minor).$($versionInfo.Patch)"
-    if (Update-FileVersion -FilePath "menubar_macos.spec" -Pattern "'CFBundleShortVersionString':\s*'[^']*'" -Replacement "'CFBundleShortVersionString': '$shortVersion'" -Description "menubar_macos.spec (CFBundleShortVersionString)") {
-        $updatedCount++
-    }
-    # CFBundleVersion: X.Y.Z.W (with 4th segment)
-    if (Update-FileVersion -FilePath "menubar_macos.spec" -Pattern "'CFBundleVersion':\s*'[^']*'" -Replacement "'CFBundleVersion': '$sourceVersion'" -Description "menubar_macos.spec (CFBundleVersion)") {
-        $updatedCount++
-    }
+    # menubar_macos.spec: do not write semver here — build_macos.sh substitutes @VERSION_SHORT@ / @VERSION_FULL@ during PyInstaller.
 
     # Generate backend/static/flutter-web/version.json from single source (for Flutter web / PWA)
     $versionJsonDir = "backend\static\flutter-web"
@@ -283,5 +283,6 @@ if ($param1 -eq "--check") {
     Write-Host ""
     Write-Host "Note: frontend/windows/runner/Runner.rc uses Flutter's version from pubspec.yaml" -ForegroundColor Gray
     Write-Host "      It will be automatically updated when Flutter builds." -ForegroundColor Gray
+    Write-Host "Note: menubar_macos.spec keeps @VERSION_SHORT@/@VERSION_FULL@; macOS packaging sets CFBundle* at build time." -ForegroundColor Gray
 }
 

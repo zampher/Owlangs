@@ -184,7 +184,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get translationPersistQueueSuccess =>
-      'Exportaciones guardadas para la cola de traducción.';
+      'Exportaciones guardadas para la cola de tareas.';
 
   @override
   String translationPersistQueueFailed(Object error) {
@@ -193,11 +193,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get translationCloseTranslateTabTitle =>
-      'La cola puede no tener el resultado final';
+      'La cola de tareas puede no tener el resultado final';
 
   @override
   String get translationCloseTranslateTabMessage =>
-      'Tus ediciones aquí aún no están guardadas en la instantánea de la cola de traducción. Si cierras sin guardar, los archivos que descargues desde la cola pueden no ser la versión final que ves en esta pestaña.\n\nPuedes actualizar la cola y cerrar, o cerrar esta pestaña sin guardar en la cola.';
+      'Tus ediciones aquí aún no están guardadas en la instantánea de la cola de tareas. Si cierras sin guardar, los archivos que descargues desde la cola pueden no ser la versión final que ves en esta pestaña.\n\nPuedes actualizar la cola y cerrar, o cerrar esta pestaña sin guardar en la cola.';
 
   @override
   String get translationCloseTranslateTabStay => 'Permanecer';
@@ -902,7 +902,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeNavTranslate => 'Traducción inmersiva';
 
   @override
-  String get homeNavTranslationQueue => 'Cola de traducción';
+  String get homeNavTranslationQueue => 'Cola de tareas';
 
   @override
   String get homeNavAnonymize => 'Anonimizar';
@@ -917,7 +917,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeNavHome => 'Inicio';
 
   @override
-  String get translationQueueTitle => 'Cola de traducción';
+  String get translationQueueTitle => 'Cola de tareas';
 
   @override
   String get translationQueueHint =>
@@ -945,11 +945,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationQueueEmpty => 'Aún no hay tareas de traducción.';
 
   @override
-  String get translationQueueNewQueuedTask => 'Nueva traducción en cola';
+  String get translationQueueNewQueuedTask => 'Traducción en cola';
 
   @override
-  String get translationQueueBackToQueueTooltip =>
-      'Volver a la cola de traducción';
+  String get translationQueueBackToQueueTooltip => 'Volver a la cola de tareas';
 
   @override
   String get translationQueuedStarted =>
@@ -1017,13 +1016,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get translationQueueClearAllTooltip =>
-      'Vaciar cola de traducción y caché del servidor (solo admin)';
+      'Vaciar cola de tareas y caché del servidor (solo admin)';
 
   @override
   String get translationQueueClearAllButton => 'Vaciar cola';
 
   @override
-  String get translationQueueClearAllTitle => 'Vaciar cola de traducción';
+  String get translationQueueClearAllTitle => 'Vaciar cola de tareas';
 
   @override
   String get translationQueueClearAllMessage =>
@@ -1036,7 +1035,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationQueueClearAllCancel => 'Cancelar';
 
   @override
-  String get translationQueueClearAllSuccess => 'Cola de traducción vaciada.';
+  String get translationQueueClearAllSuccess => 'Cola de tareas vaciada.';
 
   @override
   String translationQueueClearAllFailed(Object error) {

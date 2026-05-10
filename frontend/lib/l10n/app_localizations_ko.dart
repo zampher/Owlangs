@@ -160,7 +160,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get translationPersistQueueTooltip =>
-      '현재 내보낸 결과를 서버에 기록해 번역 대기열 다운로드가 이 화면의 최신 편집과 일치하도록 합니다.';
+      '현재 내보낸 결과를 서버에 기록해 작업 대기열 다운로드가 이 화면의 최신 편집과 일치하도록 합니다.';
 
   @override
   String get translationPersistQueueButton => '대기열 업데이트';
@@ -170,7 +170,7 @@ class AppLocalizationsKo extends AppLocalizations {
       '이미 대기열 스냅샷과 일치합니다. 추가 저장이 필요 없습니다.';
 
   @override
-  String get translationPersistQueueSuccess => '번역 대기열용 최신 내보내기를 저장했습니다.';
+  String get translationPersistQueueSuccess => '작업 대기열용 최신 내보내기를 저장했습니다.';
 
   @override
   String translationPersistQueueFailed(Object error) {
@@ -178,11 +178,11 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get translationCloseTranslateTabTitle => '대기열이 최종 결과와 다를 수 있음';
+  String get translationCloseTranslateTabTitle => '작업 대기열이 최종 결과와 다를 수 있음';
 
   @override
   String get translationCloseTranslateTabMessage =>
-      '이 탭에서의 편집이 아직 번역 대기열 스냅샷에 저장되지 않았습니다. 저장 없이 닫으면 「번역 대기열」에서 받는 파일이 이 탭의 최종 버전과 다를 수 있습니다.\n\n대기열을 먼저 업데이트한 뒤 닫거나, 대기열에 저장하지 않고 이 탭을 닫을 수 있습니다.';
+      '이 탭에서의 편집이 아직 작업 대기열 스냅샷에 저장되지 않았습니다. 저장 없이 닫으면 「작업 대기열」에서 받는 파일이 이 탭의 최종 버전과 다를 수 있습니다.\n\n대기열을 먼저 업데이트한 뒤 닫거나, 대기열에 저장하지 않고 이 탭을 닫을 수 있습니다.';
 
   @override
   String get translationCloseTranslateTabStay => '머무르기';
@@ -851,7 +851,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homeNavTranslate => '몰입형 번역';
 
   @override
-  String get homeNavTranslationQueue => '번역 대기열';
+  String get homeNavTranslationQueue => '작업 대기열';
 
   @override
   String get homeNavAnonymize => '익명화';
@@ -866,7 +866,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homeNavHome => '홈';
 
   @override
-  String get translationQueueTitle => '번역 대기열';
+  String get translationQueueTitle => '작업 대기열';
 
   @override
   String get translationQueueHint => '작업이 자동으로 새로 고칩니다. 완료 후 다운로드할 수 있습니다.';
@@ -892,10 +892,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationQueueEmpty => '번역 작업이 없습니다.';
 
   @override
-  String get translationQueueNewQueuedTask => '대기열에 새 번역';
+  String get translationQueueNewQueuedTask => '큐 방식 번역';
 
   @override
-  String get translationQueueBackToQueueTooltip => '번역 대기열로 돌아가기';
+  String get translationQueueBackToQueueTooltip => '작업 대기열로 돌아가기';
 
   @override
   String get translationQueuedStarted => '대기열에 추가되었습니다. 여기서 진행 상황을 확인하세요.';
@@ -961,13 +961,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationQueueGuestUser => '게스트';
 
   @override
-  String get translationQueueClearAllTooltip => '번역 대기열 및 서버 캐시 삭제(관리자만)';
+  String get translationQueueClearAllTooltip => '작업 대기열 및 서버 캐시 삭제(관리자만)';
 
   @override
   String get translationQueueClearAllButton => '대기열 비우기';
 
   @override
-  String get translationQueueClearAllTitle => '번역 대기열 비우기';
+  String get translationQueueClearAllTitle => '작업 대기열 비우기';
 
   @override
   String get translationQueueClearAllMessage =>
@@ -980,7 +980,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationQueueClearAllCancel => '취소';
 
   @override
-  String get translationQueueClearAllSuccess => '번역 대기열을 비웠습니다.';
+  String get translationQueueClearAllSuccess => '작업 대기열을 비웠습니다.';
 
   @override
   String translationQueueClearAllFailed(Object error) {

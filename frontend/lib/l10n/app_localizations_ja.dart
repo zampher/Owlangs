@@ -159,7 +159,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get translationPersistQueueTooltip =>
-      '現在のエクスポートをサーバーに書き込み、翻訳キューのダウンロードをこの画面の最新の編集と一致させます。';
+      '現在のエクスポートをサーバーに書き込み、タスクキューのダウンロードをこの画面の最新の編集と一致させます。';
 
   @override
   String get translationPersistQueueButton => 'キューを更新';
@@ -169,7 +169,7 @@ class AppLocalizationsJa extends AppLocalizations {
       'すでにキューのスナップショットと一致しています。保存は不要です。';
 
   @override
-  String get translationPersistQueueSuccess => '翻訳キュー用に最新のエクスポートを保存しました。';
+  String get translationPersistQueueSuccess => 'タスクキュー用に最新のエクスポートを保存しました。';
 
   @override
   String translationPersistQueueFailed(Object error) {
@@ -177,11 +177,11 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get translationCloseTranslateTabTitle => 'キューが最終結果と一致しない可能性があります';
+  String get translationCloseTranslateTabTitle => 'タスクキューが最終結果と一致しない可能性があります';
 
   @override
   String get translationCloseTranslateTabMessage =>
-      'このタブでの編集はまだ翻訳キューのスナップショットに保存されていません。保存せずに閉じると、「翻訳キュー」からダウンロードするファイルは、このタブで見ている最終版にならない場合があります。\n\n先にキューを更新してから閉じるか、キューに保存せずにこのタブを閉じるかを選べます。';
+      'このタブでの編集はまだタスクキューのスナップショットに保存されていません。保存せずに閉じると、「タスクキュー」からダウンロードするファイルは、このタブで見ている最終版にならない場合があります。\n\n先にキューを更新してから閉じるか、キューに保存せずにこのタブを閉じるかを選べます。';
 
   @override
   String get translationCloseTranslateTabStay => 'キャンセル';
@@ -851,7 +851,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeNavTranslate => 'イマーシブ翻訳';
 
   @override
-  String get homeNavTranslationQueue => '翻訳キュー';
+  String get homeNavTranslationQueue => 'タスクキュー';
 
   @override
   String get homeNavAnonymize => '匿名化';
@@ -866,7 +866,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeNavHome => 'ホーム';
 
   @override
-  String get translationQueueTitle => '翻訳キュー';
+  String get translationQueueTitle => 'タスクキュー';
 
   @override
   String get translationQueueHint => 'タスクは自動更新されます。完了後にダウンロードできます。';
@@ -892,10 +892,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationQueueEmpty => '翻訳タスクはありません。';
 
   @override
-  String get translationQueueNewQueuedTask => 'キューに新規翻訳';
+  String get translationQueueNewQueuedTask => 'キュー式翻訳';
 
   @override
-  String get translationQueueBackToQueueTooltip => '翻訳キューに戻る';
+  String get translationQueueBackToQueueTooltip => 'タスクキューに戻る';
 
   @override
   String get translationQueuedStarted => 'キューに追加しました。ここで進捗を確認できます。';
@@ -961,13 +961,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationQueueGuestUser => 'ゲスト';
 
   @override
-  String get translationQueueClearAllTooltip => '翻訳キューとサーバー側キャッシュをクリア（管理者のみ）';
+  String get translationQueueClearAllTooltip => 'タスクキューとサーバー側キャッシュをクリア（管理者のみ）';
 
   @override
   String get translationQueueClearAllButton => 'キューをクリア';
 
   @override
-  String get translationQueueClearAllTitle => '翻訳キューをクリア';
+  String get translationQueueClearAllTitle => 'タスクキューをクリア';
 
   @override
   String get translationQueueClearAllMessage =>
@@ -980,7 +980,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationQueueClearAllCancel => 'キャンセル';
 
   @override
-  String get translationQueueClearAllSuccess => '翻訳キューをクリアしました。';
+  String get translationQueueClearAllSuccess => 'タスクキューをクリアしました。';
 
   @override
   String translationQueueClearAllFailed(Object error) {

@@ -167,7 +167,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get translationPersistQueueTooltip =>
-      'Write current exports to the server and update the translation queue so downloads match your latest edits here.';
+      'Write current exports to the server and update the task queue so downloads match your latest edits here.';
 
   @override
   String get translationPersistQueueButton => 'Save update to queue';
@@ -178,7 +178,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get translationPersistQueueSuccess =>
-      'Latest exports saved for the translation queue.';
+      'Latest exports saved for the task queue.';
 
   @override
   String translationPersistQueueFailed(Object error) {
@@ -187,11 +187,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get translationCloseTranslateTabTitle =>
-      'Queue may not have your latest result';
+      'Task queue may not reflect your latest result';
 
   @override
   String get translationCloseTranslateTabMessage =>
-      'Your edits here are not saved to the translation queue snapshot yet. If you close without saving, files you download from the Translation queue will not be the final version you see in this tab.\n\nYou can update the queue and then close, or close this tab without saving to the queue.';
+      'Your edits here are not saved to the task queue snapshot yet. If you close without saving, files you download from the Task queue will not be the final version you see in this tab.\n\nYou can update the queue and then close, or close this tab without saving to the queue.';
 
   @override
   String get translationCloseTranslateTabStay => 'Stay';
@@ -879,10 +879,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeBackendRetry => 'Retry';
 
   @override
-  String get homeNavTranslate => 'Immersive translate';
+  String get homeNavTranslate => 'Immersive translation';
 
   @override
-  String get homeNavTranslationQueue => 'Translation queue';
+  String get homeNavTranslationQueue => 'Task queue';
 
   @override
   String get homeNavAnonymize => 'Anonymize';
@@ -897,7 +897,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeNavHome => 'Home';
 
   @override
-  String get translationQueueTitle => 'Translation queue';
+  String get translationQueueTitle => 'Task queue';
 
   @override
   String get translationQueueHint =>
@@ -925,10 +925,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationQueueEmpty => 'No translation tasks yet.';
 
   @override
-  String get translationQueueNewQueuedTask => 'New queued translation';
+  String get translationQueueNewQueuedTask => 'Queued translation';
 
   @override
-  String get translationQueueBackToQueueTooltip => 'Back to translation queue';
+  String get translationQueueBackToQueueTooltip => 'Back to task queue';
 
   @override
   String get translationQueuedStarted =>
@@ -996,13 +996,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get translationQueueClearAllTooltip =>
-      'Clear translation queue and server-side result cache (admin only)';
+      'Clear task queue and server-side result cache (admin only)';
 
   @override
   String get translationQueueClearAllButton => 'Clear queue';
 
   @override
-  String get translationQueueClearAllTitle => 'Clear translation queue';
+  String get translationQueueClearAllTitle => 'Clear task queue';
 
   @override
   String get translationQueueClearAllMessage =>
@@ -1015,7 +1015,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationQueueClearAllCancel => 'Cancel';
 
   @override
-  String get translationQueueClearAllSuccess => 'Translation queue cleared.';
+  String get translationQueueClearAllSuccess => 'Task queue cleared.';
 
   @override
   String translationQueueClearAllFailed(Object error) {

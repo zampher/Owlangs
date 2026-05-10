@@ -158,17 +158,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get translationPersistQueueTooltip =>
-      '将当前导出结果写入服务器，更新翻译队列中的下载，使其与当前译文一致。';
+      '将当前导出结果写入服务器，更新任务队列中的下载，使其与当前译文一致。';
 
   @override
   String get translationPersistQueueButton => '保存更新到队列';
 
   @override
   String get translationPersistQueueAlreadySyncedTooltip =>
-      '当前已与翻译队列快照一致，无需重复保存。';
+      '当前已与任务队列快照一致，无需重复保存。';
 
   @override
-  String get translationPersistQueueSuccess => '已保存最新导出，翻译队列将使用此版本。';
+  String get translationPersistQueueSuccess => '已保存最新导出，任务队列将使用此版本。';
 
   @override
   String translationPersistQueueFailed(Object error) {
@@ -176,11 +176,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get translationCloseTranslateTabTitle => '翻译队列可能不是最后结果';
+  String get translationCloseTranslateTabTitle => '任务队列中的结果可能仍非最终版本';
 
   @override
   String get translationCloseTranslateTabMessage =>
-      '您在此修改的译文尚未保存到翻译队列快照。若现在关闭而不保存，在「翻译队列」中下载的文件将不是您在此编辑后的最终版本。\n\n您可以选择先保存更新到队列再关闭，或仍要直接关闭本标签页（不保存到队列）。';
+      '您在此修改的译文尚未保存到任务队列快照。若现在关闭而不保存，在「任务队列」中下载的文件将不是您在此编辑后的最终版本。\n\n您可以选择先保存更新到队列再关闭，或仍要直接关闭本标签页（不保存到队列）。';
 
   @override
   String get translationCloseTranslateTabStay => '留在本页';
@@ -842,7 +842,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeNavTranslate => '沉浸式翻译';
 
   @override
-  String get homeNavTranslationQueue => '翻译队列';
+  String get homeNavTranslationQueue => '任务队列';
 
   @override
   String get homeNavAnonymize => '匿名化';
@@ -857,7 +857,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeNavHome => '主页';
 
   @override
-  String get translationQueueTitle => '翻译队列';
+  String get translationQueueTitle => '任务队列';
 
   @override
   String get translationQueueHint => '列表会自动刷新，完成后可下载译文。';
@@ -883,10 +883,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationQueueEmpty => '暂无翻译任务。';
 
   @override
-  String get translationQueueNewQueuedTask => '新建队列翻译';
+  String get translationQueueNewQueuedTask => '队列式翻译';
 
   @override
-  String get translationQueueBackToQueueTooltip => '返回翻译队列';
+  String get translationQueueBackToQueueTooltip => '返回任务队列';
 
   @override
   String get translationQueuedStarted => '任务已加入队列，可在此查看进度。';
@@ -952,13 +952,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationQueueGuestUser => '访客';
 
   @override
-  String get translationQueueClearAllTooltip => '清空服务器翻译队列与磁盘缓存结果（仅管理员）';
+  String get translationQueueClearAllTooltip => '清空服务器任务队列与磁盘缓存结果（仅管理员）';
 
   @override
   String get translationQueueClearAllButton => '清空队列';
 
   @override
-  String get translationQueueClearAllTitle => '清空翻译队列';
+  String get translationQueueClearAllTitle => '清空任务队列';
 
   @override
   String get translationQueueClearAllMessage =>
@@ -971,7 +971,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationQueueClearAllCancel => '取消';
 
   @override
-  String get translationQueueClearAllSuccess => '已清空翻译队列。';
+  String get translationQueueClearAllSuccess => '已清空任务队列。';
 
   @override
   String translationQueueClearAllFailed(Object error) {

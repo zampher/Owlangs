@@ -395,7 +395,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationPersistQueueTooltip.
   ///
   /// In en, this message translates to:
-  /// **'Write current exports to the server and update the translation queue so downloads match your latest edits here.'**
+  /// **'Write current exports to the server and update the task queue so downloads match your latest edits here.'**
   String get translationPersistQueueTooltip;
 
   /// No description provided for @translationPersistQueueButton.
@@ -413,7 +413,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationPersistQueueSuccess.
   ///
   /// In en, this message translates to:
-  /// **'Latest exports saved for the translation queue.'**
+  /// **'Latest exports saved for the task queue.'**
   String get translationPersistQueueSuccess;
 
   /// No description provided for @translationPersistQueueFailed.
@@ -425,13 +425,13 @@ abstract class AppLocalizations {
   /// No description provided for @translationCloseTranslateTabTitle.
   ///
   /// In en, this message translates to:
-  /// **'Queue may not have your latest result'**
+  /// **'Task queue may not reflect your latest result'**
   String get translationCloseTranslateTabTitle;
 
   /// No description provided for @translationCloseTranslateTabMessage.
   ///
   /// In en, this message translates to:
-  /// **'Your edits here are not saved to the translation queue snapshot yet. If you close without saving, files you download from the Translation queue will not be the final version you see in this tab.\n\nYou can update the queue and then close, or close this tab without saving to the queue.'**
+  /// **'Your edits here are not saved to the task queue snapshot yet. If you close without saving, files you download from the Task queue will not be the final version you see in this tab.\n\nYou can update the queue and then close, or close this tab without saving to the queue.'**
   String get translationCloseTranslateTabMessage;
 
   /// No description provided for @translationCloseTranslateTabStay.
@@ -1610,13 +1610,13 @@ abstract class AppLocalizations {
   /// No description provided for @homeNavTranslate.
   ///
   /// In en, this message translates to:
-  /// **'Immersive translate'**
+  /// **'Immersive translation'**
   String get homeNavTranslate;
 
   /// No description provided for @homeNavTranslationQueue.
   ///
   /// In en, this message translates to:
-  /// **'Translation queue'**
+  /// **'Task queue'**
   String get homeNavTranslationQueue;
 
   /// No description provided for @homeNavAnonymize.
@@ -1646,7 +1646,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationQueueTitle.
   ///
   /// In en, this message translates to:
-  /// **'Translation queue'**
+  /// **'Task queue'**
   String get translationQueueTitle;
 
   /// No description provided for @translationQueueHint.
@@ -1694,13 +1694,13 @@ abstract class AppLocalizations {
   /// No description provided for @translationQueueNewQueuedTask.
   ///
   /// In en, this message translates to:
-  /// **'New queued translation'**
+  /// **'Queued translation'**
   String get translationQueueNewQueuedTask;
 
   /// No description provided for @translationQueueBackToQueueTooltip.
   ///
   /// In en, this message translates to:
-  /// **'Back to translation queue'**
+  /// **'Back to task queue'**
   String get translationQueueBackToQueueTooltip;
 
   /// No description provided for @translationQueuedStarted.
@@ -1808,7 +1808,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationQueueClearAllTooltip.
   ///
   /// In en, this message translates to:
-  /// **'Clear translation queue and server-side result cache (admin only)'**
+  /// **'Clear task queue and server-side result cache (admin only)'**
   String get translationQueueClearAllTooltip;
 
   /// No description provided for @translationQueueClearAllButton.
@@ -1820,7 +1820,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationQueueClearAllTitle.
   ///
   /// In en, this message translates to:
-  /// **'Clear translation queue'**
+  /// **'Clear task queue'**
   String get translationQueueClearAllTitle;
 
   /// No description provided for @translationQueueClearAllMessage.
@@ -1844,7 +1844,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationQueueClearAllSuccess.
   ///
   /// In en, this message translates to:
-  /// **'Translation queue cleared.'**
+  /// **'Task queue cleared.'**
   String get translationQueueClearAllSuccess;
 
   /// No description provided for @translationQueueClearAllFailed.
