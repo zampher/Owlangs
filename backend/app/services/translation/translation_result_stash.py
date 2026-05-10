@@ -106,6 +106,9 @@ def record_generated_result(
         meta.setdefault("task_id", task_id)
         meta.setdefault("owner_username", task_state.get("owner_username"))
         meta.setdefault("original_filename", task_state.get("original_filename"))
+        _qa = float(task_state.get("queued_at") or 0)
+        _ta = float(task_state.get("task_start_time") or 0)
+        meta.setdefault("started_at", _qa if _qa > 0 else _ta)
         _ts_segs = task_state.get("translation_segments")
         if isinstance(_ts_segs, dict):
             _md = _ts_segs.get("metadata") or {}
@@ -206,6 +209,7 @@ def list_summaries_visible_to_user(is_guest: bool, username: str) -> List[Dict[s
         files_map = meta.get("files") or {}
         fts = list(files_map.keys()) if isinstance(files_map, dict) else []
         completed_at = float(meta.get("completed_at") or meta.get("stashed_at") or 0)
+        started_hint = float(meta.get("started_at") or meta.get("task_start_time") or 0)
         out.append(
             {
                 "task_id": task_id,
@@ -223,6 +227,8 @@ def list_summaries_visible_to_user(is_guest: bool, username: str) -> List[Dict[s
                 "expires_at": exp,
                 "stashed_file_types": fts,
                 "in_memory": False,
+                "started_at": started_hint if started_hint > 0 else 0.0,
+                "completed_at": completed_at,
             }
         )
     out.sort(key=lambda x: float(x.get("task_start_time") or 0.0), reverse=True)

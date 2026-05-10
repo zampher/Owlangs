@@ -157,6 +157,41 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationToolbarRetry => '重试';
 
   @override
+  String get translationPersistQueueTooltip =>
+      '将当前导出结果写入服务器，更新翻译队列中的下载，使其与当前译文一致。';
+
+  @override
+  String get translationPersistQueueButton => '保存更新到队列';
+
+  @override
+  String get translationPersistQueueAlreadySyncedTooltip =>
+      '当前已与翻译队列快照一致，无需重复保存。';
+
+  @override
+  String get translationPersistQueueSuccess => '已保存最新导出，翻译队列将使用此版本。';
+
+  @override
+  String translationPersistQueueFailed(Object error) {
+    return '保存到队列失败：$error';
+  }
+
+  @override
+  String get translationCloseTranslateTabTitle => '翻译队列可能不是最后结果';
+
+  @override
+  String get translationCloseTranslateTabMessage =>
+      '您在此修改的译文尚未保存到翻译队列快照。若现在关闭而不保存，在「翻译队列」中下载的文件将不是您在此编辑后的最终版本。\n\n您可以选择先保存更新到队列再关闭，或仍要直接关闭本标签页（不保存到队列）。';
+
+  @override
+  String get translationCloseTranslateTabStay => '留在本页';
+
+  @override
+  String get translationCloseTranslateTabClose => '仍要关闭';
+
+  @override
+  String get translationCloseTranslateTabSaveAndClose => '保存并关闭';
+
+  @override
   String get translationToolbarSwitchToFile => '切换到文件';
 
   @override
@@ -828,10 +863,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationQueueHint => '列表会自动刷新，完成后可下载译文。';
 
   @override
+  String get translationQueueCancelExitHint =>
+      '排队中或进行中的任务可点击「取消任务」中止；确认后将返回首页。';
+
+  @override
+  String get translationQueueCancelDialogTitle => '取消该翻译任务？';
+
+  @override
+  String get translationQueueCancelDialogMessage =>
+      '排队中的任务将从队列移除；进行中的任务将被中止。确认后将返回首页。';
+
+  @override
+  String get translationQueueCancelDialogKeep => '保留';
+
+  @override
+  String get translationQueueCancelDialogConfirm => '确认取消';
+
+  @override
   String get translationQueueEmpty => '暂无翻译任务。';
 
   @override
   String get translationQueueNewQueuedTask => '新建队列翻译';
+
+  @override
+  String get translationQueueBackToQueueTooltip => '返回翻译队列';
 
   @override
   String get translationQueuedStarted => '任务已加入队列，可在此查看进度。';
@@ -873,6 +928,54 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String translationQueueActionFailed(Object error) {
     return '操作失败：$error';
+  }
+
+  @override
+  String translationQueueSubmittedBy(Object user) {
+    return '发起人：$user';
+  }
+
+  @override
+  String translationQueueStartedAt(Object time) {
+    return '发起：$time';
+  }
+
+  @override
+  String translationQueueCompletedAt(Object time) {
+    return '完成：$time';
+  }
+
+  @override
+  String get translationQueueTimeUnknown => '—';
+
+  @override
+  String get translationQueueGuestUser => '访客';
+
+  @override
+  String get translationQueueClearAllTooltip => '清空服务器翻译队列与磁盘缓存结果（仅管理员）';
+
+  @override
+  String get translationQueueClearAllButton => '清空队列';
+
+  @override
+  String get translationQueueClearAllTitle => '清空翻译队列';
+
+  @override
+  String get translationQueueClearAllMessage =>
+      '将取消排队与进行中的任务，移除全部内存中的任务，并删除磁盘上的队列快照。此操作不可撤销。';
+
+  @override
+  String get translationQueueClearAllConfirm => '清空';
+
+  @override
+  String get translationQueueClearAllCancel => '取消';
+
+  @override
+  String get translationQueueClearAllSuccess => '已清空翻译队列。';
+
+  @override
+  String translationQueueClearAllFailed(Object error) {
+    return '清空失败：$error';
   }
 
   @override
@@ -2084,10 +2187,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTranslationTimeoutHint => '120（推荐：120-300秒）';
 
   @override
-  String get settingsTranslationRetryTitle => '重试次数';
+  String get settingsTranslationChunkRetryTitle => '分块/API 重试次数';
 
   @override
-  String get settingsTranslationRetryHint => '推荐：3（失败片段的重试次数）';
+  String get settingsTranslationChunkRetryHint => '推荐：3–5（单次分块翻译或接口失败时的重试）';
+
+  @override
+  String get settingsTranslationSegmentAutoRetryTitle => '队列模式：译后失败片段自动重试轮数';
+
+  @override
+  String get settingsTranslationSegmentAutoRetryHint =>
+      '推荐：3（主翻译结束后批量补译失败片段，共 1–10 轮；仅队列模式）';
 
   @override
   String get settingsTranslationChunkSizeTitle => '分块大小（词元）';

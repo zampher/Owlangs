@@ -166,6 +166,44 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationToolbarRetry => 'Retry';
 
   @override
+  String get translationPersistQueueTooltip =>
+      'Write current exports to the server and update the translation queue so downloads match your latest edits here.';
+
+  @override
+  String get translationPersistQueueButton => 'Save update to queue';
+
+  @override
+  String get translationPersistQueueAlreadySyncedTooltip =>
+      'Already matches the queue snapshot. No save needed.';
+
+  @override
+  String get translationPersistQueueSuccess =>
+      'Latest exports saved for the translation queue.';
+
+  @override
+  String translationPersistQueueFailed(Object error) {
+    return 'Could not save exports for the queue: $error';
+  }
+
+  @override
+  String get translationCloseTranslateTabTitle =>
+      'Queue may not have your latest result';
+
+  @override
+  String get translationCloseTranslateTabMessage =>
+      'Your edits here are not saved to the translation queue snapshot yet. If you close without saving, files you download from the Translation queue will not be the final version you see in this tab.\n\nYou can update the queue and then close, or close this tab without saving to the queue.';
+
+  @override
+  String get translationCloseTranslateTabStay => 'Stay';
+
+  @override
+  String get translationCloseTranslateTabClose => 'Close without saving';
+
+  @override
+  String get translationCloseTranslateTabSaveAndClose =>
+      'Save to queue and close';
+
+  @override
   String get translationToolbarSwitchToFile => 'Switch to File';
 
   @override
@@ -866,10 +904,31 @@ class AppLocalizationsEn extends AppLocalizations {
       'Tasks refresh automatically. Downloads appear when a task completes.';
 
   @override
+  String get translationQueueCancelExitHint =>
+      'For queued or running tasks, use Cancel task to stop work; after you confirm, you return to the home page.';
+
+  @override
+  String get translationQueueCancelDialogTitle =>
+      'Cancel this translation task?';
+
+  @override
+  String get translationQueueCancelDialogMessage =>
+      'Queued tasks are removed from the queue; running tasks are stopped. After confirming, you will return to the home page.';
+
+  @override
+  String get translationQueueCancelDialogKeep => 'Keep';
+
+  @override
+  String get translationQueueCancelDialogConfirm => 'Cancel task';
+
+  @override
   String get translationQueueEmpty => 'No translation tasks yet.';
 
   @override
   String get translationQueueNewQueuedTask => 'New queued translation';
+
+  @override
+  String get translationQueueBackToQueueTooltip => 'Back to translation queue';
 
   @override
   String get translationQueuedStarted =>
@@ -912,6 +971,55 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String translationQueueActionFailed(Object error) {
     return 'Action failed: $error';
+  }
+
+  @override
+  String translationQueueSubmittedBy(Object user) {
+    return 'Submitted by: $user';
+  }
+
+  @override
+  String translationQueueStartedAt(Object time) {
+    return 'Started: $time';
+  }
+
+  @override
+  String translationQueueCompletedAt(Object time) {
+    return 'Completed: $time';
+  }
+
+  @override
+  String get translationQueueTimeUnknown => '—';
+
+  @override
+  String get translationQueueGuestUser => 'Guest';
+
+  @override
+  String get translationQueueClearAllTooltip =>
+      'Clear translation queue and server-side result cache (admin only)';
+
+  @override
+  String get translationQueueClearAllButton => 'Clear queue';
+
+  @override
+  String get translationQueueClearAllTitle => 'Clear translation queue';
+
+  @override
+  String get translationQueueClearAllMessage =>
+      'This cancels queued and in-flight work, removes all in-memory tasks, and deletes on-disk queue snapshots. This cannot be undone.';
+
+  @override
+  String get translationQueueClearAllConfirm => 'Clear';
+
+  @override
+  String get translationQueueClearAllCancel => 'Cancel';
+
+  @override
+  String get translationQueueClearAllSuccess => 'Translation queue cleared.';
+
+  @override
+  String translationQueueClearAllFailed(Object error) {
+    return 'Could not clear queue: $error';
   }
 
   @override
@@ -2167,11 +2275,19 @@ class AppLocalizationsEn extends AppLocalizations {
       '120 (recommended: 120-300 seconds)';
 
   @override
-  String get settingsTranslationRetryTitle => 'Retry Count';
+  String get settingsTranslationChunkRetryTitle => 'Chunk retry (per request)';
 
   @override
-  String get settingsTranslationRetryHint =>
-      'Recommended: 3 (number of retries for failed segments)';
+  String get settingsTranslationChunkRetryHint =>
+      'Recommended: 3–5 (retries when a translation chunk or API call fails)';
+
+  @override
+  String get settingsTranslationSegmentAutoRetryTitle =>
+      'Queue mode: failed-segment auto rounds';
+
+  @override
+  String get settingsTranslationSegmentAutoRetryHint =>
+      'Recommended: 3 (1–10 batch retranslate rounds after main translation; queued mode only)';
 
   @override
   String get settingsTranslationChunkSizeTitle => 'Chunk Size (tokens)';

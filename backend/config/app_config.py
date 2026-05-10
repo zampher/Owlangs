@@ -65,7 +65,8 @@ class AppConfig:
     translator_connect_timeout: int = 15  # HTTP connect timeout (seconds) to reduce first-attempt ConnectTimeout
     translator_timeout: int = 120
     translator_retry: int = 2
-    
+    translator_segment_auto_retry_rounds: int = 3  # Queued mode: post-translation failed-segment batch rounds
+
     # Platform-specific API settings (dynamically save keys and models for different platforms)
     platform_api_keys: Dict[str, str] = field(default_factory=dict)
     platform_models: Dict[str, str] = field(default_factory=dict)

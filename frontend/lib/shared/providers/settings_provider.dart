@@ -78,6 +78,7 @@ class GlobalSettings {
     this.timeout =
         120, // Changed from 30 to 120 seconds (2 minutes) for better reliability
     this.retry = 3,
+    this.segmentAutoRetryRounds = 3,
     this.customPrompt,
 
     // Anonymization
@@ -148,6 +149,7 @@ class GlobalSettings {
         timeout:
             json['translationTimeout'] ?? 120, // Changed from 30 to 120 seconds
         retry: json['retry'] ?? 3,
+        segmentAutoRetryRounds: json['segment_auto_retry_rounds'] ?? 3,
         customPrompt: json['customPrompt'],
         anonymizationEngine: json['anonymizationEngine'] ?? 'presidio',
         entityTypes: List<String>.from(
@@ -219,6 +221,8 @@ class GlobalSettings {
   final String thinking;
   final int timeout;
   final int retry;
+  /// Queued mode: post-translation failed-segment auto batch rounds (not chunk retry).
+  final int segmentAutoRetryRounds;
   final String? customPrompt;
 
   /// DEPRECATED: chunkSize and concurrent are now per-platform settings.
@@ -286,6 +290,7 @@ class GlobalSettings {
     String? thinking,
     int? timeout,
     int? retry,
+    int? segmentAutoRetryRounds,
     String? customPrompt,
 
     // Anonymization
@@ -351,6 +356,8 @@ class GlobalSettings {
         thinking: thinking ?? this.thinking,
         timeout: timeout ?? this.timeout,
         retry: retry ?? this.retry,
+        segmentAutoRetryRounds:
+            segmentAutoRetryRounds ?? this.segmentAutoRetryRounds,
         customPrompt: customPrompt ?? this.customPrompt,
 
         // Anonymization
@@ -399,6 +406,7 @@ class GlobalSettings {
         'thinking': thinking,
         'translationTimeout': timeout,
         'retry': retry,
+        'segment_auto_retry_rounds': segmentAutoRetryRounds,
         'customPrompt': customPrompt,
         'anonymizationEngine': anonymizationEngine,
         'entityTypes': entityTypes,
@@ -470,6 +478,14 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
           }
           if (appConfig.containsKey('retry')) {
             backendSettings['retry'] = appConfig['retry'];
+          }
+          if (appConfig.containsKey('segment_auto_retry_rounds')) {
+            backendSettings['segment_auto_retry_rounds'] =
+                appConfig['segment_auto_retry_rounds'];
+          } else if (appConfig
+              .containsKey('translator_segment_auto_retry_rounds')) {
+            backendSettings['segment_auto_retry_rounds'] =
+                appConfig['translator_segment_auto_retry_rounds'];
           }
 
           // Map exclusion_defaults from backend (global config)
@@ -754,6 +770,7 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     String? thinking,
     int? timeout,
     int? retry,
+    int? segmentAutoRetryRounds,
     String? customPrompt,
   }) async {
     // 1. Immediately update local state (for fast UI response)
@@ -767,6 +784,7 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
       thinking: thinking,
       timeout: timeout,
       retry: retry,
+      segmentAutoRetryRounds: segmentAutoRetryRounds,
       customPrompt: customPrompt,
     );
 
@@ -813,6 +831,13 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     }
     if (retry != null) {
       await _settingsService.saveSetting('', 'retry', retry);
+    }
+    if (segmentAutoRetryRounds != null) {
+      await _settingsService.saveSetting(
+        '',
+        'segment_auto_retry_rounds',
+        segmentAutoRetryRounds,
+      );
     }
     if (customPrompt != null) {
       await _settingsService.saveSetting('', 'customPrompt', customPrompt);

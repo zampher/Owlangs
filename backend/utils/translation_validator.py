@@ -11,7 +11,10 @@ if a translation should be considered as failed or if it's just untranslatable c
 
 import re
 import logging
-from typing import Tuple
+from typing import Any, Dict, Tuple
+
+from logger import unified_logger as unified_logger
+from logger.logger import LogModule
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +114,98 @@ def should_treat_as_failure(source: str, translated: str) -> Tuple[bool, str]:
         f"translatable_ratio={translatable_ratio:.2%}"
     )
     return False, "Content likely doesn't need translation (mostly non-translatable characters)"
+
+
+def refresh_task_state_segment_failure_flags(task_state: Dict[str, Any]) -> int:
+    """
+    Recompute is_failed, needs_retry, and failure_reason from source_text vs target_text
+    using should_treat_as_failure for each segment.
+
+    Skips excluded, image, and user-cleared segments (same rules as batch retranslate).
+
+    Used by queued translation auto-retry so collection matches immersive / RECORD_SEGMENTS
+    semantics: flags may be missing after initial recording, or cleared incorrectly when
+    the LLM returns same-as-source but the validator would still treat it as untranslated.
+
+    Returns:
+        Count of segments with is_failed True after refresh.
+    """
+    data = task_state.get("translation_segments") or {}
+    segments = data.get("segments") if isinstance(data, dict) else None
+    if not isinstance(segments, list):
+        return 0
+    failed_count = 0
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        if seg.get("is_excluded") or seg.get("is_image"):
+            continue
+        if seg.get("status") == "cleared":
+            continue
+        src = (seg.get("source_text") or "").strip()
+        tgt = (seg.get("target_text") or "").strip()
+        is_failed, reason = should_treat_as_failure(src, tgt)
+        seg["is_failed"] = is_failed
+        seg["failure_reason"] = reason if is_failed else None
+        seg["needs_retry"] = bool(is_failed)
+        if is_failed:
+            failed_count += 1
+    return failed_count
+
+
+def summarize_segment_translation_stats(task_state: Dict[str, Any]) -> Dict[str, int]:
+    """
+    Count segments by outcome using should_treat_as_failure on source vs target.
+
+    - eligible: not excluded, not image, not cleared — same population as auto-retry eligibility.
+    - success / failed: split among eligible only.
+    """
+    data = task_state.get("translation_segments") or {}
+    segments = data.get("segments") if isinstance(data, dict) else None
+    out = {
+        "total": 0,
+        "eligible": 0,
+        "success": 0,
+        "failed": 0,
+        "excluded": 0,
+        "image": 0,
+        "cleared": 0,
+    }
+    if not isinstance(segments, list):
+        return out
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        out["total"] += 1
+        if seg.get("is_excluded"):
+            out["excluded"] += 1
+            continue
+        if seg.get("is_image"):
+            out["image"] += 1
+            continue
+        if seg.get("status") == "cleared":
+            out["cleared"] += 1
+            continue
+        src = (seg.get("source_text") or "").strip()
+        tgt = (seg.get("target_text") or "").strip()
+        out["eligible"] += 1
+        is_failed, _reason = should_treat_as_failure(src, tgt)
+        if is_failed:
+            out["failed"] += 1
+        else:
+            out["success"] += 1
+    return out
+
+
+def log_segment_translation_stats(task_id: str, task_state: Dict[str, Any], context: str) -> None:
+    """Emit one INFO line with success/failed/eligible counts for operators."""
+    s = summarize_segment_translation_stats(task_state)
+    unified_logger.info(
+        LogModule.TRANS,
+        f"[SEGMENT-STATS] task={task_id} {context}: "
+        f"total={s['total']} eligible={s['eligible']} success={s['success']} failed={s['failed']} "
+        f"(excluded={s['excluded']} image={s['image']} cleared={s['cleared']})",
+    )
 
 
 def calculate_translatable_ratio(text: str) -> float:

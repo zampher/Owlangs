@@ -392,6 +392,66 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get translationToolbarRetry;
 
+  /// No description provided for @translationPersistQueueTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Write current exports to the server and update the translation queue so downloads match your latest edits here.'**
+  String get translationPersistQueueTooltip;
+
+  /// No description provided for @translationPersistQueueButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Save update to queue'**
+  String get translationPersistQueueButton;
+
+  /// No description provided for @translationPersistQueueAlreadySyncedTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Already matches the queue snapshot. No save needed.'**
+  String get translationPersistQueueAlreadySyncedTooltip;
+
+  /// No description provided for @translationPersistQueueSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest exports saved for the translation queue.'**
+  String get translationPersistQueueSuccess;
+
+  /// No description provided for @translationPersistQueueFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save exports for the queue: {error}'**
+  String translationPersistQueueFailed(Object error);
+
+  /// No description provided for @translationCloseTranslateTabTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Queue may not have your latest result'**
+  String get translationCloseTranslateTabTitle;
+
+  /// No description provided for @translationCloseTranslateTabMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Your edits here are not saved to the translation queue snapshot yet. If you close without saving, files you download from the Translation queue will not be the final version you see in this tab.\n\nYou can update the queue and then close, or close this tab without saving to the queue.'**
+  String get translationCloseTranslateTabMessage;
+
+  /// No description provided for @translationCloseTranslateTabStay.
+  ///
+  /// In en, this message translates to:
+  /// **'Stay'**
+  String get translationCloseTranslateTabStay;
+
+  /// No description provided for @translationCloseTranslateTabClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close without saving'**
+  String get translationCloseTranslateTabClose;
+
+  /// No description provided for @translationCloseTranslateTabSaveAndClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Save to queue and close'**
+  String get translationCloseTranslateTabSaveAndClose;
+
   /// No description provided for @translationToolbarSwitchToFile.
   ///
   /// In en, this message translates to:
@@ -1595,6 +1655,36 @@ abstract class AppLocalizations {
   /// **'Tasks refresh automatically. Downloads appear when a task completes.'**
   String get translationQueueHint;
 
+  /// No description provided for @translationQueueCancelExitHint.
+  ///
+  /// In en, this message translates to:
+  /// **'For queued or running tasks, use Cancel task to stop work; after you confirm, you return to the home page.'**
+  String get translationQueueCancelExitHint;
+
+  /// No description provided for @translationQueueCancelDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel this translation task?'**
+  String get translationQueueCancelDialogTitle;
+
+  /// No description provided for @translationQueueCancelDialogMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued tasks are removed from the queue; running tasks are stopped. After confirming, you will return to the home page.'**
+  String get translationQueueCancelDialogMessage;
+
+  /// No description provided for @translationQueueCancelDialogKeep.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep'**
+  String get translationQueueCancelDialogKeep;
+
+  /// No description provided for @translationQueueCancelDialogConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel task'**
+  String get translationQueueCancelDialogConfirm;
+
   /// No description provided for @translationQueueEmpty.
   ///
   /// In en, this message translates to:
@@ -1606,6 +1696,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New queued translation'**
   String get translationQueueNewQueuedTask;
+
+  /// No description provided for @translationQueueBackToQueueTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to translation queue'**
+  String get translationQueueBackToQueueTooltip;
 
   /// No description provided for @translationQueuedStarted.
   ///
@@ -1678,6 +1774,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Action failed: {error}'**
   String translationQueueActionFailed(Object error);
+
+  /// No description provided for @translationQueueSubmittedBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Submitted by: {user}'**
+  String translationQueueSubmittedBy(Object user);
+
+  /// No description provided for @translationQueueStartedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Started: {time}'**
+  String translationQueueStartedAt(Object time);
+
+  /// No description provided for @translationQueueCompletedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed: {time}'**
+  String translationQueueCompletedAt(Object time);
+
+  /// No description provided for @translationQueueTimeUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'—'**
+  String get translationQueueTimeUnknown;
+
+  /// No description provided for @translationQueueGuestUser.
+  ///
+  /// In en, this message translates to:
+  /// **'Guest'**
+  String get translationQueueGuestUser;
+
+  /// No description provided for @translationQueueClearAllTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear translation queue and server-side result cache (admin only)'**
+  String get translationQueueClearAllTooltip;
+
+  /// No description provided for @translationQueueClearAllButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear queue'**
+  String get translationQueueClearAllButton;
+
+  /// No description provided for @translationQueueClearAllTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear translation queue'**
+  String get translationQueueClearAllTitle;
+
+  /// No description provided for @translationQueueClearAllMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This cancels queued and in-flight work, removes all in-memory tasks, and deletes on-disk queue snapshots. This cannot be undone.'**
+  String get translationQueueClearAllMessage;
+
+  /// No description provided for @translationQueueClearAllConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get translationQueueClearAllConfirm;
+
+  /// No description provided for @translationQueueClearAllCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get translationQueueClearAllCancel;
+
+  /// No description provided for @translationQueueClearAllSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation queue cleared.'**
+  String get translationQueueClearAllSuccess;
+
+  /// No description provided for @translationQueueClearAllFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not clear queue: {error}'**
+  String translationQueueClearAllFailed(Object error);
 
   /// No description provided for @homeFeatureUnderDevelopment.
   ///
@@ -3854,17 +4028,29 @@ abstract class AppLocalizations {
   /// **'120 (recommended: 120-300 seconds)'**
   String get settingsTranslationTimeoutHint;
 
-  /// No description provided for @settingsTranslationRetryTitle.
+  /// No description provided for @settingsTranslationChunkRetryTitle.
   ///
   /// In en, this message translates to:
-  /// **'Retry Count'**
-  String get settingsTranslationRetryTitle;
+  /// **'Chunk retry (per request)'**
+  String get settingsTranslationChunkRetryTitle;
 
-  /// No description provided for @settingsTranslationRetryHint.
+  /// No description provided for @settingsTranslationChunkRetryHint.
   ///
   /// In en, this message translates to:
-  /// **'Recommended: 3 (number of retries for failed segments)'**
-  String get settingsTranslationRetryHint;
+  /// **'Recommended: 3–5 (retries when a translation chunk or API call fails)'**
+  String get settingsTranslationChunkRetryHint;
+
+  /// No description provided for @settingsTranslationSegmentAutoRetryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Queue mode: failed-segment auto rounds'**
+  String get settingsTranslationSegmentAutoRetryTitle;
+
+  /// No description provided for @settingsTranslationSegmentAutoRetryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended: 3 (1–10 batch retranslate rounds after main translation; queued mode only)'**
+  String get settingsTranslationSegmentAutoRetryHint;
 
   /// No description provided for @settingsTranslationChunkSizeTitle.
   ///

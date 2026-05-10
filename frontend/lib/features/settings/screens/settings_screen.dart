@@ -725,6 +725,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                     ],
                   ),
                   const SizedBox(height: 16),
+                  _buildSegmentAutoRetryField(globalSettings, globalNotifier),
+                  const SizedBox(height: 16),
 
                   // Custom Prompt removed: Prompt is now controlled per task in Quick Settings
                 ],
@@ -963,7 +965,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            AppLocalizations.of(context)!.settingsTranslationRetryTitle,
+            AppLocalizations.of(context)!.settingsTranslationChunkRetryTitle,
             style: const TextStyle(fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 8),
@@ -975,12 +977,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               hintText:
-                  AppLocalizations.of(context)!.settingsTranslationRetryHint,
+                  AppLocalizations.of(context)!.settingsTranslationChunkRetryHint,
             ),
             onChanged: (String value) {
               final int? intValue = int.tryParse(value);
               if (intValue != null && intValue >= 0) {
                 notifier.updateTranslationSettings(retry: intValue);
+              }
+            },
+          ),
+        ],
+      );
+
+  Widget _buildSegmentAutoRetryField(
+    GlobalSettings settings,
+    GlobalSettingsNotifier notifier,
+  ) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            AppLocalizations.of(context)!
+                .settingsTranslationSegmentAutoRetryTitle,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            initialValue: settings.segmentAutoRetryRounds.toString(),
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              hintText: AppLocalizations.of(context)!
+                  .settingsTranslationSegmentAutoRetryHint,
+            ),
+            onChanged: (String value) {
+              final int? intValue = int.tryParse(value);
+              if (intValue != null && intValue >= 1 && intValue <= 10) {
+                notifier.updateTranslationSettings(
+                  segmentAutoRetryRounds: intValue,
+                );
               }
             },
           ),

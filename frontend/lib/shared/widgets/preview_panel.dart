@@ -14,10 +14,14 @@ class PreviewPanel extends ConsumerStatefulWidget {
     this.flowId,
     this.emptyState,
     this.onTabClose,
+    this.onTabCloseConfirm,
   });
   final String? flowId;
   final Widget? emptyState;
   final void Function(PreviewTab)? onTabClose;
+
+  /// When closing a tab, return `false` to cancel closing (e.g. unsaved warning).
+  final Future<bool> Function(PreviewTab)? onTabCloseConfirm;
 
   @override
   ConsumerState<PreviewPanel> createState() => _PreviewPanelState();
@@ -216,10 +220,15 @@ class _PreviewPanelState extends ConsumerState<PreviewPanel> {
                                   tab: tab,
                                   isActive: i == tabsState.activeTabIndex,
                                   onTap: () => tabsNotifier.switchToTab(i),
-                                  onClose: () {
-                                    if (widget.onTabClose != null) {
-                                      widget.onTabClose!(tab);
+                                  onClose: () async {
+                                    if (widget.onTabCloseConfirm != null) {
+                                      final bool proceed =
+                                          await widget.onTabCloseConfirm!(tab);
+                                      if (!proceed) {
+                                        return;
+                                      }
                                     }
+                                    widget.onTabClose?.call(tab);
                                     tabsNotifier.closeTab(i);
                                   },
                                 );

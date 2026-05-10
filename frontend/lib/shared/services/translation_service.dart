@@ -86,6 +86,26 @@ class TranslationService {
     return data;
   }
 
+  /// Admin-only: cancel queued/in-flight work, drop memory tasks, wipe result stash.
+  Future<Map<String, dynamic>> adminClearTranslationQueue() async {
+    final Dio dio = _buildAuthedDio(useLongTimeout: true);
+    final Response<dynamic> resp = await dio.post<dynamic>(
+      '/service/admin/clear-translation-queue',
+      options: Options(
+        receiveTimeout: AppConfig.longRequestTimeout,
+        sendTimeout: AppConfig.longRequestTimeout,
+      ),
+    );
+    final dynamic body = resp.data;
+    if (body is Map<String, dynamic>) {
+      return body;
+    }
+    if (body is Map) {
+      return body.cast<String, dynamic>();
+    }
+    return <String, dynamic>{};
+  }
+
   /// 查询任务状态
   Future<Map<String, dynamic>> getStatus(String taskId) async {
     final dio = _buildAuthedDio();
@@ -169,6 +189,23 @@ class TranslationService {
     final dio = _buildAuthedDio();
     final resp = await dio.post('/service/release/$taskId');
     return (resp.data as Map).cast<String, dynamic>();
+  }
+
+  /// Writes rebuilt exports to server-side stash so [listTranslationTasks] / queue downloads match current segments.
+  Future<Map<String, dynamic>> persistQueueSnapshot(String taskId) async {
+    final dio = _buildAuthedDio(useLongTimeout: true);
+    final resp = await dio.post<Map<String, dynamic>>(
+      '/service/persist-result/$taskId',
+      options: Options(
+        receiveTimeout: AppConfig.longRequestTimeout,
+        sendTimeout: AppConfig.longRequestTimeout,
+      ),
+    );
+    final data = resp.data;
+    if (data == null) {
+      return <String, dynamic>{'ok': false};
+    }
+    return Map<String, dynamic>.from(data);
   }
 
   /// Check if Pandoc and Calibre are available for EPUB/MOBI export.

@@ -68,6 +68,7 @@ class TranslationResultPreview extends ConsumerStatefulWidget {
     this.initialTargetParagraphs,
     this.downloads,
     this.onDownload,
+    this.onTranslationWorkspaceMutation,
     this.fileName,
     this.isTextMode = false,
     this.workflowType,
@@ -78,6 +79,8 @@ class TranslationResultPreview extends ConsumerStatefulWidget {
   final List<String>? initialTargetParagraphs; // Optional initial paragraphs
   final Map<String, String>? downloads; // Download URLs by file type
   final Function(String fileType, String url)? onDownload; // Download callback
+  /// Fired when user edits / undo / redo target text (server updated) so the shell can mark queue-stash dirty.
+  final VoidCallback? onTranslationWorkspaceMutation;
   final String? fileName; // Original file name
   final bool isTextMode;
   final String? workflowType;
@@ -132,6 +135,10 @@ class _TranslationResultPreviewState
       }
     }
     return widget.taskId;
+  }
+
+  void _notifyTranslationWorkspaceMutation() {
+    widget.onTranslationWorkspaceMutation?.call();
   }
 
   // Cached item heights for accurate scroll calculation (kept for backward compatibility)
@@ -2345,6 +2352,7 @@ class _TranslationResultPreviewState
       final TranslationSegmentsUndoRedoNotifier undoRedoNotifier =
           ref.read(translationSegmentsUndoRedoProvider(_apiTaskId()).notifier);
       undoRedoNotifier.pushRevision(index, newText, oldText: oldText);
+      _notifyTranslationWorkspaceMutation();
     } catch (e) {
       AppLogger.log(
         'TranslationResultPreview',
@@ -2426,6 +2434,7 @@ class _TranslationResultPreviewState
           'Undo: Segment ${operation.segmentIndex + 1}',
         );
       }
+      _notifyTranslationWorkspaceMutation();
     } catch (e) {
       if (mounted) {
         MessageService.showError(context, 'Failed to undo: $e');
@@ -2492,6 +2501,7 @@ class _TranslationResultPreviewState
           'Redo: Segment ${operation.segmentIndex + 1}',
         );
       }
+      _notifyTranslationWorkspaceMutation();
     } catch (e) {
       if (mounted) {
         MessageService.showError(context, 'Failed to redo: $e');
@@ -2555,6 +2565,7 @@ class _TranslationResultPreviewState
           'Undo: Segment ${segmentIndex + 1}',
         );
       }
+      _notifyTranslationWorkspaceMutation();
     } catch (e) {
       if (mounted) {
         MessageService.showError(context, 'Failed to undo: $e');
@@ -2618,6 +2629,7 @@ class _TranslationResultPreviewState
           'Redo: Segment ${segmentIndex + 1}',
         );
       }
+      _notifyTranslationWorkspaceMutation();
     } catch (e) {
       if (mounted) {
         MessageService.showError(context, 'Failed to redo: $e');
@@ -3072,6 +3084,7 @@ class _TranslationResultPreviewState
           // Trigger rebuild so itemConverter uses updated _allSegmentsMetadata
         });
         MessageService.showInfo(context, 'Segment translation restored');
+        _notifyTranslationWorkspaceMutation();
       }
     } catch (e) {
       if (mounted) {

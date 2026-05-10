@@ -172,7 +172,19 @@ class BaseWorkflowParams(BaseModel):
     timeout: int = Field(default=default_params["timeout"], description="Time to wait for API response (seconds).")
     thinking: ThinkingMode = Field(default=default_params["thinking"], description="Thinking mode for the Agent.",
                                    examples=["default", "enable", "disable"])
-    retry: int = Field(default=default_params["retry"], description="Maximum retry count after a chunk translation fails.")
+    retry: int = Field(
+        default=default_params["retry"],
+        description="Per-chunk HTTP/API retries when a translation chunk fails (Agent send_async retry budget).",
+        ge=0,
+        le=20,
+    )
+    segment_auto_retry_rounds: int = Field(
+        default=3,
+        description="Queued execution mode only: maximum rounds of batch retranslate for "
+        "failed segments after main translation completes (separate from chunk retry).",
+        ge=1,
+        le=10,
+    )
     custom_prompt: Optional[str] = Field(None, description="User-defined translation prompt.", alias="custom_prompt")
     glossary_dict: Optional[Dict[str, str]] = Field(None, description="Glossary dictionary, key is original text, value is translated text.")
     glossary_generate_enable: bool = Field(default=False, description="Whether to enable automatic glossary generation.")
@@ -453,6 +465,7 @@ class TranslateServiceRequest(BaseModel):
                         "timeout": default_params["timeout"],
                         "thinking": default_params["thinking"],
                         "retry": default_params["retry"],
+                        "segment_auto_retry_rounds": 3,
                         "convert_engine": "mineru",
                         "formula_ocr": True,
                         "table_ocr": True,

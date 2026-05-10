@@ -159,6 +159,41 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationToolbarRetry => '재시도';
 
   @override
+  String get translationPersistQueueTooltip =>
+      '현재 내보낸 결과를 서버에 기록해 번역 대기열 다운로드가 이 화면의 최신 편집과 일치하도록 합니다.';
+
+  @override
+  String get translationPersistQueueButton => '대기열 업데이트';
+
+  @override
+  String get translationPersistQueueAlreadySyncedTooltip =>
+      '이미 대기열 스냅샷과 일치합니다. 추가 저장이 필요 없습니다.';
+
+  @override
+  String get translationPersistQueueSuccess => '번역 대기열용 최신 내보내기를 저장했습니다.';
+
+  @override
+  String translationPersistQueueFailed(Object error) {
+    return '대기열에 저장하지 못했습니다: $error';
+  }
+
+  @override
+  String get translationCloseTranslateTabTitle => '대기열이 최종 결과와 다를 수 있음';
+
+  @override
+  String get translationCloseTranslateTabMessage =>
+      '이 탭에서의 편집이 아직 번역 대기열 스냅샷에 저장되지 않았습니다. 저장 없이 닫으면 「번역 대기열」에서 받는 파일이 이 탭의 최종 버전과 다를 수 있습니다.\n\n대기열을 먼저 업데이트한 뒤 닫거나, 대기열에 저장하지 않고 이 탭을 닫을 수 있습니다.';
+
+  @override
+  String get translationCloseTranslateTabStay => '머무르기';
+
+  @override
+  String get translationCloseTranslateTabClose => '저장 없이 닫기';
+
+  @override
+  String get translationCloseTranslateTabSaveAndClose => '저장 후 닫기';
+
+  @override
   String get translationToolbarSwitchToFile => '파일로 전환';
 
   @override
@@ -837,10 +872,30 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationQueueHint => '작업이 자동으로 새로 고칩니다. 완료 후 다운로드할 수 있습니다.';
 
   @override
+  String get translationQueueCancelExitHint =>
+      '대기 중이거나 실행 중인 작업은 «작업 취소»로 중단할 수 있습니다. 확인 후 홈으로 돌아갑니다.';
+
+  @override
+  String get translationQueueCancelDialogTitle => '이 번역 작업을 취소할까요?';
+
+  @override
+  String get translationQueueCancelDialogMessage =>
+      '대기 중인 작업은 대기열에서 제거되고, 실행 중인 작업은 중단됩니다. 확인 후 홈으로 이동합니다.';
+
+  @override
+  String get translationQueueCancelDialogKeep => '유지';
+
+  @override
+  String get translationQueueCancelDialogConfirm => '취소 확인';
+
+  @override
   String get translationQueueEmpty => '번역 작업이 없습니다.';
 
   @override
   String get translationQueueNewQueuedTask => '대기열에 새 번역';
+
+  @override
+  String get translationQueueBackToQueueTooltip => '번역 대기열로 돌아가기';
 
   @override
   String get translationQueuedStarted => '대기열에 추가되었습니다. 여기서 진행 상황을 확인하세요.';
@@ -882,6 +937,54 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String translationQueueActionFailed(Object error) {
     return '작업 실패: $error';
+  }
+
+  @override
+  String translationQueueSubmittedBy(Object user) {
+    return '시작 사용자: $user';
+  }
+
+  @override
+  String translationQueueStartedAt(Object time) {
+    return '시작: $time';
+  }
+
+  @override
+  String translationQueueCompletedAt(Object time) {
+    return '완료: $time';
+  }
+
+  @override
+  String get translationQueueTimeUnknown => '—';
+
+  @override
+  String get translationQueueGuestUser => '게스트';
+
+  @override
+  String get translationQueueClearAllTooltip => '번역 대기열 및 서버 캐시 삭제(관리자만)';
+
+  @override
+  String get translationQueueClearAllButton => '대기열 비우기';
+
+  @override
+  String get translationQueueClearAllTitle => '번역 대기열 비우기';
+
+  @override
+  String get translationQueueClearAllMessage =>
+      '대기 및 진행 중 작업을 취소하고 메모리 작업과 디스크 스냅샷을 삭제합니다. 되돌릴 수 없습니다.';
+
+  @override
+  String get translationQueueClearAllConfirm => '비우기';
+
+  @override
+  String get translationQueueClearAllCancel => '취소';
+
+  @override
+  String get translationQueueClearAllSuccess => '번역 대기열을 비웠습니다.';
+
+  @override
+  String translationQueueClearAllFailed(Object error) {
+    return '비우기 실패: $error';
   }
 
   @override
@@ -2102,10 +2205,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsTranslationTimeoutHint => '120 (권장: 120-300초)';
 
   @override
-  String get settingsTranslationRetryTitle => '재시도 횟수';
+  String get settingsTranslationChunkRetryTitle => '청크/API 재시도';
 
   @override
-  String get settingsTranslationRetryHint => '권장: 3 (실패한 세그먼트 재시도 횟수)';
+  String get settingsTranslationChunkRetryHint =>
+      '권장: 3–5 (청크 번역 또는 API 호출 실패 시 재시도)';
+
+  @override
+  String get settingsTranslationSegmentAutoRetryTitle =>
+      '큐 모드: 실패 세그먼트 자동 재시도 라운드';
+
+  @override
+  String get settingsTranslationSegmentAutoRetryHint =>
+      '권장: 3 (본 번역 후 일괄 재번역, 1–10 라운드; 큐 모드만)';
 
   @override
   String get settingsTranslationChunkSizeTitle => '청크 크기 (토큰)';

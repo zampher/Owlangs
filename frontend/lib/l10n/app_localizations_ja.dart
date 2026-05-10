@@ -158,6 +158,41 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationToolbarRetry => '再試行';
 
   @override
+  String get translationPersistQueueTooltip =>
+      '現在のエクスポートをサーバーに書き込み、翻訳キューのダウンロードをこの画面の最新の編集と一致させます。';
+
+  @override
+  String get translationPersistQueueButton => 'キューを更新';
+
+  @override
+  String get translationPersistQueueAlreadySyncedTooltip =>
+      'すでにキューのスナップショットと一致しています。保存は不要です。';
+
+  @override
+  String get translationPersistQueueSuccess => '翻訳キュー用に最新のエクスポートを保存しました。';
+
+  @override
+  String translationPersistQueueFailed(Object error) {
+    return 'キューへの保存に失敗しました: $error';
+  }
+
+  @override
+  String get translationCloseTranslateTabTitle => 'キューが最終結果と一致しない可能性があります';
+
+  @override
+  String get translationCloseTranslateTabMessage =>
+      'このタブでの編集はまだ翻訳キューのスナップショットに保存されていません。保存せずに閉じると、「翻訳キュー」からダウンロードするファイルは、このタブで見ている最終版にならない場合があります。\n\n先にキューを更新してから閉じるか、キューに保存せずにこのタブを閉じるかを選べます。';
+
+  @override
+  String get translationCloseTranslateTabStay => 'キャンセル';
+
+  @override
+  String get translationCloseTranslateTabClose => '保存せずに閉じる';
+
+  @override
+  String get translationCloseTranslateTabSaveAndClose => '保存して閉じる';
+
+  @override
   String get translationToolbarSwitchToFile => 'ファイルに切り替え';
 
   @override
@@ -837,10 +872,30 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationQueueHint => 'タスクは自動更新されます。完了後にダウンロードできます。';
 
   @override
+  String get translationQueueCancelExitHint =>
+      'キュー待ちまたは実行中は「キャンセル」で停止できます。確認後にホームに戻ります。';
+
+  @override
+  String get translationQueueCancelDialogTitle => 'この翻訳タスクをキャンセルしますか？';
+
+  @override
+  String get translationQueueCancelDialogMessage =>
+      'キュー待ちはキューから削除され、実行中は中止されます。確認後にホームへ戻ります。';
+
+  @override
+  String get translationQueueCancelDialogKeep => '維持';
+
+  @override
+  String get translationQueueCancelDialogConfirm => 'キャンセルする';
+
+  @override
   String get translationQueueEmpty => '翻訳タスクはありません。';
 
   @override
   String get translationQueueNewQueuedTask => 'キューに新規翻訳';
+
+  @override
+  String get translationQueueBackToQueueTooltip => '翻訳キューに戻る';
 
   @override
   String get translationQueuedStarted => 'キューに追加しました。ここで進捗を確認できます。';
@@ -882,6 +937,54 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String translationQueueActionFailed(Object error) {
     return '操作に失敗しました: $error';
+  }
+
+  @override
+  String translationQueueSubmittedBy(Object user) {
+    return '開始ユーザー: $user';
+  }
+
+  @override
+  String translationQueueStartedAt(Object time) {
+    return '開始: $time';
+  }
+
+  @override
+  String translationQueueCompletedAt(Object time) {
+    return '完了: $time';
+  }
+
+  @override
+  String get translationQueueTimeUnknown => '—';
+
+  @override
+  String get translationQueueGuestUser => 'ゲスト';
+
+  @override
+  String get translationQueueClearAllTooltip => '翻訳キューとサーバー側キャッシュをクリア（管理者のみ）';
+
+  @override
+  String get translationQueueClearAllButton => 'キューをクリア';
+
+  @override
+  String get translationQueueClearAllTitle => '翻訳キューをクリア';
+
+  @override
+  String get translationQueueClearAllMessage =>
+      'キュー待ちと実行中のタスクをキャンセルし、メモリ上のタスクとディスクのキュースナップショットを削除します。元に戻せません。';
+
+  @override
+  String get translationQueueClearAllConfirm => 'クリア';
+
+  @override
+  String get translationQueueClearAllCancel => 'キャンセル';
+
+  @override
+  String get translationQueueClearAllSuccess => '翻訳キューをクリアしました。';
+
+  @override
+  String translationQueueClearAllFailed(Object error) {
+    return 'クリアに失敗しました: $error';
   }
 
   @override
@@ -2101,10 +2204,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsTranslationTimeoutHint => '120（推奨：120-300秒）';
 
   @override
-  String get settingsTranslationRetryTitle => 'リトライ回数';
+  String get settingsTranslationChunkRetryTitle => 'チャンク/API リトライ';
 
   @override
-  String get settingsTranslationRetryHint => '推奨：3（失敗セグメントのリトライ回数）';
+  String get settingsTranslationChunkRetryHint =>
+      '推奨：3〜5（チャンク翻訳または API 呼び出し失敗時の再試行）';
+
+  @override
+  String get settingsTranslationSegmentAutoRetryTitle => 'キュー：失敗セグメント自動再試行ラウンド';
+
+  @override
+  String get settingsTranslationSegmentAutoRetryHint =>
+      '推奨：3（本翻訳後の一括再翻訳、1〜10 ラウンド；キューモードのみ）';
 
   @override
   String get settingsTranslationChunkSizeTitle => 'チャンクサイズ（トークン）';

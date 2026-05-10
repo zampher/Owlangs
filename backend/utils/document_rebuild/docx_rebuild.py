@@ -109,6 +109,68 @@ def _add_image_to_paragraph(paragraph, image_entry, style, font_name, font_size,
     return True
 
 
+def _apply_translation_to_run_range(
+    paragraph,
+    target_text: str,
+    run_start: int,
+    run_end: Optional[int],
+) -> bool:
+    """
+    Write translated text only into runs [run_start, run_end), matching DocxTranslator._after_translate
+    (proportional split across multiple runs). Preserves fonts/formatting on runs outside the range.
+
+    Returns False if placeholders are present (caller should fall back to full-paragraph replace)
+    or if the slice has no replaceable text runs.
+    """
+    if PLACEHOLDER_PATTERN.search(target_text or ""):
+        return False
+
+    from utils.docx_utils import is_image_run
+    from translator.ai_translator.docx_translator import preserve_page_breaks_in_run
+
+    para_runs = list(paragraph.runs)
+    if not para_runs:
+        return False
+
+    re = len(para_runs) if run_end is None else min(int(run_end), len(para_runs))
+    rs = max(0, min(int(run_start), len(para_runs)))
+    if rs >= re:
+        return False
+
+    text_runs = []
+    for ri in range(rs, re):
+        r = para_runs[ri]
+        if not is_image_run(r):
+            text_runs.append(r)
+
+    if not text_runs:
+        return False
+
+    ft = target_text or ""
+
+    if len(text_runs) == 1:
+        preserve_page_breaks_in_run(text_runs[0], ft)
+        return True
+
+    original_lengths = [len(run.text or "") for run in text_runs]
+    total_o = sum(original_lengths)
+    if total_o == 0:
+        preserve_page_breaks_in_run(text_runs[0], ft)
+        return True
+
+    cur = 0
+    for idx, run in enumerate(text_runs):
+        proportion = original_lengths[idx] / total_o
+        piece_len = int(len(ft) * proportion)
+        if idx == len(text_runs) - 1:
+            chunk = ft[cur:]
+        else:
+            chunk = ft[cur : cur + piece_len]
+            cur += piece_len
+        preserve_page_breaks_in_run(run, chunk)
+    return True
+
+
 def _insert_text_and_images(paragraph, text: str, image_data_map: Dict[str, Dict[str, str]], style, font_name, font_size, is_bold, is_italic):
     if not PLACEHOLDER_PATTERN.search(text or ""):
         if text:
@@ -234,10 +296,11 @@ def rebuild_docx_document_from_segments(
                 # Log all table cell segments for Table 1 (table_index=0) to diagnose export issues
                 if table_idx == 0:
                     logger.info(
+                        LogModule.RESTOR,
                         f"[DOCX-REBUILD-TABLE1] Segment {segment_index} (Table {table_idx}, Row {row_idx}, Cell {cell_idx}): "
                         f"source='{source_text[:80] if source_text else '(empty)'}...', "
                         f"target='{target_text[:80] if target_text else '(empty)'}...', "
-                        f"modified_text={'present' if modified_text is not None else 'None'}"
+                        f"modified_text={'present' if modified_text is not None else 'None'}",
                     )
             is_modified = segment.get("modified", False) or segment.get("retry_count", 0) > 0
             is_failed = segment.get("is_failed", False)
@@ -338,7 +401,6 @@ def rebuild_docx_document_from_segments(
             logger.trace(
                 LogModule.RESTOR,
                 f"[DOCX-REBUILD-TABLE1] Table1 (table_index=0) segments collected for export: {len(table1_segments)} segments",
-                module=LogModule.EXPORT,
             )
             for seg in table1_segments:
                 logger.trace(
@@ -348,13 +410,11 @@ def rebuild_docx_document_from_segments(
                     f"source='{seg['source_text'][:100] if seg['source_text'] else '(empty)'}...', "
                     f"target='{seg['target_text'][:100] if seg['target_text'] else '(empty)'}...', "
                     f"modified_text={'present' if seg['modified_text'] is not None else 'None'}",
-                    module=LogModule.EXPORT,
                 )
         else:
             logger.trace(
                 LogModule.RESTOR,
                 "[DOCX-REBUILD-TABLE1] No Table1 segments found in segment_data_map",
-                module=LogModule.EXPORT,
             )
         
         if not segment_data_map:
@@ -536,15 +596,22 @@ def rebuild_docx_document_from_segments(
             
             return para_count
         
-        # CRITICAL: Track which paragraphs have been matched to avoid multiple segments matching the same paragraph
-        # This is especially important for cells with multiple paragraphs and multiple segments
-        matched_paragraphs = set()  # Set of (table_idx, row_idx, cell_idx, cell_local_idx) tuples
-        
+        # Deep split yields multiple segments per paragraph; process in document order so run-range
+        # edits compose predictably (para_index, then run_start_index).
+        rebuild_segments_sorted = sorted(
+            segment_data_map.items(),
+            key=lambda kv: (
+                kv[1]["segment_info"].get("para_index") or 0,
+                kv[1]["segment_info"].get("run_start_index") or 0,
+                kv[0],
+            ),
+        )
+
         # Update elements with revised text using segment_info for precise location
         updated_count = 0
         skipped_count = 0
         
-        for segment_index, segment_data in segment_data_map.items():
+        for segment_index, segment_data in rebuild_segments_sorted:
             target_text = segment_data["target_text"]
             source_text = segment_data.get("source_text", "")
             seg_info = segment_data["segment_info"]
@@ -574,9 +641,10 @@ def rebuild_docx_document_from_segments(
                 if (not target_text or target_text.strip() == source_text.strip()) and original_final_target and original_final_target.strip() != original_source.strip():
                     target_text = original_final_target
                     logger.info(
+                        LogModule.RESTOR,
                         f"[DOCX-REBUILD] Segment {segment_index}: "
                         f"target_text was empty or same as source in segment_data_map, but found valid translation in original_segment. "
-                        f"Using original_final_target: '{original_final_target[:50]}...' (source: '{original_source[:50]}...')"
+                        f"Using original_final_target: '{original_final_target[:50]}...' (source: '{original_source[:50]}...')",
                     )
                 # Also update source_text if it's different from what we have
                 if original_source and original_source.strip() != source_text.strip():
@@ -592,381 +660,353 @@ def rebuild_docx_document_from_segments(
                 continue
             
             # Use segment_info for precise location
-                # Use segment_info for precise location
-                para_index = seg_info.get('para_index')
-                is_table_cell = seg_info.get('is_table_cell', False)
-                table_idx = seg_info.get('table_index')
-                row_idx = seg_info.get('row_index')
-                cell_idx = seg_info.get('cell_index')
-                run_start = seg_info.get('run_start_index', 0)
-                run_end = seg_info.get('run_end_index')
-                
-                element = None
-                
-                if is_table_cell and table_idx is not None and row_idx is not None and cell_idx is not None:
-                    # For table cells, need to find the correct cell-local para index
-                    if table_idx < len(doc.tables):
-                        table = doc.tables[table_idx]
-                        if row_idx < len(table.rows) and cell_idx < len(table.rows[row_idx].cells):
-                            cell = table.rows[row_idx].cells[cell_idx]
-                            
-                            # Log table cell content (source and target text) with detailed info
-                            # Get is_failed from the original segment (need to look it up)
-                            is_failed_log = original_segment.get("is_failed", False) if original_segment else False
-                            logger.info(
-                                f"[DOCX-REBUILD-TABLE] Table {table_idx}, Row {row_idx}, Cell {cell_idx}, Segment {segment_index}: "
+            para_index = seg_info.get('para_index')
+            is_table_cell = seg_info.get('is_table_cell', False)
+            table_idx = seg_info.get('table_index')
+            row_idx = seg_info.get('row_index')
+            cell_idx = seg_info.get('cell_index')
+            run_start = seg_info.get('run_start_index', 0)
+            run_end = seg_info.get('run_end_index')
+            
+            element = None
+            cell_local_idx_hint = seg_info.get("cell_local_idx")
+            if (
+                is_table_cell
+                and table_idx is not None
+                and row_idx is not None
+                and cell_idx is not None
+                and cell_local_idx_hint is not None
+            ):
+                hint_key = (True, table_idx, row_idx, cell_idx, cell_local_idx_hint)
+                element = para_index_map.get(hint_key)
+
+            if element is None and is_table_cell and table_idx is not None and row_idx is not None and cell_idx is not None:
+                # For table cells, need to find the correct cell-local para index
+                if table_idx < len(doc.tables):
+                    table = doc.tables[table_idx]
+                    if row_idx < len(table.rows) and cell_idx < len(table.rows[row_idx].cells):
+                        cell = table.rows[row_idx].cells[cell_idx]
+                        
+                        # Log table cell content (source and target text) with detailed info
+                        # Get is_failed from the original segment (need to look it up)
+                        is_failed_log = original_segment.get("is_failed", False) if original_segment else False
+                        logger.info(
+                            LogModule.RESTOR,
+                            f"[DOCX-REBUILD-TABLE] Table {table_idx}, Row {row_idx}, Cell {cell_idx}, Segment {segment_index}: "
+                            f"source_text='{source_text[:100] if source_text else '(empty)'}...', "
+                            f"target_text='{target_text[:100] if target_text else '(empty)'}...', "
+                            f"para_index={para_index}, is_failed={is_failed_log}",
+                        )
+                        
+                        # OPTIMIZATION: Use unified function to calculate para_index
+                        # This avoids recalculating merged regions and counting paragraphs multiple times
+                        body_para_count = calculate_para_index_for_cell(table_idx, row_idx, cell_idx)
+                        
+                        # Find the matching paragraph in the cell
+                        # CRITICAL: Use the same logic as DocxTranslator._pre_translate_with_metadata
+                        # We need to match the global para_index by counting paragraphs in the same order
+                        # as they were counted during extraction
+                        cell_local_idx = 0
+                        found_para = False
+                        cell_para_count_before_search = body_para_count
+                        
+                        for p in cell.paragraphs:
+                            if not paragraph_has_toc_field(p):
+                                if body_para_count == para_index:
+                                    para_key = (True, table_idx, row_idx, cell_idx, cell_local_idx)
+                                    element = para_index_map.get(para_key)
+                                    if element:
+                                        found_para = True
+                                        logger.info(
+                                            LogModule.RESTOR,
+                                            f"[DOCX-REBUILD] Found element for segment {segment_index} at "
+                                            f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, "
+                                            f"cell_local_idx={cell_local_idx}, para_index={para_index}, "
+                                            f"body_para_count={body_para_count}",
+                                        )
+                                    break
+                                body_para_count += 1
+                                cell_local_idx += 1
+                        
+                        if not found_para and element is None:
+                            # Try alternative: use cell_local_idx directly from para_index_map
+                            # Sometimes the para_index calculation might be off, so try all cell paragraphs
+                            logger.warning(LogModule.RESTOR,
+                                f"[DOCX-REBUILD] Could not find element using para_index={para_index} for "
+                                f"segment {segment_index} at Table {table_idx}, Row {row_idx}, Cell {cell_idx}. "
                                 f"source_text='{source_text[:100] if source_text else '(empty)'}...', "
                                 f"target_text='{target_text[:100] if target_text else '(empty)'}...', "
-                                f"para_index={para_index}, is_failed={is_failed_log}"
+                                f"body_para_count={body_para_count}, cell has {len(cell.paragraphs)} paragraphs. "
+                                f"Trying alternative matching..."
                             )
+                            # Try matching by text content as fallback
+                            # CRITICAL: Improve text matching to handle cases where para_index is incorrect
+                            # For table cells with multiple paragraphs, we need to match by content similarity
+                            source_stripped = source_text.strip() if source_text else ""
+                            best_match = None
+                            best_match_score = 0
                             
-                            # OPTIMIZATION: Use unified function to calculate para_index
-                            # This avoids recalculating merged regions and counting paragraphs multiple times
-                            body_para_count = calculate_para_index_for_cell(table_idx, row_idx, cell_idx)
-                            
-                            # Find the matching paragraph in the cell
-                            # CRITICAL: Use the same logic as DocxTranslator._pre_translate_with_metadata
-                            # We need to match the global para_index by counting paragraphs in the same order
-                            # as they were counted during extraction
-                            cell_local_idx = 0
-                            found_para = False
-                            cell_para_count_before_search = body_para_count
-                            
-                            for p in cell.paragraphs:
-                                if not paragraph_has_toc_field(p):
-                                    if body_para_count == para_index:
-                                        para_key = (True, table_idx, row_idx, cell_idx, cell_local_idx)
-                                        element = para_index_map.get(para_key)
-                                        if element:
-                                            found_para = True
-                                            # CRITICAL: Track this paragraph as matched
-                                            para_match_key = (table_idx, row_idx, cell_idx, cell_local_idx)
-                                            matched_paragraphs.add(para_match_key)
+                            for cell_local_idx_alt in range(len(cell.paragraphs)):
+                                para_alt = cell.paragraphs[cell_local_idx_alt]
+                                if not paragraph_has_toc_field(para_alt):
+                                    para_key_alt = (True, table_idx, row_idx, cell_idx, cell_local_idx_alt)
+                                    element_alt = para_index_map.get(para_key_alt)
+                                    if element_alt and source_stripped:
+                                        # Check if this paragraph contains the source text
+                                        para_text = element_alt.text.strip()
+                                        
+                                        # Calculate match score: exact match > contains > partial match
+                                        match_score = 0
+                                        target_stripped = target_text.strip() if target_text else ""
+                                        
+                                        if match_score == 0:
+                                            # Standard matching logic
+                                            if para_text == source_stripped:
+                                                match_score = 100  # Exact match
+                                            elif source_stripped in para_text:
+                                                # Source text is contained in paragraph (common case)
+                                                match_score = 80
+                                            elif para_text in source_stripped:
+                                                # Paragraph is contained in source text (less common)
+                                                match_score = 60
+                                            # CRITICAL: Also check if paragraph contains target_text (paragraph already translated)
+                                            # This is important for cells with mixed translated/untranslated content
+                                            elif target_stripped and target_stripped in para_text:
+                                                # Paragraph already contains translated text, this is likely the correct match
+                                                match_score = 75  # High score for target text in paragraph
+                                                logger.info(
+                                                    LogModule.RESTOR,
+                                                    f"[DOCX-REBUILD] Segment {segment_index} - Paragraph contains target_text (already translated): "
+                                                    f"cell_local_idx={cell_local_idx_alt}, para_text='{para_text[:100]}...', "
+                                                    f"target_text='{target_stripped[:100]}...'",
+                                                )
+                                            elif len(source_stripped) > 10:
+                                                # For longer texts, check if a significant portion matches
+                                                # This handles cases where paragraph might have been partially translated
+                                                common_chars = sum(1 for c in source_stripped[:50] if c in para_text[:100])
+                                                if common_chars > len(source_stripped[:50]) * 0.5:
+                                                    match_score = 40
+                                        
+                                        if match_score > best_match_score:
+                                            best_match_score = match_score
+                                            best_match = element_alt
+                                            
+                                        if match_score >= 80:
+                                            element = element_alt
                                             logger.info(
-                                                f"[DOCX-REBUILD] Found element for segment {segment_index} at "
-                                                f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, "
-                                                f"cell_local_idx={cell_local_idx}, para_index={para_index}, "
-                                                f"body_para_count={body_para_count}"
+                                                LogModule.RESTOR,
+                                                f"[DOCX-REBUILD] Found element for segment {segment_index} using text matching: "
+                                                f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, cell_local_idx={cell_local_idx_alt}, "
+                                                f"match_score={match_score}, para_text='{para_text[:80]}...', source_text='{source_stripped[:80]}...'",
                                             )
-                                        break
-                                    body_para_count += 1
-                                    cell_local_idx += 1
+                                            break
                             
-                            if not found_para and element is None:
-                                # Try alternative: use cell_local_idx directly from para_index_map
-                                # Sometimes the para_index calculation might be off, so try all cell paragraphs
-                                logger.warning(LogModule.RESTOR,
-                                    f"[DOCX-REBUILD] Could not find element using para_index={para_index} for "
-                                    f"segment {segment_index} at Table {table_idx}, Row {row_idx}, Cell {cell_idx}. "
-                                    f"source_text='{source_text[:100] if source_text else '(empty)'}...', "
-                                    f"target_text='{target_text[:100] if target_text else '(empty)'}...', "
-                                    f"body_para_count={body_para_count}, cell has {len(cell.paragraphs)} paragraphs. "
-                                    f"Trying alternative matching..."
-                                )
-                                # Try matching by text content as fallback
-                                # CRITICAL: Improve text matching to handle cases where para_index is incorrect
-                                # For table cells with multiple paragraphs, we need to match by content similarity
-                                source_stripped = source_text.strip() if source_text else ""
-                                best_match = None
-                                best_match_score = 0
+                            # If no high-confidence match found, use best match if score is reasonable
+                            if element is None and best_match and best_match_score >= 40:
+                                # Find the cell_local_idx for best_match
+                                best_match_cell_local_idx = None
+                                for cell_local_idx_find in range(len(cell.paragraphs)):
+                                    para_find = cell.paragraphs[cell_local_idx_find]
+                                    if not paragraph_has_toc_field(para_find):
+                                        para_key_find = (True, table_idx, row_idx, cell_idx, cell_local_idx_find)
+                                        element_find = para_index_map.get(para_key_find)
+                                        if element_find == best_match:
+                                            best_match_cell_local_idx = cell_local_idx_find
+                                            break
                                 
-                                for cell_local_idx_alt in range(len(cell.paragraphs)):
-                                    para_alt = cell.paragraphs[cell_local_idx_alt]
-                                    if not paragraph_has_toc_field(para_alt):
-                                        para_key_alt = (True, table_idx, row_idx, cell_idx, cell_local_idx_alt)
-                                        element_alt = para_index_map.get(para_key_alt)
-                                        if element_alt and source_stripped:
-                                            # Check if this paragraph contains the source text
-                                            para_text = element_alt.text.strip()
-                                            
-                                            # Calculate match score: exact match > contains > partial match
-                                            match_score = 0
-                                            target_stripped = target_text.strip() if target_text else ""
-                                            
-                                            if match_score == 0:
-                                                # Standard matching logic
-                                                if para_text == source_stripped:
-                                                    match_score = 100  # Exact match
-                                                elif source_stripped in para_text:
-                                                    # Source text is contained in paragraph (common case)
-                                                    match_score = 80
-                                                elif para_text in source_stripped:
-                                                    # Paragraph is contained in source text (less common)
-                                                    match_score = 60
-                                                # CRITICAL: Also check if paragraph contains target_text (paragraph already translated)
-                                                # This is important for cells with mixed translated/untranslated content
-                                                elif target_stripped and target_stripped in para_text:
-                                                    # Paragraph already contains translated text, this is likely the correct match
-                                                    match_score = 75  # High score for target text in paragraph
-                                                    logger.info(
-                                                        f"[DOCX-REBUILD] Segment {segment_index} - Paragraph contains target_text (already translated): "
-                                                        f"cell_local_idx={cell_local_idx_alt}, para_text='{para_text[:100]}...', "
-                                                        f"target_text='{target_stripped[:100]}...'"
-                                                    )
-                                                elif len(source_stripped) > 10:
-                                                    # For longer texts, check if a significant portion matches
-                                                    # This handles cases where paragraph might have been partially translated
-                                                    common_chars = sum(1 for c in source_stripped[:50] if c in para_text[:100])
-                                                    if common_chars > len(source_stripped[:50]) * 0.5:
-                                                        match_score = 40
-                                            
-                                            if match_score > best_match_score:
-                                                best_match_score = match_score
-                                                best_match = element_alt
-                                                
-                                            # If we found an exact or high-confidence match, use it immediately
-                                            # CRITICAL: Check if this paragraph has already been matched to avoid conflicts
-                                            para_match_key = (table_idx, row_idx, cell_idx, cell_local_idx_alt)
-                                            if match_score >= 80:
-                                                # For high-confidence matches, allow reuse if it's the same segment
-                                                if para_match_key not in matched_paragraphs:
-                                                    element = element_alt
-                                                    matched_paragraphs.add(para_match_key)
-                                                    logger.info(
-                                                        f"[DOCX-REBUILD] Found element for segment {segment_index} using text matching: "
-                                                        f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, cell_local_idx={cell_local_idx_alt}, "
-                                                        f"match_score={match_score}, para_text='{para_text[:80]}...', source_text='{source_stripped[:80]}...'"
-                                                    )
-                                                    break
-                                                else:
-                                                    # Paragraph already matched, continue searching
-                                                    logger.debug(LogModule.RESTOR,
-                                                        f"[DOCX-REBUILD] Paragraph {para_match_key} already matched, skipping for segment {segment_index}"
-                                                    )
-                                
-                                # If no high-confidence match found, use best match if score is reasonable
-                                if element is None and best_match and best_match_score >= 40:
-                                    # Find the cell_local_idx for best_match
-                                    best_match_cell_local_idx = None
-                                    for cell_local_idx_find in range(len(cell.paragraphs)):
-                                        para_find = cell.paragraphs[cell_local_idx_find]
-                                        if not paragraph_has_toc_field(para_find):
-                                            para_key_find = (True, table_idx, row_idx, cell_idx, cell_local_idx_find)
-                                            element_find = para_index_map.get(para_key_find)
-                                            if element_find == best_match:
-                                                best_match_cell_local_idx = cell_local_idx_find
-                                                break
-                                    
-                                    # CRITICAL: Check if this paragraph has already been matched
-                                    if best_match_cell_local_idx is not None:
-                                        para_match_key = (table_idx, row_idx, cell_idx, best_match_cell_local_idx)
-                                        if para_match_key not in matched_paragraphs:
-                                            element = best_match
-                                            matched_paragraphs.add(para_match_key)
-                                            logger.info(
-                                                f"[DOCX-REBUILD] Using best text match for segment {segment_index} (score={best_match_score}): "
-                                                f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, "
-                                                f"cell_local_idx={best_match_cell_local_idx}, "
-                                                f"para_text='{best_match.text.strip()[:80] if best_match.text else '(empty)'}...', "
-                                                f"source_text='{source_stripped[:80]}...'"
-                                            )
-                                        else:
-                                            logger.warning(LogModule.RESTOR,
-                                                f"[DOCX-REBUILD] Paragraph {para_match_key} already matched, "
-                                                f"skipping best match (score={best_match_score}) for segment {segment_index}"
-                                            )
-                                
-                                # If still not found, try matching all paragraphs in the cell by text similarity
-                                if element is None:
-                                    logger.warning(LogModule.RESTOR,
-                                        f"[DOCX-REBUILD] Text matching failed for segment {segment_index} at "
-                                        f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}. "
-                                        f"source_text='{source_stripped[:100] if source_stripped else '(empty)'}...', "
-                                        f"target_text='{target_text[:100] if target_text else '(empty)'}...', "
-                                        f"cell has {len(cell.paragraphs)} paragraphs. "
-                                        f"Trying all cell paragraphs as last resort..."
+                                if best_match_cell_local_idx is not None:
+                                    element = best_match
+                                    logger.info(
+                                        LogModule.RESTOR,
+                                        f"[DOCX-REBUILD] Using best text match for segment {segment_index} (score={best_match_score}): "
+                                        f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, "
+                                        f"cell_local_idx={best_match_cell_local_idx}, "
+                                        f"para_text='{best_match.text.strip()[:80] if best_match.text else '(empty)'}...', "
+                                        f"source_text='{source_stripped[:80]}...'",
                                     )
-                                    # Last resort: try all paragraphs in the cell
-                                    # For cells with multiple paragraphs, try to match by position or content
-                                    # If para_index suggests a specific position, try paragraphs near that position
-                                    cell_para_count_before = body_para_count
-                                    estimated_cell_local_idx = max(0, para_index - cell_para_count_before)
-                                    
-                                    # First, try paragraphs near the estimated position
-                                    candidates = []
-                                    for cell_local_idx_last in range(len(cell.paragraphs)):
-                                        para_last = cell.paragraphs[cell_local_idx_last]
-                                        if not paragraph_has_toc_field(para_last):
-                                            para_key_last = (True, table_idx, row_idx, cell_idx, cell_local_idx_last)
-                                            element_last = para_index_map.get(para_key_last)
-                                            if element_last and element_last.text.strip():
-                                                para_text_last = element_last.text.strip()
-                                                # Calculate distance from estimated position
-                                                distance = abs(cell_local_idx_last - estimated_cell_local_idx)
-                                                candidates.append((element_last, cell_local_idx_last, distance, para_text_last))
-                                    
-                                    # Sort by distance, then try to match by content
-                                    candidates.sort(key=lambda x: x[2])  # Sort by distance
-                                    
-                                    for element_last, cell_local_idx_last, distance, para_text_last in candidates:
-                                        # CRITICAL: Check if this paragraph has already been matched
-                                        para_match_key = (table_idx, row_idx, cell_idx, cell_local_idx_last)
+                            
+                            # If still not found, try matching all paragraphs in the cell by text similarity
+                            if element is None:
+                                logger.warning(LogModule.RESTOR,
+                                    f"[DOCX-REBUILD] Text matching failed for segment {segment_index} at "
+                                    f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}. "
+                                    f"source_text='{source_stripped[:100] if source_stripped else '(empty)'}...', "
+                                    f"target_text='{target_text[:100] if target_text else '(empty)'}...', "
+                                    f"cell has {len(cell.paragraphs)} paragraphs. "
+                                    f"Trying all cell paragraphs as last resort..."
+                                )
+                                # Last resort: try all paragraphs in the cell
+                                # For cells with multiple paragraphs, try to match by position or content
+                                # If para_index suggests a specific position, try paragraphs near that position
+                                cell_para_count_before = body_para_count
+                                estimated_cell_local_idx = max(0, para_index - cell_para_count_before)
+                                
+                                # First, try paragraphs near the estimated position
+                                candidates = []
+                                for cell_local_idx_last in range(len(cell.paragraphs)):
+                                    para_last = cell.paragraphs[cell_local_idx_last]
+                                    if not paragraph_has_toc_field(para_last):
+                                        para_key_last = (True, table_idx, row_idx, cell_idx, cell_local_idx_last)
+                                        element_last = para_index_map.get(para_key_last)
+                                        if element_last and element_last.text.strip():
+                                            para_text_last = element_last.text.strip()
+                                            # Calculate distance from estimated position
+                                            distance = abs(cell_local_idx_last - estimated_cell_local_idx)
+                                            candidates.append((element_last, cell_local_idx_last, distance, para_text_last))
+                                
+                                # Sort by distance, then try to match by content
+                                candidates.sort(key=lambda x: x[2])  # Sort by distance
+                                
+                                for element_last, cell_local_idx_last, distance, para_text_last in candidates:
+                                    # If we have source_text, prefer paragraphs that contain it or are similar
+                                    if source_stripped:
+                                        source_in_para = source_stripped in para_text_last
+                                        para_in_source = para_text_last in source_stripped
                                         
-                                        # If we have source_text, prefer paragraphs that contain it or are similar
-                                        if source_stripped:
-                                            # Check if source_text is contained in paragraph or vice versa
-                                            source_in_para = source_stripped in para_text_last
-                                            para_in_source = para_text_last in source_stripped
-                                            
-                                            if source_in_para or para_in_source:
-                                                if para_match_key not in matched_paragraphs:
-                                                    element = element_last
-                                                    matched_paragraphs.add(para_match_key)
-                                                    logger.warning(LogModule.RESTOR,
-                                                        f"[DOCX-REBUILD] Using fallback paragraph for segment {segment_index} (matched by content): "
-                                                        f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, cell_local_idx={cell_local_idx_last}, "
-                                                        f"para_text='{para_text_last[:80]}...', source_text='{source_stripped[:80]}...'"
-                                                    )
-                                                    break
-                                                else:
-                                                    logger.debug(LogModule.RESTOR,
-                                                        f"[DOCX-REBUILD] Paragraph {para_match_key} already matched, "
-                                                        f"skipping content match for segment {segment_index}"
-                                                    )
-                                        
-                                        # If no content match and this is the closest to estimated position, use it
-                                        if distance == candidates[0][2] and element is None:
-                                            if para_match_key not in matched_paragraphs:
-                                                element = element_last
-                                                matched_paragraphs.add(para_match_key)
-                                                logger.warning(LogModule.RESTOR,
-                                                    f"[DOCX-REBUILD] Using fallback paragraph for segment {segment_index} (closest to estimated position): "
-                                                    f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, cell_local_idx={cell_local_idx_last}, "
-                                                    f"distance={distance}, para_text='{para_text_last[:80]}...'"
-                                                )
-                                                break
-                                    
-                                    # If still no match, try to find an unmatched paragraph
-                                    if element is None and candidates:
-                                        found_unmatched = False
-                                        for candidate_element, candidate_cell_local_idx, candidate_distance, candidate_para_text in candidates:
-                                            candidate_match_key = (table_idx, row_idx, cell_idx, candidate_cell_local_idx)
-                                            if candidate_match_key not in matched_paragraphs:
-                                                element = candidate_element
-                                                matched_paragraphs.add(candidate_match_key)
-                                                found_unmatched = True
-                                                logger.warning(LogModule.RESTOR,
-                                                    f"[DOCX-REBUILD] Using unmatched paragraph for segment {segment_index} (cell_local_idx={candidate_cell_local_idx}): "
-                                                    f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, "
-                                                    f"para_text='{candidate_para_text[:80]}...'"
-                                                )
-                                                break
-                                        
-                                        # If no unmatched paragraph found, use first available
-                                        if element is None:
-                                            element = candidates[0][0]
-                                            first_cell_local_idx = candidates[0][1]
-                                            first_para_text = candidates[0][3]
-                                            para_match_key = (table_idx, row_idx, cell_idx, first_cell_local_idx)
-                                            matched_paragraphs.add(para_match_key)
+                                        if source_in_para or para_in_source:
+                                            element = element_last
                                             logger.warning(LogModule.RESTOR,
-                                                f"[DOCX-REBUILD] Using first available paragraph for segment {segment_index} as last resort: "
-                                                f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, cell_local_idx={first_cell_local_idx}, "
-                                                f"para_text='{first_para_text[:80]}...'"
+                                                f"[DOCX-REBUILD] Using fallback paragraph for segment {segment_index} (matched by content): "
+                                                f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, cell_local_idx={cell_local_idx_last}, "
+                                                f"para_text='{para_text_last[:80]}...', source_text='{source_stripped[:80]}...'"
                                             )
+                                            break
+                                    
+                                    # If no content match and this is the closest to estimated position, use it
+                                    if distance == candidates[0][2] and element is None:
+                                        element = element_last
+                                        logger.warning(LogModule.RESTOR,
+                                            f"[DOCX-REBUILD] Using fallback paragraph for segment {segment_index} (closest to estimated position): "
+                                            f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, cell_local_idx={cell_local_idx_last}, "
+                                            f"distance={distance}, para_text='{para_text_last[:80]}...'"
+                                        )
+                                        break
+                                
+                                # If still no match, try to find an unmatched paragraph
+                                if element is None and candidates:
+                                    for candidate_element, candidate_cell_local_idx, candidate_distance, candidate_para_text in candidates:
+                                        element = candidate_element
+                                        logger.warning(LogModule.RESTOR,
+                                            f"[DOCX-REBUILD] Using unmatched paragraph for segment {segment_index} (cell_local_idx={candidate_cell_local_idx}): "
+                                            f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, "
+                                            f"para_text='{candidate_para_text[:80]}...'"
+                                        )
+                                        break
+                                    
+                                    if element is None:
+                                        element = candidates[0][0]
+                                        first_cell_local_idx = candidates[0][1]
+                                        first_para_text = candidates[0][3]
+                                        logger.warning(LogModule.RESTOR,
+                                            f"[DOCX-REBUILD] Using first available paragraph for segment {segment_index} as last resort: "
+                                            f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, cell_local_idx={first_cell_local_idx}, "
+                                            f"para_text='{first_para_text[:80]}...'"
+                                        )
+            else:
+                # For non-table paragraphs, para_index is the document body paragraph index
+                para_key = (False, None, None, None, para_index)
+                element = para_index_map.get(para_key)
+            
+            if element is None:
+                logger.error(LogModule.RESTOR,
+                    f"[DOCX-REBUILD] ❌ Could not locate element for segment {segment_index}: "
+                    f"para_index={para_index}, is_table_cell={is_table_cell}, "
+                    f"table_idx={table_idx}, row_idx={row_idx}, cell_idx={cell_idx}, "
+                    f"source_text='{source_text[:100] if source_text else '(empty)'}...', "
+                    f"target_text='{target_text[:100] if target_text else '(empty)'}...'. "
+                    f"Falling back to simple index matching."
+                )
+                # Fallback to simple index matching
+                paragraphs = [p for p in doc.paragraphs if not paragraph_has_toc_field(p) and p.text.strip()]
+                table_paragraphs = []
+                for table in doc.tables:
+                    for row in table.rows:
+                        for cell in row.cells:
+                            for para in cell.paragraphs:
+                                if not paragraph_has_toc_field(para) and para.text.strip():
+                                    table_paragraphs.append(para)
+                all_text_elements = paragraphs + table_paragraphs
+                if segment_index < len(all_text_elements):
+                    element = all_text_elements[segment_index]
+                    logger.info(LogModule.TRANS, f"[DOCX-REBUILD] Using fallback index matching for segment {segment_index}")
                 else:
-                    # For non-table paragraphs, para_index is the document body paragraph index
-                    para_key = (False, None, None, None, para_index)
-                    element = para_index_map.get(para_key)
-                
-                if element is None:
-                    logger.error(LogModule.RESTOR,
-                        f"[DOCX-REBUILD] ❌ Could not locate element for segment {segment_index}: "
-                        f"para_index={para_index}, is_table_cell={is_table_cell}, "
-                        f"table_idx={table_idx}, row_idx={row_idx}, cell_idx={cell_idx}, "
-                        f"source_text='{source_text[:100] if source_text else '(empty)'}...', "
-                        f"target_text='{target_text[:100] if target_text else '(empty)'}...'. "
-                        f"Falling back to simple index matching."
-                    )
-                    # Fallback to simple index matching
-                    paragraphs = [p for p in doc.paragraphs if not paragraph_has_toc_field(p) and p.text.strip()]
-                    table_paragraphs = []
-                    for table in doc.tables:
-                        for row in table.rows:
-                            for cell in row.cells:
+                    # Last resort: try to find element by text content matching
+                    # This is especially important for table cells where para_index might be incorrect
+                    if is_table_cell and table_idx is not None and row_idx is not None and cell_idx is not None:
+                        logger.warning(LogModule.RESTOR,
+                            f"[DOCX-REBUILD] Segment {segment_index} index out of range, "
+                            f"trying text-based matching for table cell: Table {table_idx}, Row {row_idx}, Cell {cell_idx}"
+                        )
+                        # Try to find the cell and match by text content
+                        if table_idx < len(doc.tables):
+                            table = doc.tables[table_idx]
+                            if row_idx < len(table.rows) and cell_idx < len(table.rows[row_idx].cells):
+                                cell = table.rows[row_idx].cells[cell_idx]
+                                # Try to find paragraph in cell that contains source_text
                                 for para in cell.paragraphs:
-                                    if not paragraph_has_toc_field(para) and para.text.strip():
-                                        table_paragraphs.append(para)
-                    all_text_elements = paragraphs + table_paragraphs
-                    if segment_index < len(all_text_elements):
-                        element = all_text_elements[segment_index]
-                        logger.info(LogModule.TRANS, f"[DOCX-REBUILD] Using fallback index matching for segment {segment_index}")
-                    else:
-                        # Last resort: try to find element by text content matching
-                        # This is especially important for table cells where para_index might be incorrect
+                                    if not paragraph_has_toc_field(para):
+                                        para_text = para.text.strip()
+                                        source_stripped = source_text.strip()
+                                        if source_stripped and para_text:
+                                            # Check if source_text matches or is contained in para_text
+                                            if source_stripped == para_text or source_stripped in para_text or para_text in source_stripped:
+                                                element = para
+                                                logger.info(
+                                                    LogModule.RESTOR,
+                                                    f"[DOCX-REBUILD] Found element for segment {segment_index} using text-based matching: "
+                                                    f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, "
+                                                    f"para_text='{para_text[:50]}...', source_text='{source_stripped[:50]}...'",
+                                                )
+                                                break
+                    if element is None:
+                        # CRITICAL: For table cells, try one more time to find the element by direct cell access
+                        # This is important because para_index might be incorrect for table cells
                         if is_table_cell and table_idx is not None and row_idx is not None and cell_idx is not None:
                             logger.warning(LogModule.RESTOR,
-                                f"[DOCX-REBUILD] Segment {segment_index} index out of range, "
-                                f"trying text-based matching for table cell: Table {table_idx}, Row {row_idx}, Cell {cell_idx}"
+                                f"[DOCX-REBUILD] Segment {segment_index} at Table {table_idx}, Row {row_idx}, Cell {cell_idx} "
+                                f"could not be matched. Trying direct cell access as last resort..."
                             )
-                            # Try to find the cell and match by text content
+                            # Try direct cell access - use the first non-empty paragraph in the cell
                             if table_idx < len(doc.tables):
                                 table = doc.tables[table_idx]
                                 if row_idx < len(table.rows) and cell_idx < len(table.rows[row_idx].cells):
                                     cell = table.rows[row_idx].cells[cell_idx]
-                                    # Try to find paragraph in cell that contains source_text
+                                    # Use the first paragraph that matches source_text or any non-empty paragraph
                                     for para in cell.paragraphs:
                                         if not paragraph_has_toc_field(para):
                                             para_text = para.text.strip()
-                                            source_stripped = source_text.strip()
-                                            if source_stripped and para_text:
-                                                # Check if source_text matches or is contained in para_text
-                                                if source_stripped == para_text or source_stripped in para_text or para_text in source_stripped:
-                                                    element = para
-                                                    logger.info(
-                                                        f"[DOCX-REBUILD] Found element for segment {segment_index} using text-based matching: "
-                                                        f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, "
-                                                        f"para_text='{para_text[:50]}...', source_text='{source_stripped[:50]}...'"
-                                                    )
-                                                    break
-                        if element is None:
-                            # CRITICAL: For table cells, try one more time to find the element by direct cell access
-                            # This is important because para_index might be incorrect for table cells
-                            if is_table_cell and table_idx is not None and row_idx is not None and cell_idx is not None:
-                                logger.warning(LogModule.RESTOR,
-                                    f"[DOCX-REBUILD] Segment {segment_index} at Table {table_idx}, Row {row_idx}, Cell {cell_idx} "
-                                    f"could not be matched. Trying direct cell access as last resort..."
-                                )
-                                # Try direct cell access - use the first non-empty paragraph in the cell
-                                if table_idx < len(doc.tables):
-                                    table = doc.tables[table_idx]
-                                    if row_idx < len(table.rows) and cell_idx < len(table.rows[row_idx].cells):
-                                        cell = table.rows[row_idx].cells[cell_idx]
-                                        # Use the first paragraph that matches source_text or any non-empty paragraph
-                                        for para in cell.paragraphs:
-                                            if not paragraph_has_toc_field(para):
-                                                para_text = para.text.strip()
-                                                if para_text:
-                                                    # If source_text matches or is contained, use this paragraph
-                                                    if source_text and source_text.strip():
-                                                        source_stripped = source_text.strip()
-                                                        if source_stripped == para_text or source_stripped in para_text or para_text in source_stripped:
-                                                            element = para
-                                                            logger.info(
-                                                                f"[DOCX-REBUILD] Found element for segment {segment_index} using direct cell access: "
-                                                                f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, "
-                                                                f"para_text='{para_text[:50]}...', source_text='{source_stripped[:50]}...'"
-                                                            )
-                                                            break
-                                                    else:
-                                                        # If no source_text, use first non-empty paragraph
+                                            if para_text:
+                                                # If source_text matches or is contained, use this paragraph
+                                                if source_text and source_text.strip():
+                                                    source_stripped = source_text.strip()
+                                                    if source_stripped == para_text or source_stripped in para_text or para_text in source_stripped:
                                                         element = para
                                                         logger.info(
                                                             LogModule.RESTOR,
-                                                            f"[DOCX-REBUILD] Found element for segment {segment_index} using first non-empty paragraph: "
-                                                            f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, para_text='{para_text[:50]}...'"
+                                                            f"[DOCX-REBUILD] Found element for segment {segment_index} using direct cell access: "
+                                                            f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, "
+                                                            f"para_text='{para_text[:50]}...', source_text='{source_stripped[:50]}...'",
                                                         )
                                                         break
-                            
-                            if element is None:
-                                logger.error(LogModule.RESTOR,
-                                    f"[DOCX-REBUILD] ❌ Could not locate element for segment {segment_index} after all attempts. "
-                                    f"This segment will be skipped. "
-                                    f"is_table_cell={is_table_cell}, table_idx={table_idx}, row_idx={row_idx}, cell_idx={cell_idx}, "
-                                    f"source_text='{source_text[:50] if source_text else '(empty)'}...', "
-                                    f"target_text='{target_text[:50] if target_text else '(empty)'}...'"
-                                )
-                                continue
+                                                else:
+                                                    # If no source_text, use first non-empty paragraph
+                                                    element = para
+                                                    logger.info(
+                                                        LogModule.RESTOR,
+                                                        f"[DOCX-REBUILD] Found element for segment {segment_index} using first non-empty paragraph: "
+                                                        f"Table {table_idx}, Row {row_idx}, Cell {cell_idx}, para_text='{para_text[:50]}...'"
+                                                    )
+                                                    break
+                        
+                        if element is None:
+                            logger.error(LogModule.RESTOR,
+                                f"[DOCX-REBUILD] ❌ Could not locate element for segment {segment_index} after all attempts. "
+                                f"This segment will be skipped. "
+                                f"is_table_cell={is_table_cell}, table_idx={table_idx}, row_idx={row_idx}, cell_idx={cell_idx}, "
+                                f"source_text='{source_text[:50] if source_text else '(empty)'}...', "
+                                f"target_text='{target_text[:50] if target_text else '(empty)'}...'"
+                            )
+                            continue
             
             # CRITICAL: Only update if target_text is different from current element text
             # This prevents unnecessary updates and ensures we apply translations even if marked as failed
@@ -1051,47 +1091,50 @@ def rebuild_docx_document_from_segments(
                     f"target_text='{target_text_stripped[:100] if target_text_stripped else '(empty)'}...', "
                     f"source_text='{source_text_stripped[:100] if source_text_stripped else '(empty)'}...', "
                     f"will_update={should_update}",
-                    module=LogModule.EXPORT
                 )
             
             # Check if update is needed
             if should_update:
-                # Clear existing runs but preserve the first run's style
-                runs = element.runs
-                if runs:
-                    first_run = runs[0]
-                    # Preserve formatting from first run
-                    style = first_run.style
-                    font_name = first_run.font.name
-                    font_size = first_run.font.size
-                    is_bold = first_run.bold
-                    is_italic = first_run.italic
-                    
-                    # Clear all runs
-                    element.clear()
-
-                    _insert_text_and_images(
-                        element,
-                        target_text,
-                        image_data_map,
-                        style,
-                        font_name,
-                        font_size,
-                        is_bold,
-                        is_italic,
+                applied_slice = _apply_translation_to_run_range(
+                    element, target_text, run_start, run_end
+                )
+                if not applied_slice:
+                    logger.debug(
+                        LogModule.RESTOR,
+                        f"[DOCX-REBUILD] Run-range apply failed or skipped (placeholders/empty slice); "
+                        f"fallback full-paragraph replace segment={segment_index} "
+                        f"run_start={run_start} run_end={run_end}",
                     )
-                else:
-                    # No runs, just set text directly
-                    _insert_text_and_images(
-                        element,
-                        target_text,
-                        image_data_map,
-                        None,
-                        None,
-                        None,
-                        None,
-                        None,
-                    )
+                    runs = element.runs
+                    if runs:
+                        first_run = runs[0]
+                        style = first_run.style
+                        font_name = first_run.font.name
+                        font_size = first_run.font.size
+                        is_bold = first_run.bold
+                        is_italic = first_run.italic
+                        element.clear()
+                        _insert_text_and_images(
+                            element,
+                            target_text,
+                            image_data_map,
+                            style,
+                            font_name,
+                            font_size,
+                            is_bold,
+                            is_italic,
+                        )
+                    else:
+                        _insert_text_and_images(
+                            element,
+                            target_text,
+                            image_data_map,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                        )
                 
                 updated_count += 1
                 
@@ -1110,7 +1153,6 @@ def rebuild_docx_document_from_segments(
                             f"[DOCX-REBUILD-TABLE1-UPDATED] Segment {segment_index} - "
                             f"Row {seg_info.get('row_index')}, Cell {seg_info.get('cell_index')}: "
                             f"✅ Successfully updated: '{current_element_text[:100]}...' -> '{target_text_stripped[:100]}...'",
-                            module=LogModule.EXPORT,
                         )
             else:
                 # No update needed - target_text matches current element text

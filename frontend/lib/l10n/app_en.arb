@@ -52,6 +52,21 @@
   "translationToolbarRetryInProgress": "Retry in progress...",
   "translationToolbarRetryTooltip": "Retry all failed or marked segments. This will retranslate segments that failed during translation or were manually marked for retry, using the currently selected AI platform. Excluded and cleared segments will be skipped.",
   "translationToolbarRetry": "Retry",
+  "translationPersistQueueTooltip": "Write current exports to the server and update the translation queue so downloads match your latest edits here.",
+  "translationPersistQueueButton": "Save update to queue",
+  "translationPersistQueueAlreadySyncedTooltip": "Already matches the queue snapshot. No save needed.",
+  "translationPersistQueueSuccess": "Latest exports saved for the translation queue.",
+  "translationPersistQueueFailed": "Could not save exports for the queue: {error}",
+  "@translationPersistQueueFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "translationCloseTranslateTabTitle": "Queue may not have your latest result",
+  "translationCloseTranslateTabMessage": "Your edits here are not saved to the translation queue snapshot yet. If you close without saving, files you download from the Translation queue will not be the final version you see in this tab.\n\nYou can update the queue and then close, or close this tab without saving to the queue.",
+  "translationCloseTranslateTabStay": "Stay",
+  "translationCloseTranslateTabClose": "Close without saving",
+  "translationCloseTranslateTabSaveAndClose": "Save to queue and close",
   "translationToolbarSwitchToFile": "Switch to File",
   "translationToolbarSwitchToText": "Switch to Text",
 
@@ -266,8 +281,14 @@
   "homeNavHome": "Home",
   "translationQueueTitle": "Translation queue",
   "translationQueueHint": "Tasks refresh automatically. Downloads appear when a task completes.",
+  "translationQueueCancelExitHint": "For queued or running tasks, use Cancel task to stop work; after you confirm, you return to the home page.",
+  "translationQueueCancelDialogTitle": "Cancel this translation task?",
+  "translationQueueCancelDialogMessage": "Queued tasks are removed from the queue; running tasks are stopped. After confirming, you will return to the home page.",
+  "translationQueueCancelDialogKeep": "Keep",
+  "translationQueueCancelDialogConfirm": "Cancel task",
   "translationQueueEmpty": "No translation tasks yet.",
   "translationQueueNewQueuedTask": "New queued translation",
+  "translationQueueBackToQueueTooltip": "Back to translation queue",
   "translationQueuedStarted": "Task added to the queue. Track it here.",
   "translationQueueRefresh": "Refresh",
   "translationQueueCancel": "Cancel task",
@@ -291,6 +312,39 @@
   },
   "translationQueueActionFailed": "Action failed: {error}",
   "@translationQueueActionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "translationQueueSubmittedBy": "Submitted by: {user}",
+  "@translationQueueSubmittedBy": {
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "translationQueueStartedAt": "Started: {time}",
+  "@translationQueueStartedAt": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "translationQueueCompletedAt": "Completed: {time}",
+  "@translationQueueCompletedAt": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "translationQueueTimeUnknown": "—",
+  "translationQueueGuestUser": "Guest",
+  "translationQueueClearAllTooltip": "Clear translation queue and server-side result cache (admin only)",
+  "translationQueueClearAllButton": "Clear queue",
+  "translationQueueClearAllTitle": "Clear translation queue",
+  "translationQueueClearAllMessage": "This cancels queued and in-flight work, removes all in-memory tasks, and deletes on-disk queue snapshots. This cannot be undone.",
+  "translationQueueClearAllConfirm": "Clear",
+  "translationQueueClearAllCancel": "Cancel",
+  "translationQueueClearAllSuccess": "Translation queue cleared.",
+  "translationQueueClearAllFailed": "Could not clear queue: {error}",
+  "@translationQueueClearAllFailed": {
     "placeholders": {
       "error": {}
     }
@@ -678,8 +732,10 @@
   "settingsTranslationConcurrentHint": "Recommended: 3 (adjust 1–8 based on model and quota)",
   "settingsTranslationTimeoutTitle": "Timeout (seconds)",
   "settingsTranslationTimeoutHint": "120 (recommended: 120-300 seconds)",
-  "settingsTranslationRetryTitle": "Retry Count",
-  "settingsTranslationRetryHint": "Recommended: 3 (number of retries for failed segments)",
+  "settingsTranslationChunkRetryTitle": "Chunk retry (per request)",
+  "settingsTranslationChunkRetryHint": "Recommended: 3–5 (retries when a translation chunk or API call fails)",
+  "settingsTranslationSegmentAutoRetryTitle": "Queue mode: failed-segment auto rounds",
+  "settingsTranslationSegmentAutoRetryHint": "Recommended: 3 (1–10 batch retranslate rounds after main translation; queued mode only)",
   "settingsTranslationChunkSizeTitle": "Chunk Size (tokens)",
   "settingsTranslationChunkSizeHint": "Recommended: 3000 tokens per request (adjust by model context size)",
 

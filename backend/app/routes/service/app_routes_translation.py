@@ -7,6 +7,7 @@ Translation routes.
 Handles translation task submission, cancellation, and resource release.
 """
 
+import shutil
 from typing import Any, Dict, List
 
 from auth.models import User
@@ -17,6 +18,7 @@ from fastapi.responses import JSONResponse
 from backend.app.models.service import TranslateServiceRequest
 from backend.app.services.task import task_manager
 from backend.app.services.translation import TranslationService
+from backend.app.services.download.download_service import DownloadService
 from backend.app.services.translation.translation_queue_utils import queue_position_for_task
 from logger import unified_logger as logger
 from logger.logger import LogModule
@@ -25,6 +27,7 @@ router = APIRouter()
 
 # Initialize service instance
 translation_service = TranslationService(task_manager)
+_download_service = DownloadService(task_manager)
 
 
 @router.post(
@@ -174,6 +177,9 @@ async def list_translation_tasks(
         if not guest_view:
             if st.get("owner_username") != user.username:
                 continue
+        qa = float(st.get("queued_at") or 0)
+        ta = float(st.get("task_start_time") or 0)
+        te = float(st.get("task_end_time") or 0)
         row: Dict[str, Any] = {
             "task_id": tid,
             "status": st.get("status"),
@@ -187,6 +193,8 @@ async def list_translation_tasks(
             "queued_at": st.get("queued_at"),
             "owner_username": st.get("owner_username"),
             "in_memory": True,
+            "started_at": qa if qa > 0 else ta,
+            "completed_at": te,
         }
         qp = queue_position_for_task(all_tasks, tid)
         if qp is not None:
@@ -204,6 +212,108 @@ async def list_translation_tasks(
     items.sort(key=lambda x: float(x.get("task_start_time") or 0.0), reverse=True)
     items = items[:limit]
     return JSONResponse(content={"tasks": items, "limit": limit})
+
+
+def _require_translation_admin(user: User) -> None:
+    if not user.is_authenticated:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if not (user.is_admin() or user.is_super_admin()):
+        raise HTTPException(status_code=403, detail="Admin permission required")
+
+
+@router.post(
+    "/admin/clear-translation-queue",
+    summary="Admin: clear all translation tasks and result stash",
+    description="""
+Removes pending FIFO queue slots, cancels in-flight work where applicable, releases every
+in-memory task, and deletes on-disk ``translation_result_stash`` entries.
+Requires administrator or super-administrator.
+""",
+)
+async def admin_clear_translation_queue(user: User = Depends(get_current_user)):
+    """Purge translation worker queue, in-memory tasks, and stash (admin only)."""
+    _require_translation_admin(user)
+
+    from backend.app.services.translation.translation_execution_queue import (
+        drain_pending_execution_queue_task_ids,
+    )
+    from backend.app.services.translation.translation_result_stash import (
+        delete_task_stash,
+        stash_root,
+    )
+
+    drained = await drain_pending_execution_queue_task_ids()
+    pending_ids = set(drained) | set(task_manager.get_all_task_ids())
+
+    errors: List[str] = []
+    released = 0
+    for tid in sorted(pending_ids):
+        try:
+            st = task_manager.get_task(tid)
+            if st is not None:
+                try:
+                    if st.get("status") == "queued" or st.get("is_processing"):
+                        translation_service.cancel_translation(tid)
+                except HTTPException:
+                    pass
+            delete_task_stash(tid)
+            if task_manager.get_task(tid) is not None:
+                task_manager.cleanup_task_resources(tid)
+            released += 1
+        except Exception as e:
+            errors.append(f"{tid}:{e}")
+            logger.warning(LogModule.ROUTE, f"[ADMIN-CLEAR-QUEUE] task_id={tid}: {e}")
+
+    root = stash_root()
+    if root.is_dir():
+        for child in list(root.iterdir()):
+            if child.is_dir():
+                try:
+                    shutil.rmtree(child, ignore_errors=True)
+                except Exception as e:
+                    errors.append(f"stash:{child.name}:{e}")
+
+    logger.info(
+        LogModule.ROUTE,
+        f"[ADMIN-CLEAR-QUEUE] admin={user.username!r} drained={len(drained)} released_loop={released}",
+    )
+    return JSONResponse(
+        content={
+            "ok": len(errors) == 0,
+            "released_count": released,
+            "drained_queue_slots": len(drained),
+            "errors": errors[:50],
+        }
+    )
+
+
+@router.post(
+    "/persist-result/{task_id}",
+    summary="Persist completed translation exports to on-disk stash for the queue",
+    description="""
+Rebuilds export files from the current in-memory translation segments and writes them to
+``translation_result_stash`` (same as recording a successful download). Call after edits or
+retry so queued/offline downloads match the latest content.
+""",
+)
+async def persist_translation_result_to_stash(
+    task_id: str,
+    user: User = Depends(get_current_user),
+):
+    """Copy latest exports to result stash for queue/offline download consistency."""
+    _ = user  # auth gate only
+    try:
+        result = await _download_service.persist_completed_task_outputs_to_stash(task_id)
+        return JSONResponse(content=result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            LogModule.ROUTE,
+            f"[PERSIST-RESULT] task_id={task_id} failed: {e}",
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post(

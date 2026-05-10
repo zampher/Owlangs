@@ -73,6 +73,7 @@ class TranslationConfigService {
         'thinking': settings.thinking,
         'timeout': settings.timeout,
         'retry': settings.retry,
+        'segment_auto_retry_rounds': settings.segmentAutoRetryRounds,
         'custom_prompt': settings.customPrompt,
       };
 

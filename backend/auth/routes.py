@@ -739,6 +739,7 @@ async def get_app_config_api(
             'translator_connect_timeout': 'connect_timeout',
             'translator_timeout': 'timeout',
             'translator_retry': 'retry',
+            'translator_segment_auto_retry_rounds': 'segment_auto_retry_rounds',
             'translator_temperature': 'temperature',
             'translator_thinking_mode': 'thinking',
         }
@@ -839,7 +840,9 @@ async def get_app_config_api(
             'translator_custom_prompt', 'translator_thinking_mode', 'theme',
             'translator_platform_type', 'translator_temperature', 'translator_top_p',
             'translator_frequency_penalty', 'translator_presence_penalty',
-            'translator_chunk_token_size', 'chunk_size', 'concurrent', 'timeout', 'retry', 'temperature', 'thinking',
+            'translator_chunk_token_size', 'chunk_size', 'concurrent', 'timeout', 'retry',
+            'translator_segment_auto_retry_rounds', 'segment_auto_retry_rounds',
+            'temperature', 'thinking',
             'glossary_generate_enable', 'glossary_agent_config_choice', 'glossary_agent_thinking_mode',
             'glossary_agent_platform_type', 'glossary_agent_top_p',
             'glossary_agent_frequency_penalty', 'glossary_agent_presence_penalty', 'glossary_agent_to_lang',
@@ -3258,7 +3261,7 @@ async def batch_update_settings(
                 
                 # Sync certain settings to app_config.json for backend consistency
                 # These settings are user preferences but need to be in global config for backend to read
-                if backend_key in ['chunk_size', 'concurrent', 'timeout', 'retry']:
+                if backend_key in ['chunk_size', 'concurrent', 'timeout', 'retry', 'segment_auto_retry_rounds']:
                     try:
                         from config import get_app_config, save_app_config
                         app_config = get_app_config()
@@ -3279,6 +3282,9 @@ async def batch_update_settings(
                         elif backend_key == 'retry':
                             app_config.translator_retry = int(value) if value else 5
                             logger.info(LogModule.AUTH, f"[SETTINGS] Synced retry={value} to app_config.translator_retry")
+                        elif backend_key == 'segment_auto_retry_rounds':
+                            app_config.translator_segment_auto_retry_rounds = int(value) if value else 3
+                            logger.info(LogModule.AUTH, f"[SETTINGS] Synced segment_auto_retry_rounds={value} to app_config.translator_segment_auto_retry_rounds")
                         
                         app_config_needs_save = True
                     except Exception as e:

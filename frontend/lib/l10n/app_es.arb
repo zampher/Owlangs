@@ -48,6 +48,21 @@
   "translationToolbarRetryInProgress": "Reintento en progreso...",
   "translationToolbarRetryTooltip": "Reintentar todos los segmentos fallidos o marcados. Esto retraducirá los segmentos que fallaron durante la traducción o fueron marcados manualmente para reintento, usando la plataforma de IA actualmente seleccionada. Los segmentos excluidos y borrados se omitirán.",
   "translationToolbarRetry": "Reintentar",
+  "translationPersistQueueTooltip": "Escribe las exportaciones actuales en el servidor y actualiza la cola para que las descargas coincidan con tus últimos cambios aquí.",
+  "translationPersistQueueButton": "Actualizar cola",
+  "translationPersistQueueAlreadySyncedTooltip": "Ya coincide con la instantánea de la cola. No hace falta guardar de nuevo.",
+  "translationPersistQueueSuccess": "Exportaciones guardadas para la cola de traducción.",
+  "translationPersistQueueFailed": "No se pudo guardar para la cola: {error}",
+  "@translationPersistQueueFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "translationCloseTranslateTabTitle": "La cola puede no tener el resultado final",
+  "translationCloseTranslateTabMessage": "Tus ediciones aquí aún no están guardadas en la instantánea de la cola de traducción. Si cierras sin guardar, los archivos que descargues desde la cola pueden no ser la versión final que ves en esta pestaña.\n\nPuedes actualizar la cola y cerrar, o cerrar esta pestaña sin guardar en la cola.",
+  "translationCloseTranslateTabStay": "Permanecer",
+  "translationCloseTranslateTabClose": "Cerrar sin guardar",
+  "translationCloseTranslateTabSaveAndClose": "Guardar en la cola y cerrar",
   "translationToolbarSwitchToFile": "Cambiar a Archivo",
   "translationToolbarSwitchToText": "Cambiar a Texto",
   "translationStatusCompleted": "Traducción Completada",
@@ -260,8 +275,14 @@
   "homeNavHome": "Inicio",
   "translationQueueTitle": "Cola de traducción",
   "translationQueueHint": "Las tareas se actualizan automáticamente. Descargue cuando finalicen.",
+  "translationQueueCancelExitHint": "Para tareas en cola o en ejecución, use Cancelar tarea; al confirmar, volverá al inicio.",
+  "translationQueueCancelDialogTitle": "¿Cancelar esta tarea de traducción?",
+  "translationQueueCancelDialogMessage": "Las tareas en cola se eliminan de la cola; las que están en ejecución se detienen. Al confirmar, volverá al inicio.",
+  "translationQueueCancelDialogKeep": "Conservar",
+  "translationQueueCancelDialogConfirm": "Cancelar tarea",
   "translationQueueEmpty": "Aún no hay tareas de traducción.",
   "translationQueueNewQueuedTask": "Nueva traducción en cola",
+  "translationQueueBackToQueueTooltip": "Volver a la cola de traducción",
   "translationQueuedStarted": "Tarea añadida a la cola. Consulte el progreso aquí.",
   "translationQueueRefresh": "Actualizar",
   "translationQueueCancel": "Cancelar tarea",
@@ -285,6 +306,39 @@
   },
   "translationQueueActionFailed": "Error en la acción: {error}",
   "@translationQueueActionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "translationQueueSubmittedBy": "Enviado por: {user}",
+  "@translationQueueSubmittedBy": {
+    "placeholders": {
+      "user": {}
+    }
+  },
+  "translationQueueStartedAt": "Inicio: {time}",
+  "@translationQueueStartedAt": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "translationQueueCompletedAt": "Finalizado: {time}",
+  "@translationQueueCompletedAt": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "translationQueueTimeUnknown": "—",
+  "translationQueueGuestUser": "Invitado",
+  "translationQueueClearAllTooltip": "Vaciar cola de traducción y caché del servidor (solo admin)",
+  "translationQueueClearAllButton": "Vaciar cola",
+  "translationQueueClearAllTitle": "Vaciar cola de traducción",
+  "translationQueueClearAllMessage": "Cancela trabajos en cola y en curso, elimina tareas en memoria y instantáneas en disco. No se puede deshacer.",
+  "translationQueueClearAllConfirm": "Vaciar",
+  "translationQueueClearAllCancel": "Cancelar",
+  "translationQueueClearAllSuccess": "Cola de traducción vaciada.",
+  "translationQueueClearAllFailed": "No se pudo vaciar la cola: {error}",
+  "@translationQueueClearAllFailed": {
     "placeholders": {
       "error": {}
     }
@@ -721,8 +775,10 @@
   "settingsTranslationConcurrentHint": "Recomendado: 3 (ajustar 1–8 según el modelo y la cuota)",
   "settingsTranslationTimeoutTitle": "Tiempo de espera (segundos)",
   "settingsTranslationTimeoutHint": "120 (recomendado: 120-300 segundos)",
-  "settingsTranslationRetryTitle": "Número de Reintentos",
-  "settingsTranslationRetryHint": "Recomendado: 3 (número de reintentos para segmentos fallidos)",
+  "settingsTranslationChunkRetryTitle": "Reintentos por fragmento/API",
+  "settingsTranslationChunkRetryHint": "Recomendado: 3–5 (si falla un fragmento o la llamada a la API)",
+  "settingsTranslationSegmentAutoRetryTitle": "Cola: rondas automáticas para segmentos fallidos",
+  "settingsTranslationSegmentAutoRetryHint": "Recomendado: 3 (1–10 rondas de retraducción por lotes tras la traducción principal; solo modo cola)",
   "settingsTranslationChunkSizeTitle": "Tamaño del Fragmento (tokens)",
   "settingsTranslationChunkSizeHint": "Recomendado: 3000 tokens por solicitud (ajustar según el tamaño de contexto del modelo)",
   "settingsExclusionTitle": "Reglas de Exclusión Predeterminadas",

@@ -16,7 +16,8 @@ import asyncio
 import tempfile
 import zipfile
 import re
-from typing import Optional, Dict, Any, List
+from urllib.parse import urlencode
+from typing import Optional, Dict, Any, List, Tuple
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -104,6 +105,118 @@ def _get_image_layout_for_grouping(
     )
     logger.info(LogModule.EXPORT, f"[DOWNLOAD] image_block_indices from layout: len={len(indices) if indices else 0}, indices={indices[:20] if indices and len(indices) <= 20 else (indices[:20] if indices else [])}, path_mappings={len(path_to_block_index) if path_to_block_index else 0}")
     return (indices if indices else None, path_to_block_index if path_to_block_index else None, layout_doc)
+
+
+def _infer_workflow_from_filename(original_filename_lower: str) -> Optional[str]:
+    """Map file extension to translation workflow_type (see app.models.service payload union)."""
+    if not original_filename_lower or "." not in original_filename_lower:
+        return None
+    ext = original_filename_lower.rsplit(".", 1)[-1].lower()
+    return {
+        "md": "markdown_based",
+        "txt": "txt",
+        "docx": "docx",
+        "doc": "docx",
+        "html": "html",
+        "htm": "html",
+        "json": "json",
+        "xlsx": "xlsx",
+        "xls": "xlsx",
+        "pptx": "pptx",
+        "ppt": "pptx",
+        "srt": "srt",
+        "epub": "epub",
+        "mobi": "mobi",
+        "pdf": "markdown_based",
+        "ts": "qt_ts",
+    }.get(ext)
+
+
+def resolve_task_export_workflow_type(task_state: Dict[str, Any]) -> Optional[str]:
+    """
+    Workflow used for export palette / stash (segments metadata, then filename extension).
+    """
+    orig_l = (task_state.get("original_filename") or "").lower()
+    segs = task_state.get("translation_segments") or {}
+    meta = segs.get("metadata", {}) if isinstance(segs, dict) else {}
+    wt: Optional[str] = meta.get("workflow_type") if isinstance(meta, dict) else None
+    if not wt:
+        wt = _infer_workflow_from_filename(orig_l)
+    if not wt and orig_l.endswith(".pdf"):
+        wt = "markdown_based"
+    return wt
+
+
+def _build_stash_export_plan(task_state: Dict[str, Any]) -> List[Tuple[str, str, Dict[str, Any]]]:
+    """
+    Build (stash_key, download_file_type, kwargs for download_file).
+
+    Must stay aligned with ``completed_task_download_urls`` / GET /service/status so the
+    translation queue lists every format the download route can serve on-demand.
+    """
+    orig_l = (task_state.get("original_filename") or "").lower()
+    is_pdf = orig_l.endswith(".pdf")
+    has_layout = task_state.get("layout_document") is not None
+    is_fmt_conv = bool(task_state.get("is_format_conversion") or task_state.get("convert_only"))
+    wt = resolve_task_export_workflow_type(task_state)
+
+    plan: List[Tuple[str, str, Dict[str, Any]]] = []
+    if wt == "markdown_based":
+        allow_pdf = is_pdf and has_layout and not is_fmt_conv
+        for ft in ("docx", "html", "md"):
+            plan.append((ft, ft, {}))
+        if allow_pdf:
+            plan.append(("pdf", "pdf", {}))
+        plan.append(("md_zip", "md", {"embed_images": False}))
+    elif wt == "txt":
+        for ft in ("html", "txt"):
+            plan.append((ft, ft, {}))
+    elif wt in ("docx", "html"):
+        # Same on-demand surface as markdown_based minus PDF branch (non-PDF sources).
+        for ft in ("docx", "html", "md"):
+            plan.append((ft, ft, {}))
+        plan.append(("md_zip", "md", {"embed_images": False}))
+    elif wt == "json":
+        for ft in ("json", "html"):
+            plan.append((ft, ft, {}))
+    elif wt == "xlsx":
+        plan.append(("xlsx", "xlsx", {}))
+    elif wt == "pptx":
+        plan.append(("pptx", "pptx", {}))
+    elif wt == "srt":
+        plan.append(("srt", "srt", {}))
+    elif wt == "epub":
+        plan.append(("epub", "epub", {}))
+    elif wt == "mobi":
+        plan.append(("mobi", "mobi", {}))
+        plan.append(("epub", "epub", {}))
+    elif wt == "qt_ts":
+        plan.append(("ts", "ts", {}))
+    else:
+        df = task_state.get("downloadable_files") or {}
+        if isinstance(df, dict):
+            for k in df.keys():
+                if isinstance(k, str) and k:
+                    plan.append((k, k, {}))
+    return plan
+
+
+def completed_task_download_urls(task_id: str, task_state: Dict[str, Any]) -> Dict[str, str]:
+    """Relative /service/download URLs for every export in the stash plan (queue + status UI)."""
+    out: Dict[str, str] = {}
+    for stash_key, download_ft, kwargs in _build_stash_export_plan(task_state):
+        base = f"/service/download/{task_id}/{download_ft}"
+        if kwargs:
+            flat: Dict[str, Any] = {}
+            for k, v in kwargs.items():
+                if isinstance(v, bool):
+                    flat[k] = "true" if v else "false"
+                elif v is not None:
+                    flat[k] = v
+            out[stash_key] = f"{base}?{urlencode(flat)}"
+        else:
+            out[stash_key] = base
+    return out
 
 
 def _pandoc_pdf_file_response_from_md(
@@ -3175,6 +3288,75 @@ class DownloadService:
         # File doesn't exist
         raise HTTPException(status_code=404,
                             detail=f"Task '{task_id}' does not support downloading '{file_type}' type files, or files have been lost.")
+    
+    async def persist_completed_task_outputs_to_stash(self, task_id: str) -> Dict[str, Any]:
+        """
+        Rebuild export files from current in-memory task state and copy them into translation_result_stash
+        (same as a successful download would record). Used so the queue can serve latest content after
+        user edits or retry without requiring a browser download.
+        """
+        from backend.app.services.translation.translation_result_stash import record_generated_result
+
+        task_state = self.task_manager.get_task(task_id)
+        if not task_state:
+            raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
+        if (task_state.get("status") or "").lower() != "completed":
+            raise HTTPException(
+                status_code=400,
+                detail="Task is not completed; cannot persist results.",
+            )
+        segs = task_state.get("translation_segments")
+        if not isinstance(segs, dict) or not segs.get("segments"):
+            raise HTTPException(
+                status_code=400,
+                detail="No translation segments available to export.",
+            )
+
+        plan = _build_stash_export_plan(task_state)
+        if not plan:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot determine export formats for this task.",
+            )
+
+        stashed: List[str] = []
+        errors: List[str] = []
+
+        for stash_key, download_ft, kwargs in plan:
+            try:
+                resp = await self.download_file(task_id, download_ft, **kwargs)
+                path = getattr(resp, "path", None)
+                ts = self.task_manager.get_task(task_id)
+                if path and ts and os.path.isfile(str(path)):
+                    record_generated_result(task_id, stash_key, str(path), ts)
+                    stashed.append(stash_key)
+                else:
+                    errors.append(f"{stash_key}: missing or invalid output file")
+            except Exception as e:
+                err = f"{stash_key}: {e}"
+                errors.append(err)
+                logger.warning(
+                    LogModule.EXPORT,
+                    f"[PERSIST-STASH] task_id={task_id} {err}",
+                    exc_info=True,
+                )
+
+        ok = len(stashed) > 0
+        result: Dict[str, Any] = {
+            "ok": ok,
+            "stashed": stashed,
+            "errors": errors,
+        }
+        if not ok:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to persist any export to stash: " + "; ".join(errors[:5]),
+            )
+        logger.info(
+            LogModule.EXPORT,
+            f"[PERSIST-STASH] task_id={task_id} stored types={stashed}",
+        )
+        return result
     
     async def get_debug_file(
         self,

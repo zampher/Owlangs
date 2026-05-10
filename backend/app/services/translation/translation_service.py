@@ -19,6 +19,7 @@ from pathlib import Path
 
 from logger import unified_logger as logger
 from logger.logger import LogModule
+from utils.translation_validator import log_segment_translation_stats
 from backend.app.services.task import TaskManager
 from backend.app.services.translation.workflow_factory import WorkflowFactory
 from backend.app.services.translation.workflow_config_builder import WorkflowConfigBuilder
@@ -105,18 +106,23 @@ class TranslationService:
     ) -> None:
         """
         Queued tasks have no immersive UI: batch-retry failed segments automatically,
-        same API as frontend ``retranslateSegmentsBatch``, up to payload.retry rounds.
+        same API as frontend ``retranslateSegmentsBatch``.
+
+        Rounds are controlled by ``segment_auto_retry_rounds`` (not chunk ``retry``).
         """
         from utils.translation_segments import retranslate_segments_batch
+        from utils.translation_validator import refresh_task_state_segment_failure_flags
 
-        retry_raw = getattr(payload, "retry", None)
-        if retry_raw is None and isinstance(payload, dict):
-            retry_raw = payload.get("retry")
+        seg_rounds_raw = getattr(payload, "segment_auto_retry_rounds", None)
+        if seg_rounds_raw is None and isinstance(payload, dict):
+            seg_rounds_raw = payload.get("segment_auto_retry_rounds")
         try:
-            max_rounds = int(retry_raw) if retry_raw is not None else 3
+            max_rounds = int(seg_rounds_raw) if seg_rounds_raw is not None else 3
         except (TypeError, ValueError):
             max_rounds = 3
         max_rounds = max(1, min(max_rounds, 10))
+
+        log_segment_translation_stats(task_id, task_state, "before_queue_auto_retry")
 
         platform_key = getattr(payload, "ai_platform", None) or getattr(payload, "platform_type", None)
         if isinstance(payload, dict):
@@ -127,6 +133,22 @@ class TranslationService:
             to_lang = payload.get("to_lang") or payload.get("target_language")
 
         for attempt in range(max_rounds):
+            # Align with immersive Retry: re-validate source vs target before collecting indices.
+            # Initial recording may omit flags; batch retry may clear flags when LLM returns
+            # same-as-source that should_treat_as_failure still treats as failure on re-check.
+            refreshed_failed = refresh_task_state_segment_failure_flags(task_state)
+            if refreshed_failed:
+                logger.info(
+                    LogModule.TRANS,
+                    f"[QUEUE-AUTO-RETRY] task={task_id} revalidated segments: "
+                    f"{refreshed_failed} marked failed by should_treat_as_failure "
+                    f"(before round {attempt + 1})",
+                )
+            log_segment_translation_stats(
+                task_id,
+                task_state,
+                f"after_refresh_before_collect_round_{attempt + 1}",
+            )
             indices = self._collect_failed_segment_indices_for_retry(task_state)
             if not indices:
                 logger.info(
@@ -156,6 +178,34 @@ class TranslationService:
                     user_prompt=None,
                     to_lang_from_frontend=to_lang,
                 )
+                # Batch retry mutates segment dicts in-place (same object as task_manager's task).
+                # Explicit update_task so any merge/persist path and debugging see a write boundary.
+                try:
+                    ts_data = task_state.get("translation_segments")
+                    self.task_manager.update_task(
+                        task_id,
+                        {"translation_segments": ts_data},
+                    )
+                    n_seg = 0
+                    if isinstance(ts_data, dict):
+                        seg_list = ts_data.get("segments")
+                        if isinstance(seg_list, list):
+                            n_seg = len(seg_list)
+                    logger.info(
+                        LogModule.TRANS,
+                        f"[QUEUE-AUTO-RETRY] task={task_id} persisted translation_segments "
+                        f"after round {attempt + 1} (segment count={n_seg})",
+                    )
+                    log_segment_translation_stats(
+                        task_id,
+                        task_state,
+                        f"after_batch_retry_round_{attempt + 1}",
+                    )
+                except Exception as sync_exc:
+                    logger.warning(
+                        LogModule.TRANS,
+                        f"[QUEUE-AUTO-RETRY] task={task_id} translation_segments persist failed: {sync_exc}",
+                    )
             except Exception as exc:
                 logger.error(
                     LogModule.TRANS,
@@ -163,6 +213,8 @@ class TranslationService:
                     exc_info=True,
                 )
                 break
+
+        log_segment_translation_stats(task_id, task_state, "queue_auto_retry_finished")
     
     async def _test_llm_connectivity(self, payload: Any, task_id: str, task_state: Dict[str, Any]) -> bool:
         """
@@ -1417,6 +1469,11 @@ class TranslationService:
                         exc_info=False,
                     )
 
+                log_segment_translation_stats(
+                    task_id,
+                    task_state,
+                    "after_main_translation",
+                )
                 # Queue mode: auto batch-retry failed segments (no immersive Retry UI)
                 if task_state.get("execution_mode") == "queued":
                     try:

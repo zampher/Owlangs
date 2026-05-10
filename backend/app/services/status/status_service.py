@@ -51,16 +51,6 @@ _TRANSLATION_PHASE_PREFIXES = (
     "Translation initialized",
 )
 
-# Allowed download file types per workflow for on-demand links (status response).
-# Only these types are exposed; frontend shows a fixed set of export options based on workflow.
-# PDF source (markdown_based): DOCX, HTML, MD, PDF. Non-PDF markdown_based: DOCX, HTML, MD. No TXT/JSON by default.
-ALLOWED_DOWNLOAD_TYPES = {
-    "markdown_based": ("docx", "html", "md"),
-    "txt": ("html", "txt"),
-}
-ALLOWED_DOWNLOAD_TYPES_PDF = ("docx", "html", "md", "pdf")  # markdown_based when source is PDF
-
-
 # Minimal lang code normalization for frozen fallback (no anonymize/spacy/torch)
 _LANG_NORMALIZE = {"zh-cn": "zh", "zh-tw": "zh", "no": "nb"}
 
@@ -792,51 +782,30 @@ class StatusService:
                 downloads["pdf"] = f"/service/download/{task_id}/pdf"
                 logger.info(LogModule.WORKFLOW, f"[STATUS] Added PDF download link for task {task_id}: layout-based PDF available (will be generated on-demand)")
         
-        # Completed tasks: merge full on-demand export palette (docx/html/md[/pdf]) even when some formats
-        # are already materialized under downloadable_files — otherwise the queue only showed one button.
+        # Completed tasks: merge on-demand export URLs for all supported workflows (see
+        # download_service._build_stash_export_plan) so Translation queue shows the same buttons as
+        # the in-app download bar.
         status_lower = (task_state.get("status") or "").lower()
         if status_lower == "completed":
-            wt = workflow_type
-            if not wt:
-                segs_data = task_state.get("translation_segments")
-                if isinstance(segs_data, dict):
-                    meta = segs_data.get("metadata", {})
-                    if isinstance(meta, dict):
-                        wt = meta.get("workflow_type")
-            if not wt and original_filename:
-                ext = (original_filename or "").lower().split(".")[-1] if "." in (original_filename or "") else ""
-                if ext == "md":
-                    wt = "markdown_based"
-                elif ext == "txt":
-                    wt = "txt"
-            if not wt and is_pdf_file:
-                wt = "markdown_based"
-            if wt == "markdown_based":
-                allowed = ALLOWED_DOWNLOAD_TYPES_PDF if (is_pdf_file and has_layout_for_pdf and not is_format_conversion) else ALLOWED_DOWNLOAD_TYPES["markdown_based"]
-                before_ct = len(downloads)
-                for ft in allowed:
-                    downloads.setdefault(ft, f"/service/download/{task_id}/{ft}")
-                # Second MD export: images as files inside a ZIP (same route, embed_images=false)
-                downloads.setdefault(
-                    "md_zip",
-                    f"/service/download/{task_id}/md?embed_images=false",
+            from backend.app.services.download.download_service import (
+                completed_task_download_urls,
+                resolve_task_export_workflow_type,
+            )
+
+            palette = completed_task_download_urls(task_id, task_state)
+            before_ct = len(downloads)
+            for key, url in palette.items():
+                downloads.setdefault(key, url)
+            # Local `downloads` is rebuilt on every status query; merge always grows from 0 when only
+            # the palette applies — INFO here would log once per poll. Keep diagnosis at DEBUG.
+            if len(downloads) > before_ct:
+                logger.debug(
+                    LogModule.WORKFLOW,
+                    f"[STATUS] Task {task_id}: merged completed-task download palette: {list(downloads.keys())}",
                 )
-                if len(downloads) > before_ct:
-                    logger.info(
-                        LogModule.WORKFLOW,
-                        f"[STATUS] Task {task_id}: merged on-demand palette for markdown_based (status=completed): {list(downloads.keys())}",
-                    )
-            elif wt == "txt":
-                before_ct = len(downloads)
-                for ft in ALLOWED_DOWNLOAD_TYPES["txt"]:
-                    downloads.setdefault(ft, f"/service/download/{task_id}/{ft}")
-                if len(downloads) > before_ct:
-                    logger.info(
-                        LogModule.WORKFLOW,
-                        f"[STATUS] Task {task_id}: merged on-demand palette for txt (status=completed): {list(downloads.keys())}",
-                    )
-            if wt:
-                workflow_type = wt
+            wt_resolved = resolve_task_export_workflow_type(task_state)
+            if wt_resolved:
+                workflow_type = wt_resolved
         
         attachments = {}
         if task_state.get("download_ready") and task_state.get("attachment_files"):

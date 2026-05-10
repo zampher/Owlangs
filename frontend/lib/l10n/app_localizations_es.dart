@@ -172,6 +172,44 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationToolbarRetry => 'Reintentar';
 
   @override
+  String get translationPersistQueueTooltip =>
+      'Escribe las exportaciones actuales en el servidor y actualiza la cola para que las descargas coincidan con tus últimos cambios aquí.';
+
+  @override
+  String get translationPersistQueueButton => 'Actualizar cola';
+
+  @override
+  String get translationPersistQueueAlreadySyncedTooltip =>
+      'Ya coincide con la instantánea de la cola. No hace falta guardar de nuevo.';
+
+  @override
+  String get translationPersistQueueSuccess =>
+      'Exportaciones guardadas para la cola de traducción.';
+
+  @override
+  String translationPersistQueueFailed(Object error) {
+    return 'No se pudo guardar para la cola: $error';
+  }
+
+  @override
+  String get translationCloseTranslateTabTitle =>
+      'La cola puede no tener el resultado final';
+
+  @override
+  String get translationCloseTranslateTabMessage =>
+      'Tus ediciones aquí aún no están guardadas en la instantánea de la cola de traducción. Si cierras sin guardar, los archivos que descargues desde la cola pueden no ser la versión final que ves en esta pestaña.\n\nPuedes actualizar la cola y cerrar, o cerrar esta pestaña sin guardar en la cola.';
+
+  @override
+  String get translationCloseTranslateTabStay => 'Permanecer';
+
+  @override
+  String get translationCloseTranslateTabClose => 'Cerrar sin guardar';
+
+  @override
+  String get translationCloseTranslateTabSaveAndClose =>
+      'Guardar en la cola y cerrar';
+
+  @override
   String get translationToolbarSwitchToFile => 'Cambiar a Archivo';
 
   @override
@@ -886,10 +924,32 @@ class AppLocalizationsEs extends AppLocalizations {
       'Las tareas se actualizan automáticamente. Descargue cuando finalicen.';
 
   @override
+  String get translationQueueCancelExitHint =>
+      'Para tareas en cola o en ejecución, use Cancelar tarea; al confirmar, volverá al inicio.';
+
+  @override
+  String get translationQueueCancelDialogTitle =>
+      '¿Cancelar esta tarea de traducción?';
+
+  @override
+  String get translationQueueCancelDialogMessage =>
+      'Las tareas en cola se eliminan de la cola; las que están en ejecución se detienen. Al confirmar, volverá al inicio.';
+
+  @override
+  String get translationQueueCancelDialogKeep => 'Conservar';
+
+  @override
+  String get translationQueueCancelDialogConfirm => 'Cancelar tarea';
+
+  @override
   String get translationQueueEmpty => 'Aún no hay tareas de traducción.';
 
   @override
   String get translationQueueNewQueuedTask => 'Nueva traducción en cola';
+
+  @override
+  String get translationQueueBackToQueueTooltip =>
+      'Volver a la cola de traducción';
 
   @override
   String get translationQueuedStarted =>
@@ -932,6 +992,55 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String translationQueueActionFailed(Object error) {
     return 'Error en la acción: $error';
+  }
+
+  @override
+  String translationQueueSubmittedBy(Object user) {
+    return 'Enviado por: $user';
+  }
+
+  @override
+  String translationQueueStartedAt(Object time) {
+    return 'Inicio: $time';
+  }
+
+  @override
+  String translationQueueCompletedAt(Object time) {
+    return 'Finalizado: $time';
+  }
+
+  @override
+  String get translationQueueTimeUnknown => '—';
+
+  @override
+  String get translationQueueGuestUser => 'Invitado';
+
+  @override
+  String get translationQueueClearAllTooltip =>
+      'Vaciar cola de traducción y caché del servidor (solo admin)';
+
+  @override
+  String get translationQueueClearAllButton => 'Vaciar cola';
+
+  @override
+  String get translationQueueClearAllTitle => 'Vaciar cola de traducción';
+
+  @override
+  String get translationQueueClearAllMessage =>
+      'Cancela trabajos en cola y en curso, elimina tareas en memoria y instantáneas en disco. No se puede deshacer.';
+
+  @override
+  String get translationQueueClearAllConfirm => 'Vaciar';
+
+  @override
+  String get translationQueueClearAllCancel => 'Cancelar';
+
+  @override
+  String get translationQueueClearAllSuccess => 'Cola de traducción vaciada.';
+
+  @override
+  String translationQueueClearAllFailed(Object error) {
+    return 'No se pudo vaciar la cola: $error';
   }
 
   @override
@@ -2201,11 +2310,20 @@ class AppLocalizationsEs extends AppLocalizations {
       '120 (recomendado: 120-300 segundos)';
 
   @override
-  String get settingsTranslationRetryTitle => 'Número de Reintentos';
+  String get settingsTranslationChunkRetryTitle =>
+      'Reintentos por fragmento/API';
 
   @override
-  String get settingsTranslationRetryHint =>
-      'Recomendado: 3 (número de reintentos para segmentos fallidos)';
+  String get settingsTranslationChunkRetryHint =>
+      'Recomendado: 3–5 (si falla un fragmento o la llamada a la API)';
+
+  @override
+  String get settingsTranslationSegmentAutoRetryTitle =>
+      'Cola: rondas automáticas para segmentos fallidos';
+
+  @override
+  String get settingsTranslationSegmentAutoRetryHint =>
+      'Recomendado: 3 (1–10 rondas de retraducción por lotes tras la traducción principal; solo modo cola)';
 
   @override
   String get settingsTranslationChunkSizeTitle =>

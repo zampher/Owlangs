@@ -11,9 +11,11 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../app/app_router.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../shared/providers/admin_permissions_provider.dart';
 import '../../../shared/services/translation_service.dart';
 import '../../../shared/utils/message_service.dart';
 
@@ -125,14 +127,38 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
   }
 
   Future<void> _cancel(String taskId) async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(l10n.translationQueueCancelDialogTitle),
+        content: Text(l10n.translationQueueCancelDialogMessage),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.translationQueueCancelDialogKeep),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.translationQueueCancelDialogConfirm),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) {
+      return;
+    }
     try {
       await _svc.cancelTask(taskId);
-      await _refresh();
+      if (!mounted) {
+        return;
+      }
+      context.go(AppRouter.homeRoute);
     } catch (e) {
       if (mounted) {
         MessageService.showWarning(
           context,
-          AppLocalizations.of(context)!.translationQueueActionFailed(e),
+          l10n.translationQueueActionFailed(e),
         );
       }
     }
@@ -285,10 +311,79 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
         s == 'running';
   }
 
+  static double? _coerceUnix(dynamic v) {
+    if (v == null) {
+      return null;
+    }
+    final double? n =
+        v is num ? v.toDouble() : double.tryParse(v.toString());
+    if (n == null || n <= 0) {
+      return null;
+    }
+    return n;
+  }
+
+  String _formatUnixOrDash(
+    AppLocalizations l10n,
+    BuildContext context,
+    double? seconds,
+  ) {
+    if (seconds == null) {
+      return l10n.translationQueueTimeUnknown;
+    }
+    final DateTime dt =
+        DateTime.fromMillisecondsSinceEpoch((seconds * 1000).round());
+    final Locale loc = Localizations.localeOf(context);
+    return DateFormat.yMMMd(loc.toLanguageTag()).add_Hm().format(dt);
+  }
+
+  Future<void> _confirmClearQueue(
+    BuildContext context,
+    AppLocalizations l10n,
+  ) async {
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(l10n.translationQueueClearAllTitle),
+        content: Text(l10n.translationQueueClearAllMessage),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.translationQueueClearAllCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.translationQueueClearAllConfirm),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) {
+      return;
+    }
+    try {
+      await _svc.adminClearTranslationQueue();
+      if (!mounted) {
+        return;
+      }
+      MessageService.showInfo(context, l10n.translationQueueClearAllSuccess);
+      await _refresh();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      MessageService.showWarning(
+        context,
+        l10n.translationQueueClearAllFailed(e.toString()),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context)!;
     final ThemeData theme = Theme.of(context);
+    final AsyncValue<bool> adminGate = ref.watch(isAppAdminUserProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -304,6 +399,27 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
           ],
         ),
         actions: <Widget>[
+          adminGate.maybeWhen(
+            data: (bool isAdmin) => isAdmin
+                ? IconButton(
+                    tooltip: l10n.translationQueueClearAllTooltip,
+                    icon: const Icon(Icons.delete_sweep_outlined),
+                    onPressed:
+                        _loading ? null : () => _confirmClearQueue(context, l10n),
+                  )
+                : const SizedBox.shrink(),
+            orElse: () => const SizedBox.shrink(),
+          ),
+          TextButton.icon(
+            onPressed: () {
+              final ts = DateTime.now().millisecondsSinceEpoch;
+              context.push(
+                '${AppRouter.translationRoute}?execution_mode=queued&t=$ts',
+              );
+            },
+            icon: const Icon(Icons.add, size: 20),
+            label: Text(l10n.translationQueueNewQueuedTask),
+          ),
           IconButton(
             tooltip: l10n.translationQueueRefresh,
             icon: _loading
@@ -320,23 +436,19 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push(
-          '${AppRouter.translationRoute}?execution_mode=queued',
-        ),
-        icon: const Icon(Icons.add),
-        label: Text(l10n.translationQueueNewQueuedTask),
-      ),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
               child: Text(
-                l10n.translationQueueHint,
+                '${l10n.translationQueueHint}\n'
+                '${l10n.translationQueueCancelExitHint}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
+                  height: 1.25,
+                  fontSize: (theme.textTheme.bodySmall?.fontSize ?? 12) - 0.5,
                 ),
               ),
             ),
@@ -354,7 +466,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                   : _tasks.isEmpty
                       ? Center(child: Text(l10n.translationQueueEmpty))
                       : ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 88),
+                      padding: const EdgeInsets.only(bottom: 8),
                       itemCount: _tasks.length,
                       itemBuilder: (BuildContext context, int index) {
                         final Map<String, dynamic> row = _tasks[index];
@@ -392,13 +504,32 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
 
                         final bool inMemory = row['in_memory'] != false;
 
+                        final String? ownerRaw =
+                            row['owner_username']?.toString();
+                        final String ownerShow =
+                            (ownerRaw != null && ownerRaw.isNotEmpty)
+                                ? ownerRaw
+                                : l10n.translationQueueGuestUser;
+                        final double? startedSec = _coerceUnix(
+                              row['started_at'],
+                            ) ??
+                            _coerceUnix(row['queued_at']) ??
+                            _coerceUnix(row['task_start_time']);
+                        final double? completedSec = _coerceUnix(
+                              row['completed_at'],
+                            ) ??
+                            _coerceUnix(row['task_end_time']);
+
                         return Card(
                           margin: const EdgeInsets.symmetric(
                             horizontal: 12,
-                            vertical: 6,
+                            vertical: 3,
                           ),
                           child: Padding(
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: <Widget>[
@@ -406,14 +537,15 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                   name,
                                   style: theme.textTheme.titleSmall?.copyWith(
                                     fontWeight: FontWeight.w600,
+                                    height: 1.2,
                                   ),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(height: 6),
+                                const SizedBox(height: 4),
                                 Wrap(
-                                  spacing: 8,
-                                  runSpacing: 4,
+                                  spacing: 6,
+                                  runSpacing: 2,
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   children: <Widget>[
                                     Chip(
@@ -459,33 +591,58 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                       ),
                                   ],
                                 ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${l10n.translationQueueSubmittedBy(ownerShow)} · '
+                                  '${l10n.translationQueueStartedAt(_formatUnixOrDash(l10n, context, startedSec))} · '
+                                  '${l10n.translationQueueCompletedAt(_formatUnixOrDash(l10n, context, completedSec))}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    height: 1.2,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                                 if ((row['message']?.toString() ?? '')
                                     .isNotEmpty) ...<Widget>[
-                                  const SizedBox(height: 6),
+                                  const SizedBox(height: 4),
                                   Text(
                                     row['message'].toString(),
                                     style: theme.textTheme.bodySmall?.copyWith(
                                       color: theme.colorScheme.onSurfaceVariant,
                                     ),
-                                    maxLines: 3,
+                                    maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
                                 if (downloadEntries.isNotEmpty) ...<Widget>[
-                                  const SizedBox(height: 8),
+                                  const SizedBox(height: 6),
                                   Text(
                                     l10n.translationQueueDownloads,
-                                    style: theme.textTheme.labelMedium,
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
-                                  const SizedBox(height: 4),
+                                  const SizedBox(height: 2),
                                   Wrap(
-                                    spacing: 6,
-                                    runSpacing: 4,
+                                    spacing: 4,
+                                    runSpacing: 2,
                                     children: downloadEntries.map(
                                       (MapEntry<String, dynamic> e) {
                                         final String ft = e.key;
                                         final String url = e.value.toString();
                                         return OutlinedButton(
+                                          style: OutlinedButton.styleFrom(
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 2,
+                                            ),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize:
+                                                MaterialTapTargetSize.shrinkWrap,
+                                          ),
                                           onPressed: () => _download(
                                             taskId,
                                             ft,
@@ -494,21 +651,44 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                           ),
                                           child: Text(
                                             _downloadFormatButtonLabel(ft, l10n),
+                                            style: const TextStyle(fontSize: 12),
                                           ),
                                         );
                                       },
                                     ).toList(),
                                   ),
                                 ],
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 4),
                                 Row(
                                   children: <Widget>[
                                     if (_canCancel(status) && inMemory)
                                       TextButton(
+                                        style: TextButton.styleFrom(
+                                          visualDensity:
+                                              VisualDensity.compact,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 0,
+                                          ),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
                                         onPressed: () => _cancel(taskId),
                                         child: Text(l10n.translationQueueCancel),
                                       ),
                                     TextButton(
+                                      style: TextButton.styleFrom(
+                                        visualDensity:
+                                            VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 0,
+                                        ),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                      ),
                                       onPressed: () => _release(taskId),
                                       child: Text(l10n.translationQueueRelease),
                                     ),

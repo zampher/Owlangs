@@ -43,6 +43,7 @@ import '../../tasks/models/persisted_flow_state.dart';
 import '../providers/translation_refresh_provider.dart';
 import '../providers/extract_refresh_provider.dart';
 import '../providers/excluded_segments_provider.dart';
+import '../providers/queue_persist_dirty_provider.dart';
 import '../providers/chunk_tokens_provider.dart';
 import '../providers/format_settings_provider.dart';
 import '../widgets/translation_result_preview.dart';
@@ -93,6 +94,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
   bool _isGlossaryEditing = false; // Track if glossary is in editing state
   bool _isUpdatingExcluded =
       false; // Track if excluded segments are being updated
+  bool _queuePersistInFlight = false;
+  final Set<String> _autoPersistedQueueTaskIds = <String>{};
   String?
       _previousTargetLang; // Track previous target language to detect changes
   // Remember user's choice for each target language: null=not chosen, true=exclude, false=don't exclude
@@ -110,6 +113,17 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
   void initState() {
     super.initState();
     _textController = TextEditingController();
+    // Standalone queue flow: always start from a blank slate so a new queued task does not
+    // reuse the previous task's file, tabs, or segment UI after the prior job moved to background.
+    // Must run after the first frame: Riverpod forbids modifying providers during build/initState.
+    if (widget.flowId == null && widget.executionMode == 'queued') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _prepareFreshStandaloneQueuedSession();
+      });
+    }
     // Initialize text version stack if flowId exists
     if (widget.flowId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -714,7 +728,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       });
     }
 
-    return Column(
+    final Widget body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         // Toolbar at the top
@@ -815,6 +829,20 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         ),
       ],
     );
+
+    if (widget.flowId == null && widget.executionMode == 'queued') {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (bool didPop, Object? result) {
+          if (didPop) {
+            return;
+          }
+          _exitStandaloneQueuedToQueue();
+        },
+        child: body,
+      );
+    }
+    return body;
   }
 
   Widget _buildQuickSettings() {
@@ -1056,6 +1084,193 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
 
   void _resetTranslation(notifier) {
     notifier.resetTranslation();
+  }
+
+  String get _queuePersistScopeKey =>
+      widget.flowId ?? kQueuePersistStandaloneScope;
+
+  void _markQueuePersistDirty() {
+    ref
+        .read(queuePersistDirtyProvider(_queuePersistScopeKey).notifier)
+        .markDirty();
+  }
+
+  void _clearQueuePersistDirty() {
+    ref
+        .read(queuePersistDirtyProvider(_queuePersistScopeKey).notifier)
+        .clear();
+  }
+
+  /// Clears global translation UI state for `/translation?execution_mode=queued` (no flowId).
+  void _prepareFreshStandaloneQueuedSession() {
+    if (widget.flowId != null || widget.executionMode != 'queued') {
+      return;
+    }
+    ref.read(translationStateProvider.notifier).resetTranslation();
+    ref.read(previewTabsProvider.notifier).clearAllTabs();
+    _textController.clear();
+    _autoPersistedQueueTaskIds.clear();
+    _clearQueuePersistDirty();
+    _hasStartedTranslationInThisSession = false;
+    _glossarySkipped = false;
+    _hasShownLanguageWarning = false;
+    _isTextMode = false;
+  }
+
+  Future<void> _persistQueueSnapshotAuto(String taskId) async {
+    try {
+      final TranslationService svc = TranslationService();
+      await svc.persistQueueSnapshot(taskId);
+      if (mounted) {
+        _clearQueuePersistDirty();
+      }
+    } catch (e, st) {
+      _translationScreenLog(
+        'Auto persist queue snapshot failed: $e\n$st',
+        level: LogLevel.warn,
+      );
+      if (mounted) {
+        _markQueuePersistDirty();
+      }
+    }
+  }
+
+  Future<void> _persistQueueSnapshotManual({
+    bool showSuccessSnack = true,
+  }) async {
+    final dynamic st = _getCurrentTranslationState();
+    final String? tid = st.taskId as String?;
+    if (tid == null || tid.isEmpty) {
+      return;
+    }
+    setState(() {
+      _queuePersistInFlight = true;
+    });
+    try {
+      final TranslationService svc = TranslationService();
+      await svc.persistQueueSnapshot(tid);
+      if (mounted) {
+        _clearQueuePersistDirty();
+        if (showSuccessSnack) {
+          final AppLocalizations l10n = AppLocalizations.of(context)!;
+          _showSnackBar(l10n.translationPersistQueueSuccess, Colors.green);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        final AppLocalizations l10n = AppLocalizations.of(context)!;
+        _showSnackBar(
+          l10n.translationPersistQueueFailed(e.toString()),
+          Colors.red,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _queuePersistInFlight = false;
+        });
+      }
+    }
+  }
+
+  Future<String?> _showQueuePersistDiscardDialog(AppLocalizations l10n) {
+    return showDialog<String>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(l10n.translationCloseTranslateTabTitle),
+        content: SingleChildScrollView(
+          child: Text(l10n.translationCloseTranslateTabMessage),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('stay'),
+            child: Text(l10n.translationCloseTranslateTabStay),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('close_anyway'),
+            child: Text(l10n.translationCloseTranslateTabClose),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop('save_and_close'),
+            child: Text(l10n.translationCloseTranslateTabSaveAndClose),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _confirmExitStandaloneQueuedIfNeeded() async {
+    final bool dirty =
+        ref.read(queuePersistDirtyProvider(_queuePersistScopeKey));
+    if (!dirty) {
+      return true;
+    }
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final String? choice = await _showQueuePersistDiscardDialog(l10n);
+    if (choice == null || choice == 'stay') {
+      return false;
+    }
+    if (choice == 'close_anyway') {
+      return true;
+    }
+    await _persistQueueSnapshotManual(showSuccessSnack: false);
+    if (!mounted) {
+      return false;
+    }
+    final bool stillDirty =
+        ref.read(queuePersistDirtyProvider(_queuePersistScopeKey));
+    if (stillDirty) {
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _exitStandaloneQueuedToQueue() async {
+    if (widget.flowId != null || widget.executionMode != 'queued') {
+      return;
+    }
+    final bool ok = await _confirmExitStandaloneQueuedIfNeeded();
+    if (!ok || !mounted) {
+      return;
+    }
+    _prepareFreshStandaloneQueuedSession();
+    if (!mounted) {
+      return;
+    }
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(AppRouter.translationQueueRoute);
+    }
+  }
+
+  Future<bool> _confirmTranslateTabCloseIfNeeded(PreviewTab tab) async {
+    if (tab.id != 'translate_tab') {
+      return true;
+    }
+    final bool dirty =
+        ref.read(queuePersistDirtyProvider(_queuePersistScopeKey));
+    if (!dirty) {
+      return true;
+    }
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final String? choice = await _showQueuePersistDiscardDialog(l10n);
+    if (choice == null || choice == 'stay') {
+      return false;
+    }
+    if (choice == 'close_anyway') {
+      return true;
+    }
+    await _persistQueueSnapshotManual(showSuccessSnack: false);
+    if (!mounted) {
+      return false;
+    }
+    final bool stillDirty =
+        ref.read(queuePersistDirtyProvider(_queuePersistScopeKey));
+    if (stillDirty) {
+      return false;
+    }
+    return true;
   }
 
   String _formatTokenCount(int count) {
@@ -1406,6 +1621,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           // If no segments were successfully retranslated, do full refresh
           triggerTranslationRefresh(ref);
         }
+        _markQueuePersistDirty();
       }
     } catch (e) {
       // Reset translation state on error
@@ -1535,6 +1751,17 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
+            if (widget.flowId == null && widget.executionMode == 'queued')
+              IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: l10n.translationQueueBackToQueueTooltip,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 36,
+                  minHeight: 36,
+                ),
+                onPressed: () => _exitStandaloneQueuedToQueue(),
+              ),
           // Upload Button - Opens file picker and triggers Extract
           // CRITICAL: On Web, file picker must be called DIRECTLY in the callback to preserve user gesture context
           // Disabled if file is already uploaded and task is not cancelled
@@ -1913,6 +2140,48 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
+              ),
+            ),
+          if (state.taskId != null && isTaskDone)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Builder(
+                builder: (BuildContext _) {
+                  final bool queueDirty = ref.watch(
+                    queuePersistDirtyProvider(_queuePersistScopeKey),
+                  );
+                  final String persistTooltip = queueDirty
+                      ? l10n.translationPersistQueueTooltip
+                      : l10n.translationPersistQueueAlreadySyncedTooltip;
+                  return Tooltip(
+                    message: persistTooltip,
+                    child: OutlinedButton.icon(
+                      onPressed: _queuePersistInFlight
+                          ? null
+                          : queueDirty
+                              ? () => _persistQueueSnapshotManual()
+                              : null,
+                      icon: _queuePersistInFlight
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save_alt, size: 16),
+                      label: Text(
+                        l10n.translationPersistQueueButton,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        minimumSize: const Size(0, 32),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           const SizedBox(width: 16),
@@ -3807,6 +4076,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       notifier.setCurrentOperation(TranslationOperation.none);
       // Reset language warning flag when clearing translation state
       _hasShownLanguageWarning = false;
+      _autoPersistedQueueTaskIds.clear();
+      _clearQueuePersistDirty();
 
       // 3. Clear translation artifacts from FlowContext
       if (widget.flowId != null) {
@@ -4301,6 +4572,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         'thinking': translationParams['thinking'],
         'timeout': translationParams['timeout'],
         'retry': translationParams['retry'],
+        'segment_auto_retry_rounds':
+            translationParams['segment_auto_retry_rounds'],
         // Platform routing (optional for backend)
         'platform_key': defaultPlatform,
         // Prompt settings from Quick Settings
@@ -4462,6 +4735,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         if (mounted) {
           final AppLocalizations l10n = AppLocalizations.of(context)!;
           MessageService.showInfo(context, l10n.translationQueuedStarted);
+          _prepareFreshStandaloneQueuedSession();
           context.go(AppRouter.translationQueueRoute);
         }
         return;
@@ -4970,6 +5244,13 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           tabIcon: uiResultIcon,
         );
 
+        if (statusText == 'completed' &&
+            widget.executionMode != 'queued' &&
+            !_autoPersistedQueueTaskIds.contains(taskId)) {
+          _autoPersistedQueueTaskIds.add(taskId);
+          unawaited(_persistQueueSnapshotAuto(taskId));
+        }
+
         // Automatically switch to Review phase after translation completes (or fails)
         if (widget.flowId != null) {
           final TasksNotifier tasksNotifier = ref.read(tasksProvider.notifier);
@@ -5395,6 +5676,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     return PreviewPanel(
       flowId: widget.flowId,
       emptyState: emptyStateWidget,
+      onTabCloseConfirm: _confirmTranslateTabCloseIfNeeded,
       onTabClose: (PreviewTab tab) async {
         // Check if closing glossary tab
         if (tab.type.toString().endsWith('glossary')) {
@@ -5450,6 +5732,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       downloads: downloads,
       onDownload: (String fileType, String url) =>
           _downloadFile(fileType, url, state, notifier),
+      onTranslationWorkspaceMutation: _markQueuePersistDirty,
       fileName: displayFileName,
       isTextMode: _isTextMode,
       workflowType: currentSettings.workflowType,

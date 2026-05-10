@@ -38,6 +38,7 @@
     "translator_connect_timeout": 15,
     "translator_timeout": 120,
     "translator_retry": 2,
+    "translator_segment_auto_retry_rounds": 2,
     "platform_api_keys": {},
     "platform_models": {},
     "glossary_agent_last_platform": "https://api.openai.com/v1",

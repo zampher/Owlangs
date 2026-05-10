@@ -107,3 +107,31 @@ async def enqueue_translation_task(task_id: str) -> None:
     assert _queue is not None
     await _queue.put(task_id)
     logger.info(LogModule.SYSTEM, f"[TRANSLATION-QUEUE] Enqueued task_id={task_id}")
+
+
+async def drain_pending_execution_queue_task_ids() -> List[str]:
+    """
+    Remove task IDs waiting in the asyncio FIFO without executing them.
+
+    Used by admin purge so queued work is not started after clearing memory/stash.
+    """
+    global _queue
+    drained: List[str] = []
+    if _queue is None:
+        return drained
+    while True:
+        try:
+            tid = _queue.get_nowait()
+        except asyncio.QueueEmpty:
+            break
+        drained.append(tid)
+        try:
+            _queue.task_done()
+        except ValueError:
+            pass
+    if drained:
+        logger.info(
+            LogModule.SYSTEM,
+            f"[TRANSLATION-QUEUE] Drained {len(drained)} pending queue slot(s): {drained[:12]}...",
+        )
+    return drained
