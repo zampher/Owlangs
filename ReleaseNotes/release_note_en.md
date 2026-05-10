@@ -1,5 +1,30 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.3.0.0
+
+Compared with **1.2.1.0**, this release introduces **two translation modes** and a **task queue**: keep the familiar immersive workbench, or switch to **queued** runs and manage jobs centrally.
+
+### New Features
+
+1. **Two translation modes (main change vs 1.2.1)**  
+   - **Immersive translation**: Upload, extract, glossary, and side‑by‑side review inside the workspace flow—the same interactive pattern as in 1.2.1.  
+   - **Queued translation**: Submit work as queued jobs so the UI is not tied up for the whole run; the server schedules execution while you track status and download outputs from the **task queue**.  
+   Use immersive for interactive editing; use queued when you want background execution and centralized tracking.
+
+2. **Task queue (new)**  
+   A dedicated **task queue** lists queued and running translation jobs with refresh, cancel/remove actions, and downloads when jobs finish (available formats depend on server configuration). It is the home for results produced through **queued translation**.
+
+3. **Where to start**  
+   - **Toolbar**: **Queued translation** sits beside **Immersive translation** for a one‑tap queued submission; **Task queue** opens the full list.  
+   - **Task queue page**: Use **Queued translation** to enqueue new work—same behavior as the toolbar.  
+   - **Queued translation (standalone screen)**: **Back to task queue** via toolbar or system back; if edits are not persisted to the queue snapshot, you are prompted to **save**, **leave without saving**, or **stay**.
+
+### Fixes & Stability
+
+1. **DOCX rebuild**: Refined segment metadata and paragraph targeting so exported/rebuilt documents behave more reliably in edge layouts.
+
+---
+
 ## Owlangs 1.2.1.0
 
 ### Optimizations
