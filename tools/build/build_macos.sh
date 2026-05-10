@@ -337,12 +337,32 @@ build_backend_for_arch() {
   export DYLD_FRAMEWORK_PATH="$py_dir"
 
   local venv_path="/tmp/owlangs_build_${target_arch}_venv"
-  if [[ ! -d "$venv_path" ]]; then
-    if [[ "$target_arch" == "x86_64" ]]; then
-      arch -x86_64 "$uni_py" -m venv "$venv_path"
-    else
-      "$uni_py" -m venv "$venv_path"
+  # A directory can exist without bin/activate (interrupted venv, manual /tmp cleanup, etc.).
+  # Only skip creation when the venv is actually usable.
+  if [[ ! -f "$venv_path/bin/activate" ]]; then
+    if [[ -d "$venv_path" ]]; then
+      echo "[${target_arch}] Removing incomplete venv (missing bin/activate): ${venv_path}" >&2
+      rm -rf "$venv_path"
     fi
+    echo "[${target_arch}] Creating venv at ${venv_path}..."
+    if [[ "$target_arch" == "x86_64" ]]; then
+      if ! arch -x86_64 "$uni_py" -m venv "$venv_path"; then
+        echo "[${target_arch}] ERROR: arch -x86_64 python -m venv failed." >&2
+        echo "[${target_arch}] On Apple Silicon, install Rosetta: sudo softwareupdate --install-rosetta --agreed-to-license" >&2
+        echo "[${target_arch}] Use python.org Python 3.12 (universal2) for cross-arch venvs." >&2
+        exit 1
+      fi
+    else
+      if ! "$uni_py" -m venv "$venv_path"; then
+        echo "[${target_arch}] ERROR: python -m venv failed." >&2
+        exit 1
+      fi
+    fi
+  fi
+
+  if [[ ! -f "$venv_path/bin/activate" ]]; then
+    echo "[${target_arch}] ERROR: Expected ${venv_path}/bin/activate after venv creation." >&2
+    exit 1
   fi
 
   # shellcheck disable=SC1091
@@ -446,8 +466,19 @@ build_owlangs_app() {
     export DYLD_FRAMEWORK_PATH="$py_dir"
 
     local mb_venv="/tmp/owlangs_build_mb_universal2_venv"
-    if [[ ! -d "$mb_venv" ]]; then
-      "$uni_py" -m venv "$mb_venv"
+    if [[ ! -f "$mb_venv/bin/activate" ]]; then
+      if [[ -d "$mb_venv" ]]; then
+        echo "[app] Removing incomplete MenuBar venv (missing bin/activate): ${mb_venv}" >&2
+        rm -rf "$mb_venv"
+      fi
+      if ! "$uni_py" -m venv "$mb_venv"; then
+        echo "[app] ERROR: MenuBar venv creation failed." >&2
+        return 1
+      fi
+    fi
+    if [[ ! -f "$mb_venv/bin/activate" ]]; then
+      echo "[app] ERROR: Missing ${mb_venv}/bin/activate" >&2
+      return 1
     fi
     # shellcheck disable=SC1091
     source "$mb_venv/bin/activate"
@@ -472,8 +503,19 @@ build_owlangs_app() {
     export DYLD_FRAMEWORK_PATH="$py_dir"
 
     local mb_venv="/tmp/owlangs_build_mb_x86_venv"
-    if [[ ! -d "$mb_venv" ]]; then
-      arch -x86_64 "$uni_py" -m venv "$mb_venv"
+    if [[ ! -f "$mb_venv/bin/activate" ]]; then
+      if [[ -d "$mb_venv" ]]; then
+        echo "[app] Removing incomplete MenuBar x86_64 venv (missing bin/activate): ${mb_venv}" >&2
+        rm -rf "$mb_venv"
+      fi
+      if ! arch -x86_64 "$uni_py" -m venv "$mb_venv"; then
+        echo "[app] ERROR: arch -x86_64 venv failed for MenuBar (Rosetta / universal2 Python?)." >&2
+        return 1
+      fi
+    fi
+    if [[ ! -f "$mb_venv/bin/activate" ]]; then
+      echo "[app] ERROR: Missing ${mb_venv}/bin/activate" >&2
+      return 1
     fi
     # shellcheck disable=SC1091
     source "$mb_venv/bin/activate"
