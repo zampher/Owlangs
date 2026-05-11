@@ -19,6 +19,34 @@ try:
 except ImportError:
     BeautifulSoup = None  # type: ignore
 
+_OWLANGS_LAYOUT_STYLE_ID = "owlangs-epub-readable-layout"
+
+
+def _inject_readable_layout_css_into_head(soup) -> None:
+    """
+    Legacy MOBI/KF8 HTML often ships body/html rules like max-width + centered column.
+    When those XHTML files are written into EPUB unchanged, readers show an overly narrow column.
+
+    Append a small override so translated EPUB chapters use the viewer width sensibly.
+    """
+    if soup is None or soup.find("style", id=_OWLANGS_LAYOUT_STYLE_ID):
+        return
+    head = soup.find("head")
+    if not head:
+        return
+    style = soup.new_tag("style", attrs={"type": "text/css", "id": _OWLANGS_LAYOUT_STYLE_ID})
+    style.string = """
+/* Owlangs: relax html/body constraints from legacy MOBI/KF8 CSS */
+html, body {
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+"""
+    head.append(style)
+
 
 def sanitize_html_for_epub(html: str) -> str:
     """
@@ -84,6 +112,8 @@ def sanitize_html_for_epub(html: str) -> str:
     for tag in list(soup.find_all(True)):
         if tag.name and ":" in tag.name and tag.name.split(":")[0].lower() == "mbp":
             tag.decompose()
+
+    _inject_readable_layout_css_into_head(soup)
 
     return str(soup)
 

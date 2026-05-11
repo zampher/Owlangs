@@ -25,6 +25,19 @@ class Mobi2HTMLExporterConfig(ExporterConfig):
     image_data_map: dict = None  # Optional image data map from task_state for fallback image lookup
 
 
+def _chapter_inner_html_from_soup(soup: BeautifulSoup) -> str:
+    """
+    Return HTML for one spine item without nesting <body> inside the merged document.
+
+    Kindle/MOBI-derived chapters are full XHTML documents; concatenating str(body) produced
+    invalid nested <body> tags and confused layout (narrow column / broken flow).
+    """
+    body = soup.find("body")
+    if body:
+        return body.decode_contents()
+    return str(soup)
+
+
 class Mobi2HTMLExporter(MobiExporter):
     """
     Convert MOBI file binary content to a single HTML file.
@@ -209,12 +222,9 @@ class Mobi2HTMLExporter(MobiExporter):
                     self._process_css_images_in_soup(soup, book)
                     
                     # Extract body content if exists
-                    body = soup.find('body')
-                    if body:
-                        combined_html_parts.append(str(body))
-                    else:
-                        # If no body tag, use the whole content
-                        combined_html_parts.append(str(soup))
+                    combined_html_parts.append(
+                        f'<section class="owlangs-mobi-chapter" role="region">{_chapter_inner_html_from_soup(soup)}</section>'
+                    )
                 except Exception as item_error:
                     # Log but continue processing other items
                     logger.warning(LogModule.EXPORT, f"[MOBI2HTML] Failed to process item: {item_error}, skipping")
@@ -244,13 +254,21 @@ class Mobi2HTMLExporter(MobiExporter):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 {title_tag}
     <style>
+        /* Single-page preview: full viewport width; legacy MOBI CSS often sets narrow body/max-width */
+        html {{
+            box-sizing: border-box;
+        }}
+        *, *::before, *::after {{
+            box-sizing: inherit;
+        }}
         body {{
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             line-height: 1.6;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
+            margin: 0;
+            padding: clamp(12px, 2.5vw, 28px);
             color: #333;
+            width: 100%;
+            max-width: none;
         }}
         h1 {{
             color: #2c3e50;
@@ -259,6 +277,18 @@ class Mobi2HTMLExporter(MobiExporter):
         }}
         .epub-content {{
             margin-top: 20px;
+            width: 100%;
+            max-width: min(52rem, 100%);
+            margin-left: auto;
+            margin-right: auto;
+        }}
+        .owlangs-mobi-chapter {{
+            width: 100%;
+        }}
+        .owlangs-mobi-chapter + .owlangs-mobi-chapter {{
+            margin-top: 2.25rem;
+            padding-top: 2rem;
+            border-top: 1px solid #e8e8e8;
         }}
         img {{
             max-width: 100%;
@@ -328,11 +358,9 @@ class Mobi2HTMLExporter(MobiExporter):
                     images_processed += images_processed_in_file
                     logger.debug(LogModule.EXPORT, f"[MOBI2HTML] Processed {html_file}: {img_tags_before} img tags, {images_processed_in_file} converted to data URIs")
                     
-                    body = soup.find('body')
-                    if body:
-                        combined_html_parts.append(str(body))
-                    else:
-                        combined_html_parts.append(str(soup))
+                    combined_html_parts.append(
+                        f'<section class="owlangs-mobi-chapter" role="region">{_chapter_inner_html_from_soup(soup)}</section>'
+                    )
                 except Exception as e:
                     logger.warning(LogModule.EXPORT, f"[MOBI2HTML] Failed to process HTML file {html_file}: {e}", exc_info=True)
                     continue

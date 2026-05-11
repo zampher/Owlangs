@@ -74,6 +74,11 @@ class TXTWorkflow(Workflow[TXTWorkflowConfig, Document, Document], HTMLExportabl
         docu = self._export(TXT2TXTExporter())
         return docu.content.decode()
 
+    def export_to_markdown(self, _: ExporterConfig | None = None) -> str:
+        from workflow.html_to_markdown_export import html_content_to_markdown
+
+        return html_content_to_markdown(self.export_to_html())
+
     def save_as_html(self, name: str = None, output_dir: Path | str = "./output",
                      config: TXT2HTMLExporterConfig | None = None) -> Self:
         config = config or self.config.html_exporter_config

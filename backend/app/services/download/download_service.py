@@ -16,6 +16,7 @@ import asyncio
 import tempfile
 import zipfile
 import re
+import shutil
 from urllib.parse import urlencode
 from typing import Optional, Dict, Any, List, Tuple
 from pathlib import Path
@@ -107,6 +108,128 @@ def _get_image_layout_for_grouping(
     return (indices if indices else None, path_to_block_index if path_to_block_index else None, layout_doc)
 
 
+def _image_data_map_from_task_state(task_state: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
+    image_data_map: Dict[str, Dict[str, str]] = {}
+    existing_image_map = task_state.get("image_data_map")
+    if isinstance(existing_image_map, dict):
+        image_data_map.update({
+            str(k): {
+                "data": (v or {}).get("data", ""),
+                "alt": (v or {}).get("alt", ""),
+            }
+            for k, v in existing_image_map.items()
+        })
+    return image_data_map
+
+
+def _merge_image_data_maps(
+    base: Dict[str, Dict[str, str]],
+    override: Optional[Dict[str, Dict[str, str]]],
+) -> Dict[str, Dict[str, str]]:
+    if not override:
+        return base
+    merged = dict(base)
+    merged.update(override)
+    return merged
+
+
+def _file_response_for_md_download(
+    md_content: str,
+    task_state: Dict[str, Any],
+    file_stem: str,
+    embed_images: Optional[bool],
+    equation_format: Optional[str],
+    table_body_format: Optional[str],
+    *,
+    image_data_map_override: Optional[Dict[str, Dict[str, str]]] = None,
+) -> FileResponse:
+    """
+    Single .md (data-URI images) or ZIP (.md + image files) when embed_images is False (md_zip URLs).
+
+    Mirrors markdown_based branch so MOBI/TXT/EPUB/... segment rebuild paths do not return plain text as ZIP.
+    """
+    from utils.document_rebuild import _replace_placeholders_with_images
+    from utils.format_convert_utils import group_consecutive_images_for_markdown
+
+    should_embed = embed_images if embed_images is not None else True
+    image_data_map = _merge_image_data_maps(
+        _image_data_map_from_task_state(task_state),
+        image_data_map_override,
+    )
+
+    if should_embed:
+        md_out = md_content
+        if image_data_map:
+            md_out, _ = _replace_placeholders_with_images(md_content, image_data_map, output_dir=None)
+            _img_bidx, _path_to_bidx, _layout = _get_image_layout_for_grouping(
+                task_state, equation_format=equation_format, table_body_format=table_body_format
+            )
+            md_out = group_consecutive_images_for_markdown(
+                md_out,
+                image_block_indices=_img_bidx,
+                layout_document=_layout if _img_bidx else None,
+                layout_block_bbox=task_state.get("layout_block_bbox"),
+            )
+        temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8")
+        temp_file.write(md_out)
+        temp_file.close()
+        filename = f"{file_stem}_translated.md"
+        media_type = MEDIA_TYPES.get("md", "text/markdown; charset=utf-8")
+        logger.info(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] MD response: embedded single file, len={len(md_out)}",
+        )
+        return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+
+    zip_temp_dir = None
+    temp_dir = task_state.get("temp_dir")
+    if temp_dir and os.path.isdir(temp_dir):
+        zip_temp_dir = os.path.join(temp_dir, "downloads")
+        os.makedirs(zip_temp_dir, exist_ok=True)
+    if not zip_temp_dir:
+        zip_temp_dir = tempfile.mkdtemp()
+
+    try:
+        zip_output_dir = Path(zip_temp_dir)
+        md_with_image_paths, saved_image_paths = _replace_placeholders_with_images(
+            md_content, image_data_map, output_dir=zip_output_dir
+        )
+        _img_bidx, _path_to_bidx, _layout = _get_image_layout_for_grouping(
+            task_state, equation_format=equation_format, table_body_format=table_body_format
+        )
+        md_with_image_paths = group_consecutive_images_for_markdown(
+            md_with_image_paths,
+            image_block_indices=_img_bidx,
+            layout_document=_layout if _img_bidx else None,
+            layout_block_bbox=task_state.get("layout_block_bbox"),
+        )
+        md_file_in_zip = zip_output_dir / f"{file_stem}_translated.md"
+        md_file_in_zip.write_text(md_with_image_paths, encoding="utf-8")
+
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            zip_file.write(str(md_file_in_zip), arcname=f"{file_stem}_translated.md")
+            for img_path in saved_image_paths:
+                if img_path.exists():
+                    arc = img_path.relative_to(zip_output_dir)
+                    zip_file.write(str(img_path), arcname=str(arc).replace("\\", "/"))
+
+        zip_buffer.seek(0)
+        zip_temp_file = tempfile.NamedTemporaryFile(mode="wb", suffix=".zip", delete=False)
+        zip_temp_file.write(zip_buffer.getvalue())
+        zip_temp_file.close()
+
+        filename = f"{file_stem}_translated_with_images.zip"
+        media_type = "application/zip"
+        logger.info(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] MD response: ZIP (embed_images=false), md_len={len(md_with_image_paths)}, image_files={len(saved_image_paths)}",
+        )
+        return FileResponse(path=zip_temp_file.name, media_type=media_type, filename=filename)
+    finally:
+        shutil.rmtree(zip_temp_dir, ignore_errors=True)
+
+
 def _infer_workflow_from_filename(original_filename_lower: str) -> Optional[str]:
     """Map file extension to translation workflow_type (see app.models.service payload union)."""
     if not original_filename_lower or "." not in original_filename_lower:
@@ -169,8 +292,9 @@ def _build_stash_export_plan(task_state: Dict[str, Any]) -> List[Tuple[str, str,
             plan.append(("pdf", "pdf", {}))
         plan.append(("md_zip", "md", {"embed_images": False}))
     elif wt == "txt":
-        for ft in ("html", "txt"):
+        for ft in ("html", "txt", "md"):
             plan.append((ft, ft, {}))
+        plan.append(("md_zip", "md", {"embed_images": False}))
     elif wt in ("docx", "html"):
         # Same on-demand surface as markdown_based minus PDF branch (non-PDF sources).
         for ft in ("docx", "html", "md"):
@@ -181,15 +305,25 @@ def _build_stash_export_plan(task_state: Dict[str, Any]) -> List[Tuple[str, str,
             plan.append((ft, ft, {}))
     elif wt == "xlsx":
         plan.append(("xlsx", "xlsx", {}))
+        for ft in ("html", "md"):
+            plan.append((ft, ft, {}))
+        plan.append(("md_zip", "md", {"embed_images": False}))
     elif wt == "pptx":
-        plan.append(("pptx", "pptx", {}))
+        for ft in ("pptx", "html", "md"):
+            plan.append((ft, ft, {}))
+        plan.append(("md_zip", "md", {"embed_images": False}))
     elif wt == "srt":
         plan.append(("srt", "srt", {}))
     elif wt == "epub":
-        plan.append(("epub", "epub", {}))
+        for ft in ("epub", "html", "md"):
+            plan.append((ft, ft, {}))
+        plan.append(("md_zip", "md", {"embed_images": False}))
     elif wt == "mobi":
         plan.append(("mobi", "mobi", {}))
         plan.append(("epub", "epub", {}))
+        for ft in ("html", "md"):
+            plan.append((ft, ft, {}))
+        plan.append(("md_zip", "md", {"embed_images": False}))
     elif wt == "qt_ts":
         plan.append(("ts", "ts", {}))
     else:
@@ -2783,27 +2917,24 @@ class DownloadService:
                                                 "alt": (img_data or {}).get("alt", str(ph_id)),
                                             }
                             
-                            # Handle embed_images parameter
-                            should_embed = embed_images if embed_images is not None else True
-                            if should_embed:
-                                # Embed images as data URIs
-                                from utils.document_rebuild import _replace_placeholders_with_images
-                                md_with_embedded_images, _ = _replace_placeholders_with_images(
-                                    md_content, image_data_map, output_dir=None
-                                )
-                                md_content = md_with_embedded_images
-                            
-                            # Create temporary MD file
-                            temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8')
-                            temp_file.write(md_content)
-                            temp_file.close()
-                        
                             file_stem = task_state.get("original_filename_stem", "translated")
-                            filename = f"{file_stem}_translated.md"
-                            media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
-                        
-                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully regenerated MD from layout with equation_format={eq_format} (size: {len(md_content)} characters, embed_images={should_embed})")
-                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                            if image_data_map:
+                                task_state["image_data_map"] = _merge_image_data_maps(
+                                    _image_data_map_from_task_state(task_state),
+                                    image_data_map,
+                                )
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Regenerated MD from layout equation_format={eq_format}, len={len(md_content)}",
+                            )
+                            return _file_response_for_md_download(
+                                md_content,
+                                task_state,
+                                file_stem,
+                                embed_images,
+                                equation_format,
+                                table_body_format,
+                            )
                     except Exception as e:
                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to regenerate MD from layout with equation_format: {e}, falling back to normal regeneration", exc_info=True)
                         should_regenerate_from_layout = False
@@ -2843,15 +2974,16 @@ class DownloadService:
                                     if isinstance(md_content, bytes):
                                         md_content = md_content.decode('utf-8')
                                     if md_content:  # Ensure content is not empty
-                                        temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8')
-                                        temp_file.write(md_content)
-                                        temp_file.close()
                                         file_stem = task_state.get("original_filename_stem", "translated")
-                                        filename = f"{file_stem}_translated.md"
-                                        media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
-                                        if os.path.exists(temp_file.name):
-                                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD from segments (size: {len(md_content)} characters)")
-                                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD from segments (size: {len(md_content)} characters)")
+                                        return _file_response_for_md_download(
+                                            md_content,
+                                            task_state,
+                                            file_stem,
+                                            embed_images,
+                                            equation_format,
+                                            table_body_format,
+                                        )
                                     else:
                                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Rebuilt document content is empty")
                             except Exception as e:
@@ -2868,17 +3000,16 @@ class DownloadService:
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generating MD from workflow.export_to_markdown() for task {task_id}")
                             md_content = workflow_instance.export_to_markdown()
                             if md_content:
-                                # Create temporary MD file
-                                temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8')
-                                temp_file.write(md_content)
-                                temp_file.close()
-                            
                                 file_stem = task_state.get("original_filename_stem", "translated")
-                                filename = f"{file_stem}_translated.md"
-                                media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
-                            
                                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD from workflow.export_to_markdown()")
-                                return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                                return _file_response_for_md_download(
+                                    md_content,
+                                    task_state,
+                                    file_stem,
+                                    embed_images,
+                                    equation_format,
+                                    table_body_format,
+                                )
                         except Exception as e:
                             logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to generate MD from workflow.export_to_markdown(): {e}, trying HTML fallback", exc_info=True)
                     
@@ -2964,17 +3095,16 @@ class DownloadService:
                             
                             text_content = '\n'.join(cleaned_lines)
                         
-                            # Create temporary MD file
-                            temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8')
-                            temp_file.write(text_content)
-                            temp_file.close()
-                        
                             file_stem = task_state.get("original_filename_stem", "translated")
-                            filename = f"{file_stem}_translated.md"
-                            media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
-                        
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD from HTML")
-                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                            return _file_response_for_md_download(
+                                text_content,
+                                task_state,
+                                file_stem,
+                                embed_images,
+                                equation_format,
+                                table_body_format,
+                            )
                         except Exception as e:
                             logger.error(LogModule.EXPORT, f"Failed to generate MD from HTML: {e}", exc_info=True)
                             # If regeneration failed but MD exists, fall through to return existing MD
@@ -2983,8 +3113,21 @@ class DownloadService:
                             else:
                                 raise HTTPException(status_code=500, detail=f"Failed to generate MD: {str(e)}")
             
-                # MD exists and no need to regenerate, return it
+                # MD exists and no need to regenerate, return it (or ZIP when embed_images=false / md_zip)
                 if md_exists:
+                    if embed_images is False:
+                        file_stem = task_state.get("original_filename_stem", "translated")
+                        with open(file_info["path"], "r", encoding="utf-8-sig") as _mf:
+                            md_body = _mf.read()
+                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Packaging cached MD as ZIP (embed_images=false)")
+                        return _file_response_for_md_download(
+                            md_body,
+                            task_state,
+                            file_stem,
+                            embed_images,
+                            equation_format,
+                            table_body_format,
+                        )
                     file_path = file_info["path"]
                     filename = file_info["filename"]
                     media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
