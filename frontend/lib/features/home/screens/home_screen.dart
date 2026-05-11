@@ -14,7 +14,6 @@ import '../../../shared/providers/backend_status_provider.dart';
 import '../../../shared/services/config_service.dart';
 import '../../../shared/services/settings_service.dart';
 import '../../settings/screens/ai_platform_settings.dart';
-import '../widgets/recent_activities_widget.dart';
 import '../widgets/release_notes_widget.dart';
 import '../widgets/translation_stats_widget.dart';
 import '../../../shared/services/donor_activation_service.dart';
@@ -521,27 +520,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 padding: const EdgeInsets.all(24),
                 child: _buildWelcomeSection(authState),
               ),
-              const SizedBox(height: 24),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: SizedBox(
-                  child: showReleaseNotes
-                      ? Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: <Widget>[
-                            const Expanded(child: RecentActivitiesWidget()),
-                            const SizedBox(width: 24),
-                            Expanded(
-                              child: ReleaseNotesWidget(
-                                releaseNotes: releaseNotesText,
-                                releaseUrl: _releaseUrl,
-                              ),
-                            ),
-                          ],
-                        )
-                      : const RecentActivitiesWidget(),
+              if (showReleaseNotes) ...<Widget>[
+                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: ReleaseNotesWidget(
+                    releaseNotes: releaseNotesText,
+                    releaseUrl: _releaseUrl,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -720,7 +708,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        _buildWelcomeMessage(authState),
+                        _buildWelcomeMessage(),
                         style: TextStyle(
                           fontSize: 16,
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -978,44 +966,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  /// Build welcome message based on user type and auth state
-  String _buildWelcomeMessage(AuthState authState) {
+  /// Build welcome message based on user type (desktop Pro/Standard) or default intro.
+  String _buildWelcomeMessage() {
     final l10n = AppLocalizations.of(context)!;
     final isDesktop = !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.windows ||
             defaultTargetPlatform == TargetPlatform.linux ||
             defaultTargetPlatform == TargetPlatform.macOS);
 
-    // For desktop users, show user type (Pro/Standard)
     if (isDesktop && _isDonor != null) {
-      final username = authState.when(
-        initial: () => null,
-        loading: () => null,
-        authenticated: (UserModel user) => user.username,
-        unauthenticated: () => null,
-        error: (String message) => null,
-      );
-
-      if (_isDonor!) {
-        return username != null
-            ? l10n.homeWelcomeDearPro(username)
-            : l10n.homeWelcomeDearProNoUser;
-      } else {
-        return username != null
-            ? l10n.homeWelcomeDearStandard(username)
-            : l10n.homeWelcomeDearStandardNoUser;
-      }
+      return _isDonor!
+          ? l10n.homeWelcomeDearPro
+          : l10n.homeWelcomeDearStandard;
     }
 
-    // For non-desktop or when user type is not loaded yet, use original message
-    final name = authState.when(
-      initial: () => l10n.homeWelcomeGuest,
-      loading: () => l10n.homeLoading,
-      authenticated: (UserModel user) => user.username,
-      unauthenticated: () => l10n.homeWelcomeGuest,
-      error: (String message) => l10n.homeWelcomeGuest,
-    );
-    return l10n.homeWelcomeHello(name);
+    return l10n.homeWelcomeHello;
   }
 
   /// Build backend status indicator widget

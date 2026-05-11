@@ -1096,68 +1096,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homePhaseExport => 'Exportar';
 
   @override
-  String get homeRecentActivity => 'Actividad Reciente';
-
-  @override
-  String get homeRecentRefresh => 'Actualizar';
-
-  @override
-  String get homeRecentNoTranslations => 'No hay traducciones recientes';
-
-  @override
-  String get homeRecentNoTranslationsHint => 'Comience subiendo un documento';
-
-  @override
-  String get homeRecentNoAnonymization => 'No hay tareas de anonimización';
-
-  @override
-  String get homeRecentNoAnonymizationHint =>
-      'Intente anonimizar datos sensibles';
-
-  @override
   String get homeReleaseNotesTitle => 'Notas de la Versión';
 
   @override
   String get homeReleaseNotesViewOnGitHub => 'Ver en GitHub';
-
-  @override
-  String get homeActivityTypeAnonymizeTranslate => 'Anonimizar + Traducir';
-
-  @override
-  String get homeActivityTypeTranslation => 'Traducción';
-
-  @override
-  String get homeActivityTypeAnonymization => 'Anonimización';
-
-  @override
-  String get homeActivityTypeActivity => 'Actividad';
-
-  @override
-  String get homeTimeJustNow => 'Justo ahora';
-
-  @override
-  String get homeTimeOneMinuteAgo => 'Hace 1 minuto';
-
-  @override
-  String homeTimeMinutesAgo(Object count) {
-    return 'Hace $count minutos';
-  }
-
-  @override
-  String get homeTimeOneHourAgo => 'Hace 1 hora';
-
-  @override
-  String homeTimeHoursAgo(Object count) {
-    return 'Hace $count horas';
-  }
-
-  @override
-  String get homeTimeOneDayAgo => 'Hace 1 día';
-
-  @override
-  String homeTimeDaysAgo(Object count) {
-    return 'Hace $count días';
-  }
 
   @override
   String get homeEditionEnterprise => 'Empresa';
@@ -1189,27 +1131,24 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeEditionProStatusActivated => 'Activado';
 
   @override
-  String homeWelcomeDearPro(Object username) {
-    return '¡Estimado Pro, $username! ¿Listo para traducir sus documentos?';
-  }
+  String get homeWelcomeDearPro =>
+      'Traducción inmersiva: contrasta el original y la traducción en la interfaz.\nTraducción en cola: encola documentos y ejecuta el flujo completo en orden.';
 
   @override
-  String homeWelcomeDearStandard(Object username) {
-    return '¡Estimado usuario Estándar, $username! ¿Listo para traducir sus documentos?';
-  }
+  String get homeWelcomeDearStandard =>
+      'Traducción inmersiva: contrasta el original y la traducción en la interfaz.\nTraducción en cola: encola documentos y ejecuta el flujo completo en orden.';
 
   @override
   String get homeWelcomeDearProNoUser =>
-      '¡Estimado Pro! ¿Listo para traducir sus documentos?';
+      'Traducción inmersiva: contrasta el original y la traducción en la interfaz.\nTraducción en cola: encola documentos y ejecuta el flujo completo en orden.';
 
   @override
   String get homeWelcomeDearStandardNoUser =>
-      '¡Estimado usuario Estándar! ¿Listo para traducir sus documentos?';
+      'Traducción inmersiva: contrasta el original y la traducción en la interfaz.\nTraducción en cola: encola documentos y ejecuta el flujo completo en orden.';
 
   @override
-  String homeWelcomeHello(Object username) {
-    return '¡Hola, $username! ¿Listo para traducir sus documentos?';
-  }
+  String get homeWelcomeHello =>
+      'Traducción inmersiva: contrasta el original y la traducción en la interfaz.\nTraducción en cola: encola documentos y ejecuta el flujo completo en orden.';
 
   @override
   String get homeLoading => 'Cargando...';

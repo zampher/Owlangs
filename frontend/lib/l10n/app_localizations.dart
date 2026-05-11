@@ -1949,42 +1949,6 @@ abstract class AppLocalizations {
   /// **'Export'**
   String get homePhaseExport;
 
-  /// No description provided for @homeRecentActivity.
-  ///
-  /// In en, this message translates to:
-  /// **'Recent Activity'**
-  String get homeRecentActivity;
-
-  /// No description provided for @homeRecentRefresh.
-  ///
-  /// In en, this message translates to:
-  /// **'Refresh'**
-  String get homeRecentRefresh;
-
-  /// No description provided for @homeRecentNoTranslations.
-  ///
-  /// In en, this message translates to:
-  /// **'No recent translations'**
-  String get homeRecentNoTranslations;
-
-  /// No description provided for @homeRecentNoTranslationsHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Start by uploading a document'**
-  String get homeRecentNoTranslationsHint;
-
-  /// No description provided for @homeRecentNoAnonymization.
-  ///
-  /// In en, this message translates to:
-  /// **'No anonymization tasks'**
-  String get homeRecentNoAnonymization;
-
-  /// No description provided for @homeRecentNoAnonymizationHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Try anonymizing sensitive data'**
-  String get homeRecentNoAnonymizationHint;
-
   /// No description provided for @homeReleaseNotesTitle.
   ///
   /// In en, this message translates to:
@@ -1996,72 +1960,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'View on GitHub'**
   String get homeReleaseNotesViewOnGitHub;
-
-  /// No description provided for @homeActivityTypeAnonymizeTranslate.
-  ///
-  /// In en, this message translates to:
-  /// **'Anonymize + Translate'**
-  String get homeActivityTypeAnonymizeTranslate;
-
-  /// No description provided for @homeActivityTypeTranslation.
-  ///
-  /// In en, this message translates to:
-  /// **'Translation'**
-  String get homeActivityTypeTranslation;
-
-  /// No description provided for @homeActivityTypeAnonymization.
-  ///
-  /// In en, this message translates to:
-  /// **'Anonymization'**
-  String get homeActivityTypeAnonymization;
-
-  /// No description provided for @homeActivityTypeActivity.
-  ///
-  /// In en, this message translates to:
-  /// **'Activity'**
-  String get homeActivityTypeActivity;
-
-  /// No description provided for @homeTimeJustNow.
-  ///
-  /// In en, this message translates to:
-  /// **'Just now'**
-  String get homeTimeJustNow;
-
-  /// No description provided for @homeTimeOneMinuteAgo.
-  ///
-  /// In en, this message translates to:
-  /// **'1 minute ago'**
-  String get homeTimeOneMinuteAgo;
-
-  /// No description provided for @homeTimeMinutesAgo.
-  ///
-  /// In en, this message translates to:
-  /// **'{count} minutes ago'**
-  String homeTimeMinutesAgo(Object count);
-
-  /// No description provided for @homeTimeOneHourAgo.
-  ///
-  /// In en, this message translates to:
-  /// **'1 hour ago'**
-  String get homeTimeOneHourAgo;
-
-  /// No description provided for @homeTimeHoursAgo.
-  ///
-  /// In en, this message translates to:
-  /// **'{count} hours ago'**
-  String homeTimeHoursAgo(Object count);
-
-  /// No description provided for @homeTimeOneDayAgo.
-  ///
-  /// In en, this message translates to:
-  /// **'1 day ago'**
-  String get homeTimeOneDayAgo;
-
-  /// No description provided for @homeTimeDaysAgo.
-  ///
-  /// In en, this message translates to:
-  /// **'{count} days ago'**
-  String homeTimeDaysAgo(Object count);
 
   /// No description provided for @homeEditionEnterprise.
   ///
@@ -2120,32 +2018,32 @@ abstract class AppLocalizations {
   /// No description provided for @homeWelcomeDearPro.
   ///
   /// In en, this message translates to:
-  /// **'Dear Pro, {username}! Ready to translate your documents?'**
-  String homeWelcomeDearPro(Object username);
+  /// **'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.'**
+  String get homeWelcomeDearPro;
 
   /// No description provided for @homeWelcomeDearStandard.
   ///
   /// In en, this message translates to:
-  /// **'Dear Standard user, {username}! Ready to translate your documents?'**
-  String homeWelcomeDearStandard(Object username);
+  /// **'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.'**
+  String get homeWelcomeDearStandard;
 
   /// No description provided for @homeWelcomeDearProNoUser.
   ///
   /// In en, this message translates to:
-  /// **'Dear Pro! Ready to translate your documents?'**
+  /// **'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.'**
   String get homeWelcomeDearProNoUser;
 
   /// No description provided for @homeWelcomeDearStandardNoUser.
   ///
   /// In en, this message translates to:
-  /// **'Dear Standard user! Ready to translate your documents?'**
+  /// **'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.'**
   String get homeWelcomeDearStandardNoUser;
 
   /// No description provided for @homeWelcomeHello.
   ///
   /// In en, this message translates to:
-  /// **'Hello, {username}! Ready to translate your documents?'**
-  String homeWelcomeHello(Object username);
+  /// **'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.'**
+  String get homeWelcomeHello;
 
   /// No description provided for @homeLoading.
   ///

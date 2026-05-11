@@ -1038,67 +1038,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homePhaseExport => '내보내기';
 
   @override
-  String get homeRecentActivity => '최근 활동';
-
-  @override
-  String get homeRecentRefresh => '새로 고침';
-
-  @override
-  String get homeRecentNoTranslations => '최근 번역 없음';
-
-  @override
-  String get homeRecentNoTranslationsHint => '문서 업로드로 시작하세요';
-
-  @override
-  String get homeRecentNoAnonymization => '익명화 작업 없음';
-
-  @override
-  String get homeRecentNoAnonymizationHint => '민감한 데이터 익명화 시도';
-
-  @override
   String get homeReleaseNotesTitle => '릴리스 노트';
 
   @override
   String get homeReleaseNotesViewOnGitHub => 'GitHub에서 보기';
-
-  @override
-  String get homeActivityTypeAnonymizeTranslate => '익명화 + 번역';
-
-  @override
-  String get homeActivityTypeTranslation => '번역';
-
-  @override
-  String get homeActivityTypeAnonymization => '익명화';
-
-  @override
-  String get homeActivityTypeActivity => '활동';
-
-  @override
-  String get homeTimeJustNow => '방금';
-
-  @override
-  String get homeTimeOneMinuteAgo => '1분 전';
-
-  @override
-  String homeTimeMinutesAgo(Object count) {
-    return '$count분 전';
-  }
-
-  @override
-  String get homeTimeOneHourAgo => '1시간 전';
-
-  @override
-  String homeTimeHoursAgo(Object count) {
-    return '$count시간 전';
-  }
-
-  @override
-  String get homeTimeOneDayAgo => '1일 전';
-
-  @override
-  String homeTimeDaysAgo(Object count) {
-    return '$count일 전';
-  }
 
   @override
   String get homeEditionEnterprise => '엔터프라이즈';
@@ -1130,25 +1073,24 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homeEditionProStatusActivated => '활성화됨';
 
   @override
-  String homeWelcomeDearPro(Object username) {
-    return '프로 사용자 $username님! 문서 번역을 준비하시겠습니까?';
-  }
+  String get homeWelcomeDearPro =>
+      '몰입 번역: 화면에서 원문과 번역문을 바로 대조합니다.\n큐 번역: 문서를 작업 큐에 넣어 순서대로 파이프라인을 실행합니다.';
 
   @override
-  String homeWelcomeDearStandard(Object username) {
-    return '스탠다드 사용자 $username님! 문서 번역을 준비하시겠습니까?';
-  }
+  String get homeWelcomeDearStandard =>
+      '몰입 번역: 화면에서 원문과 번역문을 바로 대조합니다.\n큐 번역: 문서를 작업 큐에 넣어 순서대로 파이프라인을 실행합니다.';
 
   @override
-  String get homeWelcomeDearProNoUser => '프로 사용자님! 문서 번역을 준비하시겠습니까?';
+  String get homeWelcomeDearProNoUser =>
+      '몰입 번역: 화면에서 원문과 번역문을 바로 대조합니다.\n큐 번역: 문서를 작업 큐에 넣어 순서대로 파이프라인을 실행합니다.';
 
   @override
-  String get homeWelcomeDearStandardNoUser => '스탠다드 사용자님! 문서 번역을 준비하시겠습니까?';
+  String get homeWelcomeDearStandardNoUser =>
+      '몰입 번역: 화면에서 원문과 번역문을 바로 대조합니다.\n큐 번역: 문서를 작업 큐에 넣어 순서대로 파이프라인을 실행합니다.';
 
   @override
-  String homeWelcomeHello(Object username) {
-    return '$username님, 안녕하세요! 문서 번역을 준비하시겠습니까?';
-  }
+  String get homeWelcomeHello =>
+      '몰입 번역: 화면에서 원문과 번역문을 바로 대조합니다.\n큐 번역: 문서를 작업 큐에 넣어 순서대로 파이프라인을 실행합니다.';
 
   @override
   String get homeLoading => '로딩 중...';

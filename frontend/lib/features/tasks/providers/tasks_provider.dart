@@ -222,7 +222,7 @@ class TasksNotifier extends StateNotifier<TasksState> {
     state = state.copyWith(tasks: updated, activeTaskId: newActive);
   }
 
-  /// Restore a Flow from persisted state (Recent Activities / app restart).
+  /// Restore a Flow from persisted state (e.g. app restart).
   /// If a Task with the same ID already exists, it will just be activated.
   Future<Task> restoreFlowFromPersisted(PersistedFlowState flowState) async {
     final String flowId = flowState.flowId;

@@ -1076,67 +1076,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homePhaseExport => 'Export';
 
   @override
-  String get homeRecentActivity => 'Recent Activity';
-
-  @override
-  String get homeRecentRefresh => 'Refresh';
-
-  @override
-  String get homeRecentNoTranslations => 'No recent translations';
-
-  @override
-  String get homeRecentNoTranslationsHint => 'Start by uploading a document';
-
-  @override
-  String get homeRecentNoAnonymization => 'No anonymization tasks';
-
-  @override
-  String get homeRecentNoAnonymizationHint => 'Try anonymizing sensitive data';
-
-  @override
   String get homeReleaseNotesTitle => 'Release Notes';
 
   @override
   String get homeReleaseNotesViewOnGitHub => 'View on GitHub';
-
-  @override
-  String get homeActivityTypeAnonymizeTranslate => 'Anonymize + Translate';
-
-  @override
-  String get homeActivityTypeTranslation => 'Translation';
-
-  @override
-  String get homeActivityTypeAnonymization => 'Anonymization';
-
-  @override
-  String get homeActivityTypeActivity => 'Activity';
-
-  @override
-  String get homeTimeJustNow => 'Just now';
-
-  @override
-  String get homeTimeOneMinuteAgo => '1 minute ago';
-
-  @override
-  String homeTimeMinutesAgo(Object count) {
-    return '$count minutes ago';
-  }
-
-  @override
-  String get homeTimeOneHourAgo => '1 hour ago';
-
-  @override
-  String homeTimeHoursAgo(Object count) {
-    return '$count hours ago';
-  }
-
-  @override
-  String get homeTimeOneDayAgo => '1 day ago';
-
-  @override
-  String homeTimeDaysAgo(Object count) {
-    return '$count days ago';
-  }
 
   @override
   String get homeEditionEnterprise => 'Enterprise';
@@ -1168,27 +1111,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeEditionProStatusActivated => 'Activated';
 
   @override
-  String homeWelcomeDearPro(Object username) {
-    return 'Dear Pro, $username! Ready to translate your documents?';
-  }
+  String get homeWelcomeDearPro =>
+      'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.';
 
   @override
-  String homeWelcomeDearStandard(Object username) {
-    return 'Dear Standard user, $username! Ready to translate your documents?';
-  }
+  String get homeWelcomeDearStandard =>
+      'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.';
 
   @override
   String get homeWelcomeDearProNoUser =>
-      'Dear Pro! Ready to translate your documents?';
+      'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.';
 
   @override
   String get homeWelcomeDearStandardNoUser =>
-      'Dear Standard user! Ready to translate your documents?';
+      'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.';
 
   @override
-  String homeWelcomeHello(Object username) {
-    return 'Hello, $username! Ready to translate your documents?';
-  }
+  String get homeWelcomeHello =>
+      'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.';
 
   @override
   String get homeLoading => 'Loading...';

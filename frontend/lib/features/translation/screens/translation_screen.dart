@@ -4768,7 +4768,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         }
       }
 
-      // Record task creation time for Recent Activities
+      // Record task creation timestamp for ordering and diagnostics
       final DateTime taskCreatedAt = DateTime.now();
 
       // Update translate tab with real taskId

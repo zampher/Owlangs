@@ -1039,67 +1039,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homePhaseExport => 'エクスポート';
 
   @override
-  String get homeRecentActivity => '最近のアクティビティ';
-
-  @override
-  String get homeRecentRefresh => '更新';
-
-  @override
-  String get homeRecentNoTranslations => '最近の翻訳はありません';
-
-  @override
-  String get homeRecentNoTranslationsHint => 'ドキュメントをアップロードして開始';
-
-  @override
-  String get homeRecentNoAnonymization => '匿名化タスクはありません';
-
-  @override
-  String get homeRecentNoAnonymizationHint => '機密データの匿名化を試す';
-
-  @override
   String get homeReleaseNotesTitle => 'リリースノート';
 
   @override
   String get homeReleaseNotesViewOnGitHub => 'GitHubで見る';
-
-  @override
-  String get homeActivityTypeAnonymizeTranslate => '匿名化＋翻訳';
-
-  @override
-  String get homeActivityTypeTranslation => '翻訳';
-
-  @override
-  String get homeActivityTypeAnonymization => '匿名化';
-
-  @override
-  String get homeActivityTypeActivity => 'アクティビティ';
-
-  @override
-  String get homeTimeJustNow => 'たった今';
-
-  @override
-  String get homeTimeOneMinuteAgo => '1分前';
-
-  @override
-  String homeTimeMinutesAgo(Object count) {
-    return '$count分前';
-  }
-
-  @override
-  String get homeTimeOneHourAgo => '1時間前';
-
-  @override
-  String homeTimeHoursAgo(Object count) {
-    return '$count時間前';
-  }
-
-  @override
-  String get homeTimeOneDayAgo => '1日前';
-
-  @override
-  String homeTimeDaysAgo(Object count) {
-    return '$count日前';
-  }
 
   @override
   String get homeEditionEnterprise => 'エンタープライズ';
@@ -1131,26 +1074,24 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeEditionProStatusActivated => 'アクティベート済み';
 
   @override
-  String homeWelcomeDearPro(Object username) {
-    return 'プロユーザーの$usernameさん、こんにちは！ドキュメントの翻訳を始めましょうか？';
-  }
+  String get homeWelcomeDearPro =>
+      '没入型翻訳：画面上で原文と訳文をすぐ対照します。\nキュー翻訳：ドキュメントをキューに追加し、順にパイプラインを実行します。';
 
   @override
-  String homeWelcomeDearStandard(Object username) {
-    return 'スタンダードユーザーの$usernameさん、こんにちは！ドキュメントの翻訳を始めましょうか？';
-  }
+  String get homeWelcomeDearStandard =>
+      '没入型翻訳：画面上で原文と訳文をすぐ対照します。\nキュー翻訳：ドキュメントをキューに追加し、順にパイプラインを実行します。';
 
   @override
-  String get homeWelcomeDearProNoUser => 'プロユーザーの皆さん、こんにちは！ドキュメントの翻訳を始めましょうか？';
+  String get homeWelcomeDearProNoUser =>
+      '没入型翻訳：画面上で原文と訳文をすぐ対照します。\nキュー翻訳：ドキュメントをキューに追加し、順にパイプラインを実行します。';
 
   @override
   String get homeWelcomeDearStandardNoUser =>
-      'スタンダードユーザーの皆さん、こんにちは！ドキュメントの翻訳を始めましょうか？';
+      '没入型翻訳：画面上で原文と訳文をすぐ対照します。\nキュー翻訳：ドキュメントをキューに追加し、順にパイプラインを実行します。';
 
   @override
-  String homeWelcomeHello(Object username) {
-    return '$usernameさん、こんにちは！ドキュメントの翻訳を始めましょうか？';
-  }
+  String get homeWelcomeHello =>
+      '没入型翻訳：画面上で原文と訳文をすぐ対照します。\nキュー翻訳：ドキュメントをキューに追加し、順にパイプラインを実行します。';
 
   @override
   String get homeLoading => '読み込み中...';

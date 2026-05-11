@@ -1029,67 +1029,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homePhaseExport => '导出';
 
   @override
-  String get homeRecentActivity => '最近活动';
-
-  @override
-  String get homeRecentRefresh => '刷新';
-
-  @override
-  String get homeRecentNoTranslations => '无最近翻译';
-
-  @override
-  String get homeRecentNoTranslationsHint => '请从上传文档开始';
-
-  @override
-  String get homeRecentNoAnonymization => '无匿名化任务';
-
-  @override
-  String get homeRecentNoAnonymizationHint => '尝试匿名化敏感数据';
-
-  @override
   String get homeReleaseNotesTitle => '更新说明';
 
   @override
   String get homeReleaseNotesViewOnGitHub => '在 GitHub 查看';
-
-  @override
-  String get homeActivityTypeAnonymizeTranslate => '匿名化 + 翻译';
-
-  @override
-  String get homeActivityTypeTranslation => '翻译';
-
-  @override
-  String get homeActivityTypeAnonymization => '匿名化';
-
-  @override
-  String get homeActivityTypeActivity => '活动';
-
-  @override
-  String get homeTimeJustNow => '刚刚';
-
-  @override
-  String get homeTimeOneMinuteAgo => '1 分钟前';
-
-  @override
-  String homeTimeMinutesAgo(Object count) {
-    return '$count 分钟前';
-  }
-
-  @override
-  String get homeTimeOneHourAgo => '1 小时前';
-
-  @override
-  String homeTimeHoursAgo(Object count) {
-    return '$count 小时前';
-  }
-
-  @override
-  String get homeTimeOneDayAgo => '1 天前';
-
-  @override
-  String homeTimeDaysAgo(Object count) {
-    return '$count 天前';
-  }
 
   @override
   String get homeEditionEnterprise => '企业版';
@@ -1121,25 +1064,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeEditionProStatusActivated => '已激活';
 
   @override
-  String homeWelcomeDearPro(Object username) {
-    return '亲爱的专业版用户，$username！准备好翻译您的文档了吗？';
-  }
+  String get homeWelcomeDearPro =>
+      '沉浸式翻译：在界面内即时对照原文与译文。\n队列式翻译：将文档加入任务队列，按顺序完成整条流水线。';
 
   @override
-  String homeWelcomeDearStandard(Object username) {
-    return '亲爱的标准版用户，$username！准备好翻译您的文档了吗？';
-  }
+  String get homeWelcomeDearStandard =>
+      '沉浸式翻译：在界面内即时对照原文与译文。\n队列式翻译：将文档加入任务队列，按顺序完成整条流水线。';
 
   @override
-  String get homeWelcomeDearProNoUser => '亲爱的专业版用户！准备好翻译您的文档了吗？';
+  String get homeWelcomeDearProNoUser =>
+      '沉浸式翻译：在界面内即时对照原文与译文。\n队列式翻译：将文档加入任务队列，按顺序完成整条流水线。';
 
   @override
-  String get homeWelcomeDearStandardNoUser => '亲爱的标准版用户！准备好翻译您的文档了吗？';
+  String get homeWelcomeDearStandardNoUser =>
+      '沉浸式翻译：在界面内即时对照原文与译文。\n队列式翻译：将文档加入任务队列，按顺序完成整条流水线。';
 
   @override
-  String homeWelcomeHello(Object username) {
-    return '你好，$username！准备好翻译您的文档了吗？';
-  }
+  String get homeWelcomeHello =>
+      '沉浸式翻译：在界面内即时对照原文与译文。\n队列式翻译：将文档加入任务队列，按顺序完成整条流水线。';
 
   @override
   String get homeLoading => '加载中...';
