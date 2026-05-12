@@ -17,6 +17,7 @@ from logger.logger import LogModule
 from exporter.base import ExporterConfig
 from exporter.mobi.base import MobiExporter
 from ir.document import Document
+from utils.epub_fix import normalize_kindle_inline_reader_layout_styles
 
 
 @dataclass
@@ -32,6 +33,7 @@ def _chapter_inner_html_from_soup(soup: BeautifulSoup) -> str:
     Kindle/MOBI-derived chapters are full XHTML documents; concatenating str(body) produced
     invalid nested <body> tags and confused layout (narrow column / broken flow).
     """
+    normalize_kindle_inline_reader_layout_styles(soup)
     body = soup.find("body")
     if body:
         return body.decode_contents()
@@ -293,6 +295,41 @@ class Mobi2HTMLExporter(MobiExporter):
         img {{
             max-width: 100%;
             height: auto;
+        }}
+        /* Backup if inline width:0pt survives: Kindle uses it for centering; browsers collapse to one column */
+        .epub-content [style*="width:0pt"],
+        .epub-content [style*="width: 0pt"] {{
+            width: auto !important;
+            max-width: 100% !important;
+        }}
+        /* Kindle height:1em fixes box to one line; long translated paragraphs overlap the next block */
+        .epub-content [style*="height:1em"],
+        .epub-content [style*="height: 1em"] {{
+            height: auto !important;
+        }}
+        /* Wikisource contributor lists: li height:0pt stacks all rows */
+        .epub-content li[style*="height:0"],
+        .epub-content li[style*="height: 0"] {{
+            height: auto !important;
+            min-height: 1.25em !important;
+        }}
+        /* TOC hanging indent width:-14pt pulls boxes out of flow in browsers */
+        .epub-content [style*="width:-"],
+        .epub-content [style*="width: -"] {{
+            width: auto !important;
+            max-width: 100% !important;
+        }}
+        /* Wikisource / wiki nav + license boilerplate: avoid stacking on top of body text */
+        .owlangs-mobi-chapter nav {{
+            display: block !important;
+            clear: both !important;
+            position: static !important;
+            margin: 1rem 0 !important;
+            overflow: visible !important;
+        }}
+        .owlangs-mobi-chapter nav a {{
+            display: inline !important;
+            line-height: 1.45 !important;
         }}
     </style>
 </head>

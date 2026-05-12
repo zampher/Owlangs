@@ -4,11 +4,13 @@
 """
 EPUB compliance fixes for Apple Books / EPUBCheck.
 
-- Sanitize HTML: remove deprecated elements/attributes, fix image paths, strip mbp:pagebreak.
+- Sanitize HTML: remove deprecated elements/attributes, fix image paths, strip mbp:pagebreak,
+  strip Kindle inline width/height hacks (0pt, negative width, 0 height, 1em) that break browser layout.
 - Post-process OPF: ensure dc:title, remove toc="ncx", add minimal EPUB 3 nav document.
 """
 
 import io
+import logging
 import re
 import zipfile
 from typing import Optional
@@ -19,7 +21,175 @@ try:
 except ImportError:
     BeautifulSoup = None  # type: ignore
 
+logger = logging.getLogger(__name__)
+
 _OWLANGS_LAYOUT_STYLE_ID = "owlangs-epub-readable-layout"
+
+# Kindle/KF8 HTML uses width:0pt (sometimes width:0) on blocks for centered single-line layout.
+# Web browsers honor it and collapse the box to zero width, so each character stacks vertically.
+_KINDLE_ZERO_WIDTH_UNIT = re.compile(
+    r"(?i)\bwidth\s*:\s*0(?:\.0+)?(?:pt|px|em|ex|ch|rem|%)\s*;?",
+)
+_KINDLE_WIDTH_ZERO_PLAIN = re.compile(
+    r"(?i)\bwidth\s*:\s*0\b(?!\.\d)\s*;?",
+)
+# TOC / hanging indent hacks (e.g. width:-14pt) break normal flow in browsers.
+_KINDLE_NEGATIVE_WIDTH = re.compile(
+    r"(?i)\bwidth\s*:\s*-\s*[\d.]+\s*(?:pt|px|em|ex|ch|rem|%)\s*;?",
+)
+# Single-line title hack: fixed height + overflow visible lets long translated text paint over the next block.
+_KINDLE_SINGLE_LINE_HEIGHT_EM = re.compile(
+    r"(?i)\bheight\s*:\s*1(?:\.0+)?em\s*;?",
+)
+# List items / blocks with zero height (Wikisource contributor lists): all lines stack in one slot.
+_KINDLE_ZERO_HEIGHT_UNIT = re.compile(
+    r"(?i)\bheight\s*:\s*0(?:\.0+)?(?:pt|px|em|ex|ch|rem|%)\s*;?",
+)
+_KINDLE_HEIGHT_ZERO_PLAIN = re.compile(
+    r"(?i)\bheight\s*:\s*0\b(?!\.\d)\s*;?",
+)
+
+
+def normalize_kindle_inline_width_styles(soup) -> int:
+    """
+    Strip Kindle/MOBI inline width hacks from ``style`` attributes:
+
+    - ``width: 0pt`` / ``width: 0`` (vertical glyph stacking in browsers).
+    - ``width: -14pt`` etc. (TOC hanging indent; breaks normal flow after translation).
+
+    Returns the number of tags whose ``style`` was changed.
+    """
+    if BeautifulSoup is None or soup is None:
+        return 0
+    changed = 0
+    for tag in soup.find_all(style=True):
+        style = tag.get("style") or ""
+        if not style or "width" not in style.lower():
+            continue
+        new_style = _KINDLE_ZERO_WIDTH_UNIT.sub("", style)
+        new_style = _KINDLE_WIDTH_ZERO_PLAIN.sub("", new_style)
+        new_style = _KINDLE_NEGATIVE_WIDTH.sub("", new_style)
+        new_style = re.sub(r"\s*;\s*;+", ";", new_style)
+        new_style = new_style.strip().strip(";").strip()
+        prior = style.strip().strip(";").strip()
+        if new_style != prior:
+            changed += 1
+            if new_style:
+                tag["style"] = new_style
+            else:
+                del tag["style"]
+    if changed:
+        logger.debug(
+            "normalize_kindle_inline_width_styles: removed Kindle zero-width "
+            "inline width from %s element(s) (fixes vertical glyph stacking in browsers)",
+            changed,
+        )
+    return changed
+
+
+def normalize_kindle_inline_height_styles(soup) -> int:
+    """
+    Strip Kindle/KF8 inline heights that collapse or clip block layout in browsers.
+
+    - ``height: 1em`` — single-line title box; long translated text overlaps the next block.
+    - ``height: 0pt`` / ``height: 0`` — contributor lists / TOC rows stack on top of each other.
+
+    Returns the number of tags whose ``style`` was changed.
+    """
+    if BeautifulSoup is None or soup is None:
+        return 0
+    changed = 0
+    for tag in soup.find_all(style=True):
+        style = tag.get("style") or ""
+        if not style or "height" not in style.lower():
+            continue
+        new_style = _KINDLE_SINGLE_LINE_HEIGHT_EM.sub("", style)
+        new_style = _KINDLE_ZERO_HEIGHT_UNIT.sub("", new_style)
+        new_style = _KINDLE_HEIGHT_ZERO_PLAIN.sub("", new_style)
+        new_style = re.sub(r"\s*;\s*;+", ";", new_style)
+        new_style = new_style.strip().strip(";").strip()
+        prior = style.strip().strip(";").strip()
+        if new_style != prior:
+            changed += 1
+            if new_style:
+                tag["style"] = new_style
+            else:
+                del tag["style"]
+    if changed:
+        logger.debug(
+            "normalize_kindle_inline_height_styles: removed Kindle collapse-prone "
+            "inline height from %s element(s) (fixes overlap in browsers)",
+            changed,
+        )
+    return changed
+
+
+def _declaration_has_negative_margin(decl: str) -> bool:
+    """True if this margin declaration uses a negative length (shorthand allowed)."""
+    decl = decl.strip()
+    if not re.match(r"(?i)^margin(?:-top|-bottom|-left|-right)?\s*:", decl):
+        return False
+    idx = decl.find(":")
+    if idx == -1:
+        return False
+    value = decl[idx + 1 :].strip()
+    # Token-bound minus before a number (avoid matching hyphens inside keywords)
+    return bool(re.search(r"(^|[\s,])-\s*[\d.]", value))
+
+
+def _declaration_is_collapsed_line_height(decl: str) -> bool:
+    """Line-height: 0 collapses stacked lines onto each other in browsers."""
+    d = decl.strip()
+    m = re.match(r"(?i)^line-height\s*:\s*([^;]+)$", d)
+    if not m:
+        return False
+    val = m.group(1).strip().split()[0]
+    return bool(re.match(r"^0(?:\.0+)?(?:px|em|pt|%)?$", val))
+
+
+def normalize_kindle_overlap_styles(soup) -> int:
+    """
+    Remove inline declarations that cause sibling overlap (common in Wikisource/KF8 exports).
+
+    Drops negative ``margin*`` values and ``line-height: 0``.
+    """
+    if BeautifulSoup is None or soup is None:
+        return 0
+    changed = 0
+    for tag in soup.find_all(style=True):
+        style = tag.get("style") or ""
+        if not style:
+            continue
+        parts = [p.strip() for p in style.split(";") if p.strip()]
+        if not parts:
+            continue
+        kept: list[str] = []
+        for p in parts:
+            if _declaration_has_negative_margin(p) or _declaration_is_collapsed_line_height(p):
+                continue
+            kept.append(p)
+        new_style = "; ".join(kept)
+        prior = style.strip().strip(";").strip()
+        if new_style.strip() != prior:
+            changed += 1
+            if new_style:
+                tag["style"] = new_style
+            else:
+                del tag["style"]
+    if changed:
+        logger.debug(
+            "normalize_kindle_overlap_styles: cleaned overlap-prone inline styles on "
+            "%s element(s)",
+            changed,
+        )
+    return changed
+
+
+def normalize_kindle_inline_reader_layout_styles(soup) -> None:
+    """Apply width + height + overlap Kindle/Wikisource fixes for web/EPUB HTML exporters."""
+    normalize_kindle_inline_width_styles(soup)
+    normalize_kindle_inline_height_styles(soup)
+    normalize_kindle_overlap_styles(soup)
 
 
 def _inject_readable_layout_css_into_head(soup) -> None:
@@ -55,6 +225,7 @@ def sanitize_html_for_epub(html: str) -> str:
     - Fix image paths: "一mages" -> "Images" (encoding corruption).
     - Replace deprecated <font> with <span>; move align/width/height/bgcolor to style where invalid.
     - Remove mbp:pagebreak and other unknown-namespace elements.
+    - Normalize Kindle inline width/height so browsers do not stack glyphs vertically or overlap blocks.
     """
     if not html or not html.strip():
         return html
@@ -113,6 +284,8 @@ def sanitize_html_for_epub(html: str) -> str:
         if tag.name and ":" in tag.name and tag.name.split(":")[0].lower() == "mbp":
             tag.decompose()
 
+    normalize_kindle_inline_reader_layout_styles(soup)
+
     _inject_readable_layout_css_into_head(soup)
 
     return str(soup)
@@ -123,6 +296,12 @@ def _sanitize_html_fallback(html: str) -> str:
     html = re.sub(r'src="([^"]*一mages[^"]*)"', lambda m: f'src="{m.group(1).replace("一mages", "Images").replace("一", "I")}"', html)
     html = re.sub(r'\bvalign="([^"]*)"', r'style="vertical-align:\1"', html, flags=re.IGNORECASE)
     html = re.sub(r"<mbp:pagebreak[^>]*/?>", "", html, flags=re.IGNORECASE)
+    html = _KINDLE_ZERO_WIDTH_UNIT.sub("", html)
+    html = _KINDLE_WIDTH_ZERO_PLAIN.sub("", html)
+    html = _KINDLE_NEGATIVE_WIDTH.sub("", html)
+    html = _KINDLE_SINGLE_LINE_HEIGHT_EM.sub("", html)
+    html = _KINDLE_ZERO_HEIGHT_UNIT.sub("", html)
+    html = _KINDLE_HEIGHT_ZERO_PLAIN.sub("", html)
     return html
 
 

@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup
 from exporter.base import ExporterConfig
 from exporter.epub.base import EpubExporter
 from ir.document import Document
+from utils.epub_fix import normalize_kindle_inline_reader_layout_styles
 
 
 @dataclass
@@ -238,6 +239,7 @@ class Epub2HTMLExporter(EpubExporter):
 
                             # Extract body content (if exists)
                             soup = BeautifulSoup(processed_html, 'html.parser')
+                            normalize_kindle_inline_reader_layout_styles(soup)
                             body = soup.find('body')
                             if body:
                                 combined_html_parts.append(str(body))
@@ -277,6 +279,7 @@ class Epub2HTMLExporter(EpubExporter):
 
                         # Extract body content (if exists)
                         soup = BeautifulSoup(processed_html, 'html.parser')
+                        normalize_kindle_inline_reader_layout_styles(soup)
                         body = soup.find('body')
                         if body:
                             combined_html_parts.append(str(body))
@@ -314,6 +317,16 @@ class Epub2HTMLExporter(EpubExporter):
         .chapter {{
             margin-bottom: 2em;
             page-break-after: always;
+        }}
+        .chapter nav {{
+            display: block !important;
+            clear: both !important;
+            position: static !important;
+            margin: 1rem 0 !important;
+            overflow: visible !important;
+        }}
+        .chapter nav a {{
+            line-height: 1.45 !important;
         }}
         pre {{
             white-space: pre-wrap;
