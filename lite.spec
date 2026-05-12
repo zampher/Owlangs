@@ -224,6 +224,11 @@ hiddenimports = [
     'workflow.mobi_workflow',
     'workflow.qt_ts_workflow',
     'workflow.pptx_workflow',
+    # HTML→MD (XLSX/PPTX export_md, download_service); lazy-imported from workflows
+    'workflow.html_to_markdown_export',
+    'workflow.html_table_to_markdown',
+    'html2text',
+    'bs4',
     # python-pptx library for PPTX processing
     'pptx',
     'pptx.util',

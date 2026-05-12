@@ -167,6 +167,10 @@ hiddenimports = [
     'workflow.mobi_workflow',
     'workflow.qt_ts_workflow',
     'workflow.pptx_workflow',
+    'workflow.html_to_markdown_export',
+    'workflow.html_table_to_markdown',
+    'html2text',
+    'bs4',
     # Config manager
     'backend.config_manager',
 ]
