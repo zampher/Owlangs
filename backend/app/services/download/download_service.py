@@ -2947,12 +2947,12 @@ class DownloadService:
                     # This is the most reliable method as it uses the actual translation segments
                     segments_data = task_state.get("translation_segments")
                     wt_export = resolve_task_export_workflow_type(task_state)
-                    # XLSX grid is exported as HTML <table>; segment rebuild concatenates cell text only (no table in MD).
-                    skip_segment_md_for_tables = wt_export == "xlsx"
+                    # XLSX/PPTX: translated grid/slides are HTML <table> in saved HTML; segment rebuild flattens cells.
+                    skip_segment_md_for_tables = wt_export in ("xlsx", "pptx")
                     if skip_segment_md_for_tables:
                         logger.info(
                             LogModule.EXPORT,
-                            f"[DOWNLOAD] Skipping segment-based MD rebuild for xlsx (use HTML table path); task_id={task_id}",
+                            f"[DOWNLOAD] Skipping segment-based MD rebuild for {wt_export} (use HTML table path); task_id={task_id}",
                         )
                     if segments_data and not skip_segment_md_for_tables:
                         segments = segments_data.get("segments", [])
@@ -3007,7 +3007,9 @@ class DownloadService:
                         html_path = str(html_file_info)
                     html_on_disk = bool(html_path and os.path.isfile(html_path))
                     orig_lower = (task_state.get("original_filename") or "").lower()
-                    is_xlsx_export = wt_export == "xlsx" or orig_lower.endswith((".xlsx", ".xls"))
+                    prefer_disk_html_md_first = wt_export in ("xlsx", "pptx") or orig_lower.endswith(
+                        (".xlsx", ".xls", ".pptx", ".ppt")
+                    )
 
                     def _markdown_from_saved_html() -> Optional[str]:
                         if not html_on_disk or not html_path:
@@ -3026,9 +3028,8 @@ class DownloadService:
                             )
                             return None
 
-                    # XLSX: saved translated HTML is authoritative — in-memory workflow may have empty document_translated
-                    # while export_to_html() still returns a minimal shell (MD len ~ tens of bytes).
-                    if is_xlsx_export and html_on_disk:
+                    # XLSX/PPTX: saved translated HTML is authoritative — in-memory workflow may lack full document_translated.
+                    if prefer_disk_html_md_first and html_on_disk:
                         disk_md = _markdown_from_saved_html()
                         disk_stripped = (disk_md or "").strip()
                         try:
@@ -3041,14 +3042,14 @@ class DownloadService:
                         if md_too_small_vs_html and disk_stripped:
                             logger.warning(
                                 LogModule.EXPORT,
-                                f"[DOWNLOAD] xlsx MD from saved HTML looks truncated (md_chars={len(disk_stripped)} "
-                                f"vs html_bytes={html_sz_check}); not using this MD; task_id={task_id}",
+                                f"[DOWNLOAD] disk HTML→MD looks truncated (md_chars={len(disk_stripped)} "
+                                f"vs html_bytes={html_sz_check}); not using this MD; task_id={task_id} wt={wt_export}",
                             )
                         elif disk_stripped and not md_too_small_vs_html:
                             file_stem = task_state.get("original_filename_stem", "translated")
                             logger.info(
                                 LogModule.EXPORT,
-                                f"[DOWNLOAD] xlsx MD from saved HTML (chars={len(disk_md)}); task_id={task_id}",
+                                f"[DOWNLOAD] MD from saved HTML (chars={len(disk_md)}); task_id={task_id} wt={wt_export}",
                             )
                             return _file_response_for_md_download(
                                 disk_md,
@@ -3061,10 +3062,10 @@ class DownloadService:
                         if not disk_stripped:
                             logger.warning(
                                 LogModule.EXPORT,
-                                f"[DOWNLOAD] xlsx saved HTML produced empty MD, trying workflow; task_id={task_id}",
+                                f"[DOWNLOAD] saved HTML produced empty MD, trying workflow; task_id={task_id} wt={wt_export}",
                             )
 
-                    # Priority 2: workflow export_to_markdown (may be stale for xlsx; see HTML fallback below)
+                    # Priority 2: workflow export_to_markdown (may be stale for xlsx/pptx; see HTML fallback below)
                     md_content: Optional[str] = None
                     workflow_instance = task_state.get("workflow_instance")
                     if workflow_instance and hasattr(workflow_instance, "export_to_markdown"):

@@ -4885,7 +4885,7 @@ class _TranslationResultPreviewState
     if (isQtTsWorkflow) {
       availableFormats = <String>['ts'];
     } else if (isPptxWorkflow) {
-      availableFormats = <String>['pptx', 'html'];
+      availableFormats = <String>['pptx', 'html', 'md'];
     } else if (isXlsxWorkflow) {
       availableFormats = <String>['xlsx', 'html', 'md'];
     } else if (isMobiWorkflow) {
