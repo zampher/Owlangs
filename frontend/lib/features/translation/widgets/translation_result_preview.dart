@@ -4887,7 +4887,7 @@ class _TranslationResultPreviewState
     } else if (isPptxWorkflow) {
       availableFormats = <String>['pptx', 'html'];
     } else if (isXlsxWorkflow) {
-      availableFormats = <String>['xlsx', 'html'];
+      availableFormats = <String>['xlsx', 'html', 'md'];
     } else if (isMobiWorkflow) {
       availableFormats = <String>['mobi', 'epub', 'html', 'md', 'docx'];
     } else if (isEpubWorkflow) {

@@ -12,6 +12,11 @@ def html_content_to_markdown(html_content: str) -> str:
     """Convert translated HTML (full document or fragment) to Markdown."""
     from bs4 import BeautifulSoup
 
+    from workflow.html_table_to_markdown import (
+        extract_tables_and_insert_placeholders,
+        restore_table_placeholders,
+    )
+
     soup = BeautifulSoup(html_content, "html.parser")
 
     for tag in soup(["style", "script", "meta", "link"]):
@@ -20,6 +25,8 @@ def html_content_to_markdown(html_content: str) -> str:
     for title in soup.find_all("title"):
         if title.string and ("Untitled" in title.string or not title.string.strip()):
             title.decompose()
+
+    table_fragments = extract_tables_and_insert_placeholders(soup)
 
     try:
         import html2text
@@ -37,10 +44,14 @@ def html_content_to_markdown(html_content: str) -> str:
     except ImportError:
         markdown = _soup_to_markdown(soup)
 
+    markdown = restore_table_placeholders(markdown, table_fragments)
+
     return _clean_markdown(markdown)
 
 
 def _soup_to_markdown(soup) -> str:
+    from workflow.html_table_to_markdown import html_table_to_markdown_fragment
+
     lines: list[str] = []
 
     def process_element(elem, indent: int = 0) -> None:
@@ -58,6 +69,11 @@ def _soup_to_markdown(soup) -> str:
             text = elem.get_text(separator=" ", strip=True)
             if text:
                 lines.append(text)
+                lines.append("")
+        elif elem.name == "table":
+            frag = html_table_to_markdown_fragment(elem)
+            if frag.strip():
+                lines.append(frag.strip())
                 lines.append("")
         elif elem.name in ("div", "section", "article"):
             has_content = False

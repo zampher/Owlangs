@@ -1804,6 +1804,8 @@ class OutputGenerator:
             # For MOBI/EPUB workflows, prioritize HTML-to-Markdown conversion
             # (segments may contain HTML tags that need proper conversion)
             workflow_type = task_state.get("workflow_type") or task_state.get("payload", {}).get("workflow_type")
+            orig_l = (task_state.get("original_filename") or "").lower()
+            is_xlsx_file = workflow_type == "xlsx" or orig_l.endswith((".xlsx", ".xls"))
             is_mobi_epub = workflow_type in ("mobi", "epub")
             
             if is_mobi_epub:
@@ -1814,9 +1816,21 @@ class OutputGenerator:
                 except Exception as e:
                     self.task_manager.add_log(task_id, "warning", f"Could not generate Markdown from HTML: {str(e)}, trying segments rebuild")
             else:
-                # For other workflows, try to rebuild from segments first (preserves original format)
+                # For other workflows, try to rebuild from segments first (preserves original format).
+                # XLSX grid is HTML <table> in workflow export; segment rebuild flattens cells (no pipe table).
                 segments_data = task_state.get("translation_segments")
-                if segments_data and segments_data.get("segments"):
+                skip_segment_md_for_tables = is_xlsx_file
+                if skip_segment_md_for_tables:
+                    self.task_manager.add_log(
+                        task_id,
+                        "info",
+                        "Skipping Markdown rebuild from segments for XLSX (use workflow HTML-table export).",
+                    )
+                if (
+                    not skip_segment_md_for_tables
+                    and segments_data
+                    and segments_data.get("segments")
+                ):
                     try:
                         from utils.document_rebuild import rebuild_markdown_document_from_segments
                         rebuilt_doc = rebuild_markdown_document_from_segments(
@@ -1838,6 +1852,34 @@ class OutputGenerator:
             if markdown_content is None:
                 markdown_content = workflow.export_to_markdown()
                 self.task_manager.add_log(task_id, "info", "Markdown file generated from workflow export")
+
+            # XLSX: if in-memory export is tiny but translated HTML was written, use disk HTML (same as download path)
+            html_saved = output_dir / f"{file_stem}_translated.html"
+            if is_xlsx_file and html_saved.is_file():
+                try:
+                    html_text = html_saved.read_text(encoding="utf-8-sig", errors="replace")
+                    md_strip = (markdown_content or "").strip()
+                    html_len = len(html_text)
+                    if html_len > 500 and len(md_strip) < min(500, max(80, html_len // 20)):
+                        from workflow.html_to_markdown_export import html_content_to_markdown
+
+                        markdown_content = html_content_to_markdown(html_text)
+                        logger.info(
+                            LogModule.EXPORT,
+                            f"[OUTPUT-GENERATOR] Task {task_id}: XLSX MD from saved HTML "
+                            f"(workflow MD chars={len(md_strip)}, html chars={html_len})",
+                        )
+                        self.task_manager.add_log(
+                            task_id,
+                            "info",
+                            "Markdown built from saved translated HTML (XLSX; workflow export was too short).",
+                        )
+                except Exception as ex:
+                    logger.warning(
+                        LogModule.EXPORT,
+                        f"[OUTPUT-GENERATOR] Task {task_id}: XLSX MD from saved HTML failed: {ex}",
+                        exc_info=True,
+                    )
             
             if markdown_content:
                 # Process images: convert data URI images to files if needed

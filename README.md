@@ -181,7 +181,8 @@ For issues, questions, or contributions:
 
 ## Community
 
-欢迎加入技术交流微信群：
+交流微信号Wechat：zzmaimeng
+欢迎加入技术交流微信群（有时会过期，可加微信号）：
 
 <img src="WeChat_Help_技术交流微信群.png" alt="WeChat Help" width="280">
 

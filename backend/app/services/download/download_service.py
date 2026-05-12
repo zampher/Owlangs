@@ -2946,7 +2946,15 @@ class DownloadService:
                     # Priority 1: Try to regenerate from segments (works for both revised and non-revised cases)
                     # This is the most reliable method as it uses the actual translation segments
                     segments_data = task_state.get("translation_segments")
-                    if segments_data:
+                    wt_export = resolve_task_export_workflow_type(task_state)
+                    # XLSX grid is exported as HTML <table>; segment rebuild concatenates cell text only (no table in MD).
+                    skip_segment_md_for_tables = wt_export == "xlsx"
+                    if skip_segment_md_for_tables:
+                        logger.info(
+                            LogModule.EXPORT,
+                            f"[DOWNLOAD] Skipping segment-based MD rebuild for xlsx (use HTML table path); task_id={task_id}",
+                        )
+                    if segments_data and not skip_segment_md_for_tables:
                         segments = segments_data.get("segments", [])
                         if segments:  # Only try if we have actual segments
                             try:
@@ -2990,113 +2998,130 @@ class DownloadService:
                                 logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to regenerate MD from segments: {e}, trying HTML fallback", exc_info=True)
                         else:
                             logger.warning(LogModule.EXPORT, f"[DOWNLOAD] No segments found in segments_data, trying HTML fallback")
-                    else:
+                    elif not segments_data:
                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] No segments_data found, trying HTML fallback")
-                
-                    # Priority 2: Try to use workflow's export_to_markdown method (best quality)
-                    workflow_instance = task_state.get("workflow_instance")
-                    if workflow_instance and hasattr(workflow_instance, 'export_to_markdown'):
-                        try:
-                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generating MD from workflow.export_to_markdown() for task {task_id}")
-                            md_content = workflow_instance.export_to_markdown()
-                            if md_content:
-                                file_stem = task_state.get("original_filename_stem", "translated")
-                                logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD from workflow.export_to_markdown()")
-                                return _file_response_for_md_download(
-                                    md_content,
-                                    task_state,
-                                    file_stem,
-                                    embed_images,
-                                    equation_format,
-                                    table_body_format,
-                                )
-                        except Exception as e:
-                            logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to generate MD from workflow.export_to_markdown(): {e}, trying HTML fallback", exc_info=True)
-                    
-                    # Priority 3: Try to regenerate MD from HTML (convert HTML to Markdown)
+
                     html_file_info = task_state.get("downloadable_files", {}).get("html")
-                    if html_file_info and os.path.exists(html_file_info.get("path")):
+                    html_path = html_file_info.get("path") if isinstance(html_file_info, dict) else None
+                    if not html_path and html_file_info:
+                        html_path = str(html_file_info)
+                    html_on_disk = bool(html_path and os.path.isfile(html_path))
+                    orig_lower = (task_state.get("original_filename") or "").lower()
+                    is_xlsx_export = wt_export == "xlsx" or orig_lower.endswith((".xlsx", ".xls"))
+
+                    def _markdown_from_saved_html() -> Optional[str]:
+                        if not html_on_disk or not html_path:
+                            return None
                         try:
-                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Regenerating MD from HTML for task {task_id} (has_revisions_original: {has_revisions_original}, md_exists: {md_exists})")
-                            # Read HTML content
-                            with open(html_file_info["path"], 'r', encoding='utf-8-sig') as f:
-                                html_content = f.read()
-                        
-                            # Use BeautifulSoup for better HTML to text conversion
-                            from bs4 import BeautifulSoup
-                            soup = BeautifulSoup(html_content, 'html.parser')
-                            
-                            # Remove style, script, and meta tags
-                            for tag in soup(['style', 'script', 'meta', 'link']):
-                                tag.decompose()
-                            
-                            # Remove title tags that contain "Untitled" or empty
-                            for title in soup.find_all('title'):
-                                if title.string and ('Untitled' in title.string or not title.string.strip()):
-                                    title.decompose()
-                            
-                            # Try using html2text if available (better formatting)
-                            try:
-                                import html2text
-                                cleaned_html = str(soup)
-                                h = html2text.HTML2Text()
-                                h.ignore_links = False
-                                h.ignore_images = False
-                                h.body_width = 0
-                                h.unicode_snob = True
-                                h.escape_snob = True
-                                h.single_line_break = False  # Use double line breaks for paragraphs
-                                text_content = h.handle(cleaned_html)
-                            except ImportError:
-                                # Fallback: simple text extraction
-                                text_content = soup.get_text(separator='\n\n')
-                            
-                            # Clean up: remove excessive blank lines and CSS remnants
-                            lines = text_content.split('\n')
-                            cleaned_lines = []
-                            skip_blank = False
-                            in_css_block = False
-                            
-                            for line in lines:
-                                stripped = line.strip()
-                                
-                                # Skip CSS/style blocks
-                                if stripped.startswith('body {') or stripped.startswith('h1 {') or stripped.startswith('.epub-content'):
-                                    in_css_block = True
-                                    continue
-                                if in_css_block:
-                                    if stripped.endswith('}') or (stripped == '' and len(cleaned_lines) > 0 and cleaned_lines[-1].strip().endswith('}')):
-                                        in_css_block = False
-                                    continue
-                                
-                                # Skip "Untitled" lines
-                                if stripped == 'Untitled' or (stripped.startswith('Untitled') and len(stripped) < 20):
-                                    continue
-                                
-                                # Skip lines that are just CSS properties
-                                if re.match(r'^\s*[a-z-]+:\s*[^;]+;\s*$', stripped):
-                                    continue
-                                
-                                # Handle blank lines
-                                if stripped == '':
-                                    if not skip_blank:
-                                        cleaned_lines.append('')
-                                        skip_blank = True
-                                else:
-                                    cleaned_line = line.rstrip()
-                                    cleaned_lines.append(cleaned_line)
-                                    skip_blank = False
-                            
-                            # Remove leading and trailing blank lines
-                            while cleaned_lines and cleaned_lines[0].strip() == '':
-                                cleaned_lines.pop(0)
-                            while cleaned_lines and cleaned_lines[-1].strip() == '':
-                                cleaned_lines.pop()
-                            
-                            text_content = '\n'.join(cleaned_lines)
-                        
+                            with open(html_path, "r", encoding="utf-8-sig") as f:
+                                html_body = f.read()
+                            from workflow.html_to_markdown_export import html_content_to_markdown
+
+                            return html_content_to_markdown(html_body)
+                        except Exception as ex:
+                            logger.warning(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] MD from saved HTML failed task_id={task_id}: {ex}",
+                                exc_info=True,
+                            )
+                            return None
+
+                    # XLSX: saved translated HTML is authoritative — in-memory workflow may have empty document_translated
+                    # while export_to_html() still returns a minimal shell (MD len ~ tens of bytes).
+                    if is_xlsx_export and html_on_disk:
+                        disk_md = _markdown_from_saved_html()
+                        disk_stripped = (disk_md or "").strip()
+                        try:
+                            html_sz_check = os.path.getsize(html_path) if html_path else 0
+                        except OSError:
+                            html_sz_check = 0
+                        md_too_small_vs_html = (
+                            html_sz_check > 4000 and len(disk_stripped) < max(400, html_sz_check // 200)
+                        )
+                        if md_too_small_vs_html and disk_stripped:
+                            logger.warning(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] xlsx MD from saved HTML looks truncated (md_chars={len(disk_stripped)} "
+                                f"vs html_bytes={html_sz_check}); not using this MD; task_id={task_id}",
+                            )
+                        elif disk_stripped and not md_too_small_vs_html:
                             file_stem = task_state.get("original_filename_stem", "translated")
-                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD from HTML")
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] xlsx MD from saved HTML (chars={len(disk_md)}); task_id={task_id}",
+                            )
+                            return _file_response_for_md_download(
+                                disk_md,
+                                task_state,
+                                file_stem,
+                                embed_images,
+                                equation_format,
+                                table_body_format,
+                            )
+                        if not disk_stripped:
+                            logger.warning(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] xlsx saved HTML produced empty MD, trying workflow; task_id={task_id}",
+                            )
+
+                    # Priority 2: workflow export_to_markdown (may be stale for xlsx; see HTML fallback below)
+                    md_content: Optional[str] = None
+                    workflow_instance = task_state.get("workflow_instance")
+                    if workflow_instance and hasattr(workflow_instance, "export_to_markdown"):
+                        try:
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Generating MD from workflow.export_to_markdown() for task {task_id}",
+                            )
+                            md_content = workflow_instance.export_to_markdown()
+                        except Exception as e:
+                            logger.warning(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Failed to generate MD from workflow.export_to_markdown(): {e}, trying HTML fallback",
+                                exc_info=True,
+                            )
+
+                    if md_content and html_on_disk and html_path:
+                        try:
+                            html_sz = os.path.getsize(html_path)
+                            md_sz = len((md_content or "").strip().encode("utf-8"))
+                            if html_sz > 500 and md_sz < min(500, max(80, html_sz // 20)):
+                                logger.warning(
+                                    LogModule.EXPORT,
+                                    f"[DOWNLOAD] workflow MD too small (bytes≈{md_sz}) vs saved HTML ({html_sz} bytes); "
+                                    f"prefer disk HTML; task_id={task_id} wt_export={wt_export}",
+                                )
+                                md_content = None
+                        except OSError as oe:
+                            logger.debug(LogModule.EXPORT, f"[DOWNLOAD] stat HTML for MD sanity check: {oe}")
+
+                    if md_content and (md_content if isinstance(md_content, str) else "").strip():
+                        file_stem = task_state.get("original_filename_stem", "translated")
+                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD from workflow.export_to_markdown()")
+                        return _file_response_for_md_download(
+                            md_content,
+                            task_state,
+                            file_stem,
+                            embed_images,
+                            equation_format,
+                            table_body_format,
+                        )
+
+                    # Priority 3: Regenerate MD from saved HTML (same pipeline as XlsxWorkflow.export_to_markdown)
+                    if html_on_disk and html_path:
+                        try:
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Regenerating MD from HTML for task {task_id} "
+                                f"(has_revisions_original: {has_revisions_original}, md_exists: {md_exists})",
+                            )
+                            text_content = _markdown_from_saved_html()
+                            if text_content is None:
+                                raise RuntimeError("html to markdown returned None")
+                            if not (text_content or "").strip():
+                                raise RuntimeError("empty markdown from saved HTML")
+                            file_stem = task_state.get("original_filename_stem", "translated")
+                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD from HTML via html_content_to_markdown")
                             return _file_response_for_md_download(
                                 text_content,
                                 task_state,
