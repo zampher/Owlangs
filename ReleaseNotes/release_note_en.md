@@ -1,5 +1,18 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.3.1.0
+
+### Optimizations
+
+1. **Removed “Recent activity”** from the home screen. With the **task queue** already surfacing ongoing and finished work, the extra activity strip was redundant and has been dropped for a cleaner home layout.
+
+### Bug Fixes
+
+1. **Queued translation — completed downloads**: For TXT, XLSX, PPTX, EPUB, MOBI (and similar) workflows, when a job reached **completed** in the task queue, the `downloads` map sometimes omitted **`md`** and **`md_zip`** (Markdown with embedded images vs. Markdown packaged with an images folder) URLs.
+2. **HTML layout and EPUB/MOBI exports**: Exported HTML could render with inconsistent or broken layout, which also affected **EPUB** and **MOBI** built from that HTML. The HTML generation path used by EPUB/MOBI exports was tightened to improve layout stability.
+
+---
+
 ## Owlangs 1.3.0.0
 
 Compared with **1.2.1.0**, this release introduces **two translation modes** and a **task queue**: keep the familiar immersive workbench, or switch to **queued** runs and manage jobs centrally.

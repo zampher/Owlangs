@@ -1,5 +1,7 @@
 # Owlangs
 
+> 中文说明：[README_zh.md](README_zh.md)
+
 A powerful AI-powered document translation platform designed for professionals who need accurate, format-preserving translations across a wide range of document types. **You can run it fully on-premise** (local backend, Ollama, or other OpenAI-compatible endpoints) or connect to cloud AI providers.
 
 ## Features
