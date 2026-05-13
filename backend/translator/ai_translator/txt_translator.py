@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Self, Literal, List
 
 from agents.segments_agent import SegmentsTranslateAgentConfig, SegmentsTranslateAgent
+from backend.app.utils.encoding_utils import decode_with_detection
 from ir.document import Document
 from translator.ai_translator.base import AiTranslatorConfig, AiTranslator
 from logger.logger import LogModule
@@ -80,10 +81,15 @@ class TXTTranslator(AiTranslator):
             List[str]: List of original text lines to be translated.
         """
         try:
-            # Use utf-8-sig decoding to handle possible BOM (Byte Order Mark)
-            txt_content = document.content.decode('utf-8-sig')
-        except (UnicodeDecodeError, AttributeError) as e:
-            self.logger.error(LogModule.TRANS, f"Unable to decode TXT file content, please ensure file encoding is UTF-8: {e}")
+            raw = document.content
+            if raw is None:
+                return []
+            if not isinstance(raw, (bytes, bytearray)):
+                self.logger.error(LogModule.TRANS, "TXT document.content is not bytes; cannot decode.")
+                return []
+            txt_content = decode_with_detection(bytes(raw))
+        except Exception as e:
+            self.logger.error(LogModule.TRANS, f"Unable to decode TXT file content: {e}", exc_info=True)
             return []
 
         # Split text by lines and preserve empty lines as they may be part of formatting

@@ -1189,10 +1189,7 @@ class SourcePreviewService:
         try:
             from utils.markdown_splitter import split_markdown_text
             
-            try:
-                decoded = file_contents.decode('utf-8')
-            except UnicodeDecodeError:
-                decoded = file_contents.decode('utf-8', errors='replace')
+            decoded = decode_with_detection(file_contents)
             
             chunk_size = chunk_size_service.get_chunk_size(payload, task_id)
             deep_split_enabled = bool(task_state.get("deep_split", True))
