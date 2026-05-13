@@ -1805,9 +1805,9 @@ class OutputGenerator:
             # (segments may contain HTML tags that need proper conversion)
             workflow_type = task_state.get("workflow_type") or task_state.get("payload", {}).get("workflow_type")
             orig_l = (task_state.get("original_filename") or "").lower()
-            # XLSX/PPTX: HTML export carries tables; skip segment MD rebuild (flattened cells).
-            prefer_html_table_md = workflow_type in ("xlsx", "pptx") or orig_l.endswith(
-                (".xlsx", ".xls", ".pptx", ".ppt")
+            # XLSX/PPTX/HTML: translated HTML carries <table>; segment MD rebuild flattens cells / rows.
+            prefer_html_table_md = workflow_type in ("xlsx", "pptx", "html") or orig_l.endswith(
+                (".xlsx", ".xls", ".pptx", ".ppt", ".html", ".htm")
             )
             is_mobi_epub = workflow_type in ("mobi", "epub")
             
@@ -1827,7 +1827,7 @@ class OutputGenerator:
                     self.task_manager.add_log(
                         task_id,
                         "info",
-                        "Skipping Markdown rebuild from segments for XLSX/PPTX (use workflow HTML-table export).",
+                        "Skipping Markdown rebuild from segments for XLSX/PPTX/HTML (use workflow HTML-table export).",
                     )
                 if (
                     not skip_segment_md_for_tables
@@ -1869,7 +1869,7 @@ class OutputGenerator:
                         markdown_content = html_content_to_markdown(html_text)
                         logger.info(
                             LogModule.EXPORT,
-                            f"[OUTPUT-GENERATOR] Task {task_id}: XLSX/PPTX MD from saved HTML "
+                            f"[OUTPUT-GENERATOR] Task {task_id}: table-friendly MD from saved HTML "
                             f"(workflow MD chars={len(md_strip)}, html chars={html_len})",
                         )
                         self.task_manager.add_log(

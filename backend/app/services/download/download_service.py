@@ -2947,8 +2947,9 @@ class DownloadService:
                     # This is the most reliable method as it uses the actual translation segments
                     segments_data = task_state.get("translation_segments")
                     wt_export = resolve_task_export_workflow_type(task_state)
-                    # XLSX/PPTX: translated grid/slides are HTML <table> in saved HTML; segment rebuild flattens cells.
-                    skip_segment_md_for_tables = wt_export in ("xlsx", "pptx")
+                    # XLSX/PPTX/HTML: translated content is HTML with real <table>; segment rebuild uses
+                    # flattened cell lines (HtmlExtractor / grid) and destroys GFM tables in exported MD.
+                    skip_segment_md_for_tables = wt_export in ("xlsx", "pptx", "html")
                     if skip_segment_md_for_tables:
                         logger.info(
                             LogModule.EXPORT,
@@ -3007,8 +3008,8 @@ class DownloadService:
                         html_path = str(html_file_info)
                     html_on_disk = bool(html_path and os.path.isfile(html_path))
                     orig_lower = (task_state.get("original_filename") or "").lower()
-                    prefer_disk_html_md_first = wt_export in ("xlsx", "pptx") or orig_lower.endswith(
-                        (".xlsx", ".xls", ".pptx", ".ppt")
+                    prefer_disk_html_md_first = wt_export in ("xlsx", "pptx", "html") or orig_lower.endswith(
+                        (".xlsx", ".xls", ".pptx", ".ppt", ".html", ".htm")
                     )
 
                     def _markdown_from_saved_html() -> Optional[str]:

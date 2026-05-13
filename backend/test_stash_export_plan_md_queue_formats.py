@@ -46,6 +46,7 @@ class TestStashExportPlanMdQueueFormats(unittest.TestCase):
             "return html_content_to_markdown(self.export_to_html())"
         )
         for name in (
+            "html_workflow.py",
             "txt_workflow.py",
             "epub_workflow.py",
             "xlsx_workflow.py",

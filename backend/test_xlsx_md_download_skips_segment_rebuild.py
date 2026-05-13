@@ -13,7 +13,7 @@ class TestGridWorkflowMdDownloadSkipsSegmentRebuild(unittest.TestCase):
         dl_path = backend_root / "app" / "services" / "download" / "download_service.py"
         text = dl_path.read_text(encoding="utf-8")
         self.assertIn("skip_segment_md_for_tables", text)
-        self.assertIn('wt_export in ("xlsx", "pptx")', text)
+        self.assertIn('wt_export in ("xlsx", "pptx", "html")', text)
         self.assertIn("prefer_disk_html_md_first", text)
         self.assertIn("html_content_to_markdown", text)
 
@@ -24,6 +24,7 @@ class TestGridWorkflowMdDownloadSkipsSegmentRebuild(unittest.TestCase):
         self.assertIn("skip_segment_md_for_tables", text)
         self.assertIn("prefer_html_table_md", text)
         self.assertIn('"pptx"', text)
+        self.assertIn('"html"', text)
         self.assertIn("Markdown built from saved translated HTML", text)
 
 
