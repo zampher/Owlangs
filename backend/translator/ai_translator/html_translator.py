@@ -280,19 +280,68 @@ class HtmlTranslator(AiTranslator):
         self._extract_result = extract_result
         self._html_content = html_content
         
-        # Translate segments using SegmentsTranslateAgent
-        if self.glossary_agent:
-            self.glossary_dict_gen = await self.glossary_agent.send_segments_async(original_texts, self.chunk_size)
-            if self.translate_agent:
-                self.translate_agent.update_glossary_dict(self.glossary_dict_gen)
+        # CRITICAL: Read excluded segments from task_state and filter them out before translation
+        # This ensures user-selected exclusions from the Extract phase are respected
+        excluded_indices = set()
+        if task_state:
+            segments_metadata = task_state.get("segments_metadata", {})
+            excluded_segment_indices = segments_metadata.get("excluded_segment_indices", [])
+            if excluded_segment_indices:
+                excluded_indices = set(int(x) for x in excluded_segment_indices if x is not None)
+                self.logger.info(
+                    LogModule.TRANS,
+                    f"[HTML_TRANSLATOR] Task {task_id}: Found {len(excluded_indices)} excluded segments, "
+                    f"will skip translation for them."
+                )
         
-        if self.translate_agent:
-            # Set task_state for API debug output
-            if task_state and self.translate_agent:
-                self.translate_agent.task_state = task_state
-            translated_texts = await self.translate_agent.send_segments_async(original_texts, self.chunk_size)
+        # Build included indices and texts (skip excluded segments)
+        included_indices = []
+        included_texts = []
+        for idx, text in enumerate(original_texts):
+            if idx in excluded_indices:
+                continue
+            included_indices.append(idx)
+            included_texts.append(text)
+        
+        # If all segments are excluded, skip LLM translation entirely
+        if not included_texts:
+            self.logger.info(
+                LogModule.TRANS,
+                f"[HTML_TRANSLATOR] Task {task_id}: All {len(original_texts)} segments are excluded, "
+                f"skipping LLM translation."
+            )
+            translated_texts = original_texts.copy()
         else:
-            translated_texts = original_texts
+            # Translate segments using SegmentsTranslateAgent
+            if self.glossary_agent:
+                self.glossary_dict_gen = await self.glossary_agent.send_segments_async(
+                    included_texts, self.chunk_size, segment_indices=included_indices
+                )
+                if self.translate_agent:
+                    self.translate_agent.update_glossary_dict(self.glossary_dict_gen)
+            
+            if self.translate_agent:
+                # Set task_state for API debug output
+                if task_state and self.translate_agent:
+                    self.translate_agent.task_state = task_state
+                translated_included_texts = await self.translate_agent.send_segments_async(
+                    included_texts, self.chunk_size, segment_indices=included_indices
+                )
+            else:
+                translated_included_texts = included_texts.copy()
+            
+            # Rebuild full translated_texts: insert translated text for included segments,
+            # keep original text for excluded segments
+            translated_texts = original_texts.copy()
+            for i, idx in enumerate(included_indices):
+                if i < len(translated_included_texts):
+                    translated_texts[idx] = translated_included_texts[i]
+            
+            self.logger.info(
+                LogModule.TRANS,
+                f"[HTML_TRANSLATOR] Task {task_id}: Translated {len(included_indices)}/{len(original_texts)} segments, "
+                f"{len(excluded_indices)} segments kept original (excluded)."
+            )
         
         # Store original_texts and translated_texts for later use in _record_html_segments
         self.original_texts = original_texts

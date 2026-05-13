@@ -891,6 +891,15 @@ class SourcePreviewService:
                 "total_segments": result.total_segments,
                 "created_at": time.time(),
             }
+            
+            # CRITICAL: Preserve existing exclusion data from convert phase before overwriting segments_metadata.
+            # When a translate task inherits segments_metadata from its convert task, user-selected exclusions
+            # (e.g. exclude-all) must not be wiped out by re-running HTML extraction.
+            existing_segments_metadata = task_state.get("segments_metadata", {})
+            existing_excluded_segments = existing_segments_metadata.get("excluded_segments")
+            existing_excluded_segment_indices = existing_segments_metadata.get("excluded_segment_indices")
+            existing_user_unexcluded_segments = existing_segments_metadata.get("user_unexcluded_segments")
+            
             task_state["segments_metadata"] = {
                 "source": "html",
                 "workflow_type": getattr(payload, 'workflow_type', 'html'),
@@ -899,6 +908,14 @@ class SourcePreviewService:
                 "separators_after": result.separators_after,
                 "segment_info": result.segment_info,
             }
+            
+            # Restore inherited exclusion data so it survives the metadata rebuild
+            if existing_excluded_segments is not None:
+                task_state["segments_metadata"]["excluded_segments"] = existing_excluded_segments
+            if existing_excluded_segment_indices is not None:
+                task_state["segments_metadata"]["excluded_segment_indices"] = existing_excluded_segment_indices
+            if existing_user_unexcluded_segments is not None:
+                task_state["segments_metadata"]["user_unexcluded_segments"] = existing_user_unexcluded_segments
             
             # Mark excluded segments during extraction (same as Markdown workflow)
             from utils.translation_segments import _is_image_segment, _is_table_segment

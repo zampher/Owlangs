@@ -3480,7 +3480,7 @@ def complete_translation_with_source_only(
             return False
 
     segments_metadata = task_state.get("segments_metadata", {})
-    segment_info_list = segments_metadata.get("segment_info", [])
+    segment_info_list = segments_metadata.get("segment_info", []) or []
     segments_out = []
     for idx in range(total):
         source_text = source_list[idx] if idx < len(source_list) else ""
