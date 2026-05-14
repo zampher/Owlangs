@@ -14,11 +14,13 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, Response
 from fastapi.openapi.docs import get_swagger_ui_html, get_swagger_ui_oauth2_redirect_html, get_redoc_html
 
-from backend import __version__
+from backend.runtime_version import get_backend_version_tuple
 from utils.resource_utils import resource_path
 from backend.app.services.system_dependency_service import check_system_dependencies
 
 router = APIRouter()
+
+__version__, _ = get_backend_version_tuple()
 
 # Get static directory path
 STATIC_DIR = resource_path("static")

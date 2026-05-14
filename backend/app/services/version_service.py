@@ -1,15 +1,31 @@
 from __future__ import annotations
 
+import importlib
 import re
 import time
 from typing import Any, Dict, Optional
 
 import httpx
 
-from backend import __version__ as CURRENT_VERSION, __version_type__ as CURRENT_VERSION_TYPE
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from utils.utils import get_httpx_proxies
+from backend.runtime_version import get_backend_version_tuple
+
+CURRENT_VERSION, CURRENT_VERSION_TYPE = get_backend_version_tuple()
+if CURRENT_VERSION == "unknown":
+    _bf: Any = None
+    try:
+        _pkg = importlib.import_module("backend")
+        _bf = getattr(_pkg, "__file__", None)
+    except ImportError:
+        pass
+    logger.warning(
+        LogModule.SYSTEM,
+        "[VERSION] backend.__version__ missing or empty (spawn/import path). "
+        "Update check uses 'unknown'. backend.__file__={bf!r}",
+        bf=_bf,
+    )
 
 
 LATEST_RELEASE_API = "https://api.github.com/repos/zampher/Owlangs/releases/latest"

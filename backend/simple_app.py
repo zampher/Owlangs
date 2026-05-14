@@ -9,7 +9,9 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 
-from backend import __version__
+from backend.runtime_version import get_backend_version_tuple
+
+__version__, _ = get_backend_version_tuple()
 
 # Create simplified FastAPI app (version from single source)
 app = FastAPI(

@@ -84,26 +84,100 @@ def _build_llm_config_from_dict(cfg: Optional[Dict[str, Any]]) -> Optional[LLMCo
     )
 
 
-def _is_formula_segment(seg: Dict[str, Any]) -> bool:
-    block_type = (seg.get("block_type") or "").strip().lower()
-    if seg.get("is_equation") or block_type in ("equation", "formula"):
-        return True
-    text = (seg.get("target_text") or seg.get("source_text") or "").strip()
-    if not text:
+# Layout / metadata block types that represent equation segments (not plain text with $ noise).
+_FORMULA_BLOCK_TYPES = frozenset({"equation", "formula", "interline_equation"})
+
+
+def _try_build_layout_block_type_index(layout_doc: Any) -> Optional[Dict[int, str]]:
+    """
+    Map global layout block index -> normalized block.type for formula gating.
+    Returns None when layout_doc is missing or not a LayoutDocument, or when no indexed blocks exist.
+    """
+    if layout_doc is None:
+        return None
+    try:
+        from layout.base import LayoutDocument as _LayoutDocument
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(layout_doc, _LayoutDocument):
+        return None
+    out: Dict[int, str] = {}
+    for block in layout_doc.iter_blocks():
+        if block.index is None:
+            continue
+        out[int(block.index)] = (getattr(block, "type", None) or "").strip().lower()
+    return out if out else None
+
+
+def _segment_declared_block_types(seg: Dict[str, Any]) -> List[str]:
+    types: List[str] = []
+    top = (seg.get("block_type") or "").strip().lower()
+    if top:
+        types.append(top)
+    info = seg.get("segment_info")
+    if isinstance(info, dict):
+        inner = (info.get("block_type") or "").strip().lower()
+        if inner:
+            types.append(inner)
+    return types
+
+
+def _layout_indices_indicate_formula(
+    seg: Dict[str, Any],
+    block_type_by_idx: Optional[Dict[int, str]],
+) -> bool:
+    if not block_type_by_idx:
         return False
-    from utils.latex_repair_payload import has_latex_content
-    return has_latex_content(text)
+    raw = seg.get("layout_block_indices")
+    if not raw or not isinstance(raw, (list, tuple)):
+        return False
+    for x in raw:
+        try:
+            i = int(x)
+        except (TypeError, ValueError):
+            continue
+        btype = block_type_by_idx.get(i)
+        if btype and btype in _FORMULA_BLOCK_TYPES:
+            return True
+    return False
+
+
+def _is_formula_segment_for_batch_repair(
+    seg: Dict[str, Any],
+    block_type_by_idx: Optional[Dict[int, str]],
+) -> bool:
+    if seg.get("is_equation"):
+        return True
+    for bt in _segment_declared_block_types(seg):
+        if bt in _FORMULA_BLOCK_TYPES:
+            return True
+    if _layout_indices_indicate_formula(seg, block_type_by_idx):
+        return True
+    return False
 
 
 def collect_formula_items(task_state: Dict[str, Any]) -> List[FormulaRepairItem]:
     segs = (task_state.get("translation_segments") or {}).get("segments") or []
     if not isinstance(segs, list):
         return []
+    layout_doc = task_state.get("layout_document")
+    block_type_by_idx = _try_build_layout_block_type_index(layout_doc)
+    # Diagnostics: segments that look like LaTeX under the old heuristic but are not typed as formula blocks.
+    from utils.latex_repair_payload import has_latex_content
+
+    skipped_latex_like_indices: List[int] = []
     items: List[FormulaRepairItem] = []
     for seg in segs:
         if not isinstance(seg, dict):
             continue
-        if not _is_formula_segment(seg):
+        if seg.get("is_image"):
+            continue
+        if not _is_formula_segment_for_batch_repair(seg, block_type_by_idx):
+            body = (seg.get("target_text") or seg.get("source_text") or "").strip()
+            if body and has_latex_content(body):
+                si = seg.get("segment_index")
+                if isinstance(si, int) and len(skipped_latex_like_indices) < 12:
+                    skipped_latex_like_indices.append(si)
             continue
         idx = seg.get("segment_index")
         if not isinstance(idx, int):
@@ -111,6 +185,20 @@ def collect_formula_items(task_state: Dict[str, Any]) -> List[FormulaRepairItem]
         source_text = str(seg.get("source_text") or "")
         target_text = str(seg.get("target_text") or "")
         items.append(FormulaRepairItem(segment_index=idx, source_text=source_text, target_text=target_text))
+    logger.info(
+        LogModule.RESTOR,
+        "[FORMULA-REPAIR] collect_formula_items: selected={n}, layout_index_map={has_map}, "
+        "skipped_latex_like_non_formula_sample={sample}",
+        n=len(items),
+        has_map=bool(block_type_by_idx),
+        sample=skipped_latex_like_indices[:8],
+    )
+    if layout_doc is None:
+        logger.debug(
+            LogModule.RESTOR,
+            "[FORMULA-REPAIR] collect_formula_items: task_state has no layout_document; "
+            "formula segments rely on is_equation / block_type / segment_info only.",
+        )
     return items
 
 

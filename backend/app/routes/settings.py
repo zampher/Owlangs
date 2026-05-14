@@ -417,11 +417,13 @@ async def get_i18n_settings():
 async def get_version():
     """Get application version from backend."""
     try:
-        from backend import __version__, __version_type__
+        from backend.runtime_version import get_backend_version_tuple
+
+        ver, vtype = get_backend_version_tuple()
         return {
             "ok": True,
-            "version": __version__,
-            "version_type": __version_type__,
+            "version": ver,
+            "version_type": vtype,
         }
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
