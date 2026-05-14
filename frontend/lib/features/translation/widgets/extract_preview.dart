@@ -3823,8 +3823,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
               final double oldPrepareProgress = prepareProgress;
               setState(() {
                 isTranslating = true;
-                translationProgress =
-                    0.1; // Start at 10% (translation starts at 10%)
+                translationProgress = 0.0; // Start at 0%, let backend drive actual progress
                 translationStatus = 'Translating...';
                 isPreparing = false;
                 prepareProgress = 1.0;
@@ -3840,14 +3839,14 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                 final translationNotifier = ref
                     .read(translationStateProviderFamily(widget.flowId!).notifier);
                 translationNotifier.setTranslating(true);
-                translationNotifier.setProgress(10);
+                translationNotifier.setProgress(0);
                 translationNotifier.setStatusText('processing');
               }
 
               // Log progress change
-              if ((oldTranslationProgress * 100).round() != 10) {
+              if ((oldTranslationProgress * 100).round() != 0) {
                 _log(
-                  '[ExtractPreview] Progress changed: translationProgress ${(oldTranslationProgress * 100).toStringAsFixed(1)}% -> 10.0% (translation started, workflowId=$currentWorkflowId)',
+                  '[ExtractPreview] Progress changed: translationProgress ${(oldTranslationProgress * 100).toStringAsFixed(1)}% -> 0.0% (translation started, workflowId=$currentWorkflowId)',
                   level: LogLevel.info,
                 );
               }

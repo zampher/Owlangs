@@ -1374,8 +1374,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       // Update status to show retranslation is in progress
       translationNotifier.setTranslating(true);
       translationNotifier.setStatusText('retranslating');
-      // CRITICAL: Set initial progress to 10% (same as backend and translation phase)
-      translationNotifier.setProgress(10);
+      // Start at 0% and let backend polling drive the actual progress.
+      translationNotifier.setProgress(0);
 
       // CRITICAL: Pass all failed segments at once to enable backend chunk merging
       // Backend will merge segments based on chunk_size (max token size), not fixed batch size

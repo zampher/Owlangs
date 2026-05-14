@@ -900,7 +900,7 @@ class StatusService:
                     with _language_detection_lock:
                         already_running = task_id in _language_detection_tasks
                     if skip_detect_start and not already_running:
-                        logger.info(
+                        logger.debug(
                             LogModule.WORKFLOW,
                             f"[STATUS] Task {task_id}: skip language-detection worker start "
                             f"(translation phase active)",
@@ -2592,7 +2592,7 @@ class StatusService:
                 # CRITICAL: chunk_to_segment_map is required for translation tasks, do not use fallback
                 # If chunk_to_segment_map is not available, it means the extraction phase failed to build it
                 # This should not happen if all formats properly call _build_chunk_to_segment_map
-                logger.error(
+                logger.warning(
                     LogModule.EXTRACT,
                     f"[PREVIEW-API] Task {task_id}: chunk_to_segment_map not available for chunk generation. "
                     f"This indicates a bug in the extraction phase - _build_chunk_to_segment_map was not called. "

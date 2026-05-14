@@ -202,7 +202,7 @@ async def get_translation_segments_api(
     
     segments_data = _ts_module().get_translation_segments(task_id)
     if segments_data is None:
-        logger.info(
+        logger.debug(
             LogModule.ROUTE,
             f"[TRANSLATION-SEGMENTS-API] No translation segments available for task '{task_id}'"
         )

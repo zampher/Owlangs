@@ -114,6 +114,8 @@ mixin ExtractPreviewPaginationMixin<T extends ConsumerStatefulWidget>
 
   /// Pre-calculate all segment heights using SegmentHeightCalculator
   /// This ensures stable maxScrollExtent and prevents scrollbar jitter
+  /// For large segment counts, calculation is batched across frames to avoid
+  /// CanvasKit WASM memory overflow.
   void precalculateAllHeights([double? actualWidth]) {
     if (allSegments.isEmpty || segmentsHeightCache == null) {
       return;
@@ -156,13 +158,68 @@ mixin ExtractPreviewPaginationMixin<T extends ConsumerStatefulWidget>
       imageDataMap: imageDataMap,
     );
 
-    // Pre-calculate all heights
+    // For large segment counts, batch calculation across frames to avoid
+    // CanvasKit WASM memory overflow from too many TextPainter.layout() calls.
+    const int batchSize = 200;
+    if (allSegments.length > batchSize) {
+      _precalculateAllHeightsBatched(
+        calculator,
+        allSegments,
+        excludedSegments,
+        batchSize,
+      );
+      return;
+    }
+
+    // Small count: calculate synchronously
     final Map<int, double> heights = calculator.calculateAllHeights(
       allSegments,
       excludedSegments,
     );
 
-    // Cache all calculated heights
+    _cacheHeightsAndLog(heights);
+  }
+
+  /// Batched height calculation to avoid blocking UI and CanvasKit memory overflow.
+  void _precalculateAllHeightsBatched(
+    SegmentHeightCalculator calculator,
+    List<String> segments,
+    Set<int> excludedSegments,
+    int batchSize,
+  ) {
+    var start = 0;
+
+    void calculateBatch() {
+      if (!mounted || segmentsHeightCache == null) return;
+
+      final end = (start + batchSize < segments.length)
+          ? start + batchSize
+          : segments.length;
+      for (var i = start; i < end; i++) {
+        final bool isExcluded = excludedSegments.contains(i);
+        final height = calculator.calculateItemHeight(
+          segments[i],
+          isExcluded: isExcluded,
+        );
+        segmentsHeightCache!.setHeight(i, height);
+      }
+
+      start = end;
+      if (start < segments.length) {
+        // Schedule next batch in next frame to yield to event loop
+        // and give CanvasKit time to reclaim WASM memory.
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => calculateBatch(),
+        );
+      }
+    }
+
+    calculateBatch();
+  }
+
+  void _cacheHeightsAndLog(Map<int, double> heights) {
+    if (segmentsHeightCache == null) return;
+
     var totalCalculatedHeight = 0;
     var minHeight = double.infinity;
     var maxHeight = 0;
@@ -184,7 +241,6 @@ mixin ExtractPreviewPaginationMixin<T extends ConsumerStatefulWidget>
       AppLogger.log(
         'ExtractPreview',
         'Pre-calculated ${heights.length} segment heights: '
-            'availableWidth=${availableWidth.toStringAsFixed(1)}, '
             'totalHeight=${totalCalculatedHeight.toStringAsFixed(1)}, '
             'minHeight=${minHeight.toStringAsFixed(1)}, '
             'maxHeight=${maxHeight.toStringAsFixed(1)}, '

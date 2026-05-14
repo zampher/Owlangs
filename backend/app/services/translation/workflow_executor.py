@@ -158,11 +158,16 @@ class WorkflowExecutor:
                 last_logged_progress['mapped_percent'] = 100
                 return
             
-            # Map chunk completion to overall progress band 10–90%. Message uses chunk ratio (N/M as %),
-            # not the translator's internal percent argument.
+            # Map chunk completion to overall progress band.
+            # For large batches (>10 chunks), start from 0% so users see meaningful progress growth.
+            # For small batches (<=10 chunks), keep 10%-90% band to avoid jumping from 0 to 100 too quickly.
+            # Message always uses raw chunk ratio (N/M as %) regardless of mapping.
             if total:
-                mapped_percent = 10 + int(80.0 * completed / total)
                 chunk_pct = min(100, int(100.0 * completed / total))
+                if total > 10:
+                    mapped_percent = int(90.0 * completed / total)
+                else:
+                    mapped_percent = 10 + int(80.0 * completed / total)
             else:
                 mapped_percent = 10
                 chunk_pct = 0

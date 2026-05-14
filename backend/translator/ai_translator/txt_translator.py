@@ -74,12 +74,38 @@ class TXTTranslator(AiTranslator):
         """
         Preprocessing step: Parse TXT file and split text by lines.
 
+        For large TXT files, prefers segments from source_chunks_cache
+        (pre-split by split_markdown_text during import) over raw splitlines()
+        to avoid generating an excessive number of tiny chunks during translation.
+
         Args:
             document (Document): Document object to be processed.
 
         Returns:
-            List[str]: List of original text lines to be translated.
+            List[str]: List of original text segments to be translated.
         """
+        # Try to use source_chunks_cache segments first (consistent with import phase)
+        task_id = getattr(self, '_task_id', None)
+        if task_id:
+            try:
+                from backend.app.services.task import task_manager
+                task_state = task_manager.get_task(task_id)
+                if task_state:
+                    cache_info = task_state.get("source_chunks_cache", {})
+                    cached_segments = cache_info.get("segments")
+                    if cached_segments and len(cached_segments) > 0:
+                        self.logger.info(
+                            LogModule.TRANS,
+                            f"[TXT_TRANSLATOR] Task {task_id}: Using {len(cached_segments)} segments from source_chunks_cache",
+                        )
+                        return [str(s) for s in cached_segments]
+            except Exception as e:
+                self.logger.debug(
+                    LogModule.TRANS,
+                    f"[TXT_TRANSLATOR] Failed to read source_chunks_cache: {e}",
+                )
+
+        # Fallback: decode and split by lines
         try:
             raw = document.content
             if raw is None:

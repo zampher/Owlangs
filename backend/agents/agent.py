@@ -1089,9 +1089,16 @@ class Agent:
                     
                     if (count != send_with_semaphore._last_logged_progress['count'] or 
                         progress_percent != send_with_semaphore._last_logged_progress['progress_percent']):
-                        unified_logger.debug(
-                            LogModule.TRANS, f"Translation progress: {count}/{total} chunks ({progress_percent}%)"
-                        )
+                        # Log at INFO level only when progress_percent changes to avoid spamming
+                        # the log with 500+ lines for large batches.
+                        if progress_percent != send_with_semaphore._last_logged_progress['progress_percent']:
+                            unified_logger.info(
+                                LogModule.TRANS, f"Translation progress: {count}/{total} chunks ({progress_percent}%)"
+                            )
+                        else:
+                            unified_logger.debug(
+                                LogModule.TRANS, f"Translation progress: {count}/{total} chunks ({progress_percent}%)"
+                            )
                         send_with_semaphore._last_logged_progress['count'] = count
                         send_with_semaphore._last_logged_progress['progress_percent'] = progress_percent
                     
@@ -1108,6 +1115,14 @@ class Agent:
             unified_logger.debug(
                 LogModule.TRANS, f"[CONCURRENT] Starting concurrent processing of {len(prompts)} chunks with max_concurrent={max_concurrent}"
             )
+
+            # Notify start of batch processing so the caller knows total chunk count
+            # before any individual chunk completes.
+            if progress_callback:
+                try:
+                    progress_callback(0, total, 0)
+                except Exception as e:
+                    unified_logger.warning(LogModule.TRANS, f"Progress callback failed at start: {e}")
 
             for idx, p_text in enumerate(prompts):
                 task = asyncio.create_task(send_with_semaphore(p_text, idx))

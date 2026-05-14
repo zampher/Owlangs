@@ -774,34 +774,38 @@ class HealthCheckFilter(logging.Filter):
 
 class StatusAPIFilter(logging.Filter):
     """
-    Filter to reduce log level for status API requests.
+    Filter to reduce log level for high-frequency polling API requests.
     
-    Status API is polled frequently by frontend, so we downgrade these logs
-    to DEBUG level to reduce log verbosity.
+    Status API and translation-segments API are polled frequently by frontend,
+    so we downgrade these logs to DEBUG level to reduce log verbosity.
     """
-    
+
+    # API paths that are polled frequently and should be downgraded to DEBUG
+    _POLLING_PATHS = ("/service/status/", "/service/translation-segments/")
+
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
-        """Downgrade status API requests to DEBUG level so they can be hidden when INFO is used."""
-        is_status_request = False
+        """Downgrade polling API requests to DEBUG level so they can be hidden when INFO is used."""
+        is_polling_request = False
 
         # Prefer structured attribute if available (uvicorn access logs)
         if hasattr(record, "request_line"):
-            if "/service/status/" in str(getattr(record, "request_line", "")):
-                is_status_request = True
+            request_line = str(getattr(record, "request_line", ""))
+            if any(path in request_line for path in self._POLLING_PATHS):
+                is_polling_request = True
 
         # Fallback: inspect rendered message (covers other logging paths)
-        if not is_status_request:
+        if not is_polling_request:
             try:
                 msg = record.getMessage()
             except Exception:
                 msg = str(getattr(record, "msg", ""))
-            if "/service/status/" in msg:
-                is_status_request = True
+            if any(path in msg for path in self._POLLING_PATHS):
+                is_polling_request = True
 
-        if is_status_request:
+        if is_polling_request:
             record.levelno = logging.DEBUG
             record.levelname = "DEBUG"
-            # Discard status polling logs when logger level is INFO or higher
+            # Discard polling logs when logger level is INFO or higher
             uvicorn_access = logging.getLogger("uvicorn.access")
             if uvicorn_access.level > logging.DEBUG:
                 return False
