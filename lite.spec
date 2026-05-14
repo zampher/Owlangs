@@ -114,6 +114,7 @@ hiddenimports = [
     'json_repair',
     # Code imports "from utils.xxx"; bundle has backend.utils; cli injects sys.modules["utils"] = backend.utils
     'backend.utils',
+    'backend.runtime_version',
     'backend.utils.resource_utils',
     'backend.utils.redis_manager',
     'backend.utils.utils',

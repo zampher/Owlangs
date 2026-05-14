@@ -22,6 +22,7 @@ binaries = []
 hiddenimports = [
     # Backend utils modules
     'backend.utils',
+    'backend.runtime_version',
     # Utils alias for PyInstaller compatibility
     'utils',
     'utils.resource_utils',
