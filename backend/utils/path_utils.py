@@ -7,6 +7,27 @@ import platform
 from pathlib import Path
 from typing import Dict, Optional
 
+# Log once when OWLANGS_CONFIG_PATH overrides config location (avoids confusion with another repo).
+_configs_dir_env_logged: bool = False
+
+
+def _log_configs_dir_from_env(resolved: Path) -> None:
+    global _configs_dir_env_logged
+    if _configs_dir_env_logged:
+        return
+    _configs_dir_env_logged = True
+    raw = os.environ.get("OWLANGS_CONFIG_PATH", "")
+    try:
+        from logger import unified_logger as _logger
+        from logger.logger import LogModule as _LM
+
+        _logger.info(
+            _LM.CONFIG,
+            f"[CONFIG-PATH] OWLANGS_CONFIG_PATH is set ({raw!r}); using configs directory: {resolved}",
+        )
+    except Exception:
+        pass
+
 
 def get_system_data_dir() -> str:
     """Get system-appropriate data directory for Owlangs
@@ -121,7 +142,9 @@ def get_configs_dir() -> Path:
     env_dir = os.environ.get("OWLANGS_CONFIG_PATH")
     if env_dir:
         # Use env dir even if it doesn't exist yet (will be created on first use)
-        return Path(env_dir) / "configs"
+        resolved = Path(env_dir) / "configs"
+        _log_configs_dir_from_env(resolved)
+        return resolved
     
     # 2. Project root configs directory (development - check first before Windows default)
     # In frozen (packaged) environments, avoid treating the temporary bundle directory
