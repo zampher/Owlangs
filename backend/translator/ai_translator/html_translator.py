@@ -254,7 +254,7 @@ class HtmlTranslator(AiTranslator):
         document.content = self._after_translate(soup, translatable_items, translated_texts, original_texts)
         return self
 
-    async def translate_async(self, document: Document, task_id: str = None, task_state: dict = None) -> Self:
+    async def translate_async(self, document: Document, task_id: str = None, task_state: dict = None, progress_callback=None) -> Self:
         """
         Asynchronously translate HTML document.
         
@@ -315,7 +315,7 @@ class HtmlTranslator(AiTranslator):
             # Translate segments using SegmentsTranslateAgent
             if self.glossary_agent:
                 self.glossary_dict_gen = await self.glossary_agent.send_segments_async(
-                    included_texts, self.chunk_size, segment_indices=included_indices
+                    included_texts, self.chunk_size, progress_callback=progress_callback, segment_indices=included_indices
                 )
                 if self.translate_agent:
                     self.translate_agent.update_glossary_dict(self.glossary_dict_gen)
@@ -325,7 +325,7 @@ class HtmlTranslator(AiTranslator):
                 if task_state and self.translate_agent:
                     self.translate_agent.task_state = task_state
                 translated_included_texts = await self.translate_agent.send_segments_async(
-                    included_texts, self.chunk_size, segment_indices=included_indices
+                    included_texts, self.chunk_size, progress_callback=progress_callback, segment_indices=included_indices
                 )
             else:
                 translated_included_texts = included_texts.copy()

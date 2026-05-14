@@ -198,7 +198,7 @@ class SrtTranslator(AiTranslator):
         document.content = self._after_translate(subtitles, translated_texts, original_texts)
         return self
 
-    async def translate_async(self, document: Document) -> Self:
+    async def translate_async(self, document: Document, progress_callback=None) -> Self:
         """
         Asynchronously translate SRT document.
         """
@@ -210,7 +210,7 @@ class SrtTranslator(AiTranslator):
             return self
 
         if self.glossary_agent:
-            self.glossary_dict_gen = await self.glossary_agent.send_segments_async(original_texts, self.chunk_size)
+            self.glossary_dict_gen = await self.glossary_agent.send_segments_async(original_texts, self.chunk_size, progress_callback=progress_callback)
             if self.translate_agent:
                 self.translate_agent.update_glossary_dict(self.glossary_dict_gen)
 
@@ -228,7 +228,7 @@ class SrtTranslator(AiTranslator):
                 except Exception as e:
                     self.logger.debug(LogModule.TRANS, f"[SRT_TRANSLATOR] Failed to set task_state on agent: {e}")
             
-            translated_texts = await self.translate_agent.send_segments_async(original_texts, self.chunk_size)
+            translated_texts = await self.translate_agent.send_segments_async(original_texts, self.chunk_size, progress_callback=progress_callback)
             
             # Save API logs to temp directory
             if task_id:

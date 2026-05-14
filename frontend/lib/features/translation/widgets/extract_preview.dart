@@ -3111,6 +3111,52 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
               ],
             ),
           ],
+          // Translation progress bar (shown when translating) — MOVED before Spacer for consistent visibility
+          if (isTranslating) ...<Widget>[
+            const SizedBox(width: 12),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                SizedBox(
+                  width: 200,
+                  height: 4,
+                  child: LinearProgressIndicator(
+                    value: translationProgress == 0.0 ? null : translationProgress,
+                    backgroundColor: Colors.grey.shade300,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Colors.blue.shade700,
+                    ),
+                    minHeight: 4,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  translationProgress > 0
+                      ? '${(translationProgress * 100).toInt()}%'
+                      : '',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.blue.shade700,
+                  ),
+                ),
+                if (translationStatus.isNotEmpty) ...<Widget>[
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      translationStatus,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
           const Spacer(),
           // Segments statistics (moved to the right side for free expansion)
           if (initialDataLoaded && !isPreparing && allSegments.isNotEmpty)
@@ -3175,49 +3221,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                 minHeight: 28,
               ),
             ),
-          // Translation progress bar (shown when translating)
-          if (isTranslating) ...<Widget>[
-            const SizedBox(width: 6), // Further reduced spacing
-            Flexible(
-              child: SizedBox(
-                height: 4, // Reduced from default to 4
-                child: LinearProgressIndicator(
-                  value:
-                      translationProgress == 0.0 ? null : translationProgress,
-                  backgroundColor: Colors.grey.shade300,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    Colors.blue
-                        .shade700, // Use blue for translation to distinguish from Extract (green)
-                  ),
-                  minHeight: 4, // Reduced from 6 to 4
-                ),
-              ),
-            ),
-            const SizedBox(width: 4), // Further reduced spacing
-            Text(
-              translationProgress > 0
-                  ? '${(translationProgress * 100).toInt()}%'
-                  : '',
-              style: TextStyle(
-                fontSize: 10, // Further reduced from 11 to 10
-                fontWeight: FontWeight.w600,
-                color: Colors.blue.shade700, // Use blue for translation
-              ),
-            ),
-            if (translationStatus.isNotEmpty) ...<Widget>[
-              const SizedBox(width: 4), // Further reduced spacing
-              Flexible(
-                child: Text(
-                  translationStatus,
-                  style: TextStyle(
-                    fontSize: 10, // Reduced from 11 to 10
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ],
+
         ],
       ),
     );

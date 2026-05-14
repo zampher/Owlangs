@@ -42,9 +42,9 @@ class HtmlWorkflow(Workflow[HtmlWorkflowConfig, Document, Document], HTMLExporta
         self.document_translated = document
         return self
 
-    async def translate_async(self, task_id: str = None, task_state: dict = None) -> Self:
+    async def translate_async(self, task_id: str = None, task_state: dict = None, progress_callback=None) -> Self:
         document, translator = self._pre_translate(self.document_original)
-        await translator.translate_async(document, task_id=task_id, task_state=task_state)
+        await translator.translate_async(document, task_id=task_id, task_state=task_state, progress_callback=progress_callback)
         if translator.glossary_dict_gen:
             self.attachment.add_document("glossary", Glossary.glossary_dict2csv(translator.glossary_dict_gen))
         # Store translation segments for later use in _record_html_segments

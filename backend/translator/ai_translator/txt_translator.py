@@ -174,7 +174,7 @@ class TXTTranslator(AiTranslator):
         document.content = self._after_translate(final_translated_texts, original_texts)
         return self
 
-    async def translate_async(self, document: Document) -> Self:
+    async def translate_async(self, document: Document, progress_callback=None) -> Self:
         """
         Asynchronously translate TXT document.
 

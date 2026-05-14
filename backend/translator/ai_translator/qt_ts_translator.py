@@ -271,7 +271,7 @@ class QtTsTranslator(AiTranslator):
         
         return self
 
-    async def translate_async(self, document: Document) -> Self:
+    async def translate_async(self, document: Document, progress_callback=None) -> Self:
         """
         Asynchronously translate Qt .ts file.
         """
@@ -287,7 +287,7 @@ class QtTsTranslator(AiTranslator):
         
         # Generate glossary if needed
         if self.glossary_agent:
-            self.glossary_dict_gen = await self.glossary_agent.send_segments_async(original_texts, self.chunk_size)
+            self.glossary_dict_gen = await self.glossary_agent.send_segments_async(original_texts, self.chunk_size, progress_callback=progress_callback)
             if self.translate_agent:
                 self.translate_agent.update_glossary_dict(self.glossary_dict_gen)
         
@@ -305,7 +305,7 @@ class QtTsTranslator(AiTranslator):
                 except Exception as e:
                     self.logger.debug(LogModule.TRANS, f"[QT_TS_TRANSLATOR] Failed to set task_state on agent: {e}")
             
-            translated_texts = await self.translate_agent.send_segments_async(original_texts, self.chunk_size)
+            translated_texts = await self.translate_agent.send_segments_async(original_texts, self.chunk_size, progress_callback=progress_callback)
             
             # Save API logs to temp directory
             if task_id:

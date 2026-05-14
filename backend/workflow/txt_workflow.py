@@ -59,7 +59,7 @@ class TXTWorkflow(Workflow[TXTWorkflowConfig, Document, Document], HTMLExportabl
         if workflow_type:
             translator._workflow_type = workflow_type
         
-        await translator.translate_async(document)
+        await translator.translate_async(document, progress_callback=progress_callback)
         if translator.glossary_dict_gen:
             self.attachment.add_document("glossary", Glossary.glossary_dict2csv(translator.glossary_dict_gen))
         self.document_translated = document

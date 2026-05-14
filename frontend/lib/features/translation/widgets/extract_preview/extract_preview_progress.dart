@@ -732,6 +732,20 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
             });
           }
 
+          // CRITICAL: Sync progress to translationStateProvider so TranslationResultToolbar
+          // on the Translate page also shows the correct progress.
+          final extractWidget = widget as ExtractPreview;
+          final flowId = extractWidget.flowId;
+          if (flowId != null) {
+            final translationNotifier =
+                ref.read(translationStateProviderFamily(flowId).notifier);
+            translationNotifier.setTranslating(true);
+            translationNotifier.setProgress(progress.clamp(0, 100));
+            if (message.isNotEmpty) {
+              translationNotifier.setStatusText(message);
+            }
+          }
+
           // Log progress change
           if ((oldProgress * 100).round() != (newProgress * 100).round()) {
             AppLogger.log(

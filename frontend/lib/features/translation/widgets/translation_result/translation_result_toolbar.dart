@@ -117,12 +117,14 @@ class TranslationResultToolbar extends ConsumerWidget {
     // Consider task completed when:
     // - backend explicitly reports completed/processing+100, OR
     // - translation is no longer running, no active operation, and progress>=100, OR
-    // - we already have downloads from backend.
+    // - we already have downloads from backend (only when NOT actively translating).
+    // CRITICAL: hasDownloads must NOT hide progress bar during active translation,
+    // because format conversion may leave downloads before translation starts.
     final isCompletedByArtifacts = isCompletedLike ||
         (!isTranslating &&
-            currentOperation == TranslationOperation.none &&
-            progress >= 100) ||
-        hasDownloads;
+            ((currentOperation == TranslationOperation.none &&
+                    progress >= 100) ||
+                hasDownloads));
     // Show progress bar only when actively translating (not after completion)
     final isActive = !isCompletedByArtifacts &&
         (isTranslating ||
@@ -236,40 +238,10 @@ class TranslationResultToolbar extends ConsumerWidget {
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  // Status text and loading indicator
+                  // Cancel button and status text
                   if (isActive) ...<Widget>[
                     const SizedBox(width: 4), // Further reduced spacing
-                    Icon(
-                      _getStatusIcon(statusText),
-                      size: 14, // Further reduced from 16 to 14
-                      color: _getStatusColor(statusText),
-                    ),
-                    const SizedBox(width: 4), // Further reduced spacing
-                    Flexible(
-                      child: Text(
-                        _getStatusDisplayText(l10n, statusText),
-                        style: TextStyle(
-                          fontSize: 10, // Further reduced from 11 to 10
-                          fontWeight: FontWeight.w600,
-                          color: _getStatusColor(statusText),
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                    const SizedBox(width: 4), // Further reduced spacing
-                    SizedBox(
-                      width: 12, // Further reduced from 14 to 12
-                      height: 12, // Further reduced from 14 to 12
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          _getStatusColor(statusText),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4), // Further reduced spacing
-                    // Cancel button
+                    // Cancel button placed before status text so its position never shifts
                     TextButton.icon(
                       onPressed: onCancelTranslation,
                       icon: const Icon(
@@ -288,6 +260,36 @@ class TranslationResultToolbar extends ConsumerWidget {
                         ),
                         minimumSize:
                             const Size(0, 28), // Increased button height
+                      ),
+                    ),
+                    const SizedBox(width: 4), // Further reduced spacing
+                    Icon(
+                      _getStatusIcon(statusText),
+                      size: 14, // Further reduced from 16 to 14
+                      color: _getStatusColor(statusText),
+                    ),
+                    const SizedBox(width: 4), // Further reduced spacing
+                    SizedBox(
+                      width: 12, // Further reduced from 14 to 12
+                      height: 12, // Further reduced from 14 to 12
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          _getStatusColor(statusText),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4), // Further reduced spacing
+                    Flexible(
+                      child: Text(
+                        _getStatusDisplayText(l10n, statusText),
+                        style: TextStyle(
+                          fontSize: 10, // Further reduced from 11 to 10
+                          fontWeight: FontWeight.w600,
+                          color: _getStatusColor(statusText),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
                     ),
                   ],
