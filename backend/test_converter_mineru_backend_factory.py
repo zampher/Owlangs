@@ -57,6 +57,16 @@ def test_local_sync_task_id_constant():
     assert _LOCAL_MINERU_SYNC_TASK_ID == "__LOCAL_MINERU_SYNC__"
 
 
+def test_format_local_mineru_upload_error_device_string_hint():
+    from converter.x2md.converter_mineru import _format_local_mineru_upload_error
+
+    body = '{"error":"Device string must not be empty","backend":"vlm-auto-engine"}'
+    msg = _format_local_mineru_upload_error(409, body)
+    assert "Upload failed: 409" in msg
+    assert "Device string must not be empty" in msg
+    assert "nvidia-smi" in msg
+
+
 def test_local_backend_roundtrip_pending_zip():
     from converter.x2md.converter_mineru import (
         MinerULocalBackend,
@@ -85,5 +95,6 @@ if __name__ == "__main__":
     test_cloud_host_always_cloud_backend()
     test_non_mineru_host_uses_local_backend()
     test_local_sync_task_id_constant()
+    test_format_local_mineru_upload_error_device_string_hint()
     test_local_backend_roundtrip_pending_zip()
     print("converter_mineru tests OK")

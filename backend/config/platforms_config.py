@@ -3,7 +3,7 @@
 
 import os
 import json
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, fields
 from typing import Optional, Dict, Any
 from pathlib import Path
 
@@ -162,7 +162,15 @@ class PlatformsConfig:
                     if not platform_type_uses_llm_chunk_concurrent(ptype):
                         pdata.pop("chunk_size", None)
                         pdata.pop("concurrent", None)
-                    self.platforms[platform_key] = AIPlatformConfig(**pdata)
+                    allowed = {f.name for f in fields(AIPlatformConfig)}
+                    unknown = sorted(k for k in pdata if k not in allowed)
+                    if unknown:
+                        logger.debug(
+                            LogModule.CONFIG,
+                            f"Platforms '{platform_key}': ignoring keys not defined on AIPlatformConfig: {unknown}",
+                        )
+                    pdata_filtered = {k: v for k, v in pdata.items() if k in allowed}
+                    self.platforms[platform_key] = AIPlatformConfig(**pdata_filtered)
     
     def get_config_dict(self) -> Dict[str, Any]:
         """Get configuration dictionary"""

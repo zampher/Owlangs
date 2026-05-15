@@ -1045,10 +1045,23 @@ class _AnonymizeScreenState extends ConsumerState<AnonymizeScreen> {
           try {
             final formatSvc = FormatConversionService();
             final bytes = file.bytes ?? (await File(file.path!).readAsBytes());
+            final GlobalSettings globalSettings =
+                ref.read(globalSettingsProvider);
+            final FormatConvertParserOptions parserOpts =
+                await formatSvc.resolveParserOptions(
+              parsingEngine: globalSettings.parsingEngine,
+              formulaOcr: globalSettings.formulaOcr,
+              tableOcr: globalSettings.tableOcr,
+            );
 
             final convertRes = await formatSvc.convertFormat(
               fileBytes: bytes,
               fileName: file.name,
+              convertEngine: parserOpts.convertEngine,
+              formulaOcr: parserOpts.formulaOcr,
+              tableOcr: parserOpts.tableOcr,
+              modelVersion: parserOpts.modelVersion,
+              mineruToken: parserOpts.mineruToken,
             );
 
             // Always replace pending tab, even if flow is not active (mounted check)

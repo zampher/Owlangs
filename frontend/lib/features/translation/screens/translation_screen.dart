@@ -2281,10 +2281,23 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         final sourceLang =
             qs.sourceLang.isNotEmpty ? qs.sourceLang : 'auto';
 
+        final GlobalSettings globalSettings = ref.read(globalSettingsProvider);
         final FormatConversionService formatSvc = FormatConversionService();
+        final FormatConvertParserOptions parserOpts =
+            await formatSvc.resolveParserOptions(
+          parsingEngine: globalSettings.parsingEngine,
+          formulaOcr: globalSettings.formulaOcr,
+          tableOcr: globalSettings.tableOcr,
+        );
+
         final Map<String, dynamic> convertRes = await formatSvc.convertFormat(
           fileBytes: bytes,
           fileName: 'text_input.md',
+          convertEngine: parserOpts.convertEngine,
+          formulaOcr: parserOpts.formulaOcr,
+          tableOcr: parserOpts.tableOcr,
+          modelVersion: parserOpts.modelVersion,
+          mineruToken: parserOpts.mineruToken,
           skipCache: true, // Always skip cache for new sessions/page refresh
           toLang:
               toLang, // CRITICAL: Pass target language for exclusion detection
@@ -3040,18 +3053,13 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     try {
       // Get global settings for parsing engine config
       final GlobalSettings globalSettings = ref.read(globalSettingsProvider);
-
-      // Get MinerU token if needed
-      String? mineruToken;
-      if (globalSettings.parsingEngine == 'mineru') {
-        final ConfigService appConfigService = ConfigService();
-        final Map<String, dynamic>? secretsConfig =
-            await appConfigService.getSecretsConfig();
-        final Map<String, dynamic>? mineruTokenData =
-            secretsConfig?['translator_mineru_token_meta']
-                as Map<String, dynamic>?;
-        mineruToken = mineruTokenData?['key'] as String? ?? '';
-      }
+      final FormatConversionService formatService = FormatConversionService();
+      final FormatConvertParserOptions parserOpts =
+          await formatService.resolveParserOptions(
+        parsingEngine: globalSettings.parsingEngine,
+        formulaOcr: globalSettings.formulaOcr,
+        tableOcr: globalSettings.tableOcr,
+      );
 
       // Determine skipCache based on whether Extract phase has been run
       // If Extract phase was run (existingExtractTaskId exists), use cache (skipCache=false)
@@ -3076,15 +3084,14 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       final sourceLang =
           qs.sourceLang.isNotEmpty ? qs.sourceLang : 'auto';
 
-      final FormatConversionService formatService = FormatConversionService();
       final Map<String, dynamic> result = await formatService.convertFormat(
         fileBytes: fileBytes,
         fileName: fileName,
-        convertEngine: globalSettings.parsingEngine,
-        formulaOcr: globalSettings.formulaOcr,
-        tableOcr: globalSettings.tableOcr,
-        modelVersion: 'vlm', // Default from parsing engine settings
-        mineruToken: mineruToken?.isNotEmpty ?? false ? mineruToken : null,
+        convertEngine: parserOpts.convertEngine,
+        formulaOcr: parserOpts.formulaOcr,
+        tableOcr: parserOpts.tableOcr,
+        modelVersion: parserOpts.modelVersion,
+        mineruToken: parserOpts.mineruToken,
         // deepSplit: Let backend use default from translation_config.json based on file format
         skipCache: skipCache, // Reuse cache if Extract results are available
         toLang:
@@ -3740,9 +3747,22 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       final sourceLang =
           qs.sourceLang.isNotEmpty ? qs.sourceLang : 'auto';
 
+      final GlobalSettings globalSettings = ref.read(globalSettingsProvider);
+      final FormatConvertParserOptions parserOpts =
+          await formatSvc.resolveParserOptions(
+        parsingEngine: globalSettings.parsingEngine,
+        formulaOcr: globalSettings.formulaOcr,
+        tableOcr: globalSettings.tableOcr,
+      );
+
       final Map<String, dynamic> convertRes = await formatSvc.convertFormat(
         fileBytes: bytes,
         fileName: file.name,
+        convertEngine: parserOpts.convertEngine,
+        formulaOcr: parserOpts.formulaOcr,
+        tableOcr: parserOpts.tableOcr,
+        modelVersion: parserOpts.modelVersion,
+        mineruToken: parserOpts.mineruToken,
         skipCache:
             true, // Extract phase: Always access MinerU server directly (skipCache=true to force fresh conversion)
         toLang:

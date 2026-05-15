@@ -192,6 +192,11 @@ class FormatConversionService:
                     convert_engine = getattr(parsing_engine, 'convert_engine', 'mineru')
                 else:
                     convert_engine = 'mineru'
+                logger.debug(
+                    LogModule.WORKFLOW,
+                    f"[FORMAT_CONVERSION] convert_engine not in request; using server default "
+                    f"convert_engine={convert_engine}",
+                )
             # Images: always use MinerU for OCR (extract text for translation)
             _name = (request.file_name or "").lower()
             file_ext = ("." + _name.rsplit(".", 1)[-1]) if "." in _name else ""

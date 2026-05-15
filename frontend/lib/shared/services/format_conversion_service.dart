@@ -167,4 +167,46 @@ class FormatConversionService {
 
   /// Get authentication token from ConfigService
   String? _getAuthToken() => _configService.authorizationHeader;
+
+  /// Parser options aligned with global settings (cloud vs local MinerU, OCR flags).
+  Future<FormatConvertParserOptions> resolveParserOptions({
+    required String parsingEngine,
+    required bool formulaOcr,
+    required bool tableOcr,
+    String modelVersion = 'vlm',
+  }) async {
+    String? mineruToken;
+    if (parsingEngine == 'mineru') {
+      final Map<String, dynamic>? secretsConfig =
+          await _configService.getSecretsConfig();
+      final Map<String, dynamic>? mineruTokenData =
+          secretsConfig?['translator_mineru_token_meta']
+              as Map<String, dynamic>?;
+      mineruToken = mineruTokenData?['key'] as String? ?? '';
+    }
+    return FormatConvertParserOptions(
+      convertEngine: parsingEngine,
+      formulaOcr: formulaOcr,
+      tableOcr: tableOcr,
+      modelVersion: modelVersion,
+      mineruToken: mineruToken?.isNotEmpty ?? false ? mineruToken : null,
+    );
+  }
+}
+
+/// MinerU / parsing options for [FormatConversionService.convertFormat].
+class FormatConvertParserOptions {
+  const FormatConvertParserOptions({
+    required this.convertEngine,
+    required this.formulaOcr,
+    required this.tableOcr,
+    this.modelVersion = 'vlm',
+    this.mineruToken,
+  });
+
+  final String convertEngine;
+  final bool formulaOcr;
+  final bool tableOcr;
+  final String modelVersion;
+  final String? mineruToken;
 }

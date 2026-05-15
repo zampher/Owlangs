@@ -25,6 +25,7 @@ API Differences:
         - GET /tasks/{task_id}/result - Get task result
         - Returns: Direct ZIP file content or JSON
         - Fields: formula_enable, table_enable, lang_list[], backend, response_format_zip
+        - GPU/device is server-side only (mineru-api host); no client device field in multipart.
 """
 
 import asyncio
@@ -109,6 +110,22 @@ MODEL_TO_BACKEND = {
     "vlm": "vlm-auto-engine",
     "hybrid": "hybrid-auto-engine",
 }
+
+
+def _format_local_mineru_upload_error(status_code: int, response_text: str) -> str:
+    """Augment local mineru-api upload failures with hints for known server errors."""
+    text = response_text or ""
+    base = f"Upload failed: {status_code} - {text[:500]}"
+    if status_code == 409 and "Device string must not be empty" in text:
+        base += (
+            " [MinerU server] GPU/CUDA unavailable on mineru-api host "
+            "(check nvidia-smi, driver after OS upgrade, mineru-api logs)."
+        )
+        logger.error(
+            LogModule.CONVERT,
+            "[MINERU Local] mineru-api 409: device string empty on host (VLM backend).",
+        )
+    return base
 
 
 @dataclass(kw_only=True)
@@ -639,7 +656,7 @@ class MinerULocalBackend(MinerUBackend):
             'return_middle_json': 'true',  # Include middle_json for layout
             'response_format_zip': str(return_zip).lower(),
         }
-        
+
         for key, value in form_fields.items():
             body_parts.append(f"--{boundary}\r\n".encode('utf-8'))
             body_parts.append(f'Content-Disposition: form-data; name="{key}"\r\n'.encode('utf-8'))
@@ -672,7 +689,7 @@ class MinerULocalBackend(MinerUBackend):
             response = client.post(url, headers=headers, content=body_bytes)
             
             if response.status_code != 200:
-                raise Exception(f"Upload failed: {response.status_code} - {response.text[:500]}")
+                raise Exception(_format_local_mineru_upload_error(response.status_code, response.text))
             
             # Response should be ZIP file
             content_type = response.headers.get('content-type', '')
@@ -754,7 +771,7 @@ class MinerULocalBackend(MinerUBackend):
             response = await client.post(url, headers=headers, content=body_bytes)
             
             if response.status_code != 200:
-                raise Exception(f"Upload failed: {response.status_code} - {response.text[:500]}")
+                raise Exception(_format_local_mineru_upload_error(response.status_code, response.text))
             
             # Response should be ZIP file
             content_type = response.headers.get('content-type', '')
