@@ -799,6 +799,25 @@ class TranslationService:
                 convert_state = self.task_manager.get_task(convert_task_id)
                 if isinstance(convert_state, dict):
                     import copy
+
+                    # copy_source_only translate tasks mark every segment excluded; real Translate must
+                    # inherit exclusion metadata from the upstream format-convert task instead.
+                    exclusion_source = convert_state
+                    effective_convert_task_id = convert_task_id
+                    if convert_state.get("copy_source_only"):
+                        upstream_id = convert_state.get("convert_task_id")
+                        if upstream_id and upstream_id != convert_task_id:
+                            upstream_state = self.task_manager.get_task(upstream_id)
+                            if isinstance(upstream_state, dict):
+                                effective_convert_task_id = upstream_id
+                                if upstream_state.get("segments_metadata"):
+                                    exclusion_source = upstream_state
+                                logger.info(
+                                    LogModule.TRANS,
+                                    f"[TRANSLATION-SERVICE] Task {task_id}: convert_task_id={convert_task_id} "
+                                    f"was copy_source_only; using exclusion metadata from upstream {upstream_id}",
+                                )
+
                     copied_keys = []
                     for k in (
                         "image_data_map",
@@ -813,15 +832,23 @@ class TranslationService:
                     # CRITICAL: Copy segments_metadata to preserve excluded_segments and excluded_segment_indices
                     # This ensures user-selected exclusions from Convert phase are preserved in Translate phase
                     # Use deep copy to ensure nested dicts (excluded_segments) are properly copied
-                    if "segments_metadata" in convert_state:
-                        task_state["segments_metadata"] = copy.deepcopy(convert_state["segments_metadata"])
-                        excluded_segments_count = len(convert_state.get("segments_metadata", {}).get("excluded_segments", {}))
-                        excluded_indices_count = len(convert_state.get("segments_metadata", {}).get("excluded_segment_indices", []))
+                    if "segments_metadata" in exclusion_source:
+                        task_state["segments_metadata"] = copy.deepcopy(
+                            exclusion_source["segments_metadata"]
+                        )
+                        excluded_segments_count = len(
+                            exclusion_source.get("segments_metadata", {}).get("excluded_segments", {})
+                        )
+                        excluded_indices_count = len(
+                            exclusion_source.get("segments_metadata", {}).get("excluded_segment_indices", [])
+                        )
                         if excluded_segments_count > 0 or excluded_indices_count > 0:
                             logger.info(
                                 LogModule.TRANS,
-                                f"[TRANSLATION-SERVICE] Task {task_id}: Copied segments_metadata from convert_task_id={convert_task_id}: "
-                                f"{excluded_segments_count} excluded_segments (dict), {excluded_indices_count} excluded_segment_indices (list)"
+                                f"[TRANSLATION-SERVICE] Task {task_id}: Copied segments_metadata from "
+                                f"convert_task_id={effective_convert_task_id}: "
+                                f"{excluded_segments_count} excluded_segments (dict), "
+                                f"{excluded_indices_count} excluded_segment_indices (list)",
                             )
                             copied_keys.append("segments_metadata")
                     
@@ -876,8 +903,15 @@ class TranslationService:
                         copied_keys.append("ebook_metadata")
                     
                     if copied_keys:
-                        # Store convert_task_id so Translate phase preview preserves user's exclusion choices from Extract
-                        task_state["convert_task_id"] = convert_task_id
+                        # Store format-convert task id (not copy_source_only shell) for downstream inherits
+                        task_state["convert_task_id"] = effective_convert_task_id
+                        from utils.translation_segments import reconcile_excluded_segments_from_layout
+                        if not getattr(payload, "copy_source_only", False) and reconcile_excluded_segments_from_layout(task_state, task_id):
+                            logger.info(
+                                LogModule.TRANS,
+                                f"[TRANSLATION-SERVICE] Task {task_id}: Reconciled inherited exclusions "
+                                f"from layout_prepared_chunks (convert_task_id={effective_convert_task_id})",
+                            )
                         logger.info(
                             LogModule.TRANS,
                             f"[TRANSLATION-SERVICE] Task {task_id}: Inherited assets from convert_task_id={convert_task_id}: {copied_keys}"
@@ -1226,6 +1260,12 @@ class TranslationService:
                 else:
                     logger.info(LogModule.EXTRACT, f"[TRANSLATION-SERVICE] Task {task_id}: Preparing markdown preview from document_original before translation to ensure all segments (including images) are available")
                     self._prepare_markdown_based_preview(task_id, workflow, payload, task_state, original_filename, is_format_conversion=False)
+
+            # Convert toolbar: copy source to target on translate task only (no LLM, no convert-task exclude-all)
+            copy_source_only = bool(getattr(payload, "copy_source_only", False))
+            if copy_source_only:
+                from utils.translation_segments import apply_copy_source_only_exclusions
+                apply_copy_source_only_exclusions(task_state, task_id)
 
             # When all segments are excluded, complete immediately with source as target (no AI call)
             from utils.translation_segments import complete_translation_with_source_only

@@ -3437,6 +3437,119 @@ def _get_total_segment_count(task_state: dict) -> int:
     return 0
 
 
+def excluded_indices_from_layout_prepared_chunks(task_state: dict) -> set[int]:
+    """Collect segment indices marked is_excluded on layout_prepared_chunks (PDF layout path)."""
+    indices: set[int] = set()
+    for chunk in task_state.get("layout_prepared_chunks") or []:
+        if not isinstance(chunk, dict) or not chunk.get("is_excluded"):
+            continue
+        for raw_idx in chunk.get("segment_indices") or []:
+            try:
+                indices.add(int(raw_idx))
+            except (TypeError, ValueError):
+                continue
+    return indices
+
+
+def _replace_excluded_segments_metadata(
+    task_state: dict,
+    excluded_by_index: dict[int, "ExclusionReason"],
+) -> None:
+    """
+    Replace excluded_segments wholesale (does not preserve stale USER_SELECTED entries).
+    Used when reconciling against layout_prepared_chunks after mistaken exclude-all.
+    """
+    import time
+    from exclusion.core import ExclusionReason
+
+    if "segments_metadata" not in task_state:
+        task_state["segments_metadata"] = {}
+    segments_metadata = task_state["segments_metadata"]
+    excluded_dict_str_keys: dict[str, dict] = {}
+    for idx, reason in excluded_by_index.items():
+        reason_str = reason.value if isinstance(reason, ExclusionReason) else str(reason)
+        excluded_dict_str_keys[str(int(idx))] = {
+            "reason": reason_str,
+            "detected_at": time.time(),
+            "metadata": {},
+        }
+    segments_metadata["excluded_segments"] = excluded_dict_str_keys
+    segments_metadata["excluded_segment_indices"] = sorted(int(k) for k in excluded_dict_str_keys)
+
+
+def apply_copy_source_only_exclusions(task_state: dict, task_id: str = "") -> bool:
+    """
+    Mark every segment excluded on the translate task so complete_translation_with_source_only
+    fills target from source. Does not modify the linked convert/extract task.
+    """
+    from exclusion.core import ExclusionReason
+
+    total = _get_total_segment_count(task_state)
+    if total <= 0:
+        logger.warning(
+            LogModule.TRANS,
+            f"[COPY-SOURCE-ONLY] Task {task_id}: cannot apply — no segments in task_state",
+        )
+        return False
+
+    task_state["copy_source_only"] = True
+    rebuilt = {i: ExclusionReason.USER_SELECTED for i in range(total)}
+    _replace_excluded_segments_metadata(task_state, rebuilt)
+    logger.info(
+        LogModule.TRANS,
+        f"[COPY-SOURCE-ONLY] Task {task_id}: marked all {total} segments excluded for source-as-target copy",
+    )
+    return True
+
+
+def reconcile_excluded_segments_from_layout(task_state: dict, task_id: str = "") -> bool:
+    """
+    Fix stale metadata when every segment appears excluded but layout chunks still have translatable text.
+    Returns True if segments_metadata was corrected.
+    """
+    from exclusion.core import ExclusionManager, ExclusionReason
+
+    total = _get_total_segment_count(task_state)
+    if total <= 0:
+        return False
+
+    current = ExclusionManager.get_excluded_segments(task_state)
+    if len(current) < total:
+        return False
+
+    layout_excluded = excluded_indices_from_layout_prepared_chunks(task_state)
+    if not layout_excluded or len(layout_excluded) >= total:
+        return False
+
+    segments_metadata = task_state.get("segments_metadata") or {}
+    existing_dict = segments_metadata.get("excluded_segments") or {}
+    rebuilt: dict[int, ExclusionReason] = {}
+    for idx in layout_excluded:
+        key = str(idx)
+        info = existing_dict.get(key) or existing_dict.get(idx)
+        reason_str = None
+        if isinstance(info, dict):
+            reason_str = info.get("reason")
+        elif isinstance(info, str):
+            reason_str = info
+        if reason_str == ExclusionReason.USER_SELECTED.value:
+            reason_str = None
+        try:
+            reason = ExclusionReason(reason_str) if reason_str else ExclusionReason.UNKNOWN
+        except ValueError:
+            reason = ExclusionReason.UNKNOWN
+        rebuilt[idx] = reason
+
+    _replace_excluded_segments_metadata(task_state, rebuilt)
+    logger.warning(
+        LogModule.EXCLUSION,
+        f"[EXCLUSION-RECONCILE] Task {task_id}: corrected excluded segments "
+        f"{len(current)} -> {len(rebuilt)} using layout_prepared_chunks "
+        f"(total_segments={total})",
+    )
+    return True
+
+
 def complete_translation_with_source_only(
     task_id: str,
     task_state: Optional[dict] = None,
@@ -3453,6 +3566,9 @@ def complete_translation_with_source_only(
         return False
 
     from exclusion.core import ExclusionManager
+
+    if not task_state.get("copy_source_only"):
+        reconcile_excluded_segments_from_layout(task_state, task_id or "")
 
     total = _get_total_segment_count(task_state)
     if total <= 0:
@@ -3632,7 +3748,43 @@ def restore_auto_exclusion(
         f"{removed} user exclusions removed, {len(indices)} content-based excluded. "
         "Frontend should call getLayoutExtract to re-detect.",
     )
+
+    _sync_translate_tasks_exclusion_from_convert(task_id, task_state)
+
     return {"success": True, "excluded_segment_indices": indices, "removed_count": removed}
+
+
+def _sync_translate_tasks_exclusion_from_convert(convert_task_id: str, convert_state: dict) -> None:
+    """Copy reconciled segments_metadata to translate tasks that inherit this convert task."""
+    import copy
+
+    try:
+        from backend.app.services.task import task_manager
+    except Exception:
+        return
+
+    metadata_snapshot = copy.deepcopy(convert_state.get("segments_metadata") or {})
+    layout_chunks_snapshot = copy.deepcopy(convert_state.get("layout_prepared_chunks") or [])
+    if not metadata_snapshot and not layout_chunks_snapshot:
+        return
+
+    for other_id, other_state in list(task_manager.tasks.items()):
+        if not isinstance(other_state, dict):
+            continue
+        if other_state.get("convert_task_id") != convert_task_id:
+            continue
+        if other_id == convert_task_id:
+            continue
+        if metadata_snapshot:
+            other_state["segments_metadata"] = copy.deepcopy(metadata_snapshot)
+        if layout_chunks_snapshot:
+            other_state["layout_prepared_chunks"] = copy.deepcopy(layout_chunks_snapshot)
+        other_state.pop("translation_segments", None)
+        other_state.pop("chunk_to_segment_map", None)
+        logger.info(
+            LogModule.TRANS,
+            f"[EXCLUSION-SYNC] Updated translate task {other_id} exclusion state from convert task {convert_task_id}",
+        )
 
 
 def cancel_user_exclusion(

@@ -193,6 +193,10 @@ class BaseWorkflowParams(BaseModel):
         default=None,
         description="Optional Convert/Extract task_id to reuse cached assets (e.g., image_data_map, html templates) in Translate phase."
     )
+    copy_source_only: bool = Field(
+        default=False,
+        description="When True (Convert toolbar flow), copy source text to target for every segment without calling the LLM.",
+    )
     # Prompt controls (simple/advanced, AI-friendly minimal knobs)
     prompt_mode: Optional[Literal["off", "simple", "advanced"]] = Field(
         default="off",

@@ -74,18 +74,31 @@ class GlossaryArtifacts {
 }
 
 class TranslateArtifacts {
-  const TranslateArtifacts({this.backendTaskId, this.downloads, this.stats});
+  const TranslateArtifacts({
+    this.backendTaskId,
+    this.formatConversionTaskId,
+    this.downloads,
+    this.stats,
+  });
+
+  /// Latest backend task (format convert or translate).
   final String? backendTaskId;
+
+  /// Format-convert task id; kept when a copy_source_only translate task completes.
+  final String? formatConversionTaskId;
   final Map<String, String>? downloads;
   final Map<String, dynamic>? stats;
 
   TranslateArtifacts copyWith({
     String? backendTaskId,
+    String? formatConversionTaskId,
     Map<String, String>? downloads,
     Map<String, dynamic>? stats,
   }) =>
       TranslateArtifacts(
         backendTaskId: backendTaskId ?? this.backendTaskId,
+        formatConversionTaskId:
+            formatConversionTaskId ?? this.formatConversionTaskId,
         downloads: downloads ?? this.downloads,
         stats: stats ?? this.stats,
       );

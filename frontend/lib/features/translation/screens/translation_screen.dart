@@ -2917,8 +2917,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     }
   }
 
-  /// Runs format conversion, applies Exclude All on the server, then starts translation with the
-  /// result shown in the **Convert** tab (`convert_tab`), not the Translate tab.
+  /// Runs format conversion, then opens the **Convert** tab with source copied to target (no LLM).
   Future<void> _runConvertToolbarAutomation() async {
     final dynamic state = widget.flowId != null
         ? ref.read(translationStateProviderFamily(widget.flowId!))
@@ -2930,51 +2929,6 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     await _onConvertFormat(state, notifier);
 
     if (!mounted) return;
-
-    final dynamic stateAfter = widget.flowId != null
-        ? ref.read(translationStateProviderFamily(widget.flowId!))
-        : ref.read(translationStateProvider);
-    final String? taskId = stateAfter.taskId as String?;
-    if (taskId == null || taskId.isEmpty) {
-      _translationScreenLog(
-        '_runConvertToolbarAutomation: no taskId after convert',
-        level: LogLevel.warn,
-      );
-      return;
-    }
-
-    try {
-      final Map<String, dynamic> excludeResult =
-          await TranslationService().excludeAllSegments(taskId);
-      if (!mounted) return;
-      final bool ok = excludeResult['success'] as bool? ?? false;
-      if (!ok) {
-        final String msg =
-            excludeResult['message'] as String? ?? 'Exclude all failed';
-        _showSnackBar(msg, Colors.red);
-        return;
-      }
-      final List<dynamic> raw =
-          (excludeResult['excluded_segment_indices'] as List<dynamic>?)
-                  ?.toList() ??
-              <dynamic>[];
-      final Set<int> indices =
-          raw.map((e) => (e is int) ? e : (e as num).toInt()).toSet();
-      final String providerKey = widget.flowId ?? taskId;
-      ref
-          .read(excludedSegmentsProviderFamily(providerKey).notifier)
-          .setExcluded(indices);
-      if (mounted) setState(() {});
-    } catch (e, st) {
-      _translationScreenLog(
-        '_runConvertToolbarAutomation exclude all: $e\n$st',
-        level: LogLevel.error,
-      );
-      if (mounted) {
-        _showSnackBar('Exclude all failed: $e', Colors.red);
-      }
-      return;
-    }
 
     final l10n = AppLocalizations.of(context)!;
     final dynamic st = widget.flowId != null
@@ -2990,6 +2944,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       translationResultTabId: 'convert_tab',
       translationResultTitle: l10n.translationToolbarConvert,
       translationResultIcon: Icons.transform,
+      copySourceToTargetOnly: true,
     );
   }
 
@@ -3112,7 +3067,10 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
               final FlowStateNotifier flowNotifier =
                   ref.read(flowProviderFamily(widget.flowId!).notifier);
               flowNotifier.setTranslateArtifacts(
-                TranslateArtifacts(backendTaskId: taskId),
+                TranslateArtifacts(
+                  backendTaskId: taskId,
+                  formatConversionTaskId: taskId,
+                ),
               );
             } catch (_) {}
           }
@@ -4016,6 +3974,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     String translationResultTabId = 'translate_tab',
     String? translationResultTitle,
     IconData? translationResultIcon,
+    bool copySourceToTargetOnly = false,
   }) async {
     // Prevent re-entry
     if (state.currentOperation != TranslationOperation.none) {
@@ -4230,6 +4189,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         translationResultTabId: translationResultTabId,
         translationResultTitle: translationResultTitle,
         translationResultIcon: translationResultIcon,
+        copySourceToTargetOnly: copySourceToTargetOnly,
       );
     }
 
@@ -4505,16 +4465,16 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
 
       // Try to get format settings from Convert phase taskId (if available)
       // This ensures format settings are passed to Translate phase
-      // Convert phase taskId is stored in flowState.context.translate.backendTaskId
-      // (this is set when Convert phase completes, before Translate phase starts)
+      // Prefer format-convert task id (not copy_source_only translate task id).
       String? convertTaskId;
       if (widget.flowId != null) {
         try {
           final flowState = ref.read(flowProviderFamily(widget.flowId!));
-          // Convert phase taskId is stored here when Convert completes
-          convertTaskId = flowState.context.translate.backendTaskId;
+          convertTaskId = flowState.context.translate.formatConversionTaskId ??
+              flowState.context.translate.backendTaskId;
           _translationScreenLog(
-            'Found Convert phase taskId from FlowState: $convertTaskId',
+            'Found Convert phase taskId from FlowState: $convertTaskId '
+            '(formatConversionTaskId=${flowState.context.translate.formatConversionTaskId})',
             level: LogLevel.info,
           );
         } catch (e) {
@@ -4648,6 +4608,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         // Link Translate task to Convert/Extract task so backend can reuse cached assets (e.g., images).
         if (convertTaskId != null && convertTaskId.isNotEmpty)
           'convert_task_id': convertTaskId,
+        if (copySourceToTargetOnly) 'copy_source_only': true,
       };
 
       // Debug log: confirm whether payload actually contains convert_task_id
@@ -5053,6 +5014,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         // Also persist stats into FlowContext
         if (widget.flowId != null) {
           try {
+            final FlowStateModel flowState =
+                ref.read(flowProviderFamily(widget.flowId!));
             final FlowStateNotifier flowNotifier =
                 ref.read(flowProviderFamily(widget.flowId!).notifier);
             final currentState = _getCurrentTranslationState();
@@ -5061,7 +5024,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
             final String currentTaskId =
                 currentState.taskId as String? ?? taskId;
             flowNotifier.setTranslateArtifacts(
-              TranslateArtifacts(
+              flowState.context.translate.copyWith(
                 backendTaskId: currentTaskId,
                 downloads:
                     currentDownloads.isNotEmpty ? currentDownloads : null,
@@ -5089,6 +5052,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           // Persist downloads to FlowContext
           if (widget.flowId != null) {
             try {
+              final FlowStateModel flowState =
+                  ref.read(flowProviderFamily(widget.flowId!));
               final FlowStateNotifier flowNotifier =
                   ref.read(flowProviderFamily(widget.flowId!).notifier);
               final Map<String, String> mapped = downloadsValue
@@ -5097,7 +5062,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
               final String currentTaskId =
                   currentState.taskId as String? ?? taskId;
               flowNotifier.setTranslateArtifacts(
-                TranslateArtifacts(
+                flowState.context.translate.copyWith(
                   backendTaskId: currentTaskId,
                   downloads: mapped,
                 ),
