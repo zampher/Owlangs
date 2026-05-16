@@ -19,7 +19,7 @@ from typing import Optional, Dict, Any, TYPE_CHECKING
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-from backend.app.models.service import ConvertFormatRequest, ConvertFormatResponse
+from backend.app.models.service import ConvertFormatRequest, ConvertFormatResponse, FetchUrlRequest
 from backend.app.services.task import task_manager
 from backend.app.utils.encoding_utils import decode_with_detection
 from backend.app.config.pagination_config import SOURCE_PREVIEW_SEGMENTS_LIMIT
@@ -513,6 +513,101 @@ class FormatConversionService:
                 message=f"Format conversion failed: {str(e)}"
             )
     
+    async def fetch_url(self, request: FetchUrlRequest) -> ConvertFormatResponse:
+        """
+        Fetch a URL, download its HTML content, and start a format conversion task.
+
+        Args:
+            request: Fetch URL request with extraction mode and parameters.
+
+        Returns:
+            ConvertFormatResponse with task_id for async processing.
+        """
+        try:
+            import base64
+            import uuid
+            from backend.app.utils.url_fetcher import fetch_url_content, extract_main_content
+
+            url = request.url.strip()
+            logger.info(
+                LogModule.WORKFLOW,
+                f"[IMPORT] URL fetch started: url={url}, extract_mode={request.extract_mode}",
+            )
+
+            # 1. Download raw HTML
+            try:
+                raw_bytes = fetch_url_content(url)
+            except Exception as e:
+                logger.error(
+                    LogModule.WORKFLOW,
+                    f"[IMPORT] Failed to fetch URL: {url}, error={e}",
+                    exc_info=True,
+                )
+                return ConvertFormatResponse(
+                    success=False,
+                    message=f"Failed to fetch URL: {str(e)}"
+                )
+
+            # 2. Extract content based on mode
+            if request.extract_mode == "full":
+                html_content = decode_with_detection(raw_bytes)
+                logger.info(LogModule.WORKFLOW, f"[IMPORT] Using full HTML: {len(html_content)} chars")
+            else:
+                # Default to content extraction
+                html_content = extract_main_content(raw_bytes, url=url)
+                logger.info(LogModule.WORKFLOW, f"[IMPORT] Extracted main content: {len(html_content)} chars")
+
+            # 3. Encode as base64 to reuse existing pipeline
+            file_contents = html_content.encode("utf-8")
+            file_content_b64 = base64.b64encode(file_contents).decode("ascii")
+
+            # 4. Generate task ID
+            task_id = uuid.uuid4().hex[:8]
+
+            # 5. Build a pseudo ConvertFormatRequest and reuse existing logic
+            from backend.app.models.service import ConvertFormatRequest
+            pseudo_request = ConvertFormatRequest(
+                file_name="fetched.html",
+                file_content=file_content_b64,
+                workflow_type=request.workflow_type or "html",
+                to_lang=request.to_lang,
+                deep_split=request.deep_split,
+                skip_cache=request.skip_cache,
+            )
+
+            # 6. Reuse existing convert_format logic
+            result = await self.convert_format(pseudo_request)
+
+            # 7. Mark original URL in task state for reference
+            if result.success and task_manager.get_task(result.task_id) is not None:
+                task_manager.update_task(result.task_id, {
+                    "source_url": url,
+                    "extract_mode": request.extract_mode or "content",
+                })
+                logger.info(
+                    LogModule.WORKFLOW,
+                    f"[IMPORT] URL fetch task started: task_id={result.task_id}, url={url}",
+                )
+
+            # 8. Include the fetched HTML content so the frontend can populate
+            #    pickedFile.bytes without re-downloading or re-uploading empty bytes.
+            if result.success:
+                result.file_content = file_content_b64
+                logger.info(
+                    LogModule.WORKFLOW,
+                    f"[IMPORT] URL fetch returning file_content: "
+                    f"{len(file_content_b64)} chars base64, task_id={result.task_id}",
+                )
+
+            return result
+
+        except Exception as e:
+            logger.error(LogModule.WORKFLOW, f"URL fetch failed: {e}", exc_info=True)
+            return ConvertFormatResponse(
+                success=False,
+                message=f"URL fetch failed: {str(e)}"
+            )
+
     async def resplit_source(
         self,
         task_id: str,

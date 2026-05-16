@@ -165,6 +165,69 @@ class FormatConversionService {
     }
   }
 
+  /// Fetch a URL and start format conversion (parse + convert, no translation).
+  Future<Map<String, dynamic>> fetchUrl({
+    required String url,
+    String extractMode = 'content',
+    String? workflowType,
+    bool? deepSplit,
+    bool? skipCache,
+    String? toLang,
+  }) async {
+    try {
+      final appConfig = await _configService.getAppConfig();
+      final baseUrl = appConfig?['base_url'] ?? AppConfig.baseUrl;
+
+      final payload = <String, Object>{
+        'url': url,
+        'extract_mode': extractMode,
+        if (workflowType != null && workflowType.isNotEmpty)
+          'workflow_type': workflowType,
+        if (deepSplit != null) 'deep_split': deepSplit,
+        if (skipCache != null) 'skip_cache': skipCache,
+        if (toLang != null && toLang.isNotEmpty) 'to_lang': toLang,
+      };
+
+      final authHeader = _getAuthToken();
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/service/fetch-url'),
+        headers: <String, String>{
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          if (authHeader != null) 'Authorization': authHeader,
+          ...ConfigService.desktopBackendHeaders,
+        },
+        body: jsonEncode(payload),
+      );
+
+      final result = jsonDecode(response.body) as Map<String, dynamic>? ?? <String, dynamic>{};
+      if (response.statusCode == 200) {
+        final bool bodySuccess = result['success'] == true;
+        if (!bodySuccess) {
+          return <String, dynamic>{
+            'success': false,
+            'error': result['message'] ?? result['detail'] ?? 'Request failed',
+          };
+        }
+        return <String, dynamic>{
+          'success': true,
+          'data': result,
+        };
+      } else {
+        return <String, dynamic>{
+          'success': false,
+          'error': result['detail'] ?? result['message'] ?? 'Unknown error occurred',
+        };
+      }
+    } catch (e) {
+      return <String, dynamic>{
+        'success': false,
+        'error': 'Failed to fetch URL: $e',
+      };
+    }
+  }
+
   /// Get authentication token from ConfigService
   String? _getAuthToken() => _configService.authorizationHeader;
 

@@ -84,6 +84,10 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       false; // Track if translation has started in current screen session
   bool _isTextMode = false; // false = File mode, true = Text mode
   late final TextEditingController _textController;
+  late final TextEditingController _urlController;
+  bool _isFetchingUrl = false;
+  String _urlExtractMode = 'content';
+  bool _showUrlInput = false;
   Timer?
       _glossaryProgressTimer; // Timer for glossary generation progress updates
   bool _isLeftPanelCollapsed = false; // Track left panel collapse state
@@ -113,6 +117,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
   void initState() {
     super.initState();
     _textController = TextEditingController();
+    _urlController = TextEditingController();
     // Standalone queue flow: always start from a blank slate so a new queued task does not
     // reuse the previous task's file, tabs, or segment UI after the prior job moved to background.
     // Must run after the first frame: Riverpod forbids modifying providers during build/initState.
@@ -153,6 +158,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
   @override
   void dispose() {
     _textController.dispose();
+    _urlController.dispose();
     super.dispose();
   }
 
@@ -733,6 +739,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       children: <Widget>[
         // Toolbar at the top
         _buildToolbar(translationState, translationNotifier),
+        // URL fetch panel (shown below toolbar when button is clicked)
+        if (_showUrlInput && !_isTextMode)
+          _buildUrlInputPanel(translationNotifier),
         // Content area
         Expanded(
           child: Row(
@@ -2238,8 +2247,122 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
               ),
             ),
           ],
+          // Fetch URL Button - only in file mode before file is uploaded
+          if (!_isTextMode && !hasImportedFile) ...<Widget>[
+            const SizedBox(width: 8), // Reduced spacing
+            OutlinedButton.icon(
+              onPressed: isOperationInProgress
+                  ? null
+                  : () {
+                      setState(() {
+                        _showUrlInput = !_showUrlInput;
+                      });
+                    },
+              icon: Icon(
+                _showUrlInput ? Icons.close : Icons.link,
+                size: 16,
+              ),
+              label: Text(
+                _showUrlInput ? 'Close' : 'Fetch URL',
+                style: const TextStyle(fontSize: 13),
+              ),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                minimumSize: const Size(0, 32),
+              ),
+            ),
+          ],
         ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildUrlInputPanel(dynamic translationNotifier) {
+    final dynamic translationState = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!))
+        : ref.read(translationStateProvider);
+    final bool isOperationInProgress =
+        translationState.currentOperation != TranslationOperation.none;
+    final bool isDisabled = isOperationInProgress;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).dividerColor,
+          ),
+        ),
+      ),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: TextField(
+              controller: _urlController,
+              decoration: InputDecoration(
+                hintText: 'https://example.com/article',
+                prefixIcon: const Icon(Icons.link),
+                border: const OutlineInputBorder(),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                filled: true,
+                fillColor: Theme.of(context).colorScheme.surface,
+              ),
+              keyboardType: TextInputType.url,
+              enabled: !_isFetchingUrl && !isDisabled,
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) {
+                if (!_isFetchingUrl &&
+                    !isDisabled &&
+                    _urlController.text.trim().isNotEmpty) {
+                  _startFetchUrl(translationNotifier);
+                }
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _urlExtractMode,
+              items: const <DropdownMenuItem<String>>[
+                DropdownMenuItem<String>(
+                    value: 'content', child: Text('Content')),
+                DropdownMenuItem<String>(
+                    value: 'full', child: Text('Full HTML')),
+              ],
+              onChanged: (_isFetchingUrl || isDisabled)
+                  ? null
+                  : (String? v) {
+                      if (v != null) {
+                        setState(() {
+                          _urlExtractMode = v;
+                        });
+                      }
+                    },
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            onPressed: (_isFetchingUrl ||
+                    isDisabled ||
+                    _urlController.text.trim().isEmpty)
+                ? null
+                : () => _startFetchUrl(translationNotifier),
+            icon: _isFetchingUrl
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.download),
+            label: Text(_isFetchingUrl ? 'Fetching...' : 'Fetch URL'),
+          ),
+        ],
       ),
     );
   }
@@ -3796,6 +3919,179 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     _translationScreenLog(
       'File processing completed: currentOperation reset to none, taskId=${currentState.taskId}',
     );
+  }
+
+  Future<void> _startFetchUrl(dynamic translationNotifier) async {
+    final String url = _urlController.text.trim();
+    if (url.isEmpty) return;
+
+    setState(() {
+      _isFetchingUrl = true;
+    });
+    translationNotifier.setCurrentOperation(TranslationOperation.importing);
+
+    try {
+      // If there is an existing translation task for this flow, release its resources
+      if (widget.flowId != null) {
+        final dynamic translationState =
+            ref.read(translationStateProviderFamily(widget.flowId!));
+        final String? existingTaskId = translationState.taskId as String?;
+        if (existingTaskId != null &&
+            existingTaskId.isNotEmpty &&
+            !existingTaskId.startsWith('pending_')) {
+          try {
+            final TranslationService svc = TranslationService();
+            await svc.releaseTask(existingTaskId);
+            _translationScreenLog(
+              'Released previous task resources before URL fetch: $existingTaskId',
+              level: LogLevel.info,
+            );
+          } catch (e) {
+            _translationScreenLog(
+              'Failed to release previous task resources before URL fetch: $e',
+              level: LogLevel.warn,
+            );
+          }
+        }
+      }
+
+      // Clear all existing preview tabs when re-importing
+      final PreviewTabsNotifier tabsNotifier = widget.flowId != null
+          ? ref.read(previewTabsProviderFamily(widget.flowId!).notifier)
+          : ref.read(previewTabsProvider.notifier);
+      tabsNotifier.clearAllTabs();
+
+      // Save state to persistence
+      if (widget.flowId != null) {
+        try {
+          final TasksNotifier tasksNotifier = ref.read(tasksProvider.notifier);
+          tasksNotifier.setActive(widget.flowId!);
+
+          final FlowStateNotifier flowNotifier =
+              ref.read(flowProviderFamily(widget.flowId!).notifier);
+          final TranslationQuickSettings qs =
+              ref.read(translationQuickSettingsProviderFamily(widget.flowId!));
+          await flowNotifier.saveStateWithGlossaryIds(qs.selectedGlossaries);
+
+          flowNotifier.updateSource(
+            FlowSource(fileName: 'fetched.html', filePath: null),
+          );
+        } catch (e) {
+          _translationScreenLog('Failed to save state after URL fetch start: $e');
+        }
+      }
+
+      final FormatConversionService formatSvc = FormatConversionService();
+      final TranslationQuickSettings qs = widget.flowId != null
+          ? ref.read(translationQuickSettingsProviderFamily(widget.flowId!))
+          : ref.read(translationQuickSettingsProvider);
+      final String? toLang = qs.toLang.isNotEmpty ? qs.toLang : null;
+
+      final Map<String, dynamic> fetchRes = await formatSvc.fetchUrl(
+        url: url,
+        extractMode: _urlExtractMode,
+        workflowType: 'html',
+        toLang: toLang,
+      );
+
+      if (fetchRes['success'] == true) {
+        final Map<String, dynamic> data =
+            (fetchRes['data'] as Map).cast<String, dynamic>();
+        final String? taskId = data['task_id']?.toString();
+        if (taskId != null && taskId.isNotEmpty) {
+          translationNotifier.setTaskId(taskId);
+          _translationScreenLog(
+            'URL fetched successfully: taskId=$taskId, flowId=${widget.flowId}',
+            level: LogLevel.info,
+          );
+          _addExtractTab(taskId);
+
+          // Decode base64 HTML content from backend so Convert/Translate
+          // can reuse the actual file bytes instead of empty bytes.
+          Uint8List fileBytes = Uint8List(0);
+          final String? fileContentB64 = data['file_content']?.toString();
+          if (fileContentB64 != null && fileContentB64.isNotEmpty) {
+            try {
+              fileBytes = base64Decode(fileContentB64);
+              _translationScreenLog(
+                'URL fetch: decoded ${fileBytes.length} bytes from file_content',
+                level: LogLevel.info,
+              );
+            } catch (e) {
+              _translationScreenLog(
+                'Failed to decode file_content from fetch-url response: $e',
+                level: LogLevel.warn,
+              );
+            }
+          } else {
+            _translationScreenLog(
+              'URL fetch: file_content missing or empty in response',
+              level: LogLevel.warn,
+            );
+          }
+
+          // Set a virtual picked file so toolbar buttons
+          // (glossary, convert, translate) are enabled
+          final PlatformFile virtualFile = PlatformFile(
+            name: 'fetched.html',
+            size: fileBytes.length,
+            bytes: fileBytes,
+          );
+          translationNotifier.setPickedFile(virtualFile);
+        } else {
+          _translationScreenLog(
+            'URL fetch succeeded but task_id is null or empty',
+            level: LogLevel.warn,
+          );
+        }
+      } else {
+        if (mounted) {
+          _showSnackBar(
+            fetchRes['error']?.toString() ?? 'URL fetch failed',
+            Colors.red,
+          );
+        }
+      }
+    } catch (e, stackTrace) {
+      _translationScreenLog(
+        'URL fetch error: $e\n$stackTrace',
+        level: LogLevel.error,
+      );
+      if (mounted) {
+        _showSnackBar('URL fetch failed: $e', Colors.red);
+      }
+    }
+
+    if (!mounted) return;
+
+    // Auto-update workflow type to html
+    final TranslationQuickSettings qs = widget.flowId != null
+        ? ref.read(translationQuickSettingsProviderFamily(widget.flowId!))
+        : ref.read(translationQuickSettingsProvider);
+    final TranslationQuickSettingsNotifier qsNotifier = widget.flowId != null
+        ? ref.read(translationQuickSettingsProviderFamily(widget.flowId!).notifier)
+        : ref.read(translationQuickSettingsProvider.notifier);
+
+    if (qs.autoSelectWorkflow || qs.workflowType != 'html') {
+      qsNotifier.updateWorkflowType('html');
+    }
+
+    translationNotifier.setCurrentOperation(TranslationOperation.none);
+
+    // Re-read current state to check if fetch succeeded (taskId set)
+    final dynamic currentState = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!))
+        : ref.read(translationStateProvider);
+
+    setState(() {
+      _isFetchingUrl = false;
+      // Hide URL panel on success so user can continue with normal workflow.
+      // If fetch failed, _showUrlInput stays true so user can retry.
+      if (currentState.taskId != null &&
+          (currentState.taskId as String).isNotEmpty) {
+        _showUrlInput = false;
+      }
+    });
   }
 
   Future<void> _cancelCurrentTask(notifier) async {

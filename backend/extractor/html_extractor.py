@@ -42,9 +42,16 @@ class _StructuredHtmlParser(HTMLParser):
                 self.blocks.append(text)
             self._current = []
 
+    # HTML5 void elements – never push these onto the stack since they have no end tag.
+    _VOID_ELEMENTS = frozenset({
+        'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+        'link', 'meta', 'param', 'source', 'track', 'wbr',
+    })
+
     def handle_starttag(self, tag, attrs):
         tag = tag.lower()
-        self._stack.append(tag)
+        if tag not in self._VOID_ELEMENTS:
+            self._stack.append(tag)
         if tag in ('p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'code', 'div', 'section', 'article'):
             # Start a new potential block if current has content
             self._flush_current_block()

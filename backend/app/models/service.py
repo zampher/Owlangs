@@ -147,6 +147,32 @@ class ConvertFormatResponse(BaseModel):
     task_id: Optional[str] = None
     download_url: Optional[str] = None
     output_format: Optional[str] = None
+    file_content: Optional[str] = None  # Base64-encoded file content (for URL fetch → frontend reuse)
+
+
+class FetchUrlRequest(BaseModel):
+    """Request model for fetching a URL and converting its content."""
+    url: str = Field(..., description="URL to fetch and convert.", examples=["https://example.com/article"])
+    extract_mode: Optional[Literal["full", "content"]] = Field(
+        default="content",
+        description="Extraction mode: 'full' keeps the complete raw HTML; 'content' extracts the main article body using trafilatura.",
+    )
+    workflow_type: Optional[str] = Field(
+        default="html",
+        description="Workflow type for processing. Defaults to 'html'.",
+    )
+    to_lang: Optional[str] = Field(
+        default=None,
+        description="Target language code for exclusion detection (e.g., 'zh', 'en').",
+    )
+    deep_split: Optional[bool] = Field(
+        default=None,
+        description="When enabled, split text at the finest granularity before translation.",
+    )
+    skip_cache: Optional[bool] = Field(
+        default=False,
+        description="When enabled, skip using cached conversion results and force re-conversion.",
+    )
 
 
 # Glossary Management Models (removed - using original auth routes for glossary management)

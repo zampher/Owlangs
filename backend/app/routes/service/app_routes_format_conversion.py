@@ -10,7 +10,7 @@ Handles format conversion and source resplit endpoints.
 from fastapi import APIRouter, HTTPException, Body, Path as FastApiPath, Query as FastApiQuery
 from fastapi.responses import JSONResponse
 
-from backend.app.models.service import ConvertFormatRequest
+from backend.app.models.service import ConvertFormatRequest, FetchUrlRequest
 from backend.app.services.format_conversion_service import FormatConversionService
 from logger import unified_logger as logger
 from logger.logger import LogModule
@@ -79,6 +79,61 @@ async def service_convert_format_route(
             exc_info=True
         )
         raise HTTPException(status_code=500, detail=f"Format conversion failed: {str(e)}")
+
+
+@router.post(
+    "/fetch-url",
+    summary="Fetch URL content and convert (parse + convert, no translation)",
+    description="""
+    Fetch a web page by URL and convert its content without translation.
+    
+    - **Full mode**: Keeps the complete raw HTML (ads, navigation, etc. included).
+    - **Content mode** (default): Extracts the main article body using trafilatura.
+    
+    The fetched HTML is then processed through the standard HTML workflow
+    (same as uploading an HTML file).
+    """,
+    responses={
+        200: {
+            "description": "URL fetch and conversion task started successfully.",
+            "content": {"application/json": {
+                "example": {"success": True, "task_id": "a1b2c3d4", "message": "Format conversion task started successfully"}}
+            }
+        },
+        400: {"description": "Invalid URL or fetch failed."},
+        500: {"description": "Unknown error occurred while starting background task."},
+    }
+)
+async def service_fetch_url_route(
+    request: FetchUrlRequest = Body(..., description="URL fetch request with extraction parameters")
+):
+    """Fetch a URL and start format conversion without translation."""
+    try:
+        logger.info(
+            LogModule.ROUTE,
+            f"[FETCH-URL] Request received: url={request.url}, extract_mode={request.extract_mode}"
+        )
+        
+        result = await format_conversion_service.fetch_url(request)
+        
+        task_id = result.task_id if result else None
+        if task_id:
+            logger.info(
+                LogModule.ROUTE,
+                f"[FETCH-URL] Task started successfully: task_id={task_id}, url={request.url}"
+            )
+        
+        from fastapi.responses import JSONResponse
+        return JSONResponse(content=result.dict() if hasattr(result, 'dict') else result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            LogModule.ROUTE,
+            f"[FETCH-URL] Request failed: url={request.url}, error={e}",
+            exc_info=True
+        )
+        raise HTTPException(status_code=500, detail=f"URL fetch failed: {str(e)}")
 
 
 @router.post(
