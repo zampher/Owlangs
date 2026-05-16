@@ -194,6 +194,11 @@ def _file_response_for_md_download(
         md_with_image_paths, saved_image_paths = _replace_placeholders_with_images(
             md_content, image_data_map, output_dir=zip_output_dir
         )
+        # Download online images for workflows that use external URLs (e.g., HTML workflow)
+        md_with_image_paths, online_paths = _download_online_images_for_markdown(
+            md_with_image_paths, zip_output_dir
+        )
+        saved_image_paths.extend(online_paths)
         _img_bidx, _path_to_bidx, _layout = _get_image_layout_for_grouping(
             task_state, equation_format=equation_format, table_body_format=table_body_format
         )
@@ -228,6 +233,94 @@ def _file_response_for_md_download(
         return FileResponse(path=zip_temp_file.name, media_type=media_type, filename=filename)
     finally:
         shutil.rmtree(zip_temp_dir, ignore_errors=True)
+
+
+def _download_online_images_for_markdown(
+    markdown_content: str,
+    output_dir: Path,
+) -> Tuple[str, List[Path]]:
+    """
+    Download online images referenced in Markdown ![alt](url) and replace URLs with relative paths.
+    Only processes http/https URLs. Skips on failure, keeping original URL.
+    """
+    if not markdown_content:
+        return markdown_content, []
+
+    import hashlib
+    from urllib.request import urlopen, Request
+
+    img_pattern = re.compile(r'!\[([^\]]*)\]\(([^)\s]+)\)')
+    saved_paths: List[Path] = []
+    images_dir = output_dir / "images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    downloaded_urls: dict[str, Path] = {}
+
+    def _replace(match: re.Match) -> str:
+        alt = match.group(1)
+        url = match.group(2).strip()
+
+        # Only process online URLs
+        if not url.startswith(('http://', 'https://')):
+            return match.group(0)
+
+        # Skip if already downloaded
+        if url in downloaded_urls:
+            saved_path = downloaded_urls[url]
+            rel_path = saved_path.relative_to(output_dir).as_posix()
+            return f'![{alt}]({rel_path})'
+
+        try:
+            req = Request(
+                url,
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                },
+            )
+            with urlopen(req, timeout=30) as resp:
+                data = resp.read()
+                content_type = resp.headers.get('Content-Type', '')
+
+                # Determine extension from Content-Type or URL
+                ext = ''
+                if content_type:
+                    ext = mimetypes.guess_extension(content_type.split(';')[0].strip()) or ''
+                if not ext:
+                    url_path = url.split('?')[0].split('#')[0]
+                    ext = mimetypes.guess_extension(url_path) or ''
+                if not ext:
+                    ext = '.jpg'
+
+                url_hash = hashlib.sha1(url.encode()).hexdigest()[:12]
+                filename = f"img_{url_hash}{ext}"
+                file_path = images_dir / filename
+
+                # Handle duplicate filenames
+                counter = 1
+                original_path = file_path
+                while file_path.exists():
+                    file_path = images_dir / f"{original_path.stem}_{counter}{ext}"
+                    counter += 1
+
+                file_path.write_bytes(data)
+                downloaded_urls[url] = file_path
+                saved_paths.append(file_path)
+
+                rel_path = file_path.relative_to(output_dir).as_posix()
+                logger.info(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] Downloaded online image: {url} -> {rel_path}",
+                )
+                return f'![{alt}]({rel_path})'
+
+        except Exception as e:
+            logger.warning(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Failed to download online image {url}: {e}",
+            )
+            return match.group(0)
+
+    new_content = img_pattern.sub(_replace, markdown_content)
+    return new_content, saved_paths
 
 
 def _infer_workflow_from_filename(original_filename_lower: str) -> Optional[str]:

@@ -56,9 +56,19 @@ class HtmlWorkflow(Workflow[HtmlWorkflowConfig, Document, Document], HTMLExporta
         return self
 
     def export_to_html(self, _: ExporterConfig = None) -> str:
-
         docu = self._export(Html2HtmlExporter())
-        return docu.content.decode()
+        html = docu.content.decode('utf-8')
+        # Fix lazy-loaded images: copy data-src to src if src is empty/missing.
+        # This ensures DOCX/MD exports (which rely on Pandoc/html2text reading src)
+        # can embed images correctly even for convert-only workflows.
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, 'html.parser')
+        for img in soup.find_all('img'):
+            src = img.get('src', '').strip()
+            data_src = img.get('data-src', '').strip()
+            if not src and data_src:
+                img['src'] = data_src
+        return str(soup)
 
     def export_to_markdown(self, _: ExporterConfig | None = None) -> str:
         from workflow.html_to_markdown_export import html_content_to_markdown
