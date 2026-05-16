@@ -1182,10 +1182,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     }
   }
 
-  Future<String?> _showQueuePersistDiscardDialog(AppLocalizations l10n) {
-    return showDialog<String>(
+  Future<String?> _showQueuePersistDiscardDialog(AppLocalizations l10n) => showDialog<String>(
       context: context,
-      builder: (BuildContext ctx) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: Text(l10n.translationCloseTranslateTabTitle),
         content: SingleChildScrollView(
           child: Text(l10n.translationCloseTranslateTabMessage),
@@ -1206,7 +1205,6 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         ],
       ),
     );
-  }
 
   Future<bool> _confirmExitStandaloneQueuedIfNeeded() async {
     final bool dirty =
@@ -1769,7 +1767,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                   minWidth: 36,
                   minHeight: 36,
                 ),
-                onPressed: () => _exitStandaloneQueuedToQueue(),
+                onPressed: _exitStandaloneQueuedToQueue,
               ),
           // Upload Button - Opens file picker and triggers Extract
           // CRITICAL: On Web, file picker must be called DIRECTLY in the callback to preserve user gesture context
@@ -2155,7 +2153,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: Builder(
-                builder: (BuildContext _) {
+                builder: (_) {
                   final bool queueDirty = ref.watch(
                     queuePersistDirtyProvider(_queuePersistScopeKey),
                   );
@@ -2168,7 +2166,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                       onPressed: _queuePersistInFlight
                           ? null
                           : queueDirty
-                              ? () => _persistQueueSnapshotManual()
+                              ? _persistQueueSnapshotManual
                               : null,
                       icon: _queuePersistInFlight
                           ? const SizedBox(
@@ -2281,7 +2279,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     );
   }
 
-  Widget _buildUrlInputPanel(dynamic translationNotifier) {
+  Widget _buildUrlInputPanel(translationNotifier) {
     final dynamic translationState = widget.flowId != null
         ? ref.read(translationStateProviderFamily(widget.flowId!))
         : ref.read(translationStateProvider);
@@ -2331,9 +2329,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
               value: _urlExtractMode,
               items: const <DropdownMenuItem<String>>[
                 DropdownMenuItem<String>(
-                    value: 'content', child: Text('Content')),
+                    value: 'content', child: Text('Content'),),
                 DropdownMenuItem<String>(
-                    value: 'full', child: Text('Full HTML')),
+                    value: 'full', child: Text('Full HTML'),),
               ],
               onChanged: (_isFetchingUrl || isDisabled)
                   ? null
@@ -3921,7 +3919,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     );
   }
 
-  Future<void> _startFetchUrl(dynamic translationNotifier) async {
+  Future<void> _startFetchUrl(translationNotifier) async {
     final String url = _urlController.text.trim();
     if (url.isEmpty) return;
 
@@ -3974,7 +3972,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           await flowNotifier.saveStateWithGlossaryIds(qs.selectedGlossaries);
 
           flowNotifier.updateSource(
-            FlowSource(fileName: 'fetched.html', filePath: null),
+            const FlowSource(fileName: 'fetched.html'),
           );
         } catch (e) {
           _translationScreenLog('Failed to save state after URL fetch start: $e');
@@ -5582,7 +5580,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     // URL (including any format settings) is built by caller widgets.
     // Keep this method free of ref.read to avoid using Riverpod ref after
     // this widget is disposed.
-    var finalUrl = url;
+    final String finalUrl = url;
 
     notifier.setDownloading(fileType, true);
     if (mounted) {

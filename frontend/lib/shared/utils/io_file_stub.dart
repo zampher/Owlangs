@@ -7,8 +7,9 @@ import 'dart:convert' show Encoding, utf8;
 /// All operations throw UnsupportedError since file operations are not available on web.
 /// Accepts path so that call sites can use File(path) on both web and desktop.
 class File {
-  File([String? path]);
+  File([this.path = '']);
 
+  final String path;
 
   Future<bool> exists() async => false;
 

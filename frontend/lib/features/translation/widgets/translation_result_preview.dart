@@ -7,7 +7,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/app_config.dart';
 import '../../../shared/services/translation_service.dart';
@@ -810,8 +810,8 @@ class _TranslationResultPreviewState
       initialPageSize: 1000, // Default page size for Translate stage
       fetcher: (int offset, int limit) async =>
           _fetchSegmentsPage(offset, limit),
-      itemConverter: (item) {
-        // Convert Map to _SegmentPair
+      itemConverter: (Object? item) {
+        // Convert Map to SegmentPair
         if (item is Map) {
           final int index = item['index'] as int? ?? 0;
           final String sourceText = item['source_text'] as String? ?? '';

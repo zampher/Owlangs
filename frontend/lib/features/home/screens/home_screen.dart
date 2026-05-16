@@ -94,8 +94,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     showDialog(
       context: context,
       barrierDismissible: missingRequired.isEmpty, // Require action if required deps missing
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
+      builder: (BuildContext dialogContext) => AlertDialog(
           title: Row(
             children: <Widget>[
               Icon(
@@ -129,8 +128,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                   const SizedBox(height: 12),
                 ],
-                ...missing.map((dep) {
-                  return Padding(
+                ...missing.map((DependencyItem dep) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Container(
                       padding: const EdgeInsets.all(12),
@@ -201,8 +199,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ],
                       ),
                     ),
-                  );
-                }).toList(),
+                  ),),
                 if (result.macosGuidance != null) ...<Widget>[
                   const SizedBox(height: 16),
                   Container(
@@ -232,8 +229,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           style: theme.textTheme.bodySmall,
                         ),
                         const SizedBox(height: 8),
-                        ...result.macosGuidance!.steps.map((step) {
-                          return Padding(
+                        ...result.macosGuidance!.steps.map((String step) => Padding(
                             padding: const EdgeInsets.only(bottom: 4),
                             child: Text(
                               step,
@@ -244,8 +240,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     : null,
                               ),
                             ),
-                          );
-                        }).toList(),
+                          ),),
                         if (result.macosGuidance!.latexNote != null) ...<Widget>[
                           const SizedBox(height: 8),
                           Text(
@@ -274,8 +269,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: const Text('Got it'),
               ),
           ],
-        );
-      },
+        ),
     );
   }
 
@@ -298,7 +292,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (timeSinceLastCheck < _versionCheckInterval) {
         if (kDebugMode) {
           print(
-              '[HomeScreen] Using cached version data (${timeSinceLastCheck.inMinutes}m ago)');
+              '[HomeScreen] Using cached version data (${timeSinceLastCheck.inMinutes}m ago)',);
         }
         _applyVersionData(_cachedVersionData!);
         return;
@@ -472,11 +466,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               const Icon(Icons.error_outline, size: 64, color: Colors.red),
               const SizedBox(height: 16),
               Text(AppLocalizations.of(context)!.homeAuthErrorTitle,
-                  style: Theme.of(context).textTheme.headlineSmall),
+                  style: Theme.of(context).textTheme.headlineSmall,),
               const SizedBox(height: 8),
               Text(message,
                   style: Theme.of(context).textTheme.bodyMedium,
-                  textAlign: TextAlign.center),
+                  textAlign: TextAlign.center,),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () {
@@ -910,8 +904,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   /// Pro edition status text: trial remaining / not activated / activated.
   String _proStatusLabel() {
     final l10n = AppLocalizations.of(context)!;
-    if (_donorStatus?.activated ?? false)
+    if (_donorStatus?.activated ?? false) {
       return l10n.homeEditionProStatusActivated;
+    }
     if (_trialDaysRemaining != null && _trialDaysRemaining! > 0) {
       return l10n.homeEditionProStatusTrialRemaining(_trialDaysRemaining!);
     }

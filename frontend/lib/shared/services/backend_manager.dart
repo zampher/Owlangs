@@ -5,10 +5,10 @@ import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:path_provider/path_provider.dart';
 
 class BackendManager {
-  static final BackendManager _instance = BackendManager._internal();
   factory BackendManager() => _instance;
 
   BackendManager._internal();
+  static final BackendManager _instance = BackendManager._internal();
 
   io.Process? _backendProcess;
   bool _isRunning = false;
@@ -35,7 +35,7 @@ class BackendManager {
         try {
           final appDir = await getApplicationSupportDirectory();
           final appBundlePath = appDir.path.split('/Library/Application Support/')[0];
-          final backendDir = '${appBundlePath}/Contents/Resources/backend';
+          final backendDir = '$appBundlePath/Contents/Resources/backend';
 
           // 检查后端目录是否存在
           final backendDirExists = await io.Directory(backendDir).exists();
@@ -114,7 +114,7 @@ class BackendManager {
         try {
           final result = await io.Process.run(
             pythonExecutable,
-            ['--version'],
+            <String>['--version'],
             workingDirectory: workingDirectory,
           );
           if (result.exitCode != 0) {
@@ -130,7 +130,7 @@ class BackendManager {
 
         _backendProcess = await io.Process.start(
           pythonExecutable,
-          [backendPath],
+          <String>[backendPath],
           workingDirectory: workingDirectory,
           runInShell: true,
         );
@@ -146,7 +146,7 @@ class BackendManager {
 
         _backendProcess = await io.Process.start(
           backendPath,
-          [],
+          <String>[],
           workingDirectory: workingDirectory,
           runInShell: true,
         );
@@ -211,7 +211,7 @@ class BackendManager {
       }
 
       // 尝试优雅停止
-      _backendProcess?.kill(io.ProcessSignal.sigterm);
+      _backendProcess?.kill();
       await _backendProcess?.exitCode.timeout(
         const Duration(seconds: 5),
         onTimeout: () {

@@ -1849,7 +1849,7 @@ class _AnonymizeScreenState extends ConsumerState<AnonymizeScreen> {
       }
 
       // Per-platform concurrent is now read by backend from platforms.json
-      final batchSize = 5;
+      const batchSize = 5;
 
       final dynamic translationNotifier = widget.flowId != null
           ? ref.read(translationStateProviderFamily(widget.flowId!).notifier)

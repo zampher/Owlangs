@@ -22,11 +22,14 @@ typedef PaginatedDataFetcher<T> = Future<Map<String, dynamic>> Function(
   int limit,
 );
 
+/// Converts one raw API row (Map, etc.) to [T].
+typedef PaginatedItemConverter<T> = T Function(dynamic raw);
+
 /// Generic pagination controller.
 class PagedListController<T> extends ChangeNotifier {
   PagedListController({
     required PaginatedDataFetcher<T> fetcher,
-    T Function(dynamic)? itemConverter,
+    PaginatedItemConverter<T>? itemConverter,
     int? initialPageSize,
     bool prefetchEnabled = false,
   })  : _fetcher = fetcher,
@@ -55,8 +58,8 @@ class PagedListController<T> extends ChangeNotifier {
   /// Data fetcher function
   final PaginatedDataFetcher<T> _fetcher;
 
-  /// Item converter function (optional, for converting raw data to T)
-  final T Function(dynamic)? _itemConverter;
+  /// Item converter function (optional, for converting raw API rows to [T])
+  final PaginatedItemConverter<T>? _itemConverter;
 
   /// Whether to prefetch next page
   final bool _prefetchEnabled;

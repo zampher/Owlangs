@@ -139,12 +139,11 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
 
         bool hasLength(String value) =>
             value.length >= 8 && value.length <= 128;
-        bool hasUppercase(String value) => value.contains(RegExp(r'[A-Z]'));
-        bool hasLowercase(String value) => value.contains(RegExp(r'[a-z]'));
-        bool hasDigit(String value) => value.contains(RegExp(r'[0-9]'));
+        bool hasUppercase(String value) => value.contains(RegExp('[A-Z]'));
+        bool hasLowercase(String value) => value.contains(RegExp('[a-z]'));
+        bool hasDigit(String value) => value.contains(RegExp('[0-9]'));
 
-        Widget buildRequirementRow(String label, bool met) {
-          return Row(
+        Widget buildRequirementRow(String label, bool met) => Row(
             children: <Widget>[
               Icon(
                 met ? Icons.check_circle : Icons.cancel,
@@ -163,7 +162,6 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               ),
             ],
           );
-        }
 
         return StatefulBuilder(
           builder:
@@ -689,7 +687,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                                 lang['code'] == currentLang,
                             orElse: () => const <String, String>{
                               'code': 'en',
-                              'label': 'English'
+                              'label': 'English',
                             },
                           )['label'] ??
                           currentLang;

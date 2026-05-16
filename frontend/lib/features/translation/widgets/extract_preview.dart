@@ -2845,9 +2845,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
   Future<void> loadInitialDataForMixin({bool forceReload = false}) async =>
       _loadInitialData(forceReload: forceReload);
 
-  Widget _buildToolbar() {
-
-    return Container(
+  Widget _buildToolbar() => Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: Border(
@@ -2883,7 +2881,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
           const SizedBox(width: 6), // Further reduced spacing
           // Show chunk count instead of chunk size and input tokens
           Builder(
-            builder: (BuildContext context) {
+            builder: (context) {
               if (initialDataLoaded && !isPreparing && allChunks.isNotEmpty) {
                 return Text(
                   'Chunks: ${allChunks.length}',
@@ -2901,16 +2899,16 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
           // Filter buttons (shown only when data is loaded, hidden during preparation)
           if (initialDataLoaded && !isPreparing && allSegments.isNotEmpty)
             Consumer(
-              builder: (context, ref, child) {
+              builder: (BuildContext context, WidgetRef ref, Widget? child) {
                 // Get excluded segments from provider
-                final String providerKey = widget.flowId ?? widget.taskId;
-                final Set<int> excludedSegments = ref.watch(
+                final providerKey = widget.flowId ?? widget.taskId;
+                final excludedSegments = ref.watch(
                   excludedSegmentsProviderFamily(providerKey),
                 );
-                final int excludedCount = excludedSegments.length;
-                final int totalSegments = allSegments.length;
+                final excludedCount = excludedSegments.length;
+                final totalSegments = allSegments.length;
 
-                final l10n = AppLocalizations.of(context)!;
+                final AppLocalizations l10n = AppLocalizations.of(context)!;
                 return Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
@@ -2989,7 +2987,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
           if (initialDataLoaded && !isPreparing && allSegments.isNotEmpty)
             ListenableBuilder(
               listenable: paginationController,
-              builder: (BuildContext context, _) => Row(
+              builder: (context, _) => Row(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   // Pagination bar
@@ -3014,7 +3012,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                   // Page size selector
                   PageSizeSelector(
                     currentPageSize: paginationController.pageSize,
-                    onPageSizeChanged: (int size) =>
+                    onPageSizeChanged: (size) =>
                         paginationController.setPageSize(size),
                     preferenceKey: 'extract_preview_segments_page_size',
                     pageSizeOptions: const <int>[50, 100, 200, 500, 1000, 2000],
@@ -3028,7 +3026,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
             const SizedBox(width: 12),
             Row(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: <Widget>[
                 // Progress bar is placed FIRST so its position never shifts
                 // when surrounding text changes.
@@ -3116,7 +3113,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
             const SizedBox(width: 12),
             Row(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: <Widget>[
                 SizedBox(
                   width: 200,
@@ -3163,7 +3159,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
             Flexible(
               child: ListenableBuilder(
                 listenable: paginationController,
-                builder: (BuildContext context, _) => Row(
+                builder: (context, _) => Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     Icon(
@@ -3225,7 +3221,6 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
         ],
       ),
     );
-  }
 
   /// Build a compact filter button for the toolbar (simplified text, minimal margins)
   Widget _buildCompactFilterButton({

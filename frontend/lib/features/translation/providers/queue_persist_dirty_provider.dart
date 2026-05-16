@@ -18,5 +18,5 @@ class QueuePersistDirtyNotifier extends StateNotifier<bool> {
 final StateNotifierProviderFamily<QueuePersistDirtyNotifier, bool, String>
     queuePersistDirtyProvider =
     StateNotifierProvider.family<QueuePersistDirtyNotifier, bool, String>(
-  (Ref ref, String scope) => QueuePersistDirtyNotifier(),
+  (StateNotifierProviderRef<QueuePersistDirtyNotifier, bool> ref, String scope) => QueuePersistDirtyNotifier(),
 );

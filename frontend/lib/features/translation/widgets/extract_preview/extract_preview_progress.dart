@@ -110,7 +110,7 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
             setState(() {
               prepareProgress = simulatedProgressPercent / 100.0;
               prepareStatus =
-                  'Preparing... (\$simulatedProgressPercent%)';
+                  r'Preparing... ($simulatedProgressPercent%)';
             });
           }
         }
@@ -440,7 +440,7 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
               prepareStatus = message;
             } else {
               prepareStatus =
-                  'Preparing... (\$effectiveProgressPercent%)';
+                  r'Preparing... ($effectiveProgressPercent%)';
             }
 
             // Set task type for display (localized for known task types)

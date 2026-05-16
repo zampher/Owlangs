@@ -4,13 +4,6 @@ import '../../app/app_config.dart';
 
 /// Model for a single dependency check result
 class DependencyItem {
-  final String name;
-  final String displayName;
-  final bool installed;
-  final String requiredFor;
-  final bool optional;
-  final String macosInstall;
-  final String linuxInstall;
 
   DependencyItem({
     required this.name,
@@ -22,8 +15,7 @@ class DependencyItem {
     required this.linuxInstall,
   });
 
-  factory DependencyItem.fromJson(Map<String, dynamic> json) {
-    return DependencyItem(
+  factory DependencyItem.fromJson(Map<String, dynamic> json) => DependencyItem(
       name: json['name'] as String,
       displayName: json['display_name'] as String,
       installed: json['installed'] as bool,
@@ -32,14 +24,17 @@ class DependencyItem {
       macosInstall: json['macos_install'] as String,
       linuxInstall: json['linux_install'] as String,
     );
-  }
+  final String name;
+  final String displayName;
+  final bool installed;
+  final String requiredFor;
+  final bool optional;
+  final String macosInstall;
+  final String linuxInstall;
 }
 
 /// Model for macOS installation guidance
 class MacosGuidance {
-  final String message;
-  final List<String> steps;
-  final String? latexNote;
 
   MacosGuidance({
     required this.message,
@@ -47,25 +42,18 @@ class MacosGuidance {
     this.latexNote,
   });
 
-  factory MacosGuidance.fromJson(Map<String, dynamic> json) {
-    return MacosGuidance(
+  factory MacosGuidance.fromJson(Map<String, dynamic> json) => MacosGuidance(
       message: json['message'] as String,
       steps: (json['steps'] as List<dynamic>).cast<String>(),
       latexNote: json['latex_note'] as String?,
     );
-  }
+  final String message;
+  final List<String> steps;
+  final String? latexNote;
 }
 
 /// Model for dependency check response
 class DependencyCheckResult {
-  final String platform;
-  final bool isMacos;
-  final bool allOk;
-  final List<DependencyItem> dependencies;
-  final int missingCount;
-  final int missingRequiredCount;
-  final int missingOptionalCount;
-  final MacosGuidance? macosGuidance;
 
   DependencyCheckResult({
     required this.platform,
@@ -78,8 +66,7 @@ class DependencyCheckResult {
     this.macosGuidance,
   });
 
-  factory DependencyCheckResult.fromJson(Map<String, dynamic> json) {
-    return DependencyCheckResult(
+  factory DependencyCheckResult.fromJson(Map<String, dynamic> json) => DependencyCheckResult(
       platform: json['platform'] as String,
       isMacos: json['is_macos'] as bool,
       allOk: json['all_ok'] as bool,
@@ -93,7 +80,14 @@ class DependencyCheckResult {
           ? MacosGuidance.fromJson(json['macos_guidance'] as Map<String, dynamic>)
           : null,
     );
-  }
+  final String platform;
+  final bool isMacos;
+  final bool allOk;
+  final List<DependencyItem> dependencies;
+  final int missingCount;
+  final int missingRequiredCount;
+  final int missingOptionalCount;
+  final MacosGuidance? macosGuidance;
 
   /// Get list of missing dependencies
   List<DependencyItem> get missingDependencies =>
@@ -106,9 +100,9 @@ class DependencyCheckResult {
 
 /// Service for checking system dependencies
 class DependencyCheckService {
-  static final DependencyCheckService _instance = DependencyCheckService._internal();
   factory DependencyCheckService() => _instance;
   DependencyCheckService._internal();
+  static final DependencyCheckService _instance = DependencyCheckService._internal();
 
   DependencyCheckResult? _lastResult;
   DateTime? _lastCheckTime;
@@ -140,7 +134,7 @@ class DependencyCheckService {
         baseUrl: AppConfig.baseUrl,
         connectTimeout: const Duration(seconds: 5),
         receiveTimeout: const Duration(seconds: 5),
-      ));
+      ),);
 
       final response = await dio.get('/api/system/dependencies');
       final result = DependencyCheckResult.fromJson(response.data as Map<String, dynamic>);

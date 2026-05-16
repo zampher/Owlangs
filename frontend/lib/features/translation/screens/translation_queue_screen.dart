@@ -85,11 +85,11 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     });
     try {
       final Map<String, dynamic> listResp =
-          await _svc.listTranslationTasks(limit: 50);
+          await _svc.listTranslationTasks();
       final List<dynamic> raw =
           (listResp['tasks'] as List<dynamic>?) ?? <dynamic>[];
       final List<Map<String, dynamic>> enriched =
-          await Future.wait(raw.map((dynamic t) async {
+          await Future.wait(raw.map((t) async {
         final Map<String, dynamic> row =
             Map<String, dynamic>.from(t as Map<dynamic, dynamic>);
         _mergeDownloadsFromStashMeta(row);
@@ -111,7 +111,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
           _mergeDownloadsFromStashMeta(row);
         }
         return row;
-      }));
+      }),);
       if (!mounted) return;
       setState(() {
         _tasks = enriched;
@@ -311,7 +311,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
         s == 'running';
   }
 
-  static double? _coerceUnix(dynamic v) {
+  static double? _coerceUnix(v) {
     if (v == null) {
       return null;
     }
@@ -496,7 +496,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                 : (downloads.entries.toList()
                                   ..sort(
                                     (MapEntry<String, dynamic> a,
-                                            MapEntry<String, dynamic> b) =>
+                                            MapEntry<String, dynamic> b,) =>
                                         _downloadFormatSortOrder(a.key).compareTo(
                                           _downloadFormatSortOrder(b.key),
                                         ),
@@ -668,7 +668,6 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                               VisualDensity.compact,
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 8,
-                                            vertical: 0,
                                           ),
                                           minimumSize: Size.zero,
                                           tapTargetSize:
@@ -683,7 +682,6 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                             VisualDensity.compact,
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 8,
-                                          vertical: 0,
                                         ),
                                         minimumSize: Size.zero,
                                         tapTargetSize:
