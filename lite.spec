@@ -210,6 +210,7 @@ hiddenimports = [
     # Ensure app.utils is available (alias for backend.app.utils)
     'app.utils',
     'app.utils.encoding_utils',
+    'app.utils.url_fetcher',
     # Ensure workflow module is imported (local module, not a package)
     'workflow',
     'workflow.base',
@@ -230,6 +231,10 @@ hiddenimports = [
     'workflow.html_table_to_markdown',
     'html2text',
     'bs4',
+    # extractor (lazy-imported for HTML / Fetch URL workflows)
+    'extractor',
+    'extractor.base',
+    'extractor.html_extractor',
     # python-pptx library for PPTX processing
     'pptx',
     'pptx.util',

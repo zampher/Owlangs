@@ -154,6 +154,7 @@ hiddenimports = [
     'app.routes.service.app_routes_formula_check',
     'app.utils',
     'app.utils.encoding_utils',
+    'app.utils.url_fetcher',
     'workflow',
     'workflow.base',
     'workflow.interfaces',
@@ -172,6 +173,10 @@ hiddenimports = [
     'workflow.html_table_to_markdown',
     'html2text',
     'bs4',
+    # extractor (lazy-imported for HTML / Fetch URL workflows)
+    'extractor',
+    'extractor.base',
+    'extractor.html_extractor',
     # Config manager
     'backend.config_manager',
 ]

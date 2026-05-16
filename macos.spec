@@ -156,6 +156,7 @@ hiddenimports = [
     'backend.app.config.pagination_config',
     'backend.app.utils',
     'backend.app.utils.encoding_utils',
+    'backend.app.utils.url_fetcher',
     'backend.app.utils.port',
     'backend.app.utils.app_utils',
     # backend.app.services (task, translation, download, status, platform, etc.)
@@ -244,6 +245,7 @@ hiddenimports = [
     'extractor.base',
     'extractor.mobi_extractor',
     'extractor.epub_extractor',
+    'extractor.html_extractor',
     'agents',
     'agents.segments_agent',
     'glossary',
