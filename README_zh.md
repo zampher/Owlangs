@@ -4,6 +4,8 @@
 
 > English: [README.md](README.md)
 
+<img width="1000" height="477" alt="image001" src="https://github.com/user-attachments/assets/0c4e42f6-5ed1-41c1-9db6-c5b4c57871b9" />
+
 ## 功能概览
 
 ### 📄 多格式翻译
