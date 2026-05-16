@@ -78,6 +78,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
     this.selectedExclusionFilters,
     this.onExclusionUpdated,
     this.onFormulaFix,
+    this.isConvertOnly = false,
   });
 
   final String taskId;
@@ -114,6 +115,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
   final Map<String, int>? tokenUsage;
   final Set<String>? selectedExclusionFilters;
   final void Function(int)? onFormulaFix;
+  final bool isConvertOnly;
 
   /// Check if a segment is cleared based on metadata
   bool _isSegmentCleared(Map<String, dynamic> metadata) {
@@ -635,96 +637,99 @@ class TranslationComparisonPanel extends ConsumerWidget {
             }
           }
 
+          // Build target segment widget (reused for both single-column and dual-column modes)
+          final Widget targetSegment = RepaintBoundary(
+            key: ValueKey('target_${pair.index}'),
+            child: TranslationSegmentItem(
+              itemKey: targetItemKeys[pair.index],
+              text: pair.targetText,
+              sourceText: pair.sourceText,
+              index: pair.index,
+              isSource: false,
+              isHighlighted: isHighlighted,
+              isModified: modifiedSegments.containsKey(pair.index),
+              platformUsed: pair.isImage
+                  ? null
+                  : (metadata['platform_used'] as String?),
+              isFailed: pair.isImage
+                  ? false
+                  : (metadata['is_failed'] as bool? ?? false),
+              failureReason: pair.isImage
+                  ? null
+                  : (metadata['failure_reason'] as String?),
+              needsRetry: pair.isImage
+                  ? false
+                  : (metadata['needs_retry'] as bool? ?? false),
+              isExcluded: pair.isExcluded,
+              exclusionReason: pair.exclusionReason,
+              isCleared:
+                  pair.isImage ? false : _isSegmentCleared(metadata),
+              onRetry: retranslatingSegments.contains(pair.index)
+                  ? null
+                  : onRetrySegment,
+              onMarkForRetry: onMarkForRetry,
+              onUnmarkForRetry: onUnmarkForRetry,
+              onExclude: onExcludeSegment,
+              onUnexclude: onUnexcludeSegment,
+              onClear: onClearSegment,
+              onUnclear: onUnclearSegment,
+              onTap: () => onHighlightParagraph(pair.index),
+              onEdit: (newText) => onSegmentEdit(pair.index, newText),
+              onEditingStarted: onEditingStarted,
+              onUndo: onUndo,
+              onRedo: onRedo,
+              canUndo: canUndo,
+              canRedo: canRedo,
+              previewFontSize: globalSettings.previewFontSize,
+              editFontSize: globalSettings.editFontSize,
+              imageDataMap: imageDataMap,
+              taskId: taskId,
+              onExclusionUpdated: onExclusionUpdated ??
+                  (int index) {
+                    // Fallback: Refresh segments to get updated exclusion reason
+                    segmentsPaginationController?.refresh();
+                  },
+              onFormulaFix: onFormulaFix,
+            ),
+          );
+
           return Container(
             key: segmentPairKeys[pair.index],
             margin: const EdgeInsets.only(
               bottom: 1,
             ), // Further reduced from 2 to 1 for more compact display
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                // Source segment (left)
-                Expanded(
-                  child: RepaintBoundary(
-                    key: ValueKey('source_${pair.index}'),
-                    child: TranslationSegmentItem(
-                      itemKey: sourceItemKeys[pair.index],
-                      text: pair.sourceText,
-                      index: pair.index,
-                      isSource: true,
-                      isHighlighted: isHighlighted,
-                      onTap: () => onHighlightParagraph(pair.index),
-                      previewFontSize: globalSettings.previewFontSize,
-                      editFontSize: globalSettings.editFontSize,
-                      imageDataMap: imageDataMap,
-                    ),
+            child: isConvertOnly
+                ? targetSegment
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      // Source segment (left)
+                      Expanded(
+                        child: RepaintBoundary(
+                          key: ValueKey('source_${pair.index}'),
+                          child: TranslationSegmentItem(
+                            itemKey: sourceItemKeys[pair.index],
+                            text: pair.sourceText,
+                            index: pair.index,
+                            isSource: true,
+                            isHighlighted: isHighlighted,
+                            onTap: () => onHighlightParagraph(pair.index),
+                            previewFontSize: globalSettings.previewFontSize,
+                            editFontSize: globalSettings.editFontSize,
+                            imageDataMap: imageDataMap,
+                          ),
+                        ),
+                      ),
+                      // Divider
+                      Container(
+                        width: 1,
+                        color: theme.dividerColor.withOpacity(0.6),
+                        margin: const EdgeInsets.symmetric(horizontal: 2),
+                      ),
+                      // Target segment (right)
+                      Expanded(child: targetSegment),
+                    ],
                   ),
-                ),
-                // Divider
-                Container(
-                  width: 1,
-                  color: theme.dividerColor.withOpacity(0.6),
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                ),
-                // Target segment (right)
-                Expanded(
-                  child: RepaintBoundary(
-                    key: ValueKey('target_${pair.index}'),
-                    child: TranslationSegmentItem(
-                      itemKey: targetItemKeys[pair.index],
-                      text: pair.targetText,
-                      sourceText: pair.sourceText,
-                      index: pair.index,
-                      isSource: false,
-                      isHighlighted: isHighlighted,
-                      isModified: modifiedSegments.containsKey(pair.index),
-                      platformUsed: pair.isImage
-                          ? null
-                          : (metadata['platform_used'] as String?),
-                      isFailed: pair.isImage
-                          ? false
-                          : (metadata['is_failed'] as bool? ?? false),
-                      failureReason: pair.isImage
-                          ? null
-                          : (metadata['failure_reason'] as String?),
-                      needsRetry: pair.isImage
-                          ? false
-                          : (metadata['needs_retry'] as bool? ?? false),
-                      isExcluded: pair.isExcluded,
-                      exclusionReason: pair.exclusionReason,
-                      isCleared:
-                          pair.isImage ? false : _isSegmentCleared(metadata),
-                      onRetry: retranslatingSegments.contains(pair.index)
-                          ? null
-                          : onRetrySegment,
-                      onMarkForRetry: onMarkForRetry,
-                      onUnmarkForRetry: onUnmarkForRetry,
-                      onExclude: onExcludeSegment,
-                      onUnexclude: onUnexcludeSegment,
-                      onClear: onClearSegment,
-                      onUnclear: onUnclearSegment,
-                      onTap: () => onHighlightParagraph(pair.index),
-                      onEdit: (newText) => onSegmentEdit(pair.index, newText),
-                      onEditingStarted: onEditingStarted,
-                      onUndo: onUndo,
-                      onRedo: onRedo,
-                      canUndo: canUndo,
-                      canRedo: canRedo,
-                      previewFontSize: globalSettings.previewFontSize,
-                      editFontSize: globalSettings.editFontSize,
-                      imageDataMap: imageDataMap,
-                      taskId: taskId,
-                      onExclusionUpdated: onExclusionUpdated ??
-                          (int index) {
-                            // Fallback: Refresh segments to get updated exclusion reason
-                            segmentsPaginationController?.refresh();
-                          },
-                      onFormulaFix: onFormulaFix,
-                    ),
-                  ),
-                ),
-              ],
-            ),
           );
         },
       );
@@ -770,96 +775,99 @@ class TranslationComparisonPanel extends ConsumerWidget {
         final exclusionReason = metadata['exclusion_reason'] as String?;
         final isCleared = isImage ? false : _isSegmentCleared(metadata);
 
+        // Build target segment widget (reused for both modes)
+        final Widget targetSegmentWidget = hasTarget
+            ? RepaintBoundary(
+                key: ValueKey('target_$index'),
+                child: TranslationSegmentItem(
+                  itemKey: targetItemKeys[index],
+                  text: targetParagraphs[index],
+                  sourceText:
+                      hasSource ? sourceParagraphs[index] : null,
+                  index: index,
+                  isSource: false,
+                  isHighlighted: isHighlighted,
+                  isModified: modifiedSegments.containsKey(index),
+                  platformUsed: isImage ? null : platformUsed,
+                  isFailed: isImage ? false : isFailed,
+                  failureReason: isImage ? null : failureReason,
+                  needsRetry: isImage ? false : needsRetry,
+                  isExcluded: isExcluded,
+                  exclusionReason: exclusionReason,
+                  isCleared: isCleared,
+                  onRetry: isRetranslating ? null : onRetrySegment,
+                  onMarkForRetry: onMarkForRetry,
+                  onExclude: onExcludeSegment,
+                  onUnexclude: onUnexcludeSegment,
+                  onClear: onClearSegment,
+                  onUnclear: onUnclearSegment,
+                  onTap: () => onHighlightParagraph(index),
+                  onEdit: (newText) => onSegmentEdit(index, newText),
+                  onEditingStarted: onEditingStarted,
+                  onUndo: onUndo,
+                  onRedo: onRedo,
+                  canUndo: canUndo,
+                  canRedo: canRedo,
+                  previewFontSize: globalSettings.previewFontSize,
+                  editFontSize: globalSettings.editFontSize,
+                  imageDataMap: imageDataMap,
+                  taskId: taskId,
+                  onExclusionUpdated: onExclusionUpdated ??
+                      (int index) {
+                        // Fallback: Refresh segments to get updated exclusion reason
+                        segmentsPaginationController?.refresh();
+                      },
+                ),
+              )
+            : Container(
+                // Placeholder if target is missing
+                height: 50,
+                color: scheme.surfaceContainerHighest,
+              );
+
         return Container(
           key: segmentPairKeys[index],
           margin: const EdgeInsets.only(
             bottom: 1,
           ), // Further reduced from 2 to 1 for more compact display
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              // Source segment (left)
-              Expanded(
-                child: hasSource
-                    ? RepaintBoundary(
-                        key: ValueKey('source_$index'),
-                        child: TranslationSegmentItem(
-                          itemKey: sourceItemKeys[index],
-                          text: sourceParagraphs[index],
-                          index: index,
-                          isSource: true,
-                          isHighlighted: isHighlighted,
-                          onTap: () => onHighlightParagraph(index),
-                          previewFontSize: globalSettings.previewFontSize,
-                          editFontSize: globalSettings.editFontSize,
-                          imageDataMap: imageDataMap,
-                        ),
-                      )
-                    : Container(
-                        // Placeholder if source is missing
-                        height: 50,
-                        color: scheme.surfaceContainerHighest,
-                      ),
-              ),
-              // Divider
-              Container(
-                width: 1,
-                color: theme.dividerColor.withOpacity(0.6),
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-              ),
-              // Target segment (right)
-              Expanded(
-                child: hasTarget
-                    ? RepaintBoundary(
-                        key: ValueKey('target_$index'),
-                        child: TranslationSegmentItem(
-                          itemKey: targetItemKeys[index],
-                          text: targetParagraphs[index],
-                          sourceText:
-                              hasSource ? sourceParagraphs[index] : null,
-                          index: index,
-                          isSource: false,
-                          isHighlighted: isHighlighted,
-                          isModified: modifiedSegments.containsKey(index),
-                          platformUsed: isImage ? null : platformUsed,
-                          isFailed: isImage ? false : isFailed,
-                          failureReason: isImage ? null : failureReason,
-                          needsRetry: isImage ? false : needsRetry,
-                          isExcluded: isExcluded,
-                          exclusionReason: exclusionReason,
-                          isCleared: isCleared,
-                          onRetry: isRetranslating ? null : onRetrySegment,
-                          onMarkForRetry: onMarkForRetry,
-                          onExclude: onExcludeSegment,
-                          onUnexclude: onUnexcludeSegment,
-                          onClear: onClearSegment,
-                          onUnclear: onUnclearSegment,
-                          onTap: () => onHighlightParagraph(index),
-                          onEdit: (newText) => onSegmentEdit(index, newText),
-                          onEditingStarted: onEditingStarted,
-                          onUndo: onUndo,
-                          onRedo: onRedo,
-                          canUndo: canUndo,
-                          canRedo: canRedo,
-                          previewFontSize: globalSettings.previewFontSize,
-                          editFontSize: globalSettings.editFontSize,
-                          imageDataMap: imageDataMap,
-                          taskId: taskId,
-                          onExclusionUpdated: onExclusionUpdated ??
-                              (int index) {
-                                // Fallback: Refresh segments to get updated exclusion reason
-                                segmentsPaginationController?.refresh();
-                              },
-                        ),
-                      )
-                    : Container(
-                        // Placeholder if target is missing
-                        height: 50,
-                        color: scheme.surfaceContainerHighest,
-                      ),
-              ),
-            ],
-          ),
+          child: isConvertOnly
+              ? targetSegmentWidget
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    // Source segment (left)
+                    Expanded(
+                      child: hasSource
+                          ? RepaintBoundary(
+                              key: ValueKey('source_$index'),
+                              child: TranslationSegmentItem(
+                                itemKey: sourceItemKeys[index],
+                                text: sourceParagraphs[index],
+                                index: index,
+                                isSource: true,
+                                isHighlighted: isHighlighted,
+                                onTap: () => onHighlightParagraph(index),
+                                previewFontSize: globalSettings.previewFontSize,
+                                editFontSize: globalSettings.editFontSize,
+                                imageDataMap: imageDataMap,
+                              ),
+                            )
+                          : Container(
+                              // Placeholder if source is missing
+                              height: 50,
+                              color: scheme.surfaceContainerHighest,
+                            ),
+                    ),
+                    // Divider
+                    Container(
+                      width: 1,
+                      color: theme.dividerColor.withOpacity(0.6),
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                    ),
+                    // Target segment (right)
+                    Expanded(child: targetSegmentWidget),
+                  ],
+                ),
         );
       },
     );

@@ -1264,6 +1264,7 @@ class TranslationService:
             # Convert toolbar: copy source to target on translate task only (no LLM, no convert-task exclude-all)
             copy_source_only = bool(getattr(payload, "copy_source_only", False))
             if copy_source_only:
+                task_state["copy_source_only"] = True
                 from utils.translation_segments import apply_copy_source_only_exclusions
                 apply_copy_source_only_exclusions(task_state, task_id)
 

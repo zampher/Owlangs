@@ -437,6 +437,7 @@ class _TranslationResultPreviewState
   Map<String, Map<String, String>> _imageDataMap =
       <String, Map<String, String>>{};
   bool _formatDialogShown = false; // Track if format dialog has been shown
+  bool _isConvertOnly = false; // True when task is convert-only (skip translation)
 
   @override
   void initState() {
@@ -487,6 +488,15 @@ class _TranslationResultPreviewState
 
       final String currentStatus =
           (status['status'] ?? '').toString().toLowerCase();
+
+      // Detect convert-only / copy-source-only mode from backend task state
+      final bool isConvertOnly = status['convert_only'] == true ||
+          status['copy_source_only'] == true;
+      if (isConvertOnly != _isConvertOnly && mounted) {
+        setState(() {
+          _isConvertOnly = isConvertOnly;
+        });
+      }
 
       final Map<String, dynamic>? attachments =
           status['attachments'] as Map<String, dynamic>?;
@@ -727,6 +737,15 @@ class _TranslationResultPreviewState
 
         final String currentStatus =
             (status['status'] ?? '').toString().toLowerCase();
+
+        // Detect convert-only / copy-source-only mode from backend task state
+        final bool isConvertOnly = status['convert_only'] == true ||
+            status['copy_source_only'] == true;
+        if (isConvertOnly != _isConvertOnly && mounted) {
+          setState(() {
+            _isConvertOnly = isConvertOnly;
+          });
+        }
 
         // If status changed to completed or failed, reload translation content
         if (_lastKnownStatus != null &&
@@ -4168,6 +4187,7 @@ class _TranslationResultPreviewState
       taskId: _apiTaskId(),
       isLoading: _isLoading,
       loadingError: _loadingError,
+      isConvertOnly: _isConvertOnly,
       sourceParagraphs: _sourceParagraphs,
       targetParagraphs: _targetParagraphs,
       highlightedIndexNotifier: _highlightedIndexNotifier,
