@@ -2,14 +2,21 @@
 
 ## Owlangs 1.3.1.0
 
+### New Features
+
+1. **Web page extraction (Fetch URL)**: Import content by URL. The service fetches the page and extracts body text and images, then you can run format conversion or translation directly. Two extraction modes are available: **Content** (main article text) and **Full HTML** (entire page).
+
 ### Optimizations
 
 1. **Removed “Recent activity”** from the home screen. With the **task queue** already surfacing ongoing and finished work, the extra activity strip was redundant and has been dropped for a cleaner home layout.
+2. **Exclusion state after “exclude all”**: After excluding every segment and then restoring automatic exclusion, the translate phase no longer keeps a stale “all excluded” state, so translated output no longer incorrectly reflects segments that should be translatable.
+3. **MinerU import parameters**: Fixed `convert_engine` not being passed correctly during import. MinerU parsing options and error messages are aligned so import and conversion use the same parser engine configuration.
 
 ### Bug Fixes
 
-1. **Queued translation — completed downloads**: For TXT, XLSX, PPTX, EPUB, MOBI (and similar) workflows, when a job reached **completed** in the task queue, the `downloads` map sometimes omitted **`md`** and **`md_zip`** (Markdown with embedded images vs. Markdown packaged with an images folder) URLs.
-2. **HTML layout and EPUB/MOBI exports**: Exported HTML could render with inconsistent or broken layout, which also affected **EPUB** and **MOBI** built from that HTML. The HTML generation path used by EPUB/MOBI exports was tightened to improve layout stability.
+1. **Queued translation — completed downloads**: For TXT, XLSX, PPTX, EPUB, MOBI (and similar) workflows, when a job reached **completed** in the task queue, the `downloads` map sometimes omitted **`md`** and **`md_zip`** (Markdown and Markdown with images packaged as ZIP) download URLs.
+2. **HTML layout and EPUB/MOBI exports**: Exported HTML could render with inconsistent or broken layout, which also affected **EPUB** and **MOBI** built from that HTML. The HTML generation and EPUB/MOBI export pipeline was improved for more consistent layout.
+3. **Translation progress bar**: Fixed missing or stuck progress indicators during translation for **TXT**, **SRT**, **QT_TS**, **EPUB**, and **HTML** workflows.
 
 ---
 
