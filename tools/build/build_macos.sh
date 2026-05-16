@@ -22,6 +22,7 @@ ARCHITECTURE OPTIONS:
   --arm64                Build for Apple Silicon (M1/M2/M3). Default if not specified.
   --x86_64               Build for Intel Macs (requires Rosetta 2 on Apple Silicon host).
   --universal2           Build a fat binary supporting both arm64 and x86_64 (largest).
+  --dual-arch            Build arm64 and x86_64 installers in one run (two DMGs; skips universal2).
   --all-archs            Build all three architectures sequentially (arm64 → x86_64 → universal2).
 
 OTHER OPTIONS:
@@ -34,8 +35,10 @@ EXAMPLES:
   tools/build/build_macos.sh full                    # Full version for arm64
   tools/build/build_macos.sh --x86_64                # Intel-only build
   tools/build/build_macos.sh --universal2            # Universal fat binary
+  tools/build/build_macos.sh --dual-arch             # arm64 + x86_64 DMGs (no universal2 pass)
   tools/build/build_macos.sh --all-archs             # Build all three architectures
   tools/build/build_macos.sh full --no-dmg           # Full build without DMG
+  tools/build/build_macos.sh --dual-arch --no-dmg    # arm64 + x86_64, no DMG
   tools/build/build_macos.sh --all-archs --no-dmg    # All architectures, no DMG
 
 OUTPUT:
@@ -46,7 +49,7 @@ DEPENDENCIES (host machine):
   - Python 3.12 (python.org universal2 recommended for cross-arch builds)
   - Flutter SDK (for Web frontend)
   - PyInstaller 6.x
-  - Rosetta 2 (only for --x86_64 builds on Apple Silicon)
+  - Rosetta 2 (for --x86_64, --dual-arch, or --all-archs on Apple Silicon)
 EOF
 }
 
@@ -56,6 +59,7 @@ EOF
 #   tools/build/build_macos.sh full             # build full + Web frontend + DMG (arm64)
 #   tools/build/build_macos.sh --x86_64         # build x86_64 only (smaller, Intel Macs)
 #   tools/build/build_macos.sh --universal2     # build universal2 (Intel + Apple Silicon, largest)
+#   tools/build/build_macos.sh --dual-arch      # build arm64 + x86_64 (two DMGs, no universal2)
 #   tools/build/build_macos.sh --all-archs      # build arm64 + x86_64 + universal2
 #   tools/build/build_macos.sh lite --no-dmg    # build lite only, no DMG
 #   tools/build/build_macos.sh full --no-dmg    # build full only, no DMG
@@ -103,6 +107,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --all-archs)
       build_arch=all
+      shift
+      ;;
+    --dual-arch)
+      build_arch=dual
       shift
       ;;
     -h|--help)
@@ -1058,6 +1066,40 @@ EOF
   echo "[dmg] Built: dist/${dmg_name}"
 }
 
+# Copy every top-level .dmg from a partial build directory into dist/ (multi-arch merge safety).
+# Full-tree cp can still drop an arch-specific DMG in edge cases; this pass guarantees all installers remain.
+copy_dmgs_into_dist() {
+  local label="$1"
+  local from_dir="$2"
+  if [[ ! -d "$from_dir" ]]; then
+    echo "[${label}] WARN: missing partial build dir: ${from_dir}" >&2
+    return 0
+  fi
+  shopt -s nullglob
+  local dmg_files=("${from_dir}"/*.dmg)
+  shopt -u nullglob
+  if [[ ${#dmg_files[@]} -eq 0 ]]; then
+    echo "[${label}] WARN: no .dmg found under ${from_dir} (that arch build may have failed before DMG step)" >&2
+    return 0
+  fi
+  local f
+  for f in "${dmg_files[@]}"; do
+    cp -f "$f" "${ROOT_DIR}/dist/"
+    echo "[${label}] Preserved DMG: $(basename "$f")"
+  done
+}
+
+print_macos_launch_debug_hints() {
+  echo ""
+  echo "If the installed app fails to start, check (in order):"
+  echo "  1) Menu bar app log: ~/Library/Logs/Owlangs/menubar.log"
+  echo "  2) Run the binary in Terminal (shows stderr):"
+  echo "       /Applications/Owlangs.app/Contents/MacOS/Owlangs"
+  echo "     (adjust path if you copied the app elsewhere)"
+  echo "  3) Console.app: filter for Owlangs or com.owlangs.desktop"
+  echo "  4) Crash reports: ~/Library/Logs/DiagnosticReports/ (Owlangs*.ips / .crash)"
+}
+
 main() {
   if [[ "$skip_deps" == false ]]; then
     ensure_venv
@@ -1143,11 +1185,59 @@ main() {
   echo "macOS build finished successfully."
 }
 
+# If --dual-arch is specified, build arm64 + x86_64 and merge dist (no universal2 pass)
+if [[ "$build_arch" == "dual" ]]; then
+  echo "========================================"
+  echo "  Building arm64 + x86_64 (dual-arch)"
+  echo "========================================"
+
+  rm -rf "${ROOT_DIR}/dist_arm64_build" "${ROOT_DIR}/dist_x86_64_build"
+
+  script_path="$0"
+  other_args=()
+  for arg in "$@"; do
+    [[ "$arg" != "--dual-arch" ]] && other_args+=("$arg")
+  done
+
+  echo ""
+  echo ">>> [1/2] Building arm64..."
+  bash "$script_path" ${other_args[@]+"${other_args[@]}"}
+  mv "${ROOT_DIR}/dist" "${ROOT_DIR}/dist_arm64_build"
+
+  echo ""
+  echo ">>> [2/2] Building x86_64..."
+  bash "$script_path" --x86_64 ${other_args[@]+"${other_args[@]}"}
+  mv "${ROOT_DIR}/dist" "${ROOT_DIR}/dist_x86_64_build"
+
+  echo ""
+  echo ">>> Merging builds to dist/..."
+  mkdir -p "${ROOT_DIR}/dist"
+  # Copy x86_64 first, then arm64 so shared names (e.g. Owlangs.app) favor arm64 on Apple Silicon hosts.
+  cp -R "${ROOT_DIR}/dist_x86_64_build"/* "${ROOT_DIR}/dist/" 2>/dev/null || true
+  cp -R "${ROOT_DIR}/dist_arm64_build"/* "${ROOT_DIR}/dist/" 2>/dev/null || true
+  # Re-copy all DMGs from each partial build so no arch-specific installer is lost during merge.
+  copy_dmgs_into_dist "dual-arch" "${ROOT_DIR}/dist_arm64_build"
+  copy_dmgs_into_dist "dual-arch" "${ROOT_DIR}/dist_x86_64_build"
+  rm -rf "${ROOT_DIR}/dist_arm64_build" "${ROOT_DIR}/dist_x86_64_build"
+
+  echo ""
+  echo "========================================"
+  echo "  Dual-arch build finished successfully"
+  echo "========================================"
+  echo ""
+  echo "Output files:"
+  ls -lh "${ROOT_DIR}/dist/"*.dmg 2>/dev/null || true
+  print_macos_launch_debug_hints
+  exit 0
+fi
+
 # If --all-archs is specified, build all three architectures sequentially
 if [[ "$build_arch" == "all" ]]; then
   echo "========================================"
   echo "  Building all architectures"
   echo "========================================"
+
+  rm -rf "${ROOT_DIR}/dist_arm64_build" "${ROOT_DIR}/dist_x86_64_build" "${ROOT_DIR}/dist_universal2_build"
   
   script_path="$0"
   other_args=()
@@ -1180,6 +1270,9 @@ if [[ "$build_arch" == "all" ]]; then
   cp -R "${ROOT_DIR}/dist_arm64_build"/* "${ROOT_DIR}/dist/" 2>/dev/null || true
   cp -R "${ROOT_DIR}/dist_x86_64_build"/* "${ROOT_DIR}/dist/" 2>/dev/null || true
   cp -R "${ROOT_DIR}/dist_universal2_build"/* "${ROOT_DIR}/dist/" 2>/dev/null || true
+  copy_dmgs_into_dist "all-archs" "${ROOT_DIR}/dist_arm64_build"
+  copy_dmgs_into_dist "all-archs" "${ROOT_DIR}/dist_x86_64_build"
+  copy_dmgs_into_dist "all-archs" "${ROOT_DIR}/dist_universal2_build"
   rm -rf "${ROOT_DIR}/dist_arm64_build" "${ROOT_DIR}/dist_x86_64_build" "${ROOT_DIR}/dist_universal2_build"
   
   echo ""
@@ -1189,6 +1282,7 @@ if [[ "$build_arch" == "all" ]]; then
   echo ""
   echo "Output files:"
   ls -lh "${ROOT_DIR}/dist/"*.dmg 2>/dev/null || true
+  print_macos_launch_debug_hints
   exit 0
 fi
 
