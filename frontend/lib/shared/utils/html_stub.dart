@@ -57,7 +57,7 @@ class FileReader {
 
 class Blob {
   /// Matches dart:html Blob(List parts, [String? type, String? endings]).
-  Blob();
+  Blob([List? parts, String? type, String? endings]);
 }
 
 class Url {

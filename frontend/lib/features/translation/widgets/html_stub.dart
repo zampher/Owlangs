@@ -17,7 +17,7 @@ class Style {
 }
 
 class Blob {
-  Blob();
+  Blob([List? parts, String? type, String? endings]);
 }
 
 class Url {
