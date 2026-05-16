@@ -4,7 +4,7 @@
 
 > English: [README.md](README.md)
 
-<img width="1000" height="477" alt="image001" src="https://github.com/user-attachments/assets/0c4e42f6-5ed1-41c1-9db6-c5b4c57871b9" />
+<img width="1000" height="477" alt="Image002" src="https://github.com/user-attachments/assets/a04713c1-7a0f-4b70-8c19-e14f468288e8" />
 
 ## 功能概览
 
