@@ -3761,6 +3761,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       }
     }
 
+    // Widget may have been disposed during the async file processing above.
+    if (!mounted) return;
+
     // Auto-update workflow type if auto-select is enabled
     final TranslationQuickSettings qs = widget.flowId != null
         ? ref.read(translationQuickSettingsProviderFamily(widget.flowId!))

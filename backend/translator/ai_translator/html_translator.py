@@ -392,4 +392,11 @@ class HtmlTranslator(AiTranslator):
                     translated_text = translation_map[original_text]
                     tag.string = translated_text
         
+        # Fix lazy-loaded images: copy data-src to src if src is empty/missing
+        for img in soup.find_all('img'):
+            src = img.get('src', '').strip()
+            data_src = img.get('data-src', '').strip()
+            if not src and data_src:
+                img['src'] = data_src
+        
         return soup.encode('utf-8')

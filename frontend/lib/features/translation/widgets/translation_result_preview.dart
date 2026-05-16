@@ -126,6 +126,10 @@ class _TranslationResultPreviewState
   /// [TranslationState.taskId] over the tab's embedded [TranslationResultPreview.taskId] so
   /// export URLs stay valid after re-submit if the tab widget was not rebuilt with the new id.
   String _apiTaskId() {
+    // Timer/async callbacks may run after dispose; ref is invalid then.
+    if (!mounted) {
+      return widget.taskId;
+    }
     if (widget.flowId != null) {
       final dynamic st =
           ref.read(translationStateProviderFamily(widget.flowId!));
@@ -472,12 +476,15 @@ class _TranslationResultPreviewState
   /// Load task status to get attachments (e.g., glossary) and token usage
   /// Token usage is only loaded when translation is completed (called once when status changes to completed)
   Future<void> _loadTaskStatus() async {
-    // Skip if taskId is 'pending' (not yet submitted)
-    if (_apiTaskId() == 'pending') return;
+    if (!mounted) return;
+    final String taskId = _apiTaskId();
+    if (taskId == 'pending') return;
 
     try {
       final TranslationService svc = TranslationService();
-      final Map<String, dynamic> status = await svc.getStatus(_apiTaskId());
+      final Map<String, dynamic> status = await svc.getStatus(taskId);
+      if (!mounted) return;
+
       final String currentStatus =
           (status['status'] ?? '').toString().toLowerCase();
 
@@ -501,7 +508,7 @@ class _TranslationResultPreviewState
         // Set default formats to backend defaults (html for table, text for equation)
         // without showing dialog
         final formatNotifier = ref.read(
-          formatSettingsProviderFamily(_apiTaskId()).notifier,
+          formatSettingsProviderFamily(taskId).notifier,
         );
         if (hasTables) {
           formatNotifier.setTableFormat('html'); // Backend default
@@ -524,7 +531,7 @@ class _TranslationResultPreviewState
               : 0;
 
           // Update token usage even if totalTokens is 0 (to show statistics)
-          if (totalTokens >= 0) {
+          if (totalTokens >= 0 && mounted) {
             setState(() {
               _tokenUsage = <String, int>{
                 'input_tokens': tokenUsageData['input_tokens'] is int
@@ -710,8 +717,14 @@ class _TranslationResultPreviewState
       }
 
       try {
+        final String pollTaskId = _apiTaskId();
         final TranslationService svc = TranslationService();
-        final Map<String, dynamic> status = await svc.getStatus(_apiTaskId());
+        final Map<String, dynamic> status = await svc.getStatus(pollTaskId);
+        if (!mounted) {
+          t.cancel();
+          return;
+        }
+
         final String currentStatus =
             (status['status'] ?? '').toString().toLowerCase();
 
@@ -732,7 +745,9 @@ class _TranslationResultPreviewState
         }
 
         // If status is already completed but we haven't loaded token usage yet, try to load it
-        if (currentStatus == 'completed' && _tokenUsage == null) {
+        if (currentStatus == 'completed' &&
+            _tokenUsage == null &&
+            mounted) {
           _loadTaskStatus();
         }
 
@@ -4898,6 +4913,9 @@ class _TranslationResultPreviewState
       } else {
         availableFormats = <String>['html', 'json'];
       }
+    } else if (resolvedWorkflowType == 'html') {
+      // HTML workflow: docx, md, html (PDF not supported)
+      availableFormats = <String>['docx', 'md', 'html'];
     } else {
       // PDF / markdown_based / txt: docx, md, html; add pdf when not hidden (e.g. PDF source)
       availableFormats = <String>['docx', 'md', 'html'];

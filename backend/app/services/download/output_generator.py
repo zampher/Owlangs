@@ -939,9 +939,9 @@ class OutputGenerator:
                 self.task_manager.add_log(task_id, "error", f"Error generating DOCX with save_as_docx: {str(e)}")
                 self.task_manager.add_log(task_id, "error", f"Error traceback: {error_trace}")
         else:
-            # Fallback: For TXT/MOBI/EPUB workflows, convert from HTML or MD directly (preserves format and images)
+            # Fallback: For TXT/HTML/MOBI/EPUB workflows, convert from HTML or MD directly (preserves format and images)
             workflow_type = getattr(payload, 'workflow_type', None)
-            if workflow_type in ("txt", "mobi", "epub"):
+            if workflow_type in ("txt", "html", "mobi", "epub"):
                 workflow_name = "TXT" if workflow_type == "txt" else "MOBI/EPUB"
                 self.task_manager.add_log(task_id, "info", f"[DOCX-EXPORT] {workflow_name} workflow: Converting to DOCX from HTML or MD (preserves format and images)...")
                 try:

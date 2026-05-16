@@ -28,6 +28,14 @@ def html_content_to_markdown(html_content: str) -> str:
 
     table_fragments = extract_tables_and_insert_placeholders(soup)
 
+    # Preprocess lazy-loaded images: copy data-src to src so html2text
+    # (and _soup_to_markdown) can see the actual image URLs.
+    for img in soup.find_all("img"):
+        src = img.get("src", "").strip()
+        data_src = img.get("data-src", "").strip()
+        if not src and data_src:
+            img["src"] = data_src
+
     try:
         import html2text
 
@@ -49,6 +57,47 @@ def html_content_to_markdown(html_content: str) -> str:
     return _clean_markdown(markdown)
 
 
+def _extract_inline_md(elem) -> str:
+    """Recursively extract inline Markdown from an element, preserving <img> tags."""
+    from bs4 import NavigableString, Tag
+
+    parts: list[str] = []
+    for child in elem.children:
+        if isinstance(child, NavigableString):
+            parts.append(str(child))
+        elif isinstance(child, Tag):
+            if child.name == "img":
+                alt = child.get("alt", "")
+                # Prefer data-src (lazy-load) over src for WeChat/modern HTML
+                src = child.get("data-src") or child.get("src", "")
+                if src:
+                    parts.append(f"![{alt}]({src})")
+            elif child.name == "a":
+                href = child.get("href", "")
+                inner = _extract_inline_md(child).strip()
+                if href and inner:
+                    parts.append(f"[{inner}]({href})")
+                elif inner:
+                    parts.append(inner)
+            elif child.name in ("strong", "b"):
+                inner = _extract_inline_md(child).strip()
+                if inner:
+                    parts.append(f"**{inner}**")
+            elif child.name in ("em", "i"):
+                inner = _extract_inline_md(child).strip()
+                if inner:
+                    parts.append(f"*{inner}*")
+            elif child.name == "br":
+                parts.append(" ")
+            elif child.name in ("span", "code"):
+                parts.append(_extract_inline_md(child))
+            else:
+                # Recursively process unknown tags to preserve inline images
+                # (e.g., <figure>, <main>, <header>, <picture>)
+                parts.append(_extract_inline_md(child))
+    return "".join(parts)
+
+
 def _soup_to_markdown(soup) -> str:
     from workflow.html_table_to_markdown import html_table_to_markdown_fragment
 
@@ -61,12 +110,12 @@ def _soup_to_markdown(soup) -> str:
                 lines.append(text.strip())
         elif elem.name in ("h1", "h2", "h3", "h4", "h5", "h6"):
             level = int(elem.name[1])
-            text = elem.get_text(strip=True)
+            text = _extract_inline_md(elem).strip()
             if text:
                 lines.append("#" * level + " " + text)
                 lines.append("")
         elif elem.name == "p":
-            text = elem.get_text(separator=" ", strip=True)
+            text = _extract_inline_md(elem).strip()
             if text:
                 lines.append(text)
                 lines.append("")
@@ -90,38 +139,39 @@ def _soup_to_markdown(soup) -> str:
             lines.append("")
         elif elem.name == "img":
             alt = elem.get("alt", "")
-            src = elem.get("src", "")
+            # Prefer data-src (lazy-load) over src for WeChat/modern HTML
+            src = elem.get("data-src") or elem.get("src", "")
             if src:
                 lines.append(f"![{alt}]({src})")
         elif elem.name == "a":
-            text = elem.get_text(strip=True)
+            text = _extract_inline_md(elem).strip()
             href = elem.get("href", "")
             if text and href:
                 lines.append(f"[{text}]({href})")
             elif text:
                 lines.append(text)
         elif elem.name in ("strong", "b"):
-            text = elem.get_text(strip=True)
+            text = _extract_inline_md(elem).strip()
             if text:
                 lines.append(f"**{text}**")
         elif elem.name in ("em", "i"):
-            text = elem.get_text(strip=True)
+            text = _extract_inline_md(elem).strip()
             if text:
                 lines.append(f"*{text}*")
         elif elem.name in ("ul", "ol"):
             items = elem.find_all("li", recursive=False)
             for i, item in enumerate(items):
-                text = item.get_text(separator=" ", strip=True)
+                text = _extract_inline_md(item).strip()
                 if text:
                     prefix = "- " if elem.name == "ul" else f"{i + 1}. "
                     lines.append(prefix + text)
             lines.append("")
         elif elem.name == "li":
-            text = elem.get_text(separator=" ", strip=True)
+            text = _extract_inline_md(elem).strip()
             if text:
                 lines.append(text)
         else:
-            text = elem.get_text(separator=" ", strip=True)
+            text = _extract_inline_md(elem).strip()
             if text:
                 lines.append(text)
 

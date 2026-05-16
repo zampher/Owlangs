@@ -59,6 +59,12 @@ def _strip_layout_noise_from_table_clone(table: Any) -> str:
 
 
 def _simple_table_to_pipe_markdown(table: Any) -> str:
+    """Convert a simple rectangular table to pipe-style Markdown.
+
+    Preserves inline images inside cells by using _extract_inline_md.
+    """
+    from workflow.html_to_markdown_export import _extract_inline_md
+
     rows_out: list[list[str]] = []
     for tr in table.find_all("tr"):
         cells = tr.find_all(("td", "th"), recursive=False)
@@ -67,9 +73,10 @@ def _simple_table_to_pipe_markdown(table: Any) -> str:
         row: list[str] = []
         for cell in cells:
             text = (
-                cell.get_text(separator=" ", strip=True)
+                _extract_inline_md(cell)
                 .replace("\n", " ")
                 .replace("|", "\\|")
+                .strip()
             )
             row.append(text if text else " ")
         rows_out.append(row)
