@@ -229,16 +229,7 @@ class TranslationResultToolbar extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 4), // Further reduced spacing
-                  Text(
-                    '$progress%',
-                    style: TextStyle(
-                      fontSize: 10, // Reduced from 11 to 10
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  // Cancel button and status text
+                  // Cancel button and status text (progress% included here to avoid empty width flicker)
                   if (isActive) ...<Widget>[
                     const SizedBox(width: 4), // Further reduced spacing
                     // Cancel button placed before status text so its position never shifts
@@ -282,7 +273,10 @@ class TranslationResultToolbar extends ConsumerWidget {
                     const SizedBox(width: 4), // Further reduced spacing
                     Flexible(
                       child: Text(
-                        _getStatusDisplayText(l10n, statusText),
+                        () {
+                          final msg = _getStatusDisplayText(l10n, statusText);
+                          return msg.isNotEmpty ? msg : '$progress%';
+                        }(),
                         style: TextStyle(
                           fontSize: 10, // Further reduced from 11 to 10
                           fontWeight: FontWeight.w600,
@@ -735,7 +729,7 @@ class TranslationResultToolbar extends ConsumerWidget {
         return l10n.translationStatusCancelled;
       case 'processing':
       case 'pending':
-        return l10n.translationStatusTranslating;
+        return ''; // Fixed label removed; caller falls back to '$progress%' to avoid flicker
       default:
         return status.isNotEmpty
             ? status

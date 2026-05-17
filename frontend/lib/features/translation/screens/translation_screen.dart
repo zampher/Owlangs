@@ -3207,7 +3207,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           final Map<String, dynamic> statusResp = await svc.pollUntilDone(
             taskId,
             onUpdate: (Map<String, dynamic> st) {
-              notifier.setStatusText((st['status'] ?? '').toString());
+              final String backendStatus = (st['status'] ?? '').toString();
+              final String backendMessage = (st['message'] ?? '').toString();
+              notifier.setStatusText(backendMessage.isNotEmpty ? backendMessage : backendStatus);
               // Safely extract progress, handling null and invalid types
               final dynamic progressValue = st['progress'];
               final int progress = (progressValue is num)
@@ -5116,7 +5118,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       final Map<String, dynamic> statusResp = await svc.pollUntilDone(
         taskId,
         onUpdate: (Map<String, dynamic> st) async {
-          notifier.setStatusText((st['status'] ?? '').toString());
+          final String backendStatus = (st['status'] ?? '').toString();
+          final String backendMessage = (st['message'] ?? '').toString();
+          notifier.setStatusText(backendMessage.isNotEmpty ? backendMessage : backendStatus);
           // Safely extract progress, handling null and invalid types
           final dynamic progressValue = st['progress'];
           final int progress = (progressValue is num)
