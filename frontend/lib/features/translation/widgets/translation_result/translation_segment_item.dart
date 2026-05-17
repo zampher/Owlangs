@@ -780,7 +780,8 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                       (widget.onExclude != null && !_localIsExcluded) ||
                       (widget.onClear != null &&
                           widget.text.isNotEmpty &&
-                          !_localIsCleared)))
+                          !_localIsCleared) ||
+                      (widget.onEdit != null && !_isEditing)))
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Row(
@@ -845,6 +846,50 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                                               Brightness.dark
                                           ? Colors.green.shade300
                                           : Colors.green.shade700)),
+                            ),
+                          ),
+                        ),
+                      // Edit button (trigger inline editing)
+                      if (!widget.isSource && widget.onEdit != null && !_isEditing)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: _startEditing,
+                              borderRadius: BorderRadius.circular(4),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: Colors.blue.shade300,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[
+                                    Icon(
+                                      Icons.edit,
+                                      size: 12,
+                                      color: Colors.blue.shade700,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      'Edit',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.blue.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
