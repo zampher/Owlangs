@@ -160,15 +160,15 @@ def check_system_dependencies() -> Dict[str, any]:
     macos_guidance = None
     if is_macos and missing:
         macos_guidance = {
-            "message": "Some dependencies are missing. You can install them using the bundled installer.",
+            "message": (
+                "Some dependencies are missing. Use the menu bar installer "
+                "(Check Dependencies → Install) inside Owlangs.app."
+            ),
             "steps": [
-                "1. Open Terminal",
-                "2. Navigate to the Dependencies folder:",
-                "   cd /Volumes/Owlangs/Dependencies",
-                "3. Run the installer:",
-                "   ./install_dependencies.sh",
-                "4. (Optional) Check status without installing:",
-                "   ./install_dependencies.sh status",
+                "1. Open Owlangs from Applications (menu bar icon)",
+                "2. Click menu bar → Check Dependencies",
+                "3. Click Install (you may be prompted for your password)",
+                "4. If Install fails, click Help for manual steps",
             ],
             "latex_note": (
                 "For PDF math rendering, XeLaTeX is required. "

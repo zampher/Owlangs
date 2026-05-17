@@ -43,7 +43,7 @@ EXAMPLES:
 
 OUTPUT:
   dist/Owlangs.app                      The signed .app bundle
-  dist/Owlangs-{ver}-mac-{arch}.dmg     Installer DMG (unless --no-dmg)
+  dist/Owlangs-{ver}-mac-{arch}.dmg     DMG: auto-opens install window with drag-to-Applications guide (unless --no-dmg)
 
 DEPENDENCIES (host machine):
   - Python 3.12 (python.org universal2 recommended for cross-arch builds)
@@ -752,6 +752,100 @@ EOF
   echo "[bundle] Built app bundle: dist/${app_name}"
 }
 
+# Finder drag-install window + auto-open on mount (Docker-style: double-click DMG → window pops up).
+configure_dmg_finder_layout() {
+  local mount_point="$1"
+  local volname="$2"
+  local app_item="$3"
+  local bg_png="${mount_point}/.background/background.png"
+  local ds_store="${mount_point}/.DS_Store"
+
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    echo "[dmg] Skipping Finder layout (not macOS)" >&2
+    return 0
+  fi
+
+  if [[ ! -f "${bg_png}" ]]; then
+    echo "[dmg] ERROR: Background image missing: ${bg_png}" >&2
+    return 1
+  fi
+
+  # Extended attributes on the background file can prevent Finder from binding it.
+  xattr -c "${bg_png}" 2>/dev/null || true
+
+  echo "[dmg] Waiting for Finder (avoid AppleScript disk -1728)..."
+  sleep 3
+
+  local ds_mtime_before=0
+  if [[ -f "${ds_store}" ]]; then
+    ds_mtime_before=$(stat -f %m "${ds_store}" 2>/dev/null || echo 0)
+  fi
+
+  echo "[dmg] Configuring Finder install window (background + icon layout)..."
+  if ! /usr/bin/osascript "${SCRIPT_DIR}/dmg_finder_layout.applescript" "${volname}" "${app_item}"; then
+    echo "[dmg] ERROR: dmg_finder_layout.applescript failed." >&2
+    echo "[dmg] Grant Automation: System Settings → Privacy → Automation → Terminal → Finder" >&2
+    return 1
+  fi
+
+  sync
+  sleep 2
+
+  local wait=0 ds_ok=false
+  while [[ $wait -lt 30 ]]; do
+    if [[ -f "${ds_store}" ]]; then
+      local ds_mtime_now
+      ds_mtime_now=$(stat -f %m "${ds_store}" 2>/dev/null || echo 0)
+      if [[ "${ds_mtime_now}" -gt "${ds_mtime_before}" ]]; then
+        ds_ok=true
+        break
+      fi
+    fi
+    sleep 1
+    wait=$((wait + 1))
+  done
+  if [[ "$ds_ok" == true ]]; then
+    echo "[dmg] .DS_Store updated after Finder layout (${wait}s)"
+    if strings "${ds_store}" 2>/dev/null | grep -q "background"; then
+      echo "[dmg] Verified: .DS_Store references background image"
+    else
+      echo "[dmg] WARNING: .DS_Store updated but background reference not found in file." >&2
+    fi
+  else
+    echo "[dmg] WARNING: .DS_Store was not updated; install background may be missing." >&2
+  fi
+
+  if ! [[ -r "${bg_png}" ]]; then
+    echo "[dmg] ERROR: background.png not readable at ${bg_png}" >&2
+    return 1
+  fi
+  chmod 644 "${bg_png}" 2>/dev/null || true
+
+  echo "[dmg] Fixing DMG permissions (excluding .background)..."
+  for entry in "${mount_point}"/*; do
+    [[ -e "$entry" ]] || continue
+    [[ "$(basename "$entry")" == ".background" ]] && continue
+    chmod -Rf go-w "$entry" 2>/dev/null || true
+  done
+  # Do not SetFile -a V .background — causes Write Permissions Error (-61) and can break background binding.
+  rm -rf "${mount_point}/.fseventsd" 2>/dev/null || true
+
+  echo "[dmg] Enabling open-on-mount (bless)..."
+  if [[ "$(uname -m)" == "arm64" ]]; then
+    bless --folder "${mount_point}" 2>/dev/null || true
+    bless --folder "${mount_point}" --openfolder "${mount_point}" 2>/dev/null || true
+  elif bless --folder "${mount_point}" --openfolder "${mount_point}" 2>/dev/null; then
+    :
+  elif bless --folder "${mount_point}" --openfolder "${mount_point}" --fsstub "${mount_point}" 2>/dev/null; then
+    :
+  else
+    echo "[dmg] WARNING: bless failed; user may need to open the mounted volume manually." >&2
+  fi
+  echo "[dmg] Volume will open automatically when DMG is mounted (if bless succeeded)"
+
+  return 0
+}
+
 create_dmg() {
   local src_name="$1"
   local dmg_name="$2"
@@ -810,257 +904,97 @@ create_dmg() {
     return 1
   fi
 
-  # Create DMG background image with installation instructions
-  echo "[dmg] Creating DMG background image..."
-  local bg_dir="${staging_dir}/background"
-  mkdir -p "${bg_dir}"
-  
-  # Create a simple background image using ImageMagick or sips
-  # First, let's create the background using Python with PIL
-  python3 << 'PYEOF'
-from PIL import Image, ImageDraw, ImageFont
-import os
-
-# Create a 800x700 background image
-width, height = 800, 700
-img = Image.new('RGB', (width, height), color='#f5f5f7')
-draw = ImageDraw.Draw(img)
-
-# Try to use system fonts, fallback to default
-try:
-    # Try to use macOS system fonts
-    title_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 36)
-    subtitle_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 18)
-    text_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 14)
-    small_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 12)
-except:
-    try:
-        title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
-        subtitle_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
-        text_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
-        small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
-    except:
-        title_font = ImageFont.load_default()
-        subtitle_font = ImageFont.load_default()
-        text_font = ImageFont.load_default()
-        small_font = ImageFont.load_default()
-
-# Draw title
-title_text = "Owlangs Installation"
-subtitle_text = "Drag Owlangs.app to Applications"
-
-# Calculate text position (centered)
-bbox = draw.textbbox((0, 0), title_text, font=title_font)
-title_width = bbox[2] - bbox[0]
-title_x = (width - title_width) // 2
-draw.text((title_x, 30), title_text, fill='#1d1d1f', font=title_font)
-
-bbox = draw.textbbox((0, 0), subtitle_text, font=subtitle_font)
-subtitle_width = bbox[2] - bbox[0]
-subtitle_x = (width - subtitle_width) // 2
-draw.text((subtitle_x, 80), subtitle_text, fill='#86868b', font=subtitle_font)
-
-# Draw installation steps
-steps = [
-    ("1", "Drag Owlangs.app to Applications"),
-    ("2", "Run Dependencies/install_dependencies.sh"),
-    ("3", "Open Owlangs from Launchpad"),
-    ("4", "Use menu bar to start & open browser")
-]
-
-y_pos = 150
-for num, step in steps:
-    # Draw circle with number
-    circle_x, circle_y = 100, y_pos + 5
-    draw.ellipse([circle_x-15, circle_y-15, circle_x+15, circle_y+15], fill='#007aff')
-    bbox = draw.textbbox((0, 0), num, font=text_font)
-    num_width = bbox[2] - bbox[0]
-    num_height = bbox[3] - bbox[1]
-    draw.text((circle_x - num_width//2, circle_y - num_height//2), num, fill='white', font=text_font)
-    
-    # Draw step text
-    draw.text((140, y_pos), step, fill='#1d1d1f', font=text_font)
-    y_pos += 50
-
-# Draw system requirements section
-y_pos += 20
-draw.text((50, y_pos), "System Requirements:", fill='#1d1d1f', font=subtitle_font)
-y_pos += 35
-
-requirements = [
-    "• macOS 12.0 or later",
-    "• 4GB RAM (8GB recommended)",
-    "• 2GB free disk space"
-]
-
-for req in requirements:
-    draw.text((70, y_pos), req, fill='#86868b', font=small_font)
-    y_pos += 25
-
-# Draw dependencies note
-y_pos += 20
-draw.text((50, y_pos), "Dependencies:", fill='#1d1d1f', font=subtitle_font)
-y_pos += 35
-
-deps = [
-    "• Run: Dependencies/install_dependencies.sh",
-    "• Auto-checks & installs missing items"
-]
-
-for dep in deps:
-    draw.text((70, y_pos), dep, fill='#86868b', font=small_font)
-    y_pos += 25
-
-# Draw support info at bottom
-support_text = "Support: github.com/zampher/owlangs"
-bbox = draw.textbbox((0, 0), support_text, font=small_font)
-support_width = bbox[2] - bbox[0]
-support_x = (width - support_width) // 2
-draw.text((support_x, height - 40), support_text, fill='#86868b', font=small_font)
-
-# Save the image
-bg_path = os.environ.get('BG_PATH', '/tmp/dmg_background.png')
-img.save(bg_path, 'PNG')
-print(f"Background image created: {bg_path}")
-PYEOF
-
-  # Move the background image to DMG staging
-  if [[ -f "/tmp/dmg_background.png" ]]; then
-    mv "/tmp/dmg_background.png" "${bg_dir}/.background.png"
-    echo "[dmg] Background image created successfully"
-  else
-    echo "[dmg] WARNING: Failed to create background image"
+  # Drag-to-Applications background (arrow + short title); no README in DMG root.
+  echo "[dmg] Rendering drag-install background..."
+  mkdir -p "${dmg_root}/.background"
+  local dmg_py=python3
+  if [[ -n "${VIRTUAL_ENV:-}" ]] && [[ -x "${VIRTUAL_ENV}/bin/python" ]]; then
+    dmg_py="${VIRTUAL_ENV}/bin/python"
+  elif [[ -x "${ROOT_DIR}/.venv/bin/python" ]]; then
+    dmg_py="${ROOT_DIR}/.venv/bin/python"
   fi
-
-  # Create a simple README file (flat structure, English filename)
-  echo "[dmg] Creating README..."
-  cat > "${dmg_root}/README.txt" <<'EOF'
-Owlangs Installation Guide
-==========================
-
-QUICK INSTALL (Recommended: Owlangs.app)
-----------------------------------------
-1. Drag Owlangs.app to Applications folder
-2. Open terminal and run: cd /Volumes/Owlangs/Dependencies && ./install_dependencies.sh
-3. Open Owlangs from Launchpad
-4. Click "Start Server" from the menu bar to start the backend
-5. Select "Open Browser" to access Owlangs in your browser
-
-FEATURES
---------
-Owlangs.app provides:
-  • Dock icon stays visible when running
-  • Built-in console window for backend logs
-  • Menu bar controls for quick access
-  • Auto-start option in Preferences
-  • Easy start/stop/restart
-
-ALTERNATIVE: Legacy Launcher (Owlangs-legacy.app)
---------------------------------------------------
-Owlangs-legacy.app opens Terminal for logs.
-Use Owlangs.app for better integrated experience.
-
-SYSTEM REQUIREMENTS
--------------------
-• macOS 12.0 or later
-• 4GB RAM (8GB recommended)  
-• 2GB free disk space
-
-DEPENDENCIES
-------------
-For full functionality, install these dependencies:
-
-EASY INSTALL (Recommended)
-----------------------------
-Run the smart installer:
-
-  cd /Volumes/Owlangs/Dependencies
-  ./install_dependencies.sh
-
-This will automatically check and install missing dependencies:
-  • Homebrew (package manager)
-  • Redis (caching & tasks)
-  • Pandoc (document conversion)
-  • XeLaTeX (PDF math rendering)
-  • Calibre (MOBI/EPUB export)
-
-MANUAL INSTALL
---------------
-If you prefer manual installation:
-
-1. Homebrew
-   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-2. Redis
-   brew install redis && brew services start redis
-
-3. Pandoc
-   brew install pandoc
-
-4. XeLaTeX
-   brew install --cask mactex
-   # OR: brew install --cask tinytex
-
-5. Calibre (for MOBI/EPUB export)
-   brew install --cask calibre
-
-6. Playwright Chromium (for HTML to PDF)
-   # Run inside Owlangs Python environment after first launch
-   playwright install chromium
-
-CHECK STATUS
-------------
-To check what's installed:
-
-  cd /Volumes/Owlangs/Dependencies
-  ./install_dependencies.sh status
-
-TROUBLESHOOTING
----------------
-• Gatekeeper blocked: System Settings > Privacy & Security > Allow
-• App won't start: Check dependencies are installed
-• Translation failed: Configure API KEY
-• Export failed: Install Pandoc
-• PDF export failed: Install XeLaTeX
-• MOBI/EPUB export failed: Install Calibre
-• HTML to PDF failed: Run 'playwright install chromium'
-
-SUPPORT
--------
-https://github.com/zampher/owlangs
-EOF
+  if ! "${dmg_py}" "${SCRIPT_DIR}/render_dmg_background.py" "${dmg_root}/.background/background.png"; then
+    echo "[dmg] ERROR: Failed to render DMG background (need Pillow: pip install pillow)" >&2
+    return 1
+  fi
+  # Do not hide .background before DMG is built; Finder layout runs after mount.
 
   # Provide Applications shortcut
   echo "[dmg] Creating Applications shortcut..."
   ln -s /Applications "${dmg_root}/Applications" 2>/dev/null || true
   echo "[dmg] Applications shortcut created"
+  # install_dependencies.sh is bundled inside Owlangs.app (menubar_macos.spec); no DMG Dependencies folder.
 
-  # Copy dependencies folder (only if exists, flat structure)
-  if [[ -d "${ROOT_DIR}/3rdParty/macos" ]]; then
-    echo "[dmg] Copying dependencies..."
-    cp -R "${ROOT_DIR}/3rdParty/macos" "${dmg_root}/Dependencies"
-    echo "[dmg] Dependencies copied successfully"
+  local volname="Owlangs"
+  local rw_dmg="${staging_dir}/${volname}-rw.dmg"
+  local out_dmg="${ROOT_DIR}/dist/${dmg_name}"
+  mkdir -p "${ROOT_DIR}/dist"
+  rm -f "${rw_dmg}" "${out_dmg}"
+
+  if [[ -d "/Volumes/${volname}" ]]; then
+    echo "[dmg] Detaching stale /Volumes/${volname} ..."
+    hdiutil detach "/Volumes/${volname}" -force 2>/dev/null || true
+    sleep 1
   fi
 
-  echo "[dmg] Creating DMG file using hdiutil makehybrid..."
-  echo "[dmg] Command: hdiutil makehybrid -hfs -hfs-volume-name \"Owlangs\" -o \"${ROOT_DIR}/dist/${dmg_name}\" \"${dmg_root}\""
-  
-  hdiutil makehybrid -hfs -hfs-volume-name "Owlangs" -o "${ROOT_DIR}/dist/${dmg_name}" "${dmg_root}"
-  
-  if [[ $? -eq 0 ]]; then
-    echo "[dmg] DMG file created successfully"
-    echo "[dmg] DMG file location: ${ROOT_DIR}/dist/${dmg_name}"
-    if [[ -f "${ROOT_DIR}/dist/${dmg_name}" ]]; then
-      local dmg_size=$(du -h "${ROOT_DIR}/dist/${dmg_name}" | cut -f1)
-      echo "[dmg] DMG file size: ${dmg_size}"
-    else
-      echo "[dmg] WARNING: DMG command completed but file not found!" 1>&2
-    fi
-  else
-    echo "[dmg] ERROR: hdiutil makehybrid command failed with exit code $?" 1>&2
+  echo "[dmg] Creating read-write disk image..."
+  hdiutil create -srcfolder "${dmg_root}" -volname "${volname}" -fs HFS+ \
+    -fsargs "-c c=64,a=16,e=16" -format UDRW -ov "${rw_dmg}" || {
+    echo "[dmg] ERROR: hdiutil create failed" >&2
+    return 1
+  }
+
+  local attach_line mount_point device
+  attach_line=$(hdiutil attach -readwrite -noverify -noautofsck -nobrowse -noautoopen "${rw_dmg}" 2>&1) || {
+    echo "[dmg] ERROR: hdiutil attach failed: ${attach_line}" >&2
+    return 1
+  }
+  device=$(echo "${attach_line}" | awk '/^\/dev\// { print $1; exit }')
+  if [[ -z "${device}" ]]; then
+    echo "[dmg] ERROR: Could not parse hdiutil attach device from: ${attach_line}" >&2
     return 1
   fi
-  
+  mount_point=$(echo "${attach_line}" | awk '/\/Volumes\// { print $3; exit }')
+  if [[ -z "${mount_point}" ]]; then
+    mount_point="/Volumes/${volname}"
+  fi
+  echo "[dmg] Mounted at ${mount_point} (${device})"
+
+  mkdir -p "${mount_point}/.background"
+  cp -f "${dmg_root}/.background/background.png" "${mount_point}/.background/background.png"
+  xattr -c "${mount_point}/.background/background.png" 2>/dev/null || true
+  chmod 644 "${mount_point}/.background/background.png" 2>/dev/null || true
+  if command -v sips >/dev/null 2>&1; then
+    sips -s format tiff "${mount_point}/.background/background.png" \
+      --out "${mount_point}/.background/background.tiff" >/dev/null 2>&1 || true
+  fi
+  echo "[dmg] Background image installed on volume ($(du -h "${mount_point}/.background/background.png" | awk '{print $1}'))"
+
+  configure_dmg_finder_layout "${mount_point}" "${volname}" "${src_name}" || {
+    hdiutil detach "${device}" -force 2>/dev/null || true
+    return 1
+  }
+  sync
+  hdiutil detach "${device}" -force || hdiutil detach "${device}" -force
+
+  echo "[dmg] Compressing DMG → ${out_dmg}"
+  hdiutil convert "${rw_dmg}" -format UDZO -imagekey zlib-level=9 -o "${out_dmg}" || {
+    echo "[dmg] ERROR: hdiutil convert failed" >&2
+    return 1
+  }
+  rm -f "${rw_dmg}"
+
+  if [[ -f "${out_dmg}" ]]; then
+    echo "[dmg] DMG file created successfully"
+    echo "[dmg] DMG file location: ${out_dmg}"
+    local dmg_size
+    dmg_size=$(du -h "${out_dmg}" | cut -f1)
+    echo "[dmg] DMG file size: ${dmg_size}"
+  else
+    echo "[dmg] ERROR: DMG not found after convert" >&2
+    return 1
+  fi
+
   rm -rf "${staging_dir}"
   echo "[dmg] Cleaned staging directory"
   echo "[dmg] Built: dist/${dmg_name}"
