@@ -186,6 +186,7 @@ For issues, questions, or contributions:
 ## Community
 
 交流微信号Wechat：zzmaimeng
+
 <img width="280" alt="47172c0cb3a72190acf77a48417f425e" src="https://github.com/user-attachments/assets/fd3edadf-bbff-4494-bc53-f0e966999e64" />
 
 欢迎加入技术交流微信群（有时会过期，可加微信号）：
