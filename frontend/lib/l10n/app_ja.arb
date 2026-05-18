@@ -281,6 +281,8 @@
   "translationQueueDownloadMdZip": "MD（ZIP）",
   "translationQueueExecutionModeQueued": "キュー",
   "translationQueueExecutionModeImmediate": "即時",
+  "translationQueueTaskTypeTranslation": "翻訳",
+  "translationQueueTaskTypeConversion": "変換",
   "translationQueuePositionLabel": "キュー順 #{position}",
   "@translationQueuePositionLabel": {
     "placeholders": {
@@ -892,5 +894,12 @@
   "aiPlatformDisplayName": "表示名",
   "aiPlatformParserSubtype": "パーサー種別",
   "aiPlatformParserSubtypeCloud": "クラウド",
-  "aiPlatformParserSubtypeLocal": "ローカル"
+  "aiPlatformParserSubtypeLocal": "ローカル",
+
+  "translationQueueEdit": "編集",
+  "reeditTitle": "翻訳を編集",
+  "reeditSaveExport": "保存してエクスポート",
+  "reeditFetchError": "翻訳セグメントの読み込みに失敗しました。",
+  "reeditSaveSuccess": "変更が保存されました。",
+  "reeditSaveError": "変更の保存に失敗しました。"
 }

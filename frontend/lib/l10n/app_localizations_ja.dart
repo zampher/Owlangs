@@ -925,6 +925,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationQueueExecutionModeImmediate => '即時';
 
   @override
+  String get translationQueueTaskTypeTranslation => '翻訳';
+
+  @override
+  String get translationQueueTaskTypeConversion => '変換';
+
+  @override
   String translationQueuePositionLabel(Object position) {
     return 'キュー順 #$position';
   }
@@ -2702,4 +2708,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get aiPlatformParserSubtypeLocal => 'ローカル';
+
+  @override
+  String get translationQueueEdit => '編集';
+
+  @override
+  String get reeditTitle => '翻訳を編集';
+
+  @override
+  String get reeditSaveExport => '保存してエクスポート';
+
+  @override
+  String get reeditFetchError => '翻訳セグメントの読み込みに失敗しました。';
+
+  @override
+  String get reeditSaveSuccess => '変更が保存されました。';
+
+  @override
+  String get reeditSaveError => '変更の保存に失敗しました。';
 }

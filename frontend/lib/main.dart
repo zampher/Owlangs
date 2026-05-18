@@ -33,12 +33,25 @@ import 'features/translation/services/persistence_migration_service.dart';
 import 'features/tasks/services/flow_state_persistence.dart';
 import 'features/translation/services/tab_background_update_service.dart';
 import 'shared/utils/app_logger.dart';
+import 'shared/utils/desktop_drop_utils_stub.dart'
+    if (dart.library.html) 'shared/utils/desktop_drop_utils_web.dart'
+    as drop_utils;
 
 // Global variable to track runApp call time for diagnostics
 DateTime? _runAppCallTime;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // On web, override desktop_drop's window property drag handlers so that
+  // their (unimplemented) method channel is never called during drag.
+  if (kIsWeb) {
+    drop_utils.disableDesktopDropWebPlugin();
+    // Re-apply after first frame in case plugin registers after main().
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      drop_utils.disableDesktopDropWebPlugin();
+    });
+  }
 
   final isDesktop = !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.windows ||

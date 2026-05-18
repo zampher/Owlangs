@@ -1757,6 +1757,18 @@ abstract class AppLocalizations {
   /// **'Immediate'**
   String get translationQueueExecutionModeImmediate;
 
+  /// No description provided for @translationQueueTaskTypeTranslation.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation'**
+  String get translationQueueTaskTypeTranslation;
+
+  /// No description provided for @translationQueueTaskTypeConversion.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversion'**
+  String get translationQueueTaskTypeConversion;
+
   /// No description provided for @translationQueuePositionLabel.
   ///
   /// In en, this message translates to:
@@ -4921,6 +4933,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Local'**
   String get aiPlatformParserSubtypeLocal;
+
+  /// No description provided for @translationQueueEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get translationQueueEdit;
+
+  /// No description provided for @reeditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Translation'**
+  String get reeditTitle;
+
+  /// No description provided for @reeditSaveExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Save && Export'**
+  String get reeditSaveExport;
+
+  /// No description provided for @reeditFetchError.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load translation segments.'**
+  String get reeditFetchError;
+
+  /// No description provided for @reeditSaveSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Changes saved successfully.'**
+  String get reeditSaveSuccess;
+
+  /// No description provided for @reeditSaveError.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to save changes.'**
+  String get reeditSaveError;
 }
 
 class _AppLocalizationsDelegate

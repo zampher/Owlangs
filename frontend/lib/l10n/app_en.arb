@@ -298,6 +298,8 @@
   "translationQueueDownloadMdZip": "MD (ZIP)",
   "translationQueueExecutionModeQueued": "Queued",
   "translationQueueExecutionModeImmediate": "Immediate",
+  "translationQueueTaskTypeTranslation": "Translation",
+  "translationQueueTaskTypeConversion": "Conversion",
   "translationQueuePositionLabel": "Queue #{position}",
   "@translationQueuePositionLabel": {
     "placeholders": {
@@ -941,5 +943,12 @@
   "aiPlatformDisplayName": "Display Name",
   "aiPlatformParserSubtype": "Parser Subtype",
   "aiPlatformParserSubtypeCloud": "Cloud",
-  "aiPlatformParserSubtypeLocal": "Local"
+  "aiPlatformParserSubtypeLocal": "Local",
+
+  "translationQueueEdit": "Edit",
+  "reeditTitle": "Edit Translation",
+  "reeditSaveExport": "Save && Export",
+  "reeditFetchError": "Failed to load translation segments.",
+  "reeditSaveSuccess": "Changes saved successfully.",
+  "reeditSaveError": "Failed to save changes."
 }

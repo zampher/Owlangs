@@ -577,6 +577,17 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                         materialTapTargetSize:
                                             MaterialTapTargetSize.shrinkWrap,
                                       ),
+                                    Chip(
+                                      label: Text(
+                                        row['is_format_conversion'] == true
+                                            ? l10n.translationQueueTaskTypeConversion
+                                            : l10n.translationQueueTaskTypeTranslation,
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                      visualDensity: VisualDensity.compact,
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
                                     if (qp != null && qp is num && qp > 0)
                                       Chip(
                                         label: Text(
@@ -675,6 +686,32 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                         ),
                                         onPressed: () => _cancel(taskId),
                                         child: Text(l10n.translationQueueCancel),
+                                      ),
+                                    if (status == 'completed' &&
+                                        row['is_format_conversion'] != true)
+                                      TextButton(
+                                        style: TextButton.styleFrom(
+                                          visualDensity:
+                                              VisualDensity.compact,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                          ),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        onPressed: () {
+                                          final String? wf =
+                                              row['workflow_type']?.toString();
+                                          final String reeditUri =
+                                              '${AppRouter.translationRoute}'
+                                              '?execution_mode=queued'
+                                              '&reedit_task_id=$taskId'
+                                              '&reedit_workflow_type=${Uri.encodeComponent(wf ?? '')}'
+                                              '&reedit_file_name=${Uri.encodeComponent(name)}';
+                                          context.push(reeditUri);
+                                        },
+                                        child: Text(l10n.translationQueueEdit),
                                       ),
                                     TextButton(
                                       style: TextButton.styleFrom(

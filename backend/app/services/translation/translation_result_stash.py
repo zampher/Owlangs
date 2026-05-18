@@ -116,6 +116,8 @@ def record_generated_result(
                 meta.setdefault("workflow_type", _md.get("workflow_type"))
         if not meta.get("workflow_type") and task_state.get("workflow_type"):
             meta.setdefault("workflow_type", task_state.get("workflow_type"))
+        if task_state.get("convert_only") or task_state.get("is_format_conversion"):
+            meta["is_format_conversion"] = True
         meta.setdefault("completed_at", task_state.get("task_end_time") or now)
         meta["stashed_at"] = meta.get("stashed_at") or now
         if "expires_at" not in meta:
@@ -227,6 +229,7 @@ def list_summaries_visible_to_user(is_guest: bool, username: str) -> List[Dict[s
                 "expires_at": exp,
                 "stashed_file_types": fts,
                 "in_memory": False,
+                "is_format_conversion": meta.get("is_format_conversion", False),
                 "started_at": started_hint if started_hint > 0 else 0.0,
                 "completed_at": completed_at,
             }

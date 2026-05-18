@@ -122,14 +122,28 @@ class _TranslationResultPreviewState
   /// TaskId for which we already fetched on-demand download links (so we only fetch once per task).
   String? _lastTaskIdForOnDemandDownloadsFetch;
 
-  /// Backend task id for API calls. When [TranslationResultPreview.flowId] is set, prefer
-  /// [TranslationState.taskId] over the tab's embedded [TranslationResultPreview.taskId] so
-  /// export URLs stay valid after re-submit if the tab widget was not rebuilt with the new id.
+  /// Backend task id for API calls.
+  ///
+  /// Priority (highest first):
+  /// 1. [widget.taskId] when it is a concrete taskId (not `'pending'`). This
+  ///    prevents a stale [TranslationState.taskId] from a prior pipeline phase
+  ///    (e.g. a format-conversion task id lingering after file import) from
+  ///    being picked up.
+  /// 2. [TranslationState.taskId] from the Riverpod provider — only used when
+  ///    [widget.taskId] is still `'pending'` (the real id hasn't arrived yet).
+  /// 3. Fallback to [widget.taskId].
   String _apiTaskId() {
     // Timer/async callbacks may run after dispose; ref is invalid then.
     if (!mounted) {
       return widget.taskId;
     }
+    // When the widget has a concrete taskId, use it directly.  This is the
+    // common case: the tab was created/replaced with a real taskId.
+    if (widget.taskId != 'pending') {
+      return widget.taskId;
+    }
+    // Only reach here when the widget still has 'pending'.  Try the provider
+    // for a real taskId set by the translation submission flow.
     if (widget.flowId != null) {
       final dynamic st =
           ref.read(translationStateProviderFamily(widget.flowId!));

@@ -292,6 +292,8 @@
   "translationQueueDownloadMdZip": "MD (ZIP)",
   "translationQueueExecutionModeQueued": "En cola",
   "translationQueueExecutionModeImmediate": "Inmediato",
+  "translationQueueTaskTypeTranslation": "Traducción",
+  "translationQueueTaskTypeConversion": "Conversión",
   "translationQueuePositionLabel": "Posición en cola #{position}",
   "@translationQueuePositionLabel": {
     "placeholders": {
@@ -968,5 +970,12 @@
   "aiPlatformDisplayName": "Nombre para Mostrar",
   "aiPlatformParserSubtype": "Subtipo del Analizador",
   "aiPlatformParserSubtypeCloud": "Nube",
-  "aiPlatformParserSubtypeLocal": "Local"
+  "aiPlatformParserSubtypeLocal": "Local",
+
+  "translationQueueEdit": "Editar",
+  "reeditTitle": "Editar traducción",
+  "reeditSaveExport": "Guardar y exportar",
+  "reeditFetchError": "Error al cargar segmentos de traducción.",
+  "reeditSaveSuccess": "Cambios guardados correctamente.",
+  "reeditSaveError": "Error al guardar los cambios."
 }

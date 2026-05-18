@@ -4,7 +4,8 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:desktop_drop/desktop_drop.dart';
+import 'package:desktop_drop/desktop_drop.dart'
+    if (dart.library.html) 'desktop_drop_stub.dart';
 import '../../l10n/app_localizations.dart';
 import '../utils/html_stub.dart' if (dart.library.html) 'dart:html' as html;
 import 'dart:typed_data';
@@ -36,7 +37,6 @@ class FileUploadArea extends StatefulWidget {
 
 class _FileUploadAreaState extends State<FileUploadArea> {
   bool _isDragging = false;
-  html.Element? _dropZoneElement;
 
   @override
   void initState() {
@@ -48,7 +48,7 @@ class _FileUploadAreaState extends State<FileUploadArea> {
 
   @override
   void dispose() {
-    if (kIsWeb && _dropZoneElement != null) {
+    if (kIsWeb) {
       _cleanupDragAndDrop();
     }
     super.dispose();
@@ -90,22 +90,28 @@ class _FileUploadAreaState extends State<FileUploadArea> {
 
   void _handleDragOver(html.Event e) {
     if (widget.isDisabled) return;
+    if (!mounted) return;
     e.preventDefault();
     e.stopPropagation();
-    setState(() {
-      _isDragging = true;
-    });
+    if (!_isDragging) {
+      setState(() {
+        _isDragging = true;
+      });
+    }
   }
 
   void _handleDragLeave(html.Event e) {
+    if (!mounted) return;
     e.preventDefault();
     // Only update state if leaving the window
     try {
       final relatedTarget = (e as dynamic).relatedTarget;
       if (relatedTarget == null) {
-        setState(() {
-          _isDragging = false;
-        });
+        if (_isDragging) {
+          setState(() {
+            _isDragging = false;
+          });
+        }
       }
     } catch (_) {
       // Not a drag event, ignore
@@ -114,13 +120,16 @@ class _FileUploadAreaState extends State<FileUploadArea> {
 
   Future<void> _handleDrop(html.Event e) async {
     if (widget.isDisabled) return;
+    if (!mounted) return;
 
     e.preventDefault();
     e.stopPropagation();
 
-    setState(() {
-      _isDragging = false;
-    });
+    if (_isDragging) {
+      setState(() {
+        _isDragging = false;
+      });
+    }
 
     // Check if event has dataTransfer property (DragEvent)
     try {
@@ -157,6 +166,7 @@ class _FileUploadAreaState extends State<FileUploadArea> {
 
     try {
       final bytes = await completer.future;
+      if (!mounted) return;
       final platformFile = PlatformFile(
         name: file.name,
         size: file.size,

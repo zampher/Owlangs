@@ -916,6 +916,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationQueueExecutionModeImmediate => '即时';
 
   @override
+  String get translationQueueTaskTypeTranslation => '翻译';
+
+  @override
+  String get translationQueueTaskTypeConversion => '转换';
+
+  @override
   String translationQueuePositionLabel(Object position) {
     return '排队位置 #$position';
   }
@@ -2683,4 +2689,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiPlatformParserSubtypeLocal => '本地';
+
+  @override
+  String get translationQueueEdit => '编辑';
+
+  @override
+  String get reeditTitle => '编辑译文';
+
+  @override
+  String get reeditSaveExport => '保存并导出';
+
+  @override
+  String get reeditFetchError => '加载翻译片段失败。';
+
+  @override
+  String get reeditSaveSuccess => '修改已保存。';
+
+  @override
+  String get reeditSaveError => '保存修改失败。';
 }

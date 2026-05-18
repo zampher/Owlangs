@@ -4,9 +4,23 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
-/// Unified file picker helper
+// Web: use dart:html directly (avoids file_picker's unreliable focus heuristic).
+// Non-web: delegate to FilePicker.platform.
+import 'file_picker_helper_stub.dart'
+    if (dart.library.html) 'file_picker_helper_web.dart'
+    as web;
+
+/// Unified file picker helper.
+///
+/// On Flutter Web this uses [dart:html] directly to avoid [file_picker]'s
+/// ``window.focus`` cancellation detection, which fires spuriously inside
+/// Flutter's canvas and causes the picker to return ``null``.
 class FilePickerHelper {
-  /// Pick files
+  /// Pick files.
+  ///
+  /// On web the implementation bypasses the [file_picker] package entirely
+  /// and uses a direct ``<input type="file">`` element for reliable operation.
+  /// On desktop/native it delegates to [FilePicker.platform.pickFiles].
   static Future<FilePickerResult?> pickFiles({
     FileType type = FileType.any,
     List<String>? allowedExtensions,
@@ -16,14 +30,24 @@ class FilePickerHelper {
     bool lockParentWindow = false,
     String? dialogTitle,
   }) async {
-    // Ensure withData is true on Web (required for file access)
-    final bool effectiveWithData = kIsWeb ? true : withData;
+    if (kIsWeb) {
+      return web.webPickFiles(
+        dialogTitle: dialogTitle,
+        type: type,
+        allowedExtensions: allowedExtensions,
+        allowMultiple: allowMultiple,
+        withData: true, // always required on web
+        withReadStream: withReadStream,
+        lockParentWindow: lockParentWindow,
+      );
+    }
 
+    // Desktop / mobile: delegate to file_picker plugin.
     return FilePicker.platform.pickFiles(
       type: type,
       allowedExtensions: allowedExtensions,
       allowMultiple: allowMultiple,
-      withData: effectiveWithData,
+      withData: withData,
       withReadStream: withReadStream,
       lockParentWindow: lockParentWindow,
       dialogTitle: dialogTitle,

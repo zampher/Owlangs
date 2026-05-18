@@ -979,6 +979,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationQueueExecutionModeImmediate => 'Inmediato';
 
   @override
+  String get translationQueueTaskTypeTranslation => 'Traducción';
+
+  @override
+  String get translationQueueTaskTypeConversion => 'Conversión';
+
+  @override
   String translationQueuePositionLabel(Object position) {
     return 'Posición en cola #$position';
   }
@@ -2843,4 +2849,22 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get aiPlatformParserSubtypeLocal => 'Local';
+
+  @override
+  String get translationQueueEdit => 'Editar';
+
+  @override
+  String get reeditTitle => 'Editar traducción';
+
+  @override
+  String get reeditSaveExport => 'Guardar y exportar';
+
+  @override
+  String get reeditFetchError => 'Error al cargar segmentos de traducción.';
+
+  @override
+  String get reeditSaveSuccess => 'Cambios guardados correctamente.';
+
+  @override
+  String get reeditSaveError => 'Error al guardar los cambios.';
 }

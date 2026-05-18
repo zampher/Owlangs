@@ -126,7 +126,7 @@ class AppRouter {
                 const WorkspaceScreen(),
           ),
 
-          // Translation Route (optional ?execution_mode=queued)
+          // Translation Route (optional ?execution_mode=queued, ?reedit_task_id=...)
           GoRoute(
             path: translationRoute,
             name: 'translation',
@@ -134,7 +134,21 @@ class AppRouter {
               final String? q = state.uri.queryParameters['execution_mode'];
               final String mode =
                   (q == 'queued') ? 'queued' : 'immediate';
-              return TranslationScreen(executionMode: mode);
+
+              // Re-edit parameters (optional)
+              final String? reeditTaskId =
+                  state.uri.queryParameters['reedit_task_id'];
+              final String? reeditWorkflowType =
+                  state.uri.queryParameters['reedit_workflow_type'];
+              final String? reeditFileName =
+                  state.uri.queryParameters['reedit_file_name'];
+
+              return TranslationScreen(
+                executionMode: mode,
+                reeditTaskId: reeditTaskId,
+                reeditWorkflowType: reeditWorkflowType,
+                reeditFileName: reeditFileName,
+              );
             },
           ),
 

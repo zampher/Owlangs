@@ -925,6 +925,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationQueueExecutionModeImmediate => '즉시';
 
   @override
+  String get translationQueueTaskTypeTranslation => '번역';
+
+  @override
+  String get translationQueueTaskTypeConversion => '변환';
+
+  @override
   String translationQueuePositionLabel(Object position) {
     return '대기 순번 #$position';
   }
@@ -2706,4 +2712,22 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get aiPlatformParserSubtypeLocal => '로컬';
+
+  @override
+  String get translationQueueEdit => '편집';
+
+  @override
+  String get reeditTitle => '번역 편집';
+
+  @override
+  String get reeditSaveExport => '저장 및 내보내기';
+
+  @override
+  String get reeditFetchError => '번역 세그먼트를 불러오지 못했습니다.';
+
+  @override
+  String get reeditSaveSuccess => '변경사항이 저장되었습니다.';
+
+  @override
+  String get reeditSaveError => '변경사항 저장에 실패했습니다.';
 }

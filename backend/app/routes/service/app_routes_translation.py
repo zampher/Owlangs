@@ -193,6 +193,8 @@ async def list_translation_tasks(
             "queued_at": st.get("queued_at"),
             "owner_username": st.get("owner_username"),
             "in_memory": True,
+            "convert_only": st.get("convert_only", False),
+            "is_format_conversion": st.get("convert_only", False) or st.get("is_format_conversion", False),
             "started_at": qa if qa > 0 else ta,
             "completed_at": te,
         }

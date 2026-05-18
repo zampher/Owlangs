@@ -281,6 +281,8 @@
   "translationQueueDownloadMdZip": "MD(ZIP)",
   "translationQueueExecutionModeQueued": "대기열",
   "translationQueueExecutionModeImmediate": "즉시",
+  "translationQueueTaskTypeTranslation": "번역",
+  "translationQueueTaskTypeConversion": "변환",
   "translationQueuePositionLabel": "대기 순번 #{position}",
   "@translationQueuePositionLabel": {
     "placeholders": {
@@ -892,5 +894,12 @@
   "aiPlatformDisplayName": "표시 이름",
   "aiPlatformParserSubtype": "파서 유형",
   "aiPlatformParserSubtypeCloud": "클�?�드",
-  "aiPlatformParserSubtypeLocal": "로컬"
+  "aiPlatformParserSubtypeLocal": "로컬",
+
+  "translationQueueEdit": "편집",
+  "reeditTitle": "번역 편집",
+  "reeditSaveExport": "저장 및 내보내기",
+  "reeditFetchError": "번역 세그먼트를 불러오지 못했습니다.",
+  "reeditSaveSuccess": "변경사항이 저장되었습니다.",
+  "reeditSaveError": "변경사항 저장에 실패했습니다."
 }

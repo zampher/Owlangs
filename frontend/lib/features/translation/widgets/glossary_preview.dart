@@ -11,7 +11,9 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_saver/file_saver.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io' as io;
-import 'package:desktop_drop/desktop_drop.dart';
+import '../../../core/utils/file_picker_helper.dart';
+import 'package:desktop_drop/desktop_drop.dart'
+    if (dart.library.html) 'package:owlangs/shared/widgets/desktop_drop_stub.dart';
 import '../../../shared/utils/html_stub.dart' if (dart.library.html) 'dart:html'
     as html;
 import '../../../shared/services/glossary_api_service.dart';
@@ -886,18 +888,11 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
 
       // Pick CSV file
       FilePickerResult? result;
-      if (kIsWeb) {
-        result = await FilePicker.platform.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: <String>['csv'],
-          withData: true,
-        );
-      } else {
-        result = await FilePicker.platform.pickFiles(
-          type: FileType.custom,
-          allowedExtensions: <String>['csv'],
-        );
-      }
+      result = await FilePickerHelper.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: <String>['csv'],
+        withData: true,
+      );
 
       if (result == null || result.files.isEmpty) {
         // User cancelled

@@ -68,11 +68,24 @@ class TranslationScreen extends ConsumerStatefulWidget {
     super.key,
     this.flowId,
     this.executionMode = 'immediate',
+    this.reeditTaskId,
+    this.reeditWorkflowType,
+    this.reeditFileName,
   });
   final String? flowId;
 
   /// Backend `TranslateServiceRequest.execution_mode`: `immediate` or `queued`.
   final String executionMode;
+
+  /// Re-edit mode: opens an existing completed task for segment editing.
+  /// When set, the screen skips file upload/extract and opens the Translate tab directly.
+  final String? reeditTaskId;
+
+  /// Workflow type of the re-edited task (e.g. 'docx', 'html', 'json').
+  final String? reeditWorkflowType;
+
+  /// Original filename of the re-edited task, used for download naming.
+  final String? reeditFileName;
 
   @override
   ConsumerState<TranslationScreen> createState() => _TranslationScreenState();
@@ -100,6 +113,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       false; // Track if excluded segments are being updated
   bool _queuePersistInFlight = false;
   final Set<String> _autoPersistedQueueTaskIds = <String>{};
+  bool get _isReeditMode => widget.reeditTaskId != null &&
+      widget.reeditTaskId!.isNotEmpty &&
+      widget.flowId == null;
   String?
       _previousTargetLang; // Track previous target language to detect changes
   // Remember user's choice for each target language: null=not chosen, true=exclude, false=don't exclude
@@ -121,7 +137,10 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     // Standalone queue flow: always start from a blank slate so a new queued task does not
     // reuse the previous task's file, tabs, or segment UI after the prior job moved to background.
     // Must run after the first frame: Riverpod forbids modifying providers during build/initState.
-    if (widget.flowId == null && widget.executionMode == 'queued') {
+    // Skip for re-edit mode: we want to show the existing task, not start fresh.
+    if (widget.flowId == null &&
+        widget.executionMode == 'queued' &&
+        !_isReeditMode) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) {
           return;
@@ -153,6 +172,13 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         }
       });
     });
+    // Re-edit mode: bypass file upload flow, directly open the edit tab
+    if (_isReeditMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _initStandaloneQueuedReeditSession();
+      });
+    }
   }
 
   @override
@@ -1126,6 +1152,21 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     _isTextMode = false;
   }
 
+  /// Initializes the screen for re-editing a completed queued translation task.
+  /// Bypasses file upload/extract and opens the Translate tab directly.
+  void _initStandaloneQueuedReeditSession() {
+    ref.read(translationStateProvider.notifier).resetTranslation();
+    _textController.clear();
+    _autoPersistedQueueTaskIds.clear();
+    _clearQueuePersistDirty();
+    _hasStartedTranslationInThisSession = false;
+    _glossarySkipped = false;
+    _hasShownLanguageWarning = false;
+    _isTextMode = false;
+
+    _addReeditTranslationResultTab();
+  }
+
   Future<void> _persistQueueSnapshotAuto(String taskId) async {
     try {
       final TranslationService svc = TranslationService();
@@ -1148,7 +1189,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     bool showSuccessSnack = true,
   }) async {
     final dynamic st = _getCurrentTranslationState();
-    final String? tid = st.taskId as String?;
+    final String? tid = _isReeditMode
+        ? widget.reeditTaskId
+        : st.taskId as String?;
     if (tid == null || tid.isEmpty) {
       return;
     }
@@ -1782,7 +1825,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                         FilePickerResult? result;
                         try {
                           final availableFormats = _getAllFileExtensions();
-                          result = await FilePicker.platform.pickFiles(
+                          result = await FilePickerHelper.pickFiles(
                             type: FileType.custom,
                             allowedExtensions: availableFormats,
                             withData: true,
@@ -3433,7 +3476,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         // Even DateTime.now() or any other synchronous operation can break user gesture context
         // Allow all supported formats in picker; Pro-only show hint in _processFile if not activated
         final availableFormats = _getAllFileExtensions();
-        result = await FilePicker.platform.pickFiles(
+        result = await FilePickerHelper.pickFiles(
           type: FileType.custom,
           allowedExtensions: availableFormats,
           withData: true, // Required on Web to get file.bytes
@@ -5604,7 +5647,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           embedImagesParam.toLowerCase() == 'false';
 
       // Generate filename
-      final originalName = state.pickedFile?.name ?? 'translated';
+      final originalName = state.pickedFile?.name ??
+          widget.reeditFileName ??
+          'translated';
       final String nameWithoutExt = _removeFileExtension(originalName);
       final String suffix = isConvertDownload ? 'converted' : 'translated';
       final String baseName = '${nameWithoutExt}_$suffix';
@@ -5841,12 +5886,16 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     final bool isOperationInProgress =
         translationState.currentOperation != TranslationOperation.none;
     final bool isFileSelectionDisabled =
-        hasTask || isTranslating || isOperationInProgress;
+        hasTask || isTranslating || isOperationInProgress || _isReeditMode;
 
     // Build empty state widget
     Widget? emptyStateWidget;
     if (tabsState.tabs.isEmpty) {
-      if (_isTextMode) {
+      // In re-edit mode, the tab is created asynchronously; show a loading
+      // indicator instead of the file upload area during the brief gap.
+      if (_isReeditMode) {
+        emptyStateWidget = const Center(child: CircularProgressIndicator());
+      } else if (_isTextMode) {
         emptyStateWidget = TextInputArea(
           flowId: widget.flowId,
           controller: _textController,
@@ -5865,7 +5914,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                   try {
                     // Allow all supported formats in picker; Pro-only show hint in _processFile if not activated
                     final availableFormats = _getAllFileExtensions();
-                    result = await FilePicker.platform.pickFiles(
+                    result = await FilePickerHelper.pickFiles(
                       type: FileType.custom,
                       allowedExtensions: availableFormats,
                       withData: true,
@@ -5987,6 +6036,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     String? title,
     String tabId = 'translate_tab',
     IconData tabIcon = Icons.translate,
+    String? overrideFileName,
+    String? overrideWorkflowType,
   }) {
     final l10n = AppLocalizations.of(context)!;
     final PreviewTabsNotifier tabsNotifier = widget.flowId != null
@@ -5999,8 +6050,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         ? ref.read(translationStateProviderFamily(widget.flowId!).notifier)
         : ref.read(translationStateProvider.notifier);
 
-    // Get file name from picked file
-    final fileName = state.pickedFile?.name;
+    // Get file name from picked file, with override for re-edit mode
+    final String? fileName = overrideFileName ?? state.pickedFile?.name;
     // Extract just the filename without path for display
     final displayFileName = fileName != null
         ? (kIsWeb ? fileName : fileName.split('/').last.split(r'\').last)
@@ -6021,7 +6072,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       onTranslationWorkspaceMutation: _markQueuePersistDirty,
       fileName: displayFileName,
       isTextMode: _isTextMode,
-      workflowType: currentSettings.workflowType,
+      workflowType: overrideWorkflowType ?? currentSettings.workflowType,
     );
 
     final PreviewTab tab = PreviewTab(
@@ -6036,11 +6087,45 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         'fileName': displayFileName,
         'flowId': widget.flowId,
         'isTextMode': _isTextMode,
-        'workflowType': currentSettings.workflowType,
+        'workflowType': overrideWorkflowType ?? currentSettings.workflowType,
       },
     );
 
     tabsNotifier.updateOrAddTab(tab);
+  }
+
+  /// Opens a Translate tab for re-editing a completed task.
+  /// Uses re-edit override params since there is no picked file.
+  void _addReeditTranslationResultTab() {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final String taskId = widget.reeditTaskId!;
+
+    // Show a loading indicator while fetching task data
+    final Map<String, String> downloads = <String, String>{};
+
+    // Fetch downloads from backend status on-demand
+    TranslationService()
+        .getStatus(taskId)
+        .then((Map<String, dynamic> status) {
+      final dynamic dv = status['downloads'];
+      if (dv is Map && dv.isNotEmpty) {
+        downloads.addAll(
+            dv.map((k, v) => MapEntry(k.toString(), v.toString())));
+      }
+    }).catchError((Object e) {
+      // Ignore; proceed with empty downloads
+    }).whenComplete(() {
+      if (!mounted) return;
+      _addTranslationResultTab(
+        taskId,
+        downloads,
+        title: l10n.reeditTitle,
+        tabId: 'translate_reedit_tab',
+        tabIcon: Icons.edit,
+        overrideFileName: widget.reeditFileName,
+        overrideWorkflowType: widget.reeditWorkflowType,
+      );
+    });
   }
 
   /// Open or switch to Glossary tab

@@ -564,6 +564,7 @@ class TranslationService:
             "downloadable_files": {},
             "attachment_files": {},
             "convert_only": getattr(payload, 'skip_translate', False) if hasattr(payload, 'skip_translate') else False,
+            "is_format_conversion": getattr(payload, 'skip_translate', False) if hasattr(payload, 'skip_translate') else False,
             "original_file_path": original_file_path,
             # Capture LLM platform config snapshot for downstream tools (e.g. LaTeX repair)
             # Get API protocol from platform configuration
@@ -1269,12 +1270,15 @@ class TranslationService:
                 apply_copy_source_only_exclusions(task_state, task_id)
 
             # When all segments are excluded, complete immediately with source as target (no AI call)
+            # This is effectively a format conversion, so mark it as such.
             from utils.translation_segments import complete_translation_with_source_only
             if complete_translation_with_source_only(task_id, task_state):
+                task_state["is_format_conversion"] = True
+                task_state["convert_only"] = True
                 task_state["status"] = "completed"
                 task_state["progress"] = 100
                 task_state["message"] = "Translation completed (all segments excluded, source used as target)"
-                self.task_manager.update_task(task_id, {"status": "completed", "progress": 100, "message": task_state["message"]})
+                self.task_manager.update_task(task_id, {"status": "completed", "progress": 100, "message": task_state["message"], "is_format_conversion": True, "convert_only": True})
                 logger.info(LogModule.WORKFLOW, f"[TRANSLATION-SERVICE] Task {task_id}: All segments excluded, completed immediately with source as target")
                 # MOBI/EPUB: set mobi_translated_texts so ensure_translation_segments can add image segments
                 if workflow_type == "mobi":
