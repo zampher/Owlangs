@@ -41,7 +41,6 @@ Var OwlangsConfigDir
 Var OwlangsConfigsPath
 Var TempInstDir
 Var TempConfigsPath
-Var ScriptContent
 
 ;--------------------------------
 ; Interface Settings
@@ -360,88 +359,4 @@ Section "Uninstall"
     DetailPrint "Uninstallation completed."
     DetailPrint "Note: Runtime-generated config files (secrets.json), logs, and models in C:\ProgramData\Owlangs are preserved."
 SectionEnd
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

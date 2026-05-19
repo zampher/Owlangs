@@ -64,6 +64,8 @@ datas = [
     ('./configs/ui.json.template', 'configs/'),  # UI configuration template
     ('./configs/secrets.json.template', 'configs/'),  # Secrets configuration template
     ('./configs/local.json.template', 'configs/'),  # Local configuration template
+    ('./configs/translation_config.json.template', 'configs/'),  # Translation configuration template
+    ('./configs/static.json.template', 'configs/'),  # Static configuration template
     # Legacy config files (for backward compatibility)
     ('./configs/app_config.json', 'configs/'),  # Application configuration file
     ('./configs/local_users.json.template', 'configs/'),  # Local users template file
@@ -289,7 +291,6 @@ _excludes_always = [
     "nltk", "gensim", "jieba",
     "celery", "sqlalchemy",
     "safetensors", "huggingface_hub",
-    "backend.converter.x2md.converter_docling",
     "pytest", "pytest-asyncio", "pytest-cov",
     "black", "flake8", "mypy",
     "jupyter", "ipython", "notebook",

@@ -1390,7 +1390,16 @@ try {
             Remove-Item -Recurse -Force $fullPackageDir
             Write-Host "[full] Cleaned up existing full package" -ForegroundColor Yellow
         }
-        Build-PyInstaller "full.spec" $version
+        if ($IncludeAnonymize) { $env:OWLANGS_INCLUDE_ANONYMIZE = "1" }
+        try {
+            if (Test-Path "full.spec") {
+                Build-PyInstaller "full.spec" $version
+            } else {
+                Write-Host "[full] Skipping PyInstaller (full.spec not found, reusing lite build's executable)" -ForegroundColor Yellow
+            }
+        } finally {
+            Remove-Item Env:\OWLANGS_INCLUDE_ANONYMIZE -ErrorAction SilentlyContinue
+        }
         Make-WinPackage -Version $version -IsFull $true -IncludeWindowsFrontend $false -IncludePandoc $IncludePandoc
     }
     

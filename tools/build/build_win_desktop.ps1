@@ -493,7 +493,9 @@ if ($want_lite) {
 
 if ($want_full) {
     $version = Get-Version
-    if (-not (Build-PyInstaller -SpecFile "full.spec" -Version $version)) {
+    if (-not (Test-Path "full.spec")) {
+        Write-Host "[full] Skipping PyInstaller (full.spec not found, reusing lite build's executable)" -ForegroundColor Yellow
+    } elseif (-not (Build-PyInstaller -SpecFile "full.spec" -Version $version)) {
         Write-Host "`n❌ BUILD FAILED: Backend (PyInstaller) build failed!" -ForegroundColor Red
         Write-Host "   Please fix the errors above and try again." -ForegroundColor Yellow
         exit 1

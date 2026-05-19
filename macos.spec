@@ -147,6 +147,7 @@ hiddenimports = [
     'backend.app.routes.service.app_routes_format_conversion',
     'backend.app.routes.service.app_routes_glossary',
     'backend.app.routes.service.app_routes_translation_segments',
+    'backend.app.routes.service.app_routes_formula_check',
     # backend.app.models, config, utils (used by routes and services)
     'backend.app.models',
     'backend.app.models.service',

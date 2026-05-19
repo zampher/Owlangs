@@ -23,46 +23,7 @@ hiddenimports = [
     # Backend utils modules
     'backend.utils',
     'backend.runtime_version',
-    # Utils alias for PyInstaller compatibility
-    'utils',
-    'utils.resource_utils',
-    'utils.redis_manager',
-    'utils.utils',
-    'utils.language_utils',
-    'utils.path_utils',
-    'utils.font_utils',
-    'utils.pagination',
-    'utils.document_rebuild',
-    'utils.translation_segments',
-    'utils.markdown_splitter',
-    'utils.markdown_utils',
-    'utils.json_utils',
-    'utils.chunk_translation_helper',
-    'utils.translation_validator',
-    'utils.chunk_size_converter',
-    'utils.token_estimator',
-    'utils.docx_utils',
-    'utils.table_utils',
-    'utils.image_placeholder_utils',
-    'utils.format_convert_utils',
-    'utils.mixed_formula_text',
-    'utils.markdown_chunk_merger',
-    'utils.language_detection_utils',
-    'utils.language_detector',
-    'utils.latex_formula_checker',
-    'utils.latex_repair_llm',
-    'utils.latex_repair_payload',
-    'utils.latex_formula_batch_repair',
-    'utils.math_md_normalize',
-    'utils.docx_md_normalize',
-    'utils.docx_algorithm_latex_wrap',
-    'utils.docx_math_fragment_check',
-    'utils.docx_math_fragment_llm_repair',
-    'utils.llm_client',
-    'utils.extract_segments_debug',
-    'utils.epub_fix',
-    'utils.ebook_metadata',
-    'utils.config_manager',
+    # Utils alias: runtime injects sys.modules['utils'] = backend.utils; no need to duplicate
     'backend.utils.resource_utils',
     'backend.utils.redis_manager',
     'backend.utils.utils',
@@ -112,14 +73,7 @@ hiddenimports = [
     'app.models.anonymize',
     'app.models.service',
     'app.models.translation_segment',
-    # Frozen runtime: PyInstaller may resolve via backend.app.models path
-    'backend.app.models',
-    'backend.app.models.anonymize',
-    'backend.app.models.service',
-    'backend.app.models.translation_segment',
-    'backend.app.services.translation.translation_execution_queue',
-    'backend.app.services.translation.translation_queue_utils',
-    'backend.app.services.translation.translation_result_stash',
+    # Frozen runtime: backend.app.* aliases resolve to app.* via pathex; no need to duplicate
     'app.services',
     'app.services.task',
     'app.services.version_service',
@@ -204,10 +158,13 @@ custom_datas = [
     ('./configs/ui.json.template', 'configs/'),
     ('./configs/secrets.json.template', 'configs/'),
     ('./configs/local.json.template', 'configs/'),
-    ('./configs/logging.yaml', 'configs/'),
+    ('./configs/translation_config.json.template', 'configs/'),  # Translation configuration template
+    ('./configs/static.json.template', 'configs/'),  # Static configuration template
     ('./configs/app_config.json', 'configs/'),
     ('./configs/local_users.json.template', 'configs/'),
     ('./backend/config/templates/default_profile.json', 'backend/config/templates/'),
+    ('./setup_secrets.py', '.'),  # Sensitive configuration initialization script
+    ('./setup_first_deploy.py', '.'),  # First deployment setup script
 ]
 
 # Add pandoc if available
