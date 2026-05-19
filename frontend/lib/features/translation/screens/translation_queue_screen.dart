@@ -688,7 +688,8 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                         child: Text(l10n.translationQueueCancel),
                                       ),
                                     if (status == 'completed' &&
-                                        row['is_format_conversion'] != true)
+                                        row['is_format_conversion'] != true &&
+                                        row['in_memory'] == true)
                                       TextButton(
                                         style: TextButton.styleFrom(
                                           visualDensity:
