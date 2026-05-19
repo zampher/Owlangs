@@ -387,6 +387,16 @@ class TranslationService {
               await Future.delayed(retryDelay);
               continue;
             }
+            // Task is in a terminal state but segments still 404: this means
+            // the task either has no segments (e.g. convert-phase task) or the
+            // segments have been released. Stop retrying immediately.
+            AppLogger.log(
+              'TranslationService',
+              '[SEGMENTS] getTranslationSegments 404 (task terminal, no segments) for '
+              'taskId=$taskId, attempt=$attempt, taskStatus=$s',
+              level: LogLevel.error,
+            );
+            rethrow;
           } catch (_) {
             // If status check fails, fall through to generic retry/exit handling below.
           }

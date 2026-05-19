@@ -137,13 +137,10 @@ class _TranslationResultPreviewState
     if (!mounted) {
       return widget.taskId;
     }
-    // When the widget has a concrete taskId, use it directly.  This is the
-    // common case: the tab was created/replaced with a real taskId.
-    if (widget.taskId != 'pending') {
-      return widget.taskId;
-    }
-    // Only reach here when the widget still has 'pending'.  Try the provider
-    // for a real taskId set by the translation submission flow.
+    // When we have a flowId, always prefer the provider's taskId because it
+    // tracks the current phase. The widget.taskId may be the convert-phase ID
+    // while the actual translation (and its segments) live under a different
+    // workflow taskId.
     if (widget.flowId != null) {
       final dynamic st =
           ref.read(translationStateProviderFamily(widget.flowId!));
@@ -151,6 +148,10 @@ class _TranslationResultPreviewState
       if (tid != null && tid.isNotEmpty && tid != 'pending') {
         return tid;
       }
+    }
+    // Fallback to widget taskId when there is no flowId or provider has no ID.
+    if (widget.taskId != 'pending') {
+      return widget.taskId;
     }
     return widget.taskId;
   }

@@ -4890,7 +4890,12 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
     });
   }
 
-  /// Show dialog to prompt user to configure MinerU settings
+  /// Public wrapper so the progress mixin can invoke the dialog without
+  /// dynamic dispatch.  Called from [ExtractPreviewProgressMixin].
+  Future<void> showMineruSettingsDialogForMixin(String errorMessage) async {
+    return _showMineruSettingsDialog(errorMessage);
+  }
+
   Future<void> _showMineruSettingsDialog(String errorMessage) async {
     if (!mounted || !context.mounted) return;
 
