@@ -665,8 +665,7 @@ async def get_app_config_api(
     # Step 1: Get global configuration (most critical, must succeed)
     try:
         logger.info(LogModule.AUTH, "[CONFIG] Step 1: Loading global configuration...")
-        from backend.config.config_loader import get_unified_config, clear_unified_config_cache
-        clear_unified_config_cache()
+        from backend.config.config_loader import get_unified_config
         global_config = get_unified_config()
         logger.info(LogModule.AUTH, f"[CONFIG] Global config object loaded: {type(global_config)}")
         global_config_dict = global_config.get_config_dict(include_api_keys=False, flatten=True)

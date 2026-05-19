@@ -117,6 +117,15 @@ class LocalUserStore:
                     os.chmod(self.file_path, 0o640)
             except Exception:
                 pass
+            # CRITICAL: Invalidate UnifiedUserStore cache so that auth/login
+            # picks up local-user mutations immediately instead of stale data.
+            try:
+                from .unified_user_store import get_unified_user_store
+                unified_store = get_unified_user_store()
+                unified_store._cache = None
+                logger.info(LogModule.AUTH, "[LocalUsers] Invalidated UnifiedUserStore cache after save")
+            except Exception:
+                pass
             logger.info(LogModule.AUTH, f"[LocalUsers] Saved users file to: {self.file_path}")
             return True
         except Exception as e:

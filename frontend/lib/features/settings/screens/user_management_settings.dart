@@ -95,7 +95,7 @@ class _UserManagementSettingsScreenState
           <String, dynamic>{'auth_required': false},
         );
         if (!ok) throw Exception('Batch update failed');
-        await config.loadAuthConfigOnce();
+        await config.reloadAuthConfig();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(l10n.settingsUserManagementSaveSuccess)),
@@ -115,7 +115,7 @@ class _UserManagementSettingsScreenState
         });
         if (!ldapOk) throw Exception('Failed to disable LDAP');
 
-        await config.loadAuthConfigOnce();
+        await config.reloadAuthConfig();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(l10n.settingsUserManagementSaveSuccess)),
@@ -507,7 +507,7 @@ class _UserManagementSettingsScreenState
         'global',
         <String, dynamic>{'auth_required': true},
       );
-      await config.loadAuthConfigOnce();
+      await config.reloadAuthConfig();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(l10n.settingsLdapConfigSaved)),

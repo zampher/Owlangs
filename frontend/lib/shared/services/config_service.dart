@@ -55,6 +55,12 @@ class ConfigService {
     _authRequired ??= value;
   }
 
+  /// Force reload auth config from backend (use after mutating auth_required).
+  Future<void> reloadAuthConfig() async {
+    _authRequired = null;
+    return loadAuthConfigOnce();
+  }
+
   Future<void> loadAuthConfigOnce() async {
     if (_authRequired != null) return;
 
