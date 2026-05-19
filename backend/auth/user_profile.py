@@ -252,7 +252,9 @@ class UserProfileManager:
     def create_default_profile(self, username: str) -> UserProfile:
         """Create default profile for user using unified template"""
         # Use unified default template
-        template_file = "Owlangs/config/templates/default_profile.json"
+        # Locate template: project root -> backend/config/templates/default_profile.json
+        from backend.utils.path_utils import get_project_root
+        template_file = str(get_project_root() / "backend" / "config" / "templates" / "default_profile.json")
         
         try:
             # Load configuration from template file

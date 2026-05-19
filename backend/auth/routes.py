@@ -361,16 +361,13 @@ async def login(
 
         # Create session
         logger.info(LogModule.AUTH, f"Creating session for user {_mask_username(username)}")
-        await session_manager.create_session(request, response, user)
-        
-        # Get session ID to use as token
-        # For API requests, we need to return the session ID directly
-        # since cookies might not work properly in Flutter Web
-        session_id = session_manager.get_session_id(request)
-        if not session_id:
-            # If we can't get session ID from cookies, get it from the session we just created
-            # This is a workaround for Flutter Web cookie issues
-            session_id = session_manager._last_created_session_id
+        # Clear any existing session cookie so the browser won't send stale IDs.
+        old_session_id = session_manager.get_session_id(request)
+        if old_session_id:
+            await session_manager.destroy_session(request, response)
+        # Use the session ID returned by create_session directly instead of reading from
+        # request cookies (which may contain an old/invalid session ID).
+        session_id = await session_manager.create_session(request, response, user)
         logger.info(LogModule.AUTH, f"Session created with ID: {session_id}")
         
         # Prepare user information for response

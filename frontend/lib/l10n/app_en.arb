@@ -67,6 +67,10 @@
   "translationCloseTranslateTabStay": "Stay",
   "translationCloseTranslateTabClose": "Close without saving",
   "translationCloseTranslateTabSaveAndClose": "Save to queue and close",
+  "translationCloseTranslateTabKeepTitle": "Keep task in queue?",
+  "translationCloseTranslateTabKeepMessage": "The task is completed. Keep it in the translation queue for later review and editing?",
+  "translationCloseTranslateTabKeepInQueue": "Keep in queue",
+  "translationCloseTranslateTabDiscard": "Discard",
   "translationToolbarSwitchToFile": "Switch to File",
   "translationToolbarSwitchToText": "Switch to Text",
 

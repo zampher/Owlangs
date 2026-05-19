@@ -204,6 +204,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'Save to queue and close';
 
   @override
+  String get translationCloseTranslateTabKeepTitle => 'Keep task in queue?';
+
+  @override
+  String get translationCloseTranslateTabKeepMessage =>
+      'The task is completed. Keep it in the translation queue for later review and editing?';
+
+  @override
+  String get translationCloseTranslateTabKeepInQueue => 'Keep in queue';
+
+  @override
+  String get translationCloseTranslateTabDiscard => 'Discard';
+
+  @override
   String get translationToolbarSwitchToFile => 'Switch to File';
 
   @override

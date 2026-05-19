@@ -210,6 +210,20 @@ class AppLocalizationsEs extends AppLocalizations {
       'Guardar en la cola y cerrar';
 
   @override
+  String get translationCloseTranslateTabKeepTitle =>
+      '¿Mantener tarea en la cola?';
+
+  @override
+  String get translationCloseTranslateTabKeepMessage =>
+      'La tarea ha finalizado. ¿Mantenerla en la cola para revisarla y editarla más tarde?';
+
+  @override
+  String get translationCloseTranslateTabKeepInQueue => 'Mantener en cola';
+
+  @override
+  String get translationCloseTranslateTabDiscard => 'Descartar';
+
+  @override
   String get translationToolbarSwitchToFile => 'Cambiar a Archivo';
 
   @override

@@ -193,6 +193,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationCloseTranslateTabSaveAndClose => '保存して閉じる';
 
   @override
+  String get translationCloseTranslateTabKeepTitle => 'タスクをキューに保持しますか？';
+
+  @override
+  String get translationCloseTranslateTabKeepMessage =>
+      '翻訳が完了しました。後で確認・編集するためにタスクをキューに保持しますか？';
+
+  @override
+  String get translationCloseTranslateTabKeepInQueue => 'キューに保持';
+
+  @override
+  String get translationCloseTranslateTabDiscard => '破棄';
+
+  @override
   String get translationToolbarSwitchToFile => 'ファイルに切り替え';
 
   @override

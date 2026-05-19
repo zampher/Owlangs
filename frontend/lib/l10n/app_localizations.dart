@@ -452,6 +452,30 @@ abstract class AppLocalizations {
   /// **'Save to queue and close'**
   String get translationCloseTranslateTabSaveAndClose;
 
+  /// No description provided for @translationCloseTranslateTabKeepTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep task in queue?'**
+  String get translationCloseTranslateTabKeepTitle;
+
+  /// No description provided for @translationCloseTranslateTabKeepMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The task is completed. Keep it in the translation queue for later review and editing?'**
+  String get translationCloseTranslateTabKeepMessage;
+
+  /// No description provided for @translationCloseTranslateTabKeepInQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep in queue'**
+  String get translationCloseTranslateTabKeepInQueue;
+
+  /// No description provided for @translationCloseTranslateTabDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get translationCloseTranslateTabDiscard;
+
   /// No description provided for @translationToolbarSwitchToFile.
   ///
   /// In en, this message translates to:

@@ -1298,30 +1298,79 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     if (tab.id != 'translate_tab') {
       return true;
     }
+    // Check dirty state first (unsaved segment edits)
     final bool dirty =
         ref.read(queuePersistDirtyProvider(_queuePersistScopeKey));
-    if (!dirty) {
+    if (dirty) {
+      final AppLocalizations l10n = AppLocalizations.of(context)!;
+      final String? choice = await _showQueuePersistDiscardDialog(l10n);
+      if (choice == null || choice == 'stay') {
+        return false;
+      }
+      if (choice == 'close_anyway') {
+        return true;
+      }
+      await _persistQueueSnapshotManual(showSuccessSnack: false);
+      if (!mounted) {
+        return false;
+      }
+      final bool stillDirty =
+          ref.read(queuePersistDirtyProvider(_queuePersistScopeKey));
+      if (stillDirty) {
+        return false;
+      }
       return true;
     }
-    final AppLocalizations l10n = AppLocalizations.of(context)!;
-    final String? choice = await _showQueuePersistDiscardDialog(l10n);
-    if (choice == null || choice == 'stay') {
-      return false;
-    }
-    if (choice == 'close_anyway') {
-      return true;
-    }
-    await _persistQueueSnapshotManual(showSuccessSnack: false);
-    if (!mounted) {
-      return false;
-    }
-    final bool stillDirty =
-        ref.read(queuePersistDirtyProvider(_queuePersistScopeKey));
-    if (stillDirty) {
-      return false;
+    // Not dirty -- check if task is completed and ask whether to keep in queue
+    final dynamic translationState = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!))
+        : ref.read(translationStateProvider);
+    final String? taskId = translationState.taskId as String?;
+    // Only show keep/discard dialog for completed tasks (has downloads, not translating)
+    if (taskId != null &&
+        taskId.isNotEmpty &&
+        !taskId.startsWith('pending_') &&
+        !(translationState.isTranslating == true) &&
+        (translationState.downloads is Map &&
+            (translationState.downloads as Map).isNotEmpty)) {
+      final AppLocalizations l10n = AppLocalizations.of(context)!;
+      final String? choice = await _showQueueKeepOrDiscardDialog(l10n);
+      if (choice == null || choice == 'keep') {
+        // Keep in queue -- just close the tab without releasing
+        return true;
+      }
+      // Discard -- release task resources, then close
+      try {
+        final TranslationService svc = TranslationService();
+        await svc.releaseTask(taskId);
+      } catch (_) {
+        // Ignore release errors; proceed with close anyway
+      }
     }
     return true;
   }
+
+  Future<String?> _showQueueKeepOrDiscardDialog(AppLocalizations l10n) =>
+      showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(l10n.translationCloseTranslateTabKeepTitle),
+          content: Text(l10n.translationCloseTranslateTabKeepMessage),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('keep'),
+              child: Text(l10n.translationCloseTranslateTabKeepInQueue),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('discard'),
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+              child: Text(l10n.translationCloseTranslateTabDiscard),
+            ),
+          ],
+        ),
+      );
 
   String _formatTokenCount(int count) {
     if (count < 1000) return '$count';

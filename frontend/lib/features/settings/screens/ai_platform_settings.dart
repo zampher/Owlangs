@@ -1799,15 +1799,19 @@ class AIPlatformSettingsNotifier extends StateNotifier<AIPlatformSettings> {
   /// Load platform config (with cache - won't reload if loaded recently)
   Future<void> loadPlatforms({bool force = false}) async {
     if (_loadPlatformsInProgress) return;
-    
+
+    final bool hadError = state.error != null;
+
     // Check instance cache first (fastest)
-    if (!force && _lastLoadTime != null) {
+    // If there was a previous error (e.g. auth required but no token), allow
+    // retry even if the cache interval has not elapsed.
+    if (!force && !hadError && _lastLoadTime != null) {
       final timeSinceLastLoad = DateTime.now().difference(_lastLoadTime!);
       if (timeSinceLastLoad < _minReloadInterval) return;
     }
-    
+
     // Check static cache (survives widget rebuilds)
-    if (!force && _staticLastLoadTime != null && _cachedPlatforms != null) {
+    if (!force && !hadError && _staticLastLoadTime != null && _cachedPlatforms != null) {
       final timeSinceLastLoad = DateTime.now().difference(_staticLastLoadTime!);
       if (timeSinceLastLoad < _minReloadInterval) {
         state = state.copyWith(

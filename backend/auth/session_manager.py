@@ -212,15 +212,16 @@ class AuthSessionManager:
     
     async def get_user(self, request: Request) -> Optional[User]:
         """Get current user from session with in-memory fallback"""
-        # Try to get session ID from cookies first
-        session_id = self.get_session_id(request)
-        
-        # If no session ID from cookies, try Authorization header
-        if not session_id:
-            auth_header = request.headers.get("Authorization")
-            if auth_header and auth_header.startswith("Bearer "):
-                session_id = auth_header[7:]  # Remove "Bearer " prefix
-                unified_logger.debug(LogModule.AUTH, f"Using session ID from Authorization header: {session_id[:20]}...")
+        # Prefer Authorization header (used by Flutter Web) over cookies.
+        # Cookies may contain stale/expired session IDs from previous logins
+        # or before a server restart, while the header carries the active token.
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            session_id = auth_header[7:]  # Remove "Bearer " prefix
+            unified_logger.debug(LogModule.AUTH, f"Using session ID from Authorization header: {session_id[:20]}...")
+        else:
+            # Fallback to cookie for non-API clients
+            session_id = self.get_session_id(request)
         
         if not session_id:
             return None

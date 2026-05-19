@@ -421,13 +421,14 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
   GlobalSettingsNotifier() : super(const GlobalSettings()) {
     // Load settings from local cache immediately (async, non-blocking)
     // So that persisted UI language and other prefs apply as soon as load completes
-    _loadSettings();
+    reloadSettings();
   }
   final SettingsService _settingsService = SettingsService();
   bool _isLoading = false;
 
-  // 加载设置
-  Future<void> _loadSettings() async {
+  /// Reload settings from local cache and sync with backend.
+  /// Call this after login to ensure the latest user settings are fetched.
+  Future<void> reloadSettings() async {
     if (_isLoading) return;
     _isLoading = true;
     try {

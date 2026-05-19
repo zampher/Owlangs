@@ -194,6 +194,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationCloseTranslateTabSaveAndClose => '저장 후 닫기';
 
   @override
+  String get translationCloseTranslateTabKeepTitle => '작업을 대기열에 유지할까요?';
+
+  @override
+  String get translationCloseTranslateTabKeepMessage =>
+      '번역이 완료되었습니다. 나중에 검토 및 편집을 위해 대기열에 유지하시겠습니까?';
+
+  @override
+  String get translationCloseTranslateTabKeepInQueue => '대기열에 유지';
+
+  @override
+  String get translationCloseTranslateTabDiscard => '폐기';
+
+  @override
   String get translationToolbarSwitchToFile => '파일로 전환';
 
   @override

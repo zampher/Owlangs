@@ -192,6 +192,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationCloseTranslateTabSaveAndClose => '保存并关闭';
 
   @override
+  String get translationCloseTranslateTabKeepTitle => '保留任务到队列？';
+
+  @override
+  String get translationCloseTranslateTabKeepMessage =>
+      '翻译任务已完成。是否保留在任务队列中，以便以后查看和编辑？';
+
+  @override
+  String get translationCloseTranslateTabKeepInQueue => '保留在队列';
+
+  @override
+  String get translationCloseTranslateTabDiscard => '丢弃';
+
+  @override
   String get translationToolbarSwitchToFile => '切换到文件';
 
   @override

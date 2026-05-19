@@ -32,6 +32,8 @@ import 'shared/utils/set_page_title_stub.dart'
 import 'features/translation/services/persistence_migration_service.dart';
 import 'features/tasks/services/flow_state_persistence.dart';
 import 'features/translation/services/tab_background_update_service.dart';
+import 'features/settings/screens/ai_platform_settings.dart'
+    show aiPlatformSettingsProvider;
 import 'shared/utils/app_logger.dart';
 import 'shared/utils/desktop_drop_utils_stub.dart'
     if (dart.library.html) 'shared/utils/desktop_drop_utils_web.dart'
@@ -303,6 +305,31 @@ class OwlangsApp extends ConsumerWidget {
     print(
       '🚀 [APP] AuthProvider watched in ${authWatchDuration.inMilliseconds}ms, watching globalSettingsProvider...',
     );
+
+    // When user logs in, reload global settings and AI platforms from backend
+    // so that configuration (which is gated by auth) is fetched with the valid token.
+    ref.listen<AuthState>(authProvider, (previous, next) {
+      next.whenOrNull(
+        authenticated: (_) {
+          try {
+            ref.read(globalSettingsProvider.notifier).reloadSettings();
+          } catch (e) {
+            if (kDebugMode) {
+              print('⚠️ [AUTH] Failed to reload settings after login: $e');
+            }
+          }
+          try {
+            ref
+                .read(aiPlatformSettingsProvider.notifier)
+                .loadPlatforms(force: true);
+          } catch (e) {
+            if (kDebugMode) {
+              print('⚠️ [AUTH] Failed to reload AI platforms after login: $e');
+            }
+          }
+        },
+      );
+    });
 
     // Watch global settings to respond to dark mode changes
     // Use try-catch to handle potential initialization delays gracefully

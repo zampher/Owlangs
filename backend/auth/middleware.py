@@ -128,7 +128,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if self._is_exempt_path(path):
             return await call_next(request)
         
-        # Check if it's an exempt API path (GET requests only)
+        # Check if it's an exempt API path (all methods are exempt for these paths)
         if self._is_exempt_api_path(path, method):
             return await call_next(request)
         
@@ -158,8 +158,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
     
     def _is_exempt_path(self, path: str) -> bool:
         """Check if path is exempt from authentication"""
-        # Exact match
+        # Exact match (with or without trailing slash)
         if path in self.exempt_paths:
+            return True
+        if path.endswith("/") and path[:-1] in self.exempt_paths:
+            return True
+        if not path.endswith("/") and (path + "/") in self.exempt_paths:
             return True
         
         # Static file path matching
@@ -177,8 +181,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
         return False
     
     def _is_exempt_api_path(self, path: str, method: str) -> bool:
-        """Check if API path is exempt from authentication"""
+        """Check if API path is exempt from authentication.
+        
+        Exempt paths are exact matches (with or without trailing slash) to ensure
+        consistent behavior regardless of how the client constructs the request URL.
+        """
+        # Check exact match, including trailing-slash variant
         if path in self.exempt_api_paths:
+            return True
+        if path.endswith("/") and path[:-1] in self.exempt_api_paths:
+            return True
+        if not path.endswith("/") and (path + "/") in self.exempt_api_paths:
             return True
         for prefix in self.exempt_api_path_prefixes:
             if path.startswith(prefix):
