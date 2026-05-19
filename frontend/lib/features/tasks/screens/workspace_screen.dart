@@ -2,10 +2,14 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../app/app_config.dart';
 import '../../../app/app_router.dart';
@@ -945,6 +949,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 onPressed: () => context.go(AppRouter.donateRoute),
                 width: 90,
               ),
+              const SizedBox(width: 4),
+              const _GitHubStarButton(),
               Builder(
                 builder: (BuildContext context) {
                   final currentPath = GoRouter.of(context)
@@ -1362,6 +1368,111 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 textAlign: TextAlign.center,
                 softWrap: true,
                 maxLines: maxLabelLines,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// GitHub star count button displayed in the home page toolbar.
+/// Fetches the star count from the GitHub API on init.
+class _GitHubStarButton extends StatefulWidget {
+  const _GitHubStarButton();
+
+  @override
+  State<_GitHubStarButton> createState() => _GitHubStarButtonState();
+}
+
+class _GitHubStarButtonState extends State<_GitHubStarButton> {
+  int? _starCount;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchStars();
+  }
+
+  Future<void> _fetchStars() async {
+    try {
+      final response = await Dio().get(
+        'https://api.github.com/repos/zampher/Owlangs',
+        options: Options(headers: {'Accept': 'application/vnd.github.v3+json'}),
+      );
+      if (response.statusCode == 200) {
+        final data = response.data is Map ? response.data as Map : {};
+        final count = data['stargazers_count'];
+        if (mounted) {
+          setState(() {
+            _starCount = count is int ? count : 0;
+            _loading = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _loading = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _formatCount(int count) {
+    if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}k';
+    }
+    return count.toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String label;
+    if (_loading) {
+      label = '...';
+    } else if (_starCount != null) {
+      label = '★ ${_formatCount(_starCount!)} Github';
+    } else {
+      label = 'GitHub';
+    }
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: InkWell(
+        onTap: () async {
+          await launchUrl(
+            Uri.parse('https://github.com/zampher/Owlangs'),
+            mode: LaunchMode.externalApplication,
+          );
+        },
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          width: 80,
+          height: 70,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(
+                MdiIcons.github,
+                color: Theme.of(context).colorScheme.primary,
+                size: 32,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ],
