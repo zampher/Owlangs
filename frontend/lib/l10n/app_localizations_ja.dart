@@ -677,6 +677,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get quickSettingsTargetLanguage => 'ターゲット言語';
 
   @override
+  String get quickSettingsSourceLanguage => 'ソース言語 (MinerU OCR)';
+
+  @override
   String get quickSettingsLanguageSwitchDisabled =>
       '翻訳中は言語の切り替えが無効です。ターゲット言語を変更するには、抽出タブに切り替えてください。';
 
@@ -2739,4 +2742,19 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get reeditSaveError => '変更の保存に失敗しました。';
+
+  @override
+  String get workspaceCloseFlowTitle => 'このフローを閉じますか？';
+
+  @override
+  String get workspaceCloseFlowMessage => 'このフローを閉じると、保存されていない変更は破棄されます。';
+
+  @override
+  String get workspaceCloseFlowSaveToQueue => '保存して閉じる';
+
+  @override
+  String get workspaceCloseFlowDestroy => '破棄して閉じる';
+
+  @override
+  String get workspaceCloseFlowCancel => 'キャンセル';
 }

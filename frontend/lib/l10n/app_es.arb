@@ -214,6 +214,7 @@
   "translationDialogCancelTaskYesCancel": "Sí, Cancelar",
   "translationQuickSettingsTitle": "Configuración Rápida de Traducción",
   "quickSettingsTargetLanguage": "Idioma Objetivo",
+  "quickSettingsSourceLanguage": "Idioma de origen (MinerU OCR)",
   "quickSettingsLanguageSwitchDisabled": "El cambio de idioma está deshabilitado durante la traducción. Por favor, cambie a la pestaña Extraer para cambiar el idioma objetivo.",
   "quickSettingsParsingPlatform": "Plataforma de Análisis",
   "quickSettingsTestMineru": "Probar conexión MinerU",
@@ -981,5 +982,11 @@
   "reeditSaveExport": "Guardar y exportar",
   "reeditFetchError": "Error al cargar segmentos de traducción.",
   "reeditSaveSuccess": "Cambios guardados correctamente.",
-  "reeditSaveError": "Error al guardar los cambios."
+  "reeditSaveError": "Error al guardar los cambios.",
+
+  "workspaceCloseFlowTitle": "¿Cerrar este flujo?",
+  "workspaceCloseFlowMessage": "Cerrar este flujo descartará los cambios no guardados.",
+  "workspaceCloseFlowSaveToQueue": "Guardar y cerrar",
+  "workspaceCloseFlowDestroy": "Destruir y cerrar",
+  "workspaceCloseFlowCancel": "Cancelar"
 }

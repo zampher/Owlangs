@@ -1289,6 +1289,12 @@ abstract class AppLocalizations {
   /// **'Target Language'**
   String get quickSettingsTargetLanguage;
 
+  /// No description provided for @quickSettingsSourceLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Source language (MinerU OCR)'**
+  String get quickSettingsSourceLanguage;
+
   /// No description provided for @quickSettingsLanguageSwitchDisabled.
   ///
   /// In en, this message translates to:
@@ -4993,6 +4999,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to save changes.'**
   String get reeditSaveError;
+
+  /// No description provided for @workspaceCloseFlowTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Close this flow?'**
+  String get workspaceCloseFlowTitle;
+
+  /// No description provided for @workspaceCloseFlowMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Closing this flow will discard any unsaved changes.'**
+  String get workspaceCloseFlowMessage;
+
+  /// No description provided for @workspaceCloseFlowSaveToQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Save and close'**
+  String get workspaceCloseFlowSaveToQueue;
+
+  /// No description provided for @workspaceCloseFlowDestroy.
+  ///
+  /// In en, this message translates to:
+  /// **'Destroy and close'**
+  String get workspaceCloseFlowDestroy;
+
+  /// No description provided for @workspaceCloseFlowCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get workspaceCloseFlowCancel;
 }
 
 class _AppLocalizationsDelegate

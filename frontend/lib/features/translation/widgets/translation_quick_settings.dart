@@ -790,9 +790,9 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text(
-            'Source language (MinerU OCR)',
-            style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+          Text(
+            AppLocalizations.of(context)!.quickSettingsSourceLanguage,
+            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
           ),
           const SizedBox(height: 4),
           DropdownButtonFormField<String>(

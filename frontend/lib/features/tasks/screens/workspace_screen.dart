@@ -24,6 +24,7 @@ import '../services/flow_data_cache.dart';
 import '../../translation/screens/translation_screen.dart';
 import '../../translation/providers/translation_state_provider_family.dart';
 import '../../translation/providers/preview_tabs_provider.dart';
+import '../../translation/providers/queue_persist_dirty_provider.dart';
 import '../../../shared/services/translation_service.dart';
 import '../../anonymize/screens/anonymize_screen.dart';
 import '../../anonymize/screens/anonymize_and_translate_screen.dart';
@@ -103,6 +104,82 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       // Finally close the flow tab itself
       ref.read(tasksProvider.notifier).closeTask(flowId);
     }
+  }
+
+  Future<void> _confirmCloseFlow(String flowId) async {
+    final translationState = ref.read(
+      translationStateProviderFamily(flowId),
+    );
+    final String? taskId = translationState.taskId;
+    final bool hasResources =
+        taskId != null && taskId.isNotEmpty && !taskId.startsWith('pending_');
+    final bool dirty = ref.read(queuePersistDirtyProvider(flowId));
+
+    // No task resources and not dirty — close silently
+    if (!hasResources && !dirty) {
+      await _closeFlowAndReleaseResources(flowId);
+      return;
+    }
+
+    final bool hasPersistableTask = hasResources;
+
+    final String? choice = await showDialog<String>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        final l10n = AppLocalizations.of(dialogContext)!;
+        return AlertDialog(
+          title: Text(l10n.workspaceCloseFlowTitle),
+          content: Text(l10n.workspaceCloseFlowMessage),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop('cancel'),
+              child: Text(l10n.workspaceCloseFlowCancel),
+            ),
+            if (hasPersistableTask)
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop('save'),
+                child: Text(l10n.workspaceCloseFlowSaveToQueue),
+              ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop('destroy'),
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(dialogContext).colorScheme.error,
+              ),
+              child: Text(l10n.workspaceCloseFlowDestroy),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (choice == null || choice == 'cancel') {
+      return;
+    }
+
+    if (choice == 'save' && hasPersistableTask) {
+      try {
+        final TranslationService svc = TranslationService();
+        await svc.persistQueueSnapshot(taskId);
+        ref.read(queuePersistDirtyProvider(flowId).notifier).clear();
+      } catch (e) {
+        if (mounted) {
+          final String label = AppLocalizations.of(context)!
+              .workspaceCloseFlowSaveToQueue;
+          MessageService.showError(
+            context,
+            '$label failed: $e',
+          );
+        }
+        return;
+      }
+      // Close tab without releasing — release would delete the stash we just saved.
+      // The task stays alive in the backend so it appears in the queue screen.
+      ref.read(tasksProvider.notifier).closeTask(flowId);
+      return;
+    }
+
+    // choice == 'destroy' — release backend resources, then close tab
+    await _closeFlowAndReleaseResources(flowId);
   }
 
   void _startEditing(String taskId, String currentTitle) {
@@ -1175,7 +1252,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                                 const SizedBox(width: 8),
                                 GestureDetector(
                                   onTap: () async =>
-                                      _closeFlowAndReleaseResources(t.id),
+                                      _confirmCloseFlow(t.id),
                                   child: Icon(
                                     Icons.close,
                                     size: 14,

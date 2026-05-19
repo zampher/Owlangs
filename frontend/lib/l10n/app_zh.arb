@@ -203,6 +203,7 @@
   "translationDialogCancelTaskYesCancel": "是，取消",
   "translationQuickSettingsTitle": "翻译快速设置",
   "quickSettingsTargetLanguage": "目标语言",
+  "quickSettingsSourceLanguage": "源语言 (MinerU OCR)",
   "quickSettingsLanguageSwitchDisabled": "翻译期间语言切换被禁用。请切换到提取标签页以更改目标语言。",
   "quickSettingsParsingPlatform": "解析平台",
   "quickSettingsTestMineru": "测试 MinerU 连接",
@@ -905,5 +906,11 @@
   "reeditSaveExport": "保存并导出",
   "reeditFetchError": "加载翻译片段失败。",
   "reeditSaveSuccess": "修改已保存。",
-  "reeditSaveError": "保存修改失败。"
+  "reeditSaveError": "保存修改失败。",
+
+  "workspaceCloseFlowTitle": "关闭此流程？",
+  "workspaceCloseFlowMessage": "关闭此流程将丢弃所有未保存的更改。",
+  "workspaceCloseFlowSaveToQueue": "保存并关闭",
+  "workspaceCloseFlowDestroy": "销毁并关闭",
+  "workspaceCloseFlowCancel": "取消"
 }

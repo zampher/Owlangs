@@ -1298,6 +1298,11 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     if (tab.id != 'translate_tab') {
       return true;
     }
+    // When inside a flow, tab-level close is silent — the flow-level close
+    // dialog (in workspace_screen._confirmCloseFlow) handles save / exit / destroy.
+    if (widget.flowId != null) {
+      return true;
+    }
     // Check dirty state first (unsaved segment edits)
     final bool dirty =
         ref.read(queuePersistDirtyProvider(_queuePersistScopeKey));

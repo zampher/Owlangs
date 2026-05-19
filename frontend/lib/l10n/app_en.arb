@@ -217,6 +217,7 @@
 
   "translationQuickSettingsTitle": "Translation Quick Settings",
   "quickSettingsTargetLanguage": "Target Language",
+  "quickSettingsSourceLanguage": "Source language (MinerU OCR)",
   "quickSettingsLanguageSwitchDisabled": "Language switching is disabled during translation. Please switch to Extract tab to change target language.",
   "quickSettingsParsingPlatform": "Parsing Platform",
   "quickSettingsTestMineru": "Test MinerU connection",
@@ -954,5 +955,11 @@
   "reeditSaveExport": "Save && Export",
   "reeditFetchError": "Failed to load translation segments.",
   "reeditSaveSuccess": "Changes saved successfully.",
-  "reeditSaveError": "Failed to save changes."
+  "reeditSaveError": "Failed to save changes.",
+
+  "workspaceCloseFlowTitle": "Close this flow?",
+  "workspaceCloseFlowMessage": "Closing this flow will discard any unsaved changes.",
+  "workspaceCloseFlowSaveToQueue": "Save and close",
+  "workspaceCloseFlowDestroy": "Destroy and close",
+  "workspaceCloseFlowCancel": "Cancel"
 }

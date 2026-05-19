@@ -678,6 +678,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get quickSettingsTargetLanguage => '대상 언어';
 
   @override
+  String get quickSettingsSourceLanguage => '원본 언어 (MinerU OCR)';
+
+  @override
   String get quickSettingsLanguageSwitchDisabled =>
       '번역 중에는 언어 전환이 비활성화됩니다. 대상 언어를 변경하려면 추출 탭으로 전환하세요.';
 
@@ -2743,4 +2746,19 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get reeditSaveError => '변경사항 저장에 실패했습니다.';
+
+  @override
+  String get workspaceCloseFlowTitle => '이 플로우를 닫으시겠습니까?';
+
+  @override
+  String get workspaceCloseFlowMessage => '이 플로우를 닫으면 저장되지 않은 변경 사항이 폐기됩니다.';
+
+  @override
+  String get workspaceCloseFlowSaveToQueue => '저장 후 닫기';
+
+  @override
+  String get workspaceCloseFlowDestroy => '파기 후 닫기';
+
+  @override
+  String get workspaceCloseFlowCancel => '취소';
 }

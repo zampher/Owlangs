@@ -670,6 +670,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get quickSettingsTargetLanguage => '目标语言';
 
   @override
+  String get quickSettingsSourceLanguage => '源语言 (MinerU OCR)';
+
+  @override
   String get quickSettingsLanguageSwitchDisabled =>
       '翻译期间语言切换被禁用。请切换到提取标签页以更改目标语言。';
 
@@ -2720,4 +2723,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reeditSaveError => '保存修改失败。';
+
+  @override
+  String get workspaceCloseFlowTitle => '关闭此流程？';
+
+  @override
+  String get workspaceCloseFlowMessage => '关闭此流程将丢弃所有未保存的更改。';
+
+  @override
+  String get workspaceCloseFlowSaveToQueue => '保存并关闭';
+
+  @override
+  String get workspaceCloseFlowDestroy => '销毁并关闭';
+
+  @override
+  String get workspaceCloseFlowCancel => '取消';
 }
