@@ -1,5 +1,20 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.3.2.0
+
+### New Features
+
+1. **Queue task editing**: Tasks that are still in memory can now be edited directly from the task queue; tasks no longer in memory can only be downloaded.
+2. **GitHub button**: Added a GitHub button to the toolbar for quick access to the latest release downloads.
+3. **Flow close confirmation**: When closing a translation flow, the app now asks whether to save the current result to the queue before closing. 
+4. **Offline flow close safeguard**: If the connection is lost, the result is automatically saved to the queue by default.
+
+### Bug Fixes
+
+1. **Auth config load failure**: Fixed a configuration loading failure after switching from "no login required" to "local user auth" and restarting the app.
+
+---
+
 ## Owlangs 1.3.1.0
 
 ### New Features
