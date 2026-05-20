@@ -2858,6 +2858,20 @@ def update_translation_segment(
         segment["modified_at"] = time.time()
         segment["status"] = "modified"
         logger.info(LogModule.TRANS, f"Updated segment {segment_index} for task {task_id}: modified=True, old_length={len(old_text)}, new_length={len(target_text)}")
+        
+        # CRITICAL: Sync manual edit back to html_translated_texts for html workflow rebuild
+        if task_state and "html_original_texts" in task_state:
+            html_translated_texts = task_state.get("html_translated_texts", [])
+            if (
+                segment_index is not None
+                and 0 <= segment_index < len(html_translated_texts)
+            ):
+                html_translated_texts[segment_index] = target_text
+                task_state["html_translated_texts"] = html_translated_texts
+                logger.info(
+                    LogModule.TRANS,
+                    f"[UPDATE-SEGMENT] Task {task_id}: Synced segment {segment_index} to html_translated_texts"
+                )
     
     if reviewed is not None:
         segment["reviewed"] = reviewed
@@ -5104,6 +5118,26 @@ async def retranslate_segments_batch(
             segment["exclusion_reason"] = None
         
         result_map[segment_index] = segment
+    
+    # CRITICAL: Sync updated translations back to html_translated_texts so that
+    # html workflow export can rebuild the translated HTML from segments.
+    if task_state and "html_original_texts" in task_state:
+        html_translated_texts = task_state.get("html_translated_texts", [])
+        html_modified = False
+        for seg_idx, segment in result_map.items():
+            if (
+                seg_idx is not None
+                and 0 <= seg_idx < len(html_translated_texts)
+                and not segment.get("is_failed", False)
+            ):
+                html_translated_texts[seg_idx] = segment["target_text"]
+                html_modified = True
+        if html_modified:
+            task_state["html_translated_texts"] = html_translated_texts
+            logger.info(
+                LogModule.TRANS,
+                f"[BATCH_RETRY] Task {task_id}: Synced {len(result_map)} segment(s) to html_translated_texts"
+            )
     
     # Save API logs to temp directory (batch retry)
     # CRITICAL: Use accumulated logs, not task_state (which may be overwritten)

@@ -439,6 +439,7 @@ def _extract_by_common_selectors(html_str: str, url: str = "") -> Optional[str]:
 
     # Paragraphize: wrap loose inline/text children inside divs with <p>
     # so they get proper block-level line breaks after section/article unwrap.
+    # Images are also wrapped so they sit in their own paragraph with spacing.
     for div in content_elem.find_all('div'):
         if div is content_elem:
             continue
@@ -453,7 +454,7 @@ def _extract_by_common_selectors(html_str: str, url: str = "") -> Optional[str]:
                     child.replace_with(new_p)
             elif child.name not in ('p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
                                     'div', 'ul', 'ol', 'table', 'pre', 'blockquote',
-                                    'hr', 'img', 'br'):
+                                    'hr', 'br'):
                 new_p = content_elem.new_tag('p')
                 child.wrap(new_p)
 
@@ -473,6 +474,100 @@ def _extract_by_common_selectors(html_str: str, url: str = "") -> Optional[str]:
         parts.append(f'<h1>{title_text}</h1>')
     parts.append(str(content_elem))
     return '\n'.join(parts)
+
+
+def _sanitize_full_html(html_str: str, url: str = "") -> str:
+    """
+    Sanitize raw HTML for safe offline reading.
+
+    Removes external resource references (<script>, <link stylesheet>, etc.)
+    that cause CORS/404 errors when the file is opened via file:// protocol.
+    Also fixes lazy-loaded images and converts relative URLs to absolute.
+    """
+    try:
+        from bs4 import BeautifulSoup, Comment
+        from urllib.parse import urljoin
+    except ImportError:
+        return html_str
+
+    soup = BeautifulSoup(html_str, 'lxml')
+
+    # 1. Remove tags that cause external requests or are useless offline
+    remove_tags = {
+        'script', 'noscript', 'iframe', 'svg', 'canvas',
+        'video', 'audio', 'form', 'input', 'button',
+        'select', 'textarea', 'nav', 'embed', 'object',
+    }
+    for tag_name in remove_tags:
+        for tag in soup.find_all(tag_name):
+            tag.decompose()
+
+    # 2. Remove <style> tags (inline styles often depend on external CSS vars)
+    for tag in soup.find_all('style'):
+        tag.decompose()
+
+    # 3. Remove <link> tags (stylesheets, preloads, etc.)
+    for tag in soup.find_all('link'):
+        tag.decompose()
+
+    # 4. Remove <meta> tags that cause issues (CSP, referrer, etc.)
+    for tag in soup.find_all('meta'):
+        http_equiv = tag.get('http-equiv', '').lower()
+        if http_equiv in ('content-security-policy', 'content-security-policy-report-only'):
+            tag.decompose()
+
+    # 5. Remove HTML comments
+    for comment in soup.find_all(string=lambda t: isinstance(t, Comment)):
+        comment.extract()
+
+    # 6. Fix lazy-loaded images and convert relative URLs
+    for img in soup.find_all('img'):
+        data_src = img.get('data-src', '')
+        src = img.get('src', '')
+        if data_src and (
+            not src
+            or src.startswith('data:')
+            or 'placeholder' in src.lower()
+            or '1x1' in src.lower()
+            or 'blank' in src.lower()
+            or 'spacer' in src.lower()
+        ):
+            actual_src = data_src.strip()
+            if url and not actual_src.startswith(('http://', 'https://', 'data:')):
+                actual_src = urljoin(url, actual_src)
+            img['src'] = actual_src
+            if 'data-src' in img.attrs:
+                del img.attrs['data-src']
+        # Convert relative src to absolute
+        src = img.get('src', '')
+        if src and url and not src.startswith(('http://', 'https://', 'data:')):
+            img['src'] = urljoin(url, src)
+        # Clean image attributes
+        for attr in list(img.attrs.keys()):
+            if attr.lower() not in ('src', 'alt', 'title', 'width', 'height'):
+                del img.attrs[attr]
+
+    # 7. Remove event-handler attributes and data-* / class / id / style / role
+    event_prefixes = ('on', 'aria-', 'data-')
+    for tag in soup.find_all(True):
+        if tag.attrs is None:
+            continue
+        attrs_to_remove = []
+        for attr in list(tag.attrs.keys()):
+            attr_lower = attr.lower()
+            if attr_lower.startswith(event_prefixes):
+                attrs_to_remove.append(attr)
+            elif attr_lower in ('class', 'id', 'role', 'tabindex', 'style'):
+                attrs_to_remove.append(attr)
+        for attr in attrs_to_remove:
+            del tag.attrs[attr]
+
+    # 8. Remove empty head if nothing useful remains
+    head = soup.head
+    if head and not head.find_all(True):
+        head.decompose()
+
+    return str(soup)
 
 
 def extract_main_content(html_bytes: bytes, url: str = "") -> str:

@@ -550,8 +550,10 @@ class FormatConversionService:
 
             # 2. Extract content based on mode
             if request.extract_mode == "full":
-                html_content = decode_with_detection(raw_bytes)
-                logger.info(LogModule.WORKFLOW, f"[IMPORT] Using full HTML: {len(html_content)} chars")
+                raw_html = decode_with_detection(raw_bytes)
+                from backend.app.utils.url_fetcher import _sanitize_full_html
+                html_content = _sanitize_full_html(raw_html, url=url)
+                logger.info(LogModule.WORKFLOW, f"[IMPORT] Using full HTML (sanitized): {len(html_content)} chars")
             else:
                 # Default to content extraction
                 html_content = extract_main_content(raw_bytes, url=url)

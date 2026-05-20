@@ -133,6 +133,45 @@ def _merge_image_data_maps(
     return merged
 
 
+def _rebuild_html_from_task_state(task_state: Dict[str, Any]) -> Optional[str]:
+    """
+    Rebuild translated HTML for html workflow using updated html_translated_texts.
+    Returns the rebuilt HTML string, or None if rebuild is not possible.
+    """
+    html_original_texts = task_state.get("html_original_texts")
+    html_translated_texts = task_state.get("html_translated_texts")
+    if not html_original_texts or not html_translated_texts:
+        return None
+
+    # Get original HTML content from workflow_instance.document_original
+    workflow_instance = task_state.get("workflow_instance")
+    if not workflow_instance or not hasattr(workflow_instance, "document_original"):
+        return None
+    doc_original = workflow_instance.document_original
+    if not doc_original or not doc_original.content:
+        return None
+
+    try:
+        html_content = (
+            doc_original.content.decode("utf-8")
+            if isinstance(doc_original.content, bytes)
+            else str(doc_original.content)
+        )
+        from workflow.html_to_markdown_export import rebuild_html_with_translations
+
+        rebuilt_html = rebuild_html_with_translations(
+            html_content, html_original_texts, html_translated_texts
+        )
+        return rebuilt_html
+    except Exception as e:
+        logger.warning(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Failed to rebuild HTML from task_state: {e}",
+            exc_info=True,
+        )
+        return None
+
+
 def _file_response_for_md_download(
     md_content: str,
     task_state: Dict[str, Any],
@@ -3095,6 +3134,36 @@ class DownloadService:
                     elif not segments_data:
                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] No segments_data found, trying HTML fallback")
 
+                    # HTML workflow with revisions: rebuild translated HTML from html_translated_texts
+                    # so that retranslated / edited segments are reflected in exported MD.
+                    if wt_export == "html" and has_revisions_original:
+                        try:
+                            html_rebuilt = _rebuild_html_from_task_state(task_state)
+                            if html_rebuilt:
+                                from workflow.html_to_markdown_export import html_content_to_markdown
+                                md_content = html_content_to_markdown(html_rebuilt)
+                                if md_content and md_content.strip():
+                                    file_stem = task_state.get("original_filename_stem", "translated")
+                                    logger.info(
+                                        LogModule.EXPORT,
+                                        f"[DOWNLOAD] Rebuilt MD from html_translated_texts "
+                                        f"(chars={len(md_content)}); task_id={task_id} wt={wt_export}",
+                                    )
+                                    return _file_response_for_md_download(
+                                        md_content,
+                                        task_state,
+                                        file_stem,
+                                        embed_images,
+                                        equation_format,
+                                        table_body_format,
+                                    )
+                        except Exception as e:
+                            logger.warning(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] HTML workflow revision rebuild failed task_id={task_id}: {e}",
+                                exc_info=True,
+                            )
+
                     html_file_info = task_state.get("downloadable_files", {}).get("html")
                     html_path = html_file_info.get("path") if isinstance(html_file_info, dict) else None
                     if not html_path and html_file_info:
@@ -3268,6 +3337,35 @@ class DownloadService:
                 html_path = ""
                 if html_info:
                     html_path = html_info.get("path", "") if isinstance(html_info, dict) else str(html_info)
+                
+                # HTML workflow with revisions: rebuild translated HTML from html_translated_texts
+                if workflow_type == "html" and has_revisions_original:
+                    try:
+                        html_rebuilt = _rebuild_html_from_task_state(task_state)
+                        if html_rebuilt:
+                            file_stem = task_state.get("original_filename_stem", "translated")
+                            temp_file = tempfile.NamedTemporaryFile(
+                                mode="w", suffix=".html", delete=False, encoding="utf-8"
+                            )
+                            temp_file.write(html_rebuilt)
+                            temp_file.close()
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Rebuilt HTML from html_translated_texts "
+                                f"(chars={len(html_rebuilt)}); task_id={task_id}",
+                            )
+                            return FileResponse(
+                                path=temp_file.name,
+                                media_type=MEDIA_TYPES.get("html", "text/html; charset=utf-8"),
+                                filename=f"{file_stem}_translated.html",
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            LogModule.EXPORT,
+                            f"[DOWNLOAD] HTML workflow revision rebuild failed task_id={task_id}: {e}",
+                            exc_info=True,
+                        )
+                
                 if html_path and os.path.exists(html_path):
                     filename = html_info.get("filename") or os.path.basename(html_path)
                     media_type = MEDIA_TYPES.get(file_type, "text/html; charset=utf-8")

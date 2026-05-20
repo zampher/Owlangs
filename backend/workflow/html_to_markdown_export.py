@@ -228,3 +228,195 @@ def _clean_markdown(markdown: str) -> str:
         cleaned_lines.pop()
 
     return "\n".join(cleaned_lines)
+
+
+def rebuild_html_with_translations(
+    html_content: str,
+    original_texts: list[str],
+    translated_texts: list[str],
+) -> str:
+    """
+    Rebuild translated HTML by replacing text nodes in safe tags.
+    Mirrors HtmlTranslator._after_translate_with_extractor without needing
+    a translator instance, so download-service rebuilds can reuse it.
+    """
+    from bs4 import BeautifulSoup
+
+    if len(original_texts) != len(translated_texts):
+        raise ValueError(
+            f"original_texts ({len(original_texts)}) and translated_texts "
+            f"({len(translated_texts)}) length mismatch"
+        )
+
+    soup = BeautifulSoup(html_content, "lxml")
+
+    # Same sets as HtmlTranslator
+    non_translatable_tags = {
+        "script",
+        "style",
+        "pre",
+        "code",
+        "kbd",
+        "samp",
+        "var",
+        "noscript",
+        "meta",
+        "link",
+        "head",
+    }
+    safe_tags = {
+        "p",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "li",
+        "blockquote",
+        "q",
+        "caption",
+        "span",
+        "a",
+        "strong",
+        "em",
+        "b",
+        "i",
+        "u",
+        "td",
+        "th",
+        "button",
+        "label",
+        "legend",
+        "option",
+        "figcaption",
+        "summary",
+        "details",
+        "div",
+    }
+
+    for tag in soup.find_all(non_translatable_tags):
+        tag.decompose()
+
+    # Apply translations to soup, handling both single-segment and multi-segment tags.
+    # The HtmlExtractor with deep_split=True may split a single tag's text content
+    # into multiple segments (e.g. by paragraph or sentence boundaries). When the
+    # rebuild matches by tag.string (full tag content), individual segments won't
+    # match. We handle this by trying consecutive-segment concatenation as a fallback.
+    _apply_html_translations(soup, original_texts, translated_texts, safe_tags)
+
+    # Fix lazy-loaded images
+    for img in soup.find_all("img"):
+        src = img.get("src", "").strip()
+        data_src = img.get("data-src", "").strip()
+        if not src and data_src:
+            img["src"] = data_src
+
+    return str(soup)
+
+
+def _apply_html_translations(
+    soup,
+    original_texts: list[str],
+    translated_texts: list[str],
+    safe_tags: set[str],
+) -> None:
+    """Apply translations to a BeautifulSoup tree using text-node-based matching.
+
+    The HtmlExtractor may combine text from multiple adjacent inline tags into
+    one segment (e.g. two <span>s inside a <div>). This approach matches at the
+    text-node character level rather than by tag.string, correctly handling:
+    1. One tag -> one segment (direct match)
+    2. One tag -> multiple segments (deep split)
+    3. Multiple tags -> one segment (tag-group combining, the common case)
+    """
+    from bs4 import Comment as BSComment, NavigableString
+
+    # Phase 1: Collect all text nodes within safe tags
+    text_nodes: list = []
+    node_texts: list[str] = []
+    for text_node in soup.find_all(string=True):
+        if isinstance(text_node, BSComment):
+            continue
+        parent = text_node.parent
+        if parent and hasattr(parent, 'name') and parent.name in safe_tags:
+            t = str(text_node)
+            text_nodes.append(text_node)
+            node_texts.append(t)
+
+    # Track consumed segment indices to handle duplicate original texts
+    consumed_indices: set[int] = set()
+
+    for seg_idx, (orig, trans) in enumerate(zip(original_texts, translated_texts)):
+        if seg_idx in consumed_indices:
+            continue
+        if not orig or not orig.strip():
+            consumed_indices.add(seg_idx)
+            continue
+
+        # (Re)build flat text from current node state
+        flat_text = "".join(node_texts)
+
+        # Find this segment in the flat text
+        pos = flat_text.find(orig)
+        if pos == -1:
+            continue
+
+        end = pos + len(orig)
+
+        # Build cumulative node positions for this iteration
+        node_positions: list[tuple[int, int]] = []
+        cum = 0
+        for nt in node_texts:
+            node_positions.append((cum, cum + len(nt)))
+            cum += len(nt)
+
+        # Find which text node(s) this segment spans
+        start_ni: int | None = None
+        end_ni: int | None = None
+        for ni, (n_start, n_end) in enumerate(node_positions):
+            if start_ni is None and n_start <= pos < n_end:
+                start_ni = ni
+            if n_start < end <= n_end:
+                end_ni = ni
+                break
+
+        if start_ni is None or end_ni is None:
+            continue
+
+        consumed_indices.add(seg_idx)
+
+        if start_ni == end_ni:
+            # Single node — replace within this node
+            node = text_nodes[start_ni]
+            n_start, n_end = node_positions[start_ni]
+            offset = pos - n_start
+            old = node_texts[start_ni]
+            new_text = old[:offset] + trans + old[offset + len(orig):]
+            new_node = NavigableString(new_text)
+            node.replace_with(new_node)
+            text_nodes[start_ni] = new_node  # Update reference for subsequent iterations
+            node_texts[start_ni] = new_text
+        else:
+            # Multiple nodes — segment content spans inline tag boundaries.
+            # Put the translated text in the first affected node, clear the rest.
+            n_start, _ = node_positions[start_ni]
+            offset = pos - n_start
+            first_head = node_texts[start_ni][:offset]
+
+            _, n_end = node_positions[end_ni]
+            end_off = end - node_positions[end_ni][0]
+            last_tail = node_texts[end_ni][end_off:]
+
+            combined = first_head + trans + last_tail
+
+            new_first = NavigableString(combined)
+            text_nodes[start_ni].replace_with(new_first)
+            text_nodes[start_ni] = new_first
+            node_texts[start_ni] = combined
+
+            for ni in range(start_ni + 1, end_ni + 1):
+                new_empty = NavigableString("")
+                text_nodes[ni].replace_with(new_empty)
+                text_nodes[ni] = new_empty
+                node_texts[ni] = ""
