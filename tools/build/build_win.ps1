@@ -904,34 +904,19 @@ function Make-WinPackage {
         Write-Host "[$packageType] Skipping Launcher (Chrome/Web only)" -ForegroundColor Gray
     }
 
-    # Copy entire configs directory (templates + defaults) into package
+    # Copy ONLY template files (*.template) and public assets into package.
+    # Runtime configs (secrets.json, local_users.json, local.json, etc.) are
+    # initialized from templates on first run — bundling dev copies leaks
+    # API keys, password hashes, and other sensitive data.
     $configSourceDir = Join-Path $RootDir "configs"
     if (Test-Path $configSourceDir) {
-        Write-Host "[$packageType] Copying configs directory..." -ForegroundColor Yellow
-        Copy-Item -Path "$configSourceDir\*" -Destination "$packageRoot\config" -Recurse -Force
-        Write-Host "[$packageType] Copied configs directory" -ForegroundColor Green
-        
-        # Update frontend_type in app_config.json based on Frontend parameter
-        $appConfigPath = Join-Path "$packageRoot\config" "app_config.json"
-        if (Test-Path $appConfigPath) {
-            try {
-                $appConfig = Get-Content $appConfigPath -Raw | ConvertFrom-Json
-                $frontendType = if ($IncludeWindowsFrontend) { "desktop" } else { "web" }
-                
-                # Add or update frontend_type field
-                if ($appConfig.PSObject.Properties.Match("frontend_type")) {
-                    $appConfig.frontend_type = $frontendType
-                } else {
-                    $appConfig | Add-Member -MemberType NoteProperty -Name "frontend_type" -Value $frontendType
-                }
-                
-                # Save updated config
-                $appConfig | ConvertTo-Json -Depth 10 | Set-Content $appConfigPath -Encoding UTF8
-                Write-Host "[$packageType] Set frontend_type to '$frontendType' in app_config.json" -ForegroundColor Green
-            } catch {
-                Write-Host "[$packageType] WARNING: Failed to update frontend_type in app_config.json: $_" -ForegroundColor Yellow
-            }
+        Write-Host "[$packageType] Copying config templates (excluding runtime configs)..." -ForegroundColor Yellow
+        Get-ChildItem -Path $configSourceDir -File | Where-Object {
+            $_.Extension -eq '.template' -or $_.Name -eq 'donor_license_public.pem'
+        } | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination "$packageRoot\config\" -Force
         }
+        Write-Host "[$packageType] Copied config templates only (dev runtime configs excluded)" -ForegroundColor Green
     } else {
         Write-Host "[$packageType] WARNING: configs directory not found: $configSourceDir" -ForegroundColor Yellow
     }

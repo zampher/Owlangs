@@ -328,12 +328,19 @@ function Make-WinPackage-Web {
         Write-Host "[$packageType] Copied Redis" -ForegroundColor Green
     }
     
-    # Copy configs directory
+    # Copy ONLY template files (*.template) and public assets into package.
+    # Runtime configs (secrets.json, local_users.json, local.json, etc.) are
+    # initialized from templates on first run — bundling dev copies leaks
+    # API keys, password hashes, and other sensitive data.
     $configSourceDir = Join-Path $RootDir "configs"
     if (Test-Path $configSourceDir) {
-        Write-Host "[$packageType] Copying configs directory..." -ForegroundColor Yellow
-        Copy-Item -Path "$configSourceDir\*" -Destination "$packageRoot\config" -Recurse -Force
-        Write-Host "[$packageType] Copied configs" -ForegroundColor Green
+        Write-Host "[$packageType] Copying config templates (excluding runtime configs)..." -ForegroundColor Yellow
+        Get-ChildItem -Path $configSourceDir -File | Where-Object {
+            $_.Extension -eq '.template' -or $_.Name -eq 'donor_license_public.pem'
+        } | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination "$packageRoot\config\" -Force
+        }
+        Write-Host "[$packageType] Copied config templates only (dev runtime configs excluded)" -ForegroundColor Green
     }
     
     # Create batch launcher (starts backend directly for Web version)

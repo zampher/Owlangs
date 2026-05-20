@@ -160,7 +160,7 @@ custom_datas = [
     ('./configs/local.json.template', 'configs/'),
     ('./configs/translation_config.json.template', 'configs/'),  # Translation configuration template
     ('./configs/static.json.template', 'configs/'),  # Static configuration template
-    ('./configs/app_config.json', 'configs/'),
+    ('./configs/app_config.json.template', 'configs/'),
     ('./configs/local_users.json.template', 'configs/'),
     ('./backend/config/templates/default_profile.json', 'backend/config/templates/'),
     ('./setup_secrets.py', '.'),  # Sensitive configuration initialization script

@@ -49,10 +49,8 @@ datas = [
 if os.path.isdir('./backend/static/flutter-web'):
     # make sure flutter-web directory is included corrrectly.
     datas.append(('./backend/static/flutter-web', 'backend/static/flutter-web'))
-# Application configuration file (include if present; template as fallback for default)
-if os.path.isfile('./configs/app_config.json'):
-    datas.append(('./configs/app_config.json', 'config/'))
-elif os.path.isfile('./configs/app_config.json.template'):
+# Application configuration template (runtime config is initialized from template on first run)
+if os.path.isfile('./configs/app_config.json.template'):
     datas.append(('./configs/app_config.json.template', 'config/'))
 datas += [
     ('./backend/config/templates/default_profile.json', 'backend/config/templates/'),  # Default user profile template

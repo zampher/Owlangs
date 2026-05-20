@@ -66,8 +66,8 @@ datas = [
     ('./configs/local.json.template', 'configs/'),  # Local configuration template
     ('./configs/translation_config.json.template', 'configs/'),  # Translation configuration template
     ('./configs/static.json.template', 'configs/'),  # Static configuration template
-    # Legacy config files (for backward compatibility)
-    ('./configs/app_config.json', 'configs/'),  # Application configuration file
+    # Legacy config template (for backward compatibility)
+    ('./configs/app_config.json.template', 'configs/'),  # Application configuration template
     ('./configs/local_users.json.template', 'configs/'),  # Local users template file
     ('./backend/config/templates/default_profile.json', 'backend/config/templates/'),  # Default user profile template
     ('./setup_secrets.py', '.'),  # Sensitive configuration initialization script

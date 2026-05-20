@@ -99,8 +99,8 @@
   },
   "pdf": {
     "disable_markdown_fallback": true,
-    "use_reportlab": true,
-    "fallback_to_html": false,
+    "use_reportlab": false,
+    "fallback_to_html": true,
     "pdf_split_enabled": true,
     "pdf_split_max_pages": 100,
     "pdf_split_max_workers": 2,
