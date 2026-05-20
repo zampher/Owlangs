@@ -63,11 +63,18 @@ class HtmlWorkflow(Workflow[HtmlWorkflowConfig, Document, Document], HTMLExporta
         # can embed images correctly even for convert-only workflows.
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, 'html.parser')
-        for img in soup.find_all('img'):
+        img_tags = soup.find_all('img')
+        for img in img_tags:
             src = img.get('src', '').strip()
             data_src = img.get('data-src', '').strip()
             if not src and data_src:
                 img['src'] = data_src
+        if img_tags and self.logger:
+            img_with_src = sum(1 for img in img_tags if img.get('src', '').strip())
+            self.logger.info(
+                LogModule.WORKFLOW,
+                f"[HTML_WORKFLOW] export_to_html: {len(img_tags)} <img> tag(s), {img_with_src} with valid src"
+            )
         return str(soup)
 
     def export_to_markdown(self, _: ExporterConfig | None = None) -> str:

@@ -99,6 +99,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
   late final TextEditingController _textController;
   late final TextEditingController _urlController;
   bool _isFetchingUrl = false;
+  CancelToken? _fetchUrlCancelToken;
   String _urlExtractMode = 'content';
   bool _showUrlInput = false;
   Timer?
@@ -2443,11 +2444,11 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           ),
           const SizedBox(width: 8),
           ElevatedButton.icon(
-            onPressed: (_isFetchingUrl ||
-                    isDisabled ||
-                    _urlController.text.trim().isEmpty)
+            onPressed: isDisabled || _urlController.text.trim().isEmpty
                 ? null
-                : () => _startFetchUrl(translationNotifier),
+                : _isFetchingUrl
+                    ? () => _cancelFetchUrl()
+                    : () => _startFetchUrl(translationNotifier),
             icon: _isFetchingUrl
                 ? const SizedBox(
                     width: 16,
@@ -2455,7 +2456,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.download),
-            label: Text(_isFetchingUrl ? 'Fetching...' : 'Fetch URL'),
+            label: Text(_isFetchingUrl
+                ? AppLocalizations.of(context)!.fetchUrlCancel
+                : 'Fetch URL'),
           ),
         ],
       ),
@@ -4084,11 +4087,15 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           : ref.read(translationQuickSettingsProvider);
       final String? toLang = qs.toLang.isNotEmpty ? qs.toLang : null;
 
+      final cancelToken = CancelToken();
+      _fetchUrlCancelToken = cancelToken;
+
       final Map<String, dynamic> fetchRes = await formatSvc.fetchUrl(
         url: url,
         extractMode: _urlExtractMode,
         workflowType: 'html',
         toLang: toLang,
+        cancelToken: cancelToken,
       );
 
       if (fetchRes['success'] == true) {
@@ -4149,6 +4156,22 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           );
         }
       }
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel) {
+        _translationScreenLog(
+          'URL fetch cancelled by user',
+          level: LogLevel.info,
+        );
+        // Silently reset state; no error toast
+      } else {
+        _translationScreenLog(
+          'URL fetch DioException: $e',
+          level: LogLevel.error,
+        );
+        if (mounted) {
+          _showSnackBar('URL fetch failed: $e', Colors.red);
+        }
+      }
     } catch (e, stackTrace) {
       _translationScreenLog(
         'URL fetch error: $e\n$stackTrace',
@@ -4157,6 +4180,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       if (mounted) {
         _showSnackBar('URL fetch failed: $e', Colors.red);
       }
+    } finally {
+      _fetchUrlCancelToken = null;
     }
 
     if (!mounted) return;
@@ -4189,6 +4214,10 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         _showUrlInput = false;
       }
     });
+  }
+
+  void _cancelFetchUrl() {
+    _fetchUrlCancelToken?.cancel('User cancelled fetch URL');
   }
 
   Future<void> _cancelCurrentTask(notifier) async {

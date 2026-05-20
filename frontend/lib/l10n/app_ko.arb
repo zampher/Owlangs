@@ -912,5 +912,7 @@
   "workspaceCloseFlowMessage": "이 플로우를 닫으면 저장되지 않은 변경 사항이 폐기됩니다.",
   "workspaceCloseFlowSaveToQueue": "저장 후 닫기",
   "workspaceCloseFlowDestroy": "파기 후 닫기",
-  "workspaceCloseFlowCancel": "취소"
+  "workspaceCloseFlowCancel": "취소",
+
+  "fetchUrlCancel": "취소"
 }

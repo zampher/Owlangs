@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import '../../app/app_config.dart';
 import 'config_service.dart';
 
@@ -173,6 +174,7 @@ class FormatConversionService {
     bool? deepSplit,
     bool? skipCache,
     String? toLang,
+    CancelToken? cancelToken,
   }) async {
     try {
       final appConfig = await _configService.getAppConfig();
@@ -190,18 +192,25 @@ class FormatConversionService {
 
       final authHeader = _getAuthToken();
 
-      final response = await http.post(
-        Uri.parse('$baseUrl/service/fetch-url'),
-        headers: <String, String>{
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          if (authHeader != null) 'Authorization': authHeader,
-          ...ConfigService.desktopBackendHeaders,
-        },
-        body: jsonEncode(payload),
+      final dio = Dio(
+        BaseOptions(
+          baseUrl: baseUrl,
+          headers: <String, String>{
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            if (authHeader != null) 'Authorization': authHeader,
+            ...ConfigService.desktopBackendHeaders,
+          },
+        ),
       );
 
-      final result = jsonDecode(response.body) as Map<String, dynamic>? ?? <String, dynamic>{};
+      final response = await dio.post<Map<String, dynamic>>(
+        '/service/fetch-url',
+        data: payload,
+        cancelToken: cancelToken,
+      );
+
+      final result = response.data ?? <String, dynamic>{};
       if (response.statusCode == 200) {
         final bool bodySuccess = result['success'] == true;
         if (!bodySuccess) {
@@ -220,6 +229,14 @@ class FormatConversionService {
           'error': result['detail'] ?? result['message'] ?? 'Unknown error occurred',
         };
       }
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel) {
+        rethrow;
+      }
+      return <String, dynamic>{
+        'success': false,
+        'error': 'Failed to fetch URL: $e',
+      };
     } catch (e) {
       return <String, dynamic>{
         'success': false,

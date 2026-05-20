@@ -2761,4 +2761,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get workspaceCloseFlowCancel => '취소';
+
+  @override
+  String get fetchUrlCancel => '취소';
 }

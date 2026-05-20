@@ -50,6 +50,15 @@ class _StructuredHtmlParser(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         tag = tag.lower()
+        if tag == 'img':
+            # Extract image URL as a standalone block so it appears in segments.
+            # Prefer data-src (WeChat lazy-load) over src.
+            attrs_dict = dict(attrs)
+            src = attrs_dict.get('data-src', '') or attrs_dict.get('src', '')
+            if src:
+                self._flush_current_block()
+                self.blocks.append(f'[Image: {src}]')
+            return
         if tag not in self._VOID_ELEMENTS:
             self._stack.append(tag)
         if tag in ('p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'code', 'div', 'section', 'article'):

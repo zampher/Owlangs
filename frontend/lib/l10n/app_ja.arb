@@ -912,5 +912,7 @@
   "workspaceCloseFlowMessage": "このフローを閉じると、保存されていない変更は破棄されます。",
   "workspaceCloseFlowSaveToQueue": "保存して閉じる",
   "workspaceCloseFlowDestroy": "破棄して閉じる",
-  "workspaceCloseFlowCancel": "キャンセル"
+  "workspaceCloseFlowCancel": "キャンセル",
+
+  "fetchUrlCancel": "キャンセル"
 }

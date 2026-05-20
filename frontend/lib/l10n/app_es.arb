@@ -988,5 +988,7 @@
   "workspaceCloseFlowMessage": "Cerrar este flujo descartará los cambios no guardados.",
   "workspaceCloseFlowSaveToQueue": "Guardar y cerrar",
   "workspaceCloseFlowDestroy": "Destruir y cerrar",
-  "workspaceCloseFlowCancel": "Cancelar"
+  "workspaceCloseFlowCancel": "Cancelar",
+
+  "fetchUrlCancel": "Cancelar"
 }

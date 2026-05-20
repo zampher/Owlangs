@@ -2738,4 +2738,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get workspaceCloseFlowCancel => '取消';
+
+  @override
+  String get fetchUrlCancel => '取消';
 }

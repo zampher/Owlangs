@@ -2900,4 +2900,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get workspaceCloseFlowCancel => 'Cancelar';
+
+  @override
+  String get fetchUrlCancel => 'Cancelar';
 }

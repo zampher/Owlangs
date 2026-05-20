@@ -2757,4 +2757,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get workspaceCloseFlowCancel => 'キャンセル';
+
+  @override
+  String get fetchUrlCancel => 'キャンセル';
 }

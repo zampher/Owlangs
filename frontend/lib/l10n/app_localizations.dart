@@ -5029,6 +5029,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cancel'**
   String get workspaceCloseFlowCancel;
+
+  /// No description provided for @fetchUrlCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get fetchUrlCancel;
 }
 
 class _AppLocalizationsDelegate

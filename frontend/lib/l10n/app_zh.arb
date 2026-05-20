@@ -912,5 +912,7 @@
   "workspaceCloseFlowMessage": "关闭此流程将丢弃所有未保存的更改。",
   "workspaceCloseFlowSaveToQueue": "保存并关闭",
   "workspaceCloseFlowDestroy": "销毁并关闭",
-  "workspaceCloseFlowCancel": "取消"
+  "workspaceCloseFlowCancel": "取消",
+
+  "fetchUrlCancel": "取消"
 }

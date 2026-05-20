@@ -961,5 +961,7 @@
   "workspaceCloseFlowMessage": "Closing this flow will discard any unsaved changes.",
   "workspaceCloseFlowSaveToQueue": "Save and close",
   "workspaceCloseFlowDestroy": "Destroy and close",
-  "workspaceCloseFlowCancel": "Cancel"
+  "workspaceCloseFlowCancel": "Cancel",
+
+  "fetchUrlCancel": "Cancel"
 }

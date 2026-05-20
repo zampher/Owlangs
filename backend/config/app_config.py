@@ -42,7 +42,7 @@ class AppConfig:
     translator_json_paths: str = ""
     
     # Parsing settings
-    translator_convert_engine: str = ""
+    translator_convert_engine: str = "mineru"
     translator_mineru_token: str = ""
     translator_mineru_model_version: str = "vlm"
     translator_formula_ocr: bool = False
@@ -65,7 +65,7 @@ class AppConfig:
     translator_connect_timeout: int = 15  # HTTP connect timeout (seconds) to reduce first-attempt ConnectTimeout
     translator_timeout: int = 120
     translator_retry: int = 2
-    translator_segment_auto_retry_rounds: int = 3  # Queued mode: post-translation failed-segment batch rounds
+    translator_segment_auto_retry_rounds: int = 2  # Queued mode: post-translation failed-segment batch rounds
 
     # Platform-specific API settings (dynamically save keys and models for different platforms)
     platform_api_keys: Dict[str, str] = field(default_factory=dict)
@@ -79,7 +79,7 @@ class AppConfig:
     glossary_agent_top_p: float = 1.0
     glossary_agent_frequency_penalty: float = 0.0
     glossary_agent_presence_penalty: float = 0.0
-    glossary_agent_to_lang: str = "Chinese"
+    glossary_agent_to_lang: str = "English"
     
     # Glossary platform-specific API settings
     glossary_platform_api_keys: Dict[str, str] = field(default_factory=dict)
