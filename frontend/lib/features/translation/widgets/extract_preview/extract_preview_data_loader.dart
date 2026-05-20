@@ -236,6 +236,22 @@ mixin ExtractPreviewDataLoaderMixin<T extends ConsumerStatefulWidget>
         return;
       }
 
+      // CRITICAL: Only check backend progress if anonymization was actually started.
+      // The workflowId may be set for translation-only workflows (same workflowId),
+      // but the backend doesn't have an /api/anonymize/progress/ endpoint for
+      // translation workflows — it would return 404.
+      // Anonymization is considered "started" if entitiesExpanded or anonymizedText
+      // has data. If neither is set, anonymization hasn't been triggered yet.
+      if ((anonymizeArtifacts.entitiesExpanded == null ||
+          anonymizeArtifacts.entitiesExpanded!.isEmpty) &&
+          anonymizeArtifacts.anonymizedText == null) {
+        AppLogger.log(
+          'ExtractPreview',
+          '_checkAndRestoreAnonymizeProgress: No anonymization data found (entitiesExpanded is empty and anonymizedText is null), skipping backend check',
+        );
+        return;
+      }
+
       // Check backend progress to see if task is still running
       AppLogger.log(
         'ExtractPreview',

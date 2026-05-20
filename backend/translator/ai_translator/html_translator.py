@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Zampher
 # SPDX-License-Identifier: MPL-2.0
 import asyncio
+import re
 from dataclasses import dataclass
 from typing import Self, Literal, Set, Dict, List, Tuple
 
@@ -500,5 +501,21 @@ def _apply_html_translations(
                 text_nodes[ni].replace_with(new_empty)
                 text_nodes[ni] = new_empty
                 node_texts[ni] = ""
+
+    # Strip CSS hiding that would require JavaScript to unhide.
+    # WeChat and other platforms set visibility:hidden/opacity:0 on content
+    # and rely on JS to remove them — scripts are already decomposed.
+    _VIS_HIDDEN_RE = re.compile(r'visibility\s*:\s*hidden\s*;?\s*', re.IGNORECASE)
+    _OPACITY_ZERO_RE = re.compile(r'opacity\s*:\s*0\s*;?\s*', re.IGNORECASE)
+    for elem in soup.find_all(style=True):
+        style = elem.get('style', '')
+        new_style = _VIS_HIDDEN_RE.sub('', style)
+        new_style = _OPACITY_ZERO_RE.sub('', new_style)
+        if new_style != style:
+            new_style = new_style.strip().strip(';').strip()
+            if new_style:
+                elem['style'] = new_style
+            else:
+                del elem['style']
 
     return soup.encode('utf-8')

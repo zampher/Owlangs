@@ -312,6 +312,22 @@ def rebuild_html_with_translations(
         if not src and data_src:
             img["src"] = data_src
 
+    # Strip CSS hiding that would require JavaScript to unhide.
+    # WeChat and other platforms set visibility:hidden/opacity:0 on content
+    # and rely on JS to remove them — scripts are already decomposed.
+    _VIS_HIDDEN_RE = re.compile(r'visibility\s*:\s*hidden\s*;?\s*', re.IGNORECASE)
+    _OPACITY_ZERO_RE = re.compile(r'opacity\s*:\s*0\s*;?\s*', re.IGNORECASE)
+    for elem in soup.find_all(style=True):
+        style = elem.get('style', '')
+        new_style = _VIS_HIDDEN_RE.sub('', style)
+        new_style = _OPACITY_ZERO_RE.sub('', new_style)
+        if new_style != style:
+            new_style = new_style.strip().strip(';').strip()
+            if new_style:
+                elem['style'] = new_style
+            else:
+                del elem['style']
+
     return str(soup)
 
 

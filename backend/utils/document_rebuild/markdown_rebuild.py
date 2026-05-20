@@ -70,21 +70,13 @@ def has_revised_segments(task_state: Dict[str, Any]) -> bool:
     
     modified_count = 0
     modified_text_diff_count = 0
-    retry_count_total = 0
     
     for segment in segments:
         segment_index = segment.get("segment_index", -1)
-        # Check if segment is marked as modified
+        # Check if segment is marked as modified (user manually edited or retranslated)
         if segment.get("modified", False):
             modified_count += 1
             logger.info(LogModule.TRANS, f"[HAS_REVISED] Found modified segment at index {segment_index}")
-            return True
-        # Also check if segment has been retranslated (retry_count > 0)
-        # This covers cases where segments were retranslated but not explicitly marked as modified
-        retry_count = segment.get("retry_count", 0)
-        if retry_count > 0:
-            retry_count_total += 1
-            logger.info(LogModule.TRANS, f"[HAS_REVISED] Found retranslated segment at index {segment_index} (retry_count: {retry_count})")
             return True
         # CRITICAL: Also check if modified_text differs from target_text
         # This ensures we detect user edits even if modified flag is not set
@@ -105,7 +97,7 @@ def has_revised_segments(task_state: Dict[str, Any]) -> bool:
         LogModule.RESTOR,
         f"[HAS_REVISED] No modified or retranslated segments found. "
         f"Summary: total={len(segments)}, modified={modified_count}, "
-        f"modified_text_diff={modified_text_diff_count}, retry_count={retry_count_total}",
+        f"modified_text_diff={modified_text_diff_count}",
     )
     return False
 

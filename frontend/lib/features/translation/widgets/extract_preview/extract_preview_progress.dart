@@ -796,7 +796,7 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
             // CRITICAL: Update translationStateProvider status so Translate All button and Retry button work correctly
             final TranslationStateFamilyNotifier translationNotifier =
                 ref.read(translationStateProviderFamily(flowId).notifier);
-            if (isCompletedState && progress >= 100 && !isFailedState) {
+            if (isCompletedState && !isFailedState) {
               translationNotifier.setStatusText('completed');
               translationNotifier.setTranslating(false);
               translationNotifier.setProgress(100);
@@ -874,7 +874,7 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
 
           if (mounted) {
             setState(() {
-              if (isCompletedState && progress >= 100 && !isFailedState) {
+              if (isCompletedState && !isFailedState) {
                 translationProgress = 1.0;
                 translationStatus =
                     message.isNotEmpty ? message : 'Translation completed';

@@ -5369,6 +5369,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
 
           // Update end time and duration if completed
           if (statusText == 'completed' || statusText == 'failed') {
+            if (!mounted) return;
             final DateTime endTime = DateTime.now();
             notifier.setEndTime(endTime);
             final currentDurationState = _getCurrentTranslationState();
