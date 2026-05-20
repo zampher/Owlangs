@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -47,7 +47,7 @@ class AppConfig {
   static Future<bool> resetToDefaultServerUrl() async => setCustomServerUrl(null);
   // App Information
   static const String appName = 'Owlangs';
-  static const String appVersion = '1.3.1.0';
+  static const String appVersion = '1.3.2.0';
   static const String appDescription =
       'Cross-platform document translation application';
 

@@ -218,7 +218,7 @@ Section "Owlangs Translation" SecCore
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Owlangs" "DisplayName" "Owlangs"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Owlangs" "UninstallString" "$INSTDIR\uninstall.exe"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Owlangs" "InstallLocation" "$INSTDIR"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Owlangs" "DisplayVersion" "1.3.1.0"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Owlangs" "DisplayVersion" "1.3.2.0"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Owlangs" "Publisher" "Zampher"
     ; Use main launcher EXE icon as Control Panel icon
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Owlangs" "DisplayIcon" "$INSTDIR\launcher\OwlangsLauncher.exe"
