@@ -100,7 +100,18 @@ class LocalRedisManager:
         """Get Redis executable file path"""
         if sys.platform == "win32":
             # Windows - Check multiple possible locations
-            
+
+            # 0. Check EXE-side directory (single-file portable mode: 3rdParty alongside EXE)
+            #    This is the highest priority for portable/single-file deployments.
+            try:
+                exe_side = Path(sys.executable).parent / "3rdParty" / "windows" / "Redis-x64-3.0.504"
+                exe_side_server = exe_side / "redis-server.exe"
+                if exe_side_server.exists():
+                    unified_logger.info(LogModule.SYSTEM, f"Found Redis alongside executable: {exe_side_server}")
+                    return exe_side_server
+            except Exception:
+                pass
+
             # 1. Check PyInstaller environment (packaged executable)
             # In PyInstaller, sys.executable points to the EXE, and we can find Redis relative to it
             if hasattr(sys, '_MEIPASS'):

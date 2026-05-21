@@ -120,28 +120,36 @@ try {
 
 Write-Host ""
 
-# Stage 3rdParty files if needed
-if ($IncludePandoc) {
-    Write-Host "[staging] Including Pandoc and pdflatex..." -ForegroundColor Cyan
-    $distDir = "dist\Owlangs"
-    
-    if (Test-Path "3rdParty\windows") {
-        $pandocDirs = Get-ChildItem -Path "3rdParty\windows" -Directory -Filter "pandoc-*" -ErrorAction SilentlyContinue
-        foreach ($d in $pandocDirs) {
-            $dest = Join-Path $distDir "3rdParty\windows\$($d.Name)"
-            Write-Host "[staging] Copying $($d.Name)..." -ForegroundColor Yellow
-            Copy-Item -Path $d.FullName -Destination $dest -Recurse -Force
-        }
-        
-        if (Test-Path "3rdParty\windows\pdflatex") {
-            $dest = Join-Path $distDir "3rdParty\windows\pdflatex"
-            Write-Host "[staging] Copying pdflatex..." -ForegroundColor Yellow
-            Copy-Item -Path "3rdParty\windows\pdflatex" -Destination $dest -Recurse -Force
-        }
-        
-        Write-Host "[staging] 3rdParty files staged" -ForegroundColor Green
+# Stage 3rdParty files alongside the EXE (portable mode)
+Write-Host "[staging] Staging 3rdParty files..." -ForegroundColor Cyan
+$distDir = "dist"
+
+# Copy Redis
+if (Test-Path "3rdParty\windows\Redis-x64-3.0.504") {
+    $dest = Join-Path $distDir "3rdParty\windows\Redis-x64-3.0.504"
+    Write-Host "[staging] Copying Redis..." -ForegroundColor Yellow
+    New-Item -ItemType Directory -Path $dest -Force | Out-Null
+    Copy-Item -Path "3rdParty\windows\Redis-x64-3.0.504\*" -Destination $dest -Recurse -Force
+}
+
+# Copy Pandoc if available
+if (Test-Path "3rdParty\windows") {
+    $pandocDirs = Get-ChildItem -Path "3rdParty\windows" -Directory -Filter "pandoc-*" -ErrorAction SilentlyContinue
+    foreach ($d in $pandocDirs) {
+        $dest = Join-Path $distDir "3rdParty\windows\$($d.Name)"
+        Write-Host "[staging] Copying $($d.Name)..." -ForegroundColor Yellow
+        Copy-Item -Path $d.FullName -Destination $dest -Recurse -Force
     }
 }
+
+# Copy pdflatex if available
+if (Test-Path "3rdParty\windows\pdflatex") {
+    $dest = Join-Path $distDir "3rdParty\windows\pdflatex"
+    Write-Host "[staging] Copying pdflatex..." -ForegroundColor Yellow
+    Copy-Item -Path "3rdParty\windows\pdflatex" -Destination $dest -Recurse -Force
+}
+
+Write-Host "[staging] 3rdParty files staged" -ForegroundColor Green
 
 Write-Host ""
 
@@ -160,6 +168,13 @@ New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
 $exeName = "Owlangs-$Version.exe"
 Copy-Item -Path "dist\$exeName" -Destination $buildDir -Force
 Write-Host "[package] Executable: $exeName" -ForegroundColor Green
+
+# Copy 3rdParty alongside the EXE in the package directory
+if (Test-Path "dist\3rdParty") {
+    Write-Host "[package] Copying 3rdParty to package..." -ForegroundColor Yellow
+    Copy-Item -Path "dist\3rdParty" -Destination $buildDir -Recurse -Force
+    Write-Host "[package] 3rdParty files packaged" -ForegroundColor Green
+}
 
 # Create README
 $readmeContent = @"

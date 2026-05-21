@@ -8,13 +8,58 @@
 
 import os
 import sys
+import shutil
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_data_files, collect_all
 
-# Project root
+# Ensure Flutter Web frontend is built and synced before packaging
 _project_root = Path(os.getcwd())
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
+_frontend_build_dir = _project_root / 'frontend' / 'build' / 'web'
+_backend_flutter_dir = _project_root / 'backend' / 'static' / 'flutter-web'
+
+if _frontend_build_dir.exists():
+    _frontend_index = _frontend_build_dir / 'index.html'
+    _backend_index = _backend_flutter_dir / 'index.html'
+    _needs_sync = True
+    if _backend_index.exists() and _frontend_index.exists():
+        if _backend_index.stat().st_mtime >= _frontend_index.stat().st_mtime - 5:
+            _needs_sync = False
+            print(f"[BUILD-SYNC] backend/static/flutter-web is up to date")
+    if _needs_sync:
+        print(f"[BUILD-SYNC] Syncing frontend/build/web to backend/static/flutter-web...")
+        try:
+            if _backend_flutter_dir.exists():
+                shutil.rmtree(_backend_flutter_dir)
+            shutil.copytree(_frontend_build_dir, _backend_flutter_dir)
+            print(f"[BUILD-SYNC] Successfully synced Flutter Web build")
+        except Exception as e:
+            print(f"[BUILD-SYNC] Warning: Failed to sync: {e}")
+else:
+    print(f"[BUILD-SYNC] Warning: frontend/build/web not found.")
+
+# Try to get version from environment variable first (set by build script)
+# Then try to import backend, then try pyproject.toml
+_version = os.environ.get('OWLANGS_VERSION', None)
+if not _version:
+    try:
+        import backend
+        _version = backend.__version__
+    except (ImportError, AttributeError):
+        # Try to read from pyproject.toml
+        try:
+            import tomllib
+            pyproject_path = _project_root / "pyproject.toml"
+            if pyproject_path.exists():
+                data = tomllib.loads(pyproject_path.read_text("utf-8"))
+                _version = data.get("project", {}).get("version", "0.0.0")
+            else:
+                _version = "0.0.0"
+        except Exception:
+            _version = "0.0.0"
+else:
+    # Ensure _version is a plain string, not a list
+    if not isinstance(_version, str):
+        _version = str(_version)
 
 # Initialize lists
 datas = []
@@ -74,6 +119,14 @@ hiddenimports = [
     'app.models.service',
     'app.models.translation_segment',
     # Frozen runtime: backend.app.* aliases resolve to app.* via pathex; no need to duplicate
+    'backend.app.models',
+    'backend.app.models.anonymize',
+    'backend.app.models.service',
+    'backend.app.models.translation_segment',
+    # Frozen runtime: backend.app.services path
+    'backend.app.services.translation.translation_execution_queue',
+    'backend.app.services.translation.translation_queue_utils',
+    'backend.app.services.translation.translation_result_stash',
     'app.services',
     'app.services.task',
     'app.services.version_service',
@@ -133,17 +186,55 @@ hiddenimports = [
     'extractor.html_extractor',
     # Config manager
     'backend.config_manager',
+    # Markdown extensions (imported by md_translator/md_splitter)
+    'markdown.extensions.tables',
+    'pymdownx.arithmatex',
+    'pymdownx.superfences',
+    'pymdownx.highlight',
+    'pygments',
+    # DOCX formula OMML (LaTeX -> MathML -> OMML)
+    'latex2mathml', 'latex2mathml.converter', 'mathml2omml', 'mathml2omml_as',
+    # JSON repair for LLM output
+    'json_repair',
+    # python-pptx library for PPTX processing
+    'pptx',
+    'pptx.util',
+    'pptx.dml.color',
+    'pptx.enum.shapes',
+    'pptx.enum.text',
+    'pptx.shapes.base',
+    'pptx.shapes.group',
+    'pptx.shapes.autoshape',
+    'pptx.table',
+    'pptx.shapes.freeform',
+    'pptx.text.text',
+    # layout module
+    'layout',
+    'layout.base',
+    'layout.mineru_layout_model',
+    # pdf_splitter, layout_merger, mineru_zip_merger
+    'backend.utils.pdf_splitter',
+    'backend.utils.layout_merger',
+    'backend.utils.mineru_zip_merger',
+    # mobi dependencies
+    'loguru',
+    'imghdr',
 ]
 
-# Collect third-party resources
-for package in ['pygments', 'latex2mathml', 'mobi', 'ebooklib']:
+# Collect third-party resources for mobi/ebooklib
+for _pkg in ['mobi', 'ebooklib']:
     try:
-        tmp_ret = collect_all(package)
-        datas += tmp_ret[0]
-        binaries += tmp_ret[1]
-        hiddenimports += tmp_ret[2]
+        _pkg_datas, _, _pkg_hiddenimports = collect_all(_pkg)
+        datas += _pkg_datas
+        hiddenimports += _pkg_hiddenimports
     except Exception as e:
-        print(f"Warning: Failed to collect resources for {package}: {e}")
+        print(f"Warning: Failed to collect resources for {_pkg}: {e}")
+
+# Only include necessary pygments/latex2mathml data files
+datas.extend([
+    *collect_data_files('pygments', include_py_files=False),
+    *collect_data_files('latex2mathml'),
+])
 
 # Custom data files
 custom_datas = [
@@ -152,29 +243,44 @@ custom_datas = [
     ('./backend/template', 'backend/template'),
     ('./backend/i18n', 'backend/i18n'),
     ('./backend/static/favicon.ico', 'backend/favicon.ico'),
+    # Flutter Web frontend (explicit)
+    ('./backend/static/flutter-web', 'backend/static/flutter-web'),
     # Configuration templates
     ('./configs/system.json.template', 'configs/'),
     ('./configs/platforms.json.template', 'configs/'),
     ('./configs/ui.json.template', 'configs/'),
     ('./configs/secrets.json.template', 'configs/'),
     ('./configs/local.json.template', 'configs/'),
-    ('./configs/translation_config.json.template', 'configs/'),  # Translation configuration template
-    ('./configs/static.json.template', 'configs/'),  # Static configuration template
+    ('./configs/translation_config.json.template', 'configs/'),
+    ('./configs/static.json.template', 'configs/'),
     ('./configs/app_config.json.template', 'configs/'),
     ('./configs/local_users.json.template', 'configs/'),
     ('./backend/config/templates/default_profile.json', 'backend/config/templates/'),
-    ('./setup_secrets.py', '.'),  # Sensitive configuration initialization script
-    ('./setup_first_deploy.py', '.'),  # First deployment setup script
+    ('./setup_secrets.py', '.'),
+    ('./setup_first_deploy.py', '.'),
 ]
+
+# Redis executable and configuration files (Windows only)
+if sys.platform.startswith('win'):
+    _redis_files = [
+        ('./3rdParty/windows/Redis-x64-3.0.504/redis-server.exe', '3rdParty/windows/Redis-x64-3.0.504/redis-server.exe'),
+        ('./3rdParty/windows/Redis-x64-3.0.504/redis.windows.conf', '3rdParty/windows/Redis-x64-3.0.504/redis.windows.conf'),
+        ('./3rdParty/windows/Redis-x64-3.0.504/redis.windows-service.conf', '3rdParty/windows/Redis-x64-3.0.504/redis.windows-service.conf'),
+    ]
+    for _src, _dst in _redis_files:
+        if os.path.exists(_src):
+            datas.append((_src, _dst))
 
 # Add pandoc if available
 if sys.platform.startswith('win'):
-    _pandoc_dir = _project_root / '3rdParty' / 'windows'
-    if _pandoc_dir.is_dir():
-        for _p in _pandoc_dir.iterdir():
-            if _p.is_dir() and _p.name.startswith('pandoc-') and (_p / 'pandoc.exe').exists():
-                datas.append((str(_p), '3rdParty/windows/' + _p.name))
-                break
+    _pandoc_dir = os.path.join(os.getcwd(), '3rdParty', 'windows')
+    if os.path.isdir(_pandoc_dir):
+        for _name in os.listdir(_pandoc_dir):
+            if _name.startswith('pandoc-'):
+                _path = os.path.join(_pandoc_dir, _name)
+                if os.path.isdir(_path) and os.path.isfile(os.path.join(_path, 'pandoc.exe')):
+                    datas.append((_path, os.path.join('3rdParty', 'windows', _name)))
+                    break
 
 for data in custom_datas:
     if data not in datas:
@@ -202,6 +308,38 @@ numpy_essential = [
 ]
 hiddenimports = list(set(hiddenimports + numpy_essential))
 
+# Excludes: large ML/AI frameworks not needed in this build
+_include_anonymize = os.environ.get('OWLANGS_INCLUDE_ANONYMIZE') == '1'
+_excludes_always = [
+    "docling", "backend.converter.x2md.converter_docling",
+    "torch", "torchvision", "torchaudio",
+    "transformers", "tokenizers", "sentencepiece",
+    "easyocr", "cv2", "opencv-python",
+    "scipy", "pandas", "matplotlib", "seaborn",
+    "sklearn", "scikit-learn",
+    "nltk", "gensim", "jieba",
+    "celery", "sqlalchemy",
+    "safetensors", "huggingface_hub",
+    "pytest", "pytest-asyncio", "pytest-cov",
+    "black", "flake8", "mypy",
+    "jupyter", "ipython", "notebook",
+    "tensorflow", "keras",
+    "xgboost", "lightgbm",
+    # numpy test excludes
+    'numpy.tests', 'numpy.testing', 'numpy._pyinstaller', 'numpy.f2py.tests',
+    'numpy.ma.tests', 'numpy.lib.tests', 'numpy.core.tests', 'numpy.random.tests',
+    'numpy.linalg.tests', 'numpy.fft.tests', 'numpy.polynomial.tests',
+    'numpy.matrixlib.tests', 'numpy.typing.tests', 'numpy.compat.tests',
+    'numpy._core.tests', 'numpy._typing.tests',
+    'numpy.core._add_newdocs', 'numpy.core.machar', 'numpy.core.umath_tests',
+    'numpy._core._add_newdocs', 'numpy.core._multiarray_tests',
+]
+_excludes_no_anonymize = [
+    "presidio_analyzer", "presidio_anonymizer", "anonymize",
+    "spacy", "numpy",
+]
+_excludes = _excludes_always + (_excludes_no_anonymize if not _include_anonymize else [])
+
 # Analysis
 a = Analysis(
     ['backend/config_manager.py'],  # Entry point: single-file launcher
@@ -209,20 +347,12 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=list(set(hiddenimports)),
-    hookspath=[str(_project_root.resolve())],
+    hookspath=['.'],
     hooksconfig={},
     runtime_hooks=['hook-numpy-fix.py'],
-    excludes=[
-        'numpy.tests', 'numpy.testing', 'numpy._pyinstaller', 'numpy.f2py.tests',
-        'numpy.ma.tests', 'numpy.lib.tests', 'numpy.core.tests', 'numpy.random.tests',
-        'numpy.linalg.tests', 'numpy.fft.tests', 'numpy.polynomial.tests',
-        'numpy.matrixlib.tests', 'numpy.typing.tests', 'numpy.compat.tests',
-        'numpy._core.tests', 'numpy._typing.tests',
-        'numpy.core._add_newdocs', 'numpy.core.machar', 'numpy.core.umath_tests',
-        'numpy._core._add_newdocs', 'numpy.core._multiarray_tests',
-    ],
+    excludes=_excludes,
     noarchive=False,
-    optimize=0,
+    optimize=2,
 )
 
 pyz = PYZ(a.pure)
@@ -234,14 +364,14 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='Owlangs',
+    name=f'Owlangs-{_version}',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     upx_exclude=[],
-    runtime_tmpdir=None,  # Use system temp directory
-    console=True,  # Show console for interactive mode
+    runtime_tmpdir=None,
+    console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

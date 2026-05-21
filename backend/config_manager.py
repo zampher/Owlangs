@@ -12,6 +12,7 @@ import json
 import shutil
 import webbrowser
 import subprocess
+import threading
 import time
 import socket
 from pathlib import Path
@@ -237,6 +238,8 @@ class SingleFileLauncher:
     def __init__(self):
         self.config_manager = ConfigManager()
         self.server_process: Optional[subprocess.Popen] = None
+        self.server_thread: Optional[threading.Thread] = None
+        self._server_ready = threading.Event()
         self.port = 8800
         
     def check_port_available(self, port: int) -> bool:
@@ -276,54 +279,74 @@ class SingleFileLauncher:
         
         return False
     
+    def _setup_frozen_env(self):
+        """Set up frozen environment for PyInstaller single-file mode."""
+        if not hasattr(sys, 'frozen'):
+            return
+
+        # Set up utils alias: code imports "from utils.xxx", bundled as backend.utils
+        import backend.utils
+        sys.modules['utils'] = backend.utils
+
+        # Pre-register key submodules so lazy imports in frozen build resolve
+        _submodules = [
+            'backend.utils.resource_utils',
+            'backend.utils.redis_manager',
+            'backend.utils.utils',
+            'backend.utils.language_utils',
+            'backend.utils.path_utils',
+            'backend.utils.font_utils',
+            'backend.utils.json_utils',
+            'backend.utils.translation_segments',
+            'backend.utils.markdown_splitter',
+            'backend.utils.markdown_utils',
+        ]
+        for mod_name in _submodules:
+            try:
+                __import__(mod_name)
+            except Exception:
+                pass
+
+        # Pre-import backend.app so sys.modules["app"] is set for uvicorn's import_from_string
+        try:
+            import backend.app  # noqa: F401
+        except Exception:
+            pass
+
     def start_server(self) -> bool:
-        """Start the backend server."""
+        """Start the backend server in-process using uvicorn in a daemon thread."""
         # Initialize configs
         config_dir = self.config_manager.init_user_configs()
-        
-        # Set environment variables
-        os.environ['OWLANGS_CONFIG_PATH'] = str(config_dir)
+        # OWLANGS_CONFIG_PATH should point to the Owlangs data root, NOT the configs subdir
+        # because get_configs_dir() in path_utils.py appends /configs/ automatically
+        os.environ['OWLANGS_CONFIG_PATH'] = str(config_dir.parent)
         os.environ['OWLANGS_PORT'] = str(self.port)
         os.environ['OWLANGS_LOGS_PATH'] = str(self.config_manager.get_logs_dir())
-        
-        # Find server executable or module
-        if hasattr(sys, '_MEIPASS'):
-            # PyInstaller mode: run the extracted backend
-            # The backend is already extracted to _MEIPASS
-            python_exe = sys.executable
-            cmd = [
-                python_exe,
-                '-m', 'backend.cli',
-                '-i',  # Interactive mode
-                '--port', str(self.port)
-            ]
-        else:
-            # Development mode
-            backend_dir = Path(__file__).parent
-            cmd = [
-                sys.executable,
-                str(backend_dir / 'cli.py'),
-                '-i',
-                '--port', str(self.port)
-            ]
-        
+
+        # Set up frozen environment
+        self._setup_frozen_env()
+
         print(f"[Launcher] Starting server...", flush=True)
         print(f"[Launcher] Config: {config_dir}", flush=True)
-        
-        # Start server process
-        try:
-            self.server_process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                universal_newlines=True
-            )
-            return True
-        except Exception as e:
-            print(f"[Launcher] Failed to start server: {e}", flush=True)
-            return False
+
+        # Start uvicorn in a daemon thread (in-process)
+        def _run_uvicorn():
+            import uvicorn
+            try:
+                uvicorn.run(
+                    "app.factory:app",
+                    host="0.0.0.0",
+                    port=self.port,
+                    log_level="info",
+                )
+            except Exception as e:
+                print(f"[Launcher] Server error: {e}", flush=True)
+            finally:
+                self._server_ready.set()  # Unblock wait_for_server on failure
+
+        self.server_thread = threading.Thread(target=_run_uvicorn, daemon=True)
+        self.server_thread.start()
+        return True
     
     def open_browser(self) -> None:
         """Open browser to access the application."""
@@ -354,70 +377,71 @@ class SingleFileLauncher:
                 self.open_browser()
                 return 0
             return 1
-        
-        # Start server
+
+        # Start server (in-process uvicorn in daemon thread)
         if not self.start_server():
             return 1
-        
+
         # Wait for server
         if not self.wait_for_server():
             print("[Error] Server failed to start within timeout.", flush=True)
             self.stop_server()
             return 1
-        
+
         # Open browser
         self.open_browser()
-        
+
         print()
         print("-" * 60, flush=True)
         print("Server is running. Press Ctrl+C to stop.", flush=True)
         print("-" * 60, flush=True)
         print()
-        
-        # Stream server output
+
+        # Keep main thread alive
         try:
-            if self.server_process and self.server_process.stdout:
-                for line in iter(self.server_process.stdout.readline, ''):
-                    print(line, end='', flush=True)
+            while True:
+                time.sleep(1)
         except KeyboardInterrupt:
             print("\n[Launcher] Stopping server...", flush=True)
         finally:
             self.stop_server()
-        
+
         return 0
     
     def run_silent(self) -> int:
         """Run in silent mode (no console output, for background service).
-        
+
         Returns:
             Exit code.
         """
         # Initialize configs
         self.config_manager.init_user_configs()
-        
-        # Set environment
-        os.environ['OWLANGS_CONFIG_PATH'] = str(self.config_manager.get_user_config_dir())
+
+        # Set environment (point to parent dir, not configs subdir)
+        os.environ['OWLANGS_CONFIG_PATH'] = str(self.config_manager.get_user_config_dir().parent)
         os.environ['OWLANGS_PORT'] = str(self.port)
-        
-        # Start server silently
+
+        # Start server in-process
         if not self.start_server():
             return 1
-        
+
         # Wait and open browser
         if self.wait_for_server():
             self.open_browser()
-        
-        # Wait for server to finish
-        if self.server_process:
-            try:
-                self.server_process.wait()
-            except KeyboardInterrupt:
-                self.stop_server()
-        
+
+        # Wait for server to finish (daemon thread keeps running)
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self.stop_server()
+
         return 0
     
     def stop_server(self) -> None:
         """Stop the server."""
+        # In-process uvicorn runs in a daemon thread; it will be terminated
+        # automatically when the main thread exits.
         if self.server_process:
             try:
                 self.server_process.terminate()
@@ -426,6 +450,7 @@ class SingleFileLauncher:
                 self.server_process.kill()
             finally:
                 self.server_process = None
+        self.server_thread = None
 
 
 def main():
