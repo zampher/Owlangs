@@ -9,6 +9,7 @@ from exporter.html.html2html_exporter import Html2HtmlExporter
 from glossary.glossary import Glossary
 
 from ir.document import Document
+from logger.logger import LogModule
 from translator.ai_translator.html_translator import HtmlTranslatorConfig, HtmlTranslator
 from workflow.base import Workflow, WorkflowConfig
 from workflow.interfaces import HTMLExportable
@@ -55,6 +56,59 @@ class HtmlWorkflow(Workflow[HtmlWorkflowConfig, Document, Document], HTMLExporta
         self.document_translated = document
         return self
 
+    @staticmethod
+    def _wrap_html_with_css(html_body: str) -> str:
+        """Wrap HTML content in a minimal document with centering/image-friendly CSS.
+
+        URL-fetched content has all original styles stripped during extraction.
+        This adds lightweight defaults to ensure reasonable rendering offline.
+        """
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body {{
+    max-width: 800px;
+    margin: 1.5em auto;
+    padding: 0 1em;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    color: #222;
+}}
+img {{
+    max-width: 90%;
+    height: auto;
+    display: block;
+    margin: 1.2em auto;
+}}
+p {{
+    margin: 0.6em 0;
+}}
+h1, h2, h3, h4, h5, h6 {{
+    margin: 1em 0 0.5em;
+    line-height: 1.3;
+}}
+a {{
+    color: #0066cc;
+}}
+table {{
+    border-collapse: collapse;
+    margin: 1em auto;
+}}
+td, th {{
+    border: 1px solid #ccc;
+    padding: 0.4em 0.6em;
+}}
+</style>
+</head>
+<body>
+{html_body}
+</body>
+</html>"""
+
     def export_to_html(self, _: ExporterConfig = None) -> str:
         docu = self._export(Html2HtmlExporter())
         html = docu.content.decode('utf-8')
@@ -75,7 +129,7 @@ class HtmlWorkflow(Workflow[HtmlWorkflowConfig, Document, Document], HTMLExporta
                 LogModule.WORKFLOW,
                 f"[HTML_WORKFLOW] export_to_html: {len(img_tags)} <img> tag(s), {img_with_src} with valid src"
             )
-        return str(soup)
+        return self._wrap_html_with_css(str(soup))
 
     def export_to_markdown(self, _: ExporterConfig | None = None) -> str:
         from workflow.html_to_markdown_export import html_content_to_markdown
@@ -84,5 +138,11 @@ class HtmlWorkflow(Workflow[HtmlWorkflowConfig, Document, Document], HTMLExporta
 
     def save_as_html(self, name: str = None, output_dir: Path | str = "./output",
                      _: ExporterConfig | None = None) -> Self:
-        self._save(exporter=Html2HtmlExporter(), name=name, output_dir=output_dir)
+        html = self.export_to_html()
+        name = name or self.document_translated.name
+        output_path = Path(output_dir) / Path(name).with_suffix('.html')
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(html, encoding='utf-8')
+        if self.logger:
+            self.logger.info(LogModule.WORKFLOW, f"File saved to {output_path.resolve()}")
         return self
