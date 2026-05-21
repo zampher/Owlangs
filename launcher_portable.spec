@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Single-file executable spec for Owlangs Enterprise Edition
-# This creates a true single-file exe that:
+# Portable executable spec for Owlangs Enterprise Edition
+# This creates a standalone exe that:
 # 1. Extracts to temp directory on first run
 # 2. Initializes user configs in C:\ProgramData\Owlangs
 # 3. Starts backend server

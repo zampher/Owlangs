@@ -1,6 +1,6 @@
 $files = @(
     'backend/config_manager.py',
-    'tools/build/build_win_singlefile.ps1'
+    'tools/build/build_win_portable.ps1'
 )
 
 $allOk = $true

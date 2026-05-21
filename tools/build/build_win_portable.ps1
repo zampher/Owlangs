@@ -1,4 +1,4 @@
-﻿# Build Owlangs Single-File Executable
+﻿# Build Owlangs Portable Executable
 # Creates a standalone .exe that auto-starts server and opens browser
 
 param(
@@ -25,7 +25,7 @@ $RootDir = Split-Path -Parent (Split-Path -Parent $ScriptDir)
 Set-Location $RootDir
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Building Owlangs Single-File Edition" -ForegroundColor Cyan
+Write-Host "Building Owlangs Portable Edition" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Features:" -ForegroundColor Yellow
@@ -83,7 +83,7 @@ Write-Host ""
 
 # Build single-file executable
 Write-Host "[build] Building single-file executable..." -ForegroundColor Cyan
-Write-Host "[build] Using launcher_singlefile.spec" -ForegroundColor Yellow
+Write-Host "[build] Using launcher_portable.spec" -ForegroundColor Yellow
 
 $env:OWLANGS_VERSION = $Version
 $env:OWLANGS_FRONTEND = "web"
@@ -103,14 +103,14 @@ if ($IncludePandoc) {
 }
 
 try {
-    pyinstaller -y --clean launcher_singlefile.spec
+    pyinstaller -y --clean launcher_portable.spec
     
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[build] ERROR: PyInstaller build failed!" -ForegroundColor Red
         exit 1
     }
     
-    Write-Host "[build] Single-file executable built successfully!" -ForegroundColor Green
+    Write-Host "[build] Portable executable built successfully!" -ForegroundColor Green
 } finally {
     Remove-Item Env:\OWLANGS_VERSION -ErrorAction SilentlyContinue
     Remove-Item Env:\OWLANGS_FRONTEND -ErrorAction SilentlyContinue
@@ -160,7 +160,7 @@ Write-Host "[staging] 3rdParty files staged" -ForegroundColor Green
 Write-Host ""
 
 # Create output directory
-$packageName = "Owlangs-SingleFile-$Version"
+$packageName = "Owlangs-win64-portable-$Version"
 $buildDir = "build\win\$packageName"
 
 Write-Host "[package] Creating package: $packageName" -ForegroundColor Cyan
@@ -184,8 +184,8 @@ if (Test-Path "dist\3rdParty") {
 
 # Create README
 $readmeContent = @"
-Owlangs Single-File Edition v$Version
-=====================================
+Owlangs Portable Edition v$Version
+===================================
 
 快速开始
 --------
@@ -230,7 +230,7 @@ Write-Host "[package] Package created at: $buildDir" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "Single-File Build Complete!" -ForegroundColor Green
+Write-Host "Portable Build Complete!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "输出文件:" -ForegroundColor Yellow

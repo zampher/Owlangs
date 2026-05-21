@@ -232,8 +232,8 @@ class ConfigManager:
                 subprocess.run(['xdg-open', str(config_file)])
 
 
-class SingleFileLauncher:
-    """Launcher for single-file executable mode."""
+class PortableLauncher:
+    """Launcher for portable executable mode."""
     
     def __init__(self):
         self.config_manager = ConfigManager()
@@ -469,7 +469,7 @@ def main():
     
     args = parser.parse_args()
     
-    launcher = SingleFileLauncher()
+    launcher = PortableLauncher()
     launcher.port = args.port
     
     # Handle special commands
