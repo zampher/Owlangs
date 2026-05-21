@@ -6,6 +6,7 @@ import '../../../shared/models/user_model.dart';
 import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/services/config_service.dart';
 import '../../../app/app_router.dart';
+import '../../../l10n/app_localizations.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -69,6 +70,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     print(
       '🔍 [DEBUG] LoginScreen current auth state: ${authState.runtimeType}',
     );
+    final l10n = AppLocalizations.of(context)!;
 
     // Handle authentication state changes
     ref.listen<AuthState>(authProvider, (previous, next) {
@@ -110,16 +112,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               backgroundColor: Colors.red,
               duration: const Duration(seconds: 8),
               action: SnackBarAction(
-                label: 'Copy',
+                label: l10n.loginCopyErrorLabel,
                 textColor: Colors.white,
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: message));
                   // Use maybeOf to avoid using deactivated context (e.g. after redirect to home)
                   final m = ScaffoldMessenger.maybeOf(context);
                   m?.showSnackBar(
-                    const SnackBar(
-                      content: Text('Error message copied to clipboard'),
-                      duration: Duration(seconds: 2),
+                    SnackBar(
+                      content: Text(l10n.loginErrorCopiedMessage),
+                      duration: const Duration(seconds: 2),
                     ),
                   );
                 },
@@ -131,44 +133,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
 
     return Scaffold(
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: <Color>[
-              Color(0xFF1e3c72),
-              Color(0xFF2a5298),
-            ],
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Card(
-              elevation: 8,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Container(
-                width: 400,
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(15),
-                  // Use a near-white background so dark text has good contrast
-                  color: Colors.white.withOpacity(0.96),
-                  border: Border.all(
-                    color: Colors.black.withOpacity(0.06),
-                  ),
-                ),
-                child: Column(
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Card(
+            elevation: 4,
+            child: Container(
+              width: 400,
+              padding: const EdgeInsets.all(32),
+              child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     // Logo and Title
                     Column(
                       children: <Widget>[
                         Image.asset(
-                          'images/favicon.ico',
+                          'images/logo_96.png',
                           width: 48,
                           height: 48,
                           errorBuilder: (
@@ -176,28 +156,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             error,
                             stackTrace,
                           ) =>
-                              const Icon(
-                            Icons.translate,
+                              Icon(
+                            Icons.language,
                             size: 48,
-                            color: Colors.white,
+                            color: Theme.of(context).colorScheme.primary,
                           ),
                         ),
                         const SizedBox(height: 16),
-                        const Text(
-                          'Owlangs Translation\n File Format Conversion',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            // Use brand-like deep blue for strong contrast on light card
-                            color: Color(0xFF1e3c72),
-                          ),
+                        Column(
+                          children: [
+                            Text(
+                              'Owlangs',
+                              style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              l10n.loginSubtitleFeatures,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Document Translation System',
+                        Text(
+                          l10n.loginSubtitleTagline,
                           style: TextStyle(
                             fontSize: 16,
-                            color: Colors.black87,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -220,46 +212,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 AutofillHints.username,
                               ],
                               decoration: InputDecoration(
-                                labelText: 'Username',
-                                hintText: 'Please enter username',
-                                prefixIcon: const Icon(
-                                  Icons.person,
-                                  color: Colors.black54,
-                                ),
-                                filled: true,
-                                fillColor: Colors.white.withOpacity(0.9),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.withOpacity(0.3),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.withOpacity(0.3),
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: const BorderSide(
-                                    color: Color(0xFF0d6efd),
-                                    width: 2,
-                                  ),
-                                ),
-                                labelStyle:
-                                    const TextStyle(color: Colors.black87),
-                                hintStyle: TextStyle(
-                                  color: Colors.black.withOpacity(0.6),
-                                ),
+                                labelText: l10n.loginUsernameLabel,
+                                hintText: l10n.loginUsernameHint,
+                                prefixIcon: const Icon(Icons.person),
                               ),
-                              style: const TextStyle(color: Colors.black87),
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
-                                  return 'Please enter your username';
+                                  return l10n.loginUsernameRequiredError;
                                 }
                                 if (value.length < 3) {
-                                  return 'Username must be at least 3 characters';
+                                  return l10n.loginUsernameMinLengthError;
                                 }
                                 return null;
                               },
@@ -275,41 +237,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 AutofillHints.password,
                               ],
                               decoration: InputDecoration(
-                                labelText: 'Password',
-                                hintText: 'Please enter password',
-                                prefixIcon: const Icon(
-                                  Icons.lock,
-                                  color: Colors.black54,
-                                ),
+                                labelText: l10n.loginPasswordLabel,
+                                hintText: l10n.loginPasswordHint,
+                                prefixIcon: const Icon(Icons.lock),
                                 suffixIcon: IconButton(
                                   icon: Icon(
                                     _obscurePassword
                                         ? Icons.visibility_off
                                         : Icons.visibility,
-                                    color: Colors.black54,
                                   ),
                                   onPressed: _togglePasswordVisibility,
-                                ),
-                                filled: true,
-                                fillColor: Colors.white.withOpacity(0.9),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.withOpacity(0.3),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: Colors.grey.withOpacity(0.3),
-                                  ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: const BorderSide(
-                                    color: Color(0xFF0d6efd),
-                                    width: 2,
-                                  ),
                                 ),
                                 labelStyle:
                                     const TextStyle(color: Colors.black87),
@@ -317,10 +254,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   color: Colors.black.withOpacity(0.6),
                                 ),
                               ),
-                              style: const TextStyle(color: Colors.black87),
                               validator: (value) {
                                 if (value == null || value.isEmpty) {
-                                  return 'Please enter your password';
+                                  return l10n.loginPasswordRequiredError;
                                 }
                                 return null;
                               },
@@ -330,20 +266,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             const SizedBox(height: 24),
 
                             // Login Button
-                            ElevatedButton(
+                            FilledButton(
                               onPressed: authState.maybeWhen(
                                 loading: () => null,
                                 orElse: () => _handleLogin,
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF0d6efd),
-                                foregroundColor: Colors.white,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                elevation: 2,
                               ),
                               child: authState.maybeWhen(
                                 loading: () => true,
@@ -360,15 +286,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         ),
                                       ),
                                     )
-                                  : const Row(
+                                  : Row(
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
                                       children: <Widget>[
-                                        Icon(Icons.login, size: 20),
-                                        SizedBox(width: 8),
+                                        const Icon(Icons.login, size: 20),
+                                        const SizedBox(width: 8),
                                         Text(
-                                          'Login',
-                                          style: TextStyle(fontSize: 16),
+                                          l10n.commonLogin,
+                                          style: const TextStyle(fontSize: 16),
                                         ),
                                       ],
                                     ),
@@ -379,22 +305,37 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             // Forgot Password Link
                             Center(
                               child: TextButton(
-                                onPressed: () {
-                                  // TODO: Implement forgot password
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Password recovery feature coming soon!',
-                                      ),
+                                onPressed: () => showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: Text(l10n.loginPasswordRecoveryTitle),
+                                    content: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          l10n.loginPasswordRecoveryContactAdmin,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          l10n.loginPasswordRecoveryAdminHint,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  );
-                                },
-                                child: Text(
-                                  'Forgot Password?',
-                                  style: TextStyle(
-                                    color: Colors.black.withOpacity(0.8),
-                                    fontSize: 14,
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.of(context).pop(),
+                                        child: Text(l10n.commonOk),
+                                      ),
+                                    ],
                                   ),
+                                ),
+                                child: Text(
+                                  l10n.loginForgotPassword,
                                 ),
                               ),
                             ),
@@ -405,7 +346,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.9),
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primaryContainer,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
@@ -413,14 +356,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 children: <Widget>[
                                   Icon(
                                     Icons.info_outline,
-                                    color: Colors.black.withOpacity(0.7),
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onPrimaryContainer,
                                     size: 16,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    'Using Default Authentication',
+                                  l10n.loginAuthMethodDefault,
                                     style: TextStyle(
-                                      color: Colors.black.withOpacity(0.7),
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onPrimaryContainer,
                                       fontSize: 12,
                                     ),
                                   ),
@@ -439,7 +386,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             context.go(AppRouter.homeRoute);
                           },
                           icon: const Icon(Icons.arrow_back),
-                          label: const Text('Back to Home'),
+                          label: Text(l10n.backToHome),
                         ),
                       ),
                   ],
@@ -448,7 +395,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           ),
         ),
-      ),
     );
   }
 }

@@ -1392,7 +1392,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsGlossarySelectGlossary => 'Seleccionar Glosario';
 
   @override
-  String get settingsGlossaryCreateGlossary => 'Crear Glosario';
+  String get settingsGlossaryCreateGlossary => 'Crear';
 
   @override
   String get settingsGlossaryImportCsv => 'Importar CSV';
@@ -1404,7 +1404,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsGlossaryExportAll => 'Exportar Todo';
 
   @override
-  String get settingsGlossaryDeleteGlossary => 'Eliminar Glosario';
+  String get settingsGlossaryDeleteGlossary => 'Eliminar';
 
   @override
   String get settingsGlossarySaveZip => 'Guardar ZIP';
@@ -2903,4 +2903,56 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get fetchUrlCancel => 'Cancelar';
+
+  @override
+  String get loginSubtitleFeatures =>
+      'File Translation\nFormat Conversion\nURL Fetch';
+
+  @override
+  String get loginSubtitleTagline => 'AI Document Processing System';
+
+  @override
+  String get loginUsernameLabel => 'Username';
+
+  @override
+  String get loginUsernameHint => 'Please enter username';
+
+  @override
+  String get loginUsernameRequiredError => 'Please enter your username';
+
+  @override
+  String get loginUsernameMinLengthError =>
+      'Username must be at least 3 characters';
+
+  @override
+  String get loginPasswordLabel => 'Password';
+
+  @override
+  String get loginPasswordHint => 'Please enter password';
+
+  @override
+  String get loginPasswordRequiredError => 'Please enter your password';
+
+  @override
+  String get loginForgotPassword => 'Forgot Password?';
+
+  @override
+  String get loginPasswordRecoveryTitle => 'Password Recovery';
+
+  @override
+  String get loginPasswordRecoveryContactAdmin =>
+      'Please contact your administrator to reset your password.';
+
+  @override
+  String get loginPasswordRecoveryAdminHint =>
+      'Administrators can reset passwords through the user management page after logging in.';
+
+  @override
+  String get loginAuthMethodDefault => 'Using Default Authentication';
+
+  @override
+  String get loginCopyErrorLabel => 'Copy';
+
+  @override
+  String get loginErrorCopiedMessage => 'Error message copied to clipboard';
 }

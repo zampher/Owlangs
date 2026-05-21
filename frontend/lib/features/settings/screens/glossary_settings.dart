@@ -220,20 +220,21 @@ class GlossarySettingsScreen extends ConsumerWidget {
       Card(
         elevation: 4,
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Row(
                 children: <Widget>[
-                  Icon(Icons.manage_accounts, color: Colors.blue.shade700),
+                  Icon(Icons.manage_accounts,
+                      color: Theme.of(context).colorScheme.primary,),
                   const SizedBox(width: 8),
                   Text(
                     AppLocalizations.of(context)!.settingsGlossaryManagementTitle,
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.blue.shade700,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                 ],
@@ -320,50 +321,41 @@ class GlossarySettingsScreen extends ConsumerWidget {
                       const SizedBox(width: 12),
                       // Create glossary
                       Expanded(
-                        child: ElevatedButton.icon(
+                        child: FilledButton.icon(
                           onPressed: () => _showCreateGlossaryDialog(context),
                           icon: const Icon(Icons.create_new_folder),
                           label: Text(AppLocalizations.of(context)!
                               .settingsGlossaryCreateGlossary,),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.purple.shade700,
-                            foregroundColor: Colors.white,
-                          ),
+
                         ),
                       ),
                       const SizedBox(width: 12),
                       // Import current
                       Expanded(
-                        child: ElevatedButton.icon(
+                        child: FilledButton.icon(
                           onPressed: () =>
                               _showImportDialog(context, settings, notifier),
                           icon: const Icon(Icons.upload),
                           label: Text(AppLocalizations.of(context)!
                               .settingsGlossaryImportCsv,),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue.shade700,
-                            foregroundColor: Colors.white,
-                          ),
+
                         ),
                       ),
                       const SizedBox(width: 12),
                       // Export current
                       Expanded(
-                        child: ElevatedButton.icon(
+                        child: FilledButton.icon(
                           onPressed: () => _showExportDialog(context, settings),
                           icon: const Icon(Icons.download),
                           label: Text(AppLocalizations.of(context)!
                               .settingsGlossaryExport,),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange.shade700,
-                            foregroundColor: Colors.white,
-                          ),
+
                         ),
                       ),
                       const SizedBox(width: 12),
                       // Export all
                       Expanded(
-                        child: ElevatedButton.icon(
+                        child: FilledButton.icon(
                           onPressed: () async {
                             try {
                               final Uint8List bytes =
@@ -423,16 +415,13 @@ class GlossarySettingsScreen extends ConsumerWidget {
                           icon: const Icon(Icons.file_download),
                           label: Text(AppLocalizations.of(context)!
                               .settingsGlossaryExportAll,),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.teal.shade700,
-                            foregroundColor: Colors.white,
-                          ),
+
                         ),
                       ),
                       const SizedBox(width: 12),
                       // Delete selected glossary
                       Expanded(
-                        child: ElevatedButton.icon(
+                        child: OutlinedButton.icon(
                           onPressed: (selectedId == null)
                               ? null
                               : () async {
@@ -452,9 +441,17 @@ class GlossarySettingsScreen extends ConsumerWidget {
                                               Navigator.of(context).pop(false),
                                           child: Text(l10n.settingsGlossaryCancel),
                                         ),
-                                        TextButton(
+                                        FilledButton(
                                           onPressed: () =>
                                               Navigator.of(context).pop(true),
+                                          style: FilledButton.styleFrom(
+                                            backgroundColor: Theme.of(context)
+                                                .colorScheme
+                                                .error,
+                                            foregroundColor: Theme.of(context)
+                                                .colorScheme
+                                                .onError,
+                                          ),
                                           child: Text(l10n.settingsGlossaryDelete),
                                         ),
                                       ],
@@ -504,12 +501,17 @@ class GlossarySettingsScreen extends ConsumerWidget {
                                     }
                                   }
                                 },
-                          icon: const Icon(Icons.delete_forever),
+                          icon: Icon(Icons.delete_forever,
+                              color: Theme.of(context).colorScheme.error,),
                           label: Text(AppLocalizations.of(context)!
                               .settingsGlossaryDeleteGlossary,),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red.shade700,
-                            foregroundColor: Colors.white,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Theme.of(context).colorScheme.error,
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12,),
                           ),
                         ),
                       ),
@@ -530,13 +532,14 @@ class GlossarySettingsScreen extends ConsumerWidget {
       Card(
         elevation: 4,
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Row(
                 children: <Widget>[
-                  Icon(Icons.table_chart, color: Colors.green.shade700),
+                  Icon(Icons.table_chart,
+                      color: Theme.of(context).colorScheme.primary,),
                   const SizedBox(width: 8),
                   Text(
                     AppLocalizations.of(context)!
@@ -546,20 +549,17 @@ class GlossarySettingsScreen extends ConsumerWidget {
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.green.shade700,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                   const Spacer(),
-                  ElevatedButton.icon(
+                  FilledButton.icon(
                     onPressed: () =>
                         _showAddEntryDialog(context, settings, notifier),
                     icon: const Icon(Icons.add),
                     label: Text(AppLocalizations.of(context)!
                         .settingsGlossaryAddEntry,),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade700,
-                      foregroundColor: Colors.white,
-                    ),
+
                   ),
                 ],
               ),
@@ -679,7 +679,7 @@ class GlossarySettingsScreen extends ConsumerWidget {
               onPressed: () => Navigator.of(context).pop(),
               child: Text(l10n.settingsGlossaryCancel),
             ),
-            TextButton(
+            FilledButton(
               onPressed: () async {
                 final String name = nameController.text.trim();
                 if (name.isEmpty) {
@@ -1028,7 +1028,8 @@ class GlossarySettingsScreen extends ConsumerWidget {
                   children: <Widget>[
                     if (isEditing) ...<Widget>[
                       IconButton(
-                        icon: const Icon(Icons.check, color: Colors.green),
+                        icon: Icon(Icons.check,
+                            color: Theme.of(context).colorScheme.primary,),
                         onPressed: () async {
                           try {
                             await GlossaryApiService.updateEntry(
@@ -1063,7 +1064,8 @@ class GlossarySettingsScreen extends ConsumerWidget {
                         },
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close, color: Colors.red),
+                        icon: Icon(Icons.close,
+                            color: Theme.of(context).colorScheme.error,),
                         onPressed: () {
                           sourceController.text = entry.source;
                           targetController.text = entry.target;
@@ -1073,11 +1075,13 @@ class GlossarySettingsScreen extends ConsumerWidget {
                       ),
                     ] else ...<Widget>[
                       IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blue),
+                        icon: Icon(Icons.edit,
+                            color: Theme.of(context).colorScheme.primary,),
                         onPressed: () => setState(() => isEditing = true),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
+                        icon: Icon(Icons.delete,
+                            color: Theme.of(context).colorScheme.error,),
                         onPressed: () async {
                           try {
                             await GlossaryApiService.deleteEntry(
@@ -1215,7 +1219,7 @@ class GlossarySettingsScreen extends ConsumerWidget {
             Builder(
               builder: (ctx) {
                 final l10nCtx = AppLocalizations.of(ctx)!;
-                return TextButton(
+                return FilledButton(
                 onPressed: selectedGlossaryId == null
                     ? null
                     : () async {
@@ -1381,7 +1385,7 @@ class GlossarySettingsScreen extends ConsumerWidget {
             Builder(
               builder: (btnContext) {
                 final l10nBtn = AppLocalizations.of(btnContext)!;
-                return TextButton(
+                return FilledButton(
                 onPressed: selectedGlossaryId == null
                     ? null
                     : () async {
@@ -1518,7 +1522,7 @@ class GlossarySettingsScreen extends ConsumerWidget {
             Builder(
               builder: (btnContext) {
                 final l10nBtn = AppLocalizations.of(btnContext)!;
-                return TextButton(
+                return FilledButton(
                 onPressed: selectedGlossaryId == null
                     ? null
                     : () async {

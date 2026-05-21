@@ -263,7 +263,7 @@
 
   "homeTagline": "AI Based, Immersion\nPrivate, Secure(Developing)\nTeam Shared, Customizable\n",
   "homeIntro": "Upload documents and translate them into multiple languages with AI-powered accuracy.\n",
-  "homeHowItWorks": "How it works\nTranslation: Import -> Parse Document -> Glossary -> Translate -> Export\nFile format conversion: Import -> Parse Document -> Convert -> Export",
+  "homeHowItWorks": "How it works\nTranslation: Import -> Parse Document -> Glossary -> Translate -> Export\nFile format conversion: Import -> Parse Document -> Convert -> Export\nURL Fetch: Enter URL -> Fetch Page -> Parse Content -> Extract Text -> Translate/Export",
 
   "homeSnackDonorExpired": "Your registration code has expired. Please re-register to continue Pro benefits.",
   "commonOk": "OK",
@@ -454,11 +454,11 @@
   "settingsGlossaryManagementTitle": "Glossary Management",
   "settingsGlossaryManagementSubtitle": "Manage your terminology entries for consistent translation quality.",
   "settingsGlossarySelectGlossary": "Select Glossary",
-  "settingsGlossaryCreateGlossary": "Create Glossary",
+  "settingsGlossaryCreateGlossary": "Create",
   "settingsGlossaryImportCsv": "Import CSV",
   "settingsGlossaryExport": "Export",
   "settingsGlossaryExportAll": "Export All",
-  "settingsGlossaryDeleteGlossary": "Delete Glossary",
+  "settingsGlossaryDeleteGlossary": "Delete",
   "settingsGlossarySaveZip": "Save ZIP",
   "settingsGlossaryEntriesTitle": "Glossary Entries ({count})",
   "settingsGlossaryAddEntry": "Add Entry",
@@ -963,5 +963,22 @@
   "workspaceCloseFlowDestroy": "Destroy and close",
   "workspaceCloseFlowCancel": "Cancel",
 
-  "fetchUrlCancel": "Cancel"
+  "fetchUrlCancel": "Cancel",
+
+  "loginSubtitleFeatures": "File Translation\nFormat Conversion\nURL Fetch",
+  "loginSubtitleTagline": "AI Document Processing System",
+  "loginUsernameLabel": "Username",
+  "loginUsernameHint": "Please enter username",
+  "loginUsernameRequiredError": "Please enter your username",
+  "loginUsernameMinLengthError": "Username must be at least 3 characters",
+  "loginPasswordLabel": "Password",
+  "loginPasswordHint": "Please enter password",
+  "loginPasswordRequiredError": "Please enter your password",
+  "loginForgotPassword": "Forgot Password?",
+  "loginPasswordRecoveryTitle": "Password Recovery",
+  "loginPasswordRecoveryContactAdmin": "Please contact your administrator to reset your password.",
+  "loginPasswordRecoveryAdminHint": "Administrators can reset passwords through the user management page after logging in.",
+  "loginAuthMethodDefault": "Using Default Authentication",
+  "loginCopyErrorLabel": "Copy",
+  "loginErrorCopiedMessage": "Error message copied to clipboard"
 }

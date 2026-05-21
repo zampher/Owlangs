@@ -1310,7 +1310,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsGlossarySelectGlossary => '选择术语表';
 
   @override
-  String get settingsGlossaryCreateGlossary => '创建术语表';
+  String get settingsGlossaryCreateGlossary => '创建';
 
   @override
   String get settingsGlossaryImportCsv => '导入CSV';
@@ -1322,7 +1322,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsGlossaryExportAll => '导出全部';
 
   @override
-  String get settingsGlossaryDeleteGlossary => '删除术语表';
+  String get settingsGlossaryDeleteGlossary => '删除';
 
   @override
   String get settingsGlossarySaveZip => '保存ZIP';
@@ -2741,4 +2741,52 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fetchUrlCancel => '取消';
+
+  @override
+  String get loginSubtitleFeatures => '文件翻译\n格式转换\n网址抓取';
+
+  @override
+  String get loginSubtitleTagline => 'AI 文档处理系统';
+
+  @override
+  String get loginUsernameLabel => '用户名';
+
+  @override
+  String get loginUsernameHint => '请输入用户名';
+
+  @override
+  String get loginUsernameRequiredError => '请输入您的用户名';
+
+  @override
+  String get loginUsernameMinLengthError => '用户名至少需要 3 个字符';
+
+  @override
+  String get loginPasswordLabel => '密码';
+
+  @override
+  String get loginPasswordHint => '请输入密码';
+
+  @override
+  String get loginPasswordRequiredError => '请输入您的密码';
+
+  @override
+  String get loginForgotPassword => '忘记密码？';
+
+  @override
+  String get loginPasswordRecoveryTitle => '密码恢复';
+
+  @override
+  String get loginPasswordRecoveryContactAdmin => '请联系您的管理员重置密码。';
+
+  @override
+  String get loginPasswordRecoveryAdminHint => '管理员登录后可在用户管理页面重置密码。';
+
+  @override
+  String get loginAuthMethodDefault => '使用默认认证方式';
+
+  @override
+  String get loginCopyErrorLabel => '复制';
+
+  @override
+  String get loginErrorCopiedMessage => '错误信息已复制到剪贴板';
 }

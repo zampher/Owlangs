@@ -1321,7 +1321,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsGlossarySelectGlossary => '用語集を選択';
 
   @override
-  String get settingsGlossaryCreateGlossary => '用語集を作成';
+  String get settingsGlossaryCreateGlossary => '作成';
 
   @override
   String get settingsGlossaryImportCsv => 'CSVをインポート';
@@ -1333,7 +1333,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsGlossaryExportAll => 'すべてエクスポート';
 
   @override
-  String get settingsGlossaryDeleteGlossary => '用語集を削除';
+  String get settingsGlossaryDeleteGlossary => '削除';
 
   @override
   String get settingsGlossarySaveZip => 'ZIPを保存';
@@ -2760,4 +2760,56 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get fetchUrlCancel => 'キャンセル';
+
+  @override
+  String get loginSubtitleFeatures =>
+      'File Translation\nFormat Conversion\nURL Fetch';
+
+  @override
+  String get loginSubtitleTagline => 'AI Document Processing System';
+
+  @override
+  String get loginUsernameLabel => 'Username';
+
+  @override
+  String get loginUsernameHint => 'Please enter username';
+
+  @override
+  String get loginUsernameRequiredError => 'Please enter your username';
+
+  @override
+  String get loginUsernameMinLengthError =>
+      'Username must be at least 3 characters';
+
+  @override
+  String get loginPasswordLabel => 'Password';
+
+  @override
+  String get loginPasswordHint => 'Please enter password';
+
+  @override
+  String get loginPasswordRequiredError => 'Please enter your password';
+
+  @override
+  String get loginForgotPassword => 'Forgot Password?';
+
+  @override
+  String get loginPasswordRecoveryTitle => 'Password Recovery';
+
+  @override
+  String get loginPasswordRecoveryContactAdmin =>
+      'Please contact your administrator to reset your password.';
+
+  @override
+  String get loginPasswordRecoveryAdminHint =>
+      'Administrators can reset passwords through the user management page after logging in.';
+
+  @override
+  String get loginAuthMethodDefault => 'Using Default Authentication';
+
+  @override
+  String get loginCopyErrorLabel => 'Copy';
+
+  @override
+  String get loginErrorCopiedMessage => 'Error message copied to clipboard';
 }

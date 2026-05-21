@@ -1034,7 +1034,7 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
                   )
                 : Text(l10n.aiPlatformTestConnection),
           ),
-          ElevatedButton(
+          FilledButton(
             onPressed: _saveConfig,
             child: Text(l10n.aiPlatformSave),
           ),
@@ -2763,7 +2763,7 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
+                child: FilledButton.icon(
                   onPressed: _isTestingConnection ? null : _testConnection,
                   icon: _isTestingConnection
                       ? const SizedBox(
@@ -2775,10 +2775,7 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
                   label: Text(
                     _isTestingConnection ? l10n.aiPlatformTesting : l10n.aiPlatformTestConnection,
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade700,
-                    foregroundColor: Colors.white,
-                  ),
+
                 ),
               ),
               if (_testResult != null) ...<Widget>[
@@ -2831,12 +2828,9 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text(l10n.aiPlatformCancel),
         ),
-        ElevatedButton(
+        FilledButton(
           onPressed: _saveConfig,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue.shade700,
-            foregroundColor: Colors.white,
-          ),
+
           child: Text(l10n.aiPlatformSave),
         ),
       ],
@@ -3268,7 +3262,7 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
+                child: FilledButton.icon(
                   onPressed: _isTestingConnection ? null : _testConnection,
                   icon: _isTestingConnection
                       ? const SizedBox(
@@ -3280,10 +3274,7 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
                   label: Text(
                     _isTestingConnection ? l10n.aiPlatformTesting : l10n.aiPlatformTestConnection,
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade700,
-                    foregroundColor: Colors.white,
-                  ),
+
                 ),
               ),
               if (_testResult != null) ...<Widget>[
@@ -3336,12 +3327,9 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text(l10n.aiPlatformCancel),
         ),
-        ElevatedButton(
+        FilledButton(
           onPressed: _saveConfig,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue.shade700,
-            foregroundColor: Colors.white,
-          ),
+
           child: Text(l10n.aiPlatformSave),
         ),
       ],

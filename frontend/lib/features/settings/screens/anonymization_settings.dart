@@ -650,7 +650,7 @@ class _AnonymizationSettingsScreenState
                         const SizedBox(height: 16),
                         SizedBox(
                           width: double.infinity,
-                          child: ElevatedButton.icon(
+                          child: FilledButton.icon(
                             onPressed: state.testState.isTesting
                                 ? null
                                 : () {
@@ -717,10 +717,7 @@ class _AnonymizationSettingsScreenState
                                   ? 'Testing...'
                                   : 'Test Model',
                             ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange.shade700,
-                              foregroundColor: Colors.white,
-                            ),
+
                           ),
                         ),
                       ],
@@ -731,7 +728,7 @@ class _AnonymizationSettingsScreenState
                 // Save Button
                 SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton.icon(
+                  child: FilledButton.icon(
                     onPressed: () {
                       // Settings are auto-saved, but we can show a confirmation
                       MessageService.showSuccess(
@@ -741,11 +738,6 @@ class _AnonymizationSettingsScreenState
                     },
                     icon: const Icon(Icons.save),
                     label: const Text('Save'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
                   ),
                 ),
               ],

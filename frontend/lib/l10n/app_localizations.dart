@@ -2474,7 +2474,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsGlossaryCreateGlossary.
   ///
   /// In en, this message translates to:
-  /// **'Create Glossary'**
+  /// **'Create'**
   String get settingsGlossaryCreateGlossary;
 
   /// No description provided for @settingsGlossaryImportCsv.
@@ -2498,7 +2498,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsGlossaryDeleteGlossary.
   ///
   /// In en, this message translates to:
-  /// **'Delete Glossary'**
+  /// **'Delete'**
   String get settingsGlossaryDeleteGlossary;
 
   /// No description provided for @settingsGlossarySaveZip.
@@ -5035,6 +5035,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cancel'**
   String get fetchUrlCancel;
+
+  /// No description provided for @loginSubtitleFeatures.
+  ///
+  /// In en, this message translates to:
+  /// **'File Translation\nFormat Conversion\nURL Fetch'**
+  String get loginSubtitleFeatures;
+
+  /// No description provided for @loginSubtitleTagline.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Document Processing System'**
+  String get loginSubtitleTagline;
+
+  /// No description provided for @loginUsernameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get loginUsernameLabel;
+
+  /// No description provided for @loginUsernameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter username'**
+  String get loginUsernameHint;
+
+  /// No description provided for @loginUsernameRequiredError.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter your username'**
+  String get loginUsernameRequiredError;
+
+  /// No description provided for @loginUsernameMinLengthError.
+  ///
+  /// In en, this message translates to:
+  /// **'Username must be at least 3 characters'**
+  String get loginUsernameMinLengthError;
+
+  /// No description provided for @loginPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get loginPasswordLabel;
+
+  /// No description provided for @loginPasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter password'**
+  String get loginPasswordHint;
+
+  /// No description provided for @loginPasswordRequiredError.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter your password'**
+  String get loginPasswordRequiredError;
+
+  /// No description provided for @loginForgotPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Forgot Password?'**
+  String get loginForgotPassword;
+
+  /// No description provided for @loginPasswordRecoveryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Password Recovery'**
+  String get loginPasswordRecoveryTitle;
+
+  /// No description provided for @loginPasswordRecoveryContactAdmin.
+  ///
+  /// In en, this message translates to:
+  /// **'Please contact your administrator to reset your password.'**
+  String get loginPasswordRecoveryContactAdmin;
+
+  /// No description provided for @loginPasswordRecoveryAdminHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Administrators can reset passwords through the user management page after logging in.'**
+  String get loginPasswordRecoveryAdminHint;
+
+  /// No description provided for @loginAuthMethodDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Using Default Authentication'**
+  String get loginAuthMethodDefault;
+
+  /// No description provided for @loginCopyErrorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get loginCopyErrorLabel;
+
+  /// No description provided for @loginErrorCopiedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Error message copied to clipboard'**
+  String get loginErrorCopiedMessage;
 }
 
 class _AppLocalizationsDelegate

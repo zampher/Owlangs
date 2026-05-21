@@ -311,14 +311,11 @@ class PromptsSettingsScreen extends ConsumerWidget {
                     ),
                   ),
                   const Spacer(),
-                  ElevatedButton.icon(
+                  FilledButton.icon(
                     onPressed: () => _showAddPromptDialog(onUpdate),
                     icon: const Icon(Icons.add),
                     label: const Text('Add Prompt'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: color,
-                      foregroundColor: Colors.white,
-                    ),
+
                   ),
                 ],
               ),
@@ -440,14 +437,11 @@ class PromptsSettingsScreen extends ConsumerWidget {
                   children: <Widget>[
                     if (!isDefault)
                       Expanded(
-                        child: ElevatedButton.icon(
+                        child: FilledButton.icon(
                           onPressed: () => onSetDefault(prompt.id),
                           icon: const Icon(Icons.star),
                           label: const Text('Set as Default'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue.shade700,
-                            foregroundColor: Colors.white,
-                          ),
+
                         ),
                       ),
                     if (!isDefault) const SizedBox(width: 8),
@@ -466,8 +460,10 @@ class PromptsSettingsScreen extends ConsumerWidget {
                         icon: const Icon(Icons.delete),
                         label: const Text('Delete'),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red.shade700,
-                          side: BorderSide(color: Colors.red.shade300),
+                          foregroundColor: Theme.of(context).colorScheme.error,
+                          side: BorderSide(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
                         ),
                       ),
                     ),
