@@ -1562,7 +1562,7 @@ abstract class AppLocalizations {
   /// No description provided for @homeHowItWorks.
   ///
   /// In en, this message translates to:
-  /// **'How it works\nTranslation: Import -> Parse Document -> Glossary -> Translate -> Export\nFile format conversion: Import -> Parse Document -> Convert -> Export'**
+  /// **'How it works\nTranslation: Import -> Parse Document -> Glossary -> Translate -> Export\nFile format conversion: Import -> Parse Document -> Convert -> Export\nURL Fetch: Enter URL -> Fetch Page -> Parse Content -> Extract Text -> Translate/Export'**
   String get homeHowItWorks;
 
   /// No description provided for @homeSnackDonorExpired.

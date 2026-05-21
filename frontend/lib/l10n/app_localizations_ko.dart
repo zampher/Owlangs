@@ -822,7 +822,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get homeHowItWorks =>
-      '작동 방식\n번역: 가져오기 -> 문서 분석 -> 용어집 -> 번역 -> 내보내기\n파일 형식 변환: 가져오기 -> 문서 분석 -> 변환 -> 내보내기';
+      '작동 방식\n번역: 가져오기 -> 문서 분석 -> 용어집 -> 번역 -> 내보내기\n파일 형식 변환: 가져오기 -> 문서 분석 -> 변환 -> 내보내기\nURL 가져오기: URL 입력 -> 페이지 가져오기 -> 콘텐츠 분석 -> 본문 추출 -> 번역/내보내기';
 
   @override
   String get homeSnackDonorExpired =>

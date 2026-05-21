@@ -851,7 +851,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get homeHowItWorks =>
-      'How it works\nTranslation: Import -> Parse Document -> Glossary -> Translate -> Export\nFile format conversion: Import -> Parse Document -> Convert -> Export';
+      'How it works\nTranslation: Import -> Parse Document -> Glossary -> Translate -> Export\nFile format conversion: Import -> Parse Document -> Convert -> Export\nURL Fetch: Enter URL -> Fetch Page -> Parse Content -> Extract Text -> Translate/Export';
 
   @override
   String get homeSnackDonorExpired =>

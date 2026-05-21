@@ -814,7 +814,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get homeHowItWorks =>
-      '工作原理\n翻译：导入 -> 解析文档 -> 术语表 -> 翻译 -> 导出\n文件格式转换：导入 -> 解析文档 -> 转换 -> 导出';
+      '工作原理\n翻译：导入 -> 解析文档 -> 术语表 -> 翻译 -> 导出\n文件格式转换：导入 -> 解析文档 -> 转换 -> 导出\n网页抓取：输入网址 -> 抓取网页 -> 解析内容 -> 提取正文 -> 翻译/导出';
 
   @override
   String get homeSnackDonorExpired => '您的注册码已过期。请重新注册以继续享受 Pro 版权益。';

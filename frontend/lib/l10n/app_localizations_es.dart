@@ -872,7 +872,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get homeHowItWorks =>
-      'Cómo funciona\nTraducción: Importar -> Analizar documento -> Glosario -> Traducir -> Exportar\nConversión de formato: Importar -> Analizar documento -> Convertir -> Exportar';
+      'Cómo funciona\nTraducción: Importar -> Analizar documento -> Glosario -> Traducir -> Exportar\nConversión de formato: Importar -> Analizar documento -> Convertir -> Exportar\nExtracción de URL: Ingresar URL -> Obtener página -> Analizar contenido -> Extraer texto -> Traducir/Exportar';
 
   @override
   String get homeSnackDonorExpired =>

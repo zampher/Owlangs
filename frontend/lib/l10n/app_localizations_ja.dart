@@ -821,7 +821,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get homeHowItWorks =>
-      '仕組み\n翻訳: インポート -> ドキュメント解析 -> 用語集 -> 翻訳 -> エクスポート\nファイル形式変換: インポート -> ドキュメント解析 -> 変換 -> エクスポート';
+      '仕組み\n翻訳: インポート -> ドキュメント解析 -> 用語集 -> 翻訳 -> エクスポート\nファイル形式変換: インポート -> ドキュメント解析 -> 変換 -> エクスポート\nURL取得: URL入力 -> ページ取得 -> コンテンツ解析 -> 本文抽出 -> 翻訳/エクスポート';
 
   @override
   String get homeSnackDonorExpired =>
