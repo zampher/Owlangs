@@ -124,6 +124,12 @@ Write-Host ""
 Write-Host "[staging] Staging 3rdParty files..." -ForegroundColor Cyan
 $distDir = "dist"
 
+# Clean old 3rdParty in dist to prevent Copy-Item nesting on re-runs
+if (Test-Path "$distDir\3rdParty") {
+    Remove-Item -Path "$distDir\3rdParty" -Recurse -Force
+    Write-Host "[staging] Cleaned old dist/3rdParty" -ForegroundColor Yellow
+}
+
 # Copy Redis
 if (Test-Path "3rdParty\windows\Redis-x64-3.0.504") {
     $dest = Join-Path $distDir "3rdParty\windows\Redis-x64-3.0.504"
@@ -207,7 +213,7 @@ Owlangs-$Version.exe [选项]
 
 注意事项
 --------
-- 首次运行需要配置 API 密钥，程序会自动提示
+- 首次运行需要配置 API 密钥，请先配置后再使用
 - 关闭窗口即可停止服务
 - 配置文件保存在 C:\ProgramData\Owlangs，重装系统不会丢失
 
