@@ -1,4 +1,4 @@
-# Build Owlangs Single-File Executable
+﻿# Build Owlangs Single-File Executable
 # Creates a standalone .exe that auto-starts server and opens browser
 
 param(
@@ -157,8 +157,9 @@ if (Test-Path $buildDir) {
 New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
 
 # Copy the single-file executable
-Copy-Item -Path "dist\Owlangs.exe" -Destination $buildDir -Force
-Write-Host "[package] Executable: Owlangs.exe" -ForegroundColor Green
+$exeName = "Owlangs-$Version.exe"
+Copy-Item -Path "dist\$exeName" -Destination $buildDir -Force
+Write-Host "[package] Executable: $exeName" -ForegroundColor Green
 
 # Create README
 $readmeContent = @"
@@ -167,7 +168,7 @@ Owlangs Single-File Edition v$Version
 
 快速开始
 --------
-双击运行 Owlangs.exe，自动完成以下操作：
+双击运行 Owlangs-$Version.exe，自动完成以下操作：
 1. 初始化配置文件（首次运行）
 2. 启动后端服务
 3. 打开浏览器访问 http://localhost:8800
@@ -182,7 +183,7 @@ C:\ProgramData\Owlangs\configs\
 
 命令行选项
 ----------
-Owlangs.exe [选项]
+Owlangs-$Version.exe [选项]
 
   --init-config       初始化配置文件并退出
   --edit-config NAME  编辑配置文件（如: --edit-config secrets）
@@ -212,7 +213,7 @@ Write-Host "Single-File Build Complete!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "输出文件:" -ForegroundColor Yellow
-Write-Host "  $buildDir\Owlangs.exe" -ForegroundColor Cyan
+Write-Host "  $buildDir\$exeName" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "使用方法:" -ForegroundColor Yellow
 Write-Host "  1. 复制 Owlangs.exe 到任意位置" -ForegroundColor Gray

@@ -97,6 +97,10 @@ class ConfigManager:
             'secrets.json.template',
             'local.json.template',
             'logging.yaml',
+            'translation_config.json.template',
+            'static.json.template',
+            'app_config.json.template',
+            'local_users.json.template',
         ]
         
         initialized_files = []
@@ -329,7 +333,7 @@ class SingleFileLauncher:
     
     def run_interactive(self) -> int:
         """Run in interactive mode (with console output).
-        
+
         Returns:
             Exit code.
         """
@@ -337,24 +341,10 @@ class SingleFileLauncher:
         print("Owlangs - Translation and Collaboration Tool", flush=True)
         print("=" * 60, flush=True)
         print()
-        
-        # Check if first run
-        if not self.config_manager.check_secrets_configured():
-            print("[First Run] Please configure API keys for translation services.", flush=True)
-            print("[First Run] Opening secrets.json for editing...", flush=True)
-            
-            self.config_manager.init_user_configs()
-            self.config_manager.open_config_editor('secrets')
-            
-            input("\nPress Enter after configuring API keys...")
-            
-            # Check again
-            if not self.config_manager.check_secrets_configured():
-                print("[Warning] No API keys configured. Some features may not work.", flush=True)
-                response = input("Continue anyway? (y/n): ")
-                if response.lower() != 'y':
-                    return 1
-        
+
+        # Initialize configs from templates silently
+        self.config_manager.init_user_configs()
+
         # Check port
         if not self.check_port_available(self.port):
             print(f"[Error] Port {self.port} is already in use.", flush=True)
