@@ -28,6 +28,9 @@
   "translationToolbarCancelButton": "Cancelar",
   "translationToolbarExitFullscreenTooltip": "Salir de Pantalla Completa",
   "translationToolbarEnterFullscreenTooltip": "Entrar en Pantalla Completa",
+
+  "translationToolbarDecreaseFontSize": "Reducir tamaño de fuente",
+  "translationToolbarIncreaseFontSize": "Aumentar tamaño de fuente",
   "translationToolbarUpload": "Subir",
   "translationToolbarUploading": "Subiendo...",
   "translationToolbarFileUploaded": "Archivo Subido",

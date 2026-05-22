@@ -104,6 +104,12 @@ class AppLocalizationsEs extends AppLocalizations {
       'Entrar en Pantalla Completa';
 
   @override
+  String get translationToolbarDecreaseFontSize => 'Reducir tamaño de fuente';
+
+  @override
+  String get translationToolbarIncreaseFontSize => 'Aumentar tamaño de fuente';
+
+  @override
   String get translationToolbarUpload => 'Subir';
 
   @override

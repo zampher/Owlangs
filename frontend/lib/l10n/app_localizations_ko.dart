@@ -95,6 +95,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationToolbarEnterFullscreenTooltip => '전체 화면 시작';
 
   @override
+  String get translationToolbarDecreaseFontSize => '글꼴 크기 줄이기';
+
+  @override
+  String get translationToolbarIncreaseFontSize => '글꼴 크기 늘리기';
+
+  @override
   String get translationToolbarUpload => '업로드';
 
   @override

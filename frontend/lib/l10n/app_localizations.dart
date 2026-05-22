@@ -272,6 +272,18 @@ abstract class AppLocalizations {
   /// **'Enter Fullscreen'**
   String get translationToolbarEnterFullscreenTooltip;
 
+  /// No description provided for @translationToolbarDecreaseFontSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Decrease font size'**
+  String get translationToolbarDecreaseFontSize;
+
+  /// No description provided for @translationToolbarIncreaseFontSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Increase font size'**
+  String get translationToolbarIncreaseFontSize;
+
   /// No description provided for @translationToolbarUpload.
   ///
   /// In en, this message translates to:

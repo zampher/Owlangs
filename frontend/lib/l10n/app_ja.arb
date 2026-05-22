@@ -29,6 +29,9 @@
   "translationToolbarCancelButton": "キャンセル",
   "translationToolbarExitFullscreenTooltip": "フルスクリーンを終了",
   "translationToolbarEnterFullscreenTooltip": "フルスクリーンにする",
+
+  "translationToolbarDecreaseFontSize": "フォントサイズを縮小",
+  "translationToolbarIncreaseFontSize": "フォントサイズを拡大",
   "translationToolbarUpload": "アップロード",
   "translationToolbarUploading": "アップロード中...",
   "translationToolbarFileUploaded": "ファイルをアップロードしました",

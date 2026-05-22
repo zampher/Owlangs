@@ -13,6 +13,7 @@ import '../../providers/segment_undo_redo_provider.dart';
 import '../../providers/translation_state_provider_family.dart';
 import '../../models/segment_pair.dart';
 import '../common/exclusion_panel_button.dart';
+import '../../../../shared/providers/settings_provider.dart';
 
 /// Toolbar for translation result preview
 class TranslationResultToolbar extends ConsumerWidget {
@@ -460,6 +461,9 @@ class TranslationResultToolbar extends ConsumerWidget {
               if (onCheckPdfFormulas != null)
                 const SizedBox(width: 3), // Spacing after formula check button
             ],
+            // Font size controls - Always shown when content is displayed
+            const SizedBox(width: 6),
+            _buildFontSizeControls(context, ref),
           ],
           // Global Undo/Redo buttons - Always shown, aligned to right
           _buildUndoRedoButtons(context, ref),
@@ -603,6 +607,70 @@ class TranslationResultToolbar extends ConsumerWidget {
           );
         },
       );
+
+  /// Build font size increase/decrease controls
+  Widget _buildFontSizeControls(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(globalSettingsProvider);
+    final currentSize = settings.previewFontSize;
+    final l10n = AppLocalizations.of(context)!;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        IconButton(
+          icon: const Icon(Icons.text_decrease, size: 16),
+          tooltip: l10n.translationToolbarDecreaseFontSize,
+          onPressed: currentSize > 8
+              ? () {
+                  final newSize = currentSize - 1;
+                  ref
+                      .read(globalSettingsProvider.notifier)
+                      .updateGeneralSettings(
+                    previewFontSize: newSize,
+                    editFontSize: newSize + 2,
+                  );
+                }
+              : null,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(
+            minWidth: 28,
+            minHeight: 28,
+          ),
+        ),
+        SizedBox(
+          width: 20,
+          child: Text(
+            currentSize.toStringAsFixed(0),
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.text_increase, size: 16),
+          tooltip: l10n.translationToolbarIncreaseFontSize,
+          onPressed: currentSize < 32
+              ? () {
+                  final newSize = currentSize + 1;
+                  ref
+                      .read(globalSettingsProvider.notifier)
+                      .updateGeneralSettings(
+                    previewFontSize: newSize,
+                    editFontSize: newSize + 2,
+                  );
+                }
+              : null,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(
+            minWidth: 28,
+            minHeight: 28,
+          ),
+        ),
+      ],
+    );
+  }
 
   /// Build a compact filter button for the toolbar (simplified text, minimal margins)
   Widget _buildCompactFilterButton({

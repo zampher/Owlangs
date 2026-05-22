@@ -32,6 +32,9 @@
   "translationToolbarExitFullscreenTooltip": "Exit Fullscreen",
   "translationToolbarEnterFullscreenTooltip": "Enter Fullscreen",
 
+  "translationToolbarDecreaseFontSize": "Decrease font size",
+  "translationToolbarIncreaseFontSize": "Increase font size",
+
   "translationToolbarUpload": "Upload",
   "translationToolbarUploading": "Uploading...",
   "translationToolbarFileUploaded": "File Uploaded",

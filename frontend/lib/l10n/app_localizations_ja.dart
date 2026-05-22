@@ -94,6 +94,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationToolbarEnterFullscreenTooltip => 'フルスクリーンにする';
 
   @override
+  String get translationToolbarDecreaseFontSize => 'フォントサイズを縮小';
+
+  @override
+  String get translationToolbarIncreaseFontSize => 'フォントサイズを拡大';
+
+  @override
   String get translationToolbarUpload => 'アップロード';
 
   @override

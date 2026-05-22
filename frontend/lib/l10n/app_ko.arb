@@ -29,6 +29,9 @@
   "translationToolbarCancelButton": "취소",
   "translationToolbarExitFullscreenTooltip": "전체 화면 종료",
   "translationToolbarEnterFullscreenTooltip": "전체 화면 시작",
+
+  "translationToolbarDecreaseFontSize": "글꼴 크기 줄이기",
+  "translationToolbarIncreaseFontSize": "글꼴 크기 늘리기",
   "translationToolbarUpload": "업로드",
   "translationToolbarUploading": "업로드 중...",
   "translationToolbarFileUploaded": "파일 업로드됨",

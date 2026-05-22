@@ -98,6 +98,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationToolbarEnterFullscreenTooltip => 'Enter Fullscreen';
 
   @override
+  String get translationToolbarDecreaseFontSize => 'Decrease font size';
+
+  @override
+  String get translationToolbarIncreaseFontSize => 'Increase font size';
+
+  @override
   String get translationToolbarUpload => 'Upload';
 
   @override

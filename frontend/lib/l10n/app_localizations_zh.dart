@@ -94,6 +94,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationToolbarEnterFullscreenTooltip => '进入全屏';
 
   @override
+  String get translationToolbarDecreaseFontSize => '缩小字体';
+
+  @override
+  String get translationToolbarIncreaseFontSize => '增大字体';
+
+  @override
   String get translationToolbarUpload => '上传';
 
   @override
