@@ -1407,7 +1407,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     double? height,
   }) {
     // Use uniform height for all action buttons regardless of label line count
-    final double boxHeight = height ?? 84;
+    final double boxHeight = height ?? 76;
     return Card(
       elevation: highlight ? 4 : 2,
       shape: RoundedRectangleBorder(
@@ -1423,7 +1423,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
           key: key,
           width: width ?? 70,
           height: boxHeight,
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1431,9 +1431,9 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               Icon(
                 icon,
                 color: Theme.of(context).colorScheme.primary,
-                size: 32, // Match Quick Start icon size
+                size: 28,
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 3),
               Text(
                 label,
                 style: TextStyle(
