@@ -4214,19 +4214,19 @@ class _TranslationResultPreviewState
     return counts;
   }
 
-  /// Compute merged paragraphs for the merged preview mode.
-  /// Shows each segment as its own paragraph, without labels/numbers
-  /// (no chunk merging — each segment is independent).
+  /// Compute clean-mode paragraphs — each segment is its own paragraph,
+  /// same structure as labeled mode, just without segment tags/actions.
+  /// All segments shown (excluded included) for a complete reading experience.
   void _computeMergedParagraphs() {
-    if (_sourceParagraphs.isEmpty && _targetParagraphs.isEmpty) {
-      _mergedSourceParagraphs = <String>[];
-      _mergedTargetParagraphs = <String>[];
-      return;
-    }
+    _mergedSourceParagraphs = <String>[];
+    _mergedTargetParagraphs = <String>[];
 
-    // Show each segment as its own paragraph (no badges = clean display).
-    _mergedSourceParagraphs = List<String>.from(_sourceParagraphs);
-    _mergedTargetParagraphs = List<String>.from(_targetParagraphs);
+    if (_sourceParagraphs.isEmpty && _targetParagraphs.isEmpty) return;
+
+    for (int i = 0; i < _sourceParagraphs.length; i++) {
+      _mergedSourceParagraphs.add(_sourceParagraphs[i]);
+      _mergedTargetParagraphs.add(_targetParagraphs[i]);
+    }
   }
 
   /// Build unified comparison panel with source and target side by side

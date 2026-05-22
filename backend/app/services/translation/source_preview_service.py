@@ -1187,21 +1187,18 @@ class SourcePreviewService:
             True if preview was prepared successfully, False otherwise
         """
         try:
-            from utils.markdown_splitter import split_markdown_text
-            
+            from utils.markdown_splitter import split_text_into_paragraphs
+
             decoded = decode_with_detection(file_contents)
-            
+
             chunk_size = chunk_size_service.get_chunk_size(payload, task_id)
-            deep_split_enabled = bool(task_state.get("deep_split", True))
-            source = "task_state" if task_state.get("deep_split") is not None else "payload"
-            
+
             logger.info(
                 LogModule.EXTRACT,
-                f"[PREVIEW] Task {task_id}: Using deep_split={deep_split_enabled} "
-                f"(from {source}) for txt preview (chunk_size={chunk_size})"
+                f"[PREVIEW] Task {task_id}: Using paragraph-first segmentation for txt preview (chunk_size={chunk_size})"
             )
-            
-            segments = split_markdown_text(decoded, max_block_size=chunk_size, deep_split=deep_split_enabled)
+
+            segments = split_text_into_paragraphs(decoded, max_block_size=chunk_size)
             
             if not segments:
                 return False

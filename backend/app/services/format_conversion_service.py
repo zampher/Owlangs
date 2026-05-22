@@ -1461,17 +1461,20 @@ class FormatConversionService:
             separators_after = []
             segment_info = []
             
-            if workflow_type in ['markdown_based', 'txt']:
+            if workflow_type == 'markdown_based':
                 from utils.markdown_splitter import split_markdown_text
                 decoded = decode_with_detection(file_bytes)
-                # Resplit encoding (logging removed)
                 deep_split_enabled = bool(st.get("deep_split", True))
                 logger.info(
                     LogModule.WORKFLOW,
                     f"[RESPLIT] Task {task_id}: Using deep_split={deep_split_enabled} "
-                    f"from task_state for {workflow_type} workflow (chunk_size={chunk_size})"
+                    f"from task_state for markdown_based workflow (chunk_size={chunk_size})"
                 )
                 segments = split_markdown_text(decoded, max_block_size=chunk_size, deep_split=deep_split_enabled)
+            elif workflow_type == 'txt':
+                from utils.markdown_splitter import split_text_into_paragraphs
+                decoded = decode_with_detection(file_bytes)
+                segments = split_text_into_paragraphs(decoded, max_block_size=chunk_size)
             elif workflow_type == 'html':
                 from extractor.html_extractor import HtmlExtractor
                 decoded = decode_with_detection(file_bytes)

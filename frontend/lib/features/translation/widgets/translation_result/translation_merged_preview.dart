@@ -5,10 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../shared/widgets/markdown_text_with_images.dart';
 
 /// Clean-mode preview panel showing source/target text side by side
-/// without segment labels/numbers.
-///
-/// Each paragraph pair represents one individual segment, displayed
-/// without badges or action buttons — a clean reading experience.
+/// without segment labels/numbers or action buttons.
 class TranslationMergedPreviewPanel extends StatelessWidget {
   const TranslationMergedPreviewPanel({
     required this.sourceParagraphs,
@@ -81,11 +78,16 @@ class TranslationMergedPreviewPanel extends StatelessWidget {
                     ),
                   ),
                 ),
-                // Vertical divider
-                Container(
-                  width: 1,
-                  color: theme.dividerColor.withOpacity(0.6),
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                // Thin divider
+                SizedBox(
+                  width: 16,
+                  child: Center(
+                    child: Container(
+                      width: 1,
+                      height: 40,
+                      color: theme.dividerColor.withOpacity(0.3),
+                    ),
+                  ),
                 ),
                 // Target paragraph (right panel)
                 Expanded(

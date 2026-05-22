@@ -1,6 +1,7 @@
 ﻿# SPDX-FileCopyrightText: 2026 Zampher
 # SPDX-License-Identifier: MPL-2.0
 import asyncio
+import re
 from dataclasses import dataclass
 from typing import Self, Literal, List
 
@@ -72,11 +73,16 @@ class TXTTranslator(AiTranslator):
 
     def _pre_translate(self, document: Document) -> List[str]:
         """
-        Preprocessing step: Parse TXT file and split text by lines.
+        Preprocessing step: Parse TXT file and split text by natural paragraphs.
+
+        Splits by blank lines first (paragraph-first segmentation), so each
+        segment is a meaningful paragraph rather than a single line.
+        If a paragraph exceeds the chunk token limit, segments2json_chunks()
+        will further split it by lines automatically during chunk assembly.
 
         For large TXT files, prefers segments from source_chunks_cache
-        (pre-split by split_markdown_text during import) over raw splitlines()
-        to avoid generating an excessive number of tiny chunks during translation.
+        (pre-split by split_markdown_text during import) over raw paragraph splitting
+        to maintain consistency with the import phase.
 
         Args:
             document (Document): Document object to be processed.
@@ -118,8 +124,11 @@ class TXTTranslator(AiTranslator):
             self.logger.error(LogModule.TRANS, f"Unable to decode TXT file content: {e}", exc_info=True)
             return []
 
-        # Split text by lines and preserve empty lines as they may be part of formatting
-        original_texts = txt_content.splitlines()
+        # Use paragraph-first segmentation: splits by blank lines into paragraphs,
+        # or by individual lines if no blank lines are found.
+        # Consistent with split_text_into_paragraphs() used during import/preview.
+        from utils.markdown_splitter import split_text_into_paragraphs
+        original_texts = split_text_into_paragraphs(txt_content, max_block_size=self.chunk_size)
 
         return original_texts
 

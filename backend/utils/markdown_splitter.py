@@ -166,7 +166,7 @@ class MarkdownBlockSplitter:
 def split_markdown_text(markdown_text: str, max_block_size=5000, deep_split: bool = False) -> List[str]:
     """
     Split Markdown string into blocks not exceeding max_block_size
-    
+
     Args:
         markdown_text: Markdown text to split
         max_block_size: Maximum bytes per block
@@ -175,7 +175,73 @@ def split_markdown_text(markdown_text: str, max_block_size=5000, deep_split: boo
     splitter = MarkdownBlockSplitter(max_block_size=max_block_size, deep_split=deep_split)
     chunks = splitter.split_markdown(markdown_text)
     # Filter out blocks consisting only of whitespace characters
-    return [chunk for chunk in chunks if chunk.strip()]
+    chunks = [chunk for chunk in chunks if chunk.strip()]
+
+    # When deep_split is requested and the text has no markdown-specific
+    # syntax (headers, code blocks), it's likely plain text (e.g. text_input.md).
+    # Fall back to paragraph splitting so each line becomes its own segment
+    # instead of arbitrary byte-size chunks.
+    if deep_split and not re.search(r'#{1,6}\s|```|~~~', markdown_text):
+        chunks = split_text_into_paragraphs(markdown_text, max_block_size=max_block_size)
+
+    return chunks
+
+
+def split_text_into_paragraphs(text: str, max_block_size: int = 5000) -> List[str]:
+    """
+    Split plain text by natural paragraphs, then by lines if oversized.
+
+    Uses a heuristic: if blank lines (\\n\\n) are found, splits by blank lines
+    into paragraph blocks. Otherwise, falls back to line-by-line splitting
+    (each non-empty line is its own paragraph).
+
+    If a paragraph exceeds max_block_size, it is further split by individual
+    lines within that paragraph.
+
+    Args:
+        text: Plain text content
+        max_block_size: Maximum bytes per segment
+
+    Returns:
+        List of text segments (paragraphs or sub-paragraph lines)
+    """
+    # Normalize line endings
+    text = text.replace('\r\n', '\n')
+
+    # Try blank-line split first (natural paragraph boundaries)
+    blank_line_paras = re.split(r'\n\s*\n', text)
+    blank_line_paras = [p.strip() for p in blank_line_paras if p.strip()]
+
+    if len(blank_line_paras) > 1:
+        # File has blank-line paragraph boundaries — use them
+        raw_paragraphs = blank_line_paras
+    else:
+        # No blank lines — each line is its own paragraph
+        raw_paragraphs = [line.strip() for line in text.split('\n') if line.strip()]
+
+    result: List[str] = []
+    for para in raw_paragraphs:
+        para_bytes = len(para.encode('utf-8'))
+        if para_bytes > max_block_size:
+            # Split oversized paragraph by individual lines
+            lines = para.split('\n')
+            current_chunk: List[str] = []
+            current_size = 0
+            for line in lines:
+                line_size = len(line.encode('utf-8')) + 1
+                if current_size + line_size > max_block_size and current_chunk:
+                    result.append('\n'.join(current_chunk))
+                    current_chunk = [line]
+                    current_size = line_size - 1
+                else:
+                    current_chunk.append(line)
+                    current_size += line_size
+            if current_chunk:
+                result.append('\n'.join(current_chunk))
+        else:
+            result.append(para)
+
+    return result
 
 
 def _needs_single_newline_join(prev_chunk: str, next_chunk: str) -> bool:
