@@ -3548,12 +3548,13 @@ class _TranslationResultPreviewState
       return;
     }
 
-    // Prevent recursive scrolling
-    if (_isScrolling) return;
-
-    // Update both state and notifier for backward compatibility and efficient updates
+    // Always update the visual highlight immediately — even if a scroll is in progress.
+    // This ensures the user sees instant feedback when clicking a segment.
     highlightedIndex = index;
     _highlightedIndexNotifier.value = index;
+
+    // Prevent recursive scrolling (guard is AFTER the visual update so clicks always show feedback)
+    if (_isScrolling) return;
 
     // Wait for any pending height measurements to complete before scrolling
     // This is especially important after exiting edit mode, as height may have changed
@@ -3589,7 +3590,10 @@ class _TranslationResultPreviewState
             index,
             animate: true,
           )
-              .then((_) {
+              .whenComplete(() {
+            // Use whenComplete instead of then to ensure _isScrolling is always reset,
+            // even if scrollToIndex throws an exception (which would otherwise
+            // permanently block future segment clicks).
             if (mounted) {
               _isScrolling = false;
             }

@@ -161,17 +161,21 @@ class PaginatedScrollManager {
               final scrollableGlobalBottom = scrollableGlobalTop +
                   Offset(0, scrollController.position.viewportDimension);
 
-              // Check if item is fully visible (with small margin for safety)
+              // Check if item's top edge is already visible in the viewport.
+              // We check the top edge only — not "fully visible" — because
+              // segments taller than the viewport would never be "fully visible",
+              // causing re-scroll on every tap (very disruptive when reading
+              // long segments).
               const margin = 20;
-              final isFullyVisible = itemGlobalTop.dy >=
+              final topVisible = itemGlobalTop.dy >=
                       (scrollableGlobalTop.dy - margin) &&
-                  itemGlobalBottom.dy <= (scrollableGlobalBottom.dy + margin);
+                  itemGlobalTop.dy < scrollableGlobalBottom.dy;
 
-              if (isFullyVisible) {
-                // Target is already fully visible, no need to scroll
+              if (topVisible) {
+                // Target's top edge is already visible, no need to scroll
                 AppLogger.log(
                   'PaginatedScrollManager',
-                  'scrollToIndex: Target already fully visible, skipping scroll. '
+                  'scrollToIndex: Target top already visible, skipping scroll. '
                       'targetIndex=$targetIndex, itemTop=${itemGlobalTop.dy.toStringAsFixed(1)}, '
                       'scrollableTop=${scrollableGlobalTop.dy.toStringAsFixed(1)}, '
                       'scrollableBottom=${scrollableGlobalBottom.dy.toStringAsFixed(1)}',
