@@ -637,15 +637,16 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                         ),
                                       ),
                                     ),
-                                    // Download icon menu
+                                    // Download format icons
                                     if (downloadEntries.isNotEmpty)
-                                      _DownloadMenuButton(
-                                        taskId: taskId,
-                                        name: name,
-                                        entries: downloadEntries,
-                                        onDownload: _download,
-                                        cs: cs,
-                                        l10n: l10n,
+                                      ...downloadEntries.map(
+                                        (e) => _DownloadFormatButton(
+                                          taskId: taskId,
+                                          name: name,
+                                          ft: e.key,
+                                          url: e.value.toString(),
+                                          onDownload: _download,
+                                        ),
                                       ),
                                     // Cancel
                                     if (_canCancel(status) && inMemory)
@@ -803,62 +804,70 @@ class _TinyBadge extends StatelessWidget {
 
 // ─── Download popup menu button ──────────────────────────────────────────────
 
-class _DownloadMenuButton extends StatelessWidget {
+/// Map download format key to a Material icon.
+IconData _downloadFormatIcon(String ft) {
+  switch (ft) {
+    case 'pdf':
+      return Icons.picture_as_pdf;
+    case 'docx':
+    case 'doc':
+      return Icons.description;
+    case 'xlsx':
+    case 'xls':
+      return Icons.table_chart;
+    case 'pptx':
+    case 'ppt':
+      return Icons.slideshow;
+    case 'html':
+    case 'htm':
+      return Icons.language;
+    case 'md':
+      return Icons.article;
+    case 'md_zip':
+      return Icons.folder_zip_outlined;
+    case 'epub':
+      return Icons.book;
+    case 'mobi':
+      return Icons.book_online;
+    case 'txt':
+      return Icons.text_snippet;
+    case 'json':
+      return Icons.data_object;
+    case 'srt':
+      return Icons.subtitles;
+    default:
+      return Icons.download;
+  }
+}
+
+/// An icon button for a single download format.
+class _DownloadFormatButton extends StatelessWidget {
   final String taskId;
   final String name;
-  final List<MapEntry<String, dynamic>> entries;
+  final String ft;
+  final String url;
   final Future<void> Function(String, String, String, String) onDownload;
-  final ColorScheme cs;
-  final AppLocalizations l10n;
 
-  const _DownloadMenuButton({
+  const _DownloadFormatButton({
     required this.taskId,
     required this.name,
-    required this.entries,
+    required this.ft,
+    required this.url,
     required this.onDownload,
-    required this.cs,
-    required this.l10n,
   });
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      tooltip: l10n.translationQueueDownloads,
-      icon: const Icon(Icons.download_outlined, size: 20),
+    return IconButton(
+      icon: Icon(_downloadFormatIcon(ft), size: 20),
+      tooltip: ft.toUpperCase(),
+      visualDensity: VisualDensity.compact,
       padding: const EdgeInsets.all(4),
       constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-      onSelected: (String ft) {
-        final entry = entries.firstWhere(
-          (e) => e.key == ft,
-          orElse: () => MapEntry(ft, ''),
-        );
-        if (entry.value.isNotEmpty) {
-          onDownload(taskId, ft, entry.value.toString(), name);
-        }
-      },
-      itemBuilder: (BuildContext context) {
-        return entries.map((e) {
-          final String ft = e.key;
-          return PopupMenuItem<String>(
-            value: ft,
-            child: Text(
-              _DownloadMenuButton._label(ft, l10n),
-              style: const TextStyle(fontSize: 13),
-            ),
-          );
-        }).toList();
-      },
+      onPressed: url.isNotEmpty
+          ? () => onDownload(taskId, ft, url, name)
+          : null,
     );
   }
-
-  static String _label(String ft, AppLocalizations l10n) {
-    switch (ft) {
-      case 'md':
-        return l10n.translationQueueDownloadMdEmbedded;
-      case 'md_zip':
-        return l10n.translationQueueDownloadMdZip;
-      default:
-        return ft.toUpperCase();
-    }
-  }
 }
+
