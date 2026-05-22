@@ -142,7 +142,15 @@ async def get_current_user(request: Request) -> Optional[User]:
         auth_required = unified_config.auth_required
         logger.info(LogModule.AUTH, f"[AUTH] auth_required from config: {auth_required}")
         if auth_required is False:
-            logger.info(LogModule.AUTH, "[AUTH] Auth disabled, returning default local user")
+            # Auth is disabled globally, but still check for an active session/token.
+            # The desktop app may have logged in (Bearer token) and we should use
+            # the real username instead of the generic "local" fallback.
+            session_manager = get_session_manager()
+            session_user = await session_manager.get_user(request)
+            if session_user is not None:
+                logger.info(LogModule.AUTH, f"[AUTH] Auth disabled but returning session user: {session_user.username}")
+                return session_user
+            logger.info(LogModule.AUTH, "[AUTH] Auth disabled, no session, returning default local user")
             return User(
                 username="local",
                 display_name="Local User",

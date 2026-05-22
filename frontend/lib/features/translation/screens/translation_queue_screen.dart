@@ -337,6 +337,50 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     return DateFormat.yMMMd(loc.toLanguageTag()).add_Hm().format(dt);
   }
 
+  /// Compact time display: "05-22 14:00" or dash.
+  String _formatCompactTime(BuildContext context, double? seconds) {
+    if (seconds == null) return '-';
+    final DateTime dt =
+        DateTime.fromMillisecondsSinceEpoch((seconds * 1000).round());
+    final Locale loc = Localizations.localeOf(context);
+    return DateFormat.yMMMd(loc.toLanguageTag()).add_Hm().format(dt);
+  }
+
+  /// Map filename to a Material icon.
+  static IconData _fileIcon(String name) {
+    final ext = name.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'docx':
+      case 'doc':
+        return Icons.description;
+      case 'xlsx':
+      case 'xls':
+        return Icons.table_chart;
+      case 'pptx':
+      case 'ppt':
+        return Icons.slideshow;
+      case 'html':
+      case 'htm':
+        return Icons.language;
+      case 'md':
+        return Icons.article;
+      case 'epub':
+        return Icons.book;
+      case 'mobi':
+        return Icons.book_online;
+      case 'txt':
+        return Icons.text_snippet;
+      case 'json':
+        return Icons.data_object;
+      case 'srt':
+        return Icons.subtitles;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
   Future<void> _confirmClearQueue(
     BuildContext context,
     AppLocalizations l10n,
@@ -383,6 +427,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context)!;
     final ThemeData theme = Theme.of(context);
+    final ColorScheme cs = theme.colorScheme;
     final AsyncValue<bool> adminGate = ref.watch(isAppAdminUserProvider);
 
     return Scaffold(
@@ -527,180 +572,105 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                           ),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 8,
+                              horizontal: 12,
+                              vertical: 10,
                             ),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: <Widget>[
-                                Text(
-                                  name,
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    height: 1.2,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 4),
-                                Wrap(
-                                  spacing: 6,
-                                  runSpacing: 2,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                // ── Line 1: Filename + Status ──
+                                Row(
                                   children: <Widget>[
-                                    Chip(
-                                      label: Text(
-                                        '$status · $progress%',
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                      visualDensity: VisualDensity.compact,
-                                      materialTapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
+                                    Icon(
+                                      _fileIcon(name),
+                                      size: 18,
+                                      color: cs.onSurfaceVariant,
                                     ),
-                                    if (mode == 'queued')
-                                      Chip(
-                                        label: Text(
-                                          l10n.translationQueueExecutionModeQueued,
-                                          style: const TextStyle(fontSize: 12),
-                                        ),
-                                        visualDensity: VisualDensity.compact,
-                                        materialTapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                      )
-                                    else if (mode == 'immediate')
-                                      Chip(
-                                        label: Text(
-                                          l10n.translationQueueExecutionModeImmediate,
-                                          style: const TextStyle(fontSize: 12),
-                                        ),
-                                        visualDensity: VisualDensity.compact,
-                                        materialTapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                    Chip(
-                                      label: Text(
-                                        row['is_format_conversion'] == true
-                                            ? l10n.translationQueueTaskTypeConversion
-                                            : l10n.translationQueueTaskTypeTranslation,
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                      visualDensity: VisualDensity.compact,
-                                      materialTapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                    if (qp != null && qp is num && qp > 0)
-                                      Chip(
-                                        label: Text(
-                                          l10n.translationQueuePositionLabel(
-                                            qp.toInt(),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Tooltip(
+                                        message: row['message']?.toString() ?? name,
+                                        child: Text(
+                                          name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style:
+                                              theme.textTheme.titleSmall?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                            height: 1.3,
                                           ),
-                                          style: const TextStyle(fontSize: 12),
                                         ),
-                                        visualDensity: VisualDensity.compact,
-                                        materialTapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _StatusBadge(status, progress, cs),
+                                    if (mode == 'queued')
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 4),
+                                        child: _TinyBadge(
+                                          label: l10n.translationQueueExecutionModeQueued,
+                                          cs: cs,
+                                        ),
+                                      ),
+                                    if (qp != null && qp is num && qp > 0)
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 4),
+                                        child: _TinyBadge(
+                                          label: '#${qp.toInt()}',
+                                          cs: cs,
+                                        ),
                                       ),
                                   ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${l10n.translationQueueSubmittedBy(ownerShow)} · '
-                                  '${l10n.translationQueueStartedAt(_formatUnixOrDash(l10n, context, startedSec))} · '
-                                  '${l10n.translationQueueCompletedAt(_formatUnixOrDash(l10n, context, completedSec))}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                    height: 1.2,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if ((row['message']?.toString() ?? '')
-                                    .isNotEmpty) ...<Widget>[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    row['message'].toString(),
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                                if (downloadEntries.isNotEmpty) ...<Widget>[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    l10n.translationQueueDownloads,
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Wrap(
-                                    spacing: 4,
-                                    runSpacing: 2,
-                                    children: downloadEntries.map(
-                                      (MapEntry<String, dynamic> e) {
-                                        final String ft = e.key;
-                                        final String url = e.value.toString();
-                                        return OutlinedButton(
-                                          style: OutlinedButton.styleFrom(
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 2,
-                                            ),
-                                            minimumSize: Size.zero,
-                                            tapTargetSize:
-                                                MaterialTapTargetSize.shrinkWrap,
-                                          ),
-                                          onPressed: () => _download(
-                                            taskId,
-                                            ft,
-                                            url,
-                                            name,
-                                          ),
-                                          child: Text(
-                                            _downloadFormatButtonLabel(ft, l10n),
-                                            style: const TextStyle(fontSize: 12),
-                                          ),
-                                        );
-                                      },
-                                    ).toList(),
-                                  ),
-                                ],
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 6),
+                                // ── Line 2: Meta + Actions ──
                                 Row(
                                   children: <Widget>[
-                                    if (_canCancel(status) && inMemory)
-                                      TextButton(
-                                        style: TextButton.styleFrom(
-                                          visualDensity:
-                                              VisualDensity.compact,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                          ),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
+                                    Expanded(
+                                      child: Text(
+                                        '$ownerShow · ${_formatCompactTime(context, startedSec)}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: cs.onSurfaceVariant,
+                                          fontSize: 12,
                                         ),
-                                        onPressed: () => _cancel(taskId),
-                                        child: Text(l10n.translationQueueCancel),
                                       ),
+                                    ),
+                                    // Download icon menu
+                                    if (downloadEntries.isNotEmpty)
+                                      _DownloadMenuButton(
+                                        taskId: taskId,
+                                        name: name,
+                                        entries: downloadEntries,
+                                        onDownload: _download,
+                                        cs: cs,
+                                        l10n: l10n,
+                                      ),
+                                    // Cancel
+                                    if (_canCancel(status) && inMemory)
+                                      IconButton(
+                                        icon: const Icon(Icons.cancel_outlined,
+                                            size: 20),
+                                        tooltip: l10n.translationQueueCancel,
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.all(4),
+                                        constraints: const BoxConstraints(
+                                            minWidth: 28, minHeight: 28),
+                                        onPressed: () => _cancel(taskId),
+                                      ),
+                                    // Edit
                                     if (status == 'completed' &&
                                         row['is_format_conversion'] != true &&
-                                        row['in_memory'] == true)
-                                      TextButton(
-                                        style: TextButton.styleFrom(
-                                          visualDensity:
-                                              VisualDensity.compact,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                          ),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                        ),
+                                        inMemory)
+                                      IconButton(
+                                        icon: const Icon(Icons.edit_outlined,
+                                            size: 20),
+                                        tooltip: l10n.translationQueueEdit,
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.all(4),
+                                        constraints: const BoxConstraints(
+                                            minWidth: 28, minHeight: 28),
                                         onPressed: () {
                                           final String? wf =
                                               row['workflow_type']?.toString();
@@ -712,21 +682,18 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                               '&reedit_file_name=${Uri.encodeComponent(name)}';
                                           context.push(reeditUri);
                                         },
-                                        child: Text(l10n.translationQueueEdit),
                                       ),
-                                    TextButton(
-                                      style: TextButton.styleFrom(
-                                        visualDensity:
-                                            VisualDensity.compact,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                        ),
-                                        minimumSize: Size.zero,
-                                        tapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                      ),
+                                    // Release
+                                    IconButton(
+                                      icon: const Icon(
+                                          Icons.remove_circle_outline,
+                                          size: 20),
+                                      tooltip: l10n.translationQueueRelease,
+                                      visualDensity: VisualDensity.compact,
+                                      padding: const EdgeInsets.all(4),
+                                      constraints: const BoxConstraints(
+                                          minWidth: 28, minHeight: 28),
                                       onPressed: () => _release(taskId),
-                                      child: Text(l10n.translationQueueRelease),
                                     ),
                                   ],
                                 ),
@@ -741,5 +708,157 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
         ),
       ),
     );
+  }
+}
+
+// ─── Compact status badge ────────────────────────────────────────────────────
+
+class _StatusBadge extends StatelessWidget {
+  final String status;
+  final int progress;
+  final ColorScheme cs;
+
+  const _StatusBadge(this.status, this.progress, this.cs);
+
+  Color get _dotColor {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return Colors.green;
+      case 'processing':
+      case 'running':
+        return Colors.orange;
+      case 'queued':
+      case 'pending':
+        return cs.primary;
+      case 'failed':
+      case 'error':
+        return Colors.red;
+      default:
+        return cs.onSurfaceVariant;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: _dotColor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: _dotColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            '$status · $progress%',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: _dotColor,
+              height: 1.15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Ultra-compact badge (e.g. "Q", "#3") ───────────────────────────────────
+
+class _TinyBadge extends StatelessWidget {
+  final String label;
+  final ColorScheme cs;
+
+  const _TinyBadge({required this.label, required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          color: cs.onSurfaceVariant,
+          height: 1.15,
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Download popup menu button ──────────────────────────────────────────────
+
+class _DownloadMenuButton extends StatelessWidget {
+  final String taskId;
+  final String name;
+  final List<MapEntry<String, dynamic>> entries;
+  final Future<void> Function(String, String, String, String) onDownload;
+  final ColorScheme cs;
+  final AppLocalizations l10n;
+
+  const _DownloadMenuButton({
+    required this.taskId,
+    required this.name,
+    required this.entries,
+    required this.onDownload,
+    required this.cs,
+    required this.l10n,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: l10n.translationQueueDownloads,
+      icon: const Icon(Icons.download_outlined, size: 20),
+      padding: const EdgeInsets.all(4),
+      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+      onSelected: (String ft) {
+        final entry = entries.firstWhere(
+          (e) => e.key == ft,
+          orElse: () => MapEntry(ft, ''),
+        );
+        if (entry.value.isNotEmpty) {
+          onDownload(taskId, ft, entry.value.toString(), name);
+        }
+      },
+      itemBuilder: (BuildContext context) {
+        return entries.map((e) {
+          final String ft = e.key;
+          return PopupMenuItem<String>(
+            value: ft,
+            child: Text(
+              _DownloadMenuButton._label(ft, l10n),
+              style: const TextStyle(fontSize: 13),
+            ),
+          );
+        }).toList();
+      },
+    );
+  }
+
+  static String _label(String ft, AppLocalizations l10n) {
+    switch (ft) {
+      case 'md':
+        return l10n.translationQueueDownloadMdEmbedded;
+      case 'md_zip':
+        return l10n.translationQueueDownloadMdZip;
+      default:
+        return ft.toUpperCase();
+    }
   }
 }
