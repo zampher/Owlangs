@@ -4692,24 +4692,28 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       );
     }
 
-    // Check if at least one LLM platform is configured and available (current status only, no test)
-    final ConfigService appConfigService = ConfigService();
-    final Map<String, dynamic>? appConfig =
-        await appConfigService.getAppConfig();
-    final Map<String, dynamic>? secretsConfig =
-        await appConfigService.getSecretsConfig();
-    final Map<String, dynamic>? statusMap =
-        await appConfigService.getAiPlatformStatus();
-    final bool hasUsableLlm =
-        _hasAnyUsableLlmPlatform(appConfig, secretsConfig, statusMap);
-    if (!hasUsableLlm && mounted) {
-      final bool? continueAnyway = await _showNoLlmAvailableDialog(context);
-      if (continueAnyway == null) return;
-      if (continueAnyway == false) {
-        if (mounted) {
-          context.push('${AppRouter.settingsRoute}?tab=1');
+    // Skip LLM availability check for format-only conversion (no LLM needed)
+    if (!copySourceToTargetOnly) {
+      // Check if at least one LLM platform is configured and available
+      final ConfigService appConfigService = ConfigService();
+      final Map<String, dynamic>? appConfig =
+          await appConfigService.getAppConfig();
+      final Map<String, dynamic>? secretsConfig =
+          await appConfigService.getSecretsConfig();
+      final Map<String, dynamic>? statusMap =
+          await appConfigService.getAiPlatformStatus();
+      final bool hasUsableLlm =
+          _hasAnyUsableLlmPlatform(appConfig, secretsConfig, statusMap);
+      if (!hasUsableLlm && mounted) {
+        final bool? continueAnyway =
+            await _showNoLlmAvailableDialog(context);
+        if (continueAnyway == null) return;
+        if (continueAnyway == false) {
+          if (mounted) {
+            context.push('${AppRouter.settingsRoute}?tab=1');
+          }
+          return;
         }
-        return;
       }
     }
 
