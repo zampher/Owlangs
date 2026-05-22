@@ -164,6 +164,36 @@ abstract class AppLocalizations {
   /// **'Show AD placeholders on Home and in Flow (stored in system.json)'**
   String get settingsGeneralShowAdsSubtitle;
 
+  /// No description provided for @settingsGeneralClearStatsButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Statistics'**
+  String get settingsGeneralClearStatsButton;
+
+  /// No description provided for @settingsGeneralClearStatsConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Statistics?'**
+  String get settingsGeneralClearStatsConfirmTitle;
+
+  /// No description provided for @settingsGeneralClearStatsConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This will reset the document and page count displayed on the home page to 0. This action cannot be undone.'**
+  String get settingsGeneralClearStatsConfirmMessage;
+
+  /// No description provided for @settingsGeneralClearStatsConfirmButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get settingsGeneralClearStatsConfirmButton;
+
+  /// No description provided for @settingsGeneralClearStatsSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Statistics cleared successfully.'**
+  String get settingsGeneralClearStatsSuccess;
+
   /// No description provided for @backToHome.
   ///
   /// In en, this message translates to:
@@ -1594,6 +1624,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your registration code has expired. Please re-register to continue Pro benefits.'**
   String get homeSnackDonorExpired;
+
+  /// No description provided for @commonCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get commonCancel;
 
   /// No description provided for @commonOk.
   ///
@@ -5063,7 +5099,7 @@ abstract class AppLocalizations {
   /// No description provided for @loginSubtitleFeatures.
   ///
   /// In en, this message translates to:
-  /// **'File Translation\nFormat Conversion\nURL Fetch'**
+  /// **'Document Translation\nFormat Conversion\nURL Fetch'**
   String get loginSubtitleFeatures;
 
   /// No description provided for @loginSubtitleTagline.
@@ -5155,6 +5191,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error message copied to clipboard'**
   String get loginErrorCopiedMessage;
+
+  /// No description provided for @loginWelcomeBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome back'**
+  String get loginWelcomeBack;
+
+  /// No description provided for @loginFeatureFormats.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF, DOCX, XLSX, HTML, EPUB, MOBI\nand 15+ more formats'**
+  String get loginFeatureFormats;
+
+  /// No description provided for @loginFeatureLayout.
+  ///
+  /// In en, this message translates to:
+  /// **'Layout-preserving translation\nwith high fidelity'**
+  String get loginFeatureLayout;
+
+  /// No description provided for @loginFeaturePlatforms.
+  ///
+  /// In en, this message translates to:
+  /// **'20+ LLM platforms supported\nincluding OpenAI, Claude, Ollama'**
+  String get loginFeaturePlatforms;
+
+  /// No description provided for @loginPasswordRecoveryAdminGuide.
+  ///
+  /// In en, this message translates to:
+  /// **'If you are an administrator, please follow the password recovery process.'**
+  String get loginPasswordRecoveryAdminGuide;
 }
 
 class _AppLocalizationsDelegate

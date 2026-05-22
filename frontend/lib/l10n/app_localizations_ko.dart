@@ -41,6 +41,22 @@ class AppLocalizationsKo extends AppLocalizations {
       '홈 및 플로우에서 광고 자리 표시자 표시 (system.json에 저장됨)';
 
   @override
+  String get settingsGeneralClearStatsButton => '통계 지우기';
+
+  @override
+  String get settingsGeneralClearStatsConfirmTitle => '통계를 지우시겠습니까?';
+
+  @override
+  String get settingsGeneralClearStatsConfirmMessage =>
+      '홈 페이지에 표시된 문서 수와 페이지 수가 0으로 재설정됩니다. 이 작업은 되돌릴 수 없습니다.';
+
+  @override
+  String get settingsGeneralClearStatsConfirmButton => '지우기';
+
+  @override
+  String get settingsGeneralClearStatsSuccess => '통계가 지워졌습니다.';
+
+  @override
   String get backToHome => '홈으로 돌아가기';
 
   @override
@@ -839,6 +855,9 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get homeSnackDonorExpired =>
       '귀하의 등록 코드가 만료되었습니다. Pro 혜택을 계속 이용하려면 다시 등록하세요.';
+
+  @override
+  String get commonCancel => '취소';
 
   @override
   String get commonOk => '확인';
@@ -2778,54 +2797,68 @@ class AppLocalizationsKo extends AppLocalizations {
   String get fetchUrlCancel => '취소';
 
   @override
-  String get loginSubtitleFeatures =>
-      'File Translation\nFormat Conversion\nURL Fetch';
+  String get loginSubtitleFeatures => '파일 번역\n형식 변환\nURL 가져오기';
 
   @override
-  String get loginSubtitleTagline => 'AI Document Processing System';
+  String get loginSubtitleTagline => 'AI 문서 처리 시스템';
 
   @override
-  String get loginUsernameLabel => 'Username';
+  String get loginUsernameLabel => '사용자 이름';
 
   @override
-  String get loginUsernameHint => 'Please enter username';
+  String get loginUsernameHint => '사용자 이름을 입력하세요';
 
   @override
-  String get loginUsernameRequiredError => 'Please enter your username';
+  String get loginUsernameRequiredError => '사용자 이름을 입력하세요';
 
   @override
-  String get loginUsernameMinLengthError =>
-      'Username must be at least 3 characters';
+  String get loginUsernameMinLengthError => '사용자 이름은 최소 3자 이상이어야 합니다';
 
   @override
-  String get loginPasswordLabel => 'Password';
+  String get loginPasswordLabel => '비밀번호';
 
   @override
-  String get loginPasswordHint => 'Please enter password';
+  String get loginPasswordHint => '비밀번호를 입력하세요';
 
   @override
-  String get loginPasswordRequiredError => 'Please enter your password';
+  String get loginPasswordRequiredError => '비밀번호를 입력하세요';
 
   @override
-  String get loginForgotPassword => 'Forgot Password?';
+  String get loginForgotPassword => '비밀번호를 잊으셨나요?';
 
   @override
-  String get loginPasswordRecoveryTitle => 'Password Recovery';
+  String get loginPasswordRecoveryTitle => '비밀번호 복구';
 
   @override
-  String get loginPasswordRecoveryContactAdmin =>
-      'Please contact your administrator to reset your password.';
+  String get loginPasswordRecoveryContactAdmin => '관리자에게 문의하여 비밀번호를 재설정하세요.';
 
   @override
   String get loginPasswordRecoveryAdminHint =>
-      'Administrators can reset passwords through the user management page after logging in.';
+      '관리자는 로그인 후 사용자 관리 페이지에서 비밀번호를 재설정할 수 있습니다.';
 
   @override
-  String get loginAuthMethodDefault => 'Using Default Authentication';
+  String get loginAuthMethodDefault => '기본 인증 사용';
 
   @override
-  String get loginCopyErrorLabel => 'Copy';
+  String get loginCopyErrorLabel => '복사';
 
   @override
-  String get loginErrorCopiedMessage => 'Error message copied to clipboard';
+  String get loginErrorCopiedMessage => '오류 메시지가 클립보드에 복사되었습니다';
+
+  @override
+  String get loginWelcomeBack => '돌아오신 것을 환영합니다';
+
+  @override
+  String get loginFeatureFormats =>
+      'PDF, DOCX, XLSX, HTML, EPUB, MOBI\n및 15개 이상의 형식';
+
+  @override
+  String get loginFeatureLayout => '레이아웃을 보존하는 번역\n높은 충실도';
+
+  @override
+  String get loginFeaturePlatforms =>
+      '20+ LLM 플랫폼 지원\nOpenAI, Claude, Ollama 포함';
+
+  @override
+  String get loginPasswordRecoveryAdminGuide => '관리자라면 비밀번호 복구 절차를 따라주세요.';
 }

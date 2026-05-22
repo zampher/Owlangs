@@ -10,6 +10,11 @@
   "settingsGeneralAutoSaveSubtitle": "진행 중인 작업 자동 저장 (즉시 적용됨)",
   "settingsGeneralShowAdsTitle": "광고 표시",
   "settingsGeneralShowAdsSubtitle": "홈 및 플로우에서 광고 자리 표시자 표시 (system.json에 저장됨)",
+  "settingsGeneralClearStatsButton": "통계 지우기",
+  "settingsGeneralClearStatsConfirmTitle": "통계를 지우시겠습니까?",
+  "settingsGeneralClearStatsConfirmMessage": "홈 페이지에 표시된 문서 수와 페이지 수가 0으로 재설정됩니다. 이 작업은 되돌릴 수 없습니다.",
+  "settingsGeneralClearStatsConfirmButton": "지우기",
+  "settingsGeneralClearStatsSuccess": "통계가 지워졌습니다.",
   "backToHome": "홈으로 돌아가기",
 
   "settingsFontSectionTitle": "글꼴 설정",
@@ -256,6 +261,7 @@
   "homeIntro": "문서를 업로드하고 AI 기반 정확도로 여러 언어로 번역하세요.\n",
   "homeHowItWorks": "작동 방식\n번역: 가져오기 -> 문서 분석 -> 용어집 -> 번역 -> 내보내기\n파일 형식 변환: 가져오기 -> 문서 분석 -> 변환 -> 내보내기\nURL 가져오기: URL 입력 -> 페이지 가져오기 -> 콘텐츠 분석 -> 본문 추출 -> 번역/내보내기",
   "homeSnackDonorExpired": "귀하의 등록 코드가 만료되었습니다. Pro 혜택을 계속 이용하려면 다시 등록하세요.",
+  "commonCancel": "취소",
   "commonOk": "확인",
   "homeAuthErrorTitle": "인증 오류",
   "homeAuthRetryLogin": "로그인 재시도",
@@ -920,5 +926,27 @@
   "workspaceCloseFlowDestroy": "파기 후 닫기",
   "workspaceCloseFlowCancel": "취소",
 
-  "fetchUrlCancel": "취소"
+  "fetchUrlCancel": "취소",
+
+  "loginSubtitleFeatures": "파일 번역\n형식 변환\nURL 가져오기",
+  "loginSubtitleTagline": "AI 문서 처리 시스템",
+  "loginUsernameLabel": "사용자 이름",
+  "loginUsernameHint": "사용자 이름을 입력하세요",
+  "loginUsernameRequiredError": "사용자 이름을 입력하세요",
+  "loginUsernameMinLengthError": "사용자 이름은 최소 3자 이상이어야 합니다",
+  "loginPasswordLabel": "비밀번호",
+  "loginPasswordHint": "비밀번호를 입력하세요",
+  "loginPasswordRequiredError": "비밀번호를 입력하세요",
+  "loginForgotPassword": "비밀번호를 잊으셨나요?",
+  "loginPasswordRecoveryTitle": "비밀번호 복구",
+  "loginPasswordRecoveryContactAdmin": "관리자에게 문의하여 비밀번호를 재설정하세요.",
+  "loginPasswordRecoveryAdminHint": "관리자는 로그인 후 사용자 관리 페이지에서 비밀번호를 재설정할 수 있습니다.",
+  "loginAuthMethodDefault": "기본 인증 사용",
+  "loginCopyErrorLabel": "복사",
+  "loginErrorCopiedMessage": "오류 메시지가 클립보드에 복사되었습니다",
+  "loginWelcomeBack": "돌아오신 것을 환영합니다",
+  "loginFeatureFormats": "PDF, DOCX, XLSX, HTML, EPUB, MOBI\n및 15개 이상의 형식",
+  "loginFeatureLayout": "레이아웃을 보존하는 번역\n높은 충실도",
+  "loginFeaturePlatforms": "20+ LLM 플랫폼 지원\nOpenAI, Claude, Ollama 포함",
+  "loginPasswordRecoveryAdminGuide": "관리자라면 비밀번호 복구 절차를 따라주세요."
 }

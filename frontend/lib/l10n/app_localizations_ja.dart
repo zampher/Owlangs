@@ -40,6 +40,22 @@ class AppLocalizationsJa extends AppLocalizations {
       'ホームとフローで広告プレースホルダーを表示（system.jsonに保存）';
 
   @override
+  String get settingsGeneralClearStatsButton => '統計をクリア';
+
+  @override
+  String get settingsGeneralClearStatsConfirmTitle => '統計をクリアしますか？';
+
+  @override
+  String get settingsGeneralClearStatsConfirmMessage =>
+      'ホームページに表示されているドキュメント数とページ数が0にリセットされます。この操作は元に戻せません。';
+
+  @override
+  String get settingsGeneralClearStatsConfirmButton => 'クリア';
+
+  @override
+  String get settingsGeneralClearStatsSuccess => '統計がクリアされました。';
+
+  @override
   String get backToHome => 'ホームに戻る';
 
   @override
@@ -838,6 +854,9 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get homeSnackDonorExpired =>
       'お客様の登録コードの有効期限が切れています。Pro特典を継続するには、再登録してください。';
+
+  @override
+  String get commonCancel => 'キャンセル';
 
   @override
   String get commonOk => 'OK';
@@ -2774,54 +2793,68 @@ class AppLocalizationsJa extends AppLocalizations {
   String get fetchUrlCancel => 'キャンセル';
 
   @override
-  String get loginSubtitleFeatures =>
-      'File Translation\nFormat Conversion\nURL Fetch';
+  String get loginSubtitleFeatures => 'ファイル翻訳\nフォーマット変換\nURL フェッチ';
 
   @override
-  String get loginSubtitleTagline => 'AI Document Processing System';
+  String get loginSubtitleTagline => 'AI 文書処理システム';
 
   @override
-  String get loginUsernameLabel => 'Username';
+  String get loginUsernameLabel => 'ユーザー名';
 
   @override
-  String get loginUsernameHint => 'Please enter username';
+  String get loginUsernameHint => 'ユーザー名を入力してください';
 
   @override
-  String get loginUsernameRequiredError => 'Please enter your username';
+  String get loginUsernameRequiredError => 'ユーザー名を入力してください';
 
   @override
-  String get loginUsernameMinLengthError =>
-      'Username must be at least 3 characters';
+  String get loginUsernameMinLengthError => 'ユーザー名は3文字以上必要です';
 
   @override
-  String get loginPasswordLabel => 'Password';
+  String get loginPasswordLabel => 'パスワード';
 
   @override
-  String get loginPasswordHint => 'Please enter password';
+  String get loginPasswordHint => 'パスワードを入力してください';
 
   @override
-  String get loginPasswordRequiredError => 'Please enter your password';
+  String get loginPasswordRequiredError => 'パスワードを入力してください';
 
   @override
-  String get loginForgotPassword => 'Forgot Password?';
+  String get loginForgotPassword => 'パスワードをお忘れですか？';
 
   @override
-  String get loginPasswordRecoveryTitle => 'Password Recovery';
+  String get loginPasswordRecoveryTitle => 'パスワード復旧';
 
   @override
-  String get loginPasswordRecoveryContactAdmin =>
-      'Please contact your administrator to reset your password.';
+  String get loginPasswordRecoveryContactAdmin => '管理者に連絡してパスワードをリセットしてください。';
 
   @override
   String get loginPasswordRecoveryAdminHint =>
-      'Administrators can reset passwords through the user management page after logging in.';
+      '管理者はログイン後、ユーザー管理ページでパスワードをリセットできます。';
 
   @override
-  String get loginAuthMethodDefault => 'Using Default Authentication';
+  String get loginAuthMethodDefault => 'デフォルト認証を使用';
 
   @override
-  String get loginCopyErrorLabel => 'Copy';
+  String get loginCopyErrorLabel => 'コピー';
 
   @override
-  String get loginErrorCopiedMessage => 'Error message copied to clipboard';
+  String get loginErrorCopiedMessage => 'エラーメッセージをクリップボードにコピーしました';
+
+  @override
+  String get loginWelcomeBack => 'おかえりなさい';
+
+  @override
+  String get loginFeatureFormats =>
+      'PDF、DOCX、XLSX、HTML、EPUB、MOBI\nおよび15以上のフォーマット';
+
+  @override
+  String get loginFeatureLayout => 'レイアウトを保持した翻訳\n高い忠実度';
+
+  @override
+  String get loginFeaturePlatforms =>
+      '20+ LLM プラットフォームに対応\nOpenAI、Claude、Ollama を含む';
+
+  @override
+  String get loginPasswordRecoveryAdminGuide => '管理者の方は、パスワード復旧手順に従ってください。';
 }

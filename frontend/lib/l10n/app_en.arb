@@ -11,6 +11,11 @@
   "settingsGeneralAutoSaveSubtitle": "Automatically save work in progress (applied immediately)",
   "settingsGeneralShowAdsTitle": "Show ADs",
   "settingsGeneralShowAdsSubtitle": "Show AD placeholders on Home and in Flow (stored in system.json)",
+  "settingsGeneralClearStatsButton": "Clear Statistics",
+  "settingsGeneralClearStatsConfirmTitle": "Clear Statistics?",
+  "settingsGeneralClearStatsConfirmMessage": "This will reset the document and page count displayed on the home page to 0. This action cannot be undone.",
+  "settingsGeneralClearStatsConfirmButton": "Clear",
+  "settingsGeneralClearStatsSuccess": "Statistics cleared successfully.",
   "backToHome": "Back to Home",
 
   "settingsFontSectionTitle": "Font Settings",
@@ -272,6 +277,7 @@
   "homeHowItWorks": "How it works\nTranslation: Import -> Parse Document -> Glossary -> Translate -> Export\nFile format conversion: Import -> Parse Document -> Convert -> Export\nURL Fetch: Enter URL -> Fetch Page -> Parse Content -> Extract Text -> Translate/Export",
 
   "homeSnackDonorExpired": "Your registration code has expired. Please re-register to continue Pro benefits.",
+  "commonCancel": "Cancel",
   "commonOk": "OK",
   "homeAuthErrorTitle": "Authentication Error",
   "homeAuthRetryLogin": "Retry Login",
@@ -971,7 +977,7 @@
 
   "fetchUrlCancel": "Cancel",
 
-  "loginSubtitleFeatures": "File Translation\nFormat Conversion\nURL Fetch",
+  "loginSubtitleFeatures": "Document Translation\nFormat Conversion\nURL Fetch",
   "loginSubtitleTagline": "AI Document Processing System",
   "loginUsernameLabel": "Username",
   "loginUsernameHint": "Please enter username",
@@ -986,5 +992,10 @@
   "loginPasswordRecoveryAdminHint": "Administrators can reset passwords through the user management page after logging in.",
   "loginAuthMethodDefault": "Using Default Authentication",
   "loginCopyErrorLabel": "Copy",
-  "loginErrorCopiedMessage": "Error message copied to clipboard"
+  "loginErrorCopiedMessage": "Error message copied to clipboard",
+  "loginWelcomeBack": "Welcome back",
+  "loginFeatureFormats": "PDF, DOCX, XLSX, HTML, EPUB, MOBI\nand 15+ more formats",
+  "loginFeatureLayout": "Layout-preserving translation\nwith high fidelity",
+  "loginFeaturePlatforms": "20+ LLM platforms supported\nincluding OpenAI, Claude, Ollama",
+  "loginPasswordRecoveryAdminGuide": "If you are an administrator, please follow the password recovery process."
 }

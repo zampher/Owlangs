@@ -10,6 +10,11 @@
   "settingsGeneralAutoSaveSubtitle": "自动保存进行中的工作（立即应用）",
   "settingsGeneralShowAdsTitle": "显示广告",
   "settingsGeneralShowAdsSubtitle": "在主页和流程中显示广告占位符（存储在 system.json 中）",
+  "settingsGeneralClearStatsButton": "清除统计数据",
+  "settingsGeneralClearStatsConfirmTitle": "清除统计数据？",
+  "settingsGeneralClearStatsConfirmMessage": "这将把主页上显示的文档数和页数重置为 0。此操作不可撤销。",
+  "settingsGeneralClearStatsConfirmButton": "清除",
+  "settingsGeneralClearStatsSuccess": "统计数据已清除。",
   "backToHome": "回到主页",
 
   "settingsFontSectionTitle": "字体设置",
@@ -256,6 +261,7 @@
   "homeIntro": "上传文档并使用 AI 驱动的准确性将其翻译成多种语言。\n",
   "homeHowItWorks": "工作原理\n翻译：导入 -> 解析文档 -> 术语表 -> 翻译 -> 导出\n文件格式转换：导入 -> 解析文档 -> 转换 -> 导出\n网页抓取：输入网址 -> 抓取网页 -> 解析内容 -> 提取正文 -> 翻译/导出",
   "homeSnackDonorExpired": "您的注册码已过期。请重新注册以继续享受 Pro 版权益。",
+  "commonCancel": "取消",
   "commonOk": "确定",
   "homeAuthErrorTitle": "认证错误",
   "homeAuthRetryLogin": "重试登录",
@@ -922,7 +928,7 @@
 
   "fetchUrlCancel": "取消",
 
-  "loginSubtitleFeatures": "文件翻译\n格式转换\n网址抓取",
+  "loginSubtitleFeatures": "文档翻译\n格式转换\n网址抓取",
   "loginSubtitleTagline": "AI 文档处理系统",
   "loginUsernameLabel": "用户名",
   "loginUsernameHint": "请输入用户名",
@@ -937,5 +943,10 @@
   "loginPasswordRecoveryAdminHint": "管理员登录后可在用户管理页面重置密码。",
   "loginAuthMethodDefault": "使用默认认证方式",
   "loginCopyErrorLabel": "复制",
-  "loginErrorCopiedMessage": "错误信息已复制到剪贴板"
+  "loginErrorCopiedMessage": "错误信息已复制到剪贴板",
+  "loginWelcomeBack": "欢迎回来",
+  "loginFeatureFormats": "PDF、DOCX、XLSX、HTML、EPUB、MOBI\n及 15 种以上格式",
+  "loginFeatureLayout": "高保真排版翻译\n保留原文格式",
+  "loginFeaturePlatforms": "支持 20+ LLM 平台\n包括 OpenAI、Claude、Ollama",
+  "loginPasswordRecoveryAdminGuide": "如果您是管理员，请按照密码恢复流程进行处理。"
 }

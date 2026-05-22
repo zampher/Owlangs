@@ -43,6 +43,23 @@ class AppLocalizationsEs extends AppLocalizations {
       'Mostrar marcadores de posición de anuncios en Inicio y en Flujo (almacenado en system.json)';
 
   @override
+  String get settingsGeneralClearStatsButton => 'Limpiar Estadísticas';
+
+  @override
+  String get settingsGeneralClearStatsConfirmTitle => '¿Limpiar Estadísticas?';
+
+  @override
+  String get settingsGeneralClearStatsConfirmMessage =>
+      'Esto restablecerá a 0 el recuento de documentos y páginas mostrado en la página de inicio. Esta acción no se puede deshacer.';
+
+  @override
+  String get settingsGeneralClearStatsConfirmButton => 'Limpiar';
+
+  @override
+  String get settingsGeneralClearStatsSuccess =>
+      'Estadísticas limpiadas correctamente.';
+
+  @override
   String get backToHome => 'Volver a Inicio';
 
   @override
@@ -889,6 +906,9 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get homeSnackDonorExpired =>
       'Su código de registro ha expirado. Por favor, regístrese nuevamente para continuar con los beneficios Pro.';
+
+  @override
+  String get commonCancel => 'Cancelar';
 
   @override
   String get commonOk => 'Aceptar';
@@ -2918,53 +2938,74 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get loginSubtitleFeatures =>
-      'File Translation\nFormat Conversion\nURL Fetch';
+      'Traducción de archivos\nConversión de formato\nExtracción de URL';
 
   @override
-  String get loginSubtitleTagline => 'AI Document Processing System';
+  String get loginSubtitleTagline =>
+      'Sistema de procesamiento de documentos con IA';
 
   @override
-  String get loginUsernameLabel => 'Username';
+  String get loginUsernameLabel => 'Nombre de usuario';
 
   @override
-  String get loginUsernameHint => 'Please enter username';
+  String get loginUsernameHint => 'Ingrese su nombre de usuario';
 
   @override
-  String get loginUsernameRequiredError => 'Please enter your username';
+  String get loginUsernameRequiredError => 'Ingrese su nombre de usuario';
 
   @override
   String get loginUsernameMinLengthError =>
-      'Username must be at least 3 characters';
+      'El nombre de usuario debe tener al menos 3 caracteres';
 
   @override
-  String get loginPasswordLabel => 'Password';
+  String get loginPasswordLabel => 'Contraseña';
 
   @override
-  String get loginPasswordHint => 'Please enter password';
+  String get loginPasswordHint => 'Ingrese su contraseña';
 
   @override
-  String get loginPasswordRequiredError => 'Please enter your password';
+  String get loginPasswordRequiredError => 'Ingrese su contraseña';
 
   @override
-  String get loginForgotPassword => 'Forgot Password?';
+  String get loginForgotPassword => '¿Olvidó su contraseña?';
 
   @override
-  String get loginPasswordRecoveryTitle => 'Password Recovery';
+  String get loginPasswordRecoveryTitle => 'Recuperación de contraseña';
 
   @override
   String get loginPasswordRecoveryContactAdmin =>
-      'Please contact your administrator to reset your password.';
+      'Comuníquese con su administrador para restablecer la contraseña.';
 
   @override
   String get loginPasswordRecoveryAdminHint =>
-      'Administrators can reset passwords through the user management page after logging in.';
+      'Los administradores pueden restablecer contraseñas desde la página de gestión de usuarios después de iniciar sesión.';
 
   @override
-  String get loginAuthMethodDefault => 'Using Default Authentication';
+  String get loginAuthMethodDefault => 'Usando autenticación predeterminada';
 
   @override
-  String get loginCopyErrorLabel => 'Copy';
+  String get loginCopyErrorLabel => 'Copiar';
 
   @override
-  String get loginErrorCopiedMessage => 'Error message copied to clipboard';
+  String get loginErrorCopiedMessage =>
+      'Mensaje de error copiado al portapapeles';
+
+  @override
+  String get loginWelcomeBack => 'Bienvenido de nuevo';
+
+  @override
+  String get loginFeatureFormats =>
+      'PDF, DOCX, XLSX, HTML, EPUB, MOBI\ny más de 15 formatos';
+
+  @override
+  String get loginFeatureLayout =>
+      'Traducción con preservación del diseño\nde alta fidelidad';
+
+  @override
+  String get loginFeaturePlatforms =>
+      'Más de 20 plataformas LLM compatibles\nincluyendo OpenAI, Claude, Ollama';
+
+  @override
+  String get loginPasswordRecoveryAdminGuide =>
+      'Si es administrador, siga el procedimiento de recuperación de contraseña.';
 }

@@ -145,7 +145,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 // Left: Brand Panel
                 Expanded(
                   flex: 35,
-                  child: _BrandPanel(cs: cs),
+                  child: _BrandPanel(cs: cs, l10n: l10n),
                 ),
                 // Right: Login Form Panel
                 Expanded(
@@ -168,7 +168,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             return SingleChildScrollView(
               child: Column(
                 children: <Widget>[
-                  _BrandPanel(cs: cs, compact: true),
+                  _BrandPanel(cs: cs, compact: true, l10n: l10n),
                   Padding(
                     padding: const EdgeInsets.all(24),
                     child: _LoginFormPanel(
@@ -197,8 +197,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 class _BrandPanel extends StatelessWidget {
   final ColorScheme cs;
   final bool compact;
+  final AppLocalizations l10n;
 
-  const _BrandPanel({required this.cs, this.compact = false});
+  const _BrandPanel({
+    required this.cs,
+    this.compact = false,
+    required this.l10n,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -224,11 +229,11 @@ class _BrandPanel extends StatelessWidget {
               // Logo
               Image.asset(
                 'images/logo_96.png',
-                width: compact ? 56 : 72,
-                height: compact ? 56 : 72,
+                width: compact ? 72 : 100,
+                height: compact ? 72 : 100,
                 errorBuilder: (_, __, ___) => Icon(
                   Icons.language,
-                  size: compact ? 56 : 72,
+                  size: compact ? 72 : 100,
                   color: Colors.white,
                 ),
               ),
@@ -248,7 +253,7 @@ class _BrandPanel extends StatelessWidget {
 
               // Tagline
               Text(
-                AppLocalizations.of(context)!.loginSubtitleFeatures,
+                l10n.loginSubtitleFeatures,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: compact ? 14 : 16,
@@ -272,19 +277,19 @@ class _BrandPanel extends StatelessWidget {
               // Feature points
               _FeatureItem(
                 icon: Icons.description_outlined,
-                text: 'PDF, DOCX, XLSX, HTML, EPUB, MOBI\nand 15+ more formats',
+                text: l10n.loginFeatureFormats,
                 compact: compact,
               ),
               SizedBox(height: compact ? 16 : 20),
               _FeatureItem(
                 icon: Icons.design_services_outlined,
-                text: 'Layout-preserving translation\nwith high fidelity',
+                text: l10n.loginFeatureLayout,
                 compact: compact,
               ),
               SizedBox(height: compact ? 16 : 20),
               _FeatureItem(
                 icon: Icons.smart_toy_outlined,
-                text: '20+ LLM platforms supported\nincluding OpenAI, Claude, Ollama',
+                text: l10n.loginFeaturePlatforms,
                 compact: compact,
               ),
             ],
@@ -309,7 +314,6 @@ class _FeatureItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         Icon(icon, color: Colors.white.withValues(alpha: 0.9), size: compact ? 20 : 24),
         const SizedBox(width: 14),
@@ -367,7 +371,7 @@ class _LoginFormPanel extends StatelessWidget {
             children: <Widget>[
               // Title
               Text(
-                'Welcome back',
+                l10n.loginWelcomeBack,
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -531,6 +535,14 @@ class _LoginFormPanel extends StatelessWidget {
                                   const SizedBox(height: 16),
                                   Text(
                                     l10n.loginPasswordRecoveryAdminHint,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    l10n.loginPasswordRecoveryAdminGuide,
                                     style: TextStyle(
                                       fontSize: 13,
                                       color: cs.onSurfaceVariant,

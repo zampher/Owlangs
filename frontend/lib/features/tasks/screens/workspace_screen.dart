@@ -1406,8 +1406,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     int maxLabelLines = 1,
     double? height,
   }) {
-    final double boxHeight =
-        height ?? (maxLabelLines > 1 ? 84 : 70);
+    // Use uniform height for all action buttons regardless of label line count
+    final double boxHeight = height ?? 84;
     return Card(
       elevation: highlight ? 4 : 2,
       shape: RoundedRectangleBorder(

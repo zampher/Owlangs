@@ -40,6 +40,22 @@ class AppLocalizationsZh extends AppLocalizations {
       '在主页和流程中显示广告占位符（存储在 system.json 中）';
 
   @override
+  String get settingsGeneralClearStatsButton => '清除统计数据';
+
+  @override
+  String get settingsGeneralClearStatsConfirmTitle => '清除统计数据？';
+
+  @override
+  String get settingsGeneralClearStatsConfirmMessage =>
+      '这将把主页上显示的文档数和页数重置为 0。此操作不可撤销。';
+
+  @override
+  String get settingsGeneralClearStatsConfirmButton => '清除';
+
+  @override
+  String get settingsGeneralClearStatsSuccess => '统计数据已清除。';
+
+  @override
   String get backToHome => '回到主页';
 
   @override
@@ -830,6 +846,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get homeSnackDonorExpired => '您的注册码已过期。请重新注册以继续享受 Pro 版权益。';
+
+  @override
+  String get commonCancel => '取消';
 
   @override
   String get commonOk => '确定';
@@ -2755,7 +2774,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fetchUrlCancel => '取消';
 
   @override
-  String get loginSubtitleFeatures => '文件翻译\n格式转换\n网址抓取';
+  String get loginSubtitleFeatures => '文档翻译\n格式转换\n网址抓取';
 
   @override
   String get loginSubtitleTagline => 'AI 文档处理系统';
@@ -2801,4 +2820,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get loginErrorCopiedMessage => '错误信息已复制到剪贴板';
+
+  @override
+  String get loginWelcomeBack => '欢迎回来';
+
+  @override
+  String get loginFeatureFormats => 'PDF、DOCX、XLSX、HTML、EPUB、MOBI\n及 15 种以上格式';
+
+  @override
+  String get loginFeatureLayout => '高保真排版翻译\n保留原文格式';
+
+  @override
+  String get loginFeaturePlatforms => '支持 20+ LLM 平台\n包括 OpenAI、Claude、Ollama';
+
+  @override
+  String get loginPasswordRecoveryAdminGuide => '如果您是管理员，请按照密码恢复流程进行处理。';
 }

@@ -43,6 +43,23 @@ class AppLocalizationsEn extends AppLocalizations {
       'Show AD placeholders on Home and in Flow (stored in system.json)';
 
   @override
+  String get settingsGeneralClearStatsButton => 'Clear Statistics';
+
+  @override
+  String get settingsGeneralClearStatsConfirmTitle => 'Clear Statistics?';
+
+  @override
+  String get settingsGeneralClearStatsConfirmMessage =>
+      'This will reset the document and page count displayed on the home page to 0. This action cannot be undone.';
+
+  @override
+  String get settingsGeneralClearStatsConfirmButton => 'Clear';
+
+  @override
+  String get settingsGeneralClearStatsSuccess =>
+      'Statistics cleared successfully.';
+
+  @override
   String get backToHome => 'Back to Home';
 
   @override
@@ -868,6 +885,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get homeSnackDonorExpired =>
       'Your registration code has expired. Please re-register to continue Pro benefits.';
+
+  @override
+  String get commonCancel => 'Cancel';
 
   @override
   String get commonOk => 'OK';
@@ -2872,7 +2892,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get loginSubtitleFeatures =>
-      'File Translation\nFormat Conversion\nURL Fetch';
+      'Document Translation\nFormat Conversion\nURL Fetch';
 
   @override
   String get loginSubtitleTagline => 'AI Document Processing System';
@@ -2921,4 +2941,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get loginErrorCopiedMessage => 'Error message copied to clipboard';
+
+  @override
+  String get loginWelcomeBack => 'Welcome back';
+
+  @override
+  String get loginFeatureFormats =>
+      'PDF, DOCX, XLSX, HTML, EPUB, MOBI\nand 15+ more formats';
+
+  @override
+  String get loginFeatureLayout =>
+      'Layout-preserving translation\nwith high fidelity';
+
+  @override
+  String get loginFeaturePlatforms =>
+      '20+ LLM platforms supported\nincluding OpenAI, Claude, Ollama';
+
+  @override
+  String get loginPasswordRecoveryAdminGuide =>
+      'If you are an administrator, please follow the password recovery process.';
 }

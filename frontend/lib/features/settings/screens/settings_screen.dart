@@ -5,6 +5,8 @@ import '../../../app/app_config.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/providers/settings_provider.dart';
 import '../../../shared/services/config_service.dart';
+import '../../../shared/services/translation_stats_service.dart';
+import '../../home/widgets/translation_stats_widget.dart';
 import 'ai_platform_settings.dart';
 import 'parsing_engine_settings.dart';
 import 'glossary_settings.dart';
@@ -234,11 +236,101 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
             ),
           ),
           const SizedBox(height: 16),
+          // Statistics management
+          _buildStatsManagementSection(),
+          const SizedBox(height: 16),
           // Server Configuration (Web only)
           if (kIsWeb) _buildServerConfigSection(),
         ],
       ),
     );
+  }
+
+  Widget _buildStatsManagementSection() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(
+                Icons.analytics_outlined,
+                color: colorScheme.primary,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                l10n.translationStatsTitle,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.delete_sweep, size: 18),
+            label: Text(l10n.settingsGeneralClearStatsButton),
+            onPressed: () => _confirmClearStats(),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: colorScheme.error,
+              side: BorderSide(color: colorScheme.error.withOpacity(0.5)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmClearStats() async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.settingsGeneralClearStatsConfirmTitle),
+        content: Text(l10n.settingsGeneralClearStatsConfirmMessage),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l10n.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: Text(l10n.settingsGeneralClearStatsConfirmButton),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final service = TranslationStatsService();
+      await service.resetStats();
+      service.clearCache();
+      // Invalidate the provider so the home page stats widget refreshes
+      ref.invalidate(translationStatsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l10n.settingsGeneralClearStatsSuccess),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildServerConfigSection() {

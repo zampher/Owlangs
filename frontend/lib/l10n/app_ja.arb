@@ -10,6 +10,11 @@
   "settingsGeneralAutoSaveSubtitle": "作業中の内容を自動保存する（即時適用）",
   "settingsGeneralShowAdsTitle": "広告を表示",
   "settingsGeneralShowAdsSubtitle": "ホームとフローで広告プレースホルダーを表示（system.jsonに保存）",
+  "settingsGeneralClearStatsButton": "統計をクリア",
+  "settingsGeneralClearStatsConfirmTitle": "統計をクリアしますか？",
+  "settingsGeneralClearStatsConfirmMessage": "ホームページに表示されているドキュメント数とページ数が0にリセットされます。この操作は元に戻せません。",
+  "settingsGeneralClearStatsConfirmButton": "クリア",
+  "settingsGeneralClearStatsSuccess": "統計がクリアされました。",
   "backToHome": "ホームに戻る",
 
   "settingsFontSectionTitle": "フォント設定",
@@ -256,6 +261,7 @@
   "homeIntro": "AIを活用した精度でドキュメントをアップロードし、複数の言語に翻訳します。\n",
   "homeHowItWorks": "仕組み\n翻訳: インポート -> ドキュメント解析 -> 用語集 -> 翻訳 -> エクスポート\nファイル形式変換: インポート -> ドキュメント解析 -> 変換 -> エクスポート\nURL取得: URL入力 -> ページ取得 -> コンテンツ解析 -> 本文抽出 -> 翻訳/エクスポート",
   "homeSnackDonorExpired": "お客様の登録コードの有効期限が切れています。Pro特典を継続するには、再登録してください。",
+  "commonCancel": "キャンセル",
   "commonOk": "OK",
   "homeAuthErrorTitle": "認証エラー",
   "homeAuthRetryLogin": "ログインを再試行",
@@ -920,5 +926,27 @@
   "workspaceCloseFlowDestroy": "破棄して閉じる",
   "workspaceCloseFlowCancel": "キャンセル",
 
-  "fetchUrlCancel": "キャンセル"
+  "fetchUrlCancel": "キャンセル",
+
+  "loginSubtitleFeatures": "ファイル翻訳\nフォーマット変換\nURL フェッチ",
+  "loginSubtitleTagline": "AI 文書処理システム",
+  "loginUsernameLabel": "ユーザー名",
+  "loginUsernameHint": "ユーザー名を入力してください",
+  "loginUsernameRequiredError": "ユーザー名を入力してください",
+  "loginUsernameMinLengthError": "ユーザー名は3文字以上必要です",
+  "loginPasswordLabel": "パスワード",
+  "loginPasswordHint": "パスワードを入力してください",
+  "loginPasswordRequiredError": "パスワードを入力してください",
+  "loginForgotPassword": "パスワードをお忘れですか？",
+  "loginPasswordRecoveryTitle": "パスワード復旧",
+  "loginPasswordRecoveryContactAdmin": "管理者に連絡してパスワードをリセットしてください。",
+  "loginPasswordRecoveryAdminHint": "管理者はログイン後、ユーザー管理ページでパスワードをリセットできます。",
+  "loginAuthMethodDefault": "デフォルト認証を使用",
+  "loginCopyErrorLabel": "コピー",
+  "loginErrorCopiedMessage": "エラーメッセージをクリップボードにコピーしました",
+  "loginWelcomeBack": "おかえりなさい",
+  "loginFeatureFormats": "PDF、DOCX、XLSX、HTML、EPUB、MOBI\nおよび15以上のフォーマット",
+  "loginFeatureLayout": "レイアウトを保持した翻訳\n高い忠実度",
+  "loginFeaturePlatforms": "20+ LLM プラットフォームに対応\nOpenAI、Claude、Ollama を含む",
+  "loginPasswordRecoveryAdminGuide": "管理者の方は、パスワード復旧手順に従ってください。"
 }
