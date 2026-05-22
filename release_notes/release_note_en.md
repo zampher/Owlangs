@@ -1,5 +1,23 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.3.3.0
+
+### New Features
+
+1. **Portable edition**: A new no-install portable version is now available — just download, extract, and run.
+
+### Optimizations
+
+1. **Fetch URL cancellation**: In-progress URL fetch tasks can now be cancelled or interrupted.
+2. **UI Look & Feel refresh**: Refined the UI layout and visual styling for a cleaner, more modern look.
+
+### Bug Fixes
+
+1. **Image extraction in Fetch URL**: Fixed an issue where images from fetched Wechat web pages were not being extracted correctly.
+2. **Missing translated output after Fetch URL**: Fixed an issue where translated content could not be exported correctly after a URL fetch → translation workflow.
+
+---
+
 ## Owlangs 1.3.2.0
 
 ### New Features
