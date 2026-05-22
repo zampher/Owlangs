@@ -40,8 +40,8 @@
   "translationToolbarDecreaseFontSize": "Decrease font size",
   "translationToolbarIncreaseFontSize": "Increase font size",
 
-  "translationToolbarMergedView": "Merged Paragraph View",
-  "translationToolbarSegmentView": "Segment View",
+  "translationToolbarMergedView": "Clean Mode",
+  "translationToolbarSegmentView": "Labeled Mode",
 
   "translationToolbarUpload": "Upload",
   "translationToolbarUploading": "Uploading...",

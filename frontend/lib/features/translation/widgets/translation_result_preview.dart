@@ -4215,7 +4215,8 @@ class _TranslationResultPreviewState
   }
 
   /// Compute merged paragraphs for the merged preview mode.
-  /// Groups segments by chunk_id and joins texts within each group.
+  /// Shows each segment as its own paragraph, without labels/numbers
+  /// (no chunk merging — each segment is independent).
   void _computeMergedParagraphs() {
     if (_sourceParagraphs.isEmpty && _targetParagraphs.isEmpty) {
       _mergedSourceParagraphs = <String>[];
@@ -4223,59 +4224,9 @@ class _TranslationResultPreviewState
       return;
     }
 
-    if (_segmentChunkIds.isEmpty) {
-      // No chunk_id data available (old tasks, non-deep-split formats).
-      // Show each segment as its own paragraph (no badges = clean display).
-      _mergedSourceParagraphs = List<String>.from(_sourceParagraphs);
-      _mergedTargetParagraphs = List<String>.from(_targetParagraphs);
-      return;
-    }
-
-    // Group segments by chunk_id, preserving chunk order
-    final Map<int, List<String>> chunkSourceParts = <int, List<String>>{};
-    final Map<int, List<String>> chunkTargetParts = <int, List<String>>{};
-    final List<int> chunkOrder = <int>[];
-
-    for (int i = 0; i < _sourceParagraphs.length; i++) {
-      // Skip excluded segments
-      if (_excludedSegments[i] == true) continue;
-
-      final int? chunkId = _segmentChunkIds[i];
-      if (chunkId == null || chunkId < 0) {
-        // Segment not in any chunk: treat as its own paragraph
-        final int pseudoId = -(i + 1); // negative to avoid collision
-        chunkOrder.add(pseudoId);
-        chunkSourceParts[pseudoId] = <String>[
-          i < _sourceParagraphs.length ? _sourceParagraphs[i] : ''
-        ];
-        chunkTargetParts[pseudoId] = <String>[
-          i < _targetParagraphs.length ? _targetParagraphs[i] : ''
-        ];
-        continue;
-      }
-
-      chunkSourceParts.putIfAbsent(chunkId, () {
-        chunkOrder.add(chunkId);
-        return <String>[];
-      });
-      chunkTargetParts.putIfAbsent(chunkId, () => <String>[]);
-
-      if (i < _sourceParagraphs.length) {
-        final text = _sourceParagraphs[i];
-        if (text.isNotEmpty) chunkSourceParts[chunkId]!.add(text);
-      }
-      if (i < _targetParagraphs.length) {
-        final text = _targetParagraphs[i];
-        if (text.isNotEmpty) chunkTargetParts[chunkId]!.add(text);
-      }
-    }
-
-    _mergedSourceParagraphs = chunkOrder.map(
-      (id) => (chunkSourceParts[id] ?? <String>[]).join('\n\n'),
-    ).toList();
-    _mergedTargetParagraphs = chunkOrder.map(
-      (id) => (chunkTargetParts[id] ?? <String>[]).join('\n\n'),
-    ).toList();
+    // Show each segment as its own paragraph (no badges = clean display).
+    _mergedSourceParagraphs = List<String>.from(_sourceParagraphs);
+    _mergedTargetParagraphs = List<String>.from(_targetParagraphs);
   }
 
   /// Build unified comparison panel with source and target side by side

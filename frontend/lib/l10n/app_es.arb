@@ -37,8 +37,8 @@
   "translationToolbarDecreaseFontSize": "Reducir tamaño de fuente",
   "translationToolbarIncreaseFontSize": "Aumentar tamaño de fuente",
 
-  "translationToolbarMergedView": "Vista de párrafos",
-  "translationToolbarSegmentView": "Vista de segmentos",
+  "translationToolbarMergedView": "Modo limpio",
+  "translationToolbarSegmentView": "Modo etiquetado",
   "translationToolbarUpload": "Subir",
   "translationToolbarUploading": "Subiendo...",
   "translationToolbarFileUploaded": "Archivo Subido",

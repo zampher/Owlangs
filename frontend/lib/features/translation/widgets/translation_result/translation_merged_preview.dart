@@ -4,11 +4,11 @@
 import 'package:flutter/material.dart';
 import '../../../../shared/widgets/markdown_text_with_images.dart';
 
-/// Merged paragraph preview panel showing source/target text side by side
+/// Clean-mode preview panel showing source/target text side by side
 /// without segment labels/numbers.
 ///
-/// Each paragraph pair represents one original paragraph (for deep-split formats)
-/// or one segment (for non-deep-split formats, displayed without badges).
+/// Each paragraph pair represents one individual segment, displayed
+/// without badges or action buttons — a clean reading experience.
 class TranslationMergedPreviewPanel extends StatelessWidget {
   const TranslationMergedPreviewPanel({
     required this.sourceParagraphs,

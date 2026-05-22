@@ -116,10 +116,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationToolbarIncreaseFontSize => '增大字体';
 
   @override
-  String get translationToolbarMergedView => '合并段落视图';
+  String get translationToolbarMergedView => '干净模式';
 
   @override
-  String get translationToolbarSegmentView => '片段视图';
+  String get translationToolbarSegmentView => '标签模式';
 
   @override
   String get translationToolbarUpload => '上传';

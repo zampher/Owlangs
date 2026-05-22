@@ -38,8 +38,8 @@
   "translationToolbarDecreaseFontSize": "缩小字体",
   "translationToolbarIncreaseFontSize": "增大字体",
 
-  "translationToolbarMergedView": "合并段落视图",
-  "translationToolbarSegmentView": "片段视图",
+  "translationToolbarMergedView": "干净模式",
+  "translationToolbarSegmentView": "标签模式",
   "translationToolbarUpload": "上传",
   "translationToolbarUploading": "上传中...",
   "translationToolbarFileUploaded": "文件已上传",
