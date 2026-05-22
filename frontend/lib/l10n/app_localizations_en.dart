@@ -104,6 +104,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationToolbarIncreaseFontSize => 'Increase font size';
 
   @override
+  String get translationToolbarMergedView => 'Merged Paragraph View';
+
+  @override
+  String get translationToolbarSegmentView => 'Segment View';
+
+  @override
   String get translationToolbarUpload => 'Upload';
 
   @override

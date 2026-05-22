@@ -32,6 +32,9 @@
 
   "translationToolbarDecreaseFontSize": "글꼴 크기 줄이기",
   "translationToolbarIncreaseFontSize": "글꼴 크기 늘리기",
+
+  "translationToolbarMergedView": "병합 단락 보기",
+  "translationToolbarSegmentView": "세그먼트 보기",
   "translationToolbarUpload": "업로드",
   "translationToolbarUploading": "업로드 중...",
   "translationToolbarFileUploaded": "파일 업로드됨",

@@ -21,7 +21,9 @@ import '../services/translation_content_parser.dart';
 import '../services/translation_segments_service.dart';
 import '../mixins/segment_height_mixin.dart';
 import '../widgets/translation_result/translation_result_toolbar.dart';
+import '../widgets/translation_result/translation_merged_preview.dart';
 import '../../../../shared/widgets/segment_search_box.dart';
+import '../../../../shared/providers/settings_provider.dart';
 import '../widgets/translation_result/translation_comparison_panel.dart';
 import '../providers/preview_tabs_provider.dart';
 import '../providers/translation_refresh_provider.dart';
@@ -171,6 +173,13 @@ class _TranslationResultPreviewState
 
   List<String> _sourceParagraphs = <String>[];
   List<String> _targetParagraphs = <String>[];
+
+  // Merged paragraph preview state
+  List<String> _mergedSourceParagraphs = <String>[];
+  List<String> _mergedTargetParagraphs = <String>[];
+  final Map<int, int> _segmentChunkIds = <int, int>{};
+  bool _isMergedView = false;
+
   bool _isLoading = true;
   String? _loadingError;
 
@@ -1612,6 +1621,12 @@ class _TranslationResultPreviewState
             originalSourceSegments = firstPageList.map((e) {
               if (e is String) return e;
               if (e is Map) {
+                // Extract chunk_id for merged paragraph preview
+                final segIndex = e['segment_index'] as int?;
+                final chunkId = e['chunk_id'] as int?;
+                if (segIndex != null && chunkId != null && chunkId >= 0) {
+                  _segmentChunkIds[segIndex] = chunkId;
+                }
                 // CRITICAL: For MD files, check both 'text' and 'source_text' fields
                 // 'text' field contains the actual segment text (including image placeholders)
                 // 'source_text' is a fallback
@@ -1643,6 +1658,12 @@ class _TranslationResultPreviewState
                 final List<String> nextPageSegments = nextPageList.map((e) {
                   if (e is String) return e;
                   if (e is Map) {
+                    // Extract chunk_id for merged paragraph preview
+                    final segIndex = e['segment_index'] as int?;
+                    final chunkId = e['chunk_id'] as int?;
+                    if (segIndex != null && chunkId != null && chunkId >= 0) {
+                      _segmentChunkIds[segIndex] = chunkId;
+                    }
                     // CRITICAL: For MD files, check both 'text' and 'source_text' fields
                     // 'text' field contains the actual segment text (including image placeholders)
                     // 'source_text' is a fallback
@@ -2039,6 +2060,9 @@ class _TranslationResultPreviewState
               _isLoading = false;
             });
           }
+
+          // Compute merged paragraphs for merged preview mode
+          _computeMergedParagraphs();
 
           // Initialize height cache and scroll manager after segments are loaded
           if (_heightCache == null && _totalSegmentsCount > 0) {
@@ -3896,6 +3920,13 @@ class _TranslationResultPreviewState
                         });
                       }
                     : null,
+                // Merged paragraph view toggle
+                isMergedView: _isMergedView,
+                onToggleMergedView: () {
+                  setState(() {
+                    _isMergedView = !_isMergedView;
+                  });
+                },
               ),
             ),
             // Exclusion panel (if expanded)
@@ -4179,6 +4210,70 @@ class _TranslationResultPreviewState
     return counts;
   }
 
+  /// Compute merged paragraphs for the merged preview mode.
+  /// Groups segments by chunk_id and joins texts within each group.
+  void _computeMergedParagraphs() {
+    if (_sourceParagraphs.isEmpty && _targetParagraphs.isEmpty) {
+      _mergedSourceParagraphs = <String>[];
+      _mergedTargetParagraphs = <String>[];
+      return;
+    }
+
+    if (_segmentChunkIds.isEmpty) {
+      // No chunk_id data available (old tasks, non-deep-split formats).
+      // Show each segment as its own paragraph (no badges = clean display).
+      _mergedSourceParagraphs = List<String>.from(_sourceParagraphs);
+      _mergedTargetParagraphs = List<String>.from(_targetParagraphs);
+      return;
+    }
+
+    // Group segments by chunk_id, preserving chunk order
+    final Map<int, List<String>> chunkSourceParts = <int, List<String>>{};
+    final Map<int, List<String>> chunkTargetParts = <int, List<String>>{};
+    final List<int> chunkOrder = <int>[];
+
+    for (int i = 0; i < _sourceParagraphs.length; i++) {
+      // Skip excluded segments
+      if (_excludedSegments[i] == true) continue;
+
+      final int? chunkId = _segmentChunkIds[i];
+      if (chunkId == null || chunkId < 0) {
+        // Segment not in any chunk: treat as its own paragraph
+        final int pseudoId = -(i + 1); // negative to avoid collision
+        chunkOrder.add(pseudoId);
+        chunkSourceParts[pseudoId] = <String>[
+          i < _sourceParagraphs.length ? _sourceParagraphs[i] : ''
+        ];
+        chunkTargetParts[pseudoId] = <String>[
+          i < _targetParagraphs.length ? _targetParagraphs[i] : ''
+        ];
+        continue;
+      }
+
+      chunkSourceParts.putIfAbsent(chunkId, () {
+        chunkOrder.add(chunkId);
+        return <String>[];
+      });
+      chunkTargetParts.putIfAbsent(chunkId, () => <String>[]);
+
+      if (i < _sourceParagraphs.length) {
+        final text = _sourceParagraphs[i];
+        if (text.isNotEmpty) chunkSourceParts[chunkId]!.add(text);
+      }
+      if (i < _targetParagraphs.length) {
+        final text = _targetParagraphs[i];
+        if (text.isNotEmpty) chunkTargetParts[chunkId]!.add(text);
+      }
+    }
+
+    _mergedSourceParagraphs = chunkOrder.map(
+      (id) => (chunkSourceParts[id] ?? <String>[]).join('\n\n'),
+    ).toList();
+    _mergedTargetParagraphs = chunkOrder.map(
+      (id) => (chunkTargetParts[id] ?? <String>[]).join('\n\n'),
+    ).toList();
+  }
+
   /// Build unified comparison panel with source and target side by side
   /// This replaces the previous separate _buildSourcePanel and _buildTargetPanel
   Widget _buildComparisonPanel() {
@@ -4197,6 +4292,17 @@ class _TranslationResultPreviewState
                 .workflowType
             : ref.read(translationQuickSettingsProvider).workflowType);
     final bool isDocxWorkflow = resolvedWorkflowType == 'docx';
+
+    // Merged paragraph preview mode (no segment labels, merged deep-split paragraphs)
+    if (_isMergedView) {
+      return TranslationMergedPreviewPanel(
+        sourceParagraphs: _mergedSourceParagraphs,
+        targetParagraphs: _mergedTargetParagraphs,
+        scrollController: _comparisonScrollController,
+        previewFontSize:
+            ref.watch(globalSettingsProvider).previewFontSize,
+      );
+    }
 
     return TranslationComparisonPanel(
       taskId: _apiTaskId(),

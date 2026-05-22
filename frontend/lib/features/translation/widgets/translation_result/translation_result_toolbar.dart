@@ -58,6 +58,8 @@ class TranslationResultToolbar extends ConsumerWidget {
     this.onPreviousSearchMatch,
     this.onCheckPdfFormulas,
     this.onRepairDocxMath,
+    this.isMergedView = false,
+    this.onToggleMergedView,
   });
 
   final String taskId;
@@ -101,6 +103,9 @@ class TranslationResultToolbar extends ConsumerWidget {
   final VoidCallback? onCheckPdfFormulas;
   /// DOCX / texmath LLM repair（markdown_based 流程）
   final VoidCallback? onRepairDocxMath;
+  /// Merged paragraph view toggle
+  final bool isMergedView;
+  final VoidCallback? onToggleMergedView;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -316,6 +321,22 @@ class TranslationResultToolbar extends ConsumerWidget {
                   minHeight: 28,
                 ),
               ),
+            // Merged paragraph view toggle button
+            IconButton(
+              icon: Icon(
+                isMergedView ? Icons.view_list : Icons.article,
+                size: 16,
+              ),
+              tooltip: isMergedView
+                  ? l10n.translationToolbarSegmentView
+                  : l10n.translationToolbarMergedView,
+              onPressed: onToggleMergedView,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: 28,
+                minHeight: 28,
+              ),
+            ),
             // Navigate to failed segments buttons
             if (failedSegmentsCount > 0) ...<Widget>[
               IconButton(

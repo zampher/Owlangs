@@ -100,6 +100,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationToolbarIncreaseFontSize => 'フォントサイズを拡大';
 
   @override
+  String get translationToolbarMergedView => '段落結合表示';
+
+  @override
+  String get translationToolbarSegmentView => 'セグメント表示';
+
+  @override
   String get translationToolbarUpload => 'アップロード';
 
   @override

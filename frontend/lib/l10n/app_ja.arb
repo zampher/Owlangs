@@ -32,6 +32,9 @@
 
   "translationToolbarDecreaseFontSize": "フォントサイズを縮小",
   "translationToolbarIncreaseFontSize": "フォントサイズを拡大",
+
+  "translationToolbarMergedView": "段落結合表示",
+  "translationToolbarSegmentView": "セグメント表示",
   "translationToolbarUpload": "アップロード",
   "translationToolbarUploading": "アップロード中...",
   "translationToolbarFileUploaded": "ファイルをアップロードしました",

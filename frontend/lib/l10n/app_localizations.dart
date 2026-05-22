@@ -284,6 +284,18 @@ abstract class AppLocalizations {
   /// **'Increase font size'**
   String get translationToolbarIncreaseFontSize;
 
+  /// No description provided for @translationToolbarMergedView.
+  ///
+  /// In en, this message translates to:
+  /// **'Merged Paragraph View'**
+  String get translationToolbarMergedView;
+
+  /// No description provided for @translationToolbarSegmentView.
+  ///
+  /// In en, this message translates to:
+  /// **'Segment View'**
+  String get translationToolbarSegmentView;
+
   /// No description provided for @translationToolbarUpload.
   ///
   /// In en, this message translates to:

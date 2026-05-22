@@ -2508,7 +2508,18 @@ class StatusService:
         
         # Check if chunk_to_segment_map is valid (not None and not empty)
         has_valid_chunk_map = chunk_to_segment_map is not None and len(chunk_to_segment_map) > 0 if chunk_to_segment_map else False
-        
+
+        # Backfill chunk_id into segments_with_metadata for merged paragraph preview
+        if has_valid_chunk_map:
+            seg_to_chunk = {}
+            for c_idx, seg_indices in enumerate(chunk_to_segment_map):
+                for seg_idx in seg_indices:
+                    seg_to_chunk[seg_idx] = c_idx
+            for seg_obj in segments_with_metadata:
+                seg_idx = seg_obj.get("segment_index")
+                if seg_idx is not None and seg_idx in seg_to_chunk:
+                    seg_obj["chunk_id"] = seg_to_chunk[seg_idx]
+
         if has_valid_chunk_map and segments_with_metadata:
             try:
                 # Removed frequent logging to reduce log verbosity

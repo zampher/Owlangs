@@ -35,6 +35,9 @@
   "translationToolbarDecreaseFontSize": "Decrease font size",
   "translationToolbarIncreaseFontSize": "Increase font size",
 
+  "translationToolbarMergedView": "Merged Paragraph View",
+  "translationToolbarSegmentView": "Segment View",
+
   "translationToolbarUpload": "Upload",
   "translationToolbarUploading": "Uploading...",
   "translationToolbarFileUploaded": "File Uploaded",

@@ -101,6 +101,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationToolbarIncreaseFontSize => '글꼴 크기 늘리기';
 
   @override
+  String get translationToolbarMergedView => '병합 단락 보기';
+
+  @override
+  String get translationToolbarSegmentView => '세그먼트 보기';
+
+  @override
   String get translationToolbarUpload => '업로드';
 
   @override
