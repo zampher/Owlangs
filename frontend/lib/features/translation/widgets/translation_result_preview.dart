@@ -2290,6 +2290,10 @@ class _TranslationResultPreviewState
     highlightedIndex = targetIndex;
     _highlightedIndexNotifier.value = targetIndex;
 
+    // In merged/clean view, scrolling is handled by TranslationMergedPreviewPanel
+    // via its own Scrollable.ensureVisible — skip the PaginatedScrollManager path.
+    if (_isMergedView) return;
+
     // Check if segment is already visible before scrolling
     // Only scroll if segment is not visible or partially visible
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2416,6 +2420,10 @@ class _TranslationResultPreviewState
           _targetParagraphs[index] = newText;
           _modifiedSegments[index] = newText;
           _editingSegments.remove(index);
+          // Keep merged paragraphs in sync so clean mode reflects the edit.
+          if (index < _mergedTargetParagraphs.length) {
+            _mergedTargetParagraphs[index] = newText;
+          }
         });
 
         // CRITICAL: Force refresh pagination controller to ensure it uses updated metadata
@@ -4273,6 +4281,8 @@ class _TranslationResultPreviewState
             ref.watch(globalSettingsProvider).previewFontSize,
         highlightedIndexNotifier: _highlightedIndexNotifier,
         onHighlightParagraph: _highlightParagraph,
+        onEdit: _handleSegmentEdit,
+        onEditingStarted: _onEditingStarted,
       );
     }
 
