@@ -239,7 +239,7 @@ class _TranslationMergedPreviewPanelState
                                 : Colors.transparent,
                             width: 3,
                           ),
-                          bottom: BorderSide(
+                          top: BorderSide(
                             color: theme.dividerColor.withOpacity(0.3),
                           ),
                         ),
