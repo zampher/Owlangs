@@ -78,15 +78,33 @@ class TranslationMergedPreviewPanel extends StatelessWidget {
                     ),
                   ),
                 ),
-                // Thin divider
+                // Segment ID in the gap between source and target
                 SizedBox(
-                  width: 16,
-                  child: Center(
-                    child: Container(
-                      width: 1,
-                      height: 40,
-                      color: theme.dividerColor.withOpacity(0.3),
-                    ),
+                  width: 24,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Container(
+                        width: 1,
+                        height: 12,
+                        color: theme.dividerColor.withOpacity(0.2),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${index + 1}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: scheme.onSurfaceVariant.withOpacity(0.5),
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Container(
+                        width: 1,
+                        height: 12,
+                        color: theme.dividerColor.withOpacity(0.2),
+                      ),
+                    ],
                   ),
                 ),
                 // Target paragraph (right panel)
