@@ -846,13 +846,16 @@ class PaginatedScrollManager {
     final visibleCount =
         (viewportHeight / estimatedHeight).ceil() + 2; // +2 for buffer
 
+    final int itemCount = paginationController.items.length;
+    if (itemCount <= 0) return;
+
     final startIndex = firstVisible.clamp(
       _currentOffset,
-      _currentOffset + paginationController.items.length - 1,
+      _currentOffset + itemCount - 1,
     );
     final endIndex = (startIndex + visibleCount).clamp(
       _currentOffset,
-      _currentOffset + paginationController.items.length - 1,
+      _currentOffset + itemCount - 1,
     );
 
     int measured = 0;

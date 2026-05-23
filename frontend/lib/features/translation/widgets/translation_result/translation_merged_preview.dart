@@ -67,9 +67,10 @@ class TranslationMergedPreviewPanel extends StatelessWidget {
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: scheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: theme.dividerColor.withOpacity(0.3),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: theme.dividerColor.withOpacity(0.3),
+                        ),
                       ),
                     ),
                     child: MarkdownTextWithImages(
@@ -113,9 +114,10 @@ class TranslationMergedPreviewPanel extends StatelessWidget {
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: scheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: theme.dividerColor.withOpacity(0.3),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: theme.dividerColor.withOpacity(0.3),
+                        ),
                       ),
                     ),
                     child: MarkdownTextWithImages(
