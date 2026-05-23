@@ -202,20 +202,6 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     return formatKey;
   }
 
-  static String _downloadFormatButtonLabel(
-    String formatKey,
-    AppLocalizations l10n,
-  ) {
-    switch (formatKey) {
-      case 'md':
-        return l10n.translationQueueDownloadMdEmbedded;
-      case 'md_zip':
-        return l10n.translationQueueDownloadMdZip;
-      default:
-        return formatKey.toUpperCase();
-    }
-  }
-
   MimeType _mimeForExtension(String ext) {
     switch (ext.toLowerCase()) {
       case 'docx':
@@ -423,6 +409,56 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     }
   }
 
+  Future<void> _confirmClearMyQueue(
+    BuildContext context,
+    AppLocalizations l10n,
+  ) async {
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(l10n.translationQueueClearMyQueueTitle),
+        content: Text(l10n.translationQueueClearMyQueueMessage),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.translationQueueClearMyQueueCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.translationQueueClearMyQueueConfirm),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) {
+      return;
+    }
+    int success = 0;
+    int fail = 0;
+    for (final Map<String, dynamic> row in _tasks) {
+      final String taskId = row['task_id']?.toString() ?? '';
+      if (taskId.isEmpty) continue;
+      try {
+        await _svc.releaseTask(taskId);
+        success++;
+      } catch (_) {
+        fail++;
+      }
+    }
+    if (!mounted) {
+      return;
+    }
+    if (fail == 0) {
+      MessageService.showInfo(context, l10n.translationQueueClearMyQueueSuccess);
+    } else {
+      MessageService.showWarning(
+        context,
+        l10n.translationQueueClearMyQueueFailed('$fail/$success'),
+      );
+    }
+    await _refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context)!;
@@ -454,6 +490,13 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                   )
                 : const SizedBox.shrink(),
             orElse: () => const SizedBox.shrink(),
+          ),
+          IconButton(
+            tooltip: l10n.translationQueueClearMyQueueTooltip,
+            icon: const Icon(Icons.cleaning_services_outlined),
+            onPressed: _tasks.isEmpty || _loading
+                ? null
+                : () => _confirmClearMyQueue(context, l10n),
           ),
           TextButton.icon(
             onPressed: () {
@@ -648,53 +691,76 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                           onDownload: _download,
                                         ),
                                       ),
-                                    // Cancel
-                                    if (_canCancel(status) && inMemory)
-                                      IconButton(
-                                        icon: const Icon(Icons.cancel_outlined,
-                                            size: 20),
-                                        tooltip: l10n.translationQueueCancel,
-                                        visualDensity: VisualDensity.compact,
-                                        padding: const EdgeInsets.all(4),
-                                        constraints: const BoxConstraints(
-                                            minWidth: 28, minHeight: 28),
-                                        onPressed: () => _cancel(taskId),
+                                    const SizedBox(width: 28),
+                                    // Action buttons (fixed width: 2 buttons)
+                                    SizedBox(
+                                      width: 56,
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.end,
+                                        children: <Widget>[
+                                          // Cancel
+                                          if (_canCancel(status) && inMemory)
+                                            IconButton(
+                                              icon: const Icon(
+                                                  Icons.cancel_outlined,
+                                                  size: 20),
+                                              tooltip:
+                                                  l10n.translationQueueCancel,
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              padding: const EdgeInsets.all(4),
+                                              constraints: const BoxConstraints(
+                                                  minWidth: 28, minHeight: 28),
+                                              onPressed:
+                                                  () => _cancel(taskId),
+                                            ),
+                                          // Edit
+                                          if (status == 'completed' &&
+                                              row['is_format_conversion'] !=
+                                                  true &&
+                                              inMemory)
+                                            IconButton(
+                                              icon: const Icon(
+                                                  Icons.edit_outlined,
+                                                  size: 20),
+                                              tooltip:
+                                                  l10n.translationQueueEdit,
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              padding: const EdgeInsets.all(4),
+                                              constraints: const BoxConstraints(
+                                                  minWidth: 28, minHeight: 28),
+                                              onPressed: () {
+                                                final String? wf = row[
+                                                        'workflow_type']
+                                                    ?.toString();
+                                                final String reeditUri =
+                                                    '${AppRouter.translationRoute}'
+                                                    '?execution_mode=queued'
+                                                    '&reedit_task_id=$taskId'
+                                                    '&reedit_workflow_type=${Uri.encodeComponent(wf ?? '')}'
+                                                    '&reedit_file_name=${Uri.encodeComponent(name)}';
+                                                context.push(reeditUri);
+                                              },
+                                            ),
+                                          // Release
+                                          IconButton(
+                                            icon: const Icon(
+                                                Icons.remove_circle_outline,
+                                                size: 20),
+                                            tooltip:
+                                                l10n.translationQueueRelease,
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            padding: const EdgeInsets.all(4),
+                                            constraints: const BoxConstraints(
+                                                minWidth: 28, minHeight: 28),
+                                            onPressed:
+                                                () => _release(taskId),
+                                          ),
+                                        ],
                                       ),
-                                    // Edit
-                                    if (status == 'completed' &&
-                                        row['is_format_conversion'] != true &&
-                                        inMemory)
-                                      IconButton(
-                                        icon: const Icon(Icons.edit_outlined,
-                                            size: 20),
-                                        tooltip: l10n.translationQueueEdit,
-                                        visualDensity: VisualDensity.compact,
-                                        padding: const EdgeInsets.all(4),
-                                        constraints: const BoxConstraints(
-                                            minWidth: 28, minHeight: 28),
-                                        onPressed: () {
-                                          final String? wf =
-                                              row['workflow_type']?.toString();
-                                          final String reeditUri =
-                                              '${AppRouter.translationRoute}'
-                                              '?execution_mode=queued'
-                                              '&reedit_task_id=$taskId'
-                                              '&reedit_workflow_type=${Uri.encodeComponent(wf ?? '')}'
-                                              '&reedit_file_name=${Uri.encodeComponent(name)}';
-                                          context.push(reeditUri);
-                                        },
-                                      ),
-                                    // Release
-                                    IconButton(
-                                      icon: const Icon(
-                                          Icons.remove_circle_outline,
-                                          size: 20),
-                                      tooltip: l10n.translationQueueRelease,
-                                      visualDensity: VisualDensity.compact,
-                                      padding: const EdgeInsets.all(4),
-                                      constraints: const BoxConstraints(
-                                          minWidth: 28, minHeight: 28),
-                                      onPressed: () => _release(taskId),
                                     ),
                                   ],
                                 ),
@@ -804,6 +870,18 @@ class _TinyBadge extends StatelessWidget {
 
 // ─── Download popup menu button ──────────────────────────────────────────────
 
+/// Map download format key to a localized button label.
+String _downloadFormatButtonLabel(String formatKey, AppLocalizations l10n) {
+  switch (formatKey) {
+    case 'md':
+      return l10n.translationQueueDownloadMdEmbedded;
+    case 'md_zip':
+      return l10n.translationQueueDownloadMdZip;
+    default:
+      return formatKey.toUpperCase();
+  }
+}
+
 /// Map download format key to a Material icon.
 IconData _downloadFormatIcon(String ft) {
   switch (ft) {
@@ -858,9 +936,10 @@ class _DownloadFormatButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
     return IconButton(
       icon: Icon(_downloadFormatIcon(ft), size: 20),
-      tooltip: ft.toUpperCase(),
+      tooltip: _downloadFormatButtonLabel(ft, l10n),
       visualDensity: VisualDensity.compact,
       padding: const EdgeInsets.all(4),
       constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
