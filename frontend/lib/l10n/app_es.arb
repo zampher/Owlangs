@@ -362,6 +362,18 @@
       "error": {}
     }
   },
+  "translationQueueClearMyQueueTooltip": "Vaciar mi cola",
+  "translationQueueClearMyQueueTitle": "Vaciar mi cola",
+  "translationQueueClearMyQueueMessage": "¿Eliminar todas tus tareas de la cola?",
+  "translationQueueClearMyQueueConfirm": "Vaciar",
+  "translationQueueClearMyQueueCancel": "Cancelar",
+  "translationQueueClearMyQueueSuccess": "Mi cola ha sido vaciada.",
+  "translationQueueClearMyQueueFailed": "No se pudo vaciar tu cola: {error}",
+  "@translationQueueClearMyQueueFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "homeFeatureUnderDevelopment": "Esta característica está en desarrollo.",
   "homeAnonymizeNotSupportedVersion": "Aún no compatible. Estará disponible en v{version}.",
   "homeAnonymizeInDevelopment": "La anonimización está en desarrollo y aún no está disponible.",

@@ -368,6 +368,18 @@
       "error": {}
     }
   },
+  "translationQueueClearMyQueueTooltip": "Clear my queue",
+  "translationQueueClearMyQueueTitle": "Clear my queue",
+  "translationQueueClearMyQueueMessage": "Remove all your tasks from the queue?",
+  "translationQueueClearMyQueueConfirm": "Clear",
+  "translationQueueClearMyQueueCancel": "Cancel",
+  "translationQueueClearMyQueueSuccess": "My queue cleared.",
+  "translationQueueClearMyQueueFailed": "Could not clear your queue: {error}",
+  "@translationQueueClearMyQueueFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "homeFeatureUnderDevelopment": "This feature is under development.",
   "homeAnonymizeNotSupportedVersion": "Not supported yet. Will be available in v{version}.",
   "homeAnonymizeInDevelopment": "Anonymization is in development and not yet available.",

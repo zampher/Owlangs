@@ -351,6 +351,18 @@
       "error": {}
     }
   },
+  "translationQueueClearMyQueueTooltip": "내 대기열 비우기",
+  "translationQueueClearMyQueueTitle": "내 대기열 비우기",
+  "translationQueueClearMyQueueMessage": "모든 작업을 대기열에서 제거하시겠습니까?",
+  "translationQueueClearMyQueueConfirm": "비우기",
+  "translationQueueClearMyQueueCancel": "취소",
+  "translationQueueClearMyQueueSuccess": "내 대기열을 비웠습니다.",
+  "translationQueueClearMyQueueFailed": "대기열 비우기 실패: {error}",
+  "@translationQueueClearMyQueueFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "homeFeatureUnderDevelopment": "이 기능은 개발 중입니다.",
   "homeAnonymizeNotSupportedVersion": "아직 지원되지 않습니다. v{version}에서 사용 가능할 예정입니다.",
   "homeAnonymizeInDevelopment": "익명화는 개발 중이며 아직 사용할 수 없습니다.",

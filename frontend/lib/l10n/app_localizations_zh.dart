@@ -1032,6 +1032,29 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get translationQueueClearMyQueueTooltip => '清空我的队列';
+
+  @override
+  String get translationQueueClearMyQueueTitle => '清空我的队列';
+
+  @override
+  String get translationQueueClearMyQueueMessage => '从队列中移除您的所有任务？';
+
+  @override
+  String get translationQueueClearMyQueueConfirm => '清空';
+
+  @override
+  String get translationQueueClearMyQueueCancel => '取消';
+
+  @override
+  String get translationQueueClearMyQueueSuccess => '已清空我的队列。';
+
+  @override
+  String translationQueueClearMyQueueFailed(Object error) {
+    return '清空您的队列失败：$error';
+  }
+
+  @override
   String get homeFeatureUnderDevelopment => '此功能正在开发中。';
 
   @override

@@ -1041,6 +1041,29 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get translationQueueClearMyQueueTooltip => '내 대기열 비우기';
+
+  @override
+  String get translationQueueClearMyQueueTitle => '내 대기열 비우기';
+
+  @override
+  String get translationQueueClearMyQueueMessage => '모든 작업을 대기열에서 제거하시겠습니까?';
+
+  @override
+  String get translationQueueClearMyQueueConfirm => '비우기';
+
+  @override
+  String get translationQueueClearMyQueueCancel => '취소';
+
+  @override
+  String get translationQueueClearMyQueueSuccess => '내 대기열을 비웠습니다.';
+
+  @override
+  String translationQueueClearMyQueueFailed(Object error) {
+    return '대기열 비우기 실패: $error';
+  }
+
+  @override
   String get homeFeatureUnderDevelopment => '이 기능은 개발 중입니다.';
 
   @override

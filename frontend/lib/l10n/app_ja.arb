@@ -351,6 +351,18 @@
       "error": {}
     }
   },
+  "translationQueueClearMyQueueTooltip": "自分のキューをクリア",
+  "translationQueueClearMyQueueTitle": "自分のキューをクリア",
+  "translationQueueClearMyQueueMessage": "すべてのタスクをキューから削除しますか？",
+  "translationQueueClearMyQueueConfirm": "クリア",
+  "translationQueueClearMyQueueCancel": "キャンセル",
+  "translationQueueClearMyQueueSuccess": "自分のキューをクリアしました。",
+  "translationQueueClearMyQueueFailed": "キューのクリアに失敗しました: {error}",
+  "@translationQueueClearMyQueueFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "homeFeatureUnderDevelopment": "この機能は開発中です。",
   "homeAnonymizeNotSupportedVersion": "まだサポートされていません。v{version}で利用可能になります。",
   "homeAnonymizeInDevelopment": "匿名化は開発中で、まだ利用できません。",

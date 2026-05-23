@@ -351,6 +351,18 @@
       "error": {}
     }
   },
+  "translationQueueClearMyQueueTooltip": "清空我的队列",
+  "translationQueueClearMyQueueTitle": "清空我的队列",
+  "translationQueueClearMyQueueMessage": "从队列中移除您的所有任务？",
+  "translationQueueClearMyQueueConfirm": "清空",
+  "translationQueueClearMyQueueCancel": "取消",
+  "translationQueueClearMyQueueSuccess": "已清空我的队列。",
+  "translationQueueClearMyQueueFailed": "清空您的队列失败：{error}",
+  "@translationQueueClearMyQueueFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "homeFeatureUnderDevelopment": "此功能正在开发中。",
   "homeAnonymizeNotSupportedVersion": "尚未支持。将在 v{version} 版本中提供。",
   "homeAnonymizeInDevelopment": "匿名化功能正在开发中，尚不可用。",

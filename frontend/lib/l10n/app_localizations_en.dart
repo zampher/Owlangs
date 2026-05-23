@@ -1077,6 +1077,30 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get translationQueueClearMyQueueTooltip => 'Clear my queue';
+
+  @override
+  String get translationQueueClearMyQueueTitle => 'Clear my queue';
+
+  @override
+  String get translationQueueClearMyQueueMessage =>
+      'Remove all your tasks from the queue?';
+
+  @override
+  String get translationQueueClearMyQueueConfirm => 'Clear';
+
+  @override
+  String get translationQueueClearMyQueueCancel => 'Cancel';
+
+  @override
+  String get translationQueueClearMyQueueSuccess => 'My queue cleared.';
+
+  @override
+  String translationQueueClearMyQueueFailed(Object error) {
+    return 'Could not clear your queue: $error';
+  }
+
+  @override
   String get homeFeatureUnderDevelopment =>
       'This feature is under development.';
 

@@ -1041,6 +1041,29 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get translationQueueClearMyQueueTooltip => '自分のキューをクリア';
+
+  @override
+  String get translationQueueClearMyQueueTitle => '自分のキューをクリア';
+
+  @override
+  String get translationQueueClearMyQueueMessage => 'すべてのタスクをキューから削除しますか？';
+
+  @override
+  String get translationQueueClearMyQueueConfirm => 'クリア';
+
+  @override
+  String get translationQueueClearMyQueueCancel => 'キャンセル';
+
+  @override
+  String get translationQueueClearMyQueueSuccess => '自分のキューをクリアしました。';
+
+  @override
+  String translationQueueClearMyQueueFailed(Object error) {
+    return 'キューのクリアに失敗しました: $error';
+  }
+
+  @override
   String get homeFeatureUnderDevelopment => 'この機能は開発中です。';
 
   @override

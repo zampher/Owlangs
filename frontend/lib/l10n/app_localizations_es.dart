@@ -1098,6 +1098,30 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get translationQueueClearMyQueueTooltip => 'Vaciar mi cola';
+
+  @override
+  String get translationQueueClearMyQueueTitle => 'Vaciar mi cola';
+
+  @override
+  String get translationQueueClearMyQueueMessage =>
+      '¿Eliminar todas tus tareas de la cola?';
+
+  @override
+  String get translationQueueClearMyQueueConfirm => 'Vaciar';
+
+  @override
+  String get translationQueueClearMyQueueCancel => 'Cancelar';
+
+  @override
+  String get translationQueueClearMyQueueSuccess => 'Mi cola ha sido vaciada.';
+
+  @override
+  String translationQueueClearMyQueueFailed(Object error) {
+    return 'No se pudo vaciar tu cola: $error';
+  }
+
+  @override
   String get homeFeatureUnderDevelopment =>
       'Esta característica está en desarrollo.';
 

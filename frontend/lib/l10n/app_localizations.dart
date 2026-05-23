@@ -1955,6 +1955,48 @@ abstract class AppLocalizations {
   /// **'Could not clear queue: {error}'**
   String translationQueueClearAllFailed(Object error);
 
+  /// No description provided for @translationQueueClearMyQueueTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear my queue'**
+  String get translationQueueClearMyQueueTooltip;
+
+  /// No description provided for @translationQueueClearMyQueueTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear my queue'**
+  String get translationQueueClearMyQueueTitle;
+
+  /// No description provided for @translationQueueClearMyQueueMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove all your tasks from the queue?'**
+  String get translationQueueClearMyQueueMessage;
+
+  /// No description provided for @translationQueueClearMyQueueConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get translationQueueClearMyQueueConfirm;
+
+  /// No description provided for @translationQueueClearMyQueueCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get translationQueueClearMyQueueCancel;
+
+  /// No description provided for @translationQueueClearMyQueueSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'My queue cleared.'**
+  String get translationQueueClearMyQueueSuccess;
+
+  /// No description provided for @translationQueueClearMyQueueFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not clear your queue: {error}'**
+  String translationQueueClearMyQueueFailed(Object error);
+
   /// No description provided for @homeFeatureUnderDevelopment.
   ///
   /// In en, this message translates to:
