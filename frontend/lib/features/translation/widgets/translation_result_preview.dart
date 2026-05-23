@@ -3557,6 +3557,10 @@ class _TranslationResultPreviewState
     highlightedIndex = index;
     _highlightedIndexNotifier.value = index;
 
+    // In merged/clean view, scrolling is handled by TranslationMergedPreviewPanel
+    // via GlobalKey + Scrollable.ensureVisible — skip PaginatedScrollManager logic.
+    if (_isMergedView) return;
+
     // Prevent recursive scrolling (guard is AFTER the visual update so clicks always show feedback)
     if (_isScrolling) return;
 
@@ -3931,9 +3935,16 @@ class _TranslationResultPreviewState
                 // Merged paragraph view toggle
                 isMergedView: _isMergedView,
                 onToggleMergedView: () {
+                  final int? savedIndex = highlightedIndex;
                   setState(() {
                     _isMergedView = !_isMergedView;
                   });
+                  if (savedIndex != null) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      _highlightParagraph(savedIndex);
+                    });
+                  }
                 },
               ),
             ),
@@ -4260,6 +4271,8 @@ class _TranslationResultPreviewState
         scrollController: _comparisonScrollController,
         previewFontSize:
             ref.watch(globalSettingsProvider).previewFontSize,
+        highlightedIndexNotifier: _highlightedIndexNotifier,
+        onHighlightParagraph: _highlightParagraph,
       );
     }
 
