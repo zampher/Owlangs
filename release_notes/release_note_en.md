@@ -4,16 +4,18 @@
 
 ### New Features
 
-1. **Dual preview modes**: Two distinct viewing modes for translation review —
-   - **Labeled Edit Mode**: Quickly locate failed segments and resend them to the LLM for rapid translation repair
-   - **Reading Edit Mode**: Side-by-side bilingual reading without labels, more compact layout for manual polishing
+1. **Dual review modes**: Renamed the original preview modes as follows —
+   - **Labeled Review Mode**: Quickly locate failed segments and resend them to the LLM for rapid translation repair
+   - **Reading Review Mode**: Side-by-side bilingual reading without labels, more compact layout for manual polishing
 2. **Clear queue button**: Added a button to clear all tasks from the task queue
 3. **Clear statistics button**: Added a button in Settings to reset translation statistics
+4. **Font size control in toolbar**: Added a font size adjuster to the translation review toolbar for easier reading
 
 ### Optimizations
 
-1. **Streamlined task list**: Reduced queue entries to two-line compact information with direct buttons to switch between Labeled and Reading edit modes
+1. **Streamlined task list**: Reduced queue entries to two-line compact information with direct buttons to switch between Labeled and Reading review modes
 2. **Reorganized toolbar**: Buttons are now grouped by function for easier access
+3. **TXT paragraph-based splitting**: Changed TXT segmentation from chunk-based to paragraph-based for better reading-mode layout
 
 ### Bug Fixes
 
