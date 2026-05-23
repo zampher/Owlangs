@@ -380,7 +380,7 @@
       "error": {}
     }
   },
-  "translationQueueView": "View",
+  "translationQueueView": "Reading Edit",
   "homeFeatureUnderDevelopment": "This feature is under development.",
   "homeAnonymizeNotSupportedVersion": "Not supported yet. Will be available in v{version}.",
   "homeAnonymizeInDevelopment": "Anonymization is in development and not yet available.",
@@ -975,7 +975,7 @@
   "aiPlatformParserSubtypeCloud": "Cloud",
   "aiPlatformParserSubtypeLocal": "Local",
 
-  "translationQueueEdit": "Edit",
+  "translationQueueEdit": "Labeled Edit",
   "reeditTitle": "Edit Translation",
   "reeditSaveExport": "Save && Export",
   "reeditFetchError": "Failed to load translation segments.",

@@ -374,7 +374,7 @@
       "error": {}
     }
   },
-  "translationQueueView": "Ver",
+  "translationQueueView": "Edición lectura",
   "homeFeatureUnderDevelopment": "Esta característica está en desarrollo.",
   "homeAnonymizeNotSupportedVersion": "Aún no compatible. Estará disponible en v{version}.",
   "homeAnonymizeInDevelopment": "La anonimización está en desarrollo y aún no está disponible.",
@@ -1023,7 +1023,7 @@
   "loginFeaturePlatforms": "Más de 20 plataformas LLM compatibles\nincluyendo OpenAI, Claude, Ollama",
   "loginPasswordRecoveryAdminGuide": "Si es administrador, siga el procedimiento de recuperación de contraseña.",
 
-  "translationQueueEdit": "Editar",
+  "translationQueueEdit": "Edición etiquetada",
   "reeditTitle": "Editar traducción",
   "reeditSaveExport": "Guardar y exportar",
   "reeditFetchError": "Error al cargar segmentos de traducción.",

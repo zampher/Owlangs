@@ -1064,7 +1064,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get translationQueueView => '表示';
+  String get translationQueueView => '閲覧編集';
 
   @override
   String get homeFeatureUnderDevelopment => 'この機能は開発中です。';
@@ -2783,7 +2783,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get aiPlatformParserSubtypeLocal => 'ローカル';
 
   @override
-  String get translationQueueEdit => '編集';
+  String get translationQueueEdit => 'ラベル編集';
 
   @override
   String get reeditTitle => '翻訳を編集';

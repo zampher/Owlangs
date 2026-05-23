@@ -2000,7 +2000,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationQueueView.
   ///
   /// In en, this message translates to:
-  /// **'View'**
+  /// **'Reading Edit'**
   String get translationQueueView;
 
   /// No description provided for @homeFeatureUnderDevelopment.
@@ -5075,7 +5075,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationQueueEdit.
   ///
   /// In en, this message translates to:
-  /// **'Edit'**
+  /// **'Labeled Edit'**
   String get translationQueueEdit;
 
   /// No description provided for @reeditTitle.

@@ -1055,7 +1055,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get translationQueueView => '阅读';
+  String get translationQueueView => '阅读编辑模式';
 
   @override
   String get homeFeatureUnderDevelopment => '此功能正在开发中。';
@@ -2764,7 +2764,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiPlatformParserSubtypeLocal => '本地';
 
   @override
-  String get translationQueueEdit => '编辑';
+  String get translationQueueEdit => '标签编辑模式';
 
   @override
   String get reeditTitle => '编辑译文';

@@ -1122,7 +1122,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get translationQueueView => 'Ver';
+  String get translationQueueView => 'Edición lectura';
 
   @override
   String get homeFeatureUnderDevelopment =>
@@ -2927,7 +2927,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get aiPlatformParserSubtypeLocal => 'Local';
 
   @override
-  String get translationQueueEdit => 'Editar';
+  String get translationQueueEdit => 'Edición etiquetada';
 
   @override
   String get reeditTitle => 'Editar traducción';
