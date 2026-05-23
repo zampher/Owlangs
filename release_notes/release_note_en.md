@@ -1,5 +1,26 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.3.4.0
+
+### New Features
+
+1. **Dual preview modes**: Two distinct viewing modes for translation review —
+   - **Labeled Edit Mode**: Quickly locate failed segments and resend them to the LLM for rapid translation repair
+   - **Reading Edit Mode**: Side-by-side bilingual reading without labels, more compact layout for manual polishing
+2. **Clear queue button**: Added a button to clear all tasks from the task queue
+3. **Clear statistics button**: Added a button in Settings to reset translation statistics
+
+### Optimizations
+
+1. **Streamlined task list**: Reduced queue entries to two-line compact information with direct buttons to switch between Labeled and Reading edit modes
+2. **Reorganized toolbar**: Buttons are now grouped by function for easier access
+
+### Bug Fixes
+
+1. **False LLM warning during format conversion**: Fixed an erroneous "LLM not configured" prompt when running format-only conversion (e.g. PDF ↔ DOCX) without any LLM configured
+
+---
+
 ## Owlangs 1.3.3.0
 
 ### New Features
