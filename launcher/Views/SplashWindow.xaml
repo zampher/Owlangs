@@ -54,7 +54,7 @@
             
             <!-- Version Info -->
             <TextBlock Grid.Row="3" 
-                       Text="Version 1.3.3.0" 
+                       Text="Version 1.3.4.0" 
                        FontSize="11" 
                        Foreground="{DynamicResource TextTertiaryBrush}" 
                        HorizontalAlignment="Center"
