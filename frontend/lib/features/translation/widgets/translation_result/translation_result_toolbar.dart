@@ -548,7 +548,7 @@ class TranslationResultToolbar extends ConsumerWidget {
           // Merged paragraph view toggle button
           IconButton(
             icon: Icon(
-              isMergedView ? Icons.edit_outlined : Icons.visibility_outlined,
+              isMergedView ? Icons.label_outlined : Icons.chrome_reader_mode,
               size: 16,
             ),
             tooltip: isMergedView

@@ -722,7 +722,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                               inMemory)
                                             IconButton(
                                               icon: const Icon(
-                                                  Icons.edit_outlined,
+                                                  Icons.label_outlined,
                                                   size: 20),
                                               tooltip:
                                                   l10n.translationQueueEdit,
@@ -748,7 +748,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                           if (status == 'completed' && inMemory)
                                             IconButton(
                                               icon: const Icon(
-                                                  Icons.visibility_outlined,
+                                                  Icons.chrome_reader_mode,
                                                   size: 20),
                                               tooltip:
                                                   l10n.translationQueueView,

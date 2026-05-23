@@ -116,7 +116,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationToolbarIncreaseFontSize => '增大字体';
 
   @override
-  String get translationToolbarMergedView => '干净模式';
+  String get translationToolbarMergedView => '阅读模式';
 
   @override
   String get translationToolbarSegmentView => '标签模式';
@@ -1055,7 +1055,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get translationQueueView => '查看';
+  String get translationQueueView => '阅读';
 
   @override
   String get homeFeatureUnderDevelopment => '此功能正在开发中。';

@@ -121,7 +121,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationToolbarIncreaseFontSize => 'Increase font size';
 
   @override
-  String get translationToolbarMergedView => 'Clean Mode';
+  String get translationToolbarMergedView => 'Reading Mode';
 
   @override
   String get translationToolbarSegmentView => 'Labeled Mode';

@@ -317,7 +317,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationToolbarMergedView.
   ///
   /// In en, this message translates to:
-  /// **'Clean Mode'**
+  /// **'Reading Mode'**
   String get translationToolbarMergedView;
 
   /// No description provided for @translationToolbarSegmentView.

@@ -117,7 +117,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationToolbarIncreaseFontSize => '글꼴 크기 늘리기';
 
   @override
-  String get translationToolbarMergedView => '깔끔 모드';
+  String get translationToolbarMergedView => '읽기 모드';
 
   @override
   String get translationToolbarSegmentView => '레이블 모드';
