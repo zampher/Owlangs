@@ -321,22 +321,6 @@ class TranslationResultToolbar extends ConsumerWidget {
                   minHeight: 28,
                 ),
               ),
-            // Merged paragraph view toggle button
-            IconButton(
-              icon: Icon(
-                isMergedView ? Icons.view_list : Icons.article,
-                size: 16,
-              ),
-              tooltip: isMergedView
-                  ? l10n.translationToolbarSegmentView
-                  : l10n.translationToolbarMergedView,
-              onPressed: onToggleMergedView,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(
-                minWidth: 28,
-                minHeight: 28,
-              ),
-            ),
             // Navigate to failed segments buttons
             if (failedSegmentsCount > 0) ...<Widget>[
               IconButton(
@@ -561,6 +545,22 @@ class TranslationResultToolbar extends ConsumerWidget {
               onToggle: onToggleExclusionPanel!,
             ),
           ],
+          // Merged paragraph view toggle button
+          IconButton(
+            icon: Icon(
+              isMergedView ? Icons.view_list : Icons.article,
+              size: 16,
+            ),
+            tooltip: isMergedView
+                ? l10n.translationToolbarSegmentView
+                : l10n.translationToolbarMergedView,
+            onPressed: onToggleMergedView,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(
+              minWidth: 28,
+              minHeight: 28,
+            ),
+          ),
           // Fullscreen button - Always shown, rightmost
           IconButton(
             icon: Icon(

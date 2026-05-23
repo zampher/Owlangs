@@ -205,6 +205,10 @@ class TXTTranslator(AiTranslator):
         # Map translation results back to original line list, non-translated lines remain unchanged
         final_translated_texts = [translated_texts_map.get(text, text) for text in original_texts]
 
+        # Save for segment recording access
+        self._original_texts = original_texts
+        self._translated_texts = final_translated_texts
+
         # --- Step 3: Post-process and update document content ---
         document.content = self._after_translate(final_translated_texts, original_texts)
         return self
@@ -273,6 +277,20 @@ class TXTTranslator(AiTranslator):
 
         # Map translation results back to original line list
         final_translated_texts = [translated_texts_map.get(text, text) for text in original_texts]
+
+        # Save for segment recording access (instance attributes + task_state)
+        self._original_texts = original_texts
+        self._translated_texts = final_translated_texts
+
+        # Save translated segments to task_state for segment recording
+        if task_id:
+            try:
+                from backend.app.services.task import task_manager
+                task_state = task_manager.get_task(task_id) if task_id else None
+                if task_state:
+                    task_state["txt_translated_texts"] = final_translated_texts
+            except Exception as e:
+                self.logger.debug(LogModule.TRANS, f"[TXT_TRANSLATOR] Failed to save translated texts: {e}")
 
         # --- Step 3: Post-process and update document content (I/O intensive) ---
         document.content = await asyncio.to_thread(

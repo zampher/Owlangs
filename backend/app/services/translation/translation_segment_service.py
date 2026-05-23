@@ -578,35 +578,72 @@ class TranslationSegmentService:
     ) -> bool:
         """Record translation segments for TXT workflow."""
         try:
-            import re
-            
-            # Decode original TXT
-            try:
-                original_txt = file_contents.decode('utf-8')
-            except UnicodeDecodeError:
-                original_txt = file_contents.decode('utf-8', errors='replace')
-            
-            translated_txt = workflow.export_to_txt()
-            
-            # Simple paragraph-based splitting for TXT
-            def _split_text(text: str) -> List[str]:
-                # Split by double newlines or single newline followed by capital letter
-                segments = re.split(r'\n\n+|\n(?=[A-Z])', text)
-                return [s.strip() for s in segments if s.strip()]
-            
-            src_segs = _split_text(original_txt)
-            tgt_segs = _split_text(translated_txt)
-            
-            n = min(len(src_segs), len(tgt_segs))
+            # CRITICAL: Use source_chunks_cache segments as source (consistent with extraction phase)
+            cache_info = task_state.get("source_chunks_cache", {})
+            cache_segments = cache_info.get("segments", [])
+
+            # Get translated texts from task_state (saved by TXTTranslator.translate_async)
+            txt_translated_texts = task_state.get('txt_translated_texts')
+
+            if not cache_segments:
+                logger.warning(
+                    LogModule.TRANS,
+                    f"[TRANSLATION] Task {task_id}: TXT source_chunks_cache segments not found. "
+                    f"Available keys: {list(task_state.keys())}"
+                )
+                return False
+
+            if txt_translated_texts is None:
+                # Try to get from workflow's translator instance (saved as _translated_texts)
+                if hasattr(workflow, 'translator') and hasattr(workflow.translator, '_translated_texts'):
+                    txt_translated_texts = workflow.translator._translated_texts
+                    logger.info(
+                        LogModule.TRANS,
+                        f"[TRANSLATION] Task {task_id}: Using TXT translated texts from translator instance: "
+                        f"{len(txt_translated_texts)} segments."
+                    )
+
+            if txt_translated_texts is None:
+                logger.warning(
+                    LogModule.TRANS,
+                    f"[TRANSLATION] Task {task_id}: TXT translated texts not found. "
+                    f"Falling back to raw text split."
+                )
+                # Fallback: decode and split translated text directly
+                translated_txt = workflow.export_to_txt()
+                source_segs = [str(s) for s in cache_segments]
+                # For replace mode, translated text is "\n".join(translated segments)
+                # Split by newline to recover individual segments
+                tgt_lines = translated_txt.split('\n')
+                tgt_segs = [s.strip() for s in tgt_lines if s.strip()]
+                n = min(len(source_segs), len(tgt_segs))
+                if n > 0:
+                    self._record_segments(
+                        task_id=task_id,
+                        source_chunks=source_segs[:n],
+                        target_chunks=tgt_segs[:n],
+                        original_filename=original_filename,
+                        workflow_type=payload.workflow_type,
+                        task_state=task_state,
+                        original_content=file_contents.decode('utf-8', errors='replace'),
+                        excluded_segments=excluded_segments,
+                    )
+                    self.task_manager.add_log(task_id, "success", f"Recorded TXT translation segments (fallback): {n}")
+                    return True
+                return False
+
+            # Use cached segments as source and saved translated texts as target
+            source_segs = [str(s) for s in cache_segments]
+            n = min(len(source_segs), len(txt_translated_texts))
             if n > 0:
                 self._record_segments(
                     task_id=task_id,
-                    source_chunks=src_segs[:n],
-                    target_chunks=tgt_segs[:n],
+                    source_chunks=source_segs[:n],
+                    target_chunks=txt_translated_texts[:n],
                     original_filename=original_filename,
                     workflow_type=payload.workflow_type,
                     task_state=task_state,
-                    original_content=original_txt,
+                    original_content=file_contents.decode('utf-8', errors='replace'),
                     excluded_segments=excluded_segments,
                 )
                 self.task_manager.add_log(task_id, "success", f"Recorded TXT translation segments: {n}")
