@@ -302,6 +302,10 @@ class TranslationResultToolbar extends ConsumerWidget {
           if (!showProgressBar) ...<Widget>[
             // Spacer at the beginning to push all buttons to the right
             const Spacer(),
+            // Font size controls
+            _buildFontSizeControls(context, ref),
+            // Global Undo/Redo buttons
+            _buildUndoRedoButtons(context, ref),
             // Search button (shown when segments are available)
             if (totalSegments != null &&
                 totalSegments! > 0 &&
@@ -466,12 +470,7 @@ class TranslationResultToolbar extends ConsumerWidget {
               if (onCheckPdfFormulas != null)
                 const SizedBox(width: 3), // Spacing after formula check button
             ],
-            // Font size controls - Always shown when content is displayed
-            const SizedBox(width: 6),
-            _buildFontSizeControls(context, ref),
           ],
-          // Global Undo/Redo buttons - Always shown, aligned to right
-          _buildUndoRedoButtons(context, ref),
           // Pagination bar and page size selector (inserted between Undo/Redo and Filter when completed and visible)
           // CRITICAL: Show pagination controls when translation is completed, even if only one page
           // Page size selector should always be visible (allows changing page size), pagination bar only when multiple pages
