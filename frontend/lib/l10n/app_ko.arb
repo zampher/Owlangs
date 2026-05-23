@@ -363,6 +363,7 @@
       "error": {}
     }
   },
+  "translationQueueView": "보기",
   "homeFeatureUnderDevelopment": "이 기능은 개발 중입니다.",
   "homeAnonymizeNotSupportedVersion": "아직 지원되지 않습니다. v{version}에서 사용 가능할 예정입니다.",
   "homeAnonymizeInDevelopment": "익명화는 개발 중이며 아직 사용할 수 없습니다.",

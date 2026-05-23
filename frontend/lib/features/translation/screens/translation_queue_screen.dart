@@ -692,9 +692,9 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                         ),
                                       ),
                                     const SizedBox(width: 28),
-                                    // Action buttons (fixed width: 2 buttons)
+                                    // Action buttons (fixed width: up to 3 buttons)
                                     SizedBox(
-                                      width: 56,
+                                      width: 84,
                                       child: Row(
                                         mainAxisAlignment:
                                             MainAxisAlignment.end,
@@ -742,6 +742,33 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                                     '&reedit_workflow_type=${Uri.encodeComponent(wf ?? '')}'
                                                     '&reedit_file_name=${Uri.encodeComponent(name)}';
                                                 context.push(reeditUri);
+                                              },
+                                            ),
+                                          // View
+                                          if (status == 'completed' && inMemory)
+                                            IconButton(
+                                              icon: const Icon(
+                                                  Icons.visibility_outlined,
+                                                  size: 20),
+                                              tooltip:
+                                                  l10n.translationQueueView,
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              padding: const EdgeInsets.all(4),
+                                              constraints: const BoxConstraints(
+                                                  minWidth: 28, minHeight: 28),
+                                              onPressed: () {
+                                                final String? wf = row[
+                                                        'workflow_type']
+                                                    ?.toString();
+                                                final String viewUri =
+                                                    '${AppRouter.translationRoute}'
+                                                    '?execution_mode=queued'
+                                                    '&reedit_task_id=$taskId'
+                                                    '&reedit_workflow_type=${Uri.encodeComponent(wf ?? '')}'
+                                                    '&reedit_file_name=${Uri.encodeComponent(name)}'
+                                                    '&view_mode=clean';
+                                                context.push(viewUri);
                                               },
                                             ),
                                           // Release

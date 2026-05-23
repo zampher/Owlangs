@@ -142,12 +142,15 @@ class AppRouter {
                   state.uri.queryParameters['reedit_workflow_type'];
               final String? reeditFileName =
                   state.uri.queryParameters['reedit_file_name'];
+              final String? viewMode =
+                  state.uri.queryParameters['view_mode'];
 
               return TranslationScreen(
                 executionMode: mode,
                 reeditTaskId: reeditTaskId,
                 reeditWorkflowType: reeditWorkflowType,
                 reeditFileName: reeditFileName,
+                viewMode: viewMode,
               );
             },
           ),

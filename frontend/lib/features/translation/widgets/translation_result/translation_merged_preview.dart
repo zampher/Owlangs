@@ -57,7 +57,7 @@ class TranslationMergedPreviewPanel extends StatelessWidget {
           final textStyle = TextStyle(fontSize: previewFontSize);
 
           return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.only(bottom: 1),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[

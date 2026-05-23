@@ -1055,6 +1055,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get translationQueueView => '查看';
+
+  @override
   String get homeFeatureUnderDevelopment => '此功能正在开发中。';
 
   @override

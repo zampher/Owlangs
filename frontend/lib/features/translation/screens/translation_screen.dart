@@ -71,6 +71,7 @@ class TranslationScreen extends ConsumerStatefulWidget {
     this.reeditTaskId,
     this.reeditWorkflowType,
     this.reeditFileName,
+    this.viewMode,
   });
   final String? flowId;
 
@@ -86,6 +87,9 @@ class TranslationScreen extends ConsumerStatefulWidget {
 
   /// Original filename of the re-edited task, used for download naming.
   final String? reeditFileName;
+
+  /// View mode: 'clean' to start in clean mode, null for default labeled mode.
+  final String? viewMode;
 
   @override
   ConsumerState<TranslationScreen> createState() => _TranslationScreenState();
@@ -567,6 +571,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           final bool isTextModeFromData = dataRef?['isTextMode'] == true;
           final String? workflowTypeFromData =
               dataRef?['workflowType'] as String?;
+          final bool initialMergedFromData =
+              dataRef?['viewMode'] == 'clean';
           // Content will be loaded automatically when tab is opened
           content = TranslationResultPreview(
             taskId: taskId,
@@ -576,6 +582,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                 ?.map((String k, v) => MapEntry(k.toString(), v.toString())),
             isTextMode: isTextModeFromData,
             workflowType: workflowTypeFromData,
+            initialMergedView: initialMergedFromData,
           );
           break;
         case PreviewTabType.glossary:
@@ -6161,6 +6168,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       fileName: displayFileName,
       isTextMode: _isTextMode,
       workflowType: overrideWorkflowType ?? currentSettings.workflowType,
+      initialMergedView: widget.viewMode == 'clean',
     );
 
     final PreviewTab tab = PreviewTab(
@@ -6176,6 +6184,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         'flowId': widget.flowId,
         'isTextMode': _isTextMode,
         'workflowType': overrideWorkflowType ?? currentSettings.workflowType,
+        'viewMode': widget.viewMode,
       },
     );
 

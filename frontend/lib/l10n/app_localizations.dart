@@ -1997,6 +1997,12 @@ abstract class AppLocalizations {
   /// **'Could not clear your queue: {error}'**
   String translationQueueClearMyQueueFailed(Object error);
 
+  /// No description provided for @translationQueueView.
+  ///
+  /// In en, this message translates to:
+  /// **'View'**
+  String get translationQueueView;
+
   /// No description provided for @homeFeatureUnderDevelopment.
   ///
   /// In en, this message translates to:

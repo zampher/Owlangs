@@ -374,6 +374,7 @@
       "error": {}
     }
   },
+  "translationQueueView": "Ver",
   "homeFeatureUnderDevelopment": "Esta característica está en desarrollo.",
   "homeAnonymizeNotSupportedVersion": "Aún no compatible. Estará disponible en v{version}.",
   "homeAnonymizeInDevelopment": "La anonimización está en desarrollo y aún no está disponible.",

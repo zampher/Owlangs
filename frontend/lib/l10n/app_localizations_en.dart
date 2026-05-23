@@ -1101,6 +1101,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get translationQueueView => 'View';
+
+  @override
   String get homeFeatureUnderDevelopment =>
       'This feature is under development.';
 

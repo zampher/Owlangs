@@ -74,6 +74,7 @@ class TranslationResultPreview extends ConsumerStatefulWidget {
     this.fileName,
     this.isTextMode = false,
     this.workflowType,
+    this.initialMergedView = false,
   });
   final String taskId;
   final String? flowId; // Optional per-flow scope
@@ -86,6 +87,8 @@ class TranslationResultPreview extends ConsumerStatefulWidget {
   final String? fileName; // Original file name
   final bool isTextMode;
   final String? workflowType;
+  /// Start in clean (merged) view when true.
+  final bool initialMergedView;
 
   @override
   ConsumerState<TranslationResultPreview> createState() =>
@@ -466,6 +469,7 @@ class _TranslationResultPreviewState
   @override
   void initState() {
     super.initState();
+    _isMergedView = widget.initialMergedView;
     // Initialize with provided paragraphs if available
     _sourceParagraphs = widget.initialSourceParagraphs ?? <String>[];
     _targetParagraphs = widget.initialTargetParagraphs ?? <String>[];

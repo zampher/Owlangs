@@ -1064,6 +1064,9 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get translationQueueView => '表示';
+
+  @override
   String get homeFeatureUnderDevelopment => 'この機能は開発中です。';
 
   @override

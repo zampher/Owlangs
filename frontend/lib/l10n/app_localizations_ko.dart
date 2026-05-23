@@ -1064,6 +1064,9 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get translationQueueView => '보기';
+
+  @override
   String get homeFeatureUnderDevelopment => '이 기능은 개발 중입니다.';
 
   @override
