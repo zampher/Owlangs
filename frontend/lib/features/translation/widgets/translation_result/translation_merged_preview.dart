@@ -149,6 +149,10 @@ class _TranslationMergedPreviewPanelState
   }
 
   void _scrollToHighlighted(int index) {
+    // Don't scroll when already editing this segment: the layout change
+    // (TextField expansion) combined with a stale postFrameCallback can
+    // push the segment out of the viewport.
+    if (_editingIndex == index) return;
     final GlobalKey? key = _itemKeys[index];
     if (key == null) return;
     final BuildContext? itemContext = key.currentContext;
@@ -426,21 +430,26 @@ class _TranslationMergedPreviewPanelState
       ),
     );
 
-    // Only activate keyboard shortcuts when editing — avoids focus/keyboard
-    // interference with dialogs (e.g. save-and-close confirmation dialog).
-    if (_editingIndex != null) {
-      listView = CallbackShortcuts(
-        bindings: <ShortcutActivator, VoidCallback>{
-          SingleActivator(LogicalKeyboardKey.escape): _cancelEditing,
-          SingleActivator(LogicalKeyboardKey.enter, control: true):
-              _saveEditing,
-        },
-        child: Focus(
-          autofocus: false,
-          child: listView,
-        ),
-      );
-    }
+    // Always wrap with CallbackShortcuts + Focus to prevent the Scrollbar/
+    // ListView builder from being remounted when entering/exiting edit mode.
+    // A change in widget type at the top level (Scrollbar → CallbackShortcuts)
+    // would unmount the old ListView and create a new ScrollPosition at offset 0,
+    // causing an unwanted scroll-to-top.
+    // Only populate the bindings when editing — empty bindings when not editing
+    // avoids focus/keyboard interference with dialogs.
+    listView = CallbackShortcuts(
+      bindings: _editingIndex != null
+          ? <ShortcutActivator, VoidCallback>{
+              SingleActivator(LogicalKeyboardKey.escape): _cancelEditing,
+              SingleActivator(LogicalKeyboardKey.enter, control: true):
+                  _saveEditing,
+            }
+          : <ShortcutActivator, VoidCallback>{},
+      child: Focus(
+        autofocus: false,
+        child: listView,
+      ),
+    );
 
     return listView;
   }
