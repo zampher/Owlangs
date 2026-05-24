@@ -2502,6 +2502,10 @@ class _TranslationResultPreviewState
         setState(() {
           _targetParagraphs[operation.segmentIndex] = operation.oldText;
           _modifiedSegments[operation.segmentIndex] = operation.oldText;
+          // Keep merged paragraphs in sync so clean mode reflects the undo.
+          if (operation.segmentIndex < _mergedTargetParagraphs.length) {
+            _mergedTargetParagraphs[operation.segmentIndex] = operation.oldText;
+          }
         });
       }
 
@@ -2569,6 +2573,10 @@ class _TranslationResultPreviewState
         setState(() {
           _targetParagraphs[operation.segmentIndex] = operation.newText;
           _modifiedSegments[operation.segmentIndex] = operation.newText;
+          // Keep merged paragraphs in sync so clean mode reflects the redo.
+          if (operation.segmentIndex < _mergedTargetParagraphs.length) {
+            _mergedTargetParagraphs[operation.segmentIndex] = operation.newText;
+          }
         });
       }
 
@@ -2636,6 +2644,10 @@ class _TranslationResultPreviewState
         setState(() {
           _targetParagraphs[segmentIndex] = previousText;
           _modifiedSegments[segmentIndex] = previousText;
+          // Keep merged paragraphs in sync so clean mode reflects the undo.
+          if (segmentIndex < _mergedTargetParagraphs.length) {
+            _mergedTargetParagraphs[segmentIndex] = previousText;
+          }
         });
       }
 
@@ -2700,6 +2712,10 @@ class _TranslationResultPreviewState
         setState(() {
           _targetParagraphs[segmentIndex] = nextText;
           _modifiedSegments[segmentIndex] = nextText;
+          // Keep merged paragraphs in sync so clean mode reflects the redo.
+          if (segmentIndex < _mergedTargetParagraphs.length) {
+            _mergedTargetParagraphs[segmentIndex] = nextText;
+          }
         });
       }
 
