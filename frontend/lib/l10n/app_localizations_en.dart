@@ -15,8 +15,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsGeneralDarkModeTitle => 'Dark Mode';
 
   @override
-  String get settingsGeneralDarkModeSubtitle =>
-      'Enable dark theme (applied immediately)';
+  String get settingsGeneralDarkModeSubtitle => 'Enable dark theme (applied immediately)';
 
   @override
   String get settingsGeneralLanguageTitle => 'Language';
@@ -25,22 +24,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsGeneralNotificationsTitle => 'Notifications';
 
   @override
-  String get settingsGeneralNotificationsSubtitle =>
-      'Receive notifications for completed tasks (applied immediately)';
+  String get settingsGeneralNotificationsSubtitle => 'Receive notifications for completed tasks (applied immediately)';
 
   @override
   String get settingsGeneralAutoSaveTitle => 'Auto Save';
 
   @override
-  String get settingsGeneralAutoSaveSubtitle =>
-      'Automatically save work in progress (applied immediately)';
+  String get settingsGeneralAutoSaveSubtitle => 'Automatically save work in progress (applied immediately)';
 
   @override
   String get settingsGeneralShowAdsTitle => 'Show ADs';
 
   @override
-  String get settingsGeneralShowAdsSubtitle =>
-      'Show AD placeholders on Home and in Flow (stored in system.json)';
+  String get settingsGeneralShowAdsSubtitle => 'Show AD placeholders on Home and in Flow (stored in system.json)';
 
   @override
   String get settingsGeneralClearStatsButton => 'Clear Statistics';
@@ -49,15 +45,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsGeneralClearStatsConfirmTitle => 'Clear Statistics?';
 
   @override
-  String get settingsGeneralClearStatsConfirmMessage =>
-      'This will reset the document and page count displayed on the home page to 0. This action cannot be undone.';
+  String get settingsGeneralClearStatsConfirmMessage => 'This will reset the document and page count displayed on the home page to 0. This action cannot be undone.';
 
   @override
   String get settingsGeneralClearStatsConfirmButton => 'Clear';
 
   @override
-  String get settingsGeneralClearStatsSuccess =>
-      'Statistics cleared successfully.';
+  String get settingsGeneralClearStatsSuccess => 'Statistics cleared successfully.';
 
   @override
   String get backToHome => 'Back to Home';
@@ -69,8 +63,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsFontPreviewSizeTitle => 'Preview Font Size';
 
   @override
-  String get settingsFontPreviewSizeSubtitle =>
-      'Font size for source and target text in preview';
+  String get settingsFontPreviewSizeSubtitle => 'Font size for source and target text in preview';
 
   @override
   String get translationToolbarFilterAll => 'All';
@@ -150,30 +143,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationToolbarOpenGlossaryTab => 'Open glossary tab';
 
   @override
-  String get translationToolbarHintWaitExtract =>
-      'Please wait for Extract to complete';
+  String get translationToolbarHintWaitExtract => 'Please wait for Extract to complete';
 
   @override
-  String get translationToolbarHintOperationInProgress =>
-      'An operation is in progress';
+  String get translationToolbarHintOperationInProgress => 'An operation is in progress';
 
   @override
   String get translationToolbarGlossary => 'Glossary';
 
   @override
-  String get translationToolbarConvertHint =>
-      'Convert format, exclude all segments, translate, then export from the Convert tab';
+  String get translationToolbarConvertHint => 'Convert format, exclude all segments, translate, then export from the Convert tab';
 
   @override
   String get translationToolbarConvert => 'Convert';
 
   @override
-  String get translationToolbarHintSaveGlossaryFirst =>
-      'Please save the glossary first (click Apply)';
+  String get translationToolbarHintSaveGlossaryFirst => 'Please save the glossary first (click Apply)';
 
   @override
-  String get translationToolbarHintUpdatingExcluded =>
-      'Updating excluded segments...';
+  String get translationToolbarHintUpdatingExcluded => 'Updating excluded segments...';
 
   @override
   String get translationToolbarStartTranslation => 'Start translation';
@@ -188,26 +176,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationToolbarRetryInProgress => 'Retry in progress...';
 
   @override
-  String get translationToolbarRetryTooltip =>
-      'Retry all failed or marked segments. This will retranslate segments that failed during translation or were manually marked for retry, using the currently selected AI platform. Excluded and cleared segments will be skipped.';
+  String get translationToolbarRetryTooltip => 'Retry all failed or marked segments. This will retranslate segments that failed during translation or were manually marked for retry, using the currently selected AI platform. Excluded and cleared segments will be skipped.';
 
   @override
   String get translationToolbarRetry => 'Retry';
 
   @override
-  String get translationPersistQueueTooltip =>
-      'Write current exports to the server and update the task queue so downloads match your latest edits here.';
+  String get translationPersistQueueTooltip => 'Write current exports to the server and update the task queue so downloads match your latest edits here.';
 
   @override
   String get translationPersistQueueButton => 'Save update to queue';
 
   @override
-  String get translationPersistQueueAlreadySyncedTooltip =>
-      'Already matches the queue snapshot. No save needed.';
+  String get translationPersistQueueAlreadySyncedTooltip => 'Already matches the queue snapshot. No save needed.';
 
   @override
-  String get translationPersistQueueSuccess =>
-      'Latest exports saved for the task queue.';
+  String get translationPersistQueueSuccess => 'Latest exports saved for the task queue.';
 
   @override
   String translationPersistQueueFailed(Object error) {
@@ -215,12 +199,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get translationCloseTranslateTabTitle =>
-      'Task queue may not reflect your latest result';
+  String get translationCloseTranslateTabTitle => 'Task queue may not reflect your latest result';
 
   @override
-  String get translationCloseTranslateTabMessage =>
-      'Your edits here are not saved to the task queue snapshot yet. If you close without saving, files you download from the Task queue will not be the final version you see in this tab.\n\nYou can update the queue and then close, or close this tab without saving to the queue.';
+  String get translationCloseTranslateTabMessage => 'Your edits here are not saved to the task queue snapshot yet. If you close without saving, files you download from the Task queue will not be the final version you see in this tab.\n\nYou can update the queue and then close, or close this tab without saving to the queue.';
 
   @override
   String get translationCloseTranslateTabStay => 'Stay';
@@ -229,15 +211,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationCloseTranslateTabClose => 'Close without saving';
 
   @override
-  String get translationCloseTranslateTabSaveAndClose =>
-      'Save to queue and close';
+  String get translationCloseTranslateTabSaveAndClose => 'Save to queue and close';
 
   @override
   String get translationCloseTranslateTabKeepTitle => 'Keep task in queue?';
 
   @override
-  String get translationCloseTranslateTabKeepMessage =>
-      'The task is completed. Keep it in the translation queue for later review and editing?';
+  String get translationCloseTranslateTabKeepMessage => 'The task is completed. Keep it in the translation queue for later review and editing?';
 
   @override
   String get translationCloseTranslateTabKeepInQueue => 'Keep in queue';
@@ -284,8 +264,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String translationStatsSuccessFailed(
-      Object fail, Object success, Object total) {
+  String translationStatsSuccessFailed(Object fail, Object success, Object total) {
     return 'Success: $success/$total, Failed: $fail/$total';
   }
 
@@ -519,43 +498,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationSnackTextConverted => 'Text converted to file format';
 
   @override
-  String get translationSnackSourceResplitCompleted =>
-      'Source re-split completed';
+  String get translationSnackSourceResplitCompleted => 'Source re-split completed';
 
   @override
-  String get translationSnackPleaseSelectFileOrText =>
-      'Please select a file or enter text first';
+  String get translationSnackPleaseSelectFileOrText => 'Please select a file or enter text first';
 
   @override
-  String get translationSnackPleaseSelectFileOrTextWithDot =>
-      'Please select a file or enter text first.';
+  String get translationSnackPleaseSelectFileOrTextWithDot => 'Please select a file or enter text first.';
 
   @override
   String get translationSnackPleaseSelectFile => 'Please select a file first';
 
   @override
-  String get translationSnackPleaseSelectDocumentFirst =>
-      'Please select a document first.';
+  String get translationSnackPleaseSelectDocumentFirst => 'Please select a document first.';
 
   @override
-  String get translationSnackGlossaryGenerated =>
-      'Glossary generated successfully!';
+  String get translationSnackGlossaryGenerated => 'Glossary generated successfully!';
 
   @override
-  String get translationSnackGlossaryGenerationCancelled =>
-      'Glossary generation cancelled';
+  String get translationSnackGlossaryGenerationCancelled => 'Glossary generation cancelled';
 
   @override
-  String get translationSnackGlossaryAppliedToTask =>
-      'Glossary applied to translation task';
+  String get translationSnackGlossaryAppliedToTask => 'Glossary applied to translation task';
 
   @override
-  String get translationSnackPreviousTranslationCancelled =>
-      'Previous translation cancelled';
+  String get translationSnackPreviousTranslationCancelled => 'Previous translation cancelled';
 
   @override
-  String get translationSnackGlossarySavedAndApplied =>
-      'Glossary saved and applied';
+  String get translationSnackGlossarySavedAndApplied => 'Glossary saved and applied';
 
   @override
   String get translationDialogMixedLangTitle => 'Mixed Language Detected';
@@ -566,12 +536,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get translationDialogMixedLangPromptTitle =>
-      'To improve translation quality, you can add prompt instructions:';
+  String get translationDialogMixedLangPromptTitle => 'To improve translation quality, you can add prompt instructions:';
 
   @override
-  String get translationDialogMixedLangOption1Title =>
-      'Only translate text in source language';
+  String get translationDialogMixedLangOption1Title => 'Only translate text in source language';
 
   @override
   String translationDialogMixedLangOption1Subtitle(Object languageName) {
@@ -579,12 +547,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get translationDialogMixedLangOption2Title =>
-      'Keep code and technical terms unchanged';
+  String get translationDialogMixedLangOption2Title => 'Keep code and technical terms unchanged';
 
   @override
-  String get translationDialogMixedLangOption2Subtitle =>
-      'Keep code blocks, technical terms, function names, and text in other languages unchanged';
+  String get translationDialogMixedLangOption2Subtitle => 'Keep code blocks, technical terms, function names, and text in other languages unchanged';
 
   @override
   String get translationDialogMixedLangCancel => 'Cancel';
@@ -596,8 +562,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationDialogMixedLangApply => 'Apply';
 
   @override
-  String get translationSnackExportStarted =>
-      'Export task has been started, please wait.';
+  String get translationSnackExportStarted => 'Export task has been started, please wait.';
 
   @override
   String get translationSnackPromptUpdated => 'Prompt instructions updated';
@@ -659,19 +624,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationDialogSwitchToFileTitle => 'Switch to File Mode';
 
   @override
-  String get translationDialogSwitchToFileBody =>
-      'Switching to file mode will clear your current text input. Do you want to continue?';
+  String get translationDialogSwitchToFileBody => 'Switching to file mode will clear your current text input. Do you want to continue?';
 
   @override
   String get translationDialogSwitchToTextTitle => 'Switch to Text Mode';
 
   @override
-  String get translationDialogSwitchToTextBody =>
-      'Switching to text mode will clear the current file selection. Do you want to continue?';
+  String get translationDialogSwitchToTextBody => 'Switching to text mode will clear the current file selection. Do you want to continue?';
 
   @override
-  String get translationSnackAllSegmentsExcludedSkipped =>
-      'All segments are excluded. Translation will be skipped. You can export the file for format conversion.';
+  String get translationSnackAllSegmentsExcludedSkipped => 'All segments are excluded. Translation will be skipped. You can export the file for format conversion.';
 
   @override
   String get translationDialogCancelButton => 'Cancel';
@@ -683,28 +645,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationNoLlmAvailableTitle => 'No LLM platform available';
 
   @override
-  String get translationNoLlmAvailableMessage =>
-      'No configured and available LLM platform. To translate, please configure an LLM API Key in Settings first; if you only need format conversion, you can continue.';
+  String get translationNoLlmAvailableMessage => 'No configured and available LLM platform. To translate, please configure an LLM API Key in Settings first; if you only need format conversion, you can continue.';
 
   @override
   String get translationNoLlmConfigureButton => 'Configure LLM';
 
   @override
-  String get translationNoLlmContinueFormatOnlyButton =>
-      'Format conversion only';
+  String get translationNoLlmContinueFormatOnlyButton => 'Format conversion only';
 
   @override
   String get languageMatchWarningTitle => 'Language Match Warning';
 
   @override
-  String languageMatchWarningGlossaryBody(
-      Object detectedName, Object targetName) {
+  String languageMatchWarningGlossaryBody(Object detectedName, Object targetName) {
     return 'The detected source language ($detectedName) is the same as the target language ($targetName). Are you sure you want to continue with glossary generation?';
   }
 
   @override
-  String languageMatchWarningTranslationBody(
-      Object detectedName, Object targetName) {
+  String languageMatchWarningTranslationBody(Object detectedName, Object targetName) {
     return 'The detected source language ($detectedName) is the same as the target language ($targetName). Are you sure you want to continue with translation?';
   }
 
@@ -712,8 +670,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationDialogCancelTaskTitle => 'Cancel Current Task';
 
   @override
-  String get translationDialogCancelTaskBody =>
-      'This will cancel the current extraction/translation task and clear the selected file. Do you want to continue?';
+  String get translationDialogCancelTaskBody => 'This will cancel the current extraction/translation task and clear the selected file. Do you want to continue?';
 
   @override
   String get translationDialogCancelTaskNo => 'No';
@@ -731,8 +688,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get quickSettingsSourceLanguage => 'Source language (MinerU OCR)';
 
   @override
-  String get quickSettingsLanguageSwitchDisabled =>
-      'Language switching is disabled during translation. Please switch to Extract tab to change target language.';
+  String get quickSettingsLanguageSwitchDisabled => 'Language switching is disabled during translation. Please switch to Extract tab to change target language.';
 
   @override
   String get quickSettingsParsingPlatform => 'Parsing Platform';
@@ -774,15 +730,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get quickSettingsTestFailed => 'Test failed';
 
   @override
-  String get quickSettingsOpenAiPlatformsSettings =>
-      'Open AI Platforms settings';
+  String get quickSettingsOpenAiPlatformsSettings => 'Open AI Platforms settings';
 
   @override
   String get quickSettingsTemperature => 'Temperature';
 
   @override
-  String get quickSettingsTemperatureHint =>
-      'Controls randomness: Lower = more focused, Higher = more creative';
+  String get quickSettingsTemperatureHint => 'Controls randomness: Lower = more focused, Higher = more creative';
 
   @override
   String get quickSettingsQtTsOptions => 'Qt .ts Translation Options';
@@ -791,30 +745,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get quickSettingsQtTsSkipExisting => 'Skip existing translations';
 
   @override
-  String get quickSettingsQtTsSkipExistingSubtitle =>
-      'Skip messages that already have translations';
+  String get quickSettingsQtTsSkipExistingSubtitle => 'Skip messages that already have translations';
 
   @override
-  String get quickSettingsQtTsTranslateUnfinished =>
-      'Translate unfinished entries';
+  String get quickSettingsQtTsTranslateUnfinished => 'Translate unfinished entries';
 
   @override
-  String get quickSettingsQtTsTranslateUnfinishedSubtitle =>
-      'Translate messages marked as unfinished (type=\"unfinished\")';
+  String get quickSettingsQtTsTranslateUnfinishedSubtitle => 'Translate messages marked as unfinished (type=\"unfinished\")';
 
   @override
   String get quickSettingsQtTsTranslateVanished => 'Translate vanished entries';
 
   @override
-  String get quickSettingsQtTsTranslateVanishedSubtitle =>
-      'Translate messages marked as vanished (type=\"vanished\")';
+  String get quickSettingsQtTsTranslateVanishedSubtitle => 'Translate messages marked as vanished (type=\"vanished\")';
 
   @override
   String get quickSettingsQtTsTranslateObsolete => 'Translate obsolete entries';
 
   @override
-  String get quickSettingsQtTsTranslateObsoleteSubtitle =>
-      'Translate messages marked as obsolete (type=\"obsolete\")';
+  String get quickSettingsQtTsTranslateObsoleteSubtitle => 'Translate messages marked as obsolete (type=\"obsolete\")';
 
   @override
   String get quickSettingsPrompt => 'Prompt';
@@ -853,12 +802,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get quickSettingsTaskNoteLabel => 'Task note (short instruction)';
 
   @override
-  String get quickSettingsTaskNoteHint =>
-      'e.g. Keep formulas unmodified; annotate proper nouns';
+  String get quickSettingsTaskNoteHint => 'e.g. Keep formulas unmodified; annotate proper nouns';
 
   @override
-  String get quickSettingsAdRegionF =>
-      'Region F: Bottom of Quick Settings\n(Medium Rectangle 300×250)';
+  String get quickSettingsAdRegionF => 'Region F: Bottom of Quick Settings\n(Medium Rectangle 300×250)';
 
   @override
   String quickSettingsPlatformMessage(Object label, Object message) {
@@ -871,20 +818,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get homeTagline =>
-      'AI Based, Immersion\nPrivate, Secure(Developing)\nTeam Shared, Customizable\n';
+  String get homeTagline => 'AI Based, Immersion\nPrivate, Secure(Developing)\nTeam Shared, Customizable\n';
 
   @override
-  String get homeIntro =>
-      'Upload documents and translate them into multiple languages with AI-powered accuracy.\n';
+  String get homeIntro => 'Upload documents and translate them into multiple languages with AI-powered accuracy.\n';
 
   @override
-  String get homeHowItWorks =>
-      'How it works\nTranslation: Import -> Parse Document -> Glossary -> Translate -> Export\nFile format conversion: Import -> Parse Document -> Convert -> Export\nURL Fetch: Enter URL -> Fetch Page -> Parse Content -> Extract Text -> Translate/Export';
+  String get homeHowItWorks => 'How it works\nTranslation: Import -> Parse Document -> Glossary -> Translate -> Export\nFile format conversion: Import -> Parse Document -> Convert -> Export\nURL Fetch: Enter URL -> Fetch Page -> Parse Content -> Extract Text -> Translate/Export';
 
   @override
-  String get homeSnackDonorExpired =>
-      'Your registration code has expired. Please re-register to continue Pro benefits.';
+  String get homeSnackDonorExpired => 'Your registration code has expired. Please re-register to continue Pro benefits.';
 
   @override
   String get commonCancel => 'Cancel';
@@ -904,8 +847,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get homeAiPlatformsConfigureNotice =>
-      'Please configure your AI platforms in the settings panel before using the app.';
+  String get homeAiPlatformsConfigureNotice => 'Please configure your AI platforms in the settings panel before using the app.';
 
   @override
   String get homeBackendStatusStarting => 'Backend is starting up...';
@@ -917,8 +859,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeBackendStatusConnected => 'Backend is connected';
 
   @override
-  String get homeBackendStatusDisconnected =>
-      'Backend is disconnected. Please retry.';
+  String get homeBackendStatusDisconnected => 'Backend is disconnected. Please retry.';
 
   @override
   String get homeBackendStatusUnknown => 'Connecting to backend...';
@@ -948,20 +889,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationQueueTitle => 'Task queue';
 
   @override
-  String get translationQueueHint =>
-      'Tasks refresh automatically. Downloads appear when a task completes.';
+  String get translationQueueHint => 'Tasks refresh automatically. Downloads appear when a task completes.';
 
   @override
-  String get translationQueueCancelExitHint =>
-      'For queued or running tasks, use Cancel task to stop work; after you confirm, you return to the home page.';
+  String get translationQueueCancelExitHint => 'For queued or running tasks, use Cancel task to stop work; after you confirm, you return to the home page.';
 
   @override
-  String get translationQueueCancelDialogTitle =>
-      'Cancel this translation task?';
+  String get translationQueueCancelDialogTitle => 'Cancel this translation task?';
 
   @override
-  String get translationQueueCancelDialogMessage =>
-      'Queued tasks are removed from the queue; running tasks are stopped. After confirming, you will return to the home page.';
+  String get translationQueueCancelDialogMessage => 'Queued tasks are removed from the queue; running tasks are stopped. After confirming, you will return to the home page.';
 
   @override
   String get translationQueueCancelDialogKeep => 'Keep';
@@ -979,8 +916,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationQueueBackToQueueTooltip => 'Back to task queue';
 
   @override
-  String get translationQueuedStarted =>
-      'Task added to the queue. Track it here.';
+  String get translationQueuedStarted => 'Task added to the queue. Track it here.';
 
   @override
   String get translationQueueRefresh => 'Refresh';
@@ -1049,8 +985,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationQueueGuestUser => 'Guest';
 
   @override
-  String get translationQueueClearAllTooltip =>
-      'Clear task queue and server-side result cache (admin only)';
+  String get translationQueueClearAllTooltip => 'Clear task queue and server-side result cache (admin only)';
 
   @override
   String get translationQueueClearAllButton => 'Clear queue';
@@ -1059,8 +994,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationQueueClearAllTitle => 'Clear task queue';
 
   @override
-  String get translationQueueClearAllMessage =>
-      'This cancels queued and in-flight work, removes all in-memory tasks, and deletes on-disk queue snapshots. This cannot be undone.';
+  String get translationQueueClearAllMessage => 'This cancels queued and in-flight work, removes all in-memory tasks, and deletes on-disk queue snapshots. This cannot be undone.';
 
   @override
   String get translationQueueClearAllConfirm => 'Clear';
@@ -1083,8 +1017,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationQueueClearMyQueueTitle => 'Clear my queue';
 
   @override
-  String get translationQueueClearMyQueueMessage =>
-      'Remove all your tasks from the queue?';
+  String get translationQueueClearMyQueueMessage => 'Remove all your tasks from the queue?';
 
   @override
   String get translationQueueClearMyQueueConfirm => 'Clear';
@@ -1104,8 +1037,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationQueueView => 'Reading Edit';
 
   @override
-  String get homeFeatureUnderDevelopment =>
-      'This feature is under development.';
+  String get homeFeatureUnderDevelopment => 'This feature is under development.';
 
   @override
   String homeAnonymizeNotSupportedVersion(Object version) {
@@ -1113,8 +1045,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get homeAnonymizeInDevelopment =>
-      'Anonymization is in development and not yet available.';
+  String get homeAnonymizeInDevelopment => 'Anonymization is in development and not yet available.';
 
   @override
   String get homeScrollLeft => 'Scroll left';
@@ -1126,8 +1057,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeTabHome => 'Home';
 
   @override
-  String get homeToolbarAdBanner =>
-      'Toolbar Ad Banner\n(728×90 Leaderboard / 320×50 Mobile)';
+  String get homeToolbarAdBanner => 'Toolbar Ad Banner\n(728×90 Leaderboard / 320×50 Mobile)';
 
   @override
   String get homeSteps => 'Steps';
@@ -1192,24 +1122,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeEditionProStatusActivated => 'Activated';
 
   @override
-  String get homeWelcomeDearPro =>
-      'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.';
+  String get homeWelcomeDearPro => 'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.';
 
   @override
-  String get homeWelcomeDearStandard =>
-      'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.';
+  String get homeWelcomeDearStandard => 'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.';
 
   @override
-  String get homeWelcomeDearProNoUser =>
-      'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.';
+  String get homeWelcomeDearProNoUser => 'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.';
 
   @override
-  String get homeWelcomeDearStandardNoUser =>
-      'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.';
+  String get homeWelcomeDearStandardNoUser => 'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.';
 
   @override
-  String get homeWelcomeHello =>
-      'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.';
+  String get homeWelcomeHello => 'Immersive translation: Compare source and translation side by side in the UI.\nQueue translation: Enqueue documents and run the full pipeline in order.';
 
   @override
   String get homeLoading => 'Loading...';
@@ -1272,12 +1197,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get changePasswordConfirmPasswordLabel => 'Confirm new password';
 
   @override
-  String get changePasswordRequiredError =>
-      'Current password and new password are required.';
+  String get changePasswordRequiredError => 'Current password and new password are required.';
 
   @override
-  String get changePasswordConfirmMismatchError =>
-      'The two new passwords do not match.';
+  String get changePasswordConfirmMismatchError => 'The two new passwords do not match.';
 
   @override
   String get changePasswordSuccessMessage => 'Password changed successfully.';
@@ -1289,12 +1212,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get changePasswordRequirementLength => '8–128 characters';
 
   @override
-  String get changePasswordRequirementUppercase =>
-      'At least 1 uppercase letter';
+  String get changePasswordRequirementUppercase => 'At least 1 uppercase letter';
 
   @override
-  String get changePasswordRequirementLowercase =>
-      'At least 1 lowercase letter';
+  String get changePasswordRequirementLowercase => 'At least 1 lowercase letter';
 
   @override
   String get changePasswordRequirementDigit => 'At least 1 digit';
@@ -1312,8 +1233,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsParsingEngineTitle => 'Parsing Engine';
 
   @override
-  String get settingsParsingEngineSubtitle =>
-      'Select the document parsing engine for text extraction and processing.';
+  String get settingsParsingEngineSubtitle => 'Select the document parsing engine for text extraction and processing.';
 
   @override
   String get settingsParsingEngineLabel => 'Parsing Engine';
@@ -1322,15 +1242,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsParsingEngineMineru => 'MinerU (Cloud)';
 
   @override
-  String get settingsParsingEngineMineruDesc =>
-      'Advanced document parsing with OCR support';
+  String get settingsParsingEngineMineruDesc => 'Advanced document parsing with OCR support';
 
   @override
   String get settingsParsingEngineMineruLocal => 'MinerU (Local)';
 
   @override
-  String get settingsParsingEngineMineruLocalDesc =>
-      'Self-hosted MinerU; API key optional';
+  String get settingsParsingEngineMineruLocalDesc => 'Self-hosted MinerU; API key optional';
 
   @override
   String get settingsParsingEnginePdfplumber => 'PDFPlumber';
@@ -1348,8 +1266,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsFormulaOcr => 'Formula OCR';
 
   @override
-  String get settingsFormulaOcrSubtitle =>
-      'Enable OCR for mathematical formulas';
+  String get settingsFormulaOcrSubtitle => 'Enable OCR for mathematical formulas';
 
   @override
   String get settingsTableOcr => 'Table OCR';
@@ -1358,12 +1275,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTableOcrSubtitle => 'Enable OCR for tables';
 
   @override
-  String get settingsAnonymizationNewTaskNotice =>
-      'Changes apply to new tasks only';
+  String get settingsAnonymizationNewTaskNotice => 'Changes apply to new tasks only';
 
   @override
-  String get settingsParsingEngineNewTaskNotice =>
-      'Changes apply to new tasks only';
+  String get settingsParsingEngineNewTaskNotice => 'Changes apply to new tasks only';
 
   @override
   String get settingsPdfSplitMaxPages => 'PDF Split Max Pages';
@@ -1378,8 +1293,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsOcrLanguageTitle => 'OCR Language';
 
   @override
-  String get settingsOcrLanguageSubtitle =>
-      'Configure the OCR language for text recognition in images and scanned documents.';
+  String get settingsOcrLanguageSubtitle => 'Configure the OCR language for text recognition in images and scanned documents.';
 
   @override
   String get settingsOcrLanguageLabel => 'OCR Language';
@@ -1421,8 +1335,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsGlossaryManagementTitle => 'Glossary Management';
 
   @override
-  String get settingsGlossaryManagementSubtitle =>
-      'Manage your terminology entries for consistent translation quality.';
+  String get settingsGlossaryManagementSubtitle => 'Manage your terminology entries for consistent translation quality.';
 
   @override
   String get settingsGlossarySelectGlossary => 'Select Glossary';
@@ -1454,8 +1367,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsGlossaryAddEntry => 'Add Entry';
 
   @override
-  String get settingsGlossaryNoEntriesYet =>
-      'No glossary entries yet.\nAdd your first entry to get started.';
+  String get settingsGlossaryNoEntriesYet => 'No glossary entries yet.\nAdd your first entry to get started.';
 
   @override
   String get settingsGlossaryFilterLabel => 'Filter:';
@@ -1517,8 +1429,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsGlossaryGlobalGlossary => 'Global Glossary';
 
   @override
-  String get settingsGlossaryGlobalGlossarySubtitle =>
-      'If off, it will be your personal glossary';
+  String get settingsGlossaryGlobalGlossarySubtitle => 'If off, it will be your personal glossary';
 
   @override
   String get settingsGlossaryCreate => 'Create';
@@ -1549,15 +1460,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsGlossaryCategoryOptionalLabel => 'Category (optional)';
 
   @override
-  String get settingsGlossaryCategoryOptionalHint =>
-      'Leave empty for unclassified';
+  String get settingsGlossaryCategoryOptionalHint => 'Leave empty for unclassified';
 
   @override
   String get settingsGlossaryAdd => 'Add';
 
   @override
-  String get settingsGlossarySourceTargetRequired =>
-      'Source text and target text are required';
+  String get settingsGlossarySourceTargetRequired => 'Source text and target text are required';
 
   @override
   String get settingsGlossaryEntryAddedSnack => 'Entry added';
@@ -1659,8 +1568,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String settingsGlossaryGlossaryDropdownItem(
-      Object count, Object name, Object type) {
+  String settingsGlossaryGlossaryDropdownItem(Object count, Object name, Object type) {
     return '$name ($type) · $count items';
   }
 
@@ -1700,27 +1608,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsGlossaryEntryDeleteFailedSnack => 'Failed to delete entry';
 
   @override
-  String get settingsGlossaryEmptyStateTitle =>
-      'No glossaries yet. Create your first glossary to get started.';
+  String get settingsGlossaryEmptyStateTitle => 'No glossaries yet. Create your first glossary to get started.';
 
   @override
   String get settingsGlossaryTooltipCreate => 'Create a new glossary';
 
   @override
-  String get settingsGlossaryTooltipImport =>
-      'Import entries from CSV or TBX format';
+  String get settingsGlossaryTooltipImport => 'Import entries from CSV or TBX format';
 
   @override
-  String get settingsGlossaryTooltipExport =>
-      'Export selected glossary to CSV or TBX format';
+  String get settingsGlossaryTooltipExport => 'Export selected glossary to CSV or TBX format';
 
   @override
-  String get settingsGlossaryTooltipExportAll =>
-      'Export all glossaries as a ZIP archive';
+  String get settingsGlossaryTooltipExportAll => 'Export all glossaries as a ZIP archive';
 
   @override
-  String get settingsGlossaryTooltipDeleteGlossary =>
-      'Delete the selected glossary permanently';
+  String get settingsGlossaryTooltipDeleteGlossary => 'Delete the selected glossary permanently';
 
   @override
   String get settingsGlossaryBatchEditCategory => 'Edit category';
@@ -1806,8 +1709,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get glossaryPanelDropCsvHere => 'Drop CSV or TBX file here';
 
   @override
-  String get glossaryPanelNoEntriesHint =>
-      'No glossary entries.\nClick on the Detect Glossary button to get started.\nOr select a glossary from the list to view its entries.\nOr drag and drop a CSV or TBX file here.';
+  String get glossaryPanelNoEntriesHint => 'No glossary entries.\nClick on the Detect Glossary button to get started.\nOr select a glossary from the list to view its entries.\nOr drag and drop a CSV or TBX file here.';
 
   @override
   String get glossaryPanelSelectBody => 'Select a glossary to work with:';
@@ -1860,8 +1762,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get glossaryWidgetNoGlossariesHint =>
-      'No glossaries available. Create one in Settings -> Glossary';
+  String get glossaryWidgetNoGlossariesHint => 'No glossaries available. Create one in Settings -> Glossary';
 
   @override
   String glossaryWidgetTypeCountItems(Object type, Object count) {
@@ -1884,14 +1785,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String glossaryWidgetPersonalAppended(
-      Object newCount, Object skipped, Object total) {
+  String glossaryWidgetPersonalAppended(Object newCount, Object skipped, Object total) {
     return 'Added $newCount new terms to personal glossary.\nSkipped $skipped existing terms.\nTotal terms: $total';
   }
 
   @override
-  String glossaryWidgetPersonalUpdated(
-      Object newCount, Object updatedCount, Object total) {
+  String glossaryWidgetPersonalUpdated(Object newCount, Object updatedCount, Object total) {
     return 'Personal glossary updated successfully!\nAdded $newCount new terms, updated $updatedCount existing terms.\nTotal terms: $total';
   }
 
@@ -1913,29 +1812,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsUserManagementTitle => 'User Management Mode';
 
   @override
-  String get settingsUserManagementSubtitle =>
-      'Choose login and permission policy for Web deployment. Settings and Setup Wizard are admin-only.';
+  String get settingsUserManagementSubtitle => 'Choose login and permission policy for Web deployment. Settings and Setup Wizard are admin-only.';
 
   @override
   String get settingsUserManagementModeNoLogin => 'No login required';
 
   @override
-  String get settingsUserManagementModeNoLoginDesc =>
-      'Use without login; Settings and Setup Wizard available only after admin login.';
+  String get settingsUserManagementModeNoLoginDesc => 'Use without login; Settings and Setup Wizard available only after admin login.';
 
   @override
   String get settingsUserManagementModeLdap => 'LDAP login';
 
   @override
-  String get settingsUserManagementModeLdapDesc =>
-      'Log in with LDAP/AD; Settings and Setup Wizard for admin (domain group) only.';
+  String get settingsUserManagementModeLdapDesc => 'Log in with LDAP/AD; Settings and Setup Wizard for admin (domain group) only.';
 
   @override
   String get settingsUserManagementModeLocal => 'Local user login';
 
   @override
-  String get settingsUserManagementModeLocalDesc =>
-      'Authenticate against local user list on server.';
+  String get settingsUserManagementModeLocalDesc => 'Authenticate against local user list on server.';
 
   @override
   String get settingsUserManagementInDevelopment => 'In development';
@@ -1952,8 +1847,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLdapEnabled => 'Enable LDAP login';
 
   @override
-  String get settingsLdapEnableHint =>
-      'Test LDAP connection first before enabling.';
+  String get settingsLdapEnableHint => 'Test LDAP connection first before enabling.';
 
   @override
   String get settingsLdapProtocol => 'Protocol';
@@ -2011,8 +1905,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLdapGroupBaseDn => 'Group search Base DN';
 
   @override
-  String get settingsLdapGroupBaseDnPlaceholder =>
-      'OU=Groups,DC=example,DC=com';
+  String get settingsLdapGroupBaseDnPlaceholder => 'OU=Groups,DC=example,DC=com';
 
   @override
   String get settingsLdapTlsVerify => 'Verify TLS certificate';
@@ -2048,8 +1941,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLdapTestStart => 'Start test';
 
   @override
-  String get settingsLdapTestSuccess =>
-      'LDAP connection test succeeded. You can now enable LDAP.';
+  String get settingsLdapTestSuccess => 'LDAP connection test succeeded. You can now enable LDAP.';
 
   @override
   String get settingsLdapTestFailed => 'LDAP connection test failed';
@@ -2058,15 +1950,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLdapConfigSaved => 'LDAP configuration saved';
 
   @override
-  String get settingsLdapEnableRequireTest =>
-      'Please test LDAP connection first before enabling LDAP.';
+  String get settingsLdapEnableRequireTest => 'Please test LDAP connection first before enabling LDAP.';
 
   @override
   String get settingsAdminOnlyDialogTitle => 'Admin Only';
 
   @override
-  String get settingsAdminOnlyDialogMessage =>
-      'Settings and Setup Wizard are available only to administrators. Please log in with an admin account to continue.';
+  String get settingsAdminOnlyDialogMessage => 'Settings and Setup Wizard are available only to administrators. Please log in with an admin account to continue.';
 
   @override
   String get settingsAdminOnlyDialogGoToLogin => 'Go to Login';
@@ -2129,15 +2019,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiPlatformPlatformName => 'Platform Name';
 
   @override
-  String get aiPlatformPlatformNameHint =>
-      'e.g., Doubao (DeepSeek / Volcano Ark)';
+  String get aiPlatformPlatformNameHint => 'e.g., Doubao (DeepSeek / Volcano Ark)';
 
   @override
   String get aiPlatformApiUrl => 'API URL';
 
   @override
-  String get aiPlatformApiUrlHint =>
-      'e.g., https://ark.cn-beijing.volces.com/api/v3';
+  String get aiPlatformApiUrlHint => 'e.g., https://ark.cn-beijing.volces.com/api/v3';
 
   @override
   String get aiPlatformMaxTokens => 'Max Tokens';
@@ -2179,12 +2067,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiPlatformTestConnection => 'Test Connection';
 
   @override
-  String get aiPlatformTestConnectionHint =>
-      'After updating configuration, please click \"Test Connection\" below to verify the platform is available.';
+  String get aiPlatformTestConnectionHint => 'After updating configuration, please click \"Test Connection\" below to verify the platform is available.';
 
   @override
-  String get setupWizardConfigureApiKeyAndTest =>
-      'Connection unavailable. Please configure API Key and click \"Test Connection\" to verify.';
+  String get setupWizardConfigureApiKeyAndTest => 'Connection unavailable. Please configure API Key and click \"Test Connection\" to verify.';
 
   @override
   String get setupWizardSaveAndExit => 'Save and exit';
@@ -2199,35 +2085,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setupWizardStepMineru => 'PDF / MinerU';
 
   @override
-  String get setupWizardWelcomeIntro =>
-      'This wizard will help you complete two key configurations:';
+  String get setupWizardWelcomeIntro => 'This wizard will help you complete two key configurations:';
 
   @override
-  String get setupWizardWelcomeBody =>
-      '1. Select and configure your primary LLM platform.\n2. If you need to translate PDF/PNG etc., configure the MinerU parsing engine (optional).\n\nNote: After configuring, use \"Test Connection\" to verify.';
+  String get setupWizardWelcomeBody => '1. Select and configure your primary LLM platform.\n2. If you need to translate PDF/PNG etc., configure the MinerU parsing engine (optional).\n\nNote: After configuring, use \"Test Connection\" to verify.';
 
   @override
   String get setupWizardUiLanguageLabel => 'UI Language';
 
   @override
-  String get setupWizardMineruQuestion =>
-      'Do you need to translate PDF / images on this device?';
+  String get setupWizardMineruQuestion => 'Do you need to translate PDF / images on this device?';
 
   @override
-  String get setupWizardMineruYes =>
-      'Yes (recommended; enables MinerU document parsing)';
+  String get setupWizardMineruYes => 'Yes (recommended; enables MinerU document parsing)';
 
   @override
-  String get setupWizardMineruNo =>
-      'Not for now (LLM-only translation for plain text, etc.)';
+  String get setupWizardMineruNo => 'Not for now (LLM-only translation for plain text, etc.)';
 
   @override
-  String get setupWizardMineruDescription =>
-      'MinerU handles layout parsing and segmentation for PDF / images.\nEnter MinerU API Key and URL below, then click \"Test Connection\" to verify.';
+  String get setupWizardMineruDescription => 'MinerU handles layout parsing and segmentation for PDF / images.\nEnter MinerU API Key and URL below, then click \"Test Connection\" to verify.';
 
   @override
-  String get setupWizardMineruSkipped =>
-      'You chose not to configure MinerU. You can enable PDF translation later in Settings.';
+  String get setupWizardMineruSkipped => 'You chose not to configure MinerU. You can enable PDF translation later in Settings.';
 
   @override
   String get setupWizardMineruConfigTitle => 'MinerU (parsing engine)';
@@ -2236,19 +2115,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setupWizardSelectMineruPlatform => 'Select MinerU Platform';
 
   @override
-  String get setupWizardMineruCloudOption =>
-      'MinerU (Cloud) - Official cloud service';
+  String get setupWizardMineruCloudOption => 'MinerU (Cloud) - Official cloud service';
 
   @override
-  String get setupWizardMineruLocalOption =>
-      'MinerU (Local) - Self-hosted deployment';
+  String get setupWizardMineruLocalOption => 'MinerU (Local) - Self-hosted deployment';
 
   @override
   String get setupWizardSelectLlmPlatform => 'Select LLM platform';
 
   @override
-  String get setupWizardNoLlmPlatforms =>
-      'No LLM platforms in AI Platform Settings. Add a platform in Settings first.';
+  String get setupWizardNoLlmPlatforms => 'No LLM platforms in AI Platform Settings. Add a platform in Settings first.';
 
   @override
   String get setupWizardMineruSaved => 'MinerU configuration saved';
@@ -2281,12 +2157,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiPlatformThinkingDefault => 'Default';
 
   @override
-  String get aiPlatformThinkingHint =>
-      'Enable AI reasoning process for better translation quality';
+  String get aiPlatformThinkingHint => 'Enable AI reasoning process for better translation quality';
 
   @override
-  String get aiPlatformPleaseEnterApiKeyFirst =>
-      'Please enter an API key first';
+  String get aiPlatformPleaseEnterApiKeyFirst => 'Please enter an API key first';
 
   @override
   String get aiPlatformPleaseEnterApiUrlFirst => 'Please enter API URL first';
@@ -2295,8 +2169,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiPlatformHasApiKey => 'Requires API Key';
 
   @override
-  String get aiPlatformHasApiKeyHint =>
-      'Uncheck for local deployments without API authentication';
+  String get aiPlatformHasApiKeyHint => 'Uncheck for local deployments without API authentication';
 
   @override
   String get aiPlatformApiKeyOptionalHint => 'Leave empty if not required';
@@ -2354,8 +2227,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiPlatformFormulaOcr => 'Formula OCR';
 
   @override
-  String get aiPlatformFormulaOcrSubtitle =>
-      'Enable OCR for mathematical formulas';
+  String get aiPlatformFormulaOcrSubtitle => 'Enable OCR for mathematical formulas';
 
   @override
   String get aiPlatformTableOcr => 'Table OCR';
@@ -2367,22 +2239,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsFontEditSizeTitle => 'Edit Font Size';
 
   @override
-  String get settingsFontEditSizeSubtitle =>
-      'Font size when editing translated segments';
+  String get settingsFontEditSizeSubtitle => 'Font size when editing translated segments';
 
   @override
   String get settingsTranslationTitle => 'Translation Settings';
 
   @override
-  String get settingsTranslationNotice =>
-      'These settings will apply to new translation tasks only.';
+  String get settingsTranslationNotice => 'These settings will apply to new translation tasks only.';
 
   @override
   String get settingsTranslationAutoGlossaryTitle => 'Auto Generate Glossary';
 
   @override
-  String get settingsTranslationAutoGlossarySubtitle =>
-      'Automatically generate glossary after translation (applies to new tasks)';
+  String get settingsTranslationAutoGlossarySubtitle => 'Automatically generate glossary after translation (applies to new tasks)';
 
   @override
   String get settingsTranslationParamsTitle => 'Translation Parameters';
@@ -2391,51 +2260,43 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTranslationConcurrentTitle => 'Concurrent Requests';
 
   @override
-  String get settingsTranslationConcurrentHint =>
-      'Recommended: 3 (adjust 1–8 based on model and quota)';
+  String get settingsTranslationConcurrentHint => 'Recommended: 3 (adjust 1–8 based on model and quota)';
 
   @override
   String get settingsTranslationTimeoutTitle => 'Timeout (seconds)';
 
   @override
-  String get settingsTranslationTimeoutHint =>
-      '120 (recommended: 120-300 seconds)';
+  String get settingsTranslationTimeoutHint => '120 (recommended: 120-300 seconds)';
 
   @override
   String get settingsTranslationChunkRetryTitle => 'Chunk retry (per request)';
 
   @override
-  String get settingsTranslationChunkRetryHint =>
-      'Recommended: 3–5 (retries when a translation chunk or API call fails)';
+  String get settingsTranslationChunkRetryHint => 'Recommended: 3–5 (retries when a translation chunk or API call fails)';
 
   @override
-  String get settingsTranslationSegmentAutoRetryTitle =>
-      'Queue mode: failed-segment auto rounds';
+  String get settingsTranslationSegmentAutoRetryTitle => 'Queue mode: failed-segment auto rounds';
 
   @override
-  String get settingsTranslationSegmentAutoRetryHint =>
-      'Recommended: 3 (1–10 batch retranslate rounds after main translation; queued mode only)';
+  String get settingsTranslationSegmentAutoRetryHint => 'Recommended: 3 (1–10 batch retranslate rounds after main translation; queued mode only)';
 
   @override
   String get settingsTranslationChunkSizeTitle => 'Chunk Size (tokens)';
 
   @override
-  String get settingsTranslationChunkSizeHint =>
-      'Recommended: 3000 tokens per request (adjust by model context size)';
+  String get settingsTranslationChunkSizeHint => 'Recommended: 3000 tokens per request (adjust by model context size)';
 
   @override
   String get settingsExclusionTitle => 'Default Exclusion Rules';
 
   @override
-  String get settingsExclusionNotice =>
-      'Toggle ON = auto-exclude during Extract; Toggle OFF = detect only (user decides per segment).';
+  String get settingsExclusionNotice => 'Toggle ON = auto-exclude during Extract; Toggle OFF = detect only (user decides per segment).';
 
   @override
   String get settingsExclusionImageTitle => 'Image';
 
   @override
-  String get settingsExclusionImageSubtitle =>
-      'Image placeholders and pure-image content';
+  String get settingsExclusionImageSubtitle => 'Image placeholders and pure-image content';
 
   @override
   String get settingsExclusionFormulaTitle => 'Formula';
@@ -2447,36 +2308,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsExclusionReferenceTitle => 'Reference';
 
   @override
-  String get settingsExclusionReferenceSubtitle =>
-      'Citations and bibliographic references';
+  String get settingsExclusionReferenceSubtitle => 'Citations and bibliographic references';
 
   @override
   String get settingsExclusionIdentifierTitle => 'Identifier';
 
   @override
-  String get settingsExclusionIdentifierSubtitle =>
-      'URLs, emails, serial numbers, code snippets';
+  String get settingsExclusionIdentifierSubtitle => 'URLs, emails, serial numbers, code snippets';
 
   @override
   String get settingsExclusionStructuralTitle => 'Structural';
 
   @override
-  String get settingsExclusionStructuralSubtitle =>
-      'Headers, footers, footnotes, page numbers';
+  String get settingsExclusionStructuralSubtitle => 'Headers, footers, footnotes, page numbers';
 
   @override
   String get settingsExclusionTableTitle => 'Table';
 
   @override
-  String get settingsExclusionTableSubtitle =>
-      'Table content (markdown / PDF tables)';
+  String get settingsExclusionTableSubtitle => 'Table content (markdown / PDF tables)';
 
   @override
   String get settingsExclusionLanguageMatchTitle => 'Language Match';
 
   @override
-  String get settingsExclusionLanguageMatchSubtitle =>
-      'Source language matches target language';
+  String get settingsExclusionLanguageMatchSubtitle => 'Source language matches target language';
 
   @override
   String get settingsLanguageDialogTitle => 'Select Language';
@@ -2502,8 +2358,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get glossaryPanelAddToPersonal => 'Add to Personal';
 
   @override
-  String get glossaryPanelNoGlobalGlossaries =>
-      'No global glossaries available';
+  String get glossaryPanelNoGlobalGlossaries => 'No global glossaries available';
 
   @override
   String get glossaryPanelSelectTitle => 'Select Glossary';
@@ -2546,8 +2401,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get glossaryPanelEnterName => 'Enter a name for the glossary';
 
   @override
-  String get glossaryPanelSaveDialogHint =>
-      'Enter a name for the glossary or select an existing one to replace:';
+  String get glossaryPanelSaveDialogHint => 'Enter a name for the glossary or select an existing one to replace:';
 
   @override
   String get glossaryPanelReplaceTitle => 'Replace Global Glossary';
@@ -2624,8 +2478,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationStepsExtractTooltipReady => 'View extracted source';
 
   @override
-  String get translationStepsExtractTooltipNotReady =>
-      'Extract will be ready after import';
+  String get translationStepsExtractTooltipNotReady => 'Extract will be ready after import';
 
   @override
   String get translationStepsGlossaryTooltipSkipped => 'Glossary skipped';
@@ -2634,15 +2487,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationStepsGlossaryTooltipEnabled => 'Glossary enabled';
 
   @override
-  String get translationStepsGlossaryTooltipDisabled =>
-      'Generate or select a glossary to enable';
+  String get translationStepsGlossaryTooltipDisabled => 'Generate or select a glossary to enable';
 
   @override
   String get translationStepsTranslateTooltipReady => 'Translation completed';
 
   @override
-  String get translationStepsTranslateTooltipNotReady =>
-      'Run translation to enable';
+  String get translationStepsTranslateTooltipNotReady => 'Run translation to enable';
 
   @override
   String get glossaryDialogAddTitle => 'Add to Personal Glossary';
@@ -2667,22 +2518,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get glossaryDialogMergeUpdateTitle => 'Update (Recommended)';
 
   @override
-  String get glossaryDialogMergeUpdateSubtitle =>
-      'Update existing terms, add new ones';
+  String get glossaryDialogMergeUpdateSubtitle => 'Update existing terms, add new ones';
 
   @override
   String get glossaryDialogMergeAppendTitle => 'Append';
 
   @override
-  String get glossaryDialogMergeAppendSubtitle =>
-      'Only add new terms, skip existing ones';
+  String get glossaryDialogMergeAppendSubtitle => 'Only add new terms, skip existing ones';
 
   @override
   String get glossaryDialogMergeReplaceTitle => 'Replace';
 
   @override
-  String get glossaryDialogMergeReplaceSubtitle =>
-      'Replace entire glossary with these terms';
+  String get glossaryDialogMergeReplaceSubtitle => 'Replace entire glossary with these terms';
 
   @override
   String get glossaryDialogCancel => 'Cancel';
@@ -2699,20 +2547,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get glossaryConfirmAddStrategyUpdate =>
-      'Strategy: Update existing terms, add new ones';
+  String get glossaryConfirmAddStrategyUpdate => 'Strategy: Update existing terms, add new ones';
 
   @override
-  String get glossaryConfirmAddStrategyAppend =>
-      'Strategy: Only add new terms, skip existing ones';
+  String get glossaryConfirmAddStrategyAppend => 'Strategy: Only add new terms, skip existing ones';
 
   @override
-  String get glossaryConfirmAddStrategyReplace =>
-      'Strategy: Replace entire glossary';
+  String get glossaryConfirmAddStrategyReplace => 'Strategy: Replace entire glossary';
 
   @override
-  String get glossaryConfirmAddAutoCreateHint =>
-      'If your personal glossary doesn\'t exist, it will be created automatically.';
+  String get glossaryConfirmAddAutoCreateHint => 'If your personal glossary doesn\'t exist, it will be created automatically.';
 
   @override
   String get glossaryConfirmAddButton => 'Add';
@@ -2771,16 +2615,13 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get glossaryErrorFileData =>
-      'Failed to read file data. Please try again.';
+  String get glossaryErrorFileData => 'Failed to read file data. Please try again.';
 
   @override
-  String get glossaryErrorFilePath =>
-      'File path is not available. Please try again.';
+  String get glossaryErrorFilePath => 'File path is not available. Please try again.';
 
   @override
-  String get glossaryErrorOnlyCsv =>
-      'Only CSV and TBX files are supported for glossary import.';
+  String get glossaryErrorOnlyCsv => 'Only CSV and TBX files are supported for glossary import.';
 
   @override
   String get glossaryExportFormatLabel => 'Export format';
@@ -2798,12 +2639,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get extractFormatConversionFailed => 'Format conversion failed.';
 
   @override
-  String get fileUploadDisabledMessage =>
-      'File selection disabled (processing in progress)';
+  String get fileUploadDisabledMessage => 'File selection disabled (processing in progress)';
 
   @override
-  String get fileUploadSupportedFormats =>
-      'Supported: Word (DOCX), PowerPoint (PPTX), Excel (XLSX/CSV), PDF, Markdown, TXT, HTML, SRT, JSON, EPUB, MOBI, Qt TS, PNG, JPEG';
+  String get fileUploadSupportedFormats => 'Supported: Word (DOCX), PowerPoint (PPTX), Excel (XLSX/CSV), PDF, Markdown, TXT, HTML, SRT, JSON, EPUB, MOBI, Qt TS, PNG, JPEG';
 
   @override
   String get fileUploadDropHere => 'Drop file here';
@@ -2848,8 +2687,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get exclusionPanelPage => 'Page';
 
   @override
-  String get exclusionPanelRebuildTooltip =>
-      'Show only matching segments in new pagination';
+  String get exclusionPanelRebuildTooltip => 'Show only matching segments in new pagination';
 
   @override
   String get exclusionPanelPageTooltip => 'Filter within current page';
@@ -2901,8 +2739,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get extractCancelExtractionTitle => 'Cancel Extraction';
 
   @override
-  String get extractCancelExtractionContent =>
-      'Are you sure you want to cancel the extraction? This cannot be undone.';
+  String get extractCancelExtractionContent => 'Are you sure you want to cancel the extraction? This cannot be undone.';
 
   @override
   String get extractCancelExtractionNo => 'No';
@@ -2914,8 +2751,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get extractExtractionCancelled => 'Extraction cancelled';
 
   @override
-  String get extractMineruConfigRequiredTitle =>
-      'MinerU Configuration Required';
+  String get extractMineruConfigRequiredTitle => 'MinerU Configuration Required';
 
   @override
   String extractMineruConfigRequiredContent(Object error) {
@@ -3020,8 +2856,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get workspaceCloseFlowTitle => 'Close this flow?';
 
   @override
-  String get workspaceCloseFlowMessage =>
-      'Closing this flow will discard any unsaved changes.';
+  String get workspaceCloseFlowMessage => 'Closing this flow will discard any unsaved changes.';
 
   @override
   String get workspaceCloseFlowSaveToQueue => 'Save and close';
@@ -3036,8 +2871,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fetchUrlCancel => 'Cancel';
 
   @override
-  String get loginSubtitleFeatures =>
-      'Document Translation\nFormat Conversion\nURL Fetch';
+  String get loginSubtitleFeatures => 'Document Translation\nFormat Conversion\nURL Fetch';
 
   @override
   String get loginSubtitleTagline => 'AI Document Processing System';
@@ -3052,8 +2886,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get loginUsernameRequiredError => 'Please enter your username';
 
   @override
-  String get loginUsernameMinLengthError =>
-      'Username must be at least 3 characters';
+  String get loginUsernameMinLengthError => 'Username must be at least 3 characters';
 
   @override
   String get loginPasswordLabel => 'Password';
@@ -3071,12 +2904,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get loginPasswordRecoveryTitle => 'Password Recovery';
 
   @override
-  String get loginPasswordRecoveryContactAdmin =>
-      'Please contact your administrator to reset your password.';
+  String get loginPasswordRecoveryContactAdmin => 'Please contact your administrator to reset your password.';
 
   @override
-  String get loginPasswordRecoveryAdminHint =>
-      'Administrators can reset passwords through the user management page after logging in.';
+  String get loginPasswordRecoveryAdminHint => 'Administrators can reset passwords through the user management page after logging in.';
 
   @override
   String get loginAuthMethodDefault => 'Using Default Authentication';
@@ -3091,18 +2922,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get loginWelcomeBack => 'Welcome back';
 
   @override
-  String get loginFeatureFormats =>
-      'PDF, DOCX, XLSX, HTML, EPUB, MOBI\nand 15+ more formats';
+  String get loginFeatureFormats => 'PDF, DOCX, XLSX, HTML, EPUB, MOBI\nand 15+ more formats';
 
   @override
-  String get loginFeatureLayout =>
-      'Layout-preserving translation\nwith high fidelity';
+  String get loginFeatureLayout => 'Layout-preserving translation\nwith high fidelity';
 
   @override
-  String get loginFeaturePlatforms =>
-      '20+ LLM platforms supported\nincluding OpenAI, Claude, Ollama';
+  String get loginFeaturePlatforms => '20+ LLM platforms supported\nincluding OpenAI, Claude, Ollama';
 
   @override
-  String get loginPasswordRecoveryAdminGuide =>
-      'If you are an administrator, please follow the password recovery process.';
+  String get loginPasswordRecoveryAdminGuide => 'If you are an administrator, please follow the password recovery process.';
 }

@@ -401,11 +401,28 @@ class OwlangsApp extends ConsumerWidget {
                     : Brightness.dark,
               ),
             );
-            return MediaQuery(
-              // Set text scale factor to prevent system font scaling
-              data: MediaQuery.of(context)
-                  .copyWith(textScaler: const TextScaler.linear(1)),
-              child: widget!,
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final appChild = MediaQuery(
+                  // Set text scale factor to prevent system font scaling
+                  data: MediaQuery.of(context)
+                      .copyWith(textScaler: const TextScaler.linear(1)),
+                  child: widget!,
+                );
+                // Enforce minimum 800px width for web; if viewport is narrower,
+                // wrap with horizontal scroll so content never clips.
+                if (constraints.maxWidth < 800) {
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: 800,
+                      height: constraints.maxHeight,
+                      child: appChild,
+                    ),
+                  );
+                }
+                return appChild;
+              },
             );
           },
         );

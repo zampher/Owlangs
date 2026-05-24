@@ -36,8 +36,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsGeneralShowAdsTitle => '広告を表示';
 
   @override
-  String get settingsGeneralShowAdsSubtitle =>
-      'ホームとフローで広告プレースホルダーを表示（system.jsonに保存）';
+  String get settingsGeneralShowAdsSubtitle => 'ホームとフローで広告プレースホルダーを表示（system.jsonに保存）';
 
   @override
   String get settingsGeneralClearStatsButton => '統計をクリア';
@@ -46,8 +45,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsGeneralClearStatsConfirmTitle => '統計をクリアしますか？';
 
   @override
-  String get settingsGeneralClearStatsConfirmMessage =>
-      'ホームページに表示されているドキュメント数とページ数が0にリセットされます。この操作は元に戻せません。';
+  String get settingsGeneralClearStatsConfirmMessage => 'ホームページに表示されているドキュメント数とページ数が0にリセットされます。この操作は元に戻せません。';
 
   @override
   String get settingsGeneralClearStatsConfirmButton => 'クリア';
@@ -160,8 +158,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationToolbarConvert => '変換';
 
   @override
-  String get translationToolbarHintSaveGlossaryFirst =>
-      'まず用語集を保存してください（適用をクリック）';
+  String get translationToolbarHintSaveGlossaryFirst => 'まず用語集を保存してください（適用をクリック）';
 
   @override
   String get translationToolbarHintUpdatingExcluded => '除外セグメントを更新中...';
@@ -179,22 +176,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationToolbarRetryInProgress => '再試行中...';
 
   @override
-  String get translationToolbarRetryTooltip =>
-      '失敗した、または再試行マークが付いたすべてのセグメントを再翻訳します。これにより、翻訳中に失敗した、または手動で再試行マークが付けられたセグメントが、現在選択されているAIプラットフォームを使用して再翻訳されます。除外およびクリアされたセグメントはスキップされます。';
+  String get translationToolbarRetryTooltip => '失敗した、または再試行マークが付いたすべてのセグメントを再翻訳します。これにより、翻訳中に失敗した、または手動で再試行マークが付けられたセグメントが、現在選択されているAIプラットフォームを使用して再翻訳されます。除外およびクリアされたセグメントはスキップされます。';
 
   @override
   String get translationToolbarRetry => '再試行';
 
   @override
-  String get translationPersistQueueTooltip =>
-      '現在のエクスポートをサーバーに書き込み、タスクキューのダウンロードをこの画面の最新の編集と一致させます。';
+  String get translationPersistQueueTooltip => '現在のエクスポートをサーバーに書き込み、タスクキューのダウンロードをこの画面の最新の編集と一致させます。';
 
   @override
   String get translationPersistQueueButton => 'キューを更新';
 
   @override
-  String get translationPersistQueueAlreadySyncedTooltip =>
-      'すでにキューのスナップショットと一致しています。保存は不要です。';
+  String get translationPersistQueueAlreadySyncedTooltip => 'すでにキューのスナップショットと一致しています。保存は不要です。';
 
   @override
   String get translationPersistQueueSuccess => 'タスクキュー用に最新のエクスポートを保存しました。';
@@ -208,8 +202,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationCloseTranslateTabTitle => 'タスクキューが最終結果と一致しない可能性があります';
 
   @override
-  String get translationCloseTranslateTabMessage =>
-      'このタブでの編集はまだタスクキューのスナップショットに保存されていません。保存せずに閉じると、「タスクキュー」からダウンロードするファイルは、このタブで見ている最終版にならない場合があります。\n\n先にキューを更新してから閉じるか、キューに保存せずにこのタブを閉じるかを選べます。';
+  String get translationCloseTranslateTabMessage => 'このタブでの編集はまだタスクキューのスナップショットに保存されていません。保存せずに閉じると、「タスクキュー」からダウンロードするファイルは、このタブで見ている最終版にならない場合があります。\n\n先にキューを更新してから閉じるか、キューに保存せずにこのタブを閉じるかを選べます。';
 
   @override
   String get translationCloseTranslateTabStay => 'キャンセル';
@@ -224,8 +217,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationCloseTranslateTabKeepTitle => 'タスクをキューに保持しますか？';
 
   @override
-  String get translationCloseTranslateTabKeepMessage =>
-      '翻訳が完了しました。後で確認・編集するためにタスクをキューに保持しますか？';
+  String get translationCloseTranslateTabKeepMessage => '翻訳が完了しました。後で確認・編集するためにタスクをキューに保持しますか？';
 
   @override
   String get translationCloseTranslateTabKeepInQueue => 'キューに保持';
@@ -272,8 +264,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String translationStatsSuccessFailed(
-      Object fail, Object success, Object total) {
+  String translationStatsSuccessFailed(Object fail, Object success, Object total) {
     return '成功: $success/$total, 失敗: $fail/$total';
   }
 
@@ -510,12 +501,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationSnackSourceResplitCompleted => 'ソースの再分割が完了しました';
 
   @override
-  String get translationSnackPleaseSelectFileOrText =>
-      'まずファイルを選択するか、テキストを入力してください';
+  String get translationSnackPleaseSelectFileOrText => 'まずファイルを選択するか、テキストを入力してください';
 
   @override
-  String get translationSnackPleaseSelectFileOrTextWithDot =>
-      'まずファイルを選択するか、テキストを入力してください。';
+  String get translationSnackPleaseSelectFileOrTextWithDot => 'まずファイルを選択するか、テキストを入力してください。';
 
   @override
   String get translationSnackPleaseSelectFile => 'まずファイルを選択してください';
@@ -547,8 +536,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get translationDialogMixedLangPromptTitle =>
-      '翻訳品質を向上させるため、次のプロンプトを追加できます:';
+  String get translationDialogMixedLangPromptTitle => '翻訳品質を向上させるため、次のプロンプトを追加できます:';
 
   @override
   String get translationDialogMixedLangOption1Title => 'ソース言語のテキストのみを翻訳';
@@ -562,8 +550,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationDialogMixedLangOption2Title => 'コードと技術用語を変更しない';
 
   @override
-  String get translationDialogMixedLangOption2Subtitle =>
-      'コードブロック、技術用語、関数名、および他言語のテキストを変更せずに保持します';
+  String get translationDialogMixedLangOption2Subtitle => 'コードブロック、技術用語、関数名、および他言語のテキストを変更せずに保持します';
 
   @override
   String get translationDialogMixedLangCancel => 'キャンセル';
@@ -637,19 +624,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationDialogSwitchToFileTitle => 'ファイルモードに切り替え';
 
   @override
-  String get translationDialogSwitchToFileBody =>
-      'ファイルモードに切り替えると、現在のテキスト入力がクリアされます。続行しますか？';
+  String get translationDialogSwitchToFileBody => 'ファイルモードに切り替えると、現在のテキスト入力がクリアされます。続行しますか？';
 
   @override
   String get translationDialogSwitchToTextTitle => 'テキストモードに切り替え';
 
   @override
-  String get translationDialogSwitchToTextBody =>
-      'テキストモードに切り替えると、現在のファイル選択がクリアされます。続行しますか？';
+  String get translationDialogSwitchToTextBody => 'テキストモードに切り替えると、現在のファイル選択がクリアされます。続行しますか？';
 
   @override
-  String get translationSnackAllSegmentsExcludedSkipped =>
-      'すべてのセグメントが除外されました。翻訳はスキップされます。書式変換のためにエクスポートを実行できます。';
+  String get translationSnackAllSegmentsExcludedSkipped => 'すべてのセグメントが除外されました。翻訳はスキップされます。書式変換のためにエクスポートを実行できます。';
 
   @override
   String get translationDialogCancelButton => 'キャンセル';
@@ -661,8 +645,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationNoLlmAvailableTitle => '利用可能な LLM がありません';
 
   @override
-  String get translationNoLlmAvailableMessage =>
-      '設定済みで利用可能な LLM プラットフォームがありません。翻訳するには、設定で LLM の API Key を設定してください。形式変換のみの場合は続行できます。';
+  String get translationNoLlmAvailableMessage => '設定済みで利用可能な LLM プラットフォームがありません。翻訳するには、設定で LLM の API Key を設定してください。形式変換のみの場合は続行できます。';
 
   @override
   String get translationNoLlmConfigureButton => 'LLM を設定';
@@ -674,14 +657,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get languageMatchWarningTitle => '言語一致の確認';
 
   @override
-  String languageMatchWarningGlossaryBody(
-      Object detectedName, Object targetName) {
+  String languageMatchWarningGlossaryBody(Object detectedName, Object targetName) {
     return '検出された文書の言語（$detectedName）は目標言語（$targetName）と同じです。目標言語の選択が誤っている可能性があります。用語集の自動検出を続行しますか？';
   }
 
   @override
-  String languageMatchWarningTranslationBody(
-      Object detectedName, Object targetName) {
+  String languageMatchWarningTranslationBody(Object detectedName, Object targetName) {
     return '検出された文書の言語（$detectedName）は目標言語（$targetName）と同じです。目標言語の選択が誤っている可能性があります。翻訳を続行しますか？';
   }
 
@@ -689,8 +670,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationDialogCancelTaskTitle => '現在のタスクをキャンセル';
 
   @override
-  String get translationDialogCancelTaskBody =>
-      'これにより、現在の抽出/翻訳タスクがキャンセルされ、選択されたファイルがクリアされます。続行しますか？';
+  String get translationDialogCancelTaskBody => 'これにより、現在の抽出/翻訳タスクがキャンセルされ、選択されたファイルがクリアされます。続行しますか？';
 
   @override
   String get translationDialogCancelTaskNo => 'いいえ';
@@ -708,8 +688,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get quickSettingsSourceLanguage => 'ソース言語 (MinerU OCR)';
 
   @override
-  String get quickSettingsLanguageSwitchDisabled =>
-      '翻訳中は言語の切り替えが無効です。ターゲット言語を変更するには、抽出タブに切り替えてください。';
+  String get quickSettingsLanguageSwitchDisabled => '翻訳中は言語の切り替えが無効です。ターゲット言語を変更するには、抽出タブに切り替えてください。';
 
   @override
   String get quickSettingsParsingPlatform => '解析プラットフォーム';
@@ -772,22 +751,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get quickSettingsQtTsTranslateUnfinished => '未完了のエントリを翻訳';
 
   @override
-  String get quickSettingsQtTsTranslateUnfinishedSubtitle =>
-      '未完了としてマークされたメッセージを翻訳 (type=\"unfinished\")';
+  String get quickSettingsQtTsTranslateUnfinishedSubtitle => '未完了としてマークされたメッセージを翻訳 (type=\"unfinished\")';
 
   @override
   String get quickSettingsQtTsTranslateVanished => '消滅したエントリを翻訳';
 
   @override
-  String get quickSettingsQtTsTranslateVanishedSubtitle =>
-      '消滅としてマークされたメッセージを翻訳 (type=\"vanished\")';
+  String get quickSettingsQtTsTranslateVanishedSubtitle => '消滅としてマークされたメッセージを翻訳 (type=\"vanished\")';
 
   @override
   String get quickSettingsQtTsTranslateObsolete => '廃止されたエントリを翻訳';
 
   @override
-  String get quickSettingsQtTsTranslateObsoleteSubtitle =>
-      '廃止としてマークされたメッセージを翻訳 (type=\"obsolete\")';
+  String get quickSettingsQtTsTranslateObsoleteSubtitle => '廃止としてマークされたメッセージを翻訳 (type=\"obsolete\")';
 
   @override
   String get quickSettingsPrompt => 'プロンプト';
@@ -848,12 +824,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeIntro => 'AIを活用した精度でドキュメントをアップロードし、複数の言語に翻訳します。\n';
 
   @override
-  String get homeHowItWorks =>
-      '仕組み\n翻訳: インポート -> ドキュメント解析 -> 用語集 -> 翻訳 -> エクスポート\nファイル形式変換: インポート -> ドキュメント解析 -> 変換 -> エクスポート\nURL取得: URL入力 -> ページ取得 -> コンテンツ解析 -> 本文抽出 -> 翻訳/エクスポート';
+  String get homeHowItWorks => '仕組み\n翻訳: インポート -> ドキュメント解析 -> 用語集 -> 翻訳 -> エクスポート\nファイル形式変換: インポート -> ドキュメント解析 -> 変換 -> エクスポート\nURL取得: URL入力 -> ページ取得 -> コンテンツ解析 -> 本文抽出 -> 翻訳/エクスポート';
 
   @override
-  String get homeSnackDonorExpired =>
-      'お客様の登録コードの有効期限が切れています。Pro特典を継続するには、再登録してください。';
+  String get homeSnackDonorExpired => 'お客様の登録コードの有効期限が切れています。Pro特典を継続するには、再登録してください。';
 
   @override
   String get commonCancel => 'キャンセル';
@@ -873,8 +847,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get homeAiPlatformsConfigureNotice =>
-      'アプリを使用する前に、設定パネルでAIプラットフォームを構成してください。';
+  String get homeAiPlatformsConfigureNotice => 'アプリを使用する前に、設定パネルでAIプラットフォームを構成してください。';
 
   @override
   String get homeBackendStatusStarting => 'バックエンドを起動中...';
@@ -919,15 +892,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationQueueHint => 'タスクは自動更新されます。完了後にダウンロードできます。';
 
   @override
-  String get translationQueueCancelExitHint =>
-      'キュー待ちまたは実行中は「キャンセル」で停止できます。確認後にホームに戻ります。';
+  String get translationQueueCancelExitHint => 'キュー待ちまたは実行中は「キャンセル」で停止できます。確認後にホームに戻ります。';
 
   @override
   String get translationQueueCancelDialogTitle => 'この翻訳タスクをキャンセルしますか？';
 
   @override
-  String get translationQueueCancelDialogMessage =>
-      'キュー待ちはキューから削除され、実行中は中止されます。確認後にホームへ戻ります。';
+  String get translationQueueCancelDialogMessage => 'キュー待ちはキューから削除され、実行中は中止されます。確認後にホームへ戻ります。';
 
   @override
   String get translationQueueCancelDialogKeep => '維持';
@@ -1023,8 +994,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationQueueClearAllTitle => 'タスクキューをクリア';
 
   @override
-  String get translationQueueClearAllMessage =>
-      'キュー待ちと実行中のタスクをキャンセルし、メモリ上のタスクとディスクのキュースナップショットを削除します。元に戻せません。';
+  String get translationQueueClearAllMessage => 'キュー待ちと実行中のタスクをキャンセルし、メモリ上のタスクとディスクのキュースナップショットを削除します。元に戻せません。';
 
   @override
   String get translationQueueClearAllConfirm => 'クリア';
@@ -1087,8 +1057,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeTabHome => 'ホーム';
 
   @override
-  String get homeToolbarAdBanner =>
-      'ツールバー広告バナー\n(728×90 リーダーボード / 320×50 モバイル)';
+  String get homeToolbarAdBanner => 'ツールバー広告バナー\n(728×90 リーダーボード / 320×50 モバイル)';
 
   @override
   String get homeSteps => 'ステップ';
@@ -1153,24 +1122,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeEditionProStatusActivated => 'アクティベート済み';
 
   @override
-  String get homeWelcomeDearPro =>
-      '没入型翻訳：画面上で原文と訳文をすぐ対照します。\nキュー翻訳：ドキュメントをキューに追加し、順にパイプラインを実行します。';
+  String get homeWelcomeDearPro => '没入型翻訳：画面上で原文と訳文をすぐ対照します。\nキュー翻訳：ドキュメントをキューに追加し、順にパイプラインを実行します。';
 
   @override
-  String get homeWelcomeDearStandard =>
-      '没入型翻訳：画面上で原文と訳文をすぐ対照します。\nキュー翻訳：ドキュメントをキューに追加し、順にパイプラインを実行します。';
+  String get homeWelcomeDearStandard => '没入型翻訳：画面上で原文と訳文をすぐ対照します。\nキュー翻訳：ドキュメントをキューに追加し、順にパイプラインを実行します。';
 
   @override
-  String get homeWelcomeDearProNoUser =>
-      '没入型翻訳：画面上で原文と訳文をすぐ対照します。\nキュー翻訳：ドキュメントをキューに追加し、順にパイプラインを実行します。';
+  String get homeWelcomeDearProNoUser => '没入型翻訳：画面上で原文と訳文をすぐ対照します。\nキュー翻訳：ドキュメントをキューに追加し、順にパイプラインを実行します。';
 
   @override
-  String get homeWelcomeDearStandardNoUser =>
-      '没入型翻訳：画面上で原文と訳文をすぐ対照します。\nキュー翻訳：ドキュメントをキューに追加し、順にパイプラインを実行します。';
+  String get homeWelcomeDearStandardNoUser => '没入型翻訳：画面上で原文と訳文をすぐ対照します。\nキュー翻訳：ドキュメントをキューに追加し、順にパイプラインを実行します。';
 
   @override
-  String get homeWelcomeHello =>
-      '没入型翻訳：画面上で原文と訳文をすぐ対照します。\nキュー翻訳：ドキュメントをキューに追加し、順にパイプラインを実行します。';
+  String get homeWelcomeHello => '没入型翻訳：画面上で原文と訳文をすぐ対照します。\nキュー翻訳：ドキュメントをキューに追加し、順にパイプラインを実行します。';
 
   @override
   String get homeLoading => '読み込み中...';
@@ -1269,8 +1233,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsParsingEngineTitle => '解析エンジン';
 
   @override
-  String get settingsParsingEngineSubtitle =>
-      'テキスト抽出と処理のためのドキュメント解析エンジンを選択します。';
+  String get settingsParsingEngineSubtitle => 'テキスト抽出と処理のためのドキュメント解析エンジンを選択します。';
 
   @override
   String get settingsParsingEngineLabel => '解析エンジン';
@@ -1404,8 +1367,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsGlossaryAddEntry => 'エントリを追加';
 
   @override
-  String get settingsGlossaryNoEntriesYet =>
-      '用語集エントリはまだありません。\n最初のエントリを追加して始めましょう。';
+  String get settingsGlossaryNoEntriesYet => '用語集エントリはまだありません。\n最初のエントリを追加して始めましょう。';
 
   @override
   String get settingsGlossaryFilterLabel => 'フィルター：';
@@ -1606,8 +1568,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String settingsGlossaryGlossaryDropdownItem(
-      Object count, Object name, Object type) {
+  String settingsGlossaryGlossaryDropdownItem(Object count, Object name, Object type) {
     return '$name（$type）・$count項目';
   }
 
@@ -1748,8 +1709,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get glossaryPanelDropCsvHere => 'CSV または TBX ファイルをここにドロップ';
 
   @override
-  String get glossaryPanelNoEntriesHint =>
-      '用語集エントリがありません。\n「用語集を検出」ボタンをクリックして開始するか、リストから用語集を選択してエントリを表示するか、CSV または TBX ファイルをここにドラッグ＆ドロップしてください。';
+  String get glossaryPanelNoEntriesHint => '用語集エントリがありません。\n「用語集を検出」ボタンをクリックして開始するか、リストから用語集を選択してエントリを表示するか、CSV または TBX ファイルをここにドラッグ＆ドロップしてください。';
 
   @override
   String get glossaryPanelSelectBody => '操作する用語集を選択：';
@@ -1825,14 +1785,12 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String glossaryWidgetPersonalAppended(
-      Object newCount, Object skipped, Object total) {
+  String glossaryWidgetPersonalAppended(Object newCount, Object skipped, Object total) {
     return '個人用語集に $newCount 件の新規用語を追加しました。\n$skipped 件の既存用語をスキップ。\n合計 $total 用語。';
   }
 
   @override
-  String glossaryWidgetPersonalUpdated(
-      Object newCount, Object updatedCount, Object total) {
+  String glossaryWidgetPersonalUpdated(Object newCount, Object updatedCount, Object total) {
     return '個人用語集を更新しました！\n$newCount 件を追加、$updatedCount 件を更新。\n合計 $total 用語。';
   }
 
@@ -1854,22 +1812,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsUserManagementTitle => 'ユーザー管理モード';
 
   @override
-  String get settingsUserManagementSubtitle =>
-      'Web 配備時のログイン・権限ポリシーを選択。設定と設定ウィザードは管理者のみ。';
+  String get settingsUserManagementSubtitle => 'Web 配備時のログイン・権限ポリシーを選択。設定と設定ウィザードは管理者のみ。';
 
   @override
   String get settingsUserManagementModeNoLogin => 'ログイン不要';
 
   @override
-  String get settingsUserManagementModeNoLoginDesc =>
-      'ログインせずに利用。設定・設定ウィザードは管理者ログイン後のみ。';
+  String get settingsUserManagementModeNoLoginDesc => 'ログインせずに利用。設定・設定ウィザードは管理者ログイン後のみ。';
 
   @override
   String get settingsUserManagementModeLdap => 'LDAP ログイン';
 
   @override
-  String get settingsUserManagementModeLdapDesc =>
-      'LDAP/AD でログイン。設定・設定ウィザードは管理者（ドメイングループ）のみ。';
+  String get settingsUserManagementModeLdapDesc => 'LDAP/AD でログイン。設定・設定ウィザードは管理者（ドメイングループ）のみ。';
 
   @override
   String get settingsUserManagementModeLocal => 'ローカルユーザー';
@@ -1950,8 +1905,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsLdapGroupBaseDn => 'グループ検索 Base DN';
 
   @override
-  String get settingsLdapGroupBaseDnPlaceholder =>
-      'OU=Groups,DC=example,DC=com';
+  String get settingsLdapGroupBaseDnPlaceholder => 'OU=Groups,DC=example,DC=com';
 
   @override
   String get settingsLdapTlsVerify => 'TLS 証明書を検証';
@@ -1996,15 +1950,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsLdapConfigSaved => 'LDAP 設定を保存しました';
 
   @override
-  String get settingsLdapEnableRequireTest =>
-      'LDAP を有効にする前に、LDAP 接続テストを実行してください。';
+  String get settingsLdapEnableRequireTest => 'LDAP を有効にする前に、LDAP 接続テストを実行してください。';
 
   @override
   String get settingsAdminOnlyDialogTitle => '管理者のみ';
 
   @override
-  String get settingsAdminOnlyDialogMessage =>
-      '設定と設定ウィザードは管理者のみ利用できます。管理者アカウントでログインしてください。';
+  String get settingsAdminOnlyDialogMessage => '設定と設定ウィザードは管理者のみ利用できます。管理者アカウントでログインしてください。';
 
   @override
   String get settingsAdminOnlyDialogGoToLogin => 'ログイン';
@@ -2073,8 +2025,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get aiPlatformApiUrl => 'API URL';
 
   @override
-  String get aiPlatformApiUrlHint =>
-      'e.g., https://ark.cn-beijing.volces.com/api/v3';
+  String get aiPlatformApiUrlHint => 'e.g., https://ark.cn-beijing.volces.com/api/v3';
 
   @override
   String get aiPlatformMaxTokens => '最大トークン数';
@@ -2116,12 +2067,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get aiPlatformTestConnection => '接続テスト';
 
   @override
-  String get aiPlatformTestConnectionHint =>
-      '設定を保存した後、下の「接続テスト」をクリックして、このプラットフォームが正常に動作するか確認してください。';
+  String get aiPlatformTestConnectionHint => '設定を保存した後、下の「接続テスト」をクリックして、このプラットフォームが正常に動作するか確認してください。';
 
   @override
-  String get setupWizardConfigureApiKeyAndTest =>
-      '接続不可。API Key を設定し「接続テスト」をクリックして確認してください。';
+  String get setupWizardConfigureApiKeyAndTest => '接続不可。API Key を設定し「接続テスト」をクリックして確認してください。';
 
   @override
   String get setupWizardSaveAndExit => '保存して終了';
@@ -2139,8 +2088,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setupWizardWelcomeIntro => 'このウィザードでは、2つの主要設定を行います：';
 
   @override
-  String get setupWizardWelcomeBody =>
-      '1. メインのLLMプラットフォームを選択・設定します。\n2. PDF/PNGなどを翻訳する場合は、MinerU解析エンジンを設定します（任意）。\n\n注意：設定後は「接続テスト」で確認してください。';
+  String get setupWizardWelcomeBody => '1. メインのLLMプラットフォームを選択・設定します。\n2. PDF/PNGなどを翻訳する場合は、MinerU解析エンジンを設定します（任意）。\n\n注意：設定後は「接続テスト」で確認してください。';
 
   @override
   String get setupWizardUiLanguageLabel => 'UI言語';
@@ -2155,12 +2103,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setupWizardMineruNo => 'いいえ（LLMのみでテキスト翻訳など）';
 
   @override
-  String get setupWizardMineruDescription =>
-      'MinerUはPDF・画像のレイアウト解析とセグメント化を行います。\n下記にAPI KeyとURLを入力し、「接続テスト」で確認してください。';
+  String get setupWizardMineruDescription => 'MinerUはPDF・画像のレイアウト解析とセグメント化を行います。\n下記にAPI KeyとURLを入力し、「接続テスト」で確認してください。';
 
   @override
-  String get setupWizardMineruSkipped =>
-      'MinerUは設定しませんでした。設定からいつでもPDF翻訳を有効にできます。';
+  String get setupWizardMineruSkipped => 'MinerUは設定しませんでした。設定からいつでもPDF翻訳を有効にできます。';
 
   @override
   String get setupWizardMineruConfigTitle => 'MinerU（解析エンジン）';
@@ -2178,8 +2124,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setupWizardSelectLlmPlatform => 'LLMプラットフォームを選択';
 
   @override
-  String get setupWizardNoLlmPlatforms =>
-      'AIプラットフォーム設定にLLMがありません。設定でプラットフォームを追加してください。';
+  String get setupWizardNoLlmPlatforms => 'AIプラットフォーム設定にLLMがありません。設定でプラットフォームを追加してください。';
 
   @override
   String get setupWizardMineruSaved => 'MinerUの設定を保存しました';
@@ -2306,8 +2251,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsTranslationAutoGlossaryTitle => '用語集を自動生成';
 
   @override
-  String get settingsTranslationAutoGlossarySubtitle =>
-      '翻訳後に用語集を自動生成します（新しいタスクに適用）';
+  String get settingsTranslationAutoGlossarySubtitle => '翻訳後に用語集を自動生成します（新しいタスクに適用）';
 
   @override
   String get settingsTranslationParamsTitle => '翻訳パラメータ';
@@ -2328,29 +2272,25 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsTranslationChunkRetryTitle => 'チャンク/API リトライ';
 
   @override
-  String get settingsTranslationChunkRetryHint =>
-      '推奨：3〜5（チャンク翻訳または API 呼び出し失敗時の再試行）';
+  String get settingsTranslationChunkRetryHint => '推奨：3〜5（チャンク翻訳または API 呼び出し失敗時の再試行）';
 
   @override
   String get settingsTranslationSegmentAutoRetryTitle => 'キュー：失敗セグメント自動再試行ラウンド';
 
   @override
-  String get settingsTranslationSegmentAutoRetryHint =>
-      '推奨：3（本翻訳後の一括再翻訳、1〜10 ラウンド；キューモードのみ）';
+  String get settingsTranslationSegmentAutoRetryHint => '推奨：3（本翻訳後の一括再翻訳、1〜10 ラウンド；キューモードのみ）';
 
   @override
   String get settingsTranslationChunkSizeTitle => 'チャンクサイズ（トークン）';
 
   @override
-  String get settingsTranslationChunkSizeHint =>
-      '推奨：リクエストあたり3000トークン（モデルのコンテキストサイズで調整）';
+  String get settingsTranslationChunkSizeHint => '推奨：リクエストあたり3000トークン（モデルのコンテキストサイズで調整）';
 
   @override
   String get settingsExclusionTitle => 'デフォルト除外ルール';
 
   @override
-  String get settingsExclusionNotice =>
-      'ON = 抽出時に自動除外；OFF = 検出のみ（ユーザーがセグメントごとに決定）。';
+  String get settingsExclusionNotice => 'ON = 抽出時に自動除外；OFF = 検出のみ（ユーザーがセグメントごとに決定）。';
 
   @override
   String get settingsExclusionImageTitle => '画像';
@@ -2702,8 +2642,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get fileUploadDisabledMessage => 'ファイル選択が無効です（処理中）';
 
   @override
-  String get fileUploadSupportedFormats =>
-      '対応：Word（DOCX）、PowerPoint（PPTX）、Excel（XLSX/CSV）、PDF、Markdown、TXT、HTML、SRT、JSON、EPUB、MOBI、Qt TS、PNG、JPEG';
+  String get fileUploadSupportedFormats => '対応：Word（DOCX）、PowerPoint（PPTX）、Excel（XLSX/CSV）、PDF、Markdown、TXT、HTML、SRT、JSON、EPUB、MOBI、Qt TS、PNG、JPEG';
 
   @override
   String get fileUploadDropHere => 'ファイルをここにドロップ';
@@ -2968,8 +2907,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get loginPasswordRecoveryContactAdmin => '管理者に連絡してパスワードをリセットしてください。';
 
   @override
-  String get loginPasswordRecoveryAdminHint =>
-      '管理者はログイン後、ユーザー管理ページでパスワードをリセットできます。';
+  String get loginPasswordRecoveryAdminHint => '管理者はログイン後、ユーザー管理ページでパスワードをリセットできます。';
 
   @override
   String get loginAuthMethodDefault => 'デフォルト認証を使用';
@@ -2984,15 +2922,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get loginWelcomeBack => 'おかえりなさい';
 
   @override
-  String get loginFeatureFormats =>
-      'PDF、DOCX、XLSX、HTML、EPUB、MOBI\nおよび15以上のフォーマット';
+  String get loginFeatureFormats => 'PDF、DOCX、XLSX、HTML、EPUB、MOBI\nおよび15以上のフォーマット';
 
   @override
   String get loginFeatureLayout => 'レイアウトを保持した翻訳\n高い忠実度';
 
   @override
-  String get loginFeaturePlatforms =>
-      '20+ LLM プラットフォームに対応\nOpenAI、Claude、Ollama を含む';
+  String get loginFeaturePlatforms => '20+ LLM プラットフォームに対応\nOpenAI、Claude、Ollama を含む';
 
   @override
   String get loginPasswordRecoveryAdminGuide => '管理者の方は、パスワード復旧手順に従ってください。';

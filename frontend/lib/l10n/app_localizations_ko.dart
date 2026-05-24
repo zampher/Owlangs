@@ -24,8 +24,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsGeneralNotificationsTitle => '알림';
 
   @override
-  String get settingsGeneralNotificationsSubtitle =>
-      '완료된 작업에 대한 알림 수신 (즉시 적용됨)';
+  String get settingsGeneralNotificationsSubtitle => '완료된 작업에 대한 알림 수신 (즉시 적용됨)';
 
   @override
   String get settingsGeneralAutoSaveTitle => '자동 저장';
@@ -37,8 +36,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsGeneralShowAdsTitle => '광고 표시';
 
   @override
-  String get settingsGeneralShowAdsSubtitle =>
-      '홈 및 플로우에서 광고 자리 표시자 표시 (system.json에 저장됨)';
+  String get settingsGeneralShowAdsSubtitle => '홈 및 플로우에서 광고 자리 표시자 표시 (system.json에 저장됨)';
 
   @override
   String get settingsGeneralClearStatsButton => '통계 지우기';
@@ -47,8 +45,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsGeneralClearStatsConfirmTitle => '통계를 지우시겠습니까?';
 
   @override
-  String get settingsGeneralClearStatsConfirmMessage =>
-      '홈 페이지에 표시된 문서 수와 페이지 수가 0으로 재설정됩니다. 이 작업은 되돌릴 수 없습니다.';
+  String get settingsGeneralClearStatsConfirmMessage => '홈 페이지에 표시된 문서 수와 페이지 수가 0으로 재설정됩니다. 이 작업은 되돌릴 수 없습니다.';
 
   @override
   String get settingsGeneralClearStatsConfirmButton => '지우기';
@@ -155,8 +152,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationToolbarGlossary => '용어집';
 
   @override
-  String get translationToolbarConvertHint =>
-      '형식 변환 후 전체 제외·번역을 실행하고 「변환」 탭에서 내보내기';
+  String get translationToolbarConvertHint => '형식 변환 후 전체 제외·번역을 실행하고 「변환」 탭에서 내보내기';
 
   @override
   String get translationToolbarConvert => '변환';
@@ -180,22 +176,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationToolbarRetryInProgress => '재시도 진행 중...';
 
   @override
-  String get translationToolbarRetryTooltip =>
-      '실패했거나 표시된 모든 세그먼트를 재시도합니다. 이는 번역 중 실패했거나 수동으로 재시도 표시된 세그먼트를 현재 선택된 AI 플랫폼을 사용하여 재번역합니다. 제외 및 지워진 세그먼트는 건너뜁니다.';
+  String get translationToolbarRetryTooltip => '실패했거나 표시된 모든 세그먼트를 재시도합니다. 이는 번역 중 실패했거나 수동으로 재시도 표시된 세그먼트를 현재 선택된 AI 플랫폼을 사용하여 재번역합니다. 제외 및 지워진 세그먼트는 건너뜁니다.';
 
   @override
   String get translationToolbarRetry => '재시도';
 
   @override
-  String get translationPersistQueueTooltip =>
-      '현재 내보낸 결과를 서버에 기록해 작업 대기열 다운로드가 이 화면의 최신 편집과 일치하도록 합니다.';
+  String get translationPersistQueueTooltip => '현재 내보낸 결과를 서버에 기록해 작업 대기열 다운로드가 이 화면의 최신 편집과 일치하도록 합니다.';
 
   @override
   String get translationPersistQueueButton => '대기열 업데이트';
 
   @override
-  String get translationPersistQueueAlreadySyncedTooltip =>
-      '이미 대기열 스냅샷과 일치합니다. 추가 저장이 필요 없습니다.';
+  String get translationPersistQueueAlreadySyncedTooltip => '이미 대기열 스냅샷과 일치합니다. 추가 저장이 필요 없습니다.';
 
   @override
   String get translationPersistQueueSuccess => '작업 대기열용 최신 내보내기를 저장했습니다.';
@@ -209,8 +202,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationCloseTranslateTabTitle => '작업 대기열이 최종 결과와 다를 수 있음';
 
   @override
-  String get translationCloseTranslateTabMessage =>
-      '이 탭에서의 편집이 아직 작업 대기열 스냅샷에 저장되지 않았습니다. 저장 없이 닫으면 「작업 대기열」에서 받는 파일이 이 탭의 최종 버전과 다를 수 있습니다.\n\n대기열을 먼저 업데이트한 뒤 닫거나, 대기열에 저장하지 않고 이 탭을 닫을 수 있습니다.';
+  String get translationCloseTranslateTabMessage => '이 탭에서의 편집이 아직 작업 대기열 스냅샷에 저장되지 않았습니다. 저장 없이 닫으면 「작업 대기열」에서 받는 파일이 이 탭의 최종 버전과 다를 수 있습니다.\n\n대기열을 먼저 업데이트한 뒤 닫거나, 대기열에 저장하지 않고 이 탭을 닫을 수 있습니다.';
 
   @override
   String get translationCloseTranslateTabStay => '머무르기';
@@ -225,8 +217,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationCloseTranslateTabKeepTitle => '작업을 대기열에 유지할까요?';
 
   @override
-  String get translationCloseTranslateTabKeepMessage =>
-      '번역이 완료되었습니다. 나중에 검토 및 편집을 위해 대기열에 유지하시겠습니까?';
+  String get translationCloseTranslateTabKeepMessage => '번역이 완료되었습니다. 나중에 검토 및 편집을 위해 대기열에 유지하시겠습니까?';
 
   @override
   String get translationCloseTranslateTabKeepInQueue => '대기열에 유지';
@@ -273,8 +264,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String translationStatsSuccessFailed(
-      Object fail, Object success, Object total) {
+  String translationStatsSuccessFailed(Object fail, Object success, Object total) {
     return '성공: $success/$total, 실패: $fail/$total';
   }
 
@@ -511,12 +501,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationSnackSourceResplitCompleted => '원본 재분할 완료';
 
   @override
-  String get translationSnackPleaseSelectFileOrText =>
-      '먼저 파일을 선택하거나 텍스트를 입력하세요';
+  String get translationSnackPleaseSelectFileOrText => '먼저 파일을 선택하거나 텍스트를 입력하세요';
 
   @override
-  String get translationSnackPleaseSelectFileOrTextWithDot =>
-      '먼저 파일을 선택하거나 텍스트를 입력하세요.';
+  String get translationSnackPleaseSelectFileOrTextWithDot => '먼저 파일을 선택하거나 텍스트를 입력하세요.';
 
   @override
   String get translationSnackPleaseSelectFile => '먼저 파일을 선택하세요';
@@ -548,8 +536,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get translationDialogMixedLangPromptTitle =>
-      '번역 품질을 향상시키기 위해 다음 프롬프트 지침을 추가할 수 있습니다:';
+  String get translationDialogMixedLangPromptTitle => '번역 품질을 향상시키기 위해 다음 프롬프트 지침을 추가할 수 있습니다:';
 
   @override
   String get translationDialogMixedLangOption1Title => '소스 언어 텍스트만 번역';
@@ -563,8 +550,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationDialogMixedLangOption2Title => '코드와 기술 용어는 변경하지 않음';
 
   @override
-  String get translationDialogMixedLangOption2Subtitle =>
-      '코드 블록, 기술 용어, 함수 이름 및 다른 언어의 텍스트는 변경하지 않고 유지합니다';
+  String get translationDialogMixedLangOption2Subtitle => '코드 블록, 기술 용어, 함수 이름 및 다른 언어의 텍스트는 변경하지 않고 유지합니다';
 
   @override
   String get translationDialogMixedLangCancel => '취소';
@@ -638,19 +624,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationDialogSwitchToFileTitle => '파일 모드로 전환';
 
   @override
-  String get translationDialogSwitchToFileBody =>
-      '파일 모드로 전환하면 현재 텍스트 입력이 지워집니다. 계속하시겠습니까?';
+  String get translationDialogSwitchToFileBody => '파일 모드로 전환하면 현재 텍스트 입력이 지워집니다. 계속하시겠습니까?';
 
   @override
   String get translationDialogSwitchToTextTitle => '텍스트 모드로 전환';
 
   @override
-  String get translationDialogSwitchToTextBody =>
-      '텍스트 모드로 전환하면 현재 파일 선택이 지워집니다. 계속하시겠습니까?';
+  String get translationDialogSwitchToTextBody => '텍스트 모드로 전환하면 현재 파일 선택이 지워집니다. 계속하시겠습니까?';
 
   @override
-  String get translationSnackAllSegmentsExcludedSkipped =>
-      '모든 세그먼트가 제외되었습니다. 번역은 건너뛰며, 내보내기를 통해 형식 변환을 수행할 수 있습니다.';
+  String get translationSnackAllSegmentsExcludedSkipped => '모든 세그먼트가 제외되었습니다. 번역은 건너뛰며, 내보내기를 통해 형식 변환을 수행할 수 있습니다.';
 
   @override
   String get translationDialogCancelButton => '취소';
@@ -662,8 +645,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationNoLlmAvailableTitle => '사용 가능한 LLM이 없습니다';
 
   @override
-  String get translationNoLlmAvailableMessage =>
-      '설정된 사용 가능한 LLM 플랫폼이 없습니다. 번역하려면 설정에서 LLM API Key를 구성하세요. 형식 변환만 필요하면 계속할 수 있습니다.';
+  String get translationNoLlmAvailableMessage => '설정된 사용 가능한 LLM 플랫폼이 없습니다. 번역하려면 설정에서 LLM API Key를 구성하세요. 형식 변환만 필요하면 계속할 수 있습니다.';
 
   @override
   String get translationNoLlmConfigureButton => 'LLM 설정';
@@ -675,14 +657,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get languageMatchWarningTitle => '언어 일치 안내';
 
   @override
-  String languageMatchWarningGlossaryBody(
-      Object detectedName, Object targetName) {
+  String languageMatchWarningGlossaryBody(Object detectedName, Object targetName) {
     return '검출된 문서 언어($detectedName)가 대상 언어($targetName)와 같습니다. 대상 언어 선택이 잘못되었을 수 있습니다. 용어집 자동 검출을 계속하시겠습니까?';
   }
 
   @override
-  String languageMatchWarningTranslationBody(
-      Object detectedName, Object targetName) {
+  String languageMatchWarningTranslationBody(Object detectedName, Object targetName) {
     return '검출된 문서 언어($detectedName)가 대상 언어($targetName)와 같습니다. 대상 언어 선택이 잘못되었을 수 있습니다. 번역을 계속하시겠습니까?';
   }
 
@@ -690,8 +670,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationDialogCancelTaskTitle => '현재 작업 취소';
 
   @override
-  String get translationDialogCancelTaskBody =>
-      '현재 추출/번역 작업을 취소하고 선택된 파일을 지웁니다. 계속하시겠습니까?';
+  String get translationDialogCancelTaskBody => '현재 추출/번역 작업을 취소하고 선택된 파일을 지웁니다. 계속하시겠습니까?';
 
   @override
   String get translationDialogCancelTaskNo => '아니오';
@@ -709,8 +688,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get quickSettingsSourceLanguage => '원본 언어 (MinerU OCR)';
 
   @override
-  String get quickSettingsLanguageSwitchDisabled =>
-      '번역 중에는 언어 전환이 비활성화됩니다. 대상 언어를 변경하려면 추출 탭으로 전환하세요.';
+  String get quickSettingsLanguageSwitchDisabled => '번역 중에는 언어 전환이 비활성화됩니다. 대상 언어를 변경하려면 추출 탭으로 전환하세요.';
 
   @override
   String get quickSettingsParsingPlatform => '파싱 플랫폼';
@@ -773,22 +751,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get quickSettingsQtTsTranslateUnfinished => '미완성 항목 번역';
 
   @override
-  String get quickSettingsQtTsTranslateUnfinishedSubtitle =>
-      '미완성으로 표시된 메시지 번역 (type=\"unfinished\")';
+  String get quickSettingsQtTsTranslateUnfinishedSubtitle => '미완성으로 표시된 메시지 번역 (type=\"unfinished\")';
 
   @override
   String get quickSettingsQtTsTranslateVanished => '사라진 항목 번역';
 
   @override
-  String get quickSettingsQtTsTranslateVanishedSubtitle =>
-      '사라진 것으로 표시된 메시지 번역 (type=\"vanished\")';
+  String get quickSettingsQtTsTranslateVanishedSubtitle => '사라진 것으로 표시된 메시지 번역 (type=\"vanished\")';
 
   @override
   String get quickSettingsQtTsTranslateObsolete => '구식 항목 번역';
 
   @override
-  String get quickSettingsQtTsTranslateObsoleteSubtitle =>
-      '구식으로 표시된 메시지 번역 (type=\"obsolete\")';
+  String get quickSettingsQtTsTranslateObsoleteSubtitle => '구식으로 표시된 메시지 번역 (type=\"obsolete\")';
 
   @override
   String get quickSettingsPrompt => '프롬프트';
@@ -849,12 +824,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homeIntro => '문서를 업로드하고 AI 기반 정확도로 여러 언어로 번역하세요.\n';
 
   @override
-  String get homeHowItWorks =>
-      '작동 방식\n번역: 가져오기 -> 문서 분석 -> 용어집 -> 번역 -> 내보내기\n파일 형식 변환: 가져오기 -> 문서 분석 -> 변환 -> 내보내기\nURL 가져오기: URL 입력 -> 페이지 가져오기 -> 콘텐츠 분석 -> 본문 추출 -> 번역/내보내기';
+  String get homeHowItWorks => '작동 방식\n번역: 가져오기 -> 문서 분석 -> 용어집 -> 번역 -> 내보내기\n파일 형식 변환: 가져오기 -> 문서 분석 -> 변환 -> 내보내기\nURL 가져오기: URL 입력 -> 페이지 가져오기 -> 콘텐츠 분석 -> 본문 추출 -> 번역/내보내기';
 
   @override
-  String get homeSnackDonorExpired =>
-      '귀하의 등록 코드가 만료되었습니다. Pro 혜택을 계속 이용하려면 다시 등록하세요.';
+  String get homeSnackDonorExpired => '귀하의 등록 코드가 만료되었습니다. Pro 혜택을 계속 이용하려면 다시 등록하세요.';
 
   @override
   String get commonCancel => '취소';
@@ -919,15 +892,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationQueueHint => '작업이 자동으로 새로 고칩니다. 완료 후 다운로드할 수 있습니다.';
 
   @override
-  String get translationQueueCancelExitHint =>
-      '대기 중이거나 실행 중인 작업은 «작업 취소»로 중단할 수 있습니다. 확인 후 홈으로 돌아갑니다.';
+  String get translationQueueCancelExitHint => '대기 중이거나 실행 중인 작업은 «작업 취소»로 중단할 수 있습니다. 확인 후 홈으로 돌아갑니다.';
 
   @override
   String get translationQueueCancelDialogTitle => '이 번역 작업을 취소할까요?';
 
   @override
-  String get translationQueueCancelDialogMessage =>
-      '대기 중인 작업은 대기열에서 제거되고, 실행 중인 작업은 중단됩니다. 확인 후 홈으로 이동합니다.';
+  String get translationQueueCancelDialogMessage => '대기 중인 작업은 대기열에서 제거되고, 실행 중인 작업은 중단됩니다. 확인 후 홈으로 이동합니다.';
 
   @override
   String get translationQueueCancelDialogKeep => '유지';
@@ -1023,8 +994,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationQueueClearAllTitle => '작업 대기열 비우기';
 
   @override
-  String get translationQueueClearAllMessage =>
-      '대기 및 진행 중 작업을 취소하고 메모리 작업과 디스크 스냅샷을 삭제합니다. 되돌릴 수 없습니다.';
+  String get translationQueueClearAllMessage => '대기 및 진행 중 작업을 취소하고 메모리 작업과 디스크 스냅샷을 삭제합니다. 되돌릴 수 없습니다.';
 
   @override
   String get translationQueueClearAllConfirm => '비우기';
@@ -1152,24 +1122,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homeEditionProStatusActivated => '활성화됨';
 
   @override
-  String get homeWelcomeDearPro =>
-      '몰입 번역: 화면에서 원문과 번역문을 바로 대조합니다.\n큐 번역: 문서를 작업 큐에 넣어 순서대로 파이프라인을 실행합니다.';
+  String get homeWelcomeDearPro => '몰입 번역: 화면에서 원문과 번역문을 바로 대조합니다.\n큐 번역: 문서를 작업 큐에 넣어 순서대로 파이프라인을 실행합니다.';
 
   @override
-  String get homeWelcomeDearStandard =>
-      '몰입 번역: 화면에서 원문과 번역문을 바로 대조합니다.\n큐 번역: 문서를 작업 큐에 넣어 순서대로 파이프라인을 실행합니다.';
+  String get homeWelcomeDearStandard => '몰입 번역: 화면에서 원문과 번역문을 바로 대조합니다.\n큐 번역: 문서를 작업 큐에 넣어 순서대로 파이프라인을 실행합니다.';
 
   @override
-  String get homeWelcomeDearProNoUser =>
-      '몰입 번역: 화면에서 원문과 번역문을 바로 대조합니다.\n큐 번역: 문서를 작업 큐에 넣어 순서대로 파이프라인을 실행합니다.';
+  String get homeWelcomeDearProNoUser => '몰입 번역: 화면에서 원문과 번역문을 바로 대조합니다.\n큐 번역: 문서를 작업 큐에 넣어 순서대로 파이프라인을 실행합니다.';
 
   @override
-  String get homeWelcomeDearStandardNoUser =>
-      '몰입 번역: 화면에서 원문과 번역문을 바로 대조합니다.\n큐 번역: 문서를 작업 큐에 넣어 순서대로 파이프라인을 실행합니다.';
+  String get homeWelcomeDearStandardNoUser => '몰입 번역: 화면에서 원문과 번역문을 바로 대조합니다.\n큐 번역: 문서를 작업 큐에 넣어 순서대로 파이프라인을 실행합니다.';
 
   @override
-  String get homeWelcomeHello =>
-      '몰입 번역: 화면에서 원문과 번역문을 바로 대조합니다.\n큐 번역: 문서를 작업 큐에 넣어 순서대로 파이프라인을 실행합니다.';
+  String get homeWelcomeHello => '몰입 번역: 화면에서 원문과 번역문을 바로 대조합니다.\n큐 번역: 문서를 작업 큐에 넣어 순서대로 파이프라인을 실행합니다.';
 
   @override
   String get homeLoading => '로딩 중...';
@@ -1268,8 +1233,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsParsingEngineTitle => '파싱 엔진';
 
   @override
-  String get settingsParsingEngineSubtitle =>
-      '텍스트 추출 및 처리를 위한 문서 파싱 엔진을 선택하세요.';
+  String get settingsParsingEngineSubtitle => '텍스트 추출 및 처리를 위한 문서 파싱 엔진을 선택하세요.';
 
   @override
   String get settingsParsingEngineLabel => '파싱 엔진';
@@ -1329,8 +1293,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsOcrLanguageTitle => 'OCR 언어';
 
   @override
-  String get settingsOcrLanguageSubtitle =>
-      '이미지 및 스캔 문서에서 텍스트 인식을 위한 OCR 언어를 구성합니다.';
+  String get settingsOcrLanguageSubtitle => '이미지 및 스캔 문서에서 텍스트 인식을 위한 OCR 언어를 구성합니다.';
 
   @override
   String get settingsOcrLanguageLabel => 'OCR 언어';
@@ -1372,8 +1335,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsGlossaryManagementTitle => '용어집 관리';
 
   @override
-  String get settingsGlossaryManagementSubtitle =>
-      '일관된 번역 품질을 위한 용어 항목을 관리합니다.';
+  String get settingsGlossaryManagementSubtitle => '일관된 번역 품질을 위한 용어 항목을 관리합니다.';
 
   @override
   String get settingsGlossarySelectGlossary => '용어집 선택';
@@ -1405,8 +1367,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsGlossaryAddEntry => '항목 추가';
 
   @override
-  String get settingsGlossaryNoEntriesYet =>
-      '아직 용어집 항목이 없습니다.\n첫 번째 항목을 추가하여 시작하세요.';
+  String get settingsGlossaryNoEntriesYet => '아직 용어집 항목이 없습니다.\n첫 번째 항목을 추가하여 시작하세요.';
 
   @override
   String get settingsGlossaryFilterLabel => '필터:';
@@ -1607,8 +1568,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String settingsGlossaryGlossaryDropdownItem(
-      Object count, Object name, Object type) {
+  String settingsGlossaryGlossaryDropdownItem(Object count, Object name, Object type) {
     return '$name ($type) · $count개 항목';
   }
 
@@ -1648,8 +1608,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsGlossaryEntryDeleteFailedSnack => '항목 삭제 실패';
 
   @override
-  String get settingsGlossaryEmptyStateTitle =>
-      '아직 용어집이 없습니다. 첫 번째 용어집을 만들어 보세요.';
+  String get settingsGlossaryEmptyStateTitle => '아직 용어집이 없습니다. 첫 번째 용어집을 만들어 보세요.';
 
   @override
   String get settingsGlossaryTooltipCreate => '새 용어집 만들기';
@@ -1750,8 +1709,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get glossaryPanelDropCsvHere => 'CSV 또는 TBX 파일을 여기에 놓으세요';
 
   @override
-  String get glossaryPanelNoEntriesHint =>
-      '용어집 항목이 없습니다.\n「용어집 감지」 버튼을 클릭하여 시작하거나, 목록에서 용어집을 선택하여 항목을 보거나, CSV 또는 TBX 파일을 여기에 끌어다 놓으세요.';
+  String get glossaryPanelNoEntriesHint => '용어집 항목이 없습니다.\n「용어집 감지」 버튼을 클릭하여 시작하거나, 목록에서 용어집을 선택하여 항목을 보거나, CSV 또는 TBX 파일을 여기에 끌어다 놓으세요.';
 
   @override
   String get glossaryPanelSelectBody => '작업할 용어집을 선택하세요:';
@@ -1804,8 +1762,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get glossaryWidgetNoGlossariesHint =>
-      '사용 가능한 용어집이 없습니다. 설정 -> 용어집에서 만드세요.';
+  String get glossaryWidgetNoGlossariesHint => '사용 가능한 용어집이 없습니다. 설정 -> 용어집에서 만드세요.';
 
   @override
   String glossaryWidgetTypeCountItems(Object type, Object count) {
@@ -1828,14 +1785,12 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String glossaryWidgetPersonalAppended(
-      Object newCount, Object skipped, Object total) {
+  String glossaryWidgetPersonalAppended(Object newCount, Object skipped, Object total) {
     return '개인 용어집에 $newCount개 새 용어를 추가했습니다.\n$skipped개 기존 용어 건너뜀.\n총 $total개 용어.';
   }
 
   @override
-  String glossaryWidgetPersonalUpdated(
-      Object newCount, Object updatedCount, Object total) {
+  String glossaryWidgetPersonalUpdated(Object newCount, Object updatedCount, Object total) {
     return '개인 용어집이 업데이트되었습니다!\n$newCount개 추가, $updatedCount개 업데이트.\n총 $total개 용어.';
   }
 
@@ -1857,22 +1812,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsUserManagementTitle => '사용자 관리 모드';
 
   @override
-  String get settingsUserManagementSubtitle =>
-      'Web 배포 시 로그인 및 권한 정책을 선택합니다. 설정과 설정 마법사는 관리자 전용입니다.';
+  String get settingsUserManagementSubtitle => 'Web 배포 시 로그인 및 권한 정책을 선택합니다. 설정과 설정 마법사는 관리자 전용입니다.';
 
   @override
   String get settingsUserManagementModeNoLogin => '로그인 불필요';
 
   @override
-  String get settingsUserManagementModeNoLoginDesc =>
-      '로그인 없이 사용. 설정 및 설정 마법사는 관리자 로그인 후에만 사용 가능.';
+  String get settingsUserManagementModeNoLoginDesc => '로그인 없이 사용. 설정 및 설정 마법사는 관리자 로그인 후에만 사용 가능.';
 
   @override
   String get settingsUserManagementModeLdap => 'LDAP 로그인';
 
   @override
-  String get settingsUserManagementModeLdapDesc =>
-      'LDAP/AD로 로그인. 설정 및 설정 마법사는 관리자(도메인 그룹) 전용.';
+  String get settingsUserManagementModeLdapDesc => 'LDAP/AD로 로그인. 설정 및 설정 마법사는 관리자(도메인 그룹) 전용.';
 
   @override
   String get settingsUserManagementModeLocal => '로컬 사용자 로그인';
@@ -1953,8 +1905,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsLdapGroupBaseDn => '그룹 검색 Base DN';
 
   @override
-  String get settingsLdapGroupBaseDnPlaceholder =>
-      'OU=Groups,DC=example,DC=com';
+  String get settingsLdapGroupBaseDnPlaceholder => 'OU=Groups,DC=example,DC=com';
 
   @override
   String get settingsLdapTlsVerify => 'TLS 인증서 검증';
@@ -1999,15 +1950,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsLdapConfigSaved => 'LDAP 설정이 저장되었습니다';
 
   @override
-  String get settingsLdapEnableRequireTest =>
-      'LDAP 사용 전에 LDAP 연결 테스트를 먼저 실행하세요.';
+  String get settingsLdapEnableRequireTest => 'LDAP 사용 전에 LDAP 연결 테스트를 먼저 실행하세요.';
 
   @override
   String get settingsAdminOnlyDialogTitle => '관리자 전용';
 
   @override
-  String get settingsAdminOnlyDialogMessage =>
-      '설정 및 설정 마법사는 관리자만 사용할 수 있습니다. 관리자 계정으로 로그인하세요.';
+  String get settingsAdminOnlyDialogMessage => '설정 및 설정 마법사는 관리자만 사용할 수 있습니다. 관리자 계정으로 로그인하세요.';
 
   @override
   String get settingsAdminOnlyDialogGoToLogin => '로그인';
@@ -2076,8 +2025,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get aiPlatformApiUrl => 'API URL';
 
   @override
-  String get aiPlatformApiUrlHint =>
-      'e.g., https://ark.cn-beijing.volces.com/api/v3';
+  String get aiPlatformApiUrlHint => 'e.g., https://ark.cn-beijing.volces.com/api/v3';
 
   @override
   String get aiPlatformMaxTokens => '최대 토큰';
@@ -2119,12 +2067,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get aiPlatformTestConnection => '연결 테스트';
 
   @override
-  String get aiPlatformTestConnectionHint =>
-      '설정을 저장한 후 아래의 \"연결 테스트\" 버튼을 눌러 플랫폼 구성이 정상인지 확인하세요.';
+  String get aiPlatformTestConnectionHint => '설정을 저장한 후 아래의 \"연결 테스트\" 버튼을 눌러 플랫폼 구성이 정상인지 확인하세요.';
 
   @override
-  String get setupWizardConfigureApiKeyAndTest =>
-      '연결 불가. API Key를 설정하고 \"연결 테스트\"를 클릭하여 확인하세요.';
+  String get setupWizardConfigureApiKeyAndTest => '연결 불가. API Key를 설정하고 \"연결 테스트\"를 클릭하여 확인하세요.';
 
   @override
   String get setupWizardSaveAndExit => '저장 후 종료';
@@ -2142,8 +2088,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get setupWizardWelcomeIntro => '이 마법사는 두 가지 주요 설정을 도와줍니다.';
 
   @override
-  String get setupWizardWelcomeBody =>
-      '1. 기본 LLM 플랫폼을 선택하고 설정합니다.\n2. PDF/PNG 등을 번역하려면 MinerU 파싱 엔진을 설정합니다(선택).\n\n참고: 설정 후 \"연결 테스트\"로 확인하세요.';
+  String get setupWizardWelcomeBody => '1. 기본 LLM 플랫폼을 선택하고 설정합니다.\n2. PDF/PNG 등을 번역하려면 MinerU 파싱 엔진을 설정합니다(선택).\n\n참고: 설정 후 \"연결 테스트\"로 확인하세요.';
 
   @override
   String get setupWizardUiLanguageLabel => 'UI 언어';
@@ -2158,12 +2103,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get setupWizardMineruNo => '아니오(LLM만으로 텍스트 번역 등)';
 
   @override
-  String get setupWizardMineruDescription =>
-      'MinerU는 PDF/이미지의 레이아웃 파싱과 분할을 담당합니다.\n아래에 API Key와 URL을 입력한 뒤 \"연결 테스트\"로 확인하세요.';
+  String get setupWizardMineruDescription => 'MinerU는 PDF/이미지의 레이아웃 파싱과 분할을 담당합니다.\n아래에 API Key와 URL을 입력한 뒤 \"연결 테스트\"로 확인하세요.';
 
   @override
-  String get setupWizardMineruSkipped =>
-      'MinerU를 설정하지 않았습니다. 설정에서 나중에 PDF 번역을 켤 수 있습니다.';
+  String get setupWizardMineruSkipped => 'MinerU를 설정하지 않았습니다. 설정에서 나중에 PDF 번역을 켤 수 있습니다.';
 
   @override
   String get setupWizardMineruConfigTitle => 'MinerU(파싱 엔진)';
@@ -2181,8 +2124,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get setupWizardSelectLlmPlatform => 'LLM 플랫폼 선택';
 
   @override
-  String get setupWizardNoLlmPlatforms =>
-      'AI 플랫폼 설정에 LLM이 없습니다. 설정에서 플랫폼을 추가하세요.';
+  String get setupWizardNoLlmPlatforms => 'AI 플랫폼 설정에 LLM이 없습니다. 설정에서 플랫폼을 추가하세요.';
 
   @override
   String get setupWizardMineruSaved => 'MinerU 설정이 저장되었습니다';
@@ -2309,8 +2251,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsTranslationAutoGlossaryTitle => '용어집 자동 생성';
 
   @override
-  String get settingsTranslationAutoGlossarySubtitle =>
-      '번역 후 자동으로 용어집 생성 (새 작업에 적용)';
+  String get settingsTranslationAutoGlossarySubtitle => '번역 후 자동으로 용어집 생성 (새 작업에 적용)';
 
   @override
   String get settingsTranslationParamsTitle => '번역 매개변수';
@@ -2331,30 +2272,25 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsTranslationChunkRetryTitle => '청크/API 재시도';
 
   @override
-  String get settingsTranslationChunkRetryHint =>
-      '권장: 3–5 (청크 번역 또는 API 호출 실패 시 재시도)';
+  String get settingsTranslationChunkRetryHint => '권장: 3–5 (청크 번역 또는 API 호출 실패 시 재시도)';
 
   @override
-  String get settingsTranslationSegmentAutoRetryTitle =>
-      '큐 모드: 실패 세그먼트 자동 재시도 라운드';
+  String get settingsTranslationSegmentAutoRetryTitle => '큐 모드: 실패 세그먼트 자동 재시도 라운드';
 
   @override
-  String get settingsTranslationSegmentAutoRetryHint =>
-      '권장: 3 (본 번역 후 일괄 재번역, 1–10 라운드; 큐 모드만)';
+  String get settingsTranslationSegmentAutoRetryHint => '권장: 3 (본 번역 후 일괄 재번역, 1–10 라운드; 큐 모드만)';
 
   @override
   String get settingsTranslationChunkSizeTitle => '청크 크기 (토큰)';
 
   @override
-  String get settingsTranslationChunkSizeHint =>
-      '권장: 요청당 3000 토큰 (모델 컨텍스트 크기에 따라 조정)';
+  String get settingsTranslationChunkSizeHint => '권장: 요청당 3000 토큰 (모델 컨텍스트 크기에 따라 조정)';
 
   @override
   String get settingsExclusionTitle => '기본 제외 규칙';
 
   @override
-  String get settingsExclusionNotice =>
-      '켜기 = 추출 중 자동 제외; 끄기 = 감지만 (사용자가 세그먼트별 결정).';
+  String get settingsExclusionNotice => '켜기 = 추출 중 자동 제외; 끄기 = 감지만 (사용자가 세그먼트별 결정).';
 
   @override
   String get settingsExclusionImageTitle => '이미지';
@@ -2706,8 +2642,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get fileUploadDisabledMessage => '파일 선택 비활성화 (처리 중)';
 
   @override
-  String get fileUploadSupportedFormats =>
-      '지원: Word (DOCX), PowerPoint (PPTX), Excel (XLSX/CSV), PDF, Markdown, TXT, HTML, SRT, JSON, EPUB, MOBI, Qt TS, PNG, JPEG';
+  String get fileUploadSupportedFormats => '지원: Word (DOCX), PowerPoint (PPTX), Excel (XLSX/CSV), PDF, Markdown, TXT, HTML, SRT, JSON, EPUB, MOBI, Qt TS, PNG, JPEG';
 
   @override
   String get fileUploadDropHere => '여기에 파일 놓기';
@@ -2804,8 +2739,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get extractCancelExtractionTitle => '추출 취소';
 
   @override
-  String get extractCancelExtractionContent =>
-      '추출을 취소하시겠습니까? 이 작업은 되돌릴 수 없습니다.';
+  String get extractCancelExtractionContent => '추출을 취소하시겠습니까? 이 작업은 되돌릴 수 없습니다.';
 
   @override
   String get extractCancelExtractionNo => '아니오';
@@ -2973,8 +2907,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get loginPasswordRecoveryContactAdmin => '관리자에게 문의하여 비밀번호를 재설정하세요.';
 
   @override
-  String get loginPasswordRecoveryAdminHint =>
-      '관리자는 로그인 후 사용자 관리 페이지에서 비밀번호를 재설정할 수 있습니다.';
+  String get loginPasswordRecoveryAdminHint => '관리자는 로그인 후 사용자 관리 페이지에서 비밀번호를 재설정할 수 있습니다.';
 
   @override
   String get loginAuthMethodDefault => '기본 인증 사용';
@@ -2989,15 +2922,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get loginWelcomeBack => '돌아오신 것을 환영합니다';
 
   @override
-  String get loginFeatureFormats =>
-      'PDF, DOCX, XLSX, HTML, EPUB, MOBI\n및 15개 이상의 형식';
+  String get loginFeatureFormats => 'PDF, DOCX, XLSX, HTML, EPUB, MOBI\n및 15개 이상의 형식';
 
   @override
   String get loginFeatureLayout => '레이아웃을 보존하는 번역\n높은 충실도';
 
   @override
-  String get loginFeaturePlatforms =>
-      '20+ LLM 플랫폼 지원\nOpenAI, Claude, Ollama 포함';
+  String get loginFeaturePlatforms => '20+ LLM 플랫폼 지원\nOpenAI, Claude, Ollama 포함';
 
   @override
   String get loginPasswordRecoveryAdminGuide => '관리자라면 비밀번호 복구 절차를 따라주세요.';

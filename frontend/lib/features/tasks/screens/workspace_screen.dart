@@ -691,7 +691,13 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
             centerTitle: false,
             titleSpacing: 0,
             automaticallyImplyLeading: false,
-            title: Row(
+            title: LayoutBuilder(
+              builder: (context, constraints) {
+                // When AppBar title area is very narrow (< 300px), hide
+                // secondary widgets (language selector, auth) and shrink logos
+                // so the title never overflows.
+                final bool spacious = constraints.maxWidth >= 300;
+                return Row(
               children: <Widget>[
                 // Leading: Logo
                 Padding(
@@ -699,8 +705,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                   child: Image.asset(
                     // Use the main app logo PNG; Flutter does not decode .ico natively, use same PNG
                     'images/logo_96.png',
-                    width: 56, // Reduced from 64 to prevent overflow on narrow windows
-                    height: 56, // Reduced from 64 to prevent overflow on narrow windows
+                    width: spacious ? 56 : 40,
+                    height: spacious ? 56 : 40,
                     errorBuilder: (
                       BuildContext context,
                       Object error,
@@ -708,13 +714,13 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                     ) =>
                         Icon(
                       Icons.language,
-                      size: 36, // Match roughly 56x56 logo visual weight
+                      size: spacious ? 36 : 28,
                       color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                 ),
                 // Title - flexible so Row does not overflow on narrow windows
-                Flexible(
+                Expanded(
                   child: Text(
                     'Owlangs',
                     style: TextStyle(
@@ -727,12 +733,12 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                   ),
                 ),
                 // Desktop only: Language selector next to title
-                if (!kIsWeb) ...<Widget>[
+                if (spacious && !kIsWeb) ...<Widget>[
                   const SizedBox(width: 12),
                   _buildLanguageSelector(),
                 ],
                 // Web only: show username, language switcher (client-only), and Login/Logout links next to app title
-                if (kIsWeb) ...<Widget>[
+                if (spacious && kIsWeb) ...<Widget>[
                   const SizedBox(width: 12),
                   Builder(
                     builder: (BuildContext context) {
@@ -958,8 +964,10 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                   const SizedBox(width: 12),
                 ],
               ],
-            ),
-            actions: <Widget>[
+            );
+          },
+        ),
+        actions: <Widget>[
               // Immersive translate (flow tab)
               _buildActionButton(
                 icon: Icons.translate,
