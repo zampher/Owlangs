@@ -2588,7 +2588,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsGlossaryImportCsv.
   ///
   /// In en, this message translates to:
-  /// **'Import CSV'**
+  /// **'Import'**
   String get settingsGlossaryImportCsv;
 
   /// No description provided for @settingsGlossaryExport.
@@ -2834,7 +2834,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsGlossaryImportDialogTitle.
   ///
   /// In en, this message translates to:
-  /// **'Import CSV to Glossary'**
+  /// **'Import CSV/TBX to Glossary'**
   String get settingsGlossaryImportDialogTitle;
 
   /// No description provided for @settingsGlossaryMergeModeLabel.
@@ -2888,13 +2888,13 @@ abstract class AppLocalizations {
   /// No description provided for @settingsGlossaryExportDialogTitle.
   ///
   /// In en, this message translates to:
-  /// **'Download Glossary CSV'**
+  /// **'Export Glossary'**
   String get settingsGlossaryExportDialogTitle;
 
   /// No description provided for @settingsGlossarySaveCsv.
   ///
   /// In en, this message translates to:
-  /// **'Save CSV'**
+  /// **'Save CSV/TBX'**
   String get settingsGlossarySaveCsv;
 
   /// No description provided for @settingsGlossaryDownload.
@@ -3030,6 +3030,144 @@ abstract class AppLocalizations {
   /// **'Failed to delete entry'**
   String get settingsGlossaryEntryDeleteFailedSnack;
 
+  /// No description provided for @settingsGlossaryEmptyStateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No glossaries yet. Create your first glossary to get started.'**
+  String get settingsGlossaryEmptyStateTitle;
+
+  /// No description provided for @settingsGlossaryTooltipCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a new glossary'**
+  String get settingsGlossaryTooltipCreate;
+
+  /// No description provided for @settingsGlossaryTooltipImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import entries from CSV or TBX format'**
+  String get settingsGlossaryTooltipImport;
+
+  /// No description provided for @settingsGlossaryTooltipExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Export selected glossary to CSV or TBX format'**
+  String get settingsGlossaryTooltipExport;
+
+  /// No description provided for @settingsGlossaryTooltipExportAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Export all glossaries as a ZIP archive'**
+  String get settingsGlossaryTooltipExportAll;
+
+  /// No description provided for @settingsGlossaryTooltipDeleteGlossary.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the selected glossary permanently'**
+  String get settingsGlossaryTooltipDeleteGlossary;
+
+  /// No description provided for @settingsGlossaryBatchEditCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit category'**
+  String get settingsGlossaryBatchEditCategory;
+
+  /// No description provided for @settingsGlossaryBatchDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get settingsGlossaryBatchDelete;
+
+  /// No description provided for @settingsGlossaryBatchDeselect.
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect'**
+  String get settingsGlossaryBatchDeselect;
+
+  /// No description provided for @settingsGlossaryBatchSelectedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String settingsGlossaryBatchSelectedCount(Object count);
+
+  /// No description provided for @settingsGlossaryExportFormatLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Export format'**
+  String get settingsGlossaryExportFormatLabel;
+
+  /// No description provided for @settingsGlossaryExportFormatCsv.
+  ///
+  /// In en, this message translates to:
+  /// **'CSV'**
+  String get settingsGlossaryExportFormatCsv;
+
+  /// No description provided for @settingsGlossaryExportFormatTbx.
+  ///
+  /// In en, this message translates to:
+  /// **'TBX (TermBase eXchange)'**
+  String get settingsGlossaryExportFormatTbx;
+
+  /// No description provided for @settingsGlossaryExportSourceLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Source language'**
+  String get settingsGlossaryExportSourceLanguage;
+
+  /// No description provided for @settingsGlossaryExportSaveTbxTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Save TBX file'**
+  String get settingsGlossaryExportSaveTbxTitle;
+
+  /// No description provided for @settingsGlossaryDeleteEntriesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete entries'**
+  String get settingsGlossaryDeleteEntriesTitle;
+
+  /// No description provided for @settingsGlossaryDeleteEntriesBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {count} selected entries? This cannot be undone.'**
+  String settingsGlossaryDeleteEntriesBody(Object count);
+
+  /// No description provided for @settingsGlossaryDeleteEntriesConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get settingsGlossaryDeleteEntriesConfirm;
+
+  /// No description provided for @settingsGlossaryEditCategoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Category'**
+  String get settingsGlossaryEditCategoryTitle;
+
+  /// No description provided for @settingsGlossaryEditCategoryBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Set category for {count} selected entries:'**
+  String settingsGlossaryEditCategoryBody(Object count);
+
+  /// No description provided for @settingsGlossaryEditCategoryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Category'**
+  String get settingsGlossaryEditCategoryLabel;
+
+  /// No description provided for @settingsGlossaryEditCategoryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter category name'**
+  String get settingsGlossaryEditCategoryHint;
+
+  /// No description provided for @settingsGlossaryEditCategoryApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply'**
+  String get settingsGlossaryEditCategoryApply;
+
   /// No description provided for @glossaryPanelSaveNameHint.
   ///
   /// In en, this message translates to:
@@ -3075,14 +3213,62 @@ abstract class AppLocalizations {
   /// No description provided for @glossaryPanelDropCsvHere.
   ///
   /// In en, this message translates to:
-  /// **'Drop CSV file here'**
+  /// **'Drop CSV or TBX file here'**
   String get glossaryPanelDropCsvHere;
 
   /// No description provided for @glossaryPanelNoEntriesHint.
   ///
   /// In en, this message translates to:
-  /// **'No glossary entries.\nClick on the Detect Glossary button to get started.\nOr select a glossary from the list to view its entries.\nOr drag and drop a CSV file here.'**
+  /// **'No glossary entries.\nClick on the Detect Glossary button to get started.\nOr select a glossary from the list to view its entries.\nOr drag and drop a CSV or TBX file here.'**
   String get glossaryPanelNoEntriesHint;
+
+  /// No description provided for @glossaryPanelSelectBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a glossary to work with:'**
+  String get glossaryPanelSelectBody;
+
+  /// No description provided for @glossaryPanelSaveDialogTitleReplace.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace Glossary'**
+  String get glossaryPanelSaveDialogTitleReplace;
+
+  /// No description provided for @glossaryPanelSaveDialogTitleSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Glossary'**
+  String get glossaryPanelSaveDialogTitleSave;
+
+  /// No description provided for @glossaryPanelSaveReplaceInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'This will replace the existing glossary \"{name}\"'**
+  String glossaryPanelSaveReplaceInfo(Object name);
+
+  /// No description provided for @glossaryPanelSaveButtonSaveAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Save As'**
+  String get glossaryPanelSaveButtonSaveAs;
+
+  /// No description provided for @glossaryPanelGenerating.
+  ///
+  /// In en, this message translates to:
+  /// **'Generating glossary...'**
+  String get glossaryPanelGenerating;
+
+  /// No description provided for @glossaryPanelDeleteEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete entry'**
+  String get glossaryPanelDeleteEntry;
+
+  /// No description provided for @glossaryPanelInvertSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Invert selection'**
+  String get glossaryPanelInvertSelection;
 
   /// No description provided for @glossaryWidgetTitle.
   ///
@@ -4613,7 +4799,7 @@ abstract class AppLocalizations {
   /// No description provided for @glossaryExportDialogTitle.
   ///
   /// In en, this message translates to:
-  /// **'Save Glossary as CSV'**
+  /// **'Save Glossary'**
   String get glossaryExportDialogTitle;
 
   /// No description provided for @glossaryExportSuccess.
@@ -4703,8 +4889,32 @@ abstract class AppLocalizations {
   /// No description provided for @glossaryErrorOnlyCsv.
   ///
   /// In en, this message translates to:
-  /// **'Only CSV files are supported for glossary import.'**
+  /// **'Only CSV and TBX files are supported for glossary import.'**
   String get glossaryErrorOnlyCsv;
+
+  /// No description provided for @glossaryExportFormatLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Export format'**
+  String get glossaryExportFormatLabel;
+
+  /// No description provided for @glossaryExportFormatTbxSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'TermBase eXchange (ISO 12620)'**
+  String get glossaryExportFormatTbxSubtitle;
+
+  /// No description provided for @glossaryExportSourceLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Source language'**
+  String get glossaryExportSourceLanguage;
+
+  /// No description provided for @glossaryExportButtonExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Export'**
+  String get glossaryExportButtonExport;
 
   /// No description provided for @extractFormatConversionFailed.
   ///

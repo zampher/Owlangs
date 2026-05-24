@@ -684,59 +684,171 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
     });
   }
 
+  String _xmlEscape(String s) {
+    return s
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&apos;');
+  }
+
+  String _tbxLangCode(String code) {
+    // Normalize language codes to TBX format
+    switch (code.toLowerCase()) {
+      case 'en':
+        return 'en-US';
+      case 'zh':
+        return 'zh-CN';
+      case 'ja':
+        return 'ja-JP';
+      case 'ko':
+        return 'ko-KR';
+      case 'es':
+        return 'es-ES';
+      case 'fr':
+        return 'fr-FR';
+      case 'de':
+        return 'de-DE';
+      default:
+        // If already has region code (e.g. en-US), use as-is
+        if (code.contains('-') || code.contains('_')) {
+          return code.replaceAll('_', '-');
+        }
+        return code;
+    }
+  }
+
   Future<void> _exportGlossary() async {
     try {
-      // Build CSV content
-      final csvLines = <String>['src,dst,category,target_lang'];
-      for (final entry in entries) {
-        final src = '"${entry.source.replaceAll('"', '""')}"';
-        final dst = '"${entry.target.replaceAll('"', '""')}"';
-        final cat = '"${entry.category.replaceAll('"', '""')}"';
-        final tgtLang = '"${entry.targetLang.replaceAll('"', '""')}"';
-        csvLines.add('$src,$dst,$cat,$tgtLang');
-      }
-      final csvContent = csvLines.join('\r\n');
+      final l10n = AppLocalizations.of(context)!;
 
-      // Convert to bytes with UTF-8 BOM for better compatibility
-      final csvBytes = utf8.encode('\uFEFF$csvContent');
+      // Show format selection dialog
+      String format = 'csv';
+      String sourceLang = 'en';
+      final result = await showDialog<Map<String, String>>(
+        context: context,
+        builder: (dialogContext) => _ExportFormatDialog(
+          initialFormat: format,
+          initialSourceLang: sourceLang,
+        ),
+      );
+      if (result == null) return;
+      format = result['format']!;
+      sourceLang = result['sourceLang'] ?? 'en';
 
-      // Generate filename with timestamp
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final filename = 'glossary_$timestamp.csv';
 
-      // Save file (Web or Desktop)
-      if (kIsWeb) {
-        // Web: use FileSaver
-        await FileSaver.instance.saveFile(
-          name: 'glossary_$timestamp',
-          bytes: Uint8List.fromList(csvBytes),
-          ext: 'csv',
-          mimeType: MimeType.csv,
-        );
-      } else {
-        // Desktop: use FilePicker to save
-        final path = await FilePicker.platform.saveFile(
-          dialogTitle:
-              AppLocalizations.of(context)!.glossaryExportDialogTitle,
-          fileName: filename,
-          type: FileType.custom,
-          allowedExtensions: <String>['csv'],
-        );
-        if (path != null) {
-          final file = io.File(path);
-          await file.writeAsBytes(csvBytes, flush: true);
-        } else {
-          // User cancelled
-          return;
+      if (format == 'tbx') {
+        // Build TBX XML
+        final grouped = <String, List<GlossaryEntry>>{};
+        for (final entry in entries) {
+          grouped.putIfAbsent(entry.source, () => []).add(entry);
         }
-      }
 
-      if (mounted) {
-        final l10n = AppLocalizations.of(context)!;
-        MessageService.showSuccess(
-          context,
-          l10n.glossaryExportSuccess(filename),
-        );
+        final buf = StringBuffer();
+        buf.writeln('<?xml version="1.0" encoding="UTF-8"?>');
+        buf.writeln('<martif type="TBX" xml:lang="en-US">');
+        buf.writeln('  <martifHeader>');
+        buf.writeln(
+            '    <fileDesc><sourceDesc><p>Glossary Export</p></sourceDesc></fileDesc>');
+        buf.writeln('  </martifHeader>');
+        buf.writeln('  <text>');
+        buf.writeln('    <body>');
+
+        var teId = 1;
+        for (final entry in grouped.entries) {
+          final srcTerm = _xmlEscape(entry.key);
+          buf.writeln('      <termEntry id="TE-$teId">');
+          buf.writeln(
+              '        <langSet xml:lang="${_tbxLangCode(sourceLang)}"><term>$srcTerm</term></langSet>');
+          for (final dst in entry.value) {
+            final lang = dst.targetLang.isNotEmpty
+                ? _tbxLangCode(dst.targetLang)
+                : _tbxLangCode(sourceLang);
+            final dstTerm = _xmlEscape(dst.target);
+            buf.writeln(
+                '        <langSet xml:lang="$lang"><term>$dstTerm</term></langSet>');
+          }
+          buf.writeln('      </termEntry>');
+          teId++;
+        }
+
+        buf.writeln('    </body>');
+        buf.writeln('  </text>');
+        buf.writeln('</martif>');
+
+        final tbxBytes = utf8.encode(buf.toString());
+
+        if (kIsWeb) {
+          await FileSaver.instance.saveFile(
+            name: 'glossary_$timestamp',
+            bytes: Uint8List.fromList(tbxBytes),
+            ext: 'tbx',
+            mimeType: MimeType.other,
+          );
+        } else {
+          final path = await FilePicker.platform.saveFile(
+            dialogTitle: l10n.glossaryExportDialogTitle,
+            fileName: 'glossary_$timestamp.tbx',
+            type: FileType.custom,
+            allowedExtensions: <String>['tbx'],
+          );
+          if (path != null) {
+            final file = io.File(path);
+            await file.writeAsBytes(tbxBytes, flush: true);
+          } else {
+            return;
+          }
+        }
+
+        if (mounted) {
+          MessageService.showSuccess(
+            context,
+            l10n.glossaryExportSuccess('glossary_$timestamp.tbx'),
+          );
+        }
+      } else {
+        // Build CSV content
+        final csvLines = <String>['src,dst,category,target_lang'];
+        for (final entry in entries) {
+          final src = '"${entry.source.replaceAll('"', '""')}"';
+          final dst = '"${entry.target.replaceAll('"', '""')}"';
+          final cat = '"${entry.category.replaceAll('"', '""')}"';
+          final tgtLang = '"${entry.targetLang.replaceAll('"', '""')}"';
+          csvLines.add('$src,$dst,$cat,$tgtLang');
+        }
+        final csvContent = csvLines.join('\r\n');
+        final csvBytes = utf8.encode('\uFEFF$csvContent');
+
+        if (kIsWeb) {
+          await FileSaver.instance.saveFile(
+            name: 'glossary_$timestamp',
+            bytes: Uint8List.fromList(csvBytes),
+            ext: 'csv',
+            mimeType: MimeType.csv,
+          );
+        } else {
+          final path = await FilePicker.platform.saveFile(
+            dialogTitle: l10n.glossaryExportDialogTitle,
+            fileName: 'glossary_$timestamp.csv',
+            type: FileType.custom,
+            allowedExtensions: <String>['csv'],
+          );
+          if (path != null) {
+            final file = io.File(path);
+            await file.writeAsBytes(csvBytes, flush: true);
+          } else {
+            return;
+          }
+        }
+
+        if (mounted) {
+          MessageService.showSuccess(
+            context,
+            l10n.glossaryExportSuccess('glossary_$timestamp.csv'),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -749,26 +861,47 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
     }
   }
 
-  /// Process imported CSV file bytes (shared logic for file picker and drag-drop)
-  Future<void> _processImportedFileBytes(Uint8List fileBytes) async {
+  /// Process imported file bytes (CSV or TBX, shared logic for file picker and drag-drop)
+  Future<void> _processImportedFileBytes(Uint8List fileBytes,
+      {String? fileName}) async {
     try {
       setState(() {
         _busy = true;
       });
 
-      // Validate and parse CSV
-      final validationResult = _validateAndParseCsv(fileBytes);
-      if (!(validationResult['valid'] as bool)) {
-        final errors = validationResult['errors'] as List<String>;
-        final l10n = AppLocalizations.of(context)!;
-        final errorMessage =
-            l10n.glossaryCsvValidationFailed(errors.join('\n'));
-        MessageService.showError(context, errorMessage);
-        return;
+      final isTbx =
+          fileName != null && fileName.toLowerCase().endsWith('.tbx');
+      List<GlossaryEntry> importedEntries;
+
+      if (isTbx) {
+        // Parse TBX via backend API
+        final result = await GlossaryApiService.parseTbxFile(fileBytes);
+        final entriesList = result['entries'] as List<dynamic>;
+        importedEntries = entriesList.map((e) {
+          final m = e as Map<String, dynamic>;
+          return GlossaryEntry(
+            source: m['src'] as String? ?? '',
+            target: m['dst'] as String? ?? '',
+            category: m['category'] as String? ?? '',
+            targetLang: m['target_lang'] as String? ?? '',
+          );
+        }).toList();
+      } else {
+        // Validate and parse CSV
+        final validationResult = _validateAndParseCsv(fileBytes);
+        if (!(validationResult['valid'] as bool)) {
+          final errors = validationResult['errors'] as List<String>;
+          final l10n = AppLocalizations.of(context)!;
+          final errorMessage =
+              l10n.glossaryCsvValidationFailed(errors.join('\n'));
+          MessageService.showError(context, errorMessage);
+          return;
+        }
+
+        importedEntries =
+            validationResult['entries'] as List<GlossaryEntry>;
       }
 
-      final importedEntries =
-          validationResult['entries'] as List<GlossaryEntry>;
       if (importedEntries.isEmpty) {
         final l10n = AppLocalizations.of(context)!;
         MessageService.showWarning(
@@ -778,94 +911,7 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
         return;
       }
 
-      // Show dialog to choose replace or merge
-      // If glossary is empty, only show Replace option
-      final isEmpty = entries.isEmpty;
-      final l10n = AppLocalizations.of(context)!;
-      final action = await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(l10n.glossaryImportDialogTitle),
-          content: Text(
-            isEmpty
-                ? l10n.glossaryImportDialogBodyEmpty(
-                    importedEntries.length.toString(),
-                  )
-                : l10n.glossaryImportDialogBody(
-                    importedEntries.length.toString(),
-                  ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop('cancel'),
-              child: Text(l10n.glossaryDialogCancel),
-            ),
-            if (isEmpty)
-              ElevatedButton(
-                onPressed: () => Navigator.of(dialogContext).pop('replace'),
-                child: Text(l10n.glossaryImportButtonImport),
-              )
-            else ...<Widget>[
-              OutlinedButton(
-                onPressed: () => Navigator.of(dialogContext).pop('replace'),
-                child: Text(l10n.glossaryImportButtonReplace),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.of(dialogContext).pop('merge'),
-                child: Text(l10n.glossaryImportButtonMerge),
-              ),
-            ],
-          ],
-        ),
-      );
-
-      if (action == null || action == 'cancel') {
-        return;
-      }
-
-      // Import entries
-      setState(() {
-        if (action == 'replace') {
-          entries = importedEntries;
-        } else {
-          // Merge: add new entries, update existing ones
-          final existingMap = <String, GlossaryEntry>{};
-          for (final entry in entries) {
-            if (entry.source.isNotEmpty) {
-              existingMap[entry.source] = entry;
-            }
-          }
-          for (final entry in importedEntries) {
-            if (entry.source.isNotEmpty) {
-              existingMap[entry.source] = entry;
-            }
-          }
-          entries = existingMap.values.toList();
-        }
-        originalEntries = _copyEntries(entries);
-      });
-
-      // Rebuild controllers and notifiers
-      _rebuildControllersAndNotifiers();
-
-      // Auto-enter edit mode after import
-      setState(() {
-        isEditing = true;
-      });
-
-      // Notify parent about editing state change
-      if (widget.onEditingStateChanged != null) {
-        widget.onEditingStateChanged!(true);
-      }
-
-      final mode = action == 'replace' ? 'replaced' : 'merged';
-      MessageService.showSuccess(
-        context,
-        l10n.glossaryImportResult(
-          importedEntries.length.toString(),
-          mode,
-        ),
-      );
+      await _applyImportedEntries(importedEntries);
     } catch (e) {
       final l10n = AppLocalizations.of(context)!;
       MessageService.showError(
@@ -879,18 +925,105 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
     }
   }
 
-  /// Import glossary from CSV file
+  /// Show replace/merge dialog and apply imported entries to state
+  Future<void> _applyImportedEntries(
+      List<GlossaryEntry> importedEntries) async {
+    final isEmpty = entries.isEmpty;
+    final l10n = AppLocalizations.of(context)!;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.glossaryImportDialogTitle),
+        content: Text(
+          isEmpty
+              ? l10n.glossaryImportDialogBodyEmpty(
+                  importedEntries.length.toString(),
+                )
+              : l10n.glossaryImportDialogBody(
+                  importedEntries.length.toString(),
+                ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop('cancel'),
+            child: Text(l10n.glossaryDialogCancel),
+          ),
+          if (isEmpty)
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop('replace'),
+              child: Text(l10n.glossaryImportButtonImport),
+            )
+          else ...<Widget>[
+            OutlinedButton(
+              onPressed: () => Navigator.of(dialogContext).pop('replace'),
+              child: Text(l10n.glossaryImportButtonReplace),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop('merge'),
+              child: Text(l10n.glossaryImportButtonMerge),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    if (action == null || action == 'cancel') {
+      return;
+    }
+
+    setState(() {
+      if (action == 'replace') {
+        entries = importedEntries;
+      } else {
+        // Merge: add new entries, update existing ones
+        final existingMap = <String, GlossaryEntry>{};
+        for (final entry in entries) {
+          if (entry.source.isNotEmpty) {
+            existingMap[entry.source] = entry;
+          }
+        }
+        for (final entry in importedEntries) {
+          if (entry.source.isNotEmpty) {
+            existingMap[entry.source] = entry;
+          }
+        }
+        entries = existingMap.values.toList();
+      }
+      originalEntries = _copyEntries(entries);
+    });
+
+    _rebuildControllersAndNotifiers();
+
+    setState(() {
+      isEditing = true;
+    });
+
+    if (widget.onEditingStateChanged != null) {
+      widget.onEditingStateChanged!(true);
+    }
+
+    final mode = action == 'replace' ? 'replaced' : 'merged';
+    MessageService.showSuccess(
+      context,
+      l10n.glossaryImportResult(
+        importedEntries.length.toString(),
+        mode,
+      ),
+    );
+  }
+
+  /// Import glossary from CSV or TBX file
   Future<void> _importGlossaryFromFile() async {
     try {
       setState(() {
         _busy = true;
       });
 
-      // Pick CSV file
+      // Pick file
       FilePickerResult? result;
       result = await FilePickerHelper.pickFiles(
         type: FileType.custom,
-        allowedExtensions: <String>['csv'],
+        allowedExtensions: <String>['csv', 'tbx'],
         withData: true,
       );
 
@@ -932,8 +1065,8 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
         fileBytes = await io.File(file.path!).readAsBytes();
       }
 
-      // Process the file
-      await _processImportedFileBytes(fileBytes);
+      // Process the file (CSV or TBX)
+      await _processImportedFileBytes(fileBytes, fileName: file.name);
     } catch (e) {
       final l10n = AppLocalizations.of(context)!;
       MessageService.showError(
@@ -952,7 +1085,7 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
 
     // Check file extension
     final fileName = file.name.toLowerCase();
-    if (!fileName.endsWith('.csv')) {
+    if (!fileName.endsWith('.csv') && !fileName.endsWith('.tbx')) {
       final l10n = AppLocalizations.of(context)!;
       MessageService.showError(
         context,
@@ -984,8 +1117,8 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
       fileBytes = await io.File(file.path!).readAsBytes();
     }
 
-    // Process the file
-    await _processImportedFileBytes(fileBytes);
+    // Process the file (CSV or TBX)
+    await _processImportedFileBytes(fileBytes, fileName: fileName);
   }
 
   /// Validate and parse CSV file
@@ -1243,9 +1376,9 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Text(
-                  'Select a glossary to work with:',
-                  style: TextStyle(fontSize: 14),
+                Text(
+                  AppLocalizations.of(context)!.glossaryPanelSelectBody,
+                  style: const TextStyle(fontSize: 14),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
@@ -1515,8 +1648,8 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
         builder: (BuildContext context, setDialogState) => AlertDialog(
           title: Text(
             dialogSelectedGlossaryId != null
-                ? 'Replace Glossary'
-                : 'Save Glossary',
+                ? AppLocalizations.of(context)!.glossaryPanelSaveDialogTitleReplace
+                : AppLocalizations.of(context)!.glossaryPanelSaveDialogTitleSave,
           ),
           content: SizedBox(
             width: 400,
@@ -1654,7 +1787,12 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'This will replace the existing glossary "${_globalGlossaries.firstWhere((g) => (g['id'] ?? g['glossary_id'] ?? '').toString() == dialogSelectedGlossaryId, orElse: () => <String, dynamic>{})['name'] ?? 'Unknown'}"',
+                            AppLocalizations.of(context)!.glossaryPanelSaveReplaceInfo(
+                              _globalGlossaries.firstWhere(
+                                (g) => (g['id'] ?? g['glossary_id'] ?? '').toString() == dialogSelectedGlossaryId,
+                                orElse: () => <String, dynamic>{},
+                              )['name'] ?? 'Unknown',
+                            ),
                             style: TextStyle(
                               fontSize: 12,
                               color: Theme.of(context)
@@ -1687,7 +1825,9 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
                       });
                     },
               child: Text(
-                dialogSelectedGlossaryId != null ? 'Replace' : 'Save As',
+                dialogSelectedGlossaryId != null
+                    ? AppLocalizations.of(context)!.glossaryPanelReplaceConfirm
+                    : AppLocalizations.of(context)!.glossaryPanelSaveButtonSaveAs,
               ),
             ),
           ],
@@ -1944,7 +2084,7 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
                     Text(
                       statusText.isNotEmpty
                           ? statusText
-                          : 'Generating glossary...',
+                          : AppLocalizations.of(context)!.glossaryPanelGenerating,
                       style: TextStyle(
                         fontSize: 10, // Reduced from 11 to 10
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -2105,8 +2245,8 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
                     icon: const Icon(Icons.delete, size: 18),
                     label: Text(
                       _selectedEntryIndices.isEmpty
-                          ? 'Delete'
-                          : 'Delete (${_selectedEntryIndices.length})',
+                          ? AppLocalizations.of(context)!.settingsGlossaryBatchDelete
+                          : '${AppLocalizations.of(context)!.settingsGlossaryBatchDelete} (${_selectedEntryIndices.length})',
                     ),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
@@ -2202,7 +2342,7 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
                                             Icons.swap_horiz,
                                             size: 18,
                                           ),
-                                          tooltip: 'Invert selection',
+                                          tooltip: AppLocalizations.of(context)!.glossaryPanelInvertSelection,
                                           padding: EdgeInsets.zero,
                                           constraints: const BoxConstraints(
                                             minWidth: 32,
@@ -2315,7 +2455,7 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
                                             const Icon(Icons.delete, size: 20),
                                         color: Colors.red.shade700,
                                         onPressed: () => _deleteEntry(index),
-                                        tooltip: 'Delete entry',
+                                        tooltip: AppLocalizations.of(context)!.glossaryPanelDeleteEntry,
                                       ),
                                     ),
                                 ],
@@ -2443,7 +2583,7 @@ class _GlossaryDropZoneState extends State<_GlossaryDropZone> {
   Future<void> _processDroppedFile(file) async {
     // Check file extension
     final fileName = file.name.toLowerCase();
-    if (!fileName.endsWith('.csv')) {
+    if (!fileName.endsWith('.csv') && !fileName.endsWith('.tbx')) {
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
         MessageService.showError(context, l10n.glossaryErrorOnlyCsv);
@@ -2591,6 +2731,95 @@ class _GlossaryDropZoneState extends State<_GlossaryDropZone> {
         widget.onFileDropped(platformFile);
       },
       child: inner,
+    );
+  }
+}
+
+/// Dialog for selecting export format (CSV or TBX)
+class _ExportFormatDialog extends StatefulWidget {
+  final String initialFormat;
+  final String initialSourceLang;
+
+  const _ExportFormatDialog({
+    required this.initialFormat,
+    required this.initialSourceLang,
+  });
+
+  @override
+  State<_ExportFormatDialog> createState() => _ExportFormatDialogState();
+}
+
+class _ExportFormatDialogState extends State<_ExportFormatDialog> {
+  late String _format;
+  late String _sourceLang;
+  late TextEditingController _langController;
+
+  @override
+  void initState() {
+    super.initState();
+    _format = widget.initialFormat;
+    _sourceLang = widget.initialSourceLang;
+    _langController = TextEditingController(text: _sourceLang);
+  }
+
+  @override
+  void dispose() {
+    _langController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return AlertDialog(
+      title: Text(l10n.glossaryExportDialogTitle),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.glossaryExportFormatLabel,
+              style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          RadioListTile<String>(
+            title: const Text('CSV'),
+            value: 'csv',
+            groupValue: _format,
+            onChanged: (v) => setState(() => _format = v!),
+          ),
+          RadioListTile<String>(
+            title: const Text('TBX'),
+            subtitle: Text(l10n.glossaryExportFormatTbxSubtitle),
+            value: 'tbx',
+            groupValue: _format,
+            onChanged: (v) => setState(() => _format = v!),
+          ),
+          if (_format == 'tbx') ...[
+            const SizedBox(height: 8),
+            TextField(
+              controller: _langController,
+              decoration: InputDecoration(
+                labelText: l10n.glossaryExportSourceLanguage,
+                hintText: 'en',
+                border: const OutlineInputBorder(),
+              ),
+              onChanged: (v) => _sourceLang = v,
+            ),
+          ],
+        ],
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.glossaryDialogCancel),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.of(context).pop(<String, String>{
+            'format': _format,
+            'sourceLang': _sourceLang,
+          }),
+          child: Text(l10n.glossaryExportButtonExport),
+        ),
+      ],
     );
   }
 }

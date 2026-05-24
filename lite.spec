@@ -207,6 +207,8 @@ hiddenimports = [
     'app.routes.service.app_routes_status',
     'app.routes.service.app_routes_format_conversion',
     'app.routes.service.app_routes_glossary',
+    # tbx_converter: all imports in auth/routes.py are lazy (inside function bodies)
+    'glossary.tbx_converter',
     'app.routes.service.app_routes_translation_segments',
     'app.routes.service.app_routes_formula_check',
     # Ensure app.utils is available (alias for backend.app.utils)

@@ -249,6 +249,8 @@ hiddenimports = [
     'agents.segments_agent',
     'glossary',
     'glossary.glossary',
+    # tbx_converter: all imports in auth/routes.py are lazy (inside function bodies)
+    'glossary.tbx_converter',
     'mobi',
     'ebooklib',
     'ebooklib.epub',

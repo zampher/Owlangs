@@ -1454,7 +1454,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsGlossaryCreateGlossary => 'Crear';
 
   @override
-  String get settingsGlossaryImportCsv => 'Importar CSV';
+  String get settingsGlossaryImportCsv => 'Importar';
 
   @override
   String get settingsGlossaryExport => 'Exportar';
@@ -1592,7 +1592,8 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get settingsGlossaryImportDialogTitle => 'Importar CSV al Glosario';
+  String get settingsGlossaryImportDialogTitle =>
+      'Importar CSV/TBX al Glosario';
 
   @override
   String get settingsGlossaryMergeModeLabel => 'Modo de Fusión';
@@ -1623,10 +1624,10 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get settingsGlossaryExportDialogTitle => 'Descargar Glosario CSV';
+  String get settingsGlossaryExportDialogTitle => 'Exportar Glosario';
 
   @override
-  String get settingsGlossarySaveCsv => 'Guardar CSV';
+  String get settingsGlossarySaveCsv => 'Guardar CSV/TBX';
 
   @override
   String get settingsGlossaryDownload => 'Descargar';
@@ -1725,6 +1726,87 @@ class AppLocalizationsEs extends AppLocalizations {
       'Error al eliminar la entrada';
 
   @override
+  String get settingsGlossaryEmptyStateTitle =>
+      'Aún no hay glosarios. Crea tu primer glosario para comenzar.';
+
+  @override
+  String get settingsGlossaryTooltipCreate => 'Crear un nuevo glosario';
+
+  @override
+  String get settingsGlossaryTooltipImport =>
+      'Importar entradas desde formato CSV o TBX';
+
+  @override
+  String get settingsGlossaryTooltipExport =>
+      'Exportar glosario seleccionado a formato CSV o TBX';
+
+  @override
+  String get settingsGlossaryTooltipExportAll =>
+      'Exportar todos los glosarios como archivo ZIP';
+
+  @override
+  String get settingsGlossaryTooltipDeleteGlossary =>
+      'Eliminar permanentemente el glosario seleccionado';
+
+  @override
+  String get settingsGlossaryBatchEditCategory => 'Editar categoría';
+
+  @override
+  String get settingsGlossaryBatchDelete => 'Eliminar';
+
+  @override
+  String get settingsGlossaryBatchDeselect => 'Deseleccionar';
+
+  @override
+  String settingsGlossaryBatchSelectedCount(Object count) {
+    return '$count seleccionados';
+  }
+
+  @override
+  String get settingsGlossaryExportFormatLabel => 'Formato de exportación';
+
+  @override
+  String get settingsGlossaryExportFormatCsv => 'CSV';
+
+  @override
+  String get settingsGlossaryExportFormatTbx => 'TBX (TermBase eXchange)';
+
+  @override
+  String get settingsGlossaryExportSourceLanguage => 'Idioma de origen';
+
+  @override
+  String get settingsGlossaryExportSaveTbxTitle => 'Guardar archivo TBX';
+
+  @override
+  String get settingsGlossaryDeleteEntriesTitle => 'Eliminar entradas';
+
+  @override
+  String settingsGlossaryDeleteEntriesBody(Object count) {
+    return '¿Eliminar $count entradas seleccionadas? Esta acción no se puede deshacer.';
+  }
+
+  @override
+  String get settingsGlossaryDeleteEntriesConfirm => 'Eliminar';
+
+  @override
+  String get settingsGlossaryEditCategoryTitle => 'Editar Categoría';
+
+  @override
+  String settingsGlossaryEditCategoryBody(Object count) {
+    return 'Establecer categoría para $count entradas seleccionadas:';
+  }
+
+  @override
+  String get settingsGlossaryEditCategoryLabel => 'Categoría';
+
+  @override
+  String get settingsGlossaryEditCategoryHint =>
+      'Ingrese nombre de la categoría';
+
+  @override
+  String get settingsGlossaryEditCategoryApply => 'Aplicar';
+
+  @override
   String get glossaryPanelSaveNameHint =>
       'Ingrese nombre o seleccione existente...';
 
@@ -1749,11 +1831,37 @@ class AppLocalizationsEs extends AppLocalizations {
   String get glossaryPanelProcessing => 'Procesando...';
 
   @override
-  String get glossaryPanelDropCsvHere => 'Suelte el archivo CSV aquí';
+  String get glossaryPanelDropCsvHere => 'Suelte el archivo CSV o TBX aquí';
 
   @override
   String get glossaryPanelNoEntriesHint =>
-      'No hay entradas en el glosario.\nHaga clic en el botón Detectar Glosario para comenzar.\nO seleccione un glosario de la lista para ver sus entradas.\nO arrastre y suelte un archivo CSV aquí.';
+      'No hay entradas en el glosario.\nHaga clic en el botón Detectar Glosario para comenzar.\nO seleccione un glosario de la lista para ver sus entradas.\nO arrastre y suelte un archivo CSV o TBX aquí.';
+
+  @override
+  String get glossaryPanelSelectBody => 'Seleccione un glosario para trabajar:';
+
+  @override
+  String get glossaryPanelSaveDialogTitleReplace => 'Reemplazar Glosario';
+
+  @override
+  String get glossaryPanelSaveDialogTitleSave => 'Guardar Glosario';
+
+  @override
+  String glossaryPanelSaveReplaceInfo(Object name) {
+    return 'Esto reemplazará el glosario existente \"$name\"';
+  }
+
+  @override
+  String get glossaryPanelSaveButtonSaveAs => 'Guardar como';
+
+  @override
+  String get glossaryPanelGenerating => 'Generando glosario...';
+
+  @override
+  String get glossaryPanelDeleteEntry => 'Eliminar entrada';
+
+  @override
+  String get glossaryPanelInvertSelection => 'Invertir selección';
 
   @override
   String get glossaryWidgetTitle => 'Glosario';
@@ -2652,7 +2760,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get glossaryConfirmAddButton => 'Agregar';
 
   @override
-  String get glossaryExportDialogTitle => 'Guardar Glosario como CSV';
+  String get glossaryExportDialogTitle => 'Guardar Glosario';
 
   @override
   String glossaryExportSuccess(Object filename) {
@@ -2715,7 +2823,19 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get glossaryErrorOnlyCsv =>
-      'Solo se admiten archivos CSV para la importación de glosarios.';
+      'Solo se admiten archivos CSV y TBX para la importación de glosarios.';
+
+  @override
+  String get glossaryExportFormatLabel => 'Formato de exportación';
+
+  @override
+  String get glossaryExportFormatTbxSubtitle => 'TermBase eXchange (ISO 12620)';
+
+  @override
+  String get glossaryExportSourceLanguage => 'Idioma de origen';
+
+  @override
+  String get glossaryExportButtonExport => 'Exportar';
 
   @override
   String get extractFormatConversionFailed => 'La conversión de formato falló.';

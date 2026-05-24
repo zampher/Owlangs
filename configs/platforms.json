@@ -1,6 +1,6 @@
 {
   "_schema_version": 1,
-  "default_platform": "ollama",
+  "default_platform": "deepseek",
   "platforms": {
     "local": {
       "name": "Local (OpenAI API)",

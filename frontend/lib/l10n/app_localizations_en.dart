@@ -1431,7 +1431,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsGlossaryCreateGlossary => 'Create';
 
   @override
-  String get settingsGlossaryImportCsv => 'Import CSV';
+  String get settingsGlossaryImportCsv => 'Import';
 
   @override
   String get settingsGlossaryExport => 'Export';
@@ -1568,7 +1568,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get settingsGlossaryImportDialogTitle => 'Import CSV to Glossary';
+  String get settingsGlossaryImportDialogTitle => 'Import CSV/TBX to Glossary';
 
   @override
   String get settingsGlossaryMergeModeLabel => 'Merge Mode';
@@ -1599,10 +1599,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get settingsGlossaryExportDialogTitle => 'Download Glossary CSV';
+  String get settingsGlossaryExportDialogTitle => 'Export Glossary';
 
   @override
-  String get settingsGlossarySaveCsv => 'Save CSV';
+  String get settingsGlossarySaveCsv => 'Save CSV/TBX';
 
   @override
   String get settingsGlossaryDownload => 'Download';
@@ -1700,6 +1700,86 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsGlossaryEntryDeleteFailedSnack => 'Failed to delete entry';
 
   @override
+  String get settingsGlossaryEmptyStateTitle =>
+      'No glossaries yet. Create your first glossary to get started.';
+
+  @override
+  String get settingsGlossaryTooltipCreate => 'Create a new glossary';
+
+  @override
+  String get settingsGlossaryTooltipImport =>
+      'Import entries from CSV or TBX format';
+
+  @override
+  String get settingsGlossaryTooltipExport =>
+      'Export selected glossary to CSV or TBX format';
+
+  @override
+  String get settingsGlossaryTooltipExportAll =>
+      'Export all glossaries as a ZIP archive';
+
+  @override
+  String get settingsGlossaryTooltipDeleteGlossary =>
+      'Delete the selected glossary permanently';
+
+  @override
+  String get settingsGlossaryBatchEditCategory => 'Edit category';
+
+  @override
+  String get settingsGlossaryBatchDelete => 'Delete';
+
+  @override
+  String get settingsGlossaryBatchDeselect => 'Deselect';
+
+  @override
+  String settingsGlossaryBatchSelectedCount(Object count) {
+    return '$count selected';
+  }
+
+  @override
+  String get settingsGlossaryExportFormatLabel => 'Export format';
+
+  @override
+  String get settingsGlossaryExportFormatCsv => 'CSV';
+
+  @override
+  String get settingsGlossaryExportFormatTbx => 'TBX (TermBase eXchange)';
+
+  @override
+  String get settingsGlossaryExportSourceLanguage => 'Source language';
+
+  @override
+  String get settingsGlossaryExportSaveTbxTitle => 'Save TBX file';
+
+  @override
+  String get settingsGlossaryDeleteEntriesTitle => 'Delete entries';
+
+  @override
+  String settingsGlossaryDeleteEntriesBody(Object count) {
+    return 'Delete $count selected entries? This cannot be undone.';
+  }
+
+  @override
+  String get settingsGlossaryDeleteEntriesConfirm => 'Delete';
+
+  @override
+  String get settingsGlossaryEditCategoryTitle => 'Edit Category';
+
+  @override
+  String settingsGlossaryEditCategoryBody(Object count) {
+    return 'Set category for $count selected entries:';
+  }
+
+  @override
+  String get settingsGlossaryEditCategoryLabel => 'Category';
+
+  @override
+  String get settingsGlossaryEditCategoryHint => 'Enter category name';
+
+  @override
+  String get settingsGlossaryEditCategoryApply => 'Apply';
+
+  @override
   String get glossaryPanelSaveNameHint => 'Enter name or select existing...';
 
   @override
@@ -1723,11 +1803,37 @@ class AppLocalizationsEn extends AppLocalizations {
   String get glossaryPanelProcessing => 'Processing...';
 
   @override
-  String get glossaryPanelDropCsvHere => 'Drop CSV file here';
+  String get glossaryPanelDropCsvHere => 'Drop CSV or TBX file here';
 
   @override
   String get glossaryPanelNoEntriesHint =>
-      'No glossary entries.\nClick on the Detect Glossary button to get started.\nOr select a glossary from the list to view its entries.\nOr drag and drop a CSV file here.';
+      'No glossary entries.\nClick on the Detect Glossary button to get started.\nOr select a glossary from the list to view its entries.\nOr drag and drop a CSV or TBX file here.';
+
+  @override
+  String get glossaryPanelSelectBody => 'Select a glossary to work with:';
+
+  @override
+  String get glossaryPanelSaveDialogTitleReplace => 'Replace Glossary';
+
+  @override
+  String get glossaryPanelSaveDialogTitleSave => 'Save Glossary';
+
+  @override
+  String glossaryPanelSaveReplaceInfo(Object name) {
+    return 'This will replace the existing glossary \"$name\"';
+  }
+
+  @override
+  String get glossaryPanelSaveButtonSaveAs => 'Save As';
+
+  @override
+  String get glossaryPanelGenerating => 'Generating glossary...';
+
+  @override
+  String get glossaryPanelDeleteEntry => 'Delete entry';
+
+  @override
+  String get glossaryPanelInvertSelection => 'Invert selection';
 
   @override
   String get glossaryWidgetTitle => 'Glossary';
@@ -2612,7 +2718,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get glossaryConfirmAddButton => 'Add';
 
   @override
-  String get glossaryExportDialogTitle => 'Save Glossary as CSV';
+  String get glossaryExportDialogTitle => 'Save Glossary';
 
   @override
   String glossaryExportSuccess(Object filename) {
@@ -2674,7 +2780,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get glossaryErrorOnlyCsv =>
-      'Only CSV files are supported for glossary import.';
+      'Only CSV and TBX files are supported for glossary import.';
+
+  @override
+  String get glossaryExportFormatLabel => 'Export format';
+
+  @override
+  String get glossaryExportFormatTbxSubtitle => 'TermBase eXchange (ISO 12620)';
+
+  @override
+  String get glossaryExportSourceLanguage => 'Source language';
+
+  @override
+  String get glossaryExportButtonExport => 'Export';
 
   @override
   String get extractFormatConversionFailed => 'Format conversion failed.';

@@ -1382,7 +1382,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsGlossaryCreateGlossary => '생성';
 
   @override
-  String get settingsGlossaryImportCsv => 'CSV 가져오기';
+  String get settingsGlossaryImportCsv => '가져오기';
 
   @override
   String get settingsGlossaryExport => '내보내기';
@@ -1516,7 +1516,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get settingsGlossaryImportDialogTitle => 'CSV를 용어집으로 가져오기';
+  String get settingsGlossaryImportDialogTitle => 'CSV/TBX를 용어집으로 가져오기';
 
   @override
   String get settingsGlossaryMergeModeLabel => '병합 모드';
@@ -1547,10 +1547,10 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get settingsGlossaryExportDialogTitle => '용어집 CSV 다운로드';
+  String get settingsGlossaryExportDialogTitle => '용어집 내보내기';
 
   @override
-  String get settingsGlossarySaveCsv => 'CSV 저장';
+  String get settingsGlossarySaveCsv => 'CSV/TBX 저장';
 
   @override
   String get settingsGlossaryDownload => '다운로드';
@@ -1648,6 +1648,82 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsGlossaryEntryDeleteFailedSnack => '항목 삭제 실패';
 
   @override
+  String get settingsGlossaryEmptyStateTitle =>
+      '아직 용어집이 없습니다. 첫 번째 용어집을 만들어 보세요.';
+
+  @override
+  String get settingsGlossaryTooltipCreate => '새 용어집 만들기';
+
+  @override
+  String get settingsGlossaryTooltipImport => 'CSV 또는 TBX 형식에서 항목 가져오기';
+
+  @override
+  String get settingsGlossaryTooltipExport => '선택한 용어집을 CSV 또는 TBX 형식으로 내보내기';
+
+  @override
+  String get settingsGlossaryTooltipExportAll => '모든 용어집을 ZIP 아카이브로 내보내기';
+
+  @override
+  String get settingsGlossaryTooltipDeleteGlossary => '선택한 용어집을 영구적으로 삭제';
+
+  @override
+  String get settingsGlossaryBatchEditCategory => '카테고리 편집';
+
+  @override
+  String get settingsGlossaryBatchDelete => '삭제';
+
+  @override
+  String get settingsGlossaryBatchDeselect => '선택 해제';
+
+  @override
+  String settingsGlossaryBatchSelectedCount(Object count) {
+    return '$count개 선택됨';
+  }
+
+  @override
+  String get settingsGlossaryExportFormatLabel => '내보내기 형식';
+
+  @override
+  String get settingsGlossaryExportFormatCsv => 'CSV';
+
+  @override
+  String get settingsGlossaryExportFormatTbx => 'TBX（TermBase eXchange）';
+
+  @override
+  String get settingsGlossaryExportSourceLanguage => '소스 언어';
+
+  @override
+  String get settingsGlossaryExportSaveTbxTitle => 'TBX 파일 저장';
+
+  @override
+  String get settingsGlossaryDeleteEntriesTitle => '항목 삭제';
+
+  @override
+  String settingsGlossaryDeleteEntriesBody(Object count) {
+    return '선택한 $count개 항목을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.';
+  }
+
+  @override
+  String get settingsGlossaryDeleteEntriesConfirm => '삭제';
+
+  @override
+  String get settingsGlossaryEditCategoryTitle => '카테고리 편집';
+
+  @override
+  String settingsGlossaryEditCategoryBody(Object count) {
+    return '선택한 $count개 항목의 카테고리 설정:';
+  }
+
+  @override
+  String get settingsGlossaryEditCategoryLabel => '카테고리';
+
+  @override
+  String get settingsGlossaryEditCategoryHint => '카테고리 이름 입력';
+
+  @override
+  String get settingsGlossaryEditCategoryApply => '적용';
+
+  @override
   String get glossaryPanelSaveNameHint => '이름을 입력하거나 기존 용어집 선택...';
 
   @override
@@ -1671,11 +1747,37 @@ class AppLocalizationsKo extends AppLocalizations {
   String get glossaryPanelProcessing => '처리 중...';
 
   @override
-  String get glossaryPanelDropCsvHere => 'CSV 파일을 여기에 놓으세요';
+  String get glossaryPanelDropCsvHere => 'CSV 또는 TBX 파일을 여기에 놓으세요';
 
   @override
   String get glossaryPanelNoEntriesHint =>
-      '용어집 항목이 없습니다.\n「용어집 감지」 버튼을 클릭하여 시작하거나, 목록에서 용어집을 선택하여 항목을 보거나, CSV 파일을 여기에 끌어다 놓으세요.';
+      '용어집 항목이 없습니다.\n「용어집 감지」 버튼을 클릭하여 시작하거나, 목록에서 용어집을 선택하여 항목을 보거나, CSV 또는 TBX 파일을 여기에 끌어다 놓으세요.';
+
+  @override
+  String get glossaryPanelSelectBody => '작업할 용어집을 선택하세요:';
+
+  @override
+  String get glossaryPanelSaveDialogTitleReplace => '용어집 교체';
+
+  @override
+  String get glossaryPanelSaveDialogTitleSave => '용어집 저장';
+
+  @override
+  String glossaryPanelSaveReplaceInfo(Object name) {
+    return '기존 용어집 \"$name\"을(를) 교체합니다';
+  }
+
+  @override
+  String get glossaryPanelSaveButtonSaveAs => '다른 이름으로 저장';
+
+  @override
+  String get glossaryPanelGenerating => '용어집 생성 중...';
+
+  @override
+  String get glossaryPanelDeleteEntry => '항목 삭제';
+
+  @override
+  String get glossaryPanelInvertSelection => '선택 반전';
 
   @override
   String get glossaryWidgetTitle => '용어집';
@@ -2524,7 +2626,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get glossaryConfirmAddButton => '추가';
 
   @override
-  String get glossaryExportDialogTitle => '용어집을 CSV로 저장';
+  String get glossaryExportDialogTitle => '용어집 저장';
 
   @override
   String glossaryExportSuccess(Object filename) {
@@ -2583,7 +2685,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get glossaryErrorFilePath => '파일 경로를 사용할 수 없습니다. 다시 시도하세요.';
 
   @override
-  String get glossaryErrorOnlyCsv => '용어집 가져오기는 CSV 파일만 지원됩니다.';
+  String get glossaryErrorOnlyCsv => '용어집 가져오기는 CSV 및 TBX 파일이 지원됩니다.';
+
+  @override
+  String get glossaryExportFormatLabel => '내보내기 형식';
+
+  @override
+  String get glossaryExportFormatTbxSubtitle => 'TermBase eXchange（ISO 12620）';
+
+  @override
+  String get glossaryExportSourceLanguage => '소스 언어';
+
+  @override
+  String get glossaryExportButtonExport => '내보내기';
 
   @override
   String get extractFormatConversionFailed => '형식 변환 실패.';

@@ -1370,7 +1370,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsGlossaryCreateGlossary => '创建';
 
   @override
-  String get settingsGlossaryImportCsv => '导入CSV';
+  String get settingsGlossaryImportCsv => '导入';
 
   @override
   String get settingsGlossaryExport => '导出';
@@ -1503,7 +1503,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get settingsGlossaryImportDialogTitle => '导入CSV到术语表';
+  String get settingsGlossaryImportDialogTitle => '导入CSV/TBX到术语表';
 
   @override
   String get settingsGlossaryMergeModeLabel => '合并模式';
@@ -1534,10 +1534,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get settingsGlossaryExportDialogTitle => '下载术语表CSV';
+  String get settingsGlossaryExportDialogTitle => '导出术语表';
 
   @override
-  String get settingsGlossarySaveCsv => '保存CSV';
+  String get settingsGlossarySaveCsv => '保存CSV/TBX';
 
   @override
   String get settingsGlossaryDownload => '下载';
@@ -1635,6 +1635,81 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsGlossaryEntryDeleteFailedSnack => '删除条目失败';
 
   @override
+  String get settingsGlossaryEmptyStateTitle => '暂无术语表。请先创建您的第一个术语表。';
+
+  @override
+  String get settingsGlossaryTooltipCreate => '创建新术语表';
+
+  @override
+  String get settingsGlossaryTooltipImport => '从 CSV 或 TBX 格式导入条目';
+
+  @override
+  String get settingsGlossaryTooltipExport => '将选中的术语表导出为 CSV 或 TBX 格式';
+
+  @override
+  String get settingsGlossaryTooltipExportAll => '将所有术语表导出为 ZIP 压缩包';
+
+  @override
+  String get settingsGlossaryTooltipDeleteGlossary => '永久删除选中的术语表';
+
+  @override
+  String get settingsGlossaryBatchEditCategory => '编辑分类';
+
+  @override
+  String get settingsGlossaryBatchDelete => '删除';
+
+  @override
+  String get settingsGlossaryBatchDeselect => '取消选择';
+
+  @override
+  String settingsGlossaryBatchSelectedCount(Object count) {
+    return '已选 $count 项';
+  }
+
+  @override
+  String get settingsGlossaryExportFormatLabel => '导出格式';
+
+  @override
+  String get settingsGlossaryExportFormatCsv => 'CSV';
+
+  @override
+  String get settingsGlossaryExportFormatTbx => 'TBX（TermBase eXchange）';
+
+  @override
+  String get settingsGlossaryExportSourceLanguage => '源语言';
+
+  @override
+  String get settingsGlossaryExportSaveTbxTitle => '保存 TBX 文件';
+
+  @override
+  String get settingsGlossaryDeleteEntriesTitle => '删除条目';
+
+  @override
+  String settingsGlossaryDeleteEntriesBody(Object count) {
+    return '删除已选的 $count 条条目？此操作不可撤销。';
+  }
+
+  @override
+  String get settingsGlossaryDeleteEntriesConfirm => '删除';
+
+  @override
+  String get settingsGlossaryEditCategoryTitle => '编辑分类';
+
+  @override
+  String settingsGlossaryEditCategoryBody(Object count) {
+    return '为已选的 $count 条条目设置分类：';
+  }
+
+  @override
+  String get settingsGlossaryEditCategoryLabel => '分类';
+
+  @override
+  String get settingsGlossaryEditCategoryHint => '输入分类名称';
+
+  @override
+  String get settingsGlossaryEditCategoryApply => '应用';
+
+  @override
   String get glossaryPanelSaveNameHint => '输入名称或选择已有术语表...';
 
   @override
@@ -1658,11 +1733,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get glossaryPanelProcessing => '处理中...';
 
   @override
-  String get glossaryPanelDropCsvHere => '将 CSV 文件拖放到此处';
+  String get glossaryPanelDropCsvHere => '将 CSV 或 TBX 文件拖放到此处';
 
   @override
   String get glossaryPanelNoEntriesHint =>
-      '暂无术语表条目。\n点击「识别术语表」开始，或从列表选择术语表查看条目，也可拖放 CSV 文件到此。';
+      '暂无术语表条目。\n点击「识别术语表」开始，或从列表选择术语表查看条目，也可拖放 CSV 或 TBX 文件到此。';
+
+  @override
+  String get glossaryPanelSelectBody => '选择一个术语表进行操作：';
+
+  @override
+  String get glossaryPanelSaveDialogTitleReplace => '替换术语表';
+
+  @override
+  String get glossaryPanelSaveDialogTitleSave => '保存术语表';
+
+  @override
+  String glossaryPanelSaveReplaceInfo(Object name) {
+    return '这将替换现有术语表 \"$name\"';
+  }
+
+  @override
+  String get glossaryPanelSaveButtonSaveAs => '另存为';
+
+  @override
+  String get glossaryPanelGenerating => '正在生成术语表...';
+
+  @override
+  String get glossaryPanelDeleteEntry => '删除条目';
+
+  @override
+  String get glossaryPanelInvertSelection => '反向选择';
 
   @override
   String get glossaryWidgetTitle => '术语表';
@@ -2502,7 +2603,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get glossaryConfirmAddButton => '添加';
 
   @override
-  String get glossaryExportDialogTitle => '将术语表另存为CSV';
+  String get glossaryExportDialogTitle => '将术语表另存为';
 
   @override
   String glossaryExportSuccess(Object filename) {
@@ -2561,7 +2662,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get glossaryErrorFilePath => '文件路径不可用。请重试。';
 
   @override
-  String get glossaryErrorOnlyCsv => '仅支持CSV文件进行术语表导入。';
+  String get glossaryErrorOnlyCsv => '仅支持CSV和TBX文件进行术语表导入。';
+
+  @override
+  String get glossaryExportFormatLabel => '导出格式';
+
+  @override
+  String get glossaryExportFormatTbxSubtitle => 'TermBase eXchange（ISO 12620）';
+
+  @override
+  String get glossaryExportSourceLanguage => '源语言';
+
+  @override
+  String get glossaryExportButtonExport => '导出';
 
   @override
   String get extractFormatConversionFailed => '格式转换失败。';

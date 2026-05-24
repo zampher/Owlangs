@@ -1381,7 +1381,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsGlossaryCreateGlossary => '作成';
 
   @override
-  String get settingsGlossaryImportCsv => 'CSVをインポート';
+  String get settingsGlossaryImportCsv => 'インポート';
 
   @override
   String get settingsGlossaryExport => 'エクスポート';
@@ -1515,7 +1515,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get settingsGlossaryImportDialogTitle => 'CSVを用語集にインポート';
+  String get settingsGlossaryImportDialogTitle => 'CSV/TBXを用語集にインポート';
 
   @override
   String get settingsGlossaryMergeModeLabel => 'マージモード';
@@ -1546,10 +1546,10 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get settingsGlossaryExportDialogTitle => '用語集CSVをダウンロード';
+  String get settingsGlossaryExportDialogTitle => '用語集をエクスポート';
 
   @override
-  String get settingsGlossarySaveCsv => 'CSVを保存';
+  String get settingsGlossarySaveCsv => 'CSV/TBXを保存';
 
   @override
   String get settingsGlossaryDownload => 'ダウンロード';
@@ -1647,6 +1647,81 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsGlossaryEntryDeleteFailedSnack => 'エントリの削除に失敗しました';
 
   @override
+  String get settingsGlossaryEmptyStateTitle => '用語集がまだありません。最初の用語集を作成してください。';
+
+  @override
+  String get settingsGlossaryTooltipCreate => '新しい用語集を作成';
+
+  @override
+  String get settingsGlossaryTooltipImport => 'CSV または TBX 形式からエントリをインポート';
+
+  @override
+  String get settingsGlossaryTooltipExport => '選択した用語集を CSV または TBX 形式でエクスポート';
+
+  @override
+  String get settingsGlossaryTooltipExportAll => 'すべての用語集を ZIP アーカイブとしてエクスポート';
+
+  @override
+  String get settingsGlossaryTooltipDeleteGlossary => '選択した用語集を完全に削除';
+
+  @override
+  String get settingsGlossaryBatchEditCategory => 'カテゴリを編集';
+
+  @override
+  String get settingsGlossaryBatchDelete => '削除';
+
+  @override
+  String get settingsGlossaryBatchDeselect => '選択解除';
+
+  @override
+  String settingsGlossaryBatchSelectedCount(Object count) {
+    return '$count 件選択中';
+  }
+
+  @override
+  String get settingsGlossaryExportFormatLabel => 'エクスポート形式';
+
+  @override
+  String get settingsGlossaryExportFormatCsv => 'CSV';
+
+  @override
+  String get settingsGlossaryExportFormatTbx => 'TBX（TermBase eXchange）';
+
+  @override
+  String get settingsGlossaryExportSourceLanguage => 'ソース言語';
+
+  @override
+  String get settingsGlossaryExportSaveTbxTitle => 'TBX ファイルを保存';
+
+  @override
+  String get settingsGlossaryDeleteEntriesTitle => 'エントリを削除';
+
+  @override
+  String settingsGlossaryDeleteEntriesBody(Object count) {
+    return '選択した $count 件のエントリを削除しますか？この操作は元に戻せません。';
+  }
+
+  @override
+  String get settingsGlossaryDeleteEntriesConfirm => '削除';
+
+  @override
+  String get settingsGlossaryEditCategoryTitle => 'カテゴリを編集';
+
+  @override
+  String settingsGlossaryEditCategoryBody(Object count) {
+    return '選択した $count 件のエントリのカテゴリを設定：';
+  }
+
+  @override
+  String get settingsGlossaryEditCategoryLabel => 'カテゴリ';
+
+  @override
+  String get settingsGlossaryEditCategoryHint => 'カテゴリ名を入力';
+
+  @override
+  String get settingsGlossaryEditCategoryApply => '適用';
+
+  @override
   String get glossaryPanelSaveNameHint => '名前を入力するか、既存の用語集を選択...';
 
   @override
@@ -1670,11 +1745,37 @@ class AppLocalizationsJa extends AppLocalizations {
   String get glossaryPanelProcessing => '処理中...';
 
   @override
-  String get glossaryPanelDropCsvHere => 'CSV ファイルをここにドロップ';
+  String get glossaryPanelDropCsvHere => 'CSV または TBX ファイルをここにドロップ';
 
   @override
   String get glossaryPanelNoEntriesHint =>
-      '用語集エントリがありません。\n「用語集を検出」ボタンをクリックして開始するか、リストから用語集を選択してエントリを表示するか、CSV ファイルをここにドラッグ＆ドロップしてください。';
+      '用語集エントリがありません。\n「用語集を検出」ボタンをクリックして開始するか、リストから用語集を選択してエントリを表示するか、CSV または TBX ファイルをここにドラッグ＆ドロップしてください。';
+
+  @override
+  String get glossaryPanelSelectBody => '操作する用語集を選択：';
+
+  @override
+  String get glossaryPanelSaveDialogTitleReplace => '用語集を置換';
+
+  @override
+  String get glossaryPanelSaveDialogTitleSave => '用語集を保存';
+
+  @override
+  String glossaryPanelSaveReplaceInfo(Object name) {
+    return '既存の用語集 \"$name\" を置換します';
+  }
+
+  @override
+  String get glossaryPanelSaveButtonSaveAs => '名前を付けて保存';
+
+  @override
+  String get glossaryPanelGenerating => '用語集を生成中...';
+
+  @override
+  String get glossaryPanelDeleteEntry => 'エントリを削除';
+
+  @override
+  String get glossaryPanelInvertSelection => '選択を反転';
 
   @override
   String get glossaryWidgetTitle => '用語集';
@@ -2521,7 +2622,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get glossaryConfirmAddButton => '追加';
 
   @override
-  String get glossaryExportDialogTitle => '用語集をCSVとして保存';
+  String get glossaryExportDialogTitle => '用語集を保存';
 
   @override
   String glossaryExportSuccess(Object filename) {
@@ -2580,7 +2681,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get glossaryErrorFilePath => 'ファイルパスが利用できません。もう一度お試しください。';
 
   @override
-  String get glossaryErrorOnlyCsv => '用語集インポートにはCSVファイルのみサポートされています。';
+  String get glossaryErrorOnlyCsv => '用語集インポートにはCSVおよびTBXファイルがサポートされています。';
+
+  @override
+  String get glossaryExportFormatLabel => 'エクスポート形式';
+
+  @override
+  String get glossaryExportFormatTbxSubtitle => 'TermBase eXchange（ISO 12620）';
+
+  @override
+  String get glossaryExportSourceLanguage => 'ソース言語';
+
+  @override
+  String get glossaryExportButtonExport => 'エクスポート';
 
   @override
   String get extractFormatConversionFailed => 'フォーマット変換に失敗しました。';

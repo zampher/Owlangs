@@ -32,6 +32,8 @@ class GlossarySettings {
     this.selectedCategoryFilter,
     this.targetLanguage = 'en',
     this.selectedGlossaryId,
+    this.glossaryListVersion = 0,
+    this.selectedEntryIds = const <String>{},
   });
   final bool useGlobalGlossary;
   final String globalGlossaryFile;
@@ -41,6 +43,8 @@ class GlossarySettings {
   final String? selectedCategoryFilter;
   final String targetLanguage; // Only target_lang is kept, source_lang removed
   final String? selectedGlossaryId;
+  final int glossaryListVersion; // Incremented to trigger glossary list refresh
+  final Set<String> selectedEntryIds; // For batch category editing
 
   GlossarySettings copyWith({
     bool? useGlobalGlossary,
@@ -51,6 +55,8 @@ class GlossarySettings {
     String? selectedCategoryFilter,
     String? targetLanguage,
     String? selectedGlossaryId,
+    int? glossaryListVersion,
+    Set<String>? selectedEntryIds,
   }) =>
       GlossarySettings(
         useGlobalGlossary: useGlobalGlossary ?? this.useGlobalGlossary,
@@ -63,6 +69,8 @@ class GlossarySettings {
             selectedCategoryFilter ?? this.selectedCategoryFilter,
         targetLanguage: targetLanguage ?? this.targetLanguage,
         selectedGlossaryId: selectedGlossaryId ?? this.selectedGlossaryId,
+        glossaryListVersion: glossaryListVersion ?? this.glossaryListVersion,
+        selectedEntryIds: selectedEntryIds ?? this.selectedEntryIds,
       );
 }
 
@@ -183,7 +191,37 @@ class GlossarySettingsNotifier extends StateNotifier<GlossarySettings> {
   void clearSelectedGlossaryId() {
     state = state.copyWith();
   }
+
+  void incrementGlossaryListVersion() {
+    state = state.copyWith(glossaryListVersion: state.glossaryListVersion + 1);
+  }
+
+  void toggleEntrySelection(String id) {
+    final updated = Set<String>.from(state.selectedEntryIds);
+    if (updated.contains(id)) {
+      updated.remove(id);
+    } else {
+      updated.add(id);
+    }
+    state = state.copyWith(selectedEntryIds: updated);
+  }
+
+  void clearEntrySelection() {
+    state = state.copyWith(selectedEntryIds: <String>{});
+  }
+
+  void setSelectedEntryIds(Set<String> ids) {
+    state = state.copyWith(selectedEntryIds: ids);
+  }
+
+  void selectAllEntries() {
+    state = state.copyWith(
+      selectedEntryIds: state.glossaryEntries.map((e) => e.id).toSet(),
+    );
+  }
 }
+
+// ---- Batch category edit dialog ----
 
 class GlossarySettingsScreen extends ConsumerWidget {
   const GlossarySettingsScreen({super.key});
@@ -275,6 +313,48 @@ class GlossarySettingsScreen extends ConsumerWidget {
                     selectedId = firstId;
                   }
 
+                  // --- Empty state: no glossaries yet ---
+                  if (!loading && glossaries.isEmpty) {
+                    return Column(
+                      children: <Widget>[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Column(
+                            children: <Widget>[
+                              Icon(
+                                Icons.book_outlined,
+                                size: 48,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                AppLocalizations.of(context)!
+                                    .settingsGlossaryEmptyStateTitle,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        FilledButton.icon(
+                          onPressed: () =>
+                              _showCreateGlossaryDialog(context, notifier),
+                          icon: const Icon(Icons.create_new_folder),
+                          label: Text(AppLocalizations.of(context)!
+                              .settingsGlossaryCreateGlossary,),
+                        ),
+                      ],
+                    );
+                  }
+
+                  // --- Normal state: toolbar with dropdown + actions ---
                   return Row(
                     children: <Widget>[
                       // Glossary dropdown
@@ -321,18 +401,25 @@ class GlossarySettingsScreen extends ConsumerWidget {
                       const SizedBox(width: 12),
                       // Create glossary
                       Expanded(
-                        child: FilledButton.icon(
-                          onPressed: () => _showCreateGlossaryDialog(context),
+                        child: Tooltip(
+                          message: AppLocalizations.of(context)!.settingsGlossaryTooltipCreate,
+                          child: FilledButton.icon(
+                          onPressed: () =>
+                              _showCreateGlossaryDialog(context, notifier),
                           icon: const Icon(Icons.create_new_folder),
                           label: Text(AppLocalizations.of(context)!
                               .settingsGlossaryCreateGlossary,),
 
                         ),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       // Import current
                       Expanded(
-                        child: FilledButton.icon(
+                        child: Tooltip(
+                          message: AppLocalizations.of(context)!
+                              .settingsGlossaryTooltipImport,
+                          child: FilledButton.icon(
                           onPressed: () =>
                               _showImportDialog(context, settings, notifier),
                           icon: const Icon(Icons.upload),
@@ -340,22 +427,30 @@ class GlossarySettingsScreen extends ConsumerWidget {
                               .settingsGlossaryImportCsv,),
 
                         ),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       // Export current
                       Expanded(
-                        child: FilledButton.icon(
+                        child: Tooltip(
+                          message: AppLocalizations.of(context)!
+                              .settingsGlossaryTooltipExport,
+                          child: FilledButton.icon(
                           onPressed: () => _showExportDialog(context, settings),
                           icon: const Icon(Icons.download),
                           label: Text(AppLocalizations.of(context)!
                               .settingsGlossaryExport,),
 
                         ),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       // Export all
                       Expanded(
-                        child: FilledButton.icon(
+                        child: Tooltip(
+                          message: AppLocalizations.of(context)!
+                              .settingsGlossaryTooltipExportAll,
+                          child: FilledButton.icon(
                           onPressed: () async {
                             try {
                               final Uint8List bytes =
@@ -417,11 +512,15 @@ class GlossarySettingsScreen extends ConsumerWidget {
                               .settingsGlossaryExportAll,),
 
                         ),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       // Delete selected glossary
                       Expanded(
-                        child: OutlinedButton.icon(
+                        child: Tooltip(
+                          message: AppLocalizations.of(context)!
+                              .settingsGlossaryTooltipDeleteGlossary,
+                          child: OutlinedButton.icon(
                           onPressed: (selectedId == null)
                               ? null
                               : () async {
@@ -462,6 +561,8 @@ class GlossarySettingsScreen extends ConsumerWidget {
                                     await GlossaryApiService.deleteGlossary(
                                       selectedId!,
                                     );
+                                    // Trigger toolbar FutureBuilder refresh
+                                    notifier.incrementGlossaryListVersion();
                                     // refresh list and selection
                                     final List<Map<String, dynamic>> list =
                                         await GlossaryApiService
@@ -513,6 +614,7 @@ class GlossarySettingsScreen extends ConsumerWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 12,),
                           ),
+                        ),
                         ),
                       ),
                     ],
@@ -641,7 +743,10 @@ class GlossarySettingsScreen extends ConsumerWidget {
     }
   }
 
-  void _showCreateGlossaryDialog(BuildContext context) {
+  void _showCreateGlossaryDialog(
+    BuildContext context,
+    GlossarySettingsNotifier notifier,
+  ) {
     final nameController = TextEditingController();
     final descController = TextEditingController();
     bool isGlobal = true;
@@ -698,6 +803,11 @@ class GlossarySettingsScreen extends ConsumerWidget {
                   );
                   if (context.mounted) {
                     Navigator.of(context).pop();
+                    // Refresh glossary list and select the newly created one
+                    notifier.incrementGlossaryListVersion();
+                    notifier.setSelectedGlossaryId(
+                      resp['glossary_id'] as String? ?? '',
+                    );
                     _showCopyableSnackBar(
                       context,
                       l10n.settingsGlossaryCreatedSnack(
@@ -838,6 +948,28 @@ class GlossarySettingsScreen extends ConsumerWidget {
             ),
             child: Row(
               children: <Widget>[
+                // Select-all checkbox
+                SizedBox(
+                  width: 40,
+                  child: Checkbox(
+                    value: filteredEntries.isNotEmpty &&
+                        filteredEntries.every(
+                          (e) => settings.selectedEntryIds.contains(e.id),
+                        ),
+                    onChanged: (_) {
+                      final allSelected = filteredEntries.every(
+                        (e) => settings.selectedEntryIds.contains(e.id),
+                      );
+                      if (allSelected) {
+                        notifier.clearEntrySelection();
+                      } else {
+                        notifier.setSelectedEntryIds(
+                          filteredEntries.map((e) => e.id).toSet(),
+                        );
+                      }
+                    },
+                  ),
+                ),
                 Expanded(
                   flex: 2,
                   child: Text(
@@ -882,6 +1014,57 @@ class GlossarySettingsScreen extends ConsumerWidget {
               ],
             ),
           ),
+          // Batch action bar
+          if (settings.selectedEntryIds.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withOpacity(0.3),
+                border: Border(
+                  bottom: BorderSide(color: colorScheme.outlineVariant),
+                ),
+              ),
+              child: Row(
+                children: <Widget>[
+                  Text(
+                    AppLocalizations.of(context)!
+                        .settingsGlossaryBatchSelectedCount(
+                      settings.selectedEntryIds.length.toString(),
+                    ),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () =>
+                        _showBatchCategoryDialog(context, settings, notifier),
+                    icon: const Icon(Icons.category),
+                    label: Text(AppLocalizations.of(context)!
+                        .settingsGlossaryBatchEditCategory),
+                  ),
+                  const SizedBox(width: 4),
+                  TextButton.icon(
+                    onPressed: () => _showBatchDeleteDialog(
+                      context, settings, notifier,
+                    ),
+                    icon: Icon(Icons.delete_outline,
+                        color: colorScheme.error),
+                    label: Text(AppLocalizations.of(context)!
+                        .settingsGlossaryBatchDelete,
+                        style: TextStyle(color: colorScheme.error)),
+                  ),
+                  const SizedBox(width: 4),
+                  TextButton.icon(
+                    onPressed: () => notifier.clearEntrySelection(),
+                    icon: const Icon(Icons.deselect),
+                    label: Text(AppLocalizations.of(context)!
+                        .settingsGlossaryBatchDeselect),
+                  ),
+                ],
+              ),
+            ),
           // Table rows
           ...filteredEntries.asMap().entries.map((entry) {
             final index = entry.key;
@@ -936,6 +1119,15 @@ class GlossarySettingsScreen extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: <Widget>[
+              // Selection checkbox
+              SizedBox(
+                width: 40,
+                child: Checkbox(
+                  value: settings.selectedEntryIds.contains(entry.id),
+                  onChanged: (_) =>
+                      notifier.toggleEntrySelection(entry.id),
+                ),
+              ),
               Expanded(
                 flex: 2,
                 child: isEditing
@@ -1375,6 +1567,7 @@ class GlossarySettingsScreen extends ConsumerWidget {
                 decoration: InputDecoration(
                     labelText: l10nImport.settingsGlossaryMergeModeLabel,),
               ),
+              const SizedBox(height: 12),
             ],
           ),
           actions: <Widget>[
@@ -1392,7 +1585,7 @@ class GlossarySettingsScreen extends ConsumerWidget {
                         try {
                           final result = await FilePickerHelper.pickFiles(
                             type: FileType.custom,
-                            allowedExtensions: <String>['csv'],
+                            allowedExtensions: <String>['csv', 'tbx'],
                           );
                           if (result == null) return;
                           final bytes = result.files.single.bytes;
@@ -1405,28 +1598,58 @@ class GlossarySettingsScreen extends ConsumerWidget {
                             );
                             return;
                           }
-                          final resp = await GlossaryApiService.importCsv(
-                            selectedGlossaryId!,
-                            bytes,
-                            mergeMode: mergeMode,
-                          );
-                          await _loadEntriesForGlossary(
-                            btnContext,
-                            notifier,
-                            selectedGlossaryId!,
-                            settings,
-                          );
-                          if (btnContext.mounted) {
-                            Navigator.of(btnContext).pop();
-                            ScaffoldMessenger.of(btnContext).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  l10nBtn.settingsGlossaryImportedSnack(
-                                    (resp['imported_count'] ?? 0).toString(),
+                          final fileName =
+                              result.files.single.name.toLowerCase();
+                          if (fileName.endsWith('.tbx')) {
+                            final resp =
+                                await GlossaryApiService.importTbx(
+                              selectedGlossaryId!,
+                              bytes,
+                              mergeMode: mergeMode,
+                              sourceLang: 'en',
+                            );
+                            await _loadEntriesForGlossary(
+                              btnContext,
+                              notifier,
+                              selectedGlossaryId!,
+                              settings,
+                            );
+                            if (btnContext.mounted) {
+                              Navigator.of(btnContext).pop();
+                              ScaffoldMessenger.of(btnContext).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    l10nBtn.settingsGlossaryImportedSnack(
+                                      (resp['imported_count'] ?? 0).toString(),
+                                    ),
                                   ),
                                 ),
-                              ),
+                              );
+                            }
+                          } else {
+                            final resp = await GlossaryApiService.importCsv(
+                              selectedGlossaryId!,
+                              bytes,
+                              mergeMode: mergeMode,
                             );
+                            await _loadEntriesForGlossary(
+                              btnContext,
+                              notifier,
+                              selectedGlossaryId!,
+                              settings,
+                            );
+                            if (btnContext.mounted) {
+                              Navigator.of(btnContext).pop();
+                              ScaffoldMessenger.of(btnContext).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    l10nBtn.settingsGlossaryImportedSnack(
+                                      (resp['imported_count'] ?? 0).toString(),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
                           }
                         } catch (e) {
                           if (btnContext.mounted) {
@@ -1458,6 +1681,22 @@ class GlossarySettingsScreen extends ConsumerWidget {
     final glossariesFuture = GlossaryApiService.getSimpleGlossaryList();
     // State variables outside builder to persist across rebuilds
     String? selectedGlossaryId = settings.selectedGlossaryId;
+    String exportFormat = 'csv'; // csv | tbx
+    String sourceLang = 'en';
+
+    // Common language codes for TBX source language selection
+    const List<Map<String, String>> langOptions = <Map<String, String>>[
+      <String, String>{'code': 'en', 'name': 'English'},
+      <String, String>{'code': 'zh', 'name': '中文'},
+      <String, String>{'code': 'ja', 'name': '日本語'},
+      <String, String>{'code': 'ko', 'name': '한국어'},
+      <String, String>{'code': 'fr', 'name': 'Français'},
+      <String, String>{'code': 'de', 'name': 'Deutsch'},
+      <String, String>{'code': 'es', 'name': 'Español'},
+      <String, String>{'code': 'ru', 'name': 'Русский'},
+      <String, String>{'code': 'ar', 'name': 'العربية'},
+      <String, String>{'code': 'pt', 'name': 'Português'},
+    ];
 
     showDialog(
       context: context,
@@ -1512,6 +1751,46 @@ class GlossarySettingsScreen extends ConsumerWidget {
                   );
                 },
               ),
+              const SizedBox(height: 12),
+              // Format selector
+              DropdownButtonFormField<String>(
+                initialValue: exportFormat,
+                decoration: InputDecoration(
+                    labelText: l10nExport.settingsGlossaryExportFormatLabel),
+                items: <DropdownMenuItem<String>>[
+                  const DropdownMenuItem(value: 'csv', child: Text('CSV')),
+                  DropdownMenuItem(
+                      value: 'tbx',
+                      child: Text(
+                          l10nExport.settingsGlossaryExportFormatTbx)),
+                ],
+                onChanged: (v) {
+                  setState(() {
+                    exportFormat = v ?? 'csv';
+                  });
+                },
+              ),
+              if (exportFormat == 'tbx') ...[
+                const SizedBox(height: 12),
+                // Source language selector for TBX
+                DropdownButtonFormField<String>(
+                  initialValue: sourceLang,
+                  decoration: InputDecoration(
+                      labelText: l10nExport
+                          .settingsGlossaryExportSourceLanguage),
+                  items: langOptions
+                      .map((lang) => DropdownMenuItem<String>(
+                            value: lang['code'] as String,
+                            child: Text('${lang['name']} (${lang['code']})'),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    setState(() {
+                      sourceLang = v ?? 'en';
+                    });
+                  },
+                ),
+              ],
             ],
           ),
           actions: <Widget>[
@@ -1527,39 +1806,75 @@ class GlossarySettingsScreen extends ConsumerWidget {
                     ? null
                     : () async {
                         try {
-                          final data = await GlossaryApiService.downloadCsv(
-                            selectedGlossaryId!,
-                          );
                           final baseName =
                               'glossary_${DateTime.now().millisecondsSinceEpoch}';
-                          if (kIsWeb) {
-                            await FileSaver.instance.saveFile(
-                              name: baseName,
-                              bytes: data,
-                              ext: 'csv',
+                          if (exportFormat == 'tbx') {
+                            // TBX export
+                            final data = await GlossaryApiService.downloadTbx(
+                              selectedGlossaryId!,
+                              sourceLang: sourceLang,
                             );
-                          } else {
-                            final savePath = await FilePickerHelper.saveFile(
-                              fileName: '$baseName.csv',
-                              dialogTitle: l10nBtn.settingsGlossarySaveCsv,
-                              type: FileType.custom,
-                              allowedExtensions: <String>['csv'],
-                            );
-                            if (savePath != null) {
-                              // ignore: avoid_print
-                              print('[ExportCurrent] Saved to: $savePath');
-                              final f = File(savePath);
-                              await f.writeAsBytes(data, flush: true);
+                            if (kIsWeb) {
+                              await FileSaver.instance.saveFile(
+                                name: baseName,
+                                bytes: data,
+                                ext: 'tbx',
+                              );
+                            } else {
+                              final savePath = await FilePickerHelper.saveFile(
+                                fileName: '$baseName.tbx',
+                                dialogTitle: l10nExport.settingsGlossaryExportSaveTbxTitle,
+                                type: FileType.custom,
+                                allowedExtensions: <String>['tbx'],
+                              );
+                              if (savePath != null) {
+                                final f = File(savePath);
+                                await f.writeAsBytes(data, flush: true);
+                              }
                             }
-                          }
-                          if (btnContext.mounted) {
-                            Navigator.of(btnContext).pop();
-                            _showCopyableSnackBar(
-                              btnContext,
-                              l10nBtn.settingsGlossaryDownloadedSnack(
-                                '${kIsWeb ? baseName : 'CSV file'} (${data.lengthInBytes} bytes)',
-                              ),
+                            if (btnContext.mounted) {
+                              Navigator.of(btnContext).pop();
+                              _showCopyableSnackBar(
+                                btnContext,
+                                l10nBtn.settingsGlossaryDownloadedSnack(
+                                  '${kIsWeb ? baseName : 'TBX file'} (${data.lengthInBytes} bytes)',
+                                ),
+                              );
+                            }
+                          } else {
+                            // CSV export (existing logic)
+                            final data = await GlossaryApiService.downloadCsv(
+                              selectedGlossaryId!,
                             );
+                            if (kIsWeb) {
+                              await FileSaver.instance.saveFile(
+                                name: baseName,
+                                bytes: data,
+                                ext: 'csv',
+                              );
+                            } else {
+                              final savePath = await FilePickerHelper.saveFile(
+                                fileName: '$baseName.csv',
+                                dialogTitle: l10nBtn.settingsGlossarySaveCsv,
+                                type: FileType.custom,
+                                allowedExtensions: <String>['csv'],
+                              );
+                              if (savePath != null) {
+                                // ignore: avoid_print
+                                print('[ExportCurrent] Saved to: $savePath');
+                                final f = File(savePath);
+                                await f.writeAsBytes(data, flush: true);
+                              }
+                            }
+                            if (btnContext.mounted) {
+                              Navigator.of(btnContext).pop();
+                              _showCopyableSnackBar(
+                                btnContext,
+                                l10nBtn.settingsGlossaryDownloadedSnack(
+                                  '${kIsWeb ? baseName : 'CSV file'} (${data.lengthInBytes} bytes)',
+                                ),
+                              );
+                            }
                           }
                         } catch (e) {
                           if (btnContext.mounted) {
@@ -1582,6 +1897,152 @@ class GlossarySettingsScreen extends ConsumerWidget {
           ],
         );
         },
+      ),
+    );
+  }
+
+  void _showBatchDeleteDialog(
+    BuildContext context,
+    GlossarySettings settings,
+    GlossarySettingsNotifier notifier,
+  ) {
+    final l10n = AppLocalizations.of(context)!;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.settingsGlossaryDeleteEntriesTitle),
+        content: Text(
+          l10n.settingsGlossaryDeleteEntriesBody(
+            settings.selectedEntryIds.length.toString(),
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(l10n.settingsGlossaryCancel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () async {
+              final selectedIds = settings.selectedEntryIds.toList();
+              final glossaryId = settings.selectedGlossaryId ?? '';
+              if (ctx.mounted) Navigator.of(ctx).pop();
+              try {
+                await GlossaryApiService.batchDeleteEntries(
+                  glossaryId, selectedIds,
+                );
+                notifier.clearEntrySelection();
+                await _loadEntriesForGlossary(
+                  context,
+                  notifier,
+                  glossaryId,
+                  settings,
+                );
+                if (context.mounted) {
+                  _showCopyableSnackBar(
+                    context,
+                    l10n.settingsGlossaryDeleteEntriesConfirm +
+                        ' ${selectedIds.length} entries',
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '${l10n.settingsGlossaryDeleteEntriesConfirm} entries: $e',
+                      ),
+                    ),
+                  );
+                }
+              }
+            },
+            child: Text(l10n.settingsGlossaryDeleteEntriesConfirm),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showBatchCategoryDialog(
+    BuildContext context,
+    GlossarySettings settings,
+    GlossarySettingsNotifier notifier,
+  ) {
+    final categoryController = TextEditingController();
+    final l10n = AppLocalizations.of(context)!;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.settingsGlossaryEditCategoryTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text(
+              l10n.settingsGlossaryEditCategoryBody(
+                settings.selectedEntryIds.length.toString(),
+              ),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: categoryController,
+              decoration: InputDecoration(
+                labelText: l10n.settingsGlossaryEditCategoryLabel,
+                hintText: l10n.settingsGlossaryEditCategoryHint,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(l10n.settingsGlossaryCancel),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final newCategory = categoryController.text.trim();
+              try {
+                final selectedIds = settings.selectedEntryIds.toList();
+                await GlossaryApiService.batchUpdateCategory(
+                  settings.selectedGlossaryId ?? '',
+                  selectedIds,
+                  newCategory,
+                );
+                if (ctx.mounted) {
+                  Navigator.of(ctx).pop();
+                  notifier.clearEntrySelection();
+                  // Reload entries to refresh IDs
+                  await _loadEntriesForGlossary(
+                    context,
+                    notifier,
+                    settings.selectedGlossaryId ?? '',
+                    settings,
+                  );
+                  _showCopyableSnackBar(
+                    context,
+                    '${l10n.settingsGlossaryEditCategoryApply} ${selectedIds.length} entries',
+                  );
+                }
+              } catch (e) {
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(
+                      content: Text('${l10n.settingsGlossaryEditCategoryApply} failed: $e'),
+                    ),
+                  );
+                }
+              }
+            },
+            child: Text(l10n.settingsGlossaryEditCategoryApply),
+          ),
+        ],
       ),
     );
   }

@@ -90,6 +90,50 @@ class GlossaryApiService {
     }
   }
 
+  // Batch update category for multiple entries
+  static Future<Map<String, dynamic>> batchUpdateCategory(
+    String glossaryId,
+    List<String> entryIds,
+    String category,
+  ) async {
+    final Uri uri = Uri.parse(
+      '$_baseUrl/auth/glossaries/$glossaryId/entries/batch-category',
+    );
+    final http.Response res = await http.put(
+      uri,
+      headers: _headers(),
+      body: json.encode(<String, dynamic>{
+        'entry_ids': entryIds,
+        'category': category,
+      }),
+    );
+    if (res.statusCode == 200) {
+      return json.decode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to batch update category: ${res.statusCode}');
+  }
+
+  // Batch delete multiple entries
+  static Future<Map<String, dynamic>> batchDeleteEntries(
+    String glossaryId,
+    List<String> entryIds,
+  ) async {
+    final Uri uri = Uri.parse(
+      '$_baseUrl/auth/glossaries/$glossaryId/entries/batch-delete',
+    );
+    final http.Response res = await http.delete(
+      uri,
+      headers: _headers(),
+      body: json.encode(<String, dynamic>{
+        'entry_ids': entryIds,
+      }),
+    );
+    if (res.statusCode == 200) {
+      return json.decode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to batch delete entries: ${res.statusCode}');
+  }
+
   // Import CSV to glossary (merge)
   static Future<Map<String, dynamic>> importCsv(
     String glossaryId,
@@ -115,6 +159,57 @@ class GlossaryApiService {
     throw Exception('Failed to import CSV: ${res.statusCode}');
   }
 
+  // Import TBX file to glossary (merge)
+  static Future<Map<String, dynamic>> importTbx(
+    String glossaryId,
+    Uint8List bytes, {
+    String mergeMode = 'update',
+    String sourceLang = 'en',
+  }) async {
+    final Uri uri = Uri.parse('$_baseUrl/auth/glossaries/$glossaryId/import');
+    final http.MultipartRequest request = http.MultipartRequest('POST', uri);
+    final String? auth = ConfigService().authorizationHeader;
+    if (auth != null && auth.isNotEmpty) {
+      request.headers['Authorization'] = auth;
+    }
+    request.headers.addAll(ConfigService.desktopBackendHeaders);
+    request.fields['merge_mode'] = mergeMode;
+    request.fields['source_lang'] = sourceLang;
+    request.files.add(
+      http.MultipartFile.fromBytes('file', bytes, filename: 'glossary.tbx'),
+    );
+    final http.StreamedResponse streamed = await request.send();
+    final http.Response res = await http.Response.fromStream(streamed);
+    if (res.statusCode == 200) {
+      return json.decode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to import TBX: ${res.statusCode}');
+  }
+
+  // Parse TBX file and return entries without saving
+  static Future<Map<String, dynamic>> parseTbxFile(
+    Uint8List bytes, {
+    String sourceLang = 'en',
+  }) async {
+    final Uri uri = Uri.parse('$_baseUrl/auth/glossaries/parse-tbx');
+    final http.MultipartRequest request = http.MultipartRequest('POST', uri);
+    final String? auth = ConfigService().authorizationHeader;
+    if (auth != null && auth.isNotEmpty) {
+      request.headers['Authorization'] = auth;
+    }
+    request.headers.addAll(ConfigService.desktopBackendHeaders);
+    request.fields['source_lang'] = sourceLang;
+    request.files.add(
+      http.MultipartFile.fromBytes('file', bytes, filename: 'glossary.tbx'),
+    );
+    final http.StreamedResponse streamed = await request.send();
+    final http.Response res = await http.Response.fromStream(streamed);
+    if (res.statusCode == 200) {
+      return json.decode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to parse TBX: ${res.statusCode}');
+  }
+
   // Download CSV
   static Future<Uint8List> downloadCsv(String glossaryId) async {
     final Uri uri = Uri.parse('$_baseUrl/auth/glossaries/$glossaryId/download');
@@ -123,6 +218,23 @@ class GlossaryApiService {
       return res.bodyBytes;
     }
     throw Exception('Failed to download CSV: ${res.statusCode}');
+  }
+
+  // Download TBX
+  static Future<Uint8List> downloadTbx(
+    String glossaryId, {
+    String sourceLang = 'en',
+  }) async {
+    final Uri uri = Uri.parse('$_baseUrl/auth/glossaries/$glossaryId/download')
+        .replace(queryParameters: <String, String>{
+      'format': 'tbx',
+      'source_lang': sourceLang,
+    });
+    final http.Response res = await http.get(uri, headers: _headers());
+    if (res.statusCode == 200) {
+      return res.bodyBytes;
+    }
+    throw Exception('Failed to download TBX: ${res.statusCode}');
   }
 
   // Delete a glossary by id

@@ -1526,6 +1526,33 @@ async def export_all_glossaries(
     filename = "glossaries_export.xlsx"
     return FileResponse(tmp.name, filename=filename, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+
+@auth_router.post("/glossaries/parse-tbx")
+async def parse_tbx_file(
+    file: UploadFile = File(...),
+    source_lang: str = 'en',
+    user: User = Depends(get_current_user)
+):
+    """Parse a TBX file and return entries without saving.
+    Used by the glossary preview during translation to import TBX data."""
+    content = await file.read()
+    from glossary.tbx_converter import tbx_bytes_to_entries
+    entries = tbx_bytes_to_entries(content, source_lang=source_lang)
+    # Set source_lang as default category
+    result = []
+    for src, entry in entries.items():
+        category = entry.get('category', '')
+        if not category:
+            category = source_lang
+        result.append({
+            'src': src,
+            'dst': entry.get('dst', ''),
+            'category': category,
+            'target_lang': entry.get('target_lang', ''),
+        })
+    return {"entries": result, "count": len(result)}
+
+
 @auth_router.post("/glossaries/upload")
 async def upload_glossary(
     request: Request,
@@ -1542,61 +1569,86 @@ async def upload_glossary(
         name = form.get("name", "").strip()
         description = form.get("description", "").strip()
         is_global = form.get("is_global", "false").lower() == "true"
-        
+        source_lang = form.get("source_lang", "en").strip()
+
         if not file or not name:
             raise HTTPException(status_code=400, detail="File name and glossary name cannot be empty")
-        
+
         # Check permissions
         if is_global and not user.is_admin():
             raise HTTPException(status_code=403, detail="Only administrators can upload global glossaries")
-        
-        # Read file content with encoding fallback
-        # Supported languages: zh, en, ja, ko, fr, de, es, ru, ar, pt
-        # Encoding priority: UTF-8 > Chinese > Japanese > Korean > Western European > Russian > Arabic > Fallback
+
         content = await file.read()
-        content_str = None
-        for encoding in [
-            'utf-8-sig', 'utf-8',  # UTF-8 (universal, highest priority)
-            'gbk', 'gb2312', 'gb18030',  # Chinese (Simplified)
-            'big5', 'big5hkscs',  # Chinese (Traditional)
-            'shift_jis', 'euc-jp', 'iso-2022-jp',  # Japanese
-            'euc-kr', 'cp949',  # Korean
-            'iso-8859-1', 'latin-1', 'windows-1252',  # Western European (en, fr, de, es, pt)
-            'windows-1251', 'koi8-r', 'cp866', 'iso-8859-5',  # Russian
-            'windows-1256', 'iso-8859-6', 'cp1256',  # Arabic
-        ]:
-            try:
-                content_str = content.decode(encoding)
-                break
-            except (UnicodeDecodeError, LookupError):
-                continue
-        if content_str is None:
-            content_str = content.decode('utf-8-sig', errors='replace')
-        
-        # Parse CSV
-        import csv
-        from io import StringIO
-        
-        glossary_dict = {}
-        reader = csv.DictReader(StringIO(content_str))
-        for row in reader:
-            src = row.get('src', '').strip()
-            dst = row.get('dst', '').strip()
-            if src and dst:
-                glossary_dict[src] = dst
-        
+        original_filename = getattr(file, 'filename', '') or ''
+
+        if original_filename.lower().endswith('.tbx'):
+            # --- TBX file parsing ---
+            from glossary.tbx_converter import tbx_bytes_to_entries
+            glossary_dict = tbx_bytes_to_entries(content, source_lang=source_lang)
+            # Use source_lang as default category
+            for entry in glossary_dict.values():
+                if not entry.get('category'):
+                    entry['category'] = source_lang
+        else:
+            # --- CSV file parsing (with encoding fallback) ---
+            content_str = None
+            for encoding in [
+                'utf-8-sig', 'utf-8',
+                'gbk', 'gb2312', 'gb18030',
+                'big5', 'big5hkscs',
+                'shift_jis', 'euc-jp', 'iso-2022-jp',
+                'euc-kr', 'cp949',
+                'iso-8859-1', 'latin-1', 'windows-1252',
+                'windows-1251', 'koi8-r', 'cp866', 'iso-8859-5',
+                'windows-1256', 'iso-8859-6', 'cp1256',
+            ]:
+                try:
+                    content_str = content.decode(encoding)
+                    break
+                except (UnicodeDecodeError, LookupError):
+                    continue
+            if content_str is None:
+                content_str = content.decode('utf-8-sig', errors='replace')
+
+            import csv
+            from io import StringIO
+            glossary_dict = {}
+            reader = csv.DictReader(StringIO(content_str))
+            for row in reader:
+                src = row.get('src', '').strip()
+                dst = row.get('dst', '').strip()
+                category = row.get('category', '').strip()
+                target_lang = row.get('target_lang', '').strip()
+                if src and dst:
+                    glossary_dict[src] = {
+                        'dst': dst,
+                        'category': category,
+                        'target_lang': target_lang,
+                    }
+
         # Allow creating an empty glossary (header-only CSV)
         creating_empty = len(glossary_dict) == 0
-        
+
         # Validate glossary
         if not creating_empty:
-            is_valid, message = manager.validate_glossary_dict(glossary_dict)
+            simple_dict = {k: v.get('dst', '') if isinstance(v, dict) else v
+                           for k, v in glossary_dict.items()}
+            is_valid, message = manager.validate_glossary_dict(simple_dict)
             if not is_valid:
                 raise HTTPException(status_code=400, detail=message)
-        
+
         # Save glossary
         if is_global:
-            glossary = manager.create_global_glossary(name, glossary_dict, user.username, description)
+            simple_dict = {k: v.get('dst', '') if isinstance(v, dict) else v
+                           for k, v in glossary_dict.items()}
+            glossary = manager.create_global_glossary(name, simple_dict, user.username, description)
+            # Save with languages if present
+            if glossary_dict and any(
+                isinstance(v, dict) and (v.get('category') or v.get('target_lang'))
+                for v in glossary_dict.values()
+            ):
+                lang_dict = {k: v for k, v in glossary_dict.items() if isinstance(v, dict)}
+                manager.save_glossary_with_languages(glossary.id, lang_dict, user.username)
             logger.info(LogModule.AUTH, f"Administrator {user.username} created global glossary: {name}")
             return {
                 "success": True,
@@ -1607,9 +1659,19 @@ async def upload_glossary(
             }
         else:
             # Personal glossary
-            success = manager.save_user_personal_glossary(user.username, glossary_dict)
+            simple_dict = {k: v.get('dst', '') if isinstance(v, dict) else v
+                           for k, v in glossary_dict.items()}
+            success = manager.save_user_personal_glossary(user.username, simple_dict)
             if not success:
                 raise HTTPException(status_code=500, detail="Failed to save personal glossary")
+            # Save with languages if present
+            if glossary_dict and any(
+                isinstance(v, dict) and (v.get('category') or v.get('target_lang'))
+                for v in glossary_dict.values()
+            ):
+                personal_id = f"personal_{user.username}"
+                lang_dict = {k: v for k, v in glossary_dict.items() if isinstance(v, dict)}
+                manager.save_glossary_with_languages(personal_id, lang_dict, user.username)
             logger.info(LogModule.AUTH, f"User {user.username} updated personal glossary")
             return {
                 "success": True,
@@ -1629,51 +1691,75 @@ async def upload_glossary(
 @auth_router.get("/glossaries/{glossary_id}/download")
 async def download_glossary(
     glossary_id: str,
+    format: str = 'csv',  # csv | tbx
+    source_lang: str = 'en',
     user: User = Depends(get_current_user)
 ):
-    """Download glossary with category support"""
+    """Download glossary in CSV or TBX format.
+
+    - format=csv (default): 4-column CSV
+    - format=tbx: TBX-Basic XML (requires source_lang to specify source language)
+    """
     from glossary.manager import get_glossary_manager
+    from glossary.tbx_converter import entries_to_tbx_bytes
     from fastapi.responses import FileResponse
-    
+    import tempfile
+
     manager = get_glossary_manager()
-    
-    # Get glossary content with languages (fallback handled later if needed)
+
+    # Get glossary content with languages
     glossary_dict = manager.get_glossary_content_with_languages(glossary_id)
-    # Distinguish between not found (None) and empty glossary (empty dict)
     if glossary_dict is None:
         raise HTTPException(status_code=404, detail="Glossary not found")
-    
-    # Generate temporary CSV file with three columns
-    import tempfile
-    import csv
-    
-    temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, encoding='utf-8-sig')
-    writer = csv.writer(temp_file)
-    writer.writerow(['src', 'dst', 'category', 'target_lang'])
-    for src, entry in glossary_dict.items():
-        dst = entry.get('dst', '')
-        category = entry.get('category', '')  # 保留空白
-        target_lang = entry.get('target_lang', '')
-        writer.writerow([src, dst, category, target_lang])
-    temp_file.close()
-    
-    # Determine filename
+
+    # Determine base name (without extension)
     if glossary_id.startswith('global_'):
         global_glossaries = manager.get_global_glossaries()
+        base_name = "glossary"
         for g in global_glossaries:
             if g.id == glossary_id:
-                filename = f"{g.name}.csv"
+                base_name = g.name
                 break
-        else:
-            filename = "glossary.csv"
     else:
-        filename = "personal_glossary.csv"
-    
-    return FileResponse(
-        path=temp_file.name,
-        filename=filename,
-        media_type='text/csv'
-    )
+        base_name = "personal_glossary"
+
+    if format == 'tbx':
+        # --- TBX export ---
+        tbx_bytes = entries_to_tbx_bytes(glossary_dict, source_lang=source_lang)
+        if not tbx_bytes:
+            raise HTTPException(status_code=500, detail="Failed to generate TBX file")
+
+        tmp = tempfile.NamedTemporaryFile(suffix='.tbx', delete=False)
+        tmp.write(tbx_bytes)
+        tmp.close()
+
+        return FileResponse(
+            path=tmp.name,
+            filename=f"{base_name}.tbx",
+            media_type='application/xml'
+        )
+    else:
+        # --- CSV export (default) ---
+        import csv
+        import tempfile as tf
+
+        tmp = tf.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, encoding='utf-8-sig')
+        writer = csv.writer(tmp)
+        writer.writerow(['src', 'dst', 'category', 'target_lang'])
+        for src, entry in glossary_dict.items():
+            writer.writerow([
+                src,
+                entry.get('dst', ''),
+                entry.get('category', ''),
+                entry.get('target_lang', ''),
+            ])
+        tmp.close()
+
+        return FileResponse(
+            path=tmp.name,
+            filename=f"{base_name}.csv",
+            media_type='text/csv'
+        )
 
 
 @auth_router.get("/glossaries/{glossary_id}/entries")
@@ -1764,46 +1850,53 @@ async def import_glossary_entries(
         mode = "update"
 
     content_bytes = await file.read()
-    # Try multiple encodings for better compatibility
-    # Supported languages: zh, en, ja, ko, fr, de, es, ru, ar, pt
-    # Encoding priority: UTF-8 > Chinese > Japanese > Korean > Western European > Russian > Arabic > Fallback
-    content_str = None
-    for encoding in [
-        'utf-8-sig', 'utf-8',  # UTF-8 (universal, highest priority)
-        'gbk', 'gb2312', 'gb18030',  # Chinese (Simplified)
-        'big5', 'big5hkscs',  # Chinese (Traditional)
-        'shift_jis', 'euc-jp', 'iso-2022-jp',  # Japanese
-        'euc-kr', 'cp949',  # Korean
-        'iso-8859-1', 'latin-1', 'windows-1252',  # Western European (en, fr, de, es, pt)
-        'windows-1251', 'koi8-r', 'cp866', 'iso-8859-5',  # Russian
-        'windows-1256', 'iso-8859-6', 'cp1256',  # Arabic
-    ]:
-        try:
-            content_str = content_bytes.decode(encoding)
-            break
-        except (UnicodeDecodeError, LookupError):
-            continue
-    if content_str is None:
-        # Fallback: decode with error replacement
-        content_str = content_bytes.decode('utf-8-sig', errors='replace')
+    original_filename = getattr(file, 'filename', '') or ''
 
-    # parse csv with language and category support
-    # Note: source_lang is removed, only target_lang is kept
-    import csv
-    from io import StringIO
-    reader = csv.DictReader(StringIO(content_str))
-    imported: dict[str, dict[str, str]] = {}
-    for row in reader:
-        src = (row.get('src') or '').strip()
-        dst = (row.get('dst') or '').strip()
-        category = (row.get('category') or '').strip()  # 保留空白
-        target_lang = (row.get('target_lang') or '').strip()
-        if src and dst:
-            imported[src] = {
-                'dst': dst,
-                'category': category,
-                'target_lang': target_lang,
-            }
+    if original_filename.lower().endswith('.tbx'):
+        # --- TBX file parsing ---
+        from glossary.tbx_converter import tbx_bytes_to_entries
+        source_lang = (form.get("source_lang") or "").strip() or "en"
+        imported = tbx_bytes_to_entries(content_bytes, source_lang=source_lang)
+        # Use source_lang as default category
+        for entry in imported.values():
+            if not entry.get('category'):
+                entry['category'] = source_lang
+    else:
+        # --- CSV file parsing (with encoding fallback) ---
+        content_str = None
+        for encoding in [
+            'utf-8-sig', 'utf-8',
+            'gbk', 'gb2312', 'gb18030',
+            'big5', 'big5hkscs',
+            'shift_jis', 'euc-jp', 'iso-2022-jp',
+            'euc-kr', 'cp949',
+            'iso-8859-1', 'latin-1', 'windows-1252',
+            'windows-1251', 'koi8-r', 'cp866', 'iso-8859-5',
+            'windows-1256', 'iso-8859-6', 'cp1256',
+        ]:
+            try:
+                content_str = content_bytes.decode(encoding)
+                break
+            except (UnicodeDecodeError, LookupError):
+                continue
+        if content_str is None:
+            content_str = content_bytes.decode('utf-8-sig', errors='replace')
+
+        import csv
+        from io import StringIO
+        reader = csv.DictReader(StringIO(content_str))
+        imported = {}
+        for row in reader:
+            src = (row.get('src') or '').strip()
+            dst = (row.get('dst') or '').strip()
+            category = (row.get('category') or '').strip()
+            target_lang = (row.get('target_lang') or '').strip()
+            if src and dst:
+                imported[src] = {
+                    'dst': dst,
+                    'category': category,
+                    'target_lang': target_lang,
+                }
     if not imported:
         raise HTTPException(status_code=400, detail="Empty CSV")
 
@@ -1998,46 +2091,57 @@ async def create_and_import_glossary(
         merge_mode = "update"
     
     manager = get_glossary_manager()
-    
-    # Parse CSV if provided with encoding fallback
-    # Supported languages: zh, en, ja, ko, fr, de, es, ru, ar, pt
-    # Encoding priority: UTF-8 > Chinese > Japanese > Korean > Western European > Russian > Arabic > Fallback
+
+    # Parse CSV or TBX if provided
     glossary_dict = {}
     if file:
         content_bytes = await file.read()
-        content_str = None
-        for encoding in [
-            'utf-8-sig', 'utf-8',  # UTF-8 (universal, highest priority)
-            'gbk', 'gb2312', 'gb18030',  # Chinese (Simplified)
-            'big5', 'big5hkscs',  # Chinese (Traditional)
-            'shift_jis', 'euc-jp', 'iso-2022-jp',  # Japanese
-            'euc-kr', 'cp949',  # Korean
-            'iso-8859-1', 'latin-1', 'windows-1252',  # Western European (en, fr, de, es, pt)
-            'windows-1251', 'koi8-r', 'cp866', 'iso-8859-5',  # Russian
-            'windows-1256', 'iso-8859-6', 'cp1256',  # Arabic
-        ]:
-            try:
-                content_str = content_bytes.decode(encoding)
-                break
-            except (UnicodeDecodeError, LookupError):
-                continue
-        if content_str is None:
-            content_str = content_bytes.decode('utf-8-sig', errors='replace')
-        
-        import csv
-        from io import StringIO
-        reader = csv.DictReader(StringIO(content_str))
-        for row in reader:
-            src = (row.get('src') or '').strip()
-            dst = (row.get('dst') or '').strip()
-            category = (row.get('category') or '').strip()
-            target_lang = (row.get('target_lang') or '').strip()
-            if src and dst:
-                glossary_dict[src] = {
-                    'dst': dst,
-                    'category': category,
-                    'target_lang': target_lang,
-                }
+        original_filename = getattr(file, 'filename', '') or ''
+
+        if original_filename.lower().endswith('.tbx'):
+            # --- TBX file parsing ---
+            from glossary.tbx_converter import tbx_bytes_to_entries
+            source_lang = (form.get("source_lang") or "en").strip()
+            glossary_dict = tbx_bytes_to_entries(content_bytes, source_lang=source_lang)
+            # Use source_lang as default category
+            for entry in glossary_dict.values():
+                if not entry.get('category'):
+                    entry['category'] = source_lang
+        else:
+            # --- CSV file parsing (with encoding fallback) ---
+            content_str = None
+            for encoding in [
+                'utf-8-sig', 'utf-8',
+                'gbk', 'gb2312', 'gb18030',
+                'big5', 'big5hkscs',
+                'shift_jis', 'euc-jp', 'iso-2022-jp',
+                'euc-kr', 'cp949',
+                'iso-8859-1', 'latin-1', 'windows-1252',
+                'windows-1251', 'koi8-r', 'cp866', 'iso-8859-5',
+                'windows-1256', 'iso-8859-6', 'cp1256',
+            ]:
+                try:
+                    content_str = content_bytes.decode(encoding)
+                    break
+                except (UnicodeDecodeError, LookupError):
+                    continue
+            if content_str is None:
+                content_str = content_bytes.decode('utf-8-sig', errors='replace')
+
+            import csv
+            from io import StringIO
+            reader = csv.DictReader(StringIO(content_str))
+            for row in reader:
+                src = (row.get('src') or '').strip()
+                dst = (row.get('dst') or '').strip()
+                category = (row.get('category') or '').strip()
+                target_lang = (row.get('target_lang') or '').strip()
+                if src and dst:
+                    glossary_dict[src] = {
+                        'dst': dst,
+                        'category': category,
+                        'target_lang': target_lang,
+                    }
     
     # Allow creating empty glossary
     creating_empty = len(glossary_dict) == 0
@@ -2194,6 +2298,47 @@ async def create_glossary_entry(
     return {"success": True, "message": "Entry saved", "entry": {"id": eid, "src": src, "dst": dst, "category": category, "target_lang": target_lang}}
 
 
+@auth_router.put("/glossaries/{glossary_id}/entries/batch-category")
+async def batch_update_category(
+    glossary_id: str,
+    payload: dict,
+    user: User = Depends(get_current_user)
+):
+    """Batch update category for multiple entries by their entry IDs."""
+    from glossary.manager import get_glossary_manager
+    entry_ids = payload.get("entry_ids", [])
+    new_category = (payload.get("category") or "").strip()
+
+    if not entry_ids:
+        raise HTTPException(status_code=400, detail="No entry IDs provided")
+
+    manager = get_glossary_manager()
+    data = manager.get_glossary_content_with_languages(glossary_id) or {}
+
+    updated = 0
+    keys_to_update = []
+    for k, v in data.items():
+        eid = _compute_entry_id(k, v)
+        if eid in entry_ids:
+            keys_to_update.append((k, v))
+            updated += 1
+
+    if updated == 0:
+        raise HTTPException(status_code=400, detail="No matching entries found")
+
+    # Remove old keys and re-insert with new category
+    for old_key, v in keys_to_update:
+        del data[old_key]
+        v['category'] = new_category
+        data[old_key] = v
+
+    success = manager.save_glossary_with_languages(glossary_id, data, user.username)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update entries")
+
+    return {"success": True, "updated": updated}
+
+
 @auth_router.put("/glossaries/{glossary_id}/entries/{entry_id}")
 async def update_glossary_entry(
     glossary_id: str,
@@ -2243,6 +2388,42 @@ async def update_glossary_entry(
 
     eid = _compute_entry_id(new_src, data[new_src])
     return {"success": True, "message": "Entry updated", "entry": {"id": eid, "src": new_src, "dst": new_dst, "category": new_category, "target_lang": new_target_lang}}
+
+
+@auth_router.delete("/glossaries/{glossary_id}/entries/batch-delete")
+async def batch_delete_entries(
+    glossary_id: str,
+    payload: dict,
+    user: User = Depends(get_current_user)
+):
+    """Batch delete multiple entries by their entry IDs."""
+    from glossary.manager import get_glossary_manager
+    entry_ids = payload.get("entry_ids", [])
+    if not entry_ids:
+        raise HTTPException(status_code=400, detail="No entry IDs provided")
+
+    manager = get_glossary_manager()
+    data = manager.get_glossary_content_with_languages(glossary_id) or {}
+
+    deleted = 0
+    keys_to_delete = []
+    for k, v in data.items():
+        eid = _compute_entry_id(k, v)
+        if eid in entry_ids:
+            keys_to_delete.append(k)
+            deleted += 1
+
+    for k in keys_to_delete:
+        del data[k]
+
+    if deleted == 0:
+        raise HTTPException(status_code=400, detail="No matching entries found")
+
+    success = manager.save_glossary_with_languages(glossary_id, data, user.username)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete entries")
+
+    return {"success": True, "deleted": deleted}
 
 
 @auth_router.delete("/glossaries/{glossary_id}/entries/{entry_id}")
