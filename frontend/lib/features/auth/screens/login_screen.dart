@@ -220,12 +220,13 @@ class _BrandPanel extends StatelessWidget {
         ),
       ),
       child: Center(
-        child: Padding(
-          padding: EdgeInsets.all(compact ? 32 : 48),
-          child: Column(
-            mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.all(compact ? 32 : 48),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
               // Logo
               Image.asset(
                 'images/logo_96.png',
@@ -292,7 +293,8 @@ class _BrandPanel extends StatelessWidget {
                 text: l10n.loginFeaturePlatforms,
                 compact: compact,
               ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -361,7 +363,7 @@ class _LoginFormPanel extends StatelessWidget {
     final cs = theme.colorScheme;
 
     return Center(
-      child: SingleChildScrollView(
+      child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 32),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),

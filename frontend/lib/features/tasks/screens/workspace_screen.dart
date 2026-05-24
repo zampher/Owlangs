@@ -699,8 +699,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                   child: Image.asset(
                     // Use the main app logo PNG; Flutter does not decode .ico natively, use same PNG
                     'images/logo_96.png',
-                    width: 64, // Enlarged to 64x64
-                    height: 64, // Enlarged to 64x64
+                    width: 56, // Reduced from 64 to prevent overflow on narrow windows
+                    height: 56, // Reduced from 64 to prevent overflow on narrow windows
                     errorBuilder: (
                       BuildContext context,
                       Object error,
@@ -708,7 +708,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                     ) =>
                         Icon(
                       Icons.language,
-                      size: 40, // Match roughly 64x64 logo visual weight
+                      size: 36, // Match roughly 56x56 logo visual weight
                       color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
