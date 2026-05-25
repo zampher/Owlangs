@@ -534,6 +534,17 @@ def main():
         action='store_true',
         help='Show version information'
     )
+    parser.add_argument(
+        '--mcp-port',
+        type=int,
+        default=8100,
+        help='Port for the MCP HTTP server (default: 8100)'
+    )
+    parser.add_argument(
+        '--no-mcp',
+        action='store_true',
+        help='Disable MCP server startup (start FastAPI only)'
+    )
 
     # Strip multiprocessing-fork args before parse_args (PyInstaller + uvicorn reload spawns child with these)
     # Child process would otherwise fail with "unrecognized arguments: --multiprocessing-fork parent_pid=... pipe_handle=..."
@@ -680,6 +691,27 @@ def main():
             # Start server thread
             server_thread = threading.Thread(target=start_server, daemon=True)
             server_thread.start()
+
+            # ── MCP Server (background thread) ──────────────────────────────────────
+            mcp_port = args.mcp_port or 8100
+            if not args.no_mcp:
+                def start_mcp_server():
+                    try:
+                        from backend.mcp_server.server import mcp
+                        import uvicorn
+                        app = mcp.streamable_http_app()
+                        uvicorn.run(app, host="127.0.0.1", port=mcp_port, log_level="info")
+                    except ImportError as e:
+                        unified_logger.warning(LogModule.SYSTEM, "MCP server not available (install 'mcp' package): {err}", err=e)
+                    except Exception as e:
+                        unified_logger.warning(LogModule.SYSTEM, "MCP server failed to start (port {port}?): {err}", port=mcp_port, err=e)
+
+                mcp_thread = threading.Thread(target=start_mcp_server, daemon=True)
+                mcp_thread.start()
+                unified_logger.info(LogModule.SYSTEM, "MCP server starting on 127.0.0.1:{port}", port=mcp_port)
+            else:
+                unified_logger.info(LogModule.SYSTEM, "MCP server disabled by --no-mcp flag")
+            # ─────────────────────────────────────────────────────────────────────────
 
             # Wait for server to actually start (poll port instead of fixed sleep)
             import time

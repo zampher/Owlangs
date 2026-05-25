@@ -540,7 +540,7 @@ async def test_ai_platform_connectivity(
             "This is not an Owlangs HTTP route failure — start Ollama or your LLM service, "
             "or correct base_url/model in settings."
         )
-        logger.error(
+        logger.warning(
             LogModule.AUTH,
             f"[TEST_AI_PLATFORM] ConnectError url={base_url!r} platform={platform_type}: {e}",
         )

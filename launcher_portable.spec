@@ -188,6 +188,43 @@ hiddenimports = [
     'extractor.html_extractor',
     # Config manager
     'backend.config_manager',
+    # MCP server modules
+    'backend.mcp_server',
+    'backend.mcp_server.server',
+    'backend.mcp_server.service_layer',
+    'backend.mcp_server.tools',
+    'backend.mcp_server.tools.config_tools',
+    'backend.mcp_server.tools.translate_tools',
+    'backend.mcp_server.tools.glossary_tools',
+    'backend.mcp_server.tools.convert_tools',
+    'backend.mcp_server.resources',
+    'backend.mcp_server.resources.providers',
+    'backend.mcp_server.prompts',
+    'backend.mcp_server.prompts.templates',
+    # MCP protocol package
+    'mcp',
+    'mcp.server',
+    'mcp.server.fastmcp',
+    'mcp.server.models',
+    'mcp.server.session',
+    'mcp.server.lowlevel',
+    'mcp.shared',
+    'mcp.shared.session',
+    'mcp.shared.request_id',
+    'mcp.shared.context',
+    'mcp.types',
+    'mcp.tool',
+    'mcp.resource',
+    'mcp.prompt',
+    # MCP transport dependencies
+    'sse_starlette',
+    'sse_starlette.sse',
+    'httpx_sse',
+    'pyjwt',
+    'pydantic_settings',
+    'anyio',
+    'anyio.streams',
+    'anyio.streams.stapled',
     # Markdown extensions (imported by md_translator/md_splitter)
     'markdown.extensions.tables',
     'pymdownx.arithmatex',
@@ -223,8 +260,8 @@ hiddenimports = [
     'imghdr',
 ]
 
-# Collect third-party resources for mobi/ebooklib
-for _pkg in ['mobi', 'ebooklib']:
+# Collect third-party resources for mobi/ebooklib/mcp
+for _pkg in ['mobi', 'ebooklib', 'mcp']:
     try:
         _pkg_datas, _, _pkg_hiddenimports = collect_all(_pkg)
         datas += _pkg_datas

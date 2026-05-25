@@ -769,7 +769,50 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
             if self.config.logger:
                 self.config.logger.error(LogModule.WORKFLOW, f"[TRANSLATE] {error_msg}")
             raise RuntimeError(error_msg)
-        
+
+        # CRITICAL: For single-phase PDF translation (no convert_task_id), source_chunks_cache
+        # is empty because _prepare_markdown_based_preview was skipped (document was still
+        # binary at that point). Populate it now from the converted markdown so the
+        # segment-based translator can run.
+        if task_state_ref is not None:
+            cache = task_state_ref.get("source_chunks_cache") or {}
+            if not cache.get("segments"):
+                try:
+                    raw = document_md.content
+                    md_content = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+                    if md_content.strip():
+                        from extractor.markdown_based_extractor import MarkdownBasedExtractor
+                        chunk_size = getattr(translator_config, "chunk_size", 2500) or 2500
+                        deep_split = getattr(translator_config, "deep_split", True) or True
+                        extractor = MarkdownBasedExtractor(
+                            md_content,
+                            chunk_size=chunk_size,
+                            deep_split=deep_split,
+                        )
+                        result = extractor.extract()
+                        if result.total_segments > 0:
+                            import hashlib, time
+                            content_hash = hashlib.sha1(md_content.encode("utf-8")).hexdigest()
+                            task_state_ref["source_chunks_cache"] = {
+                                "content_hash": content_hash,
+                                "chunk_size": chunk_size,
+                                "segments": result.segments,
+                                "total_segments": result.total_segments,
+                                "created_at": time.time(),
+                            }
+                            if self.config.logger:
+                                self.config.logger.info(
+                                    LogModule.WORKFLOW,
+                                    f"[TRANSLATE] Populated source_chunks_cache from converted markdown: "
+                                    f"{result.total_segments} segments (task_id={task_id})"
+                                )
+                except Exception as e:
+                    if self.config.logger:
+                        self.config.logger.warning(
+                            LogModule.WORKFLOW,
+                            f"[TRANSLATE] Failed to populate source_chunks_cache from converted markdown: {e}"
+                        )
+
         # Translate the markdown document with progress callback and segment recording
         await translator.translate_async(
             document_md, 

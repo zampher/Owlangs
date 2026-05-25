@@ -257,10 +257,47 @@ hiddenimports = [
     # mobi dependencies
     'loguru',
     'imghdr',
+    # MCP server modules
+    'backend.mcp_server',
+    'backend.mcp_server.server',
+    'backend.mcp_server.service_layer',
+    'backend.mcp_server.tools',
+    'backend.mcp_server.tools.config_tools',
+    'backend.mcp_server.tools.translate_tools',
+    'backend.mcp_server.tools.glossary_tools',
+    'backend.mcp_server.tools.convert_tools',
+    'backend.mcp_server.resources',
+    'backend.mcp_server.resources.providers',
+    'backend.mcp_server.prompts',
+    'backend.mcp_server.prompts.templates',
+    # MCP protocol package
+    'mcp',
+    'mcp.server',
+    'mcp.server.fastmcp',
+    'mcp.server.models',
+    'mcp.server.session',
+    'mcp.server.lowlevel',
+    'mcp.shared',
+    'mcp.shared.session',
+    'mcp.shared.request_id',
+    'mcp.shared.context',
+    'mcp.types',
+    'mcp.tool',
+    'mcp.resource',
+    'mcp.prompt',
+    # MCP transport dependencies
+    'sse_starlette',
+    'sse_starlette.sse',
+    'httpx_sse',
+    'pyjwt',
+    'pydantic_settings',
+    'anyio',
+    'anyio.streams',
+    'anyio.streams.stapled',
 ]
 
-# Collect mobi and ebooklib modules/data for MOBI/EPUB support in frozen build
-for _pkg in ['mobi', 'ebooklib']:
+# Collect mobi, ebooklib, and mcp modules/data for MOBI/EPUB support and MCP server in frozen build
+for _pkg in ['mobi', 'ebooklib', 'mcp']:
     try:
         _pkg_datas, _, _pkg_hiddenimports = collect_all(_pkg)
         datas += _pkg_datas

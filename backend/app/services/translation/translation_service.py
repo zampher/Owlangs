@@ -1259,8 +1259,19 @@ class TranslationService:
                         f"[TRANSLATION-SERVICE] Task {task_id}: Using inherited source_chunks_cache and chunk_to_segment_map from convert task; skipping markdown preview preparation (avoids decoding binary original file)"
                     )
                 else:
-                    logger.info(LogModule.EXTRACT, f"[TRANSLATION-SERVICE] Task {task_id}: Preparing markdown preview from document_original before translation to ensure all segments (including images) are available")
-                    self._prepare_markdown_based_preview(task_id, workflow, payload, task_state, original_filename, is_format_conversion=False)
+                    # Single-phase mode (no convert_task_id): PDF files are still raw binary
+                    # and haven't been converted by MinerU yet. Skip preview preparation —
+                    # the full pipeline (conversion + translation) runs inside execute_translate.
+                    import os
+                    _is_binary_format = os.path.splitext(original_filename)[1].lower() in ('.pdf',)
+                    if _is_binary_format:
+                        logger.info(
+                            LogModule.EXTRACT,
+                            f"[TRANSLATION-SERVICE] Task {task_id}: Skipping markdown preview preparation for {original_filename} in single-phase mode (document is still raw binary, conversion happens inside execute_translate)"
+                        )
+                    else:
+                        logger.info(LogModule.EXTRACT, f"[TRANSLATION-SERVICE] Task {task_id}: Preparing markdown preview from document_original before translation to ensure all segments (including images) are available")
+                        self._prepare_markdown_based_preview(task_id, workflow, payload, task_state, original_filename, is_format_conversion=False)
 
             # Convert toolbar: copy source to target on translate task only (no LLM, no convert-task exclude-all)
             copy_source_only = bool(getattr(payload, "copy_source_only", False))
@@ -2145,7 +2156,7 @@ class TranslationService:
             if is_pdf_file and disable_markdown_fallback:
                 logger.info(LogModule.EXTRACT, f"[PREVIEW] Task {task_id}: Using layout-based preview (markdown fallback disabled)")
                 self.task_manager.add_log(task_id, "info", "PDF markdown fallback is disabled. Using layout-based preview.")
-                
+
                 layout_doc = task_state.get("layout_document")
                 if layout_doc is None:
                     # Try to load from layout_source_zip
@@ -2159,12 +2170,16 @@ class TranslationService:
                                 logger.info(LogModule.EXTRACT, f"[PREVIEW] Task {task_id}: Loaded layout_document from layout_source_zip")
                         except Exception as load_error:
                             logger.warning(LogModule.EXTRACT, f"[PREVIEW] Task {task_id}: Failed to load layout_document: {load_error}")
-                
+
                 if layout_doc:
                     self.source_preview_service.prepare_layout_preview_from_layout(
                         task_id, layout_doc, payload, task_state, reason="markdown_fallback_disabled"
                     )
-                return
+                    return
+
+                # No layout available (e.g. single-phase immediate/queued mode without Extract phase).
+                # Fall through to markdown-based preview generation to populate source_chunks_cache.
+                logger.info(LogModule.EXTRACT, f"[PREVIEW] Task {task_id}: No layout document available, falling back to markdown-based preview")
             
             # Generate preview from markdown content
             try:

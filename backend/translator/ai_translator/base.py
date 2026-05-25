@@ -51,9 +51,16 @@ class AiTranslator(Translator[T]):
                 if name in ['debug', 'info', 'warning', 'error', 'critical', 'success', 'trace']:
                     def wrapper(*args, **kwargs):
                         # UnifiedLogger uses (module, message). Pass (LogModule.TRANS, *args) for legacy single-arg calls.
-                        if 'module' not in kwargs and not (args and isinstance(args[0], LogModule)):
-                            return method(LogModule.TRANS, *args, **kwargs)
-                        return method(*args, **kwargs)
+                        # If args already contain a module (2 args) but isinstance check fails due to import path issues,
+                        # still pass through — don't double-prepend.
+                        if 'module' in kwargs:
+                            return method(**kwargs)
+                        if len(args) >= 2:
+                            # Already has (module, message) — pass through
+                            return method(*args, **kwargs)
+                        if args and isinstance(args[0], LogModule):
+                            return method(*args, **kwargs)
+                        return method(LogModule.TRANS, *args, **kwargs)
                     return wrapper
                 return method
         
