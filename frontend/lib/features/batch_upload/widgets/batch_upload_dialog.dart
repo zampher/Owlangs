@@ -84,6 +84,8 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
           _pickFolder();
         } else if (widget.initialSource == 'zip') {
           _pickZip();
+        } else if (widget.initialSource == 'single') {
+          _pickSingleFile();
         }
       });
     }
@@ -184,6 +186,42 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
     );
     if (result == null || result.files.isEmpty || !mounted) return;
     _scanZip(result.files.first.bytes!);
+  }
+
+  Future<void> _pickSingleFile() async {
+    final l10n = AppLocalizations.of(context)!;
+    final result = await FilePickerHelper.pickFiles(
+      dialogTitle: l10n.batchUploadSelectSingleFile,
+    );
+    if (result == null || result.files.isEmpty || !mounted) return;
+
+    final pf = result.files.first;
+    final ext = pf.name.split('.').last.toLowerCase();
+    final formats = FileFormatService().getAllFormats();
+    final legacyNames = <String>[];
+
+    if (FileFormatService().isLegacyFormat(ext)) {
+      legacyNames.add(pf.name);
+      _onFilesDiscovered([], legacyNames);
+      return;
+    }
+    if (!formats.contains(ext)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${pf.name}: ${l10n.batchUploadNoSupportedFiles}')),
+      );
+      return;
+    }
+
+    final files = <DiscoveredFile>[
+      DiscoveredFile(
+        fileName: pf.name,
+        fileSizeBytes: pf.size,
+        fileBytes: pf.bytes,
+        isSelected: true,
+      ),
+    ];
+    _onFilesDiscovered(files, legacyNames);
   }
 
   void _scanZip(List<int> zipBytes) {

@@ -441,9 +441,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               title: Text(l10n.batchUploadSelectSingleFile),
               onTap: () {
                 Navigator.of(ctx).pop();
-                final int ts = DateTime.now().millisecondsSinceEpoch;
                 context.push(
-                  '${AppRouter.translationRoute}?execution_mode=queued&auto_pick_file=true&t=$ts',
+                  '${AppRouter.batchUploadRoute}?source=single',
                 );
               },
             ),

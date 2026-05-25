@@ -1219,7 +1219,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                                     ),
                                     const SizedBox(width: 2),
                                     Text(
-                                      'Fix formula',
+                                      'Fix',
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w500,
