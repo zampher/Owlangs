@@ -996,6 +996,9 @@ class AppLocalizationsEs extends AppLocalizations {
       'Elija un archivo ZIP con archivos para traducir';
 
   @override
+  String get batchUploadSelectSingleFile => 'Seleccionar archivo';
+
+  @override
   String batchUploadFilesFound(Object count) {
     return '$count archivos compatibles encontrados';
   }

@@ -289,6 +289,7 @@
   "batchUploadFolderDescription": "번역할 파일이 포함된 폴더 선택",
   "batchUploadSelectZip": "ZIP 아카이브 선택",
   "batchUploadZipDescription": "번역할 파일이 포함된 ZIP 아카이브 선택",
+  "batchUploadSelectSingleFile": "파일 선택",
   "batchUploadFilesFound": "지원되는 파일 {count}개 발견",
   "@batchUploadFilesFound": {
     "placeholders": {

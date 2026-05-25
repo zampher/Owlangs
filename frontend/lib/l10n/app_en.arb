@@ -306,6 +306,7 @@
   "batchUploadFolderDescription": "Pick a folder containing files to translate",
   "batchUploadSelectZip": "Select ZIP archive",
   "batchUploadZipDescription": "Pick a ZIP archive containing files to translate",
+  "batchUploadSelectSingleFile": "Select file",
   "batchUploadFilesFound": "{count} supported files found",
   "@batchUploadFilesFound": {
     "placeholders": {

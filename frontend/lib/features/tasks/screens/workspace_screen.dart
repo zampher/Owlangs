@@ -427,8 +427,54 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     );
   }
 
-  void _showBatchUploadDialog(BuildContext context) {
-    context.push(AppRouter.batchUploadRoute);
+  void _showSourceTypeDialog(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(l10n.translationQueueNewQueuedTask),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(Icons.upload_file),
+              title: Text(l10n.batchUploadSelectSingleFile),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                final int ts = DateTime.now().millisecondsSinceEpoch;
+                context.push(
+                  '${AppRouter.translationRoute}?execution_mode=queued&auto_pick_file=true&t=$ts',
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_open),
+              title: Text(l10n.batchUploadSelectFolder),
+              subtitle: Text(l10n.batchUploadFolderDescription),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                context.push('${AppRouter.batchUploadRoute}?source=folder');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_zip_outlined),
+              title: Text(l10n.batchUploadSelectZip),
+              subtitle: Text(l10n.batchUploadZipDescription),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                context.push('${AppRouter.batchUploadRoute}?source=zip');
+              },
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(l10n.commonCancel),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _createFlowWithProtection(TaskFlow flowType) async {
@@ -991,21 +1037,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 label: l10n.translationQueueNewQueuedTask,
                 width: 92,
                 maxLabelLines: 2,
-                onPressed: () {
-                  final int ts = DateTime.now().millisecondsSinceEpoch;
-                  context.push(
-                    '${AppRouter.translationRoute}?execution_mode=queued&t=$ts',
-                  );
-                },
-              ),
-              const SizedBox(width: 4),
-              // Batch upload: folder or ZIP archive
-              _buildActionButton(
-                icon: Icons.folder_open,
-                label: l10n.homeNavBatchUpload,
-                width: 92,
-                maxLabelLines: 2,
-                onPressed: () => _showBatchUploadDialog(context),
+                onPressed: () => _showSourceTypeDialog(context),
               ),
               const SizedBox(width: 4),
               // Translation queue (list + poll + download)

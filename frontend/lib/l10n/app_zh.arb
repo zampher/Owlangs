@@ -289,6 +289,7 @@
   "batchUploadFolderDescription": "选择包含待翻译文件的文件夹",
   "batchUploadSelectZip": "选择 ZIP 压缩包",
   "batchUploadZipDescription": "选择包含待翻译文件的 ZIP 压缩包",
+  "batchUploadSelectSingleFile": "选择文件",
   "batchUploadFilesFound": "找到 {count} 个支持的文件",
   "@batchUploadFilesFound": {
     "placeholders": {

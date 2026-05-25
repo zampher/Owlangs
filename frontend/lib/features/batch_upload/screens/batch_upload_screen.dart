@@ -13,7 +13,10 @@ import '../widgets/batch_upload_dialog.dart'
 /// Preserves the same horizontal layout (toolbar top, settings left, file list
 /// right) but shown as a standalone route instead of a dialog overlay.
 class BatchUploadScreen extends StatelessWidget {
-  const BatchUploadScreen({super.key});
+  const BatchUploadScreen({super.key, this.initialSource});
+
+  /// If 'folder' or 'zip', auto-trigger the corresponding source picker.
+  final String? initialSource;
 
   @override
   Widget build(BuildContext context) {
@@ -26,8 +29,8 @@ class BatchUploadScreen extends StatelessWidget {
           onPressed: () => context.pop(),
         ),
       ),
-      body: const SafeArea(
-        child: BatchUploadPageBody(showAppBar: true),
+      body: SafeArea(
+        child: BatchUploadPageBody(showAppBar: true, initialSource: initialSource),
       ),
     );
   }

@@ -1787,6 +1787,12 @@ abstract class AppLocalizations {
   /// **'Pick a ZIP archive containing files to translate'**
   String get batchUploadZipDescription;
 
+  /// No description provided for @batchUploadSelectSingleFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Select file'**
+  String get batchUploadSelectSingleFile;
+
   /// No description provided for @batchUploadFilesFound.
   ///
   /// In en, this message translates to:

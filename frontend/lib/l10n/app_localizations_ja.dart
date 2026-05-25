@@ -941,6 +941,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get batchUploadZipDescription => '翻訳するファイルが入ったZIPアーカイブを選択';
 
   @override
+  String get batchUploadSelectSingleFile => 'ファイルを選択';
+
+  @override
   String batchUploadFilesFound(Object count) {
     return '$count 個のサポートされているファイルが見つかりました';
   }

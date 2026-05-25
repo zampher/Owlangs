@@ -975,6 +975,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Pick a ZIP archive containing files to translate';
 
   @override
+  String get batchUploadSelectSingleFile => 'Select file';
+
+  @override
   String batchUploadFilesFound(Object count) {
     return '$count supported files found';
   }

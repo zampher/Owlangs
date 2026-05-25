@@ -941,6 +941,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get batchUploadZipDescription => '번역할 파일이 포함된 ZIP 아카이브 선택';
 
   @override
+  String get batchUploadSelectSingleFile => '파일 선택';
+
+  @override
   String batchUploadFilesFound(Object count) {
     return '지원되는 파일 $count개 발견';
   }

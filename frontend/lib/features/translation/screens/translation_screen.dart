@@ -72,6 +72,7 @@ class TranslationScreen extends ConsumerStatefulWidget {
     this.reeditWorkflowType,
     this.reeditFileName,
     this.viewMode,
+    this.autoPickFile = false,
   });
   final String? flowId;
 
@@ -90,6 +91,9 @@ class TranslationScreen extends ConsumerStatefulWidget {
 
   /// View mode: 'clean' to start in clean mode, null for default labeled mode.
   final String? viewMode;
+
+  /// If true, auto-trigger the file picker on startup (desktop only).
+  final bool autoPickFile;
 
   @override
   ConsumerState<TranslationScreen> createState() => _TranslationScreenState();
@@ -182,6 +186,16 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _initStandaloneQueuedReeditSession();
+      });
+    }
+    // Auto-pick file: programmatically open the file picker on startup
+    if (widget.autoPickFile) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _isReeditMode) return;
+        final notifier = widget.flowId != null
+            ? ref.read(translationStateProviderFamily(widget.flowId!).notifier)
+            : ref.read(translationStateProvider.notifier);
+        _pickFile(notifier);
       });
     }
   }

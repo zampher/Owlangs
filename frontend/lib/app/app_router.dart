@@ -146,6 +146,8 @@ class AppRouter {
                   state.uri.queryParameters['reedit_file_name'];
               final String? viewMode =
                   state.uri.queryParameters['view_mode'];
+              final bool autoPickFile =
+                  state.uri.queryParameters['auto_pick_file'] == 'true';
 
               return TranslationScreen(
                 executionMode: mode,
@@ -153,6 +155,7 @@ class AppRouter {
                 reeditWorkflowType: reeditWorkflowType,
                 reeditFileName: reeditFileName,
                 viewMode: viewMode,
+                autoPickFile: autoPickFile,
               );
             },
           ),
@@ -168,8 +171,11 @@ class AppRouter {
           GoRoute(
             path: batchUploadRoute,
             name: 'batch_upload',
-            builder: (BuildContext context, GoRouterState state) =>
-                const BatchUploadScreen(),
+            builder: (BuildContext context, GoRouterState state) {
+              final String? source =
+                  state.uri.queryParameters['source'];
+              return BatchUploadScreen(initialSource: source);
+            },
           ),
 
           // Anonymization Route

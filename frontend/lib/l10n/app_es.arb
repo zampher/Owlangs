@@ -300,6 +300,7 @@
   "batchUploadFolderDescription": "Elija una carpeta con archivos para traducir",
   "batchUploadSelectZip": "Seleccionar archivo ZIP",
   "batchUploadZipDescription": "Elija un archivo ZIP con archivos para traducir",
+  "batchUploadSelectSingleFile": "Seleccionar archivo",
   "batchUploadFilesFound": "{count} archivos compatibles encontrados",
   "@batchUploadFilesFound": {
     "placeholders": {

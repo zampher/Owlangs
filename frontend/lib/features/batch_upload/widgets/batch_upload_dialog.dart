@@ -27,29 +27,23 @@ import '../services/batch_submission_service.dart';
 import '../utils/zip_filename_utils.dart';
 import 'batch_quick_settings_panel.dart';
 
-/// Reusable body for batch file upload — used by both [BatchUploadDialog]
-/// and [BatchUploadScreen].
+/// Reusable body for batch file upload — used by [BatchUploadScreen].
 ///
 /// Three phases:
 ///   1. Source selection (folder or ZIP)
 ///   2. File review with checkboxes
 ///   3. Submission progress
 class BatchUploadPageBody extends ConsumerStatefulWidget {
-  const BatchUploadPageBody({super.key, this.showAppBar = false});
+  const BatchUploadPageBody({super.key, this.showAppBar = false, this.initialSource});
 
   /// When true, the title bar is omitted (Scaffold AppBar provides it).
   final bool showAppBar;
 
+  /// If 'folder' or 'zip', auto-trigger the corresponding source picker on startup.
+  final String? initialSource;
+
   @override
   ConsumerState<BatchUploadPageBody> createState() => _BatchUploadPageBodyState();
-}
-
-/// Dialog wrapper for [BatchUploadPageBody].
-class BatchUploadDialog extends ConsumerStatefulWidget {
-  const BatchUploadDialog({super.key});
-
-  @override
-  ConsumerState<BatchUploadDialog> createState() => _BatchUploadDialogState();
 }
 
 enum _DialogPhase { chooseSource, reviewFiles, submitting, done }
@@ -77,6 +71,23 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
   int _succeeded = 0;
   int _failed = 0;
   List<FileSubmissionStatus> _statuses = [];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialSource != null) {
+      // Skip the source-selection phase entirely when auto-picking
+      _phase = _DialogPhase.reviewFiles;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (widget.initialSource == 'folder') {
+          _pickFolder();
+        } else if (widget.initialSource == 'zip') {
+          _pickZip();
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -1004,21 +1015,6 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
       default:
         return Icons.insert_drive_file;
     }
-  }
-}
-
-// ── Dialog wrapper state ────────────────────────────────────────────
-
-class _BatchUploadDialogState extends ConsumerState<BatchUploadDialog> {
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 760),
-        child: const BatchUploadPageBody(showAppBar: false),
-      ),
-    );
   }
 }
 

@@ -931,6 +931,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batchUploadZipDescription => '选择包含待翻译文件的 ZIP 压缩包';
 
   @override
+  String get batchUploadSelectSingleFile => '选择文件';
+
+  @override
   String batchUploadFilesFound(Object count) {
     return '找到 $count 个支持的文件';
   }
