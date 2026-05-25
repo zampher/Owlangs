@@ -79,6 +79,32 @@ class FilePickerHelper {
     );
   }
 
+  /// Pick a directory (desktop only).
+  ///
+  /// Returns the absolute path of the selected directory, or ``null`` if the
+  /// user cancelled the dialog.  Returns ``null`` on web where directory
+  /// picking is not supported by the [file_picker] plugin.
+  static Future<String?> pickDirectory({String? dialogTitle}) async {
+    if (kIsWeb) return null;
+    return FilePicker.platform.getDirectoryPath(dialogTitle: dialogTitle);
+  }
+
+  /// Pick a directory on web and return its files.
+  ///
+  /// Uses the HTML ``webkitdirectory`` attribute to let the user select a
+  /// folder.  Each returned [PlatformFile] has its [PlatformFile.name] set to
+  /// the path relative to the selected directory root.
+  ///
+  /// Returns ``null`` when cancelled, or on non-web platforms.
+  static Future<List<PlatformFile>?> pickDirectoryFiles({
+    String? dialogTitle,
+  }) async {
+    if (kIsWeb) {
+      return web.webPickDirectoryFiles(dialogTitle: dialogTitle);
+    }
+    return null;
+  }
+
   /// Check if running on Web platform
   static bool get isWeb => kIsWeb;
 

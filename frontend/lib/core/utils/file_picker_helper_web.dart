@@ -125,6 +125,98 @@ Future<FilePickerResult?> webPickFiles({
   return result;
 }
 
+/// Picks a directory on web via ``<input type="file" webkitdirectory>``.
+///
+/// Returns the list of files with their [PlatformFile.name] set to the
+/// path relative to the selected directory (e.g. ``"subdir/file.docx"``),
+/// or ``null`` if the user cancelled.
+Future<List<PlatformFile>?> webPickDirectoryFiles({
+  String? dialogTitle,
+}) async {
+  final completer = Completer<List<PlatformFile>?>();
+  bool resolved = false;
+
+  final input = document.createElement('input') as InputElement
+    ..type = 'file'
+    ..setAttribute('webkitdirectory', '')
+    ..style.display = 'none';
+
+  void resolveResult(List<PlatformFile>? result) {
+    if (resolved) return;
+    resolved = true;
+    if (input.parentNode != null) input.remove();
+    completer.complete(result);
+  }
+
+  input.addEventListener('change', (e) {
+    final files = input.files;
+    if (files == null || files.isEmpty) {
+      resolveResult(null);
+      return;
+    }
+
+    final pickedFiles = <PlatformFile>[];
+    int remaining = files.length;
+
+    for (final file in files) {
+      final reader = FileReader();
+
+      reader.addEventListener('loadend', (_) {
+        // Use webkitRelativePath (via dynamic access — not typed in dart:html)
+        // to preserve directory structure when the user picks a folder.
+        // Wrap in try-catch for browsers that don't support webkitRelativePath.
+        String relPath;
+        try {
+          final dynamic dynFile = file;
+          relPath = (dynFile.webkitRelativePath is String &&
+                  (dynFile.webkitRelativePath as String).isNotEmpty)
+              ? dynFile.webkitRelativePath as String
+              : file.name;
+        } catch (_) {
+          relPath = file.name;
+        }
+        pickedFiles.add(PlatformFile(
+          name: relPath,
+          size: file.size,
+          bytes: reader.result is Uint8List ? reader.result as Uint8List : null,
+        ));
+        remaining--;
+        if (remaining == 0) {
+          resolveResult(List.unmodifiable(pickedFiles));
+        }
+      });
+
+      reader.addEventListener('error', (_) {
+        remaining--;
+        if (remaining == 0) {
+          resolveResult(
+            pickedFiles.isNotEmpty ? List.unmodifiable(pickedFiles) : null,
+          );
+        }
+      });
+
+      reader.readAsArrayBuffer(file);
+    }
+  });
+
+  input.addEventListener('cancel', (_) => resolveResult(null));
+
+  final timeout = Timer(const Duration(minutes: 5), () {
+    if (kDebugMode) {
+      print('[FilePickerWeb] Directory picker timeout after 5 minutes');
+    }
+    resolveResult(null);
+  });
+
+  document.body!.append(input);
+  await Future<void>.microtask(() {});
+  input.click();
+
+  final result = await completer.future;
+  timeout.cancel();
+  return result;
+}
+
 String _acceptFromType(FileType type) {
   switch (type) {
     case FileType.any:

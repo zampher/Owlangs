@@ -20,11 +20,18 @@ class FileFormatService {
     'srt',
   ];
 
+  // Legacy formats that are not directly supported (need conversion).
+  // Users should convert .doc → .docx, .ppt → .pptx, .xls → .xlsx first.
+  static const List<String> _legacyFormats = <String>[
+    'doc',
+    'ppt',
+    'xls',
+  ];
+
   // Pro-only formats (EPUB, MOBI, and others); require activation to use
   static const List<String> _donorFormats = <String>[
     'pptx',
     'xlsx',
-    'xls',
     'csv',
     'epub',
     'mobi',
@@ -37,8 +44,17 @@ class FileFormatService {
     'jpeg',
   ];
 
-  /// Get all supported formats (free + donor)
+  /// Get all supported formats (free + donor, excluding legacy formats)
   List<String> getAllFormats() => <String>[..._freeFormats, ..._donorFormats];
+
+  /// Get legacy formats that require conversion before submission.
+  List<String> getLegacyFormats() => List<String>.unmodifiable(_legacyFormats);
+
+  /// Check if a file extension is a legacy format that needs conversion.
+  bool isLegacyFormat(String extension) {
+    final normalizedExt = extension.toLowerCase().replaceAll('.', '');
+    return _legacyFormats.contains(normalizedExt);
+  }
 
   /// Get formats available to free users
   List<String> getFreeFormats() => List<String>.unmodifiable(_freeFormats);
@@ -111,5 +127,48 @@ class FileFormatService {
   String getSupportedFormatsDisplayString() {
     final names = getAllFormats().map(getFormatDisplayName).toSet();
     return names.join(', ');
+  }
+
+  /// Infer the backend workflow type from a file extension.
+  ///
+  /// Returns one of: ``markdown_based``, ``txt``, ``json``, ``xlsx``,
+  /// ``srt``, ``epub``, ``mobi``, ``html``, ``pptx``, ``docx``, ``qt_ts``.
+  /// Falls back to ``txt`` for unknown extensions.
+  static String inferWorkflowType(String extension) {
+    final ext = extension.toLowerCase().replaceAll('.', '');
+    switch (ext) {
+      case 'pdf':
+      case 'md':
+      case 'png':
+      case 'jpg':
+      case 'jpeg':
+        return 'markdown_based';
+      case 'docx':
+        return 'docx';
+      case 'pptx':
+        return 'pptx';
+      case 'txt':
+        return 'txt';
+      case 'json':
+      case 'arb':
+        return 'json';
+      case 'xlsx':
+      case 'csv':
+        return 'xlsx';
+      case 'srt':
+        return 'srt';
+      case 'epub':
+        return 'epub';
+      case 'mobi':
+      case 'azw':
+        return 'mobi';
+      case 'html':
+      case 'htm':
+        return 'html';
+      case 'ts':
+        return 'qt_ts';
+      default:
+        return 'txt';
+    }
   }
 }

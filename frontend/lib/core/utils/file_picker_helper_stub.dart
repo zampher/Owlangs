@@ -26,3 +26,8 @@ Future<FilePickerResult?> webPickFiles({
     lockParentWindow: lockParentWindow,
   );
 }
+
+/// Stub — directory file picking is not supported outside web.
+Future<List<PlatformFile>?> webPickDirectoryFiles({String? dialogTitle}) async {
+  return null;
+}

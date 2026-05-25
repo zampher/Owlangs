@@ -266,6 +266,7 @@
   "quickSettingsStyleAcademic": "Academic",
   "quickSettingsStyleBusiness": "Business",
   "quickSettingsStyleTechnical": "Technical",
+  "quickSettingsStyleNone": "None",
   "quickSettingsTaskNoteLabel": "Task note (short instruction)",
   "quickSettingsTaskNoteHint": "e.g. Keep formulas unmodified; annotate proper nouns",
   "quickSettingsAdRegionF": "Region F: Bottom of Quick Settings\n(Medium Rectangle 300×250)",
@@ -296,6 +297,118 @@
   "homeNavSettings": "Settings",
   "homeNavDonateHelp": "Donate & Help",
   "homeNavHome": "Home",
+  "homeNavBatchUpload": "Batch upload",
+
+  "batchUploadTitle": "Batch file upload",
+  "batchUploadFormatConvert": "Format conversion",
+  "batchUploadSelectSourceHint": "Choose supported files to translate. Each file becomes a queued task.",
+  "batchUploadSelectFolder": "Select folder",
+  "batchUploadFolderDescription": "Pick a folder containing files to translate",
+  "batchUploadSelectZip": "Select ZIP archive",
+  "batchUploadZipDescription": "Pick a ZIP archive containing files to translate",
+  "batchUploadFilesFound": "{count} supported files found",
+  "@batchUploadFilesFound": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadSelectAll": "Select all",
+  "batchUploadDeselectAll": "Deselect all",
+  "batchUploadStartTranslation": "Start translation",
+  "batchUploadSubmitting": "Submitting files...",
+  "batchUploadProgress": "Submitted {completed} of {total} files",
+  "@batchUploadProgress": {
+    "placeholders": {
+      "completed": {},
+      "total": {}
+    }
+  },
+  "batchUploadCompleteTitle": "Batch complete",
+  "batchUploadComplete": "{success} succeeded, {failed} failed",
+  "@batchUploadComplete": {
+    "placeholders": {
+      "success": {},
+      "failed": {}
+    }
+  },
+  "batchUploadNoSupportedFiles": "No supported files found in this source",
+  "batchUploadSelectedCount": "{count} files selected",
+  "@batchUploadSelectedCount": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadLegacyFormatsFound": "{files} cannot be translated directly. Please convert .doc to .docx, .ppt to .pptx, .xls to .xlsx before submitting.",
+  "@batchUploadLegacyFormatsFound": {
+    "description": "Shown when legacy formats (.doc/.ppt/.xls) are found but no supported files",
+    "placeholders": {
+      "files": {}
+    }
+  },
+  "batchUploadLegacyFormatsSkipped": "{count} file(s) skipped — legacy format not directly supported. Please convert .doc to .docx, .ppt to .pptx, .xls to .xlsx and try again.",
+  "@batchUploadLegacyFormatsSkipped": {
+    "description": "Shown when legacy format files are skipped in batch upload",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadSettingsToggle": "Quick settings",
+  "batchUploadSaveDefaults": "Save as defaults",
+  "batchUploadTemperature": "Temperature: {value}",
+  "@batchUploadTemperature": {
+    "description": "Shows temperature value in batch upload settings",
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "batchUploadGlossaryHint": "Glossaries selected: {count}",
+  "@batchUploadGlossaryHint": {
+    "description": "Shows how many glossaries are selected",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadGlossaryNone": "No glossaries selected",
+  "batchUploadConfirmLangTitle": "Confirm Target Language",
+  "batchUploadConfirmLangMessage": "The target language is \"{lang}\". Do you want to continue?",
+  "@batchUploadConfirmLangMessage": {
+    "placeholders": {
+      "lang": {}
+    }
+  },
+  "batchUploadConvert": "Convert",
+  "batchUploadTranslate": "Translate",
+  "batchUploadFolderPickerTitle": "Select folder with files to translate",
+  "batchUploadZipPickerTitle": "Select ZIP archive containing files to translate",
+  "batchUploadScanFolderError": "Failed to scan folder: {error}",
+  "@batchUploadScanFolderError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "batchUploadReadZipError": "Failed to read ZIP archive: {error}",
+  "@batchUploadReadZipError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "batchUploadGlossarySection": "Glossary",
+  "batchUploadGlossaryMore": "+{count}",
+  "@batchUploadGlossaryMore": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadGlossaryLoadError": "Error: {error}",
+  "@batchUploadGlossaryLoadError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "batchUploadNoGlossaries": "No glossaries available",
+  "batchUploadMineru": "MinerU",
+  "batchUploadMineruLocal": "MinerU Local",
+  "commonClose": "Close",
   "translationQueueTitle": "Task queue",
   "translationQueueHint": "Tasks refresh automatically. Downloads appear when a task completes.",
   "translationQueueCancelExitHint": "For queued or running tasks, use Cancel task to stop work; after you confirm, you return to the home page.",

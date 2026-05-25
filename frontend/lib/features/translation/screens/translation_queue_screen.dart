@@ -153,7 +153,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
       if (!mounted) {
         return;
       }
-      context.go(AppRouter.homeRoute);
+      await _refresh();
     } catch (e) {
       if (mounted) {
         MessageService.showWarning(
@@ -647,6 +647,22 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                     ),
                                     const SizedBox(width: 8),
                                     _StatusBadge(status, progress, cs),
+                                    if (row['is_format_conversion'] == true)
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 4),
+                                        child: _TinyBadge(
+                                          label: l10n.translationQueueTaskTypeConversion,
+                                          cs: cs,
+                                        ),
+                                      )
+                                    else
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 4),
+                                        child: _TinyBadge(
+                                          label: l10n.translationQueueTaskTypeTranslation,
+                                          cs: cs,
+                                        ),
+                                      ),
                                     if (mode == 'queued')
                                       Padding(
                                         padding: const EdgeInsets.only(left: 4),

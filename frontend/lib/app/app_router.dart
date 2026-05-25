@@ -11,6 +11,7 @@ import '../features/auth/screens/login_screen.dart';
 // import '../features/home/screens/home_screen.dart';
 import '../features/translation/screens/translation_screen.dart';
 import '../features/translation/screens/translation_queue_screen.dart';
+import '../features/batch_upload/screens/batch_upload_screen.dart';
 import '../features/tasks/screens/workspace_screen.dart';
 import '../features/anonymization/screens/anonymize_screen.dart';
 import '../features/settings/screens/settings_screen.dart';
@@ -44,6 +45,7 @@ class AppRouter {
   static const String donateRoute = '/donate';
   static const String profileRoute = '/profile';
   static const String setupWizardRoute = '/setup-wizard';
+  static const String batchUploadRoute = '/batch-upload';
 
   // Lazy initialization to avoid blocking startup
   static GoRouter? _routerInstance;
@@ -160,6 +162,14 @@ class AppRouter {
             name: 'translation_queue',
             builder: (BuildContext context, GoRouterState state) =>
                 const TranslationQueueScreen(),
+          ),
+
+          // Batch Upload Route
+          GoRoute(
+            path: batchUploadRoute,
+            name: 'batch_upload',
+            builder: (BuildContext context, GoRouterState state) =>
+                const BatchUploadScreen(),
           ),
 
           // Anonymization Route

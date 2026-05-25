@@ -252,6 +252,7 @@
   "quickSettingsStyleAcademic": "学術的",
   "quickSettingsStyleBusiness": "ビジネス",
   "quickSettingsStyleTechnical": "技術的",
+  "quickSettingsStyleNone": "なし",
   "quickSettingsTaskNoteLabel": "タスク注記（短い指示）",
   "quickSettingsTaskNoteHint": "例: 数式は変更しない；固有名詞に注釈を付ける",
   "quickSettingsAdRegionF": "領域 F: クイック設定の下部\n(中長方形 300×250)",
@@ -279,6 +280,118 @@
   "homeNavSettings": "設定",
   "homeNavDonateHelp": "寄付＆ヘルプ",
   "homeNavHome": "ホーム",
+  "homeNavBatchUpload": "一括アップロード",
+
+  "batchUploadTitle": "一括ファイルアップロード",
+  "batchUploadFormatConvert": "形式変換",
+  "batchUploadSelectSourceHint": "翻訳するファイルを選択してください。各ファイルはキュー内のタスクになります。",
+  "batchUploadSelectFolder": "フォルダを選択",
+  "batchUploadFolderDescription": "翻訳するファイルが入ったフォルダを選択",
+  "batchUploadSelectZip": "ZIPアーカイブを選択",
+  "batchUploadZipDescription": "翻訳するファイルが入ったZIPアーカイブを選択",
+  "batchUploadFilesFound": "{count} 個のサポートされているファイルが見つかりました",
+  "@batchUploadFilesFound": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadSelectAll": "すべて選択",
+  "batchUploadDeselectAll": "すべて解除",
+  "batchUploadStartTranslation": "翻訳を開始",
+  "batchUploadSubmitting": "ファイルを送信中...",
+  "batchUploadProgress": "{completed}/{total} ファイル送信済み",
+  "@batchUploadProgress": {
+    "placeholders": {
+      "completed": {},
+      "total": {}
+    }
+  },
+  "batchUploadCompleteTitle": "一括完了",
+  "batchUploadComplete": "{success} 成功、{failed} 失敗",
+  "@batchUploadComplete": {
+    "placeholders": {
+      "success": {},
+      "failed": {}
+    }
+  },
+  "batchUploadNoSupportedFiles": "サポートされているファイルが見つかりません",
+  "batchUploadSelectedCount": "{count} ファイル選択済み",
+  "@batchUploadSelectedCount": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadLegacyFormatsFound": "{files} は直接翻訳できません。.doc を .docx、.ppt を .pptx、.xls を .xlsx に変換してから送信してください。",
+  "@batchUploadLegacyFormatsFound": {
+    "description": "Shown when legacy formats (.doc/.ppt/.xls) are found but no supported files",
+    "placeholders": {
+      "files": {}
+    }
+  },
+  "batchUploadLegacyFormatsSkipped": "{count} ファイルをスキップしました（レガシー形式は直接サポートされていません）。.doc→.docx、.ppt→.pptx、.xls→.xlsx に変換してから再試行してください。",
+  "@batchUploadLegacyFormatsSkipped": {
+    "description": "Shown when legacy format files are skipped in batch upload",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadSettingsToggle": "Quick settings",
+  "batchUploadSaveDefaults": "Save as defaults",
+  "batchUploadTemperature": "Temperature: {value}",
+  "@batchUploadTemperature": {
+    "description": "Shows temperature value in batch upload settings",
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "batchUploadGlossaryHint": "Glossaries selected: {count}",
+  "@batchUploadGlossaryHint": {
+    "description": "Shows how many glossaries are selected",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadGlossaryNone": "No glossaries selected",
+  "batchUploadConfirmLangTitle": "対象言語を確認",
+  "batchUploadConfirmLangMessage": "対象言語は「{lang}」です。続行しますか？",
+  "@batchUploadConfirmLangMessage": {
+    "placeholders": {
+      "lang": {}
+    }
+  },
+  "batchUploadConvert": "変換",
+  "batchUploadTranslate": "翻訳",
+  "batchUploadFolderPickerTitle": "翻訳するファイルが入ったフォルダを選択",
+  "batchUploadZipPickerTitle": "翻訳するファイルが入ったZIPアーカイブを選択",
+  "batchUploadScanFolderError": "フォルダのスキャンに失敗しました：{error}",
+  "@batchUploadScanFolderError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "batchUploadReadZipError": "ZIPアーカイブの読み取りに失敗しました：{error}",
+  "@batchUploadReadZipError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "batchUploadGlossarySection": "用語集",
+  "batchUploadGlossaryMore": "+{count}",
+  "@batchUploadGlossaryMore": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadGlossaryLoadError": "エラー：{error}",
+  "@batchUploadGlossaryLoadError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "batchUploadNoGlossaries": "利用可能な用語集がありません",
+  "batchUploadMineru": "MinerU",
+  "batchUploadMineruLocal": "MinerU ローカル",
+  "commonClose": "閉じる",
   "translationQueueTitle": "タスクキュー",
   "translationQueueHint": "タスクは自動更新されます。完了後にダウンロードできます。",
   "translationQueueCancelExitHint": "キュー待ちまたは実行中は「キャンセル」で停止できます。確認後にホームに戻ります。",

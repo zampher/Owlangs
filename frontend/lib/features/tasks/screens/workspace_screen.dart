@@ -427,6 +427,10 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     );
   }
 
+  void _showBatchUploadDialog(BuildContext context) {
+    context.push(AppRouter.batchUploadRoute);
+  }
+
   Future<void> _createFlowWithProtection(TaskFlow flowType) async {
     // Prevent duplicate flow creation
     if (_isCreatingFlow) {
@@ -993,6 +997,15 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                     '${AppRouter.translationRoute}?execution_mode=queued&t=$ts',
                   );
                 },
+              ),
+              const SizedBox(width: 4),
+              // Batch upload: folder or ZIP archive
+              _buildActionButton(
+                icon: Icons.folder_open,
+                label: l10n.homeNavBatchUpload,
+                width: 92,
+                maxLabelLines: 2,
+                onPressed: () => _showBatchUploadDialog(context),
               ),
               const SizedBox(width: 4),
               // Translation queue (list + poll + download)

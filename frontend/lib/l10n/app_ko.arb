@@ -252,6 +252,7 @@
   "quickSettingsStyleAcademic": "학술적",
   "quickSettingsStyleBusiness": "비즈니스",
   "quickSettingsStyleTechnical": "기술적",
+  "quickSettingsStyleNone": "없음",
   "quickSettingsTaskNoteLabel": "작업 참고 (짧은 지침)",
   "quickSettingsTaskNoteHint": "예: 수식 수정하지 않음; 고유 명사 주석 달기",
   "quickSettingsAdRegionF": "영역 F: 빠른 설정 하단\n(중간 직사각형 300×250)",
@@ -279,6 +280,118 @@
   "homeNavSettings": "설정",
   "homeNavDonateHelp": "기부 및 도움말",
   "homeNavHome": "홈",
+  "homeNavBatchUpload": "일괄 업로드",
+
+  "batchUploadTitle": "일괄 파일 업로드",
+  "batchUploadFormatConvert": "형식 변환",
+  "batchUploadSelectSourceHint": "번역할 지원 파일을 선택하세요. 각 파일은 대기열 작업이 됩니다.",
+  "batchUploadSelectFolder": "폴더 선택",
+  "batchUploadFolderDescription": "번역할 파일이 포함된 폴더 선택",
+  "batchUploadSelectZip": "ZIP 아카이브 선택",
+  "batchUploadZipDescription": "번역할 파일이 포함된 ZIP 아카이브 선택",
+  "batchUploadFilesFound": "지원되는 파일 {count}개 발견",
+  "@batchUploadFilesFound": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadSelectAll": "모두 선택",
+  "batchUploadDeselectAll": "모두 선택 해제",
+  "batchUploadStartTranslation": "번역 시작",
+  "batchUploadSubmitting": "파일 제출 중...",
+  "batchUploadProgress": "{completed}/{total} 파일 제출됨",
+  "@batchUploadProgress": {
+    "placeholders": {
+      "completed": {},
+      "total": {}
+    }
+  },
+  "batchUploadCompleteTitle": "일괄 완료",
+  "batchUploadComplete": "{success}개 성공, {failed}개 실패",
+  "@batchUploadComplete": {
+    "placeholders": {
+      "success": {},
+      "failed": {}
+    }
+  },
+  "batchUploadNoSupportedFiles": "지원되는 파일을 찾을 수 없음",
+  "batchUploadSelectedCount": "{count}개 파일 선택됨",
+  "@batchUploadSelectedCount": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadLegacyFormatsFound": "{files}을(를) 직접 번역할 수 없습니다. .doc를 .docx로, .ppt를 .pptx로, .xls를 .xlsx로 변환한 후 제출하세요.",
+  "@batchUploadLegacyFormatsFound": {
+    "description": "Shown when legacy formats (.doc/.ppt/.xls) are found but no supported files",
+    "placeholders": {
+      "files": {}
+    }
+  },
+  "batchUploadLegacyFormatsSkipped": "{count}개 파일이 건너뛰어졌습니다(레거시 형식은 직접 지원되지 않음). .doc→.docx, .ppt→.pptx, .xls→.xlsx로 변환한 후 다시 시도하세요.",
+  "@batchUploadLegacyFormatsSkipped": {
+    "description": "Shown when legacy format files are skipped in batch upload",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadSettingsToggle": "Quick settings",
+  "batchUploadSaveDefaults": "Save as defaults",
+  "batchUploadTemperature": "Temperature: {value}",
+  "@batchUploadTemperature": {
+    "description": "Shows temperature value in batch upload settings",
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "batchUploadGlossaryHint": "Glossaries selected: {count}",
+  "@batchUploadGlossaryHint": {
+    "description": "Shows how many glossaries are selected",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadGlossaryNone": "No glossaries selected",
+  "batchUploadConfirmLangTitle": "대상 언어 확인",
+  "batchUploadConfirmLangMessage": "대상 언어가 \"{lang}\"입니다. 계속하시겠습니까?",
+  "@batchUploadConfirmLangMessage": {
+    "placeholders": {
+      "lang": {}
+    }
+  },
+  "batchUploadConvert": "변환",
+  "batchUploadTranslate": "번역",
+  "batchUploadFolderPickerTitle": "번역할 파일이 포함된 폴더 선택",
+  "batchUploadZipPickerTitle": "번역할 파일이 포함된 ZIP 아카이브 선택",
+  "batchUploadScanFolderError": "폴더 스캔 실패：{error}",
+  "@batchUploadScanFolderError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "batchUploadReadZipError": "ZIP 아카이브 읽기 실패：{error}",
+  "@batchUploadReadZipError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "batchUploadGlossarySection": "용어집",
+  "batchUploadGlossaryMore": "+{count}",
+  "@batchUploadGlossaryMore": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadGlossaryLoadError": "오류：{error}",
+  "@batchUploadGlossaryLoadError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "batchUploadNoGlossaries": "사용 가능한 용어집이 없습니다",
+  "batchUploadMineru": "MinerU",
+  "batchUploadMineruLocal": "MinerU 로컬",
+  "commonClose": "닫기",
   "translationQueueTitle": "작업 대기열",
   "translationQueueHint": "작업이 자동으로 새로 고칩니다. 완료 후 다운로드할 수 있습니다.",
   "translationQueueCancelExitHint": "대기 중이거나 실행 중인 작업은 «작업 취소»로 중단할 수 있습니다. 확인 후 홈으로 돌아갑니다.",

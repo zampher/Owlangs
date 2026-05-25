@@ -1571,6 +1571,12 @@ abstract class AppLocalizations {
   /// **'Technical'**
   String get quickSettingsStyleTechnical;
 
+  /// No description provided for @quickSettingsStyleNone.
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get quickSettingsStyleNone;
+
   /// No description provided for @quickSettingsTaskNoteLabel.
   ///
   /// In en, this message translates to:
@@ -1732,6 +1738,246 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Home'**
   String get homeNavHome;
+
+  /// No description provided for @homeNavBatchUpload.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch upload'**
+  String get homeNavBatchUpload;
+
+  /// No description provided for @batchUploadTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch file upload'**
+  String get batchUploadTitle;
+
+  /// No description provided for @batchUploadFormatConvert.
+  ///
+  /// In en, this message translates to:
+  /// **'Format conversion'**
+  String get batchUploadFormatConvert;
+
+  /// No description provided for @batchUploadSelectSourceHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose supported files to translate. Each file becomes a queued task.'**
+  String get batchUploadSelectSourceHint;
+
+  /// No description provided for @batchUploadSelectFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Select folder'**
+  String get batchUploadSelectFolder;
+
+  /// No description provided for @batchUploadFolderDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a folder containing files to translate'**
+  String get batchUploadFolderDescription;
+
+  /// No description provided for @batchUploadSelectZip.
+  ///
+  /// In en, this message translates to:
+  /// **'Select ZIP archive'**
+  String get batchUploadSelectZip;
+
+  /// No description provided for @batchUploadZipDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a ZIP archive containing files to translate'**
+  String get batchUploadZipDescription;
+
+  /// No description provided for @batchUploadFilesFound.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} supported files found'**
+  String batchUploadFilesFound(Object count);
+
+  /// No description provided for @batchUploadSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get batchUploadSelectAll;
+
+  /// No description provided for @batchUploadDeselectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect all'**
+  String get batchUploadDeselectAll;
+
+  /// No description provided for @batchUploadStartTranslation.
+  ///
+  /// In en, this message translates to:
+  /// **'Start translation'**
+  String get batchUploadStartTranslation;
+
+  /// No description provided for @batchUploadSubmitting.
+  ///
+  /// In en, this message translates to:
+  /// **'Submitting files...'**
+  String get batchUploadSubmitting;
+
+  /// No description provided for @batchUploadProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Submitted {completed} of {total} files'**
+  String batchUploadProgress(Object completed, Object total);
+
+  /// No description provided for @batchUploadCompleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch complete'**
+  String get batchUploadCompleteTitle;
+
+  /// No description provided for @batchUploadComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'{success} succeeded, {failed} failed'**
+  String batchUploadComplete(Object success, Object failed);
+
+  /// No description provided for @batchUploadNoSupportedFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'No supported files found in this source'**
+  String get batchUploadNoSupportedFiles;
+
+  /// No description provided for @batchUploadSelectedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} files selected'**
+  String batchUploadSelectedCount(Object count);
+
+  /// Shown when legacy formats (.doc/.ppt/.xls) are found but no supported files
+  ///
+  /// In en, this message translates to:
+  /// **'{files} cannot be translated directly. Please convert .doc to .docx, .ppt to .pptx, .xls to .xlsx before submitting.'**
+  String batchUploadLegacyFormatsFound(Object files);
+
+  /// Shown when legacy format files are skipped in batch upload
+  ///
+  /// In en, this message translates to:
+  /// **'{count} file(s) skipped — legacy format not directly supported. Please convert .doc to .docx, .ppt to .pptx, .xls to .xlsx and try again.'**
+  String batchUploadLegacyFormatsSkipped(Object count);
+
+  /// No description provided for @batchUploadSettingsToggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick settings'**
+  String get batchUploadSettingsToggle;
+
+  /// No description provided for @batchUploadSaveDefaults.
+  ///
+  /// In en, this message translates to:
+  /// **'Save as defaults'**
+  String get batchUploadSaveDefaults;
+
+  /// Shows temperature value in batch upload settings
+  ///
+  /// In en, this message translates to:
+  /// **'Temperature: {value}'**
+  String batchUploadTemperature(Object value);
+
+  /// Shows how many glossaries are selected
+  ///
+  /// In en, this message translates to:
+  /// **'Glossaries selected: {count}'**
+  String batchUploadGlossaryHint(Object count);
+
+  /// No description provided for @batchUploadGlossaryNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No glossaries selected'**
+  String get batchUploadGlossaryNone;
+
+  /// No description provided for @batchUploadConfirmLangTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Target Language'**
+  String get batchUploadConfirmLangTitle;
+
+  /// No description provided for @batchUploadConfirmLangMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The target language is \"{lang}\". Do you want to continue?'**
+  String batchUploadConfirmLangMessage(Object lang);
+
+  /// No description provided for @batchUploadConvert.
+  ///
+  /// In en, this message translates to:
+  /// **'Convert'**
+  String get batchUploadConvert;
+
+  /// No description provided for @batchUploadTranslate.
+  ///
+  /// In en, this message translates to:
+  /// **'Translate'**
+  String get batchUploadTranslate;
+
+  /// No description provided for @batchUploadFolderPickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select folder with files to translate'**
+  String get batchUploadFolderPickerTitle;
+
+  /// No description provided for @batchUploadZipPickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select ZIP archive containing files to translate'**
+  String get batchUploadZipPickerTitle;
+
+  /// No description provided for @batchUploadScanFolderError.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to scan folder: {error}'**
+  String batchUploadScanFolderError(Object error);
+
+  /// No description provided for @batchUploadReadZipError.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to read ZIP archive: {error}'**
+  String batchUploadReadZipError(Object error);
+
+  /// No description provided for @batchUploadGlossarySection.
+  ///
+  /// In en, this message translates to:
+  /// **'Glossary'**
+  String get batchUploadGlossarySection;
+
+  /// No description provided for @batchUploadGlossaryMore.
+  ///
+  /// In en, this message translates to:
+  /// **'+{count}'**
+  String batchUploadGlossaryMore(Object count);
+
+  /// No description provided for @batchUploadGlossaryLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error: {error}'**
+  String batchUploadGlossaryLoadError(Object error);
+
+  /// No description provided for @batchUploadNoGlossaries.
+  ///
+  /// In en, this message translates to:
+  /// **'No glossaries available'**
+  String get batchUploadNoGlossaries;
+
+  /// No description provided for @batchUploadMineru.
+  ///
+  /// In en, this message translates to:
+  /// **'MinerU'**
+  String get batchUploadMineru;
+
+  /// No description provided for @batchUploadMineruLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'MinerU Local'**
+  String get batchUploadMineruLocal;
+
+  /// No description provided for @commonClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get commonClose;
 
   /// No description provided for @translationQueueTitle.
   ///

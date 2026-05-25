@@ -15,6 +15,9 @@ class File {
 
   Future<bool> exists() async => false;
   Future<List<int>> readAsBytes() async => <int>[];
+  FileStat statSync() {
+    throw UnsupportedError('File.statSync is not supported on web');
+  }
   Future<FileStat> stat() async {
     throw UnsupportedError('File.stat is not supported on web');
   }
@@ -43,6 +46,9 @@ class Directory {
   final String path;
   Stream<dynamic> list({bool recursive = false}) async* {
     throw UnsupportedError('Directory.list is not supported on web');
+  }
+  List<dynamic> listSync({bool recursive = false}) {
+    throw UnsupportedError('Directory.listSync is not supported on web');
   }
   Future<bool> exists() async => false;
 }

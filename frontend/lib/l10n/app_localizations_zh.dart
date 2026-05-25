@@ -36,7 +36,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsGeneralShowAdsTitle => '显示广告';
 
   @override
-  String get settingsGeneralShowAdsSubtitle => '在主页和流程中显示广告占位符（存储在 system.json 中）';
+  String get settingsGeneralShowAdsSubtitle =>
+      '在主页和流程中显示广告占位符（存储在 system.json 中）';
 
   @override
   String get settingsGeneralClearStatsButton => '清除统计数据';
@@ -45,7 +46,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsGeneralClearStatsConfirmTitle => '清除统计数据？';
 
   @override
-  String get settingsGeneralClearStatsConfirmMessage => '这将把主页上显示的文档数和页数重置为 0。此操作不可撤销。';
+  String get settingsGeneralClearStatsConfirmMessage =>
+      '这将把主页上显示的文档数和页数重置为 0。此操作不可撤销。';
 
   @override
   String get settingsGeneralClearStatsConfirmButton => '清除';
@@ -176,19 +178,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationToolbarRetryInProgress => '重试进行中...';
 
   @override
-  String get translationToolbarRetryTooltip => '重试所有失败或标记的片段。这将使用当前选定的 AI 平台重新翻译在翻译过程中失败的或手动标记为重试的片段。已排除和已清除的片段将被跳过。';
+  String get translationToolbarRetryTooltip =>
+      '重试所有失败或标记的片段。这将使用当前选定的 AI 平台重新翻译在翻译过程中失败的或手动标记为重试的片段。已排除和已清除的片段将被跳过。';
 
   @override
   String get translationToolbarRetry => '重试';
 
   @override
-  String get translationPersistQueueTooltip => '将当前导出结果写入服务器，更新任务队列中的下载，使其与当前译文一致。';
+  String get translationPersistQueueTooltip =>
+      '将当前导出结果写入服务器，更新任务队列中的下载，使其与当前译文一致。';
 
   @override
   String get translationPersistQueueButton => '保存更新到队列';
 
   @override
-  String get translationPersistQueueAlreadySyncedTooltip => '当前已与任务队列快照一致，无需重复保存。';
+  String get translationPersistQueueAlreadySyncedTooltip =>
+      '当前已与任务队列快照一致，无需重复保存。';
 
   @override
   String get translationPersistQueueSuccess => '已保存最新导出，任务队列将使用此版本。';
@@ -202,7 +207,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationCloseTranslateTabTitle => '任务队列中的结果可能仍非最终版本';
 
   @override
-  String get translationCloseTranslateTabMessage => '您在此修改的译文尚未保存到任务队列快照。若现在关闭而不保存，在「任务队列」中下载的文件将不是您在此编辑后的最终版本。\n\n您可以选择先保存更新到队列再关闭，或仍要直接关闭本标签页（不保存到队列）。';
+  String get translationCloseTranslateTabMessage =>
+      '您在此修改的译文尚未保存到任务队列快照。若现在关闭而不保存，在「任务队列」中下载的文件将不是您在此编辑后的最终版本。\n\n您可以选择先保存更新到队列再关闭，或仍要直接关闭本标签页（不保存到队列）。';
 
   @override
   String get translationCloseTranslateTabStay => '留在本页';
@@ -217,7 +223,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationCloseTranslateTabKeepTitle => '保留任务到队列？';
 
   @override
-  String get translationCloseTranslateTabKeepMessage => '翻译任务已完成。是否保留在任务队列中，以便以后查看和编辑？';
+  String get translationCloseTranslateTabKeepMessage =>
+      '翻译任务已完成。是否保留在任务队列中，以便以后查看和编辑？';
 
   @override
   String get translationCloseTranslateTabKeepInQueue => '保留在队列';
@@ -264,7 +271,8 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String translationStatsSuccessFailed(Object fail, Object success, Object total) {
+  String translationStatsSuccessFailed(
+      Object fail, Object success, Object total) {
     return '成功：$success/$total，失败：$fail/$total';
   }
 
@@ -550,7 +558,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationDialogMixedLangOption2Title => '保持代码和技术术语不变';
 
   @override
-  String get translationDialogMixedLangOption2Subtitle => '保持代码块、技术术语、函数名及其他语言的文本不变';
+  String get translationDialogMixedLangOption2Subtitle =>
+      '保持代码块、技术术语、函数名及其他语言的文本不变';
 
   @override
   String get translationDialogMixedLangCancel => '取消';
@@ -633,7 +642,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationDialogSwitchToTextBody => '切换到文本模式将清除当前的文件选择。是否继续？';
 
   @override
-  String get translationSnackAllSegmentsExcludedSkipped => '所有片段被排除，将跳过翻译，您可以通过导出，进行格式转换。';
+  String get translationSnackAllSegmentsExcludedSkipped =>
+      '所有片段被排除，将跳过翻译，您可以通过导出，进行格式转换。';
 
   @override
   String get translationDialogCancelButton => '取消';
@@ -645,7 +655,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationNoLlmAvailableTitle => '暂无可用 LLM 平台';
 
   @override
-  String get translationNoLlmAvailableMessage => '当前没有已配置且可用的 LLM 平台，无法进行翻译。如需翻译，请先到设置中配置 LLM 的 API Key；若仅需格式转换，可继续。';
+  String get translationNoLlmAvailableMessage =>
+      '当前没有已配置且可用的 LLM 平台，无法进行翻译。如需翻译，请先到设置中配置 LLM 的 API Key；若仅需格式转换，可继续。';
 
   @override
   String get translationNoLlmConfigureButton => '去配置 LLM';
@@ -657,12 +668,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get languageMatchWarningTitle => '语言匹配提示';
 
   @override
-  String languageMatchWarningGlossaryBody(Object detectedName, Object targetName) {
+  String languageMatchWarningGlossaryBody(
+      Object detectedName, Object targetName) {
     return '检测到的文档语言（$detectedName）与目标语言（$targetName）相同，目标语言可能选择有误。是否仍继续执行术语表检测？';
   }
 
   @override
-  String languageMatchWarningTranslationBody(Object detectedName, Object targetName) {
+  String languageMatchWarningTranslationBody(
+      Object detectedName, Object targetName) {
     return '检测到的文档语言（$detectedName）与目标语言（$targetName）相同，目标语言可能选择有误。是否仍继续翻译？';
   }
 
@@ -688,7 +701,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get quickSettingsSourceLanguage => '源语言 (MinerU OCR)';
 
   @override
-  String get quickSettingsLanguageSwitchDisabled => '翻译期间语言切换被禁用。请切换到提取标签页以更改目标语言。';
+  String get quickSettingsLanguageSwitchDisabled =>
+      '翻译期间语言切换被禁用。请切换到提取标签页以更改目标语言。';
 
   @override
   String get quickSettingsParsingPlatform => '解析平台';
@@ -751,19 +765,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get quickSettingsQtTsTranslateUnfinished => '翻译未完成的条目';
 
   @override
-  String get quickSettingsQtTsTranslateUnfinishedSubtitle => '翻译标记为未完成的消息 (type=\"unfinished\")';
+  String get quickSettingsQtTsTranslateUnfinishedSubtitle =>
+      '翻译标记为未完成的消息 (type=\"unfinished\")';
 
   @override
   String get quickSettingsQtTsTranslateVanished => '翻译已消失的条目';
 
   @override
-  String get quickSettingsQtTsTranslateVanishedSubtitle => '翻译标记为已消失的消息 (type=\"vanished\")';
+  String get quickSettingsQtTsTranslateVanishedSubtitle =>
+      '翻译标记为已消失的消息 (type=\"vanished\")';
 
   @override
   String get quickSettingsQtTsTranslateObsolete => '翻译过时的条目';
 
   @override
-  String get quickSettingsQtTsTranslateObsoleteSubtitle => '翻译标记为过时的消息 (type=\"obsolete\")';
+  String get quickSettingsQtTsTranslateObsoleteSubtitle =>
+      '翻译标记为过时的消息 (type=\"obsolete\")';
 
   @override
   String get quickSettingsPrompt => '提示';
@@ -799,6 +816,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get quickSettingsStyleTechnical => '技术';
 
   @override
+  String get quickSettingsStyleNone => '无';
+
+  @override
   String get quickSettingsTaskNoteLabel => '任务备注（简短指令）';
 
   @override
@@ -824,7 +844,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeIntro => '上传文档并使用 AI 驱动的准确性将其翻译成多种语言。\n';
 
   @override
-  String get homeHowItWorks => '工作原理\n翻译：导入 -> 解析文档 -> 术语表 -> 翻译 -> 导出\n文件格式转换：导入 -> 解析文档 -> 转换 -> 导出\n网页抓取：输入网址 -> 抓取网页 -> 解析内容 -> 提取正文 -> 翻译/导出';
+  String get homeHowItWorks =>
+      '工作原理\n翻译：导入 -> 解析文档 -> 术语表 -> 翻译 -> 导出\n文件格式转换：导入 -> 解析文档 -> 转换 -> 导出\n网页抓取：输入网址 -> 抓取网页 -> 解析内容 -> 提取正文 -> 翻译/导出';
 
   @override
   String get homeSnackDonorExpired => '您的注册码已过期。请重新注册以继续享受 Pro 版权益。';
@@ -886,19 +907,167 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeNavHome => '主页';
 
   @override
+  String get homeNavBatchUpload => '批量上传';
+
+  @override
+  String get batchUploadTitle => '批量文件上传';
+
+  @override
+  String get batchUploadFormatConvert => '格式转换';
+
+  @override
+  String get batchUploadSelectSourceHint => '选择要翻译的支持文件。每个文件将成为一个队列任务。';
+
+  @override
+  String get batchUploadSelectFolder => '选择文件夹';
+
+  @override
+  String get batchUploadFolderDescription => '选择包含待翻译文件的文件夹';
+
+  @override
+  String get batchUploadSelectZip => '选择 ZIP 压缩包';
+
+  @override
+  String get batchUploadZipDescription => '选择包含待翻译文件的 ZIP 压缩包';
+
+  @override
+  String batchUploadFilesFound(Object count) {
+    return '找到 $count 个支持的文件';
+  }
+
+  @override
+  String get batchUploadSelectAll => '全选';
+
+  @override
+  String get batchUploadDeselectAll => '取消全选';
+
+  @override
+  String get batchUploadStartTranslation => '开始翻译';
+
+  @override
+  String get batchUploadSubmitting => '正在提交文件...';
+
+  @override
+  String batchUploadProgress(Object completed, Object total) {
+    return '已提交 $completed / $total 个文件';
+  }
+
+  @override
+  String get batchUploadCompleteTitle => '批量完成';
+
+  @override
+  String batchUploadComplete(Object success, Object failed) {
+    return '$success 个成功，$failed 个失败';
+  }
+
+  @override
+  String get batchUploadNoSupportedFiles => '未找到支持的文件';
+
+  @override
+  String batchUploadSelectedCount(Object count) {
+    return '已选 $count 个文件';
+  }
+
+  @override
+  String batchUploadLegacyFormatsFound(Object files) {
+    return '$files 无法直接翻译。请先将 .doc 转换为 .docx，.ppt 转换为 .pptx，.xls 转换为 .xlsx 后再提交。';
+  }
+
+  @override
+  String batchUploadLegacyFormatsSkipped(Object count) {
+    return '已跳过 $count 个文件（旧版格式不支持直接翻译）。请将 .doc 转换为 .docx，.ppt 转换为 .pptx，.xls 转换为 .xlsx 后重试。';
+  }
+
+  @override
+  String get batchUploadSettingsToggle => '快速设置';
+
+  @override
+  String get batchUploadSaveDefaults => '保存为默认';
+
+  @override
+  String batchUploadTemperature(Object value) {
+    return '温度：$value';
+  }
+
+  @override
+  String batchUploadGlossaryHint(Object count) {
+    return '已选 $count 个术语表';
+  }
+
+  @override
+  String get batchUploadGlossaryNone => '未选择术语表';
+
+  @override
+  String get batchUploadConfirmLangTitle => '确认目标语言';
+
+  @override
+  String batchUploadConfirmLangMessage(Object lang) {
+    return '目标语言为“$lang”。是否继续？';
+  }
+
+  @override
+  String get batchUploadConvert => '转换';
+
+  @override
+  String get batchUploadTranslate => '翻译';
+
+  @override
+  String get batchUploadFolderPickerTitle => '选择包含待翻译文件的文件夹';
+
+  @override
+  String get batchUploadZipPickerTitle => '选择包含待翻译文件的 ZIP 压缩包';
+
+  @override
+  String batchUploadScanFolderError(Object error) {
+    return '扫描文件夹失败：$error';
+  }
+
+  @override
+  String batchUploadReadZipError(Object error) {
+    return '读取 ZIP 压缩包失败：$error';
+  }
+
+  @override
+  String get batchUploadGlossarySection => '术语表';
+
+  @override
+  String batchUploadGlossaryMore(Object count) {
+    return '+$count';
+  }
+
+  @override
+  String batchUploadGlossaryLoadError(Object error) {
+    return '错误：$error';
+  }
+
+  @override
+  String get batchUploadNoGlossaries => '暂无可用术语表';
+
+  @override
+  String get batchUploadMineru => 'MinerU';
+
+  @override
+  String get batchUploadMineruLocal => 'MinerU 本地';
+
+  @override
+  String get commonClose => '关闭';
+
+  @override
   String get translationQueueTitle => '任务队列';
 
   @override
   String get translationQueueHint => '列表会自动刷新，完成后可下载译文。';
 
   @override
-  String get translationQueueCancelExitHint => '排队中或进行中的任务可点击「取消任务」中止；确认后将返回首页。';
+  String get translationQueueCancelExitHint =>
+      '排队中或进行中的任务可点击「取消任务」中止；确认后将返回首页。';
 
   @override
   String get translationQueueCancelDialogTitle => '取消该翻译任务？';
 
   @override
-  String get translationQueueCancelDialogMessage => '排队中的任务将从队列移除；进行中的任务将被中止。确认后将返回首页。';
+  String get translationQueueCancelDialogMessage =>
+      '排队中的任务将从队列移除；进行中的任务将被中止。确认后将返回首页。';
 
   @override
   String get translationQueueCancelDialogKeep => '保留';
@@ -994,7 +1163,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationQueueClearAllTitle => '清空任务队列';
 
   @override
-  String get translationQueueClearAllMessage => '将取消排队与进行中的任务，移除全部内存中的任务，并删除磁盘上的队列快照。此操作不可撤销。';
+  String get translationQueueClearAllMessage =>
+      '将取消排队与进行中的任务，移除全部内存中的任务，并删除磁盘上的队列快照。此操作不可撤销。';
 
   @override
   String get translationQueueClearAllConfirm => '清空';
@@ -1122,19 +1292,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeEditionProStatusActivated => '已激活';
 
   @override
-  String get homeWelcomeDearPro => '沉浸式翻译：在界面内即时对照原文与译文。\n队列式翻译：将文档加入任务队列，按顺序完成整条流水线。';
+  String get homeWelcomeDearPro =>
+      '沉浸式翻译：在界面内即时对照原文与译文。\n队列式翻译：将文档加入任务队列，按顺序完成整条流水线。';
 
   @override
-  String get homeWelcomeDearStandard => '沉浸式翻译：在界面内即时对照原文与译文。\n队列式翻译：将文档加入任务队列，按顺序完成整条流水线。';
+  String get homeWelcomeDearStandard =>
+      '沉浸式翻译：在界面内即时对照原文与译文。\n队列式翻译：将文档加入任务队列，按顺序完成整条流水线。';
 
   @override
-  String get homeWelcomeDearProNoUser => '沉浸式翻译：在界面内即时对照原文与译文。\n队列式翻译：将文档加入任务队列，按顺序完成整条流水线。';
+  String get homeWelcomeDearProNoUser =>
+      '沉浸式翻译：在界面内即时对照原文与译文。\n队列式翻译：将文档加入任务队列，按顺序完成整条流水线。';
 
   @override
-  String get homeWelcomeDearStandardNoUser => '沉浸式翻译：在界面内即时对照原文与译文。\n队列式翻译：将文档加入任务队列，按顺序完成整条流水线。';
+  String get homeWelcomeDearStandardNoUser =>
+      '沉浸式翻译：在界面内即时对照原文与译文。\n队列式翻译：将文档加入任务队列，按顺序完成整条流水线。';
 
   @override
-  String get homeWelcomeHello => '沉浸式翻译：在界面内即时对照原文与译文。\n队列式翻译：将文档加入任务队列，按顺序完成整条流水线。';
+  String get homeWelcomeHello =>
+      '沉浸式翻译：在界面内即时对照原文与译文。\n队列式翻译：将文档加入任务队列，按顺序完成整条流水线。';
 
   @override
   String get homeLoading => '加载中...';
@@ -1568,7 +1743,8 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String settingsGlossaryGlossaryDropdownItem(Object count, Object name, Object type) {
+  String settingsGlossaryGlossaryDropdownItem(
+      Object count, Object name, Object type) {
     return '$name ($type) · $count 项';
   }
 
@@ -1709,7 +1885,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get glossaryPanelDropCsvHere => '将 CSV 或 TBX 文件拖放到此处';
 
   @override
-  String get glossaryPanelNoEntriesHint => '暂无术语表条目。\n点击「识别术语表」开始，或从列表选择术语表查看条目，也可拖放 CSV 或 TBX 文件到此。';
+  String get glossaryPanelNoEntriesHint =>
+      '暂无术语表条目。\n点击「识别术语表」开始，或从列表选择术语表查看条目，也可拖放 CSV 或 TBX 文件到此。';
 
   @override
   String get glossaryPanelSelectBody => '选择一个术语表进行操作：';
@@ -1785,12 +1962,14 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String glossaryWidgetPersonalAppended(Object newCount, Object skipped, Object total) {
+  String glossaryWidgetPersonalAppended(
+      Object newCount, Object skipped, Object total) {
     return '已向个人术语表添加 $newCount 个新术语。\n跳过 $skipped 个已存在术语。\n共 $total 个术语。';
   }
 
   @override
-  String glossaryWidgetPersonalUpdated(Object newCount, Object updatedCount, Object total) {
+  String glossaryWidgetPersonalUpdated(
+      Object newCount, Object updatedCount, Object total) {
     return '个人术语表更新成功！\n新增 $newCount 个，更新 $updatedCount 个。\n共 $total 个术语。';
   }
 
@@ -1812,19 +1991,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsUserManagementTitle => '用户管理模式';
 
   @override
-  String get settingsUserManagementSubtitle => '选择 Web 部署下的登录与权限策略。设置和配置向导仅管理员可用。';
+  String get settingsUserManagementSubtitle =>
+      '选择 Web 部署下的登录与权限策略。设置和配置向导仅管理员可用。';
 
   @override
   String get settingsUserManagementModeNoLogin => '用户免登录';
 
   @override
-  String get settingsUserManagementModeNoLoginDesc => '无需登录即可使用；设置与配置向导仅管理员登录后可用。';
+  String get settingsUserManagementModeNoLoginDesc =>
+      '无需登录即可使用；设置与配置向导仅管理员登录后可用。';
 
   @override
   String get settingsUserManagementModeLdap => 'LDAP 登录';
 
   @override
-  String get settingsUserManagementModeLdapDesc => '使用 LDAP/AD 域账号登录；设置与配置向导仅管理员（域内指定组）可用。';
+  String get settingsUserManagementModeLdapDesc =>
+      '使用 LDAP/AD 域账号登录；设置与配置向导仅管理员（域内指定组）可用。';
 
   @override
   String get settingsUserManagementModeLocal => '本地用户登录';
@@ -1905,7 +2087,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsLdapGroupBaseDn => '组搜索 Base DN';
 
   @override
-  String get settingsLdapGroupBaseDnPlaceholder => 'OU=Groups,DC=example,DC=com';
+  String get settingsLdapGroupBaseDnPlaceholder =>
+      'OU=Groups,DC=example,DC=com';
 
   @override
   String get settingsLdapTlsVerify => '验证 TLS 证书';
@@ -2025,7 +2208,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiPlatformApiUrl => 'API URL';
 
   @override
-  String get aiPlatformApiUrlHint => 'e.g., https://ark.cn-beijing.volces.com/api/v3';
+  String get aiPlatformApiUrlHint =>
+      'e.g., https://ark.cn-beijing.volces.com/api/v3';
 
   @override
   String get aiPlatformMaxTokens => '最大词元数';
@@ -2070,7 +2254,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiPlatformTestConnectionHint => '配置完成后，请点击下方“测试连接”，检查该平台是否可用。';
 
   @override
-  String get setupWizardConfigureApiKeyAndTest => '当前连接不可用，请配置 API Key 并点击「测试连接」以确认平台可用。';
+  String get setupWizardConfigureApiKeyAndTest =>
+      '当前连接不可用，请配置 API Key 并点击「测试连接」以确认平台可用。';
 
   @override
   String get setupWizardSaveAndExit => '保存并退出';
@@ -2088,7 +2273,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setupWizardWelcomeIntro => '本向导将帮助你完成两个关键配置：';
 
   @override
-  String get setupWizardWelcomeBody => '1. 选择并配置主用的大语言模型平台。\n2. 若需要翻译 PDF/PNG 等文件格式，需配置解析引擎 MinerU（可选）。\n\n注意：在配置完成后，请使用「测试连接」确认配置可用。';
+  String get setupWizardWelcomeBody =>
+      '1. 选择并配置主用的大语言模型平台。\n2. 若需要翻译 PDF/PNG 等文件格式，需配置解析引擎 MinerU（可选）。\n\n注意：在配置完成后，请使用「测试连接」确认配置可用。';
 
   @override
   String get setupWizardUiLanguageLabel => '界面语言';
@@ -2103,10 +2289,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setupWizardMineruNo => '暂时不需要（仅使用大语言模型翻译纯文本等）';
 
   @override
-  String get setupWizardMineruDescription => 'MinerU 负责 PDF / 图片等文档的版面解析与切分。\n请在下方填写 MinerU 的 API Key 和接口地址，并点击「测试连接」确认可用。';
+  String get setupWizardMineruDescription =>
+      'MinerU 负责 PDF / 图片等文档的版面解析与切分。\n请在下方填写 MinerU 的 API Key 和接口地址，并点击「测试连接」确认可用。';
 
   @override
-  String get setupWizardMineruSkipped => '你选择了暂时不配置 MinerU，后续仍可在设置中随时开启 PDF 翻译能力。';
+  String get setupWizardMineruSkipped =>
+      '你选择了暂时不配置 MinerU，后续仍可在设置中随时开启 PDF 翻译能力。';
 
   @override
   String get setupWizardMineruConfigTitle => 'MinerU 配置（解析引擎）';
@@ -2124,7 +2312,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setupWizardSelectLlmPlatform => '选择大语言模型平台';
 
   @override
-  String get setupWizardNoLlmPlatforms => '当前未在「AI 平台设置」中配置任何大语言模型平台，请先前往设置中添加平台。';
+  String get setupWizardNoLlmPlatforms =>
+      '当前未在「AI 平台设置」中配置任何大语言模型平台，请先前往设置中添加平台。';
 
   @override
   String get setupWizardMineruSaved => 'MinerU 配置已保存';
@@ -2278,7 +2467,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTranslationSegmentAutoRetryTitle => '队列模式：译后失败片段自动重试轮数';
 
   @override
-  String get settingsTranslationSegmentAutoRetryHint => '推荐：3（主翻译结束后批量补译失败片段，共 1–10 轮；仅队列模式）';
+  String get settingsTranslationSegmentAutoRetryHint =>
+      '推荐：3（主翻译结束后批量补译失败片段，共 1–10 轮；仅队列模式）';
 
   @override
   String get settingsTranslationChunkSizeTitle => '分块大小（词元）';
@@ -2642,7 +2832,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fileUploadDisabledMessage => '文件选择已禁用（处理进行中）';
 
   @override
-  String get fileUploadSupportedFormats => '支持：Word (DOCX)、PowerPoint (PPTX)、Excel (XLSX/CSV)、PDF、Markdown、TXT、HTML、SRT、JSON、EPUB、MOBI、Qt TS、PNG、JPEG';
+  String get fileUploadSupportedFormats =>
+      '支持：Word (DOCX)、PowerPoint (PPTX)、Excel (XLSX/CSV)、PDF、Markdown、TXT、HTML、SRT、JSON、EPUB、MOBI、Qt TS、PNG、JPEG';
 
   @override
   String get fileUploadDropHere => '将文件拖放到此处';

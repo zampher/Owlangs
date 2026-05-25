@@ -252,6 +252,7 @@
   "quickSettingsStyleAcademic": "学术",
   "quickSettingsStyleBusiness": "商务",
   "quickSettingsStyleTechnical": "技术",
+  "quickSettingsStyleNone": "无",
   "quickSettingsTaskNoteLabel": "任务备注（简短指令）",
   "quickSettingsTaskNoteHint": "例如：保持公式不变；标注专有名词",
   "quickSettingsAdRegionF": "区域 F：快速设置底部\n（中等矩形 300×250）",
@@ -279,6 +280,118 @@
   "homeNavSettings": "设置",
   "homeNavDonateHelp": "捐赠与帮助",
   "homeNavHome": "主页",
+  "homeNavBatchUpload": "批量上传",
+
+  "batchUploadTitle": "批量文件上传",
+  "batchUploadFormatConvert": "格式转换",
+  "batchUploadSelectSourceHint": "选择要翻译的支持文件。每个文件将成为一个队列任务。",
+  "batchUploadSelectFolder": "选择文件夹",
+  "batchUploadFolderDescription": "选择包含待翻译文件的文件夹",
+  "batchUploadSelectZip": "选择 ZIP 压缩包",
+  "batchUploadZipDescription": "选择包含待翻译文件的 ZIP 压缩包",
+  "batchUploadFilesFound": "找到 {count} 个支持的文件",
+  "@batchUploadFilesFound": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadSelectAll": "全选",
+  "batchUploadDeselectAll": "取消全选",
+  "batchUploadStartTranslation": "开始翻译",
+  "batchUploadSubmitting": "正在提交文件...",
+  "batchUploadProgress": "已提交 {completed} / {total} 个文件",
+  "@batchUploadProgress": {
+    "placeholders": {
+      "completed": {},
+      "total": {}
+    }
+  },
+  "batchUploadCompleteTitle": "批量完成",
+  "batchUploadComplete": "{success} 个成功，{failed} 个失败",
+  "@batchUploadComplete": {
+    "placeholders": {
+      "success": {},
+      "failed": {}
+    }
+  },
+  "batchUploadNoSupportedFiles": "未找到支持的文件",
+  "batchUploadSelectedCount": "已选 {count} 个文件",
+  "@batchUploadSelectedCount": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadLegacyFormatsFound": "{files} 无法直接翻译。请先将 .doc 转换为 .docx，.ppt 转换为 .pptx，.xls 转换为 .xlsx 后再提交。",
+  "@batchUploadLegacyFormatsFound": {
+    "description": "Shown when legacy formats (.doc/.ppt/.xls) are found but no supported files",
+    "placeholders": {
+      "files": {}
+    }
+  },
+  "batchUploadLegacyFormatsSkipped": "已跳过 {count} 个文件（旧版格式不支持直接翻译）。请将 .doc 转换为 .docx，.ppt 转换为 .pptx，.xls 转换为 .xlsx 后重试。",
+  "@batchUploadLegacyFormatsSkipped": {
+    "description": "Shown when legacy format files are skipped in batch upload",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadSettingsToggle": "快速设置",
+  "batchUploadSaveDefaults": "保存为默认",
+  "batchUploadTemperature": "温度：{value}",
+  "@batchUploadTemperature": {
+    "description": "Shows temperature value in batch upload settings",
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "batchUploadGlossaryHint": "已选 {count} 个术语表",
+  "@batchUploadGlossaryHint": {
+    "description": "Shows how many glossaries are selected",
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadGlossaryNone": "未选择术语表",
+  "batchUploadConfirmLangTitle": "确认目标语言",
+  "batchUploadConfirmLangMessage": "目标语言为“{lang}”。是否继续？",
+  "@batchUploadConfirmLangMessage": {
+    "placeholders": {
+      "lang": {}
+    }
+  },
+  "batchUploadConvert": "转换",
+  "batchUploadTranslate": "翻译",
+  "batchUploadFolderPickerTitle": "选择包含待翻译文件的文件夹",
+  "batchUploadZipPickerTitle": "选择包含待翻译文件的 ZIP 压缩包",
+  "batchUploadScanFolderError": "扫描文件夹失败：{error}",
+  "@batchUploadScanFolderError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "batchUploadReadZipError": "读取 ZIP 压缩包失败：{error}",
+  "@batchUploadReadZipError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "batchUploadGlossarySection": "术语表",
+  "batchUploadGlossaryMore": "+{count}",
+  "@batchUploadGlossaryMore": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "batchUploadGlossaryLoadError": "错误：{error}",
+  "@batchUploadGlossaryLoadError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "batchUploadNoGlossaries": "暂无可用术语表",
+  "batchUploadMineru": "MinerU",
+  "batchUploadMineruLocal": "MinerU 本地",
+  "commonClose": "关闭",
   "translationQueueTitle": "任务队列",
   "translationQueueHint": "列表会自动刷新，完成后可下载译文。",
   "translationQueueCancelExitHint": "排队中或进行中的任务可点击「取消任务」中止；确认后将返回首页。",
