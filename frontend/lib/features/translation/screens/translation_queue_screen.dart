@@ -123,6 +123,17 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
           row['status'] = st['status'] ?? row['status'];
           row['progress'] = st['progress'] ?? row['progress'];
           row['message'] = st['message'] ?? row['message'];
+          // Merge translation stats and token usage for completed tasks
+          if (st['translation_stats'] is Map) {
+            row['translation_stats'] = Map<String, dynamic>.from(
+              st['translation_stats'] as Map<dynamic, dynamic>,
+            );
+          }
+          if (st['token_usage'] is Map) {
+            row['token_usage'] = Map<String, dynamic>.from(
+              st['token_usage'] as Map<dynamic, dynamic>,
+            );
+          }
           final dynamic sd = st['downloads'];
           if (sd is Map && sd.isNotEmpty) {
             row['downloads'] = Map<String, dynamic>.from(sd);
@@ -833,14 +844,15 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                           name,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style:
-                                              theme.textTheme.titleSmall?.copyWith(
+                                          style: theme.textTheme.titleSmall?.copyWith(
                                             fontWeight: FontWeight.w600,
                                             height: 1.3,
                                           ),
                                         ),
                                       ),
                                     ),
+                                    if (status == 'completed')
+                                      _buildInlineStats(row, cs),
                                     const SizedBox(width: 8),
                                     _StatusBadge(status, progress, cs),
                                     if (row['is_format_conversion'] == true)
@@ -1124,6 +1136,99 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     }
     await _refresh();
   }
+
+  /// Build inline stats widget for Line 1 (filename row).
+  Widget _buildInlineStats(
+    Map<String, dynamic> row,
+    ColorScheme cs,
+  ) {
+    final Map<String, dynamic>? stats =
+        row['translation_stats'] as Map<String, dynamic>?;
+    final Map<String, dynamic>? tokens =
+        row['token_usage'] as Map<String, dynamic>?;
+
+    final List<InlineSpan> spans = <InlineSpan>[];
+
+    // Segments: success / failed / total with colors
+    if (stats != null) {
+      final int total = (stats['total_segments'] as num?)?.toInt() ?? 0;
+      final int success = (stats['success_count'] as num?)?.toInt() ?? 0;
+      final int failed = (stats['fail_count'] as num?)?.toInt() ?? 0;
+      if (total > 0) {
+        spans.add(const TextSpan(text: '  '));
+        spans.add(WidgetSpan(
+          child: Icon(Icons.segment, size: 12, color: cs.primary),
+        ));
+        spans.add(TextSpan(text: '$success', style: TextStyle(
+          fontSize: 11, fontWeight: FontWeight.w600, color: cs.primary,
+        )));
+        if (failed > 0) {
+          spans.add(TextSpan(text: '·$failed', style: TextStyle(
+            fontSize: 11, fontWeight: FontWeight.w600, color: cs.error,
+          )));
+        }
+        spans.add(TextSpan(text: '/$total', style: TextStyle(
+          fontSize: 10, color: cs.onSurfaceVariant,
+        )));
+      }
+    }
+
+    // Token usage
+    if (tokens != null) {
+      final int input = (tokens['input_tokens'] as num?)?.toInt() ?? 0;
+      final int output = (tokens['output_tokens'] as num?)?.toInt() ?? 0;
+      if (input > 0 || output > 0) {
+        spans.add(const TextSpan(text: '  '));
+        spans.add(WidgetSpan(
+          child: Icon(Icons.token, size: 12, color: cs.tertiary),
+        ));
+        spans.add(TextSpan(text: '${_fmtToken(input)}→${_fmtToken(output)}', style: TextStyle(
+          fontSize: 10, color: cs.onSurfaceVariant,
+        )));
+      }
+    }
+
+    if (spans.isEmpty) return const SizedBox.shrink();
+
+    // Build tooltip message with detailed labels
+    final List<String> tooltipParts = <String>[];
+    if (stats != null) {
+      final int total = (stats['total_segments'] as num?)?.toInt() ?? 0;
+      final int success = (stats['success_count'] as num?)?.toInt() ?? 0;
+      final int failed = (stats['fail_count'] as num?)?.toInt() ?? 0;
+      if (total > 0) {
+        final String failedPart = failed > 0 ? ', $failed failed' : '';
+        tooltipParts.add('Segments: $success succeeded${failedPart}, $total total');
+      }
+    }
+    if (tokens != null) {
+      final int input = (tokens['input_tokens'] as num?)?.toInt() ?? 0;
+      final int output = (tokens['output_tokens'] as num?)?.toInt() ?? 0;
+      if (input > 0) tooltipParts.add('Input tokens:  $input');
+      if (output > 0) tooltipParts.add('Output tokens: $output');
+    }
+
+    return Tooltip(
+      message: tooltipParts.join('\n'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      textStyle: TextStyle(
+        fontSize: 12,
+        color: cs.onInverseSurface,
+        height: 1.4,
+      ),
+      child: RichText(
+        text: TextSpan(children: spans),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  String _fmtToken(int count) {
+    if (count >= 1000000) return '${(count / 1000000).toStringAsFixed(1)}M';
+    if (count >= 1000) return '${(count / 1000).toStringAsFixed(1)}K';
+    return count.toString();
+  }
 }
 
 // ─── Batch download bottom bar ───────────────────────────────────────────────
@@ -1396,4 +1501,3 @@ class _DownloadFormatButton extends StatelessWidget {
     );
   }
 }
-

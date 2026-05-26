@@ -391,34 +391,42 @@ class TranslationService {
         // Special handling for 404: this is often "segments not ready yet" while task is still processing.
         // In that case we keep retrying without treating it as a hard error, even if attempt >= maxRetries.
         if (is404) {
+          String taskStatus = '';
           try {
             final Map<String, dynamic> status = await getStatus(taskId);
-            final String s =
-                (status['status'] ?? '').toString().toLowerCase();
-            final bool done =
-                s == 'completed' || s == 'failed' || s == 'cancelled';
-            if (!done) {
-              AppLogger.log(
-                'TranslationService',
-                '[SEGMENTS] getTranslationSegments 404 (segments not ready yet) for '
-                'taskId=$taskId, attempt=$attempt, taskStatus=$s',
-                level: LogLevel.warn,
-              );
-              await Future.delayed(retryDelay);
-              continue;
-            }
+            taskStatus = (status['status'] ?? '').toString().toLowerCase();
+          } catch (_) {
+            // Status check failed, fall through to generic handling below.
+          }
+
+          final bool done =
+              taskStatus == 'completed' || taskStatus == 'failed' || taskStatus == 'cancelled';
+
+          if (!done && taskStatus.isNotEmpty) {
+            // Task is still processing, keep retrying.
+            AppLogger.log(
+              'TranslationService',
+              '[SEGMENTS] getTranslationSegments 404 (segments not ready yet) for '
+              'taskId=$taskId, attempt=$attempt, taskStatus=$taskStatus',
+              level: LogLevel.warn,
+            );
+            await Future.delayed(retryDelay);
+            continue;
+          }
+
+          if (done) {
             // Task is in a terminal state but segments still 404: this means
             // the task either has no segments (e.g. convert-phase task) or the
             // segments have been released. Stop retrying immediately.
             AppLogger.log(
               'TranslationService',
               '[SEGMENTS] getTranslationSegments 404 (task terminal, no segments) for '
-              'taskId=$taskId, attempt=$attempt, taskStatus=$s',
+              'taskId=$taskId, attempt=$attempt, taskStatus=$taskStatus',
               level: LogLevel.error,
             );
-            rethrow;
-          } catch (_) {
-            // If status check fails, fall through to generic retry/exit handling below.
+            throw Exception(
+              'Task $taskId is in terminal state ($taskStatus) and has no segments',
+            );
           }
         }
 
