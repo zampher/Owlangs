@@ -10,6 +10,7 @@ Handles path setup, lazy imports, error wrapping, and data transformation.
 
 import asyncio
 import base64
+import json
 import os
 import sys
 import tempfile

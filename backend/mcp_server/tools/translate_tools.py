@@ -13,6 +13,7 @@ Implements:
   - owlangs_translate_batch_download
 """
 
+import json
 from typing import Optional, Dict, List
 
 from backend.mcp_server.service_layer import (

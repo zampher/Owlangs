@@ -22,6 +22,7 @@ mcp = FastMCP(
     "owlangs",
     instructions="Owlangs Document Translation Platform — AI-driven translation for 15+ document formats, "
                  "27+ LLM platforms, glossary management, and format conversion.",
+    streamable_http_path="/mcp",
 )
 
 # ── Register Tools ─────────────────────────────────────────────────────────────
