@@ -539,7 +539,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationToolbarSwitchToText.
   ///
   /// In en, this message translates to:
-  /// **'Switch to Text'**
+  /// **'Enter Text'**
   String get translationToolbarSwitchToText;
 
   /// No description provided for @translationStatusCompleted.
@@ -1706,13 +1706,13 @@ abstract class AppLocalizations {
   /// No description provided for @homeNavTranslate.
   ///
   /// In en, this message translates to:
-  /// **'Immersive translation'**
+  /// **'Immersive task'**
   String get homeNavTranslate;
 
   /// No description provided for @homeNavTranslationQueue.
   ///
   /// In en, this message translates to:
-  /// **'Task queue'**
+  /// **'Task management'**
   String get homeNavTranslationQueue;
 
   /// No description provided for @homeNavAnonymize.
@@ -2036,7 +2036,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationQueueNewQueuedTask.
   ///
   /// In en, this message translates to:
-  /// **'Queued translation'**
+  /// **'Queued task'**
   String get translationQueueNewQueuedTask;
 
   /// No description provided for @translationQueueBackToQueueTooltip.

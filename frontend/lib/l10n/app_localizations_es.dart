@@ -256,7 +256,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationToolbarSwitchToFile => 'Cambiar a Archivo';
 
   @override
-  String get translationToolbarSwitchToText => 'Cambiar a Texto';
+  String get translationToolbarSwitchToText => 'Ingresar Texto';
 
   @override
   String get translationStatusCompleted => 'Traducción Completada';
@@ -951,10 +951,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeBackendRetry => 'Reintentar';
 
   @override
-  String get homeNavTranslate => 'Traducción inmersiva';
+  String get homeNavTranslate => 'Tarea inmersiva';
 
   @override
-  String get homeNavTranslationQueue => 'Cola de tareas';
+  String get homeNavTranslationQueue => 'Gestión de tareas';
 
   @override
   String get homeNavAnonymize => 'Anonimizar';
@@ -1152,7 +1152,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationQueueEmpty => 'Aún no hay tareas de traducción.';
 
   @override
-  String get translationQueueNewQueuedTask => 'Traducción en cola';
+  String get translationQueueNewQueuedTask => 'Tarea en cola';
 
   @override
   String get translationQueueBackToQueueTooltip => 'Volver a la cola de tareas';

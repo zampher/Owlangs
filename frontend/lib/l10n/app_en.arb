@@ -83,7 +83,7 @@
   "translationCloseTranslateTabKeepInQueue": "Keep in queue",
   "translationCloseTranslateTabDiscard": "Discard",
   "translationToolbarSwitchToFile": "Switch to File",
-  "translationToolbarSwitchToText": "Switch to Text",
+  "translationToolbarSwitchToText": "Enter Text",
 
   "translationStatusCompleted": "Translation Completed",
   "translationStatusRetry": "Translation Retry",
@@ -291,8 +291,8 @@
   "homeBackendStatusUnknown": "Connecting to backend...",
   "homeBackendRetry": "Retry",
 
-  "homeNavTranslate": "Immersive translation",
-  "homeNavTranslationQueue": "Task queue",
+  "homeNavTranslate": "Immersive task",
+  "homeNavTranslationQueue": "Task management",
   "homeNavAnonymize": "Anonymize",
   "homeNavSettings": "Settings",
   "homeNavDonateHelp": "Donate & Help",
@@ -418,7 +418,7 @@
   "translationQueueCancelDialogKeep": "Keep",
   "translationQueueCancelDialogConfirm": "Cancel task",
   "translationQueueEmpty": "No translation tasks yet.",
-  "translationQueueNewQueuedTask": "Queued translation",
+  "translationQueueNewQueuedTask": "Queued task",
   "translationQueueBackToQueueTooltip": "Back to task queue",
   "translationQueuedStarted": "Task added to the queue. Track it here.",
   "translationQueueRefresh": "Refresh",

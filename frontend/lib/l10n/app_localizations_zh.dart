@@ -236,7 +236,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationToolbarSwitchToFile => '切换到文件';
 
   @override
-  String get translationToolbarSwitchToText => '切换到文本';
+  String get translationToolbarSwitchToText => '输入文本';
 
   @override
   String get translationStatusCompleted => '翻译完成';
@@ -889,10 +889,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeBackendRetry => '重试';
 
   @override
-  String get homeNavTranslate => '沉浸式翻译';
+  String get homeNavTranslate => '沉浸式任务';
 
   @override
-  String get homeNavTranslationQueue => '任务队列';
+  String get homeNavTranslationQueue => '任务管理';
 
   @override
   String get homeNavAnonymize => '匿名化';
@@ -1082,7 +1082,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationQueueEmpty => '暂无翻译任务。';
 
   @override
-  String get translationQueueNewQueuedTask => '队列式翻译';
+  String get translationQueueNewQueuedTask => '队列式任务';
 
   @override
   String get translationQueueBackToQueueTooltip => '返回任务队列';

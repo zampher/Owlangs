@@ -237,7 +237,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationToolbarSwitchToFile => 'ファイルに切り替え';
 
   @override
-  String get translationToolbarSwitchToText => 'テキストに切り替え';
+  String get translationToolbarSwitchToText => 'テキストを入力';
 
   @override
   String get translationStatusCompleted => '翻訳完了';
@@ -898,10 +898,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeBackendRetry => '再試行';
 
   @override
-  String get homeNavTranslate => 'イマーシブ翻訳';
+  String get homeNavTranslate => 'イマーシブタスク';
 
   @override
-  String get homeNavTranslationQueue => 'タスクキュー';
+  String get homeNavTranslationQueue => 'タスク管理';
 
   @override
   String get homeNavAnonymize => '匿名化';
@@ -1092,7 +1092,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationQueueEmpty => '翻訳タスクはありません。';
 
   @override
-  String get translationQueueNewQueuedTask => 'キュー式翻訳';
+  String get translationQueueNewQueuedTask => 'キュー式タスク';
 
   @override
   String get translationQueueBackToQueueTooltip => 'タスクキューに戻る';

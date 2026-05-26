@@ -249,7 +249,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationToolbarSwitchToFile => 'Switch to File';
 
   @override
-  String get translationToolbarSwitchToText => 'Switch to Text';
+  String get translationToolbarSwitchToText => 'Enter Text';
 
   @override
   String get translationStatusCompleted => 'Translation Completed';
@@ -930,10 +930,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeBackendRetry => 'Retry';
 
   @override
-  String get homeNavTranslate => 'Immersive translation';
+  String get homeNavTranslate => 'Immersive task';
 
   @override
-  String get homeNavTranslationQueue => 'Task queue';
+  String get homeNavTranslationQueue => 'Task management';
 
   @override
   String get homeNavAnonymize => 'Anonymize';
@@ -1131,7 +1131,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationQueueEmpty => 'No translation tasks yet.';
 
   @override
-  String get translationQueueNewQueuedTask => 'Queued translation';
+  String get translationQueueNewQueuedTask => 'Queued task';
 
   @override
   String get translationQueueBackToQueueTooltip => 'Back to task queue';

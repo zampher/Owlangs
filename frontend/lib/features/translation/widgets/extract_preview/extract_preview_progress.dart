@@ -461,8 +461,11 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
           }
         }
 
-        prepareInFlight = false;
-        return;
+        // Handle completion when format conversion finishes with progress=100
+        // and segments are ready — stop polling so language detection messages
+        // don't overwrite the completed state. The completion handlers below
+        // (previewReady / hasSegments checks) were previously dead code after
+        // an unconditional return; they now properly finalize the prepare phase.
 
         // If preview is ready but we don't have segments yet, reload initial data
         // This handles the case where preview becomes ready after conversion completes

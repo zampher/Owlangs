@@ -135,6 +135,7 @@ class TranslationResultToolbar extends ConsumerWidget {
     final isActive = !isCompletedByArtifacts &&
         (isTranslating ||
             currentOperation == TranslationOperation.translating ||
+            currentOperation == TranslationOperation.retranslating ||
             statusLower == 'processing');
     // Hide progress bar when translation is completed (including processing+100%)
     final isCompleted = isCompletedByArtifacts ||

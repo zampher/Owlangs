@@ -238,7 +238,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationToolbarSwitchToFile => '파일로 전환';
 
   @override
-  String get translationToolbarSwitchToText => '텍스트로 전환';
+  String get translationToolbarSwitchToText => '텍스트 입력';
 
   @override
   String get translationStatusCompleted => '번역 완료';
@@ -898,10 +898,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homeBackendRetry => '재시도';
 
   @override
-  String get homeNavTranslate => '몰입형 번역';
+  String get homeNavTranslate => '몰입형 작업';
 
   @override
-  String get homeNavTranslationQueue => '작업 대기열';
+  String get homeNavTranslationQueue => '작업 관리';
 
   @override
   String get homeNavAnonymize => '익명화';
@@ -1092,7 +1092,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationQueueEmpty => '번역 작업이 없습니다.';
 
   @override
-  String get translationQueueNewQueuedTask => '큐 방식 번역';
+  String get translationQueueNewQueuedTask => '큐 방식 작업';
 
   @override
   String get translationQueueBackToQueueTooltip => '작업 대기열로 돌아가기';
