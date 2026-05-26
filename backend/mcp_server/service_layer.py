@@ -233,7 +233,15 @@ async def download_result(
     service = DownloadService(task_manager)
     try:
         from fastapi.responses import FileResponse
-        response = await service.download_file(task_id, file_type)
+
+        # Map md_zip → md with embed_images=False
+        dl_file_type = file_type
+        dl_embed_images: Optional[bool] = None
+        if file_type == "md_zip":
+            dl_file_type = "md"
+            dl_embed_images = False
+
+        response = await service.download_file(task_id, dl_file_type, embed_images=dl_embed_images)
 
         if isinstance(response, FileResponse):
             file_path = response.path
@@ -768,9 +776,24 @@ async def download_batch_results(
                 if ts:
                     is_conv = bool(ts.get("is_format_conversion") or ts.get("convert_only"))
                 suffix = "converted" if is_conv else "translated"
-                safe_name = f"{base_name}_{suffix}.{ext}" if ext else f"{base_name}_{suffix}"
 
-                zf.writestr(safe_name, raw_bytes)
+                if file_type == "md_zip":
+                    # Flatten: extract inner ZIP and place contents under a folder
+                    folder_name = f"{base_name}_{suffix}"
+                    try:
+                        with zipfile.ZipFile(io.BytesIO(raw_bytes), "r") as inner_zf:
+                            for inner_name in inner_zf.namelist():
+                                inner_bytes = inner_zf.read(inner_name)
+                                # Rename _translated → actual suffix inside the folder
+                                renamed = inner_name.replace("_translated", f"_{suffix}")
+                                zf.writestr(f"{folder_name}/{renamed}", inner_bytes)
+                        safe_name = f"{folder_name}/"
+                    except Exception:
+                        safe_name = f"{base_name}_{suffix}.zip"
+                        zf.writestr(safe_name, raw_bytes)
+                else:
+                    safe_name = f"{base_name}_{suffix}.{ext}" if ext else f"{base_name}_{suffix}"
+                    zf.writestr(safe_name, raw_bytes)
                 manifest[task_id] = {"status": "success", "file": safe_name}
             except Exception as e:
                 manifest[task_id] = {"status": "skipped", "reason": str(e)}

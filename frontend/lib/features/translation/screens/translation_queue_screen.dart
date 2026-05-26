@@ -34,7 +34,6 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
   List<Map<String, dynamic>> _tasks = <Map<String, dynamic>>[];
   bool _loading = false;
   String? _loadError;
-  bool _isSelectMode = false;
   final Set<String> _selectedTaskIds = <String>{};
 
   @override
@@ -126,6 +125,57 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
         _loadError = e.toString();
       });
     }
+  }
+
+  /// Show "New queue task" dialog with three upload options (Single File / Folder / ZIP),
+  /// same as the workspace screen's queued translation entry.
+  void _showNewTaskDialog() {
+    final l10n = AppLocalizations.of(context)!;
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(l10n.translationQueueNewQueuedTask),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(Icons.upload_file),
+              title: Text(l10n.batchUploadSelectSingleFile),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                context.push(
+                  '${AppRouter.batchUploadRoute}?source=single',
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_open),
+              title: Text(l10n.batchUploadSelectFolder),
+              subtitle: Text(l10n.batchUploadFolderDescription),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                context.push('${AppRouter.batchUploadRoute}?source=folder');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_zip_outlined),
+              title: Text(l10n.batchUploadSelectZip),
+              subtitle: Text(l10n.batchUploadZipDescription),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                context.push('${AppRouter.batchUploadRoute}?source=zip');
+              },
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(l10n.commonCancel),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _cancel(String taskId) async {
@@ -471,7 +521,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: _isSelectMode
+        title: _selectedTaskIds.isNotEmpty
             ? Text('${l10n.translationQueueTitle} · ${_selectedTaskIds.length} ${l10n.translationQueueSelected}')
             : Text(l10n.translationQueueTitle),
         leadingWidth: 220,
@@ -485,6 +535,12 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
           ],
         ),
         actions: <Widget>[
+          // New task first
+          IconButton(
+            tooltip: l10n.translationQueueNewQueuedTask,
+            icon: const Icon(Icons.add, size: 20),
+            onPressed: _showNewTaskDialog,
+          ),
           adminGate.maybeWhen(
             data: (bool isAdmin) => isAdmin
                 ? IconButton(
@@ -502,38 +558,6 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
             onPressed: _tasks.isEmpty || _loading
                 ? null
                 : () => _confirmClearMyQueue(context, l10n),
-          ),
-          if (_isSelectMode)
-            IconButton(
-              tooltip: l10n.translationQueueClearSelection,
-              icon: const Icon(Icons.close),
-              onPressed: () {
-                setState(() {
-                  _isSelectMode = false;
-                  _selectedTaskIds.clear();
-                });
-              },
-            )
-          else
-            IconButton(
-              tooltip: l10n.translationQueueSelectMode,
-              icon: const Icon(Icons.checklist),
-              onPressed: () {
-                setState(() {
-                  _isSelectMode = true;
-                  _selectedTaskIds.clear();
-                });
-              },
-            ),
-          TextButton.icon(
-            onPressed: () {
-              final ts = DateTime.now().millisecondsSinceEpoch;
-              context.push(
-                '${AppRouter.translationRoute}?execution_mode=queued&t=$ts',
-              );
-            },
-            icon: const Icon(Icons.add, size: 20),
-            label: Text(l10n.translationQueueNewQueuedTask),
           ),
           IconButton(
             tooltip: l10n.translationQueueRefresh,
@@ -573,6 +597,91 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                 child: Text(
                   l10n.translationQueueLoadFailed(_loadError!),
                   style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ),
+            // Multi-select toolbar
+            if (_selectedTaskIds.isNotEmpty)
+              _BatchDownloadBottomBar(
+                taskIds: _selectedTaskIds.toList(growable: false),
+                formatCounts: _computeFormatCounts(
+                  _selectedTaskIds,
+                  _tasks,
+                ),
+                onDownloadFormat: _batchDownload,
+                onClear: () => _batchClear(_selectedTaskIds.toList(growable: false)),
+              ),
+            // Select-all row
+            if (_tasks.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                child: Row(
+                  children: <Widget>[
+                    Checkbox(
+                      value: _tasks.every((Map<String, dynamic> r) =>
+                        _selectedTaskIds.contains(r['task_id']?.toString()))
+                          ? true
+                          : _selectedTaskIds.any((String id) =>
+                              _tasks.any((Map<String, dynamic> r) =>
+                                r['task_id']?.toString() == id))
+                            ? null
+                            : false,
+                      tristate: true,
+                      onChanged: (_) {
+                        setState(() {
+                          final bool allSelected = _tasks.every(
+                            (Map<String, dynamic> r) =>
+                              _selectedTaskIds.contains(r['task_id']?.toString()),
+                          );
+                          if (allSelected) {
+                            _selectedTaskIds.clear();
+                          } else {
+                            _selectedTaskIds.addAll(
+                              _tasks
+                                .map((Map<String, dynamic> r) => r['task_id']?.toString() ?? '')
+                                .where((String id) => id.isNotEmpty),
+                            );
+                          }
+                        });
+                      },
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          final bool allSelected = _tasks.every(
+                            (Map<String, dynamic> r) =>
+                              _selectedTaskIds.contains(r['task_id']?.toString()),
+                          );
+                          if (allSelected) {
+                            _selectedTaskIds.clear();
+                          } else {
+                            _selectedTaskIds.addAll(
+                              _tasks
+                                .map((Map<String, dynamic> r) => r['task_id']?.toString() ?? '')
+                                .where((String id) => id.isNotEmpty),
+                            );
+                          }
+                        });
+                      },
+                      child: Text(
+                        _tasks.every((Map<String, dynamic> r) =>
+                          _selectedTaskIds.contains(r['task_id']?.toString()))
+                              ? l10n.translationQueueClearSelection
+                              : l10n.translationQueueSelectMode,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${_selectedTaskIds.length}/${_tasks.length}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             Expanded(
@@ -641,17 +750,15 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                             vertical: 3,
                           ),
                           child: InkWell(
-                            onTap: _isSelectMode
-                                ? () {
-                                    setState(() {
-                                      if (_selectedTaskIds.contains(taskId)) {
-                                        _selectedTaskIds.remove(taskId);
-                                      } else {
-                                        _selectedTaskIds.add(taskId);
-                                      }
-                                    });
-                                  }
-                                : null,
+                            onTap: () {
+                              setState(() {
+                                if (_selectedTaskIds.contains(taskId)) {
+                                  _selectedTaskIds.remove(taskId);
+                                } else {
+                                  _selectedTaskIds.add(taskId);
+                                }
+                              });
+                            },
                             borderRadius: BorderRadius.circular(12),
                             child: Padding(
                             padding: const EdgeInsets.symmetric(
@@ -664,10 +771,17 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                 // ── Line 1: Filename + Status ──
                                 Row(
                                   children: <Widget>[
-                                    if (_isSelectMode)
-                                      Checkbox(
+                                    Checkbox(
                                         value: _selectedTaskIds.contains(taskId),
-                                        onChanged: null, // handled by InkWell on the Card
+                                        onChanged: (_) {
+                                          setState(() {
+                                            if (_selectedTaskIds.contains(taskId)) {
+                                              _selectedTaskIds.remove(taskId);
+                                            } else {
+                                              _selectedTaskIds.add(taskId);
+                                            }
+                                          });
+                                        },
                                         visualDensity: VisualDensity.compact,
                                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                       ),
@@ -743,8 +857,8 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                         ),
                                       ),
                                     ),
-                                    // Download format icons (hide in select mode)
-                                    if (!_isSelectMode && downloadEntries.isNotEmpty)
+                                    // Download format icons
+                                    if (downloadEntries.isNotEmpty)
                                       ...downloadEntries.map(
                                         (e) => _DownloadFormatButton(
                                           taskId: taskId,
@@ -866,12 +980,6 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
           ],
         ),
       ),
-      bottomNavigationBar: _isSelectMode && _selectedTaskIds.isNotEmpty
-          ? _BatchDownloadBottomBar(
-              taskIds: _selectedTaskIds.toList(growable: false),
-              onDownloadFormat: _batchDownload,
-            )
-          : null,
     );
   }
 
@@ -898,10 +1006,6 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
         ext: ext,
       );
       if (mounted) {
-        setState(() {
-          _isSelectMode = false;
-          _selectedTaskIds.clear();
-        });
         MessageService.showInfo(
           context,
           l10n.translationQueueBatchDownloadSuccess(fileType),
@@ -916,17 +1020,90 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
       }
     }
   }
+
+  /// Count how many of the selected tasks support each download format.
+  static Map<String, int> _computeFormatCounts(
+    Set<String> selectedTaskIds,
+    List<Map<String, dynamic>> tasks,
+  ) {
+    final Map<String, int> counts = <String, int>{};
+    for (final Map<String, dynamic> row in tasks) {
+      final String? tid = row['task_id']?.toString();
+      if (tid == null || !selectedTaskIds.contains(tid)) continue;
+      final dynamic d = row['downloads'];
+      if (d is Map) {
+        for (final String key in d.keys) {
+          counts[key] = (counts[key] ?? 0) + 1;
+        }
+      }
+    }
+    return counts;
+  }
+
+  Future<void> _batchClear(List<String> taskIds) async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(l10n.translationQueueClearAllTitle),
+        content: Text(
+          '${l10n.translationQueueClearAllMessage}\n\n'
+          '${taskIds.length} ${l10n.translationQueueSelected}',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.translationQueueClearAllCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.translationQueueClearAllConfirm),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    int success = 0;
+    for (final String taskId in taskIds) {
+      try {
+        await _svc.releaseTask(taskId);
+        success++;
+      } catch (_) {}
+    }
+    setState(() {
+      _selectedTaskIds.clear();
+    });
+    if (mounted) {
+      if (success == taskIds.length) {
+        MessageService.showInfo(
+          context,
+          l10n.translationQueueClearAllSuccess,
+        );
+      } else {
+        MessageService.showWarning(
+          context,
+          '$success/${taskIds.length} ${l10n.translationQueueClearAllFailed('')}',
+        );
+      }
+    }
+    await _refresh();
+  }
 }
 
 // ─── Batch download bottom bar ───────────────────────────────────────────────
 
 class _BatchDownloadBottomBar extends StatelessWidget {
   final List<String> taskIds;
+  final Map<String, int> formatCounts;
   final Future<void> Function(List<String>, String) onDownloadFormat;
+  final VoidCallback? onClear;
 
   const _BatchDownloadBottomBar({
     required this.taskIds,
+    required this.formatCounts,
     required this.onDownloadFormat,
+    this.onClear,
   });
 
   @override
@@ -943,6 +1120,7 @@ class _BatchDownloadBottomBar extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
+          // Selection count
           Text(
             '${taskIds.length} ${l10n.translationQueueSelected}',
             style: theme.textTheme.labelMedium?.copyWith(
@@ -950,6 +1128,15 @@ class _BatchDownloadBottomBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
+          // "Download" label
+          Text(
+            l10n.translationQueueDownloads,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 4),
+          // Format chips
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -958,6 +1145,15 @@ class _BatchDownloadBottomBar extends StatelessWidget {
               ),
             ),
           ),
+          // Clear / delete button
+          if (onClear != null)
+            IconButton(
+              icon: Icon(Icons.delete_outline, size: 20, color: cs.error),
+              tooltip: l10n.translationQueueClearSelection,
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              onPressed: onClear,
+            ),
         ],
       ),
     );
@@ -974,12 +1170,14 @@ class _BatchDownloadBottomBar extends StatelessWidget {
     ];
     return formats.map((f) {
       final String ft = f.$1;
+      final int count = formatCounts[ft] ?? 0;
+      if (count == 0) return const SizedBox.shrink();
       return Padding(
         padding: const EdgeInsets.only(right: 6),
         child: ActionChip(
           avatar: Icon(f.$2, size: 16),
           label: Text(
-            _downloadFormatButtonLabel(ft, l10n),
+            '${_downloadFormatButtonLabel(ft, l10n)} ($count)',
             style: const TextStyle(fontSize: 12),
           ),
           onPressed: () => onDownloadFormat(taskIds, ft),

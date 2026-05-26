@@ -143,10 +143,17 @@ async def service_batch_download_route(body: BatchDownloadRequest):
                 if ts:
                     original_filename = ts.get("original_filename") or ""
 
+                # Map md_zip → md with embed_images=False
+                dl_file_type = body.file_type
+                dl_embed_images: Optional[bool] = None
+                if body.file_type == "md_zip":
+                    dl_file_type = "md"
+                    dl_embed_images = False
+
                 resp = await download_service.download_file(
                     task_id=task_id,
-                    file_type=body.file_type,
-                    embed_images=None,
+                    file_type=dl_file_type,
+                    embed_images=dl_embed_images,
                 )
                 file_bytes = await _read_response_bytes(resp)
                 if file_bytes is None:
@@ -160,20 +167,36 @@ async def service_batch_download_route(body: BatchDownloadRequest):
                     )
                     continue
 
-                # Determine filename inside ZIP
+                # Determine folder/entry name inside ZIP
                 ext = body.file_type
                 if body.file_type == "md_zip":
                     ext = "zip"
-                base_name = "unknown"
+                base_name = task_id
                 if original_filename:
                     base_name = original_filename.rsplit(".", 1)[0] if "." in original_filename else original_filename
                 is_conv = False
                 if ts:
                     is_conv = bool(ts.get("is_format_conversion") or ts.get("convert_only"))
                 suffix = "converted" if is_conv else "translated"
-                entry_name = f"{base_name}_{suffix}.{ext}"
 
-                zf.writestr(entry_name, file_bytes)
+                if body.file_type == "md_zip":
+                    # Flatten: extract inner ZIP and place contents under a folder
+                    folder_name = f"{base_name}_{suffix}"
+                    try:
+                        with zipfile.ZipFile(io.BytesIO(file_bytes), "r") as inner_zf:
+                            for inner_name in inner_zf.namelist():
+                                inner_bytes = inner_zf.read(inner_name)
+                                # Rename _translated → actual suffix inside the folder
+                                renamed = inner_name.replace("_translated", f"_{suffix}")
+                                zf.writestr(f"{folder_name}/{renamed}", inner_bytes)
+                        entry_name = f"{folder_name}/"
+                    except Exception:
+                        # Not a valid ZIP, fall back to single entry
+                        entry_name = f"{folder_name}.{ext}"
+                        zf.writestr(entry_name, file_bytes)
+                else:
+                    entry_name = f"{base_name}_{suffix}.{ext}"
+                    zf.writestr(entry_name, file_bytes)
                 manifest[task_id] = {"status": "success", "file": entry_name}
                 logger.info(
                     LogModule.ROUTE,
