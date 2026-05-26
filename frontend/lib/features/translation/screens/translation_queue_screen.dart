@@ -34,6 +34,8 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
   List<Map<String, dynamic>> _tasks = <Map<String, dynamic>>[];
   bool _loading = false;
   String? _loadError;
+  bool _isSelectMode = false;
+  final Set<String> _selectedTaskIds = <String>{};
 
   @override
   void initState() {
@@ -468,7 +470,9 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.translationQueueTitle),
+        title: _isSelectMode
+            ? Text('${l10n.translationQueueTitle} · ${_selectedTaskIds.length} ${l10n.translationQueueSelected}')
+            : Text(l10n.translationQueueTitle),
         leadingWidth: 220,
         leading: Row(
           children: <Widget>[
@@ -498,6 +502,28 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                 ? null
                 : () => _confirmClearMyQueue(context, l10n),
           ),
+          if (_isSelectMode)
+            IconButton(
+              tooltip: l10n.translationQueueClearSelection,
+              icon: const Icon(Icons.close),
+              onPressed: () {
+                setState(() {
+                  _isSelectMode = false;
+                  _selectedTaskIds.clear();
+                });
+              },
+            )
+          else
+            IconButton(
+              tooltip: l10n.translationQueueSelectMode,
+              icon: const Icon(Icons.checklist),
+              onPressed: () {
+                setState(() {
+                  _isSelectMode = true;
+                  _selectedTaskIds.clear();
+                });
+              },
+            ),
           TextButton.icon(
             onPressed: () {
               final ts = DateTime.now().millisecondsSinceEpoch;
@@ -613,7 +639,20 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                             horizontal: 12,
                             vertical: 3,
                           ),
-                          child: Padding(
+                          child: InkWell(
+                            onTap: _isSelectMode
+                                ? () {
+                                    setState(() {
+                                      if (_selectedTaskIds.contains(taskId)) {
+                                        _selectedTaskIds.remove(taskId);
+                                      } else {
+                                        _selectedTaskIds.add(taskId);
+                                      }
+                                    });
+                                  }
+                                : null,
+                            borderRadius: BorderRadius.circular(12),
+                            child: Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 10,
@@ -624,6 +663,13 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                 // ── Line 1: Filename + Status ──
                                 Row(
                                   children: <Widget>[
+                                    if (_isSelectMode)
+                                      Checkbox(
+                                        value: _selectedTaskIds.contains(taskId),
+                                        onChanged: null, // handled by InkWell on the Card
+                                        visualDensity: VisualDensity.compact,
+                                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
                                     Icon(
                                       _fileIcon(name),
                                       size: 18,
@@ -696,8 +742,8 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                         ),
                                       ),
                                     ),
-                                    // Download format icons
-                                    if (downloadEntries.isNotEmpty)
+                                    // Download format icons (hide in select mode)
+                                    if (!_isSelectMode && downloadEntries.isNotEmpty)
                                       ...downloadEntries.map(
                                         (e) => _DownloadFormatButton(
                                           taskId: taskId,
@@ -810,18 +856,139 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                               ],
                             ),
                           ),
-                        );
+                        ),
+                      );
                       },
                     ),
             ),
           ],
         ),
       ),
+      bottomNavigationBar: _isSelectMode && _selectedTaskIds.isNotEmpty
+          ? _BatchDownloadBottomBar(
+              taskIds: _selectedTaskIds.toList(growable: false),
+              onDownloadFormat: _batchDownload,
+            )
+          : null,
     );
+  }
+
+  Future<void> _batchDownload(List<String> taskIds, String fileType) async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    try {
+      final List<int> bytes = await _svc.batchDownload(taskIds, fileType);
+      if (bytes.isEmpty) {
+        if (mounted) {
+          MessageService.showWarning(
+            context,
+            l10n.translationQueueBatchDownloadFailed('empty result'),
+          );
+        }
+        return;
+      }
+      final String timestamp =
+          DateTime.now().millisecondsSinceEpoch.toString();
+      const String ext = 'zip';
+      final String filename = 'batch_download_${fileType}_$timestamp.$ext';
+      await _saveDownloadedBytes(
+        bytes: bytes,
+        filename: filename,
+        ext: ext,
+      );
+      if (mounted) {
+        setState(() {
+          _isSelectMode = false;
+          _selectedTaskIds.clear();
+        });
+        MessageService.showInfo(
+          context,
+          l10n.translationQueueBatchDownloadSuccess(fileType),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showWarning(
+          context,
+          l10n.translationQueueBatchDownloadFailed(e.toString()),
+        );
+      }
+    }
   }
 }
 
-// ─── Compact status badge ────────────────────────────────────────────────────
+// ─── Batch download bottom bar ───────────────────────────────────────────────
+
+class _BatchDownloadBottomBar extends StatelessWidget {
+  final List<String> taskIds;
+  final Future<void> Function(List<String>, String) onDownloadFormat;
+
+  const _BatchDownloadBottomBar({
+    required this.taskIds,
+    required this.onDownloadFormat,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme cs = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest,
+        border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
+      ),
+      child: Row(
+        children: <Widget>[
+          Text(
+            '${taskIds.length} ${l10n.translationQueueSelected}',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _buildFormatChips(l10n),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildFormatChips(AppLocalizations l10n) {
+    const List<(String, IconData)> formats = <(String, IconData)>[
+      ('docx', Icons.description),
+      ('html', Icons.language),
+      ('md', Icons.article),
+      ('md_zip', Icons.folder_zip_outlined),
+      ('pdf', Icons.picture_as_pdf),
+      ('txt', Icons.text_snippet),
+    ];
+    return formats.map((f) {
+      final String ft = f.$1;
+      return Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: ActionChip(
+          avatar: Icon(f.$2, size: 16),
+          label: Text(
+            _downloadFormatButtonLabel(ft, l10n),
+            style: const TextStyle(fontSize: 12),
+          ),
+          onPressed: () => onDownloadFormat(taskIds, ft),
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+        ),
+      );
+    }).toList();
+  }
+}
 
 class _StatusBadge extends StatelessWidget {
   final String status;

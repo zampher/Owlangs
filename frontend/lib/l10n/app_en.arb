@@ -494,6 +494,11 @@
       "error": {}
     }
   },
+  "translationQueueSelected": "selected",
+  "translationQueueSelectMode": "Select",
+  "translationQueueClearSelection": "Clear selection",
+  "translationQueueBatchDownloadFailed": "Batch download failed: {error}",
+  "translationQueueBatchDownloadSuccess": "Batch download: {fileType} ready",
   "translationQueueView": "Reading Edit",
   "homeFeatureUnderDevelopment": "This feature is under development.",
   "homeAnonymizeNotSupportedVersion": "Not supported yet. Will be available in v{version}.",

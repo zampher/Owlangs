@@ -477,6 +477,11 @@
       "error": {}
     }
   },
+  "translationQueueSelected": "已选",
+  "translationQueueSelectMode": "选择",
+  "translationQueueClearSelection": "清除选择",
+  "translationQueueBatchDownloadFailed": "批量下载失败：{error}",
+  "translationQueueBatchDownloadSuccess": "批量下载：{fileType} 已就绪",
   "translationQueueView": "阅读编辑模式",
   "homeFeatureUnderDevelopment": "此功能正在开发中。",
   "homeAnonymizeNotSupportedVersion": "尚未支持。将在 v{version} 版本中提供。",

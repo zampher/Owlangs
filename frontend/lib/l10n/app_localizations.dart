@@ -2249,6 +2249,36 @@ abstract class AppLocalizations {
   /// **'Could not clear your queue: {error}'**
   String translationQueueClearMyQueueFailed(Object error);
 
+  /// No description provided for @translationQueueSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'selected'**
+  String get translationQueueSelected;
+
+  /// No description provided for @translationQueueSelectMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get translationQueueSelectMode;
+
+  /// No description provided for @translationQueueClearSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear selection'**
+  String get translationQueueClearSelection;
+
+  /// No description provided for @translationQueueBatchDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch download failed: {error}'**
+  String translationQueueBatchDownloadFailed(Object error);
+
+  /// No description provided for @translationQueueBatchDownloadSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch download: {fileType} ready'**
+  String translationQueueBatchDownloadSuccess(Object fileType);
+
   /// No description provided for @translationQueueView.
   ///
   /// In en, this message translates to:

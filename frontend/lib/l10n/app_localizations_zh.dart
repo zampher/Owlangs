@@ -1207,6 +1207,25 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get translationQueueSelected => '已选';
+
+  @override
+  String get translationQueueSelectMode => '选择';
+
+  @override
+  String get translationQueueClearSelection => '清除选择';
+
+  @override
+  String translationQueueBatchDownloadFailed(Object error) {
+    return '批量下载失败：$error';
+  }
+
+  @override
+  String translationQueueBatchDownloadSuccess(Object fileType) {
+    return '批量下载：$fileType 已就绪';
+  }
+
+  @override
   String get translationQueueView => '阅读编辑模式';
 
   @override

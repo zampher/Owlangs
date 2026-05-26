@@ -7,10 +7,15 @@ Download routes.
 Handles file download endpoints for translation results.
 """
 
-from typing import Optional
+import io
+import json
+import os
+import zipfile
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Path as FastApiPath, Query as FastApiQuery
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel
 
 from backend.app.services.download import DownloadService
 from backend.app.services.download.output_generator import get_ebook_converters_availability
@@ -22,6 +27,11 @@ router = APIRouter()
 
 # Initialize service instance
 download_service = DownloadService(task_manager)
+
+
+class BatchDownloadRequest(BaseModel):
+    task_ids: List[str]
+    file_type: str  # "md", "html", "docx", "pdf", etc.
 
 
 @router.get(
@@ -81,6 +91,121 @@ async def service_download_file_route(
     except Exception as e:
         logger.warning(LogModule.ROUTE, f"[DOWNLOAD-STASH] Record stash failed task_id={task_id}: {e}", exc_info=True)
     return resp
+
+
+async def _read_response_bytes(response) -> Optional[bytes]:
+    """Read bytes from a FileResponse or StreamingResponse."""
+    from fastapi.responses import FileResponse as FR, StreamingResponse as SR
+    if isinstance(response, FR):
+        path = getattr(response, "path", None)
+        if path and os.path.isfile(path):
+            with open(path, "rb") as f:
+                return f.read()
+    elif isinstance(response, SR):
+        chunks = []
+        async for chunk in response.body_iterator:
+            chunks.append(chunk)
+        return b"".join(chunks) if chunks else None
+    return None
+
+
+@router.post(
+    "/batch-download",
+    summary="Batch download translation results as ZIP",
+    description="Download results from multiple completed tasks in a single ZIP file. "
+                "For each task_id, the requested file_type is downloaded. Tasks that do not "
+                "support the requested format are skipped and listed in _manifest.json.",
+    responses={
+        200: {
+            "description": "ZIP file containing all successfully downloaded results + _manifest.json",
+            "content": {"application/zip": {"schema": {"type": "string", "format": "binary"}}},
+        },
+        400: {"description": "No task_ids provided or all tasks failed."},
+    },
+)
+async def service_batch_download_route(body: BatchDownloadRequest):
+    """Download results from multiple tasks as a ZIP."""
+    if not body.task_ids:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "task_ids list is empty"},
+        )
+
+    buf = io.BytesIO()
+    manifest: Dict[str, Dict[str, str]] = {}
+
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for task_id in body.task_ids:
+            try:
+                ts = task_manager.get_task(task_id)
+                original_filename = ""
+                if ts:
+                    original_filename = ts.get("original_filename") or ""
+
+                resp = await download_service.download_file(
+                    task_id=task_id,
+                    file_type=body.file_type,
+                    embed_images=None,
+                )
+                file_bytes = await _read_response_bytes(resp)
+                if file_bytes is None:
+                    manifest[task_id] = {
+                        "status": "skipped",
+                        "reason": "Failed to read response bytes",
+                    }
+                    logger.warning(
+                        LogModule.ROUTE,
+                        f"[BATCH-DOWNLOAD] task_id={task_id}: no bytes returned for {body.file_type}",
+                    )
+                    continue
+
+                # Determine filename inside ZIP
+                ext = body.file_type
+                if body.file_type == "md_zip":
+                    ext = "zip"
+                base_name = "unknown"
+                if original_filename:
+                    base_name = original_filename.rsplit(".", 1)[0] if "." in original_filename else original_filename
+                safe_id = task_id[:8] if len(task_id) > 8 else task_id
+                entry_name = f"{base_name}_{safe_id}.{ext}"
+
+                zf.writestr(entry_name, file_bytes)
+                manifest[task_id] = {"status": "success", "file": entry_name}
+                logger.info(
+                    LogModule.ROUTE,
+                    f"[BATCH-DOWNLOAD] task_id={task_id}: added {entry_name}",
+                )
+            except Exception as e:
+                manifest[task_id] = {
+                    "status": "skipped",
+                    "reason": str(e),
+                }
+                logger.warning(
+                    LogModule.ROUTE,
+                    f"[BATCH-DOWNLOAD] task_id={task_id}: skipped ({e})",
+                )
+
+        # Write manifest
+        zf.writestr("_manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+
+    buf.seek(0)
+    content = buf.getvalue()
+
+    if not content or all(
+        v.get("status") != "success" for v in manifest.values()
+    ):
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "All tasks failed or were skipped", "manifest": manifest},
+        )
+
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=batch_download_{body.file_type}.zip"},
+    )
 
 
 @router.get(

@@ -1217,6 +1217,25 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get translationQueueSelected => 'selected';
+
+  @override
+  String get translationQueueSelectMode => 'Select';
+
+  @override
+  String get translationQueueClearSelection => 'Clear selection';
+
+  @override
+  String translationQueueBatchDownloadFailed(Object error) {
+    return 'Batch download failed: $error';
+  }
+
+  @override
+  String translationQueueBatchDownloadSuccess(Object fileType) {
+    return 'Batch download: $fileType ready';
+  }
+
+  @override
   String get translationQueueView => '閲覧編集';
 
   @override

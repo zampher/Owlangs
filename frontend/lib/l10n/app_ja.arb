@@ -477,6 +477,11 @@
       "error": {}
     }
   },
+  "translationQueueSelected": "selected",
+  "translationQueueSelectMode": "Select",
+  "translationQueueClearSelection": "Clear selection",
+  "translationQueueBatchDownloadFailed": "Batch download failed: {error}",
+  "translationQueueBatchDownloadSuccess": "Batch download: {fileType} ready",
   "translationQueueView": "閲覧編集",
   "homeFeatureUnderDevelopment": "この機能は開発中です。",
   "homeAnonymizeNotSupportedVersion": "まだサポートされていません。v{version}で利用可能になります。",

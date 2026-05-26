@@ -282,6 +282,26 @@ class TranslationService {
     }
   }
 
+  /// 批量下载：提交多个 task_id，返回 ZIP 文件字节
+  Future<List<int>> batchDownload(
+    List<String> taskIds,
+    String fileType,
+  ) async {
+    final Dio dio = _buildAuthedDio(useLongTimeout: true);
+    final Response<List<int>> resp = await dio.post<List<int>>(
+      '/service/batch-download',
+      data: <String, dynamic>{
+        'task_ids': taskIds,
+        'file_type': fileType,
+      },
+      options: Options(
+        responseType: ResponseType.bytes,
+        receiveTimeout: AppConfig.longRequestTimeout,
+      ),
+    );
+    return resp.data ?? <int>[];
+  }
+
   /// 轮询任务状态，直到完成或失败或超时
   /// onUpdate: 每次拉取到状态时回调；intervalSec: 轮询间隔；timeoutSec: 超时时间
   Future<Map<String, dynamic>> pollUntilDone(

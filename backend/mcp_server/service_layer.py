@@ -15,6 +15,7 @@ import sys
 import tempfile
 import time
 import uuid
+import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -609,6 +610,165 @@ async def convert_document(
         }
     except Exception as e:
         return {"success": False, "message": f"Document conversion failed: {str(e)}"}
+
+
+async def translate_batch_zip(
+    zip_content: Optional[str],
+    zip_file_name: str,
+    to_lang: str,
+    base_url: str = "",
+    api_key: str = "",
+    model_id: str = "",
+    glossary: Optional[Dict[str, str]] = None,
+    glossary_ids: Optional[List[str]] = None,
+    glossary_generate: bool = False,
+    convert_engine: Optional[str] = None,
+    chunk_size: int = 0,
+    concurrent: int = 3,
+    temperature: float = 0.3,
+    custom_prompt: Optional[str] = None,
+    prompt_mode: Optional[str] = None,
+    prompt_style: Optional[str] = None,
+    deep_split: Optional[bool] = None,
+    execution_mode: str = "queued",
+    skip_translate: bool = False,
+) -> Dict[str, Any]:
+    """
+    Upload a ZIP of documents, extract supported files, submit each as a
+    translation task.  Returns a list of (task_id, file_name).
+    """
+    zip_bytes = _resolve_file_content(zip_content, None)
+    if zip_bytes is None:
+        return {"success": False, "message": "zip_content is required (base64-encoded)"}
+
+    import io
+    temp_dir = tempfile.mkdtemp(prefix="mcp_batch_")
+    tasks: List[Dict[str, str]] = []
+    errors: List[Dict[str, str]] = []
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
+            names = zf.namelist()
+            for name in names:
+                # Skip directories / macOS metadata
+                if name.endswith("/") or name.startswith("__MACOSX") or name.startswith("."):
+                    continue
+                ext = Path(name).suffix.lower()
+                supported_exts = {
+                    ".pdf", ".md", ".png", ".jpg", ".jpeg",
+                    ".docx", ".doc", ".pptx", ".ppt",
+                    ".xlsx", ".xls", ".csv", ".txt",
+                    ".html", ".htm", ".json", ".srt",
+                    ".epub", ".mobi", ".azw", ".ts",
+                }
+                if ext not in supported_exts:
+                    errors.append({"file": name, "reason": f"Unsupported extension: {ext}"})
+                    continue
+
+                file_bytes = zf.read(name)
+                file_b64 = base64.b64encode(file_bytes).decode("utf-8")
+
+                result = await translate_file(
+                    file_content=file_b64,
+                    file_path=None,
+                    file_name=Path(name).name,
+                    to_lang=to_lang,
+                    base_url=base_url,
+                    api_key=api_key,
+                    model_id=model_id,
+                    glossary=glossary,
+                    glossary_ids=glossary_ids,
+                    glossary_generate=glossary_generate,
+                    convert_engine=convert_engine,
+                    chunk_size=chunk_size,
+                    concurrent=concurrent,
+                    temperature=temperature,
+                    custom_prompt=custom_prompt,
+                    prompt_mode=prompt_mode,
+                    prompt_style=prompt_style,
+                    deep_split=deep_split,
+                    execution_mode=execution_mode,
+                    skip_translate=skip_translate,
+                )
+                if result.get("task_started") and result.get("task_id"):
+                    tasks.append({
+                        "task_id": result["task_id"],
+                        "file_name": Path(name).name,
+                    })
+                else:
+                    errors.append({
+                        "file": name,
+                        "reason": result.get("message", "Unknown error"),
+                    })
+    except Exception as e:
+        return {"success": False, "message": f"Failed to process ZIP: {str(e)}"}
+
+    return {
+        "success": True,
+        "total": len(tasks) + len(errors),
+        "submitted": len(tasks),
+        "failed": len(errors),
+        "tasks": tasks,
+        "errors": errors,
+    }
+
+
+async def download_batch_results(
+    task_ids: List[str],
+    file_type: str = "target",
+) -> Dict[str, Any]:
+    """
+    Download results from multiple tasks, pack into a single ZIP.
+    Skips tasks that do not support the requested format.
+    Returns: { success, file_content (base64), file_name, manifest }.
+    """
+    import io
+
+    buf = io.BytesIO()
+    manifest: Dict[str, Dict[str, str]] = {}
+
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for task_id in task_ids:
+            try:
+                result = await download_result(task_id, file_type)
+                if not result.get("success"):
+                    manifest[task_id] = {
+                        "status": "skipped",
+                        "reason": result.get("message", "Unknown error"),
+                    }
+                    continue
+
+                raw = result.get("file_content", "")
+                file_name = result.get("file_name", f"{task_id}_{file_type}")
+                try:
+                    raw_bytes = base64.b64decode(raw) if raw else b""
+                except Exception:
+                    manifest[task_id] = {"status": "skipped", "reason": "Base64 decode failed"}
+                    continue
+
+                if not raw_bytes:
+                    manifest[task_id] = {"status": "skipped", "reason": "Empty content"}
+                    continue
+
+                # Determine extension from file_type
+                ext = file_type if file_type != "target" else Path(file_name).suffix.lstrip(".")
+                safe_name = f"{Path(file_name).stem}_{task_id[:8]}.{ext}" if ext else file_name
+                zf.writestr(safe_name, raw_bytes)
+                manifest[task_id] = {"status": "success", "file": safe_name}
+            except Exception as e:
+                manifest[task_id] = {"status": "skipped", "reason": str(e)}
+
+        zf.writestr("_manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+
+    buf.seek(0)
+    zip_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    return {
+        "success": True,
+        "file_content": zip_b64,
+        "file_name": "batch_results.zip",
+        "manifest": manifest,
+    }
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
