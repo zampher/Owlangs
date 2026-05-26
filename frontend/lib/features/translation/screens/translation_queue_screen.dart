@@ -122,6 +122,10 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
           final Map<String, dynamic> st = await _svc.getStatus(id);
           row['status'] = st['status'] ?? row['status'];
           row['progress'] = st['progress'] ?? row['progress'];
+          // Ensure completed tasks always show 100% progress
+          if (row['status']?.toString().toLowerCase() == 'completed') {
+            row['progress'] = 100;
+          }
           row['message'] = st['message'] ?? row['message'];
           // Merge translation stats and token usage for completed tasks
           if (st['translation_stats'] is Map) {
