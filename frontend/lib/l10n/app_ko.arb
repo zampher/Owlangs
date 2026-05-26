@@ -278,7 +278,8 @@
   "homeNavTranslationQueue": "작업 관리",
   "homeNavAnonymize": "익명화",
   "homeNavSettings": "설정",
-  "homeNavDonateHelp": "기부 및 도움말",
+  "homeNavDonateHelp": "도움말",
+  "homeNavDonate": "기부",
   "homeNavHome": "홈",
   "homeNavBatchUpload": "일괄 업로드",
 

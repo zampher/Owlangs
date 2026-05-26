@@ -910,7 +910,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homeNavSettings => '설정';
 
   @override
-  String get homeNavDonateHelp => '기부 및 도움말';
+  String get homeNavDonateHelp => '도움말';
+
+  @override
+  String get homeNavDonate => '기부';
 
   @override
   String get homeNavHome => '홈';

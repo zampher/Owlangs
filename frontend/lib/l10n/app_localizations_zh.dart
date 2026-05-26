@@ -901,7 +901,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeNavSettings => '设置';
 
   @override
-  String get homeNavDonateHelp => '捐赠与帮助';
+  String get homeNavDonateHelp => '帮助';
+
+  @override
+  String get homeNavDonate => '捐赠';
 
   @override
   String get homeNavHome => '主页';

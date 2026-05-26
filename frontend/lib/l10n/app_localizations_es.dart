@@ -963,7 +963,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeNavSettings => 'Configuración';
 
   @override
-  String get homeNavDonateHelp => 'Donar & Ayuda';
+  String get homeNavDonateHelp => 'Ayuda';
+
+  @override
+  String get homeNavDonate => 'Donar';
 
   @override
   String get homeNavHome => 'Inicio';

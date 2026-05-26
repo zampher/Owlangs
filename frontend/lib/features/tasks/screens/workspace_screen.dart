@@ -70,8 +70,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   bool _canScrollLeft = false;
   bool _canScrollRight = false;
 
-  // GlobalKey for Donate & Help button to get its position
-  final GlobalKey _donateHelpButtonKey = GlobalKey();
+  // GlobalKey for Help button to get its position
+  final GlobalKey _helpButtonKey = GlobalKey();
 
   /// Defer building HomeScreen to next frame so route transition paints quickly.
   bool _homeContentReady = false;
@@ -1075,13 +1075,27 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               // Settings and Setup wizard (Web: admin only)
               ..._adminOnlyActionButtons(l10n, highlightSetupWizardButton),
               const SizedBox(width: 4),
-              // Donate & Help button
+              // Help button
               _buildActionButton(
-                key: _donateHelpButtonKey,
-                icon: Icons.volunteer_activism,
+                key: _helpButtonKey,
+                icon: Icons.help_outline,
                 label: l10n.homeNavDonateHelp,
-                onPressed: () => context.go(AppRouter.donateRoute),
-                width: 90,
+                onPressed: () => context.push(
+                  AppRouter.donateRoute,
+                  extra: <String, dynamic>{'mode': 'help'},
+                ),
+                width: 72,
+              ),
+              const SizedBox(width: 4),
+              // Donate button
+              _buildActionButton(
+                icon: Icons.volunteer_activism,
+                label: l10n.homeNavDonate,
+                onPressed: () => context.push(
+                  AppRouter.donateRoute,
+                  extra: <String, dynamic>{'mode': 'donate'},
+                ),
+                width: 72,
               ),
               const SizedBox(width: 4),
               const _GitHubStarButton(),

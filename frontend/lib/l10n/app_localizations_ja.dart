@@ -910,7 +910,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeNavSettings => '設定';
 
   @override
-  String get homeNavDonateHelp => '寄付＆ヘルプ';
+  String get homeNavDonateHelp => 'ヘルプ';
+
+  @override
+  String get homeNavDonate => '寄付';
 
   @override
   String get homeNavHome => 'ホーム';

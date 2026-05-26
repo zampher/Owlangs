@@ -295,7 +295,8 @@
   "homeNavTranslationQueue": "Task management",
   "homeNavAnonymize": "Anonymize",
   "homeNavSettings": "Settings",
-  "homeNavDonateHelp": "Donate & Help",
+  "homeNavDonateHelp": "Help",
+  "homeNavDonate": "Donate",
   "homeNavHome": "Home",
   "homeNavBatchUpload": "Batch upload",
 

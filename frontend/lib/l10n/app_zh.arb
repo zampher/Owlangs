@@ -278,7 +278,8 @@
   "homeNavTranslationQueue": "任务管理",
   "homeNavAnonymize": "匿名化",
   "homeNavSettings": "设置",
-  "homeNavDonateHelp": "捐赠与帮助",
+  "homeNavDonateHelp": "帮助",
+  "homeNavDonate": "捐赠",
   "homeNavHome": "主页",
   "homeNavBatchUpload": "批量上传",
 

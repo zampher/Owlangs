@@ -942,7 +942,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeNavSettings => 'Settings';
 
   @override
-  String get homeNavDonateHelp => 'Donate & Help';
+  String get homeNavDonateHelp => 'Help';
+
+  @override
+  String get homeNavDonate => 'Donate';
 
   @override
   String get homeNavHome => 'Home';

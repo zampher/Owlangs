@@ -9,8 +9,14 @@ import 'quick_start_guide_screen.dart';
 import 'donate_screen.dart';
 
 /// Main screen managing Donate, Help, and Contact tabs.
+///
+/// [mode] controls which tabs are shown:
+/// - 'full' (default): Quick Start, Help, Editions, Donate, Contact
+/// - 'help': Quick Start, Help, Editions, Contact (no Donate tab)
+/// - 'donate': Only Donate content, no TabBar
 class DonateHelpContactScreen extends StatefulWidget {
-  const DonateHelpContactScreen({super.key});
+  final String mode;
+  const DonateHelpContactScreen({super.key, this.mode = 'full'});
 
   @override
   State<DonateHelpContactScreen> createState() =>
@@ -20,12 +26,21 @@ class DonateHelpContactScreen extends StatefulWidget {
 class _DonateHelpContactScreenState extends State<DonateHelpContactScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  late int _tabCount;
 
   @override
   void initState() {
     super.initState();
-    // OpenSource edition: activation is removed, so the tab count decreases.
-    _tabController = TabController(length: 5, vsync: this);
+    if (widget.mode == 'donate') {
+      _tabCount = 1;
+    } else if (widget.mode == 'help') {
+      // Quick Start, Help, Editions, Contact (no Donate)
+      _tabCount = 4;
+    } else {
+      // full: Quick Start, Help, Editions, Donate, Contact
+      _tabCount = 5;
+    }
+    _tabController = TabController(length: _tabCount, vsync: this);
   }
 
   @override
@@ -36,57 +51,72 @@ class _DonateHelpContactScreenState extends State<DonateHelpContactScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Optionally honor initialTab index passed via GoRouter.extra
-    final extra = GoRouterState.of(context).extra;
-    if (extra is Map && extra['initialTab'] is int) {
-      final int idx = extra['initialTab'] as int;
-      // Compatibility:
-      // Old tabs (before removing Activation): 0 Quick Start, 1 Help, 2 Editions,
-      // 3 Donate, 4 Activation, 5 Contact.
-      // New tabs: 0 Quick Start, 1 Help, 2 Editions, 3 Donate, 4 Contact.
-      int mappedIdx = idx;
-      if (idx == 4) mappedIdx = 3; // Activation -> Donate
-      if (idx == 5) mappedIdx = 4; // Contact stays Contact
-      if (mappedIdx >= 0 && mappedIdx < _tabController.length) {
-        _tabController.index = mappedIdx;
-      }
-    }
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Donate & Help'),
-        leadingWidth: 220,
-        leading: OwlangsAppBarLeading(
-          onTap: () => context.go(AppRouter.homeRoute),
-        ),
-        actions: <Widget>[
-          IconButton(
-            tooltip: 'Home',
-            onPressed: () => context.go(AppRouter.homeRoute),
-            icon: const Icon(Icons.home_outlined),
-          ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const <Widget>[
-            Tab(icon: Icon(Icons.play_circle_outline), text: 'Quick Start'),
-            Tab(icon: Icon(Icons.help_outline), text: 'Help'),
-            Tab(icon: Icon(Icons.compare_arrows), text: 'Editions'),
-            Tab(icon: Icon(Icons.volunteer_activism), text: 'Donate'),
-            Tab(icon: Icon(Icons.contact_support), text: 'Contact'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: const <Widget>[
-          QuickStartGuideScreen(),
-          HelpScreen(),
-          EditionComparisonScreen(),
-          DonateScreen(),
-          ContactScreen(),
-        ],
-      ),
+      appBar: widget.mode == 'donate'
+          ? AppBar(
+              title: const Text('Donate'),
+              leadingWidth: 220,
+              leading: OwlangsAppBarLeading(
+                onTap: () => context.go(AppRouter.homeRoute),
+              ),
+              actions: <Widget>[
+                IconButton(
+                  tooltip: 'Home',
+                  onPressed: () => context.go(AppRouter.homeRoute),
+                  icon: const Icon(Icons.home_outlined),
+                ),
+              ],
+            )
+          : AppBar(
+              title: const Text('Donate & Help'),
+              leadingWidth: 220,
+              leading: OwlangsAppBarLeading(
+                onTap: () => context.go(AppRouter.homeRoute),
+              ),
+              actions: <Widget>[
+                IconButton(
+                  tooltip: 'Home',
+                  onPressed: () => context.go(AppRouter.homeRoute),
+                  icon: const Icon(Icons.home_outlined),
+                ),
+              ],
+              bottom: TabBar(
+                controller: _tabController,
+                tabs: widget.mode == 'help'
+                    ? const <Widget>[
+                        Tab(icon: Icon(Icons.play_circle_outline), text: 'Quick Start'),
+                        Tab(icon: Icon(Icons.help_outline), text: 'Help'),
+                        Tab(icon: Icon(Icons.compare_arrows), text: 'Editions'),
+                        Tab(icon: Icon(Icons.contact_support), text: 'Contact'),
+                      ]
+                    : const <Widget>[
+                        Tab(icon: Icon(Icons.play_circle_outline), text: 'Quick Start'),
+                        Tab(icon: Icon(Icons.help_outline), text: 'Help'),
+                        Tab(icon: Icon(Icons.compare_arrows), text: 'Editions'),
+                        Tab(icon: Icon(Icons.volunteer_activism), text: 'Donate'),
+                        Tab(icon: Icon(Icons.contact_support), text: 'Contact'),
+                      ],
+              ),
+            ),
+      body: widget.mode == 'donate'
+          ? const DonateScreen()
+          : TabBarView(
+              controller: _tabController,
+              children: widget.mode == 'help'
+                  ? const <Widget>[
+                      QuickStartGuideScreen(),
+                      HelpScreen(),
+                      EditionComparisonScreen(),
+                      ContactScreen(),
+                    ]
+                  : const <Widget>[
+                      QuickStartGuideScreen(),
+                      HelpScreen(),
+                      EditionComparisonScreen(),
+                      DonateScreen(),
+                      ContactScreen(),
+                    ],
+            ),
     );
   }
 }

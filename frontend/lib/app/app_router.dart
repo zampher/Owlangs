@@ -236,8 +236,11 @@ class AppRouter {
           GoRoute(
             path: donateRoute,
             name: 'donate',
-            builder: (BuildContext context, GoRouterState state) =>
-                const DonateHelpContactScreen(),
+            builder: (BuildContext context, GoRouterState state) {
+              final extra = state.extra;
+              final mode = (extra is Map) ? (extra['mode'] as String?) ?? 'full' : 'full';
+              return DonateHelpContactScreen(mode: mode);
+            },
           ),
 
           // Profile Route

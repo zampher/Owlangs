@@ -1730,8 +1730,14 @@ abstract class AppLocalizations {
   /// No description provided for @homeNavDonateHelp.
   ///
   /// In en, this message translates to:
-  /// **'Donate & Help'**
+  /// **'Help'**
   String get homeNavDonateHelp;
+
+  /// No description provided for @homeNavDonate.
+  ///
+  /// In en, this message translates to:
+  /// **'Donate'**
+  String get homeNavDonate;
 
   /// No description provided for @homeNavHome.
   ///
