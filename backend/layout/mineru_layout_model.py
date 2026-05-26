@@ -570,7 +570,7 @@ def parse_mineru_layout_from_zip_bytes(zip_bytes: bytes) -> Optional[LayoutDocum
                         "_version_name": data.get("_version_name")
                     }
                     
-                    logger.info(LogModule.EXTRACT, f"Parsed MinerU layout.json: {len(pages)} pages, {global_index} blocks")
+                    logger.debug(LogModule.EXTRACT, f"Parsed MinerU layout.json: {len(pages)} pages, {global_index} blocks")
                     return LayoutDocument(pages=pages, engine="mineru", metadata=metadata)
             except Exception as e:
                 logger.debug(LogModule.LAYOUT, f"Failed to parse layout.json, trying middle.json: {e}")

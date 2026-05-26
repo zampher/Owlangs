@@ -133,7 +133,7 @@ class SystemConfig:
             config_path = get_config_file_path(config_file)
             
             if config_path.exists():
-                logger.info(LogModule.CONFIG, f"Loading system configuration from: {config_path}")
+                logger.debug(LogModule.CONFIG, f"Loading system configuration from: {config_path}")
                 with open(config_path, 'r', encoding='utf-8-sig') as f:
                     data = json.load(f)
 

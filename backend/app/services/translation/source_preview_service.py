@@ -98,9 +98,9 @@ class SourcePreviewService:
                     target_lang = None
         
         if target_lang:
-            logger.info(LogModule.EXTRACT, f"[PREVIEW] Task {task_id}: Using target_lang={target_lang} from payload for exclusion detection")
+            logger.debug(LogModule.EXTRACT, f"[PREVIEW] Task {task_id}: Using target_lang={target_lang} from payload for exclusion detection")
         else:
-            logger.info(LogModule.EXTRACT, f"[PREVIEW] Task {task_id}: target_lang is None or default 'en', skipping language_match detection during extraction")
+            logger.debug(LogModule.EXTRACT, f"[PREVIEW] Task {task_id}: target_lang is None or default 'en', skipping language_match detection during extraction")
         
         return target_lang
     
@@ -1845,7 +1845,7 @@ class SourcePreviewService:
                         table_body_format = "html"
             except Exception:
                 pass
-            logger.info(
+            logger.debug(
                 LogModule.EXTRACT,
                 f"[PREVIEW] Task {task_id}: Building layout preview with deep_split={deep_split_enabled} "
                 f"(from {source}), chunk_size={chunk_size}, equation_format={equation_format}, table_body_format={table_body_format}, "
@@ -1859,7 +1859,7 @@ class SourcePreviewService:
                 include_structural_blocks=True  # CRITICAL: Must match Extract phase to ensure same segment count (176 vs 164)
             )
             layout_result = builder.build(layout_doc)
-            logger.info(LogModule.EXTRACT, f"[PREVIEW] Task {task_id}: LayoutMarkdownBuilder generated {len(layout_result.chunks)} chunks (deep_split={deep_split_enabled})")
+            logger.debug(LogModule.EXTRACT, f"[PREVIEW] Task {task_id}: LayoutMarkdownBuilder generated {len(layout_result.chunks)} chunks (deep_split={deep_split_enabled})")
             
             if not layout_result.chunks:
                 return False
@@ -2231,7 +2231,7 @@ class SourcePreviewService:
                     excluded_segments=filtered_excluded_layout,
                 )
                 task_state["segments_metadata"]["excluded_segment_indices"] = sorted(filtered_excluded_layout.keys())
-                logger.info(
+                logger.debug(
                     LogModule.EXCLUSION,
                     f"[PREVIEW] Task {task_id}: Stored {len(filtered_excluded_layout)} excluded segments from layout chunks "
                     f"(content-based + user-chosen optional) so they are not sent for translation or marked as failed"
@@ -2347,7 +2347,7 @@ class SourcePreviewService:
                 task_state["chunk_tokens_info"] = chunk_tokens_info
                 task_state["total_estimated_input_tokens"] = total_estimated_tokens
             
-            logger.info(
+            logger.debug(
                 LogModule.EXTRACT,
                 f"[PREVIEW] Task {task_id}: Built chunk_to_segment_map: {len(chunk_to_segment_map)} chunks "
                 f"(excluded {len(excluded_segment_indices)} segments from chunking, total estimated tokens: {total_estimated_tokens})"

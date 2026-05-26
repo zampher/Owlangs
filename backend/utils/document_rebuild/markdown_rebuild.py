@@ -93,7 +93,7 @@ def has_revised_segments(task_state: Dict[str, Any]) -> bool:
             )
             return True
     
-    logger.info(
+    logger.debug(
         LogModule.RESTOR,
         f"[HAS_REVISED] No modified or retranslated segments found. "
         f"Summary: total={len(segments)}, modified={modified_count}, "
@@ -176,10 +176,10 @@ def _process_images_and_create_markdown_document(
         # Log updated keys for debugging
         if saved_image_paths:
             updated_keys = [f"./images/{path.name}" for path in saved_image_paths]
-            logger.info(LogModule.TRANS, f"[REBUILD] Updated image_data_map with {len(updated_keys)} file paths: {updated_keys[:5]}")
-            logger.info(LogModule.TRANS, f"[REBUILD] image_data_map keys count: {original_keys_count} -> {len(image_data_map)}")
+            logger.debug(LogModule.TRANS, f"[REBUILD] Updated image_data_map with {len(updated_keys)} file paths: {updated_keys[:5]}")
+            logger.debug(LogModule.TRANS, f"[REBUILD] image_data_map keys count: {original_keys_count} -> {len(image_data_map)}")
         if saved_image_paths:
-            logger.info(LogModule.TRANS, f"Saved {len(saved_image_paths)} images to {output_dir / 'images' if output_dir else 'images'}")
+            logger.debug(LogModule.TRANS, f"Saved {len(saved_image_paths)} images to {output_dir / 'images' if output_dir else 'images'}")
         
         # CRITICAL: Ensure updated image_data_map is saved back to task_state
         # This ensures MD2DOCXExporter can access the updated keys
@@ -202,7 +202,7 @@ def _process_images_and_create_markdown_document(
         stem=file_stem
     )
     
-    logger.info(LogModule.TRANS, f"Rebuilt MarkdownDocument from {len(segments)} segments")
+    logger.debug(LogModule.TRANS, f"Rebuilt MarkdownDocument from {len(segments)} segments")
     return markdown_doc
 
 
@@ -280,12 +280,12 @@ def _rebuild_markdown_from_layout_segments(
                 separator = segment.get("separator_after")
                 separators.append(separator)
     
-    logger.info(LogModule.TRANS, f"Rebuilding Markdown: {len(segments)} segments, {modified_segments_count} modified, {len(target_texts)} with content")
-    
+    logger.debug(LogModule.TRANS, f"Rebuilding Markdown: {len(segments)} segments, {modified_segments_count} modified, {len(target_texts)} with content")
+
     if not target_texts:
         logger.warning(LogModule.RESTOR,"No target texts found in segments")
         return ""
-    
+
     # Build mapping from segment index to block types (for title formatting)
     # CRITICAL: Use segment_index (not array index) as key to handle filtered/cleared segments
     segment_to_block_types: Dict[int, List[str]] = {}
@@ -681,12 +681,12 @@ def _rebuild_markdown_from_text_segments(
                 separator = segment.get("separator_after")
                 separators.append(separator)
     
-    logger.info(LogModule.TRANS, f"Rebuilding Markdown: {len(segments)} segments, {modified_segments_count} modified, {len(target_texts)} with content")
-    
+    logger.debug(LogModule.TRANS, f"Rebuilding Markdown: {len(segments)} segments, {modified_segments_count} modified, {len(target_texts)} with content")
+
     if not target_texts:
         logger.warning(LogModule.RESTOR,"No target texts found in segments")
         return ""
-    
+
     # Rebuild markdown using preserved separators or intelligent joining
     if len(separators) == len(target_texts) - 1 and all(s is not None for s in separators):
         # All separators preserved, use them; empty/whitespace-only -> paragraph break (double newline)
@@ -697,12 +697,12 @@ def _rebuild_markdown_from_text_segments(
             # Use paragraph break when separator is empty so EPUB/MOBI get proper line breaks
             separator = sep_str if sep_str.strip() else "\n\n"
             markdown_content += separator + target_texts[i]
-        logger.info(LogModule.TRANS, f"Rebuilt markdown using preserved separators, content length: {len(markdown_content)} characters")
+        logger.debug(LogModule.TRANS, f"Rebuilt markdown using preserved separators, content length: {len(markdown_content)} characters")
     else:
         # Use intelligent markdown joining to preserve format (handles single vs double newlines)
         # This preserves original formatting like lists, tables, quotes, etc.
         markdown_content = join_markdown_texts(target_texts)
-        logger.info(LogModule.TRANS, f"Rebuilt markdown using intelligent joining, content length: {len(markdown_content)} characters")
+        logger.debug(LogModule.TRANS, f"Rebuilt markdown using intelligent joining, content length: {len(markdown_content)} characters")
     
     return markdown_content
 
@@ -760,7 +760,7 @@ def rebuild_markdown_document_from_segments(
             f"[REBUILD] {segments_with_layout_indices} segment(s) have layout_block_indices but no layout_document/source_input_type!=layout; using text-only rebuild",
         )
     if is_pdf_with_layout and segments_with_layout_indices == 0:
-        logger.warning(
+        logger.info(
             LogModule.RESTOR,
             "[REBUILD] Layout branch taken but no segment has layout_block_indices; block types may not apply (check segment recording)",
         )
@@ -806,7 +806,7 @@ def rebuild_markdown_document_from_segments(
     else:
         # Use text-based rebuild for MD/TXT paths
         if not is_pdf_with_layout:
-            logger.info(LogModule.RESTOR, "[REBUILD] Text path: using text-based segment type for rebuild")
+            logger.debug(LogModule.RESTOR, "[REBUILD] Text path: using text-based segment type for rebuild")
         markdown_content = _rebuild_markdown_from_text_segments(segments=segments)
     
     if not markdown_content:

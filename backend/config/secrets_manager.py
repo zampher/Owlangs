@@ -240,7 +240,7 @@ class SecretsManager:
                 changed = True
 
                 if changed:
-                    logger.info(LogModule.CONFIG, f"Normalized secrets structure, saving updated file")
+                    logger.debug(LogModule.CONFIG, f"Normalized secrets structure, saving updated file")
                     # Save immediately to ensure file is written with new structure
                     self._secrets_cache = secrets
                     self.save_secrets(secrets)
@@ -542,7 +542,7 @@ class SecretsManager:
             # Update cache
             self._secrets_cache = secrets
             
-            logger.info(LogModule.CONFIG, f"Sensitive configuration saved to: {self.secrets_file}")
+            logger.debug(LogModule.CONFIG, f"Sensitive configuration saved to: {self.secrets_file}")
             return True
             
         except Exception as e:

@@ -632,7 +632,7 @@ def record_translation_segments(
     
     # Log pre-fill statistics in batch (avoid per-segment logging for performance)
     if prefill_stats["total"] > 0:
-        logger.info(LogModule.TRANS,
+        logger.debug(LogModule.TRANS,
             f"[RECORD_SEGMENTS] Task {task_id}: Pre-fill completed - "
             f"total={prefill_stats['total']}, new={prefill_stats['new']}, existing={prefill_stats['existing']}, "
             f"excluded={prefill_stats['excluded']}, images={prefill_stats['images']}"
@@ -686,12 +686,12 @@ def record_translation_segments(
         reason_counts = {}
         for reason in excluded_segments_with_reasons.values():
             reason_counts[reason] = reason_counts.get(reason, 0) + 1
-        logger.info(LogModule.TRANS,
+        logger.debug(LogModule.TRANS,
             f"[RECORD_SEGMENTS] Task {task_id}: Found {len(excluded_segments_with_reasons)} excluded segments: "
             f"{', '.join(f'{count} {reason.value}' for reason, count in sorted(reason_counts.items()))}"
         )
     else:
-        logger.info(LogModule.TRANS,
+        logger.debug(LogModule.TRANS,
             f"[RECORD_SEGMENTS] Task {task_id}: No excluded segments found in task_state"
         )
     
@@ -773,7 +773,7 @@ def record_translation_segments(
                 if chunk_to_segment_map is None:
                     # Explicitly None means "treat as segments" (PPTX, or markdown_based segment-level result)
                     is_actually_segments = True
-                    logger.info(LogModule.TRANS,
+                    logger.debug(LogModule.TRANS,
                         f"[RECORD_SEGMENTS] chunk_to_segment_map=None and len matches cache: treating as segments. "
                         f"source_chunks={len(source_chunks)}, cached_segments={len(cached_segments)}, workflow={workflow_type}"
                     )
@@ -798,7 +798,7 @@ def record_translation_segments(
     if is_actually_segments:
         # Create one-to-one mapping: each "chunk" (actually segment) maps to itself
         chunk_to_segment_map_computed = [[i] for i in range(len(source_chunks))]
-        logger.info(LogModule.TRANS,
+        logger.debug(LogModule.TRANS,
             f"[RECORD_SEGMENTS] Input is segments (not chunks), created one-to-one mapping: "
             f"{len(chunk_to_segment_map_computed)} entries (workflow={workflow_type}, "
             f"source_chunks={len(source_chunks)}, target_chunks={len(target_chunks)})"
@@ -830,7 +830,7 @@ def record_translation_segments(
     elif is_actually_segments:
         # Create one-to-one mapping: each "chunk" (actually segment) maps to itself
         chunk_to_segment_map_computed = [[i] for i in range(len(source_chunks))]
-        logger.info(LogModule.TRANS,
+        logger.debug(LogModule.TRANS,
             f"[RECORD_SEGMENTS] Input is segments (not chunks), created one-to-one mapping: "
             f"{len(chunk_to_segment_map_computed)} entries (workflow={workflow_type}, "
             f"source_chunks={len(source_chunks)}, target_chunks={len(target_chunks)})"
@@ -2565,7 +2565,7 @@ def record_translation_segments(
             # Check for segments that are excluded but not in original data
             missing_in_original = new_excluded_indices - existing_excluded_indices
             if missing_in_original:
-                logger.warning(LogModule.TRANS,
+                logger.info(LogModule.TRANS,
                     f"[RECORD_SEGMENTS] Task {task_id}: Found {len(missing_in_original)} excluded segments "
                     f"that are not in segments_metadata.excluded_segments: {sorted(missing_in_original)[:10]}... "
                     f"This indicates a data inconsistency. These segments will be excluded in translation, "
@@ -2603,7 +2603,7 @@ def record_translation_segments(
             total_segments = len(segments) if segments else None
             source_segments_count = len(source_segments) if source_segments else None
             
-            logger.info(LogModule.TRANS,
+            logger.debug(LogModule.TRANS,
                 f"[RECORD_SEGMENTS] Task {task_id}: Using {len(excluded_segments_with_reasons)} excluded segments from Extract phase. "
                 f"Reason breakdown: {', '.join(f'{count} {reason.value}' for reason, count in sorted(reason_counts.items()))}. "
                 f"Original data had {len(existing_excluded)} excluded segments with reasons: "

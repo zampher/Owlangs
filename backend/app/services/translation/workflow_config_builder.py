@@ -89,7 +89,7 @@ class WorkflowConfigBuilder:
         # Priority 1: Payload explicit override
         payload_val = payload.get('concurrent', None) if isinstance(payload, dict) else getattr(payload, 'concurrent', None)
         if payload_val is not None and payload_val > 0:
-            logger.info(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={payload_val} from payload (explicit override)")
+            logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={payload_val} from payload (explicit override)")
             return int(payload_val)
         
         # Priority 2: Selected platform's config
@@ -106,7 +106,7 @@ class WorkflowConfigBuilder:
                 ):
                     platform_concurrent = platform_cfg.concurrent
                     if platform_concurrent is not None and platform_concurrent > 0:
-                        logger.info(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={platform_concurrent} from platform '{platform_key}' config")
+                        logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={platform_concurrent} from platform '{platform_key}' config")
                         return int(platform_concurrent)
             except Exception as e:
                 logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Failed to get concurrent from platform config: {e}")
@@ -131,14 +131,14 @@ class WorkflowConfigBuilder:
                 except Exception:
                     pass
             if concurrent is not None and concurrent > 0:
-                logger.info(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={concurrent} from app_config.json (backward compat)")
+                logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={concurrent} from app_config.json (backward compat)")
                 return int(concurrent)
         except Exception as e:
             logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Failed to get concurrent from app_config: {e}")
         
         # Priority 4: default_params
         default_concurrent = int(default_params.get("concurrent", 10))
-        logger.info(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={default_concurrent} from default_params")
+        logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={default_concurrent} from default_params")
         return default_concurrent
 
     def _get_connect_timeout_from_config_or_payload(self, payload: Any) -> int:
@@ -197,11 +197,11 @@ class WorkflowConfigBuilder:
             timeout = getattr(payload, 'timeout', 1200)
         
         # Log timeout value for diagnostics (especially for EPUB/MOBI workflows)
-        logger.info(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Extracted timeout={timeout}s from payload (type={type(payload).__name__})")
+        logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Extracted timeout={timeout}s from payload (type={type(payload).__name__})")
 
         # Concurrent: prefer app_config.translator_concurrent (same priority as chunk_size), then payload, then default
         concurrent = self._get_concurrent_from_config_or_payload(payload)
-        logger.info(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={concurrent} for translator (translator_concurrent threshold)")
+        logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={concurrent} for translator (translator_concurrent threshold)")
         connect_timeout = self._get_connect_timeout_from_config_or_payload(payload)
         logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using connect_timeout={connect_timeout}s from app_config (translator_connect_timeout)")
 
@@ -464,7 +464,7 @@ class WorkflowConfigBuilder:
         
         # Get skip_cache from payload (for format conversion requests)
         skip_cache = getattr(payload, 'skip_cache', False)
-        logger.info(
+        logger.debug(
             LogModule.CONFIG,
             f"[IMPORT] Task {self.task_id}: skip_cache from payload: {skip_cache} "
             f"(type: {type(skip_cache)}, payload has skip_cache: {hasattr(payload, 'skip_cache')})"

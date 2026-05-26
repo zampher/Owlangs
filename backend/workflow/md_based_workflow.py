@@ -414,7 +414,7 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
         skip_cache = getattr(self.config, 'skip_cache', False)
         if convert_engine in ("mineru", "mineru_local") and not skip_cache and not reused_mineru_result and not document_cached:
             if self.config.logger:
-                self.config.logger.warning(
+                self.config.logger.info(
                     LogModule.WORKFLOW,
                     "[MINERU] No cached or Extract-phase MinerU result found. "
                     "Falling back to direct MinerU conversion (this may re-upload the file)."

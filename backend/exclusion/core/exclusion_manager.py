@@ -305,7 +305,7 @@ class ExclusionManager:
             else:
                 reason_str = str(exclusion_info)
             reason_counts[reason_str] = reason_counts.get(reason_str, 0) + 1
-        logger.info(
+        logger.debug(
                 LogModule.EXCLUSION,
                 f"Updated {len(excluded_dict)} excluded segments in segments_metadata.excluded_segments "
                 f"({', '.join(f'{count} {reason}' for reason, count in sorted(reason_counts.items()))})"

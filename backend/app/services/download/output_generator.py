@@ -757,7 +757,7 @@ class OutputGenerator:
                             or (payload.get("from_lang") if isinstance(payload, dict) else getattr(payload, "from_lang", None))
                             or to_lang
                         )
-                        logger.info(
+                        logger.debug(
                             LogModule.EXPORT,
                             f"[OUTPUT-GENERATOR] Task {task_id}: Rebuilt Markdown from segments for Pandoc DOCX "
                             f"(equation_format={eq_fmt}, table_body_format={tbl_fmt}) so images are included",
@@ -814,7 +814,7 @@ class OutputGenerator:
                                     task_id=task_id,
                                     task_manager=self.task_manager,
                                 )
-                                logger.info(
+                                logger.debug(
                                     LogModule.EXPORT,
                                     f"[OUTPUT-GENERATOR] Task {task_id}: DOCX fragment math check "
                                     f"segments={frag_summary.checked_segments} issues={len(frag_summary.issues)}",

@@ -449,7 +449,7 @@ class MinerUCloudBackend(MinerUBackend):
                 # Download ZIP
                 zip_response = self._make_request_with_retry('GET', zip_url)
                 zip_bytes = zip_response.content
-                logger.info(LogModule.CONVERT, f"[MINERU Cloud] Downloaded ZIP: {len(zip_bytes)} bytes from {zip_url[:50]}...")
+                logger.debug(LogModule.CONVERT, f"[MINERU Cloud] Downloaded ZIP: {len(zip_bytes)} bytes from {zip_url[:50]}...")
                 # Extract markdown
                 markdown_content = self._extract_markdown_from_zip(zip_bytes)
                 return markdown_content, zip_bytes
@@ -498,7 +498,7 @@ class MinerUCloudBackend(MinerUBackend):
                 # Download ZIP
                 zip_response = await self._make_request_with_retry_async('GET', zip_url)
                 zip_bytes = zip_response.content
-                logger.info(LogModule.CONVERT, f"[MINERU Cloud] Async downloaded ZIP: {len(zip_bytes)} bytes from {zip_url[:50]}...")
+                logger.debug(LogModule.CONVERT, f"[MINERU Cloud] Async downloaded ZIP: {len(zip_bytes)} bytes from {zip_url[:50]}...")
                 # Extract markdown
                 markdown_content = self._extract_markdown_from_zip(zip_bytes)
                 return markdown_content, zip_bytes
@@ -531,12 +531,12 @@ class MinerUCloudBackend(MinerUBackend):
         zip_path = os.path.join(debug_dir, f"mineru_response_{int(time.time())}.zip")
         with open(zip_path, 'wb') as f:
             f.write(zip_bytes)
-        logger.info(LogModule.CONVERT, f"[MINERU] Saved ZIP to: {zip_path} ({len(zip_bytes)} bytes)")
+        logger.debug(LogModule.CONVERT, f"[MINERU] Saved ZIP to: {zip_path} ({len(zip_bytes)} bytes)")
         
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             # List all files in ZIP for debugging
             file_list = zf.namelist()
-            logger.info(LogModule.CONVERT, f"[MINERU] ZIP contents: {file_list}")
+            logger.debug(LogModule.CONVERT, f"[MINERU] ZIP contents: {file_list}")
             
             # Try to find markdown file - local MinerU may use different names
             md_files = [f for f in file_list if f.endswith('.md')]
@@ -545,7 +545,7 @@ class MinerUCloudBackend(MinerUBackend):
             
             # Prefer full.md, otherwise use first .md file
             md_file = 'full.md' if 'full.md' in md_files else md_files[0]
-            logger.info(LogModule.CONVERT, f"[MINERU] Using markdown file: {md_file}")
+            logger.debug(LogModule.CONVERT, f"[MINERU] Using markdown file: {md_file}")
             
             with zf.open(md_file) as f:
                 return f.read().decode("utf-8")
@@ -841,7 +841,7 @@ class MinerULocalBackend(MinerUBackend):
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             # List all files in ZIP for debugging
             file_list = zf.namelist()
-            logger.info(LogModule.CONVERT, f"[MINERU Local] ZIP contents: {file_list}")
+            logger.debug(LogModule.CONVERT, f"[MINERU Local] ZIP contents: {file_list}")
             
             # Try to find markdown file - local MinerU may use different names
             md_files = [f for f in file_list if f.endswith('.md')]
@@ -850,7 +850,7 @@ class MinerULocalBackend(MinerUBackend):
             
             # Prefer full.md, otherwise use first .md file
             md_file = 'full.md' if 'full.md' in md_files else md_files[0]
-            logger.info(LogModule.CONVERT, f"[MINERU Local] Using markdown file: {md_file}")
+            logger.debug(LogModule.CONVERT, f"[MINERU Local] Using markdown file: {md_file}")
             
             with zf.open(md_file) as f:
                 return f.read().decode("utf-8")

@@ -49,9 +49,9 @@ class ChunkSizeService:
         payload_chunk_size = _get_payload_attr('chunk_size', 0)
         if payload_chunk_size and payload_chunk_size != 0:
             if task_id:
-                logger.info(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={payload_chunk_size} from payload (explicit override)")
+                logger.debug(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={payload_chunk_size} from payload (explicit override)")
             return int(payload_chunk_size)
-        
+
         # Priority 2: Selected platform's config
         platform_key = _get_payload_attr('platform_key')
         if platform_key:
@@ -67,7 +67,7 @@ class ChunkSizeService:
                     platform_chunk_size = platform_cfg.chunk_size
                     if platform_chunk_size and platform_chunk_size != 0:
                         if task_id:
-                            logger.info(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={platform_chunk_size} from platform '{platform_key}' config")
+                            logger.debug(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={platform_chunk_size} from platform '{platform_key}' config")
                         return int(platform_chunk_size)
             except Exception as e:
                 if task_id:
@@ -84,7 +84,7 @@ class ChunkSizeService:
                     chunk_size = app_config.translator_chunk_token_size
                     if chunk_size and chunk_size != 0:
                         if task_id:
-                            logger.info(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={chunk_size} from app_config.json (backward compat)")
+                            logger.debug(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={chunk_size} from app_config.json (backward compat)")
                         return int(chunk_size)
             except Exception:
                 pass
@@ -98,7 +98,7 @@ class ChunkSizeService:
                         chunk_size = data.get('translator_chunk_token_size')
                         if chunk_size and chunk_size != 0:
                             if task_id:
-                                logger.info(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={chunk_size} from app_config.json file (backward compat)")
+                                logger.debug(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={chunk_size} from app_config.json file (backward compat)")
                             return int(chunk_size)
             except Exception:
                 pass

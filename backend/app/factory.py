@@ -540,7 +540,7 @@ def create_app() -> FastAPI:
         # Log current machine_id used for donor license binding (helps debugging activation issues)
         machine_id = get_machine_id()
 
-        unified_logger.info(
+        unified_logger.debug(
             LogModule.SYSTEM,
             "[LICENSE] Startup license status: edition={edition}, activated={activated}, "
             "effective_activated={effective}, trial_start_date={trial_start}, "

@@ -612,7 +612,7 @@ def _build_layout_markdown(
                             merged_caption = "\n".join(line_texts).strip()
                             if merged_caption:
                                 caption_text = merged_caption
-                                logger.info(LogModule.LAYOUT, "[LAYOUT] Image caption extracted from nested block "
+                                logger.debug(LogModule.LAYOUT, "[LAYOUT] Image caption extracted from nested block "
                                     f"page={block.page_index}, block_index={block_index}, "
                                     f"text_preview={caption_text[:120]!r}"
                                 )
@@ -641,7 +641,7 @@ def _build_layout_markdown(
             )
 
             if caption_text:
-                logger.info(LogModule.LAYOUT, "[LAYOUT] Image caption will be added as separate text segment: "
+                logger.debug(LogModule.LAYOUT, "[LAYOUT] Image caption will be added as separate text segment: "
                     f"block_index={block_index}, page={block.page_index}, "
                     f"text_preview={caption_text[:120]!r}"
                 )
@@ -701,7 +701,7 @@ def _build_layout_markdown(
                     merged_caption = "\n".join(line_texts).strip()
                     if merged_caption:
                         caption_text = merged_caption
-                        logger.info(LogModule.LAYOUT, "[LAYOUT] Table caption extracted from nested block "
+                        logger.debug(LogModule.LAYOUT, "[LAYOUT] Table caption extracted from nested block "
                             f"page={block.page_index}, block_index={block_index}, "
                             f"text_preview={caption_text[:120]!r}"
                         )
@@ -829,7 +829,7 @@ def _build_layout_markdown(
 
                 # Log basic preview for debugging
                 first_line_preview = lines[0][:120] if lines else ""
-                logger.info(
+                logger.debug(
                     LogModule.LAYOUT,
                     "[LAYOUT] Table body converted to markdown-like text: "
                     f"page={block.page_index}, block_index={block_index}, "

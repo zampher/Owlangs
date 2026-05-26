@@ -185,7 +185,7 @@ def collect_formula_items(task_state: Dict[str, Any]) -> List[FormulaRepairItem]
         source_text = str(seg.get("source_text") or "")
         target_text = str(seg.get("target_text") or "")
         items.append(FormulaRepairItem(segment_index=idx, source_text=source_text, target_text=target_text))
-    logger.info(
+    logger.debug(
         LogModule.RESTOR,
         "[FORMULA-REPAIR] collect_formula_items: selected={n}, layout_index_map={has_map}, "
         "skipped_latex_like_non_formula_sample={sample}",

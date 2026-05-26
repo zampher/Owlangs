@@ -177,7 +177,7 @@ class AppConfig:
         try:
             cfg_path = cls._resolve_app_config_path(config_file)
             if cfg_path.exists():
-                logger.info(LogModule.CONFIG, f"Loading application configuration from file: {cfg_path}")
+                logger.debug(LogModule.CONFIG, f"Loading application configuration from file: {cfg_path}")
                 with open(cfg_path, 'r', encoding='utf-8-sig') as f:
                     data = json.load(f)
 

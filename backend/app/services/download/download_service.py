@@ -91,13 +91,13 @@ def _get_image_layout_for_grouping(
     layout_doc = task_state.get("layout_document")
     eq_fmt = equation_format if equation_format is not None else (task_state.get("equation_format") if task_state else None)
     tbl_fmt = table_body_format if table_body_format is not None else (task_state.get("table_body_format") if task_state else None)
-    logger.info(
+    logger.debug(
         LogModule.EXPORT,
         f"[DOWNLOAD] Layout for image grouping: segs_data_type={type(segs_data).__name__ if segs_data else None}, "
         f"seg_list_len={len(seg_list) if seg_list else 0}, layout_doc={layout_doc is not None}"
     )
     if not layout_doc or not seg_list:
-        logger.info(LogModule.EXPORT, f"[DOWNLOAD] No layout/segments for image grouping, returning (None, None, None)")
+        logger.debug(LogModule.EXPORT, f"[DOWNLOAD] No layout/segments for image grouping, returning (None, None, None)")
         return (None, None, None)
     indices, path_to_block_index = get_image_block_indices_from_layout(
         seg_list, layout_doc,
@@ -807,12 +807,12 @@ class DownloadService:
         
         # Debug: Check translation_segments structure
         segments_data = task_state.get("translation_segments")
-        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Task {task_id}, file_type={file_type}, segments_data exists: {segments_data is not None}")
-        
+        logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Task {task_id}, file_type={file_type}, segments_data exists: {segments_data is not None}")
+
         if segments_data:
             segments = segments_data.get("segments", [])
             modified_count = sum(1 for seg in segments if seg.get("modified", False))
-            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Task {task_id}, total segments: {len(segments)}, modified segments: {modified_count}")
+            logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Task {task_id}, total segments: {len(segments)}, modified segments: {modified_count}")
         
         # Store original has_revisions status before any fallback logic
         has_revisions_original = has_revised_segments(task_state)
@@ -900,7 +900,7 @@ class DownloadService:
                 if docx_path and os.path.exists(docx_path):
                     filename = os.path.basename(docx_path) or f"{task_state.get('original_filename_stem', 'translated')}.docx"
                     media_type = MEDIA_TYPES.get("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-                    logger.info(
+                    logger.debug(
                         LogModule.EXPORT,
                         f"[DOWNLOAD] Using Pandoc-generated DOCX for markdown_based workflow (task {task_id}): {docx_path}",
                     )
@@ -2062,13 +2062,13 @@ class DownloadService:
                     )
                 
                     if rebuilt_doc:
-                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Rebuilt document successful, content length: {len(rebuilt_doc.content)} bytes")
+                        logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Rebuilt document successful, content length: {len(rebuilt_doc.content)} bytes")
                     else:
                         logger.error(LogModule.EXPORT, f"[DOWNLOAD] Failed to rebuild document from segments, falling back to original")
                         has_revisions = False
-                
+
                     if rebuilt_doc:
-                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully rebuilt MarkdownDocument, creating workflow for {file_type} export")
+                        logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Successfully rebuilt MarkdownDocument, creating workflow for {file_type} export")
                         # Create minimal workflow for export
                         from workflow.md_based_workflow import MarkdownBasedWorkflow, MarkdownBasedWorkflowConfig
                         from exporter.md.md2html_exporter import MD2HTMLExporterConfig
@@ -2120,7 +2120,7 @@ class DownloadService:
                         # Create workflow and set rebuilt document
                         workflow = MarkdownBasedWorkflow(workflow_config)
                         workflow.document_translated = rebuilt_doc
-                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Workflow created, document_translated content length: {len(rebuilt_doc.content)} bytes")
+                        logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Workflow created, document_translated content length: {len(rebuilt_doc.content)} bytes")
                     
                         # Generate the requested file type
                         file_stem = task_state.get("original_filename_stem", "rebuilt")
@@ -2173,7 +2173,7 @@ class DownloadService:
                                 temp_file.close()
                                 filename = f"{file_stem}_translated.md"
                                 media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
-                                logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated revised MD file with embedded images: {temp_file.name}")
+                                logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Generated revised MD file with embedded images: {temp_file.name}")
                             else:
                                 # Save images to folder and create ZIP (MD file + images folder)
                                 # Use task_state temp_dir if available, otherwise create independent temp directory

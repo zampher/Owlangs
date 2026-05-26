@@ -120,11 +120,11 @@ class MDTranslator(AiTranslator):
         excluded_set = set(excluded_segments_with_reasons.keys())
         
         if excluded_set:
-                self.logger.info(LogModule.TRANS, f"[MD_TRANSLATOR] Task {task_id}: Retrieved {len(excluded_set)} excluded_segments from ExclusionManager "
+                self.logger.debug(LogModule.TRANS, f"[MD_TRANSLATOR] Task {task_id}: Retrieved {len(excluded_set)} excluded_segments from ExclusionManager "
                 f"(single source of truth). Excluded indices: {sorted(excluded_set)[:20]}{'...' if len(excluded_set) > 20 else ''}"
                 )
         else:
-            self.logger.warning(
+            self.logger.info(
                 f"[MD_TRANSLATOR] Task {task_id}: No excluded_segments found from ExclusionManager. "
                 f"segments_metadata.excluded_segments: {excluded_segments_dict}, "
                 f"segments_metadata.excluded_segment_indices: {excluded_indices_list}")
@@ -250,13 +250,13 @@ class MDTranslator(AiTranslator):
         # Get excluded segments (single source of truth)
         excluded_set = self._get_excluded_segments(task_id)
         if excluded_set:
-            self.logger.info(
+            self.logger.debug(
                 LogModule.TRANS,
                 f"[MD_TRANSLATOR] Task {task_id}: Excluded segments (will keep source text, skip translation): "
                 f"{sorted(excluded_set)[:50]}{'...' if len(excluded_set) > 50 else ''}",
             )
         else:
-            self.logger.info(
+            self.logger.debug(
                 LogModule.TRANS,
                 f"[MD_TRANSLATOR] Task {task_id}: No excluded segments for segment pipeline",
             )
@@ -337,7 +337,7 @@ class MDTranslator(AiTranslator):
                 seg_prompts.append(prompt_text)
                 chunk_index_groups.append(list(current_indices))
 
-            self.logger.info(
+            self.logger.debug(
                 LogModule.TRANS,
                 f"[MD_TRANSLATOR] Task {task_id}: Built {len(seg_prompts)} SEG-tag prompts "
                 f"from {len(indices_to_translate)} translatable segments "

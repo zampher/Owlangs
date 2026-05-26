@@ -95,7 +95,7 @@ class UserProfile:
             profile_file = os.path.join(profile_dir, f"{username}_profile.json")
             
             if os.path.exists(profile_file):
-                logger.info(LogModule.AUTH, f"Loading user configuration from file: {profile_file}")
+                logger.debug(LogModule.AUTH, f"Loading user configuration from file: {profile_file}")
                 with open(profile_file, 'r', encoding='utf-8-sig') as f:
                     data = json.load(f)
                     # Create configuration instance and update fields

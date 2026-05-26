@@ -242,7 +242,7 @@ def _get_pandoc_path() -> Optional[Path]:
                 for pandoc_dir in pandoc_base.glob("pandoc-*"):
                     pandoc_exe = pandoc_dir / "pandoc.exe"
                     if pandoc_exe.exists():
-                        logger.info(LogModule.TRANS, f"Found Pandoc in installation directory: {pandoc_exe}")
+                        logger.debug(LogModule.TRANS, f"Found Pandoc in installation directory: {pandoc_exe}")
                         return pandoc_exe
             # Also check in _MEIPASS (PyInstaller temp directory)
             meipass_pandoc_base = Path(sys._MEIPASS) / "3rdParty" / "windows"
@@ -261,7 +261,7 @@ def _get_pandoc_path() -> Optional[Path]:
                 for pandoc_dir in pandoc_base.glob("pandoc-*"):
                     pandoc_exe = pandoc_dir / "pandoc.exe"
                     if pandoc_exe.exists():
-                        logger.info(LogModule.TRANS, f"Found Pandoc in installation directory: {pandoc_exe}")
+                        logger.debug(LogModule.TRANS, f"Found Pandoc in installation directory: {pandoc_exe}")
                         return pandoc_exe
         # Fallback to legacy hard-coded path for backwards compatibility
         legacy_dir = Path("C:/Program Files/Owlangs")
@@ -1829,10 +1829,10 @@ def get_image_block_indices_from_layout(
     try:
         from layout.base import LayoutDocument as _LD
         if not isinstance(layout_document, _LD):
-            logger.info(LogModule.RESTOR, "[PDF-EXPORT] get_image_block_indices_from_layout: layout_document is not LayoutDocument")
+            logger.debug(LogModule.RESTOR, "[PDF-EXPORT] get_image_block_indices_from_layout: layout_document is not LayoutDocument")
             return ([], {})
     except Exception as e:
-        logger.info(LogModule.RESTOR, f"[PDF-EXPORT] get_image_block_indices_from_layout: {e}")
+        logger.debug(LogModule.RESTOR, f"[PDF-EXPORT] get_image_block_indices_from_layout: {e}")
         return ([], {})
     block_index_to_block: Dict[int, Any] = {}
     block_index_to_type: Dict[int, str] = {}
@@ -1901,12 +1901,12 @@ def get_image_block_indices_from_layout(
                     )
             break
     if not out and segments:
-        logger.info(
+        logger.debug(
             LogModule.RESTOR,
             f"[PDF-EXPORT] get_image_block_indices_from_layout: 0 image indices (segments={len(segments)}, "
             f"segments_with_layout_block_indices={segs_with_layout}, layout_image_blocks={len(image_blocks)})"
         )
-    logger.info(
+    logger.debug(
         LogModule.RESTOR,
         f"[PDF-EXPORT] get_image_block_indices_from_layout: {len(out)} image indices, {len(path_to_block_index)} path mappings"
     )
@@ -2029,7 +2029,7 @@ def group_consecutive_images_for_markdown(
             
             html_block = f'<div style="text-align: center; margin: 1em 0;">\n' + "\n".join(img_tags) + "\n</div>"
             parts.append(html_block)
-            logger.info(LogModule.RESTOR, f"[MD-EXPORT] Side-by-side images: {n} images grouped in HTML div (same row)")
+            logger.debug(LogModule.RESTOR, f"[MD-EXPORT] Side-by-side images: {n} images grouped in HTML div (same row)")
         else:
             for m in run:
                 parts.append(m.group(0))

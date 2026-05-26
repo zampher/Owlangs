@@ -366,13 +366,13 @@ class TranslationService:
         try:
             from backend.app.services.platform.platform_service import platform_service
             api_protocol = platform_service.get_api_protocol(base_url, model_id)
-            logger.info(LogModule.CONFIG, f"[REPAIR-CONFIG] Platform lookup: base_url={base_url}, model_id={model_id}, api_protocol={api_protocol}")
+            logger.debug(LogModule.CONFIG, f"[REPAIR-CONFIG] Platform lookup: base_url={base_url}, model_id={model_id}, api_protocol={api_protocol}")
             if api_protocol:
                 api_type = api_protocol
         except Exception as e:
             logger.warning(LogModule.CONFIG, f"[REPAIR-CONFIG] Failed to get api_protocol: {e}")
         
-        logger.info(LogModule.CONFIG, f"[REPAIR-CONFIG] Final config: api_type={api_type}, base_url={base_url}, model_id={model_id}")
+        logger.debug(LogModule.CONFIG, f"[REPAIR-CONFIG] Final config: api_type={api_type}, base_url={base_url}, model_id={model_id}")
         
         return {
             "base_url": base_url,
@@ -977,7 +977,7 @@ class TranslationService:
                         f"[TRANSLATION-SERVICE] Task {task_id}: convert_task_id={convert_task_id} provided but task not found in task_manager"
                     )
             else:
-                logger.info(
+                logger.debug(
                     LogModule.TRANS,
                     f"[TRANSLATION-SERVICE] Task {task_id}: No convert_task_id provided; running without inherited extract assets"
                 )
@@ -1328,16 +1328,16 @@ class TranslationService:
                 logger.info(LogModule.TRANS, f"[TRANSLATION-SERVICE] Task {task_id}: execute_translate returned successfully (including _after_translate completion)")
 
                 # Sync workflow attachments after translation (already done in execute_translate, but keep for compatibility)
-                logger.info(LogModule.WORKFLOW, f"[TRANSLATION-SERVICE] Task {task_id}: About to sync workflow attachments (post_translate)")
+                logger.debug(LogModule.WORKFLOW, f"[TRANSLATION-SERVICE] Task {task_id}: About to sync workflow attachments (post_translate)")
                 self._sync_workflow_attachments(task_id, workflow, task_state, reason="post_translate")
-                logger.info(LogModule.WORKFLOW, f"[TRANSLATION-SERVICE] Task {task_id}: Workflow attachments synced")
+                logger.debug(LogModule.WORKFLOW, f"[TRANSLATION-SERVICE] Task {task_id}: Workflow attachments synced")
 
                 # For PDF/Markdown-based workflows, update preview from translated markdown (if needed)
                 if workflow_type == "markdown_based":
                     pass  # Preview update can be done later if needed
 
                 # Record translation segments for frontend preview (skip when already filled by complete_translation_with_source_only)
-                logger.info(LogModule.TRANS, f"[TRANSLATION-SERVICE] Task {task_id}: About to call ensure_translation_segments for workflow_type={workflow_type}")
+                logger.debug(LogModule.TRANS, f"[TRANSLATION-SERVICE] Task {task_id}: About to call ensure_translation_segments for workflow_type={workflow_type}")
                 try:
                     result = self.translation_segment_service.ensure_translation_segments(
                         task_id=task_id,
@@ -1575,7 +1575,7 @@ class TranslationService:
         # CRITICAL: Do NOT generate output files here - generate them on-demand when user clicks download/preview
         # This allows users to edit translation results before generating files
         # Files will be generated in DownloadService.download_file() when needed
-        logger.info(
+        logger.debug(
             LogModule.WORKFLOW,
             f"[TRANSLATION-SERVICE] Task {task_id}: Skipping file generation - files will be generated on-demand when user downloads/previews"
         )
@@ -1868,7 +1868,7 @@ class TranslationService:
                         )
                 
                 if not extract_task_state:
-                    logger.warning(
+                    logger.info(
                         LogModule.EXTRACT,
                         f"[MINERU-REUSE] No matching Extract phase task_state found for task {task_id}. "
                         f"Will proceed with normal MinerU conversion (may re-upload/re-download)."
@@ -2729,7 +2729,7 @@ class TranslationService:
             
             task_state["layout_document"] = layout_doc
             total_blocks = sum(1 for _ in layout_doc.iter_blocks())
-            logger.info(
+            logger.debug(
                 LogModule.EXTRACT,
                 f"[LAYOUT] Stored layout_document in task_state for task {task_id}: "
                 f"{layout_doc.page_count} pages, {total_blocks} blocks, "
