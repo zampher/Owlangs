@@ -3213,6 +3213,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fetchUrlCancel => 'Cancel';
 
   @override
+  String get fetchUrl => 'Fetch URL';
+
+  @override
+  String get fetchUrlClose => 'Close';
+
+  @override
   String get loginSubtitleFeatures =>
       'Document Translation\nFormat Conversion\nURL Fetch';
 

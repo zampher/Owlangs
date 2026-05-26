@@ -1098,6 +1098,9 @@
 
   "fetchUrlCancel": "취소",
 
+  "fetchUrl": "URL 가져오기",
+  "fetchUrlClose": "닫기",
+
   "loginSubtitleFeatures": "파일 번역\n형식 변환\nURL 가져오기",
   "loginSubtitleTagline": "AI 문서 처리 시스템",
   "loginUsernameLabel": "사용자 이름",

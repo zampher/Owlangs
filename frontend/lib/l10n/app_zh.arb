@@ -1098,6 +1098,9 @@
 
   "fetchUrlCancel": "取消",
 
+  "fetchUrl": "网址抓取",
+  "fetchUrlClose": "关闭",
+
   "loginSubtitleFeatures": "文档翻译\n格式转换\n网址抓取",
   "loginSubtitleTagline": "AI 文档处理系统",
   "loginUsernameLabel": "用户名",

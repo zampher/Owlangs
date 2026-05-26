@@ -5636,6 +5636,18 @@ abstract class AppLocalizations {
   /// **'Cancel'**
   String get fetchUrlCancel;
 
+  /// Button label to fetch content from a URL
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch URL'**
+  String get fetchUrl;
+
+  /// Button label to close the URL input field
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get fetchUrlClose;
+
   /// No description provided for @loginSubtitleFeatures.
   ///
   /// In en, this message translates to:

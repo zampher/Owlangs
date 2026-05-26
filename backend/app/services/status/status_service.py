@@ -656,10 +656,40 @@ class StatusService:
                 except Exception:
                     task_state["current_task_ref"] = "unknown"
         
-        # Remove payload if it exists (it's a non-serializable object, kept only for retranslation)
-        # We don't need to send it in the status response
+        # Extract serializable task params from payload before removing it,
+        # so the frontend can restore original task settings in reedit mode.
+        task_params: Dict[str, Any] = {}
         if "payload" in task_state:
+            raw_payload = task_state["payload"]
+            if isinstance(raw_payload, dict):
+                payload_dict = raw_payload
+            else:
+                # Pydantic model or SimpleNamespace
+                try:
+                    payload_dict = dict(raw_payload)
+                except Exception:
+                    try:
+                        payload_dict = raw_payload.model_dump() if hasattr(raw_payload, "model_dump") else {}
+                    except Exception:
+                        payload_dict = {}
+            # Extract fields relevant to frontend quick settings
+            _relevant_keys = [
+                "to_lang", "workflow_type", "deep_split", "temperature",
+                "prompt_mode", "prompt_style", "custom_note", "skip_translate",
+                "convert_engine", "formula_ocr", "table_ocr", "model_version",
+                "ocr_language", "insert_mode", "separator", "chunk_size",
+                "base_url", "model_id", "concurrent", "timeout", "retry",
+                "segment_auto_retry_rounds", "thinking", "copy_source_only",
+                "glossary_dict", "glossary_generate_enable",
+            ]
+            for k in _relevant_keys:
+                if k in payload_dict and payload_dict[k] is not None:
+                    val = payload_dict[k]
+                    # Skip complex non-serializable types
+                    if isinstance(val, (str, int, float, bool, list, dict)) or val is None:
+                        task_params[k] = val
             del task_state["payload"]
+        task_state["task_params"] = task_params
         
         # Check if layout_document is available BEFORE removing it (for PDF files)
         original_filename = task_state.get("original_filename", "")

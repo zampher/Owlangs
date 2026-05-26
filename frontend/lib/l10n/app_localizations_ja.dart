@@ -3104,6 +3104,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get fetchUrlCancel => 'キャンセル';
 
   @override
+  String get fetchUrl => 'URL フェッチ';
+
+  @override
+  String get fetchUrlClose => '閉じる';
+
+  @override
   String get loginSubtitleFeatures => 'ファイル翻訳\nフォーマット変換\nURL フェッチ';
 
   @override

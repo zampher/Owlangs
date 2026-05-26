@@ -3109,6 +3109,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get fetchUrlCancel => '취소';
 
   @override
+  String get fetchUrl => 'URL 가져오기';
+
+  @override
+  String get fetchUrlClose => '닫기';
+
+  @override
   String get loginSubtitleFeatures => '파일 번역\n형식 변환\nURL 가져오기';
 
   @override

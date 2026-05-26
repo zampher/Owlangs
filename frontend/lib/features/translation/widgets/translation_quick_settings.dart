@@ -377,6 +377,32 @@ class TranslationQuickSettingsNotifier
     state = state.copyWith(selectedGlossaries: current);
   }
 
+  /// Restore settings from backend task_params (used when entering reedit mode).
+  /// Maps backend payload field names to frontend quick settings.
+  void restoreFromTaskParams(Map<String, dynamic> params) {
+    final String? toLang = params['to_lang'] as String?;
+    final String? workflowType = params['workflow_type'] as String?;
+    final String? promptMode = params['prompt_mode'] as String?;
+    final String? promptStyle = params['prompt_style'] as String?;
+    final String? taskNote = params['custom_note'] as String?;
+    final bool? deepSplit = params['deep_split'] as bool?;
+    final double? temperature = params['temperature'] != null
+        ? (params['temperature'] as num).toDouble()
+        : null;
+
+    state = state.copyWith(
+      toLang: toLang,
+      workflowType: workflowType,
+      promptMode: promptMode,
+      promptStyle: promptStyle,
+      taskNote: taskNote,
+      deepSplit: deepSplit,
+      temperature: temperature,
+      autoSelectWorkflow: false, // Preserve the original workflow, don't auto-detect
+    );
+    _saveSettings();
+  }
+
   void reset() {
     state = const TranslationQuickSettings();
   }

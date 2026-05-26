@@ -3084,6 +3084,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fetchUrlCancel => '取消';
 
   @override
+  String get fetchUrl => '网址抓取';
+
+  @override
+  String get fetchUrlClose => '关闭';
+
+  @override
   String get loginSubtitleFeatures => '文档翻译\n格式转换\n网址抓取';
 
   @override

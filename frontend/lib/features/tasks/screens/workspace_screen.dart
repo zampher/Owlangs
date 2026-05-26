@@ -748,126 +748,150 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 final bool spacious = constraints.maxWidth >= 300;
                 return Row(
               children: <Widget>[
-                // Leading: Logo
-                Padding(
-                  padding: const EdgeInsets.all(4), // Keep compact padding
-                  child: Image.asset(
-                    // Use the main app logo PNG; Flutter does not decode .ico natively, use same PNG
-                    'images/logo_96.png',
-                    width: spacious ? 56 : 40,
-                    height: spacious ? 56 : 40,
-                    errorBuilder: (
-                      BuildContext context,
-                      Object error,
-                      StackTrace? stackTrace,
-                    ) =>
-                        Icon(
-                      Icons.language,
-                      size: spacious ? 36 : 28,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                ),
-                // Title - flexible so Row does not overflow on narrow windows
-                Expanded(
-                  child: Text(
-                    'Owlangs',
-                    style: TextStyle(
-                      fontSize: 18, // Reduced from 28 to 18
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 2,
-                  ),
-                ),
-                // Desktop only: Language selector next to title
-                if (spacious && !kIsWeb) ...<Widget>[
-                  const SizedBox(width: 12),
-                  _buildLanguageSelector(),
-                ],
-                // Web only: show username, language switcher (client-only), and Login/Logout links next to app title
-                if (spacious && kIsWeb) ...<Widget>[
-                  const SizedBox(width: 12),
-                  Builder(
-                    builder: (BuildContext context) {
-                      final authState = ref.watch(authProvider);
-                      final isAuthenticated = authState.maybeWhen(
-                        authenticated: (_) => true,
-                        orElse: () => false,
-                      );
-                      final displayName = authState.maybeWhen(
-                        authenticated: (user) => user.username,
-                        orElse: () => 'guest',
-                      );
-                      final bool isGuestUser = !isAuthenticated ||
-                          displayName.toLowerCase() == 'guest';
-                      final Color linkColor = Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withOpacity(0.85);
-                      final globalSettings = ref.watch(globalSettingsProvider);
-                      final GlobalSettingsNotifier globalNotifier =
-                          ref.read(globalSettingsProvider.notifier);
-                      const List<Map<String, String>> languages =
-                          <Map<String, String>>[
-                        <String, String>{'code': 'zh', 'label': '中文'},
-                        <String, String>{'code': 'en', 'label': 'English'},
-                        <String, String>{'code': 'ja', 'label': '日本語'},
-                        <String, String>{'code': 'ko', 'label': '한국어'},
-                        <String, String>{'code': 'es', 'label': 'Español'},
-                      ];
-                      final String currentLang = globalSettings.language;
-                      final String currentLabel = languages.firstWhere(
-                            (Map<String, String> lang) =>
-                                lang['code'] == currentLang,
-                            orElse: () => const <String, String>{
-                              'code': 'en',
-                              'label': 'English',
-                            },
-                          )['label'] ??
-                          currentLang;
+                Flexible(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      // Leading: Logo
+                      Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Image.asset(
+                          'images/logo_96.png',
+                          width: spacious ? 56 : 40,
+                          height: spacious ? 56 : 40,
+                          errorBuilder: (
+                            BuildContext context,
+                            Object error,
+                            StackTrace? stackTrace,
+                          ) =>
+                              Icon(
+                            Icons.language,
+                            size: spacious ? 36 : 28,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      // Title
+                      Text(
+                        'Owlangs',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                      // Desktop only: Language selector next to title
+                      if (spacious && !kIsWeb) ...<Widget>[
+                        const SizedBox(width: 12),
+                        _buildLanguageSelector(),
+                      ],
+                      // Web only: show username, language switcher, and Login/Logout links
+                      if (spacious && kIsWeb) ...<Widget>[
+                        const SizedBox(width: 12),
+                        Builder(
+                          builder: (BuildContext context) {
+                            final authState = ref.watch(authProvider);
+                            final isAuthenticated = authState.maybeWhen(
+                              authenticated: (_) => true,
+                              orElse: () => false,
+                            );
+                            final displayName = authState.maybeWhen(
+                              authenticated: (user) => user.username,
+                              orElse: () => 'guest',
+                            );
+                            final bool isGuestUser = !isAuthenticated ||
+                                displayName.toLowerCase() == 'guest';
+                            final Color linkColor = Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withOpacity(0.85);
+                            final globalSettings = ref.watch(globalSettingsProvider);
+                            final GlobalSettingsNotifier globalNotifier =
+                                ref.read(globalSettingsProvider.notifier);
+                            const List<Map<String, String>> languages =
+                                <Map<String, String>>[
+                              <String, String>{'code': 'zh', 'label': '中文'},
+                              <String, String>{'code': 'en', 'label': 'English'},
+                              <String, String>{'code': 'ja', 'label': '日本語'},
+                              <String, String>{'code': 'ko', 'label': '한국어'},
+                              <String, String>{'code': 'es', 'label': 'Español'},
+                            ];
+                            final String currentLang = globalSettings.language;
+                            final String currentLabel = languages.firstWhere(
+                                  (Map<String, String> lang) =>
+                                      lang['code'] == currentLang,
+                                  orElse: () => const <String, String>{
+                                    'code': 'en',
+                                    'label': 'English',
+                                  },
+                                )['label'] ??
+                                currentLang;
 
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          if (!isGuestUser)
-                            PopupMenuButton<_UserMenuAction>(
-                              tooltip: displayName,
-                              onSelected:
-                                  (_UserMenuAction selectedAction) async {
-                                switch (selectedAction) {
-                                  case _UserMenuAction.changePassword:
-                                    await _showChangePasswordDialog(context);
-                                    break;
-                                  case _UserMenuAction.logout:
-                                    await ref
-                                        .read(authProvider.notifier)
-                                        .logout();
-                                    if (context.mounted) {
-                                      context.go(AppRouter.loginRoute);
-                                    }
-                                    break;
-                                }
-                              },
-                              itemBuilder: (BuildContext context) =>
-                                  <PopupMenuEntry<_UserMenuAction>>[
-                                PopupMenuItem<_UserMenuAction>(
-                                  value: _UserMenuAction.changePassword,
-                                  child: Text(
-                                    l10n.userMenuChangePassword,
-                                  ),
-                                ),
-                                PopupMenuItem<_UserMenuAction>(
-                                  value: _UserMenuAction.logout,
-                                  child: Text(
-                                    l10n.commonLogout,
-                                  ),
-                                ),
-                              ],
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: <Widget>[
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                if (!isGuestUser)
+                                  PopupMenuButton<_UserMenuAction>(
+                                    tooltip: displayName,
+                                    onSelected:
+                                        (_UserMenuAction selectedAction) async {
+                                      switch (selectedAction) {
+                                        case _UserMenuAction.changePassword:
+                                          await _showChangePasswordDialog(context);
+                                          break;
+                                        case _UserMenuAction.logout:
+                                          await ref
+                                              .read(authProvider.notifier)
+                                              .logout();
+                                          if (context.mounted) {
+                                            context.go(AppRouter.loginRoute);
+                                          }
+                                          break;
+                                      }
+                                    },
+                                    itemBuilder: (BuildContext context) =>
+                                        <PopupMenuEntry<_UserMenuAction>>[
+                                      PopupMenuItem<_UserMenuAction>(
+                                        value: _UserMenuAction.changePassword,
+                                        child: Text(
+                                          l10n.userMenuChangePassword,
+                                        ),
+                                      ),
+                                      PopupMenuItem<_UserMenuAction>(
+                                        value: _UserMenuAction.logout,
+                                        child: Text(
+                                          l10n.commonLogout,
+                                        ),
+                                      ),
+                                    ],
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: <Widget>[
+                                        Icon(
+                                          Icons.person,
+                                          size: 18,
+                                          color: linkColor,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          displayName,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                            color: linkColor,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const Icon(
+                                          Icons.arrow_drop_down,
+                                          size: 18,
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else ...<Widget>[
                                   Icon(
                                     Icons.person,
                                     size: 18,
@@ -883,124 +907,104 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  const Icon(
-                                    Icons.arrow_drop_down,
-                                    size: 18,
-                                  ),
                                 ],
-                              ),
-                            )
-                          else ...<Widget>[
-                            Icon(
-                              Icons.person,
-                              size: 18,
-                              color: linkColor,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              displayName,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: linkColor,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                          const SizedBox(width: 12),
-                          Text(
-                            '|',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: linkColor.withOpacity(0.5),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Client-only UI language switcher (does not change server global default)
-                          PopupMenuButton<String>(
-                            tooltip: 'Language',
-                            initialValue: currentLang,
-                            padding: EdgeInsets.zero,
-                            itemBuilder: (BuildContext context) =>
-                                languages.map((Map<String, String> lang) {
-                              final String code = lang['code']!;
-                              final String label = lang['label']!;
-                              return PopupMenuItem<String>(
-                                value: code,
-                                child: Text(label),
-                              );
-                            }).toList(),
-                            onSelected:
-                                globalNotifier.updateUiLanguageLocalOnly,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: <Widget>[
-                                Icon(
-                                  Icons.language,
-                                  size: 18,
-                                  color: linkColor,
-                                ),
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 12),
                                 Text(
-                                  currentLabel,
+                                  '|',
                                   style: TextStyle(
-                                    fontSize: 13,
-                                    color: linkColor,
+                                    fontSize: 12,
+                                    color: linkColor.withOpacity(0.5),
                                   ),
                                 ),
-                                const Icon(
-                                  Icons.arrow_drop_down,
-                                  size: 18,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            '|',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: linkColor.withOpacity(0.5),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          if (!isAuthenticated)
-                            TextButton(
-                              onPressed: () {
-                                context.go(AppRouter.loginRoute);
-                              },
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: <Widget>[
-                                  Icon(
-                                    Icons.login,
-                                    size: 16,
-                                    color: linkColor,
+                                const SizedBox(width: 8),
+                                PopupMenuButton<String>(
+                                  tooltip: 'Language',
+                                  initialValue: currentLang,
+                                  padding: EdgeInsets.zero,
+                                  itemBuilder: (BuildContext context) =>
+                                      languages.map((Map<String, String> lang) {
+                                    final String code = lang['code']!;
+                                    final String label = lang['label']!;
+                                    return PopupMenuItem<String>(
+                                      value: code,
+                                      child: Text(label),
+                                    );
+                                  }).toList(),
+                                  onSelected:
+                                      globalNotifier.updateUiLanguageLocalOnly,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      Icon(
+                                        Icons.language,
+                                        size: 18,
+                                        color: linkColor,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        currentLabel,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: linkColor,
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.arrow_drop_down,
+                                        size: 18,
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    l10n.commonLogin,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: linkColor,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  '|',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: linkColor.withOpacity(0.5),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                if (!isAuthenticated)
+                                  TextButton(
+                                    onPressed: () {
+                                      context.go(AppRouter.loginRoute);
+                                    },
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: <Widget>[
+                                        Icon(
+                                          Icons.login,
+                                          size: 16,
+                                          color: linkColor,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          l10n.commonLogin,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: linkColor,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      );
-                    },
+                              ],
+                            );
+                          },
+                        ),
+                      ],
+                    ],
                   ),
-                ],
+                ),
+                const Spacer(),
                 const SizedBox(width: 8),
                 // Optional ad banner on the left of buttons
                 if (showAds && _isAdBannerVisible) ...<Widget>[
@@ -1070,7 +1074,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               ],
               // Settings and Setup wizard (Web: admin only)
               ..._adminOnlyActionButtons(l10n, highlightSetupWizardButton),
-              // Donate & Help button (icon = donate/support, label = both concepts)
+              const SizedBox(width: 4),
+              // Donate & Help button
               _buildActionButton(
                 key: _donateHelpButtonKey,
                 icon: Icons.volunteer_activism,

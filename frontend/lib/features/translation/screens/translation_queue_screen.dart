@@ -28,25 +28,43 @@ class TranslationQueueScreen extends ConsumerStatefulWidget {
       _TranslationQueueScreenState();
 }
 
-class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen> {
+class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
+    with WidgetsBindingObserver {
   final TranslationService _svc = TranslationService();
   Timer? _pollTimer;
   List<Map<String, dynamic>> _tasks = <Map<String, dynamic>>[];
   bool _loading = false;
   String? _loadError;
   final Set<String> _selectedTaskIds = <String>{};
+  bool _appInForeground = true;
+  bool _wasActiveRoute = true;
 
   @override
   void initState() {
     super.initState();
-    _refresh();
+    WidgetsBinding.instance.addObserver(this);
+    // Defer initial refresh to avoid calling ModalRoute.of(context) before build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _refresh();
+    });
     _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refresh());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pollTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final bool nowForeground = state == AppLifecycleState.resumed;
+    if (nowForeground && !_appInForeground) {
+      // App came back to foreground — refresh immediately
+      _refresh();
+    }
+    _appInForeground = nowForeground;
   }
 
   /// When task was evicted from memory, list API still exposes [stashed_file_types].
@@ -80,6 +98,10 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
 
   Future<void> _refresh() async {
     if (!mounted) return;
+    // Skip refresh when app is in background or this screen is not the current route
+    if (!_appInForeground) return;
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
     setState(() {
       _loading = true;
       _loadError = null;
@@ -514,6 +536,19 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Detect transition from inactive → active route (e.g. popped back from a task)
+    // and trigger an immediate refresh when the screen becomes visible again.
+    final ModalRoute<dynamic>? currentRoute = ModalRoute.of(context);
+    final bool isActive = currentRoute?.isCurrent ?? true;
+    if (isActive && !_wasActiveRoute && mounted) {
+      _wasActiveRoute = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refresh();
+      });
+    } else if (!isActive) {
+      _wasActiveRoute = false;
+    }
+
     final AppLocalizations l10n = AppLocalizations.of(context)!;
     final ThemeData theme = Theme.of(context);
     final ColorScheme cs = theme.colorScheme;

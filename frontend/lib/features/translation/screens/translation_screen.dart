@@ -1811,10 +1811,11 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
             currentOperation == TranslationOperation.generatingGlossary ||
             currentOperation == TranslationOperation.converting;
     final hasImportedFile = !_isTextMode && state.pickedFile != null;
-    final shouldShowModeToggle = !hideDuringOperation && !hasImportedFile;
+    final shouldShowModeToggle = !_isReeditMode && !hideDuringOperation && !hasImportedFile;
     // Disable Upload button if file is already uploaded and task is not cancelled
     final bool isTaskCancelled = state.statusText.toLowerCase() == 'cancelled';
-    final bool shouldDisableUpload = hasImportedFile &&
+    final bool shouldDisableUpload = _isReeditMode ||
+        hasImportedFile &&
         state.taskId != null &&
         (state.taskId as String).isNotEmpty &&
         !isTaskCancelled;
@@ -2011,7 +2012,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           const SizedBox(width: 8), // Reduced spacing
           // Re-split Source Button (supports both file mode and text mode)
           OutlinedButton.icon(
-            onPressed: !isOperationInProgress &&
+            onPressed: !_isReeditMode &&
+                    !isOperationInProgress &&
                     (state.taskId != null ||
                         (_isTextMode &&
                             _textController.text.trim().isNotEmpty))
@@ -2117,7 +2119,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                   widget.flowId ?? (state.taskId ?? 'translation');
               final int exclusionInFlight = ref.watch(
                   exclusionUpdateInFlightProviderFamily(exclusionKey),);
-              final bool isConvertEnabled = hasFileOrText &&
+              final bool isConvertEnabled = !_isReeditMode &&
+                  hasFileOrText &&
                   !isOperationInProgress &&
                   !_isGlossaryEditing &&
                   !_isUpdatingExcluded &&
@@ -2161,7 +2164,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
               final bool hasFileOrText = state.pickedFile != null ||
                   (_isTextMode && _textController.text.trim().isNotEmpty);
               // Only enable if Extract is completed (or no Extract tab exists yet)
-              final bool isTranslateEnabled = hasFileOrText &&
+              final bool isTranslateEnabled = !_isReeditMode &&
+                  hasFileOrText &&
                   !isOperationInProgress &&
                   !_isGlossaryEditing &&
                   !_isUpdatingExcluded &&
@@ -2364,8 +2368,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
               ),
             ),
           ],
-          // Fetch URL Button - only in file mode before file is uploaded
-          if (!_isTextMode && !hasImportedFile) ...<Widget>[
+          // Fetch URL Button - only in file mode before file is uploaded, not in reedit mode
+          if (!_isReeditMode && !_isTextMode && !hasImportedFile) ...<Widget>[
             const SizedBox(width: 8), // Reduced spacing
             OutlinedButton.icon(
               onPressed: isOperationInProgress
@@ -2380,7 +2384,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                 size: 16,
               ),
               label: Text(
-                _showUrlInput ? 'Close' : 'Fetch URL',
+                _showUrlInput ? AppLocalizations.of(context)!.fetchUrlClose : AppLocalizations.of(context)!.fetchUrl,
                 style: const TextStyle(fontSize: 13),
               ),
               style: OutlinedButton.styleFrom(
@@ -2392,6 +2396,20 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
               ),
             ),
           ],
+          // Show filename on the right side in reedit mode
+          if (_isReeditMode && widget.reeditFileName != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 12, right: 4),
+              child: Text(
+                widget.reeditFileName!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
         ],
         ),
       ),
@@ -2479,7 +2497,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                 : const Icon(Icons.download),
             label: Text(_isFetchingUrl
                 ? AppLocalizations.of(context)!.fetchUrlCancel
-                : 'Fetch URL'),
+                : AppLocalizations.of(context)!.fetchUrl),
           ),
         ],
       ),
@@ -6207,9 +6225,26 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
 
   /// Opens a Translate tab for re-editing a completed task.
   /// Uses re-edit override params since there is no picked file.
+  /// Also updates the translation state so toolbar buttons (Retry, Translate All) become active.
+  /// Restores original task parameters from the backend payload so the re-edit form reflects
+  /// the user's original settings (target language, workflow type, prompt, etc.).
   void _addReeditTranslationResultTab() {
     final AppLocalizations l10n = AppLocalizations.of(context)!;
     final String taskId = widget.reeditTaskId!;
+
+    // Set taskId and completed status so toolbar buttons (Retry, Translate All)
+    // become visible and clickable in reedit/view mode.
+    final dynamic notifier = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!).notifier)
+        : ref.read(translationStateProvider.notifier);
+    notifier.setTaskId(taskId);
+    notifier.setProgress(100);
+    notifier.setStatusText('completed');
+
+    // Get quick settings notifier for restoring original task params
+    final dynamic qsNotifier = widget.flowId != null
+        ? ref.read(translationQuickSettingsProviderFamily(widget.flowId!).notifier)
+        : ref.read(translationQuickSettingsProvider.notifier);
 
     // Show a loading indicator while fetching task data
     final Map<String, String> downloads = <String, String>{};
@@ -6222,6 +6257,12 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       if (dv is Map && dv.isNotEmpty) {
         downloads.addAll(
             dv.map((k, v) => MapEntry(k.toString(), v.toString())));
+      }
+
+      // Restore original task parameters (target language, workflow type, prompt, etc.)
+      final dynamic taskParams = status['task_params'];
+      if (taskParams is Map<String, dynamic> && taskParams.isNotEmpty) {
+        qsNotifier.restoreFromTaskParams(taskParams);
       }
     }).catchError((Object e) {
       // Ignore; proceed with empty downloads

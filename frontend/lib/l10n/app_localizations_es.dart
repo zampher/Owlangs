@@ -3261,6 +3261,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get fetchUrlCancel => 'Cancelar';
 
   @override
+  String get fetchUrl => 'Extraer URL';
+
+  @override
+  String get fetchUrlClose => 'Cerrar';
+
+  @override
   String get loginSubtitleFeatures =>
       'Traducción de archivos\nConversión de formato\nExtracción de URL';
 

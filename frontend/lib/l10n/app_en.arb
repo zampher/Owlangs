@@ -1150,6 +1150,20 @@
 
   "fetchUrlCancel": "Cancel",
 
+  "@fetchUrl": {
+    "description": "Button label to fetch content from a URL",
+    "type": "text",
+    "placeholders": {}
+  },
+  "fetchUrl": "Fetch URL",
+
+  "@fetchUrlClose": {
+    "description": "Button label to close the URL input field",
+    "type": "text",
+    "placeholders": {}
+  },
+  "fetchUrlClose": "Close",
+
   "loginSubtitleFeatures": "Document Translation\nFormat Conversion\nURL Fetch",
   "loginSubtitleTagline": "AI Document Processing System",
   "loginUsernameLabel": "Username",

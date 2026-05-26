@@ -1098,6 +1098,9 @@
 
   "fetchUrlCancel": "キャンセル",
 
+  "fetchUrl": "URL フェッチ",
+  "fetchUrlClose": "閉じる",
+
   "loginSubtitleFeatures": "ファイル翻訳\nフォーマット変換\nURL フェッチ",
   "loginSubtitleTagline": "AI 文書処理システム",
   "loginUsernameLabel": "ユーザー名",

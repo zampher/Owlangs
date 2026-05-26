@@ -1194,5 +1194,8 @@
   "workspaceCloseFlowDestroy": "Destruir y cerrar",
   "workspaceCloseFlowCancel": "Cancelar",
 
-  "fetchUrlCancel": "Cancelar"
+  "fetchUrlCancel": "Cancelar",
+
+  "fetchUrl": "Extraer URL",
+  "fetchUrlClose": "Cerrar"
 }
