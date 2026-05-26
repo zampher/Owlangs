@@ -167,8 +167,11 @@ async def service_batch_download_route(body: BatchDownloadRequest):
                 base_name = "unknown"
                 if original_filename:
                     base_name = original_filename.rsplit(".", 1)[0] if "." in original_filename else original_filename
-                safe_id = task_id[:8] if len(task_id) > 8 else task_id
-                entry_name = f"{base_name}_{safe_id}.{ext}"
+                is_conv = False
+                if ts:
+                    is_conv = bool(ts.get("is_format_conversion") or ts.get("convert_only"))
+                suffix = "converted" if is_conv else "translated"
+                entry_name = f"{base_name}_{suffix}.{ext}"
 
                 zf.writestr(entry_name, file_bytes)
                 manifest[task_id] = {"status": "success", "file": entry_name}

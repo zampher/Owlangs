@@ -724,6 +724,8 @@ async def download_batch_results(
     """
     import io
 
+    from backend.app.services.task import task_manager
+
     buf = io.BytesIO()
     manifest: Dict[str, Dict[str, str]] = {}
 
@@ -752,7 +754,22 @@ async def download_batch_results(
 
                 # Determine extension from file_type
                 ext = file_type if file_type != "target" else Path(file_name).suffix.lstrip(".")
-                safe_name = f"{Path(file_name).stem}_{task_id[:8]}.{ext}" if ext else file_name
+
+                # Build clean filename: {original_name}_translated.{ext}
+                ts = task_manager.get_task(task_id)
+                original_filename = ""
+                if ts:
+                    original_filename = ts.get("original_filename") or ""
+                if original_filename:
+                    base_name = Path(original_filename).stem
+                else:
+                    base_name = Path(file_name).stem
+                is_conv = False
+                if ts:
+                    is_conv = bool(ts.get("is_format_conversion") or ts.get("convert_only"))
+                suffix = "converted" if is_conv else "translated"
+                safe_name = f"{base_name}_{suffix}.{ext}" if ext else f"{base_name}_{suffix}"
+
                 zf.writestr(safe_name, raw_bytes)
                 manifest[task_id] = {"status": "success", "file": safe_name}
             except Exception as e:

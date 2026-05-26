@@ -253,6 +253,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     String fileType,
     String relativeUrl,
     String? originalFilename,
+    bool isFormatConversion,
   ) async {
     try {
       final List<int> bytes = await _svc.downloadFile(relativeUrl);
@@ -260,9 +261,9 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
               originalFilename.trim().isNotEmpty)
           ? _stripExtension(originalFilename.trim())
           : 'download';
-      final String safeTask = taskId.length > 6 ? taskId.substring(0, 8) : taskId;
+      final String suffix = isFormatConversion ? 'converted' : 'translated';
       final String ext = _fileExtensionForDownloadFormat(fileType);
-      final String filename = '${baseName}_$safeTask.$ext';
+      final String filename = '${baseName}_$suffix.$ext';
       await _saveDownloadedBytes(
         bytes: bytes,
         filename: filename,
@@ -750,6 +751,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                           name: name,
                                           ft: e.key,
                                           url: e.value.toString(),
+                                          isFormatConversion: row['is_format_conversion'] == true,
                                           onDownload: _download,
                                         ),
                                       ),
@@ -1134,13 +1136,15 @@ class _DownloadFormatButton extends StatelessWidget {
   final String name;
   final String ft;
   final String url;
-  final Future<void> Function(String, String, String, String) onDownload;
+  final bool isFormatConversion;
+  final Future<void> Function(String, String, String, String, bool) onDownload;
 
   const _DownloadFormatButton({
     required this.taskId,
     required this.name,
     required this.ft,
     required this.url,
+    required this.isFormatConversion,
     required this.onDownload,
   });
 
@@ -1154,7 +1158,7 @@ class _DownloadFormatButton extends StatelessWidget {
       padding: const EdgeInsets.all(4),
       constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
       onPressed: url.isNotEmpty
-          ? () => onDownload(taskId, ft, url, name)
+          ? () => onDownload(taskId, ft, url, name, isFormatConversion)
           : null,
     );
   }
