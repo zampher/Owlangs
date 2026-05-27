@@ -1198,5 +1198,8 @@
   "fetchUrlCancel": "Cancelar",
 
   "fetchUrl": "Extraer URL",
-  "fetchUrlClose": "Cerrar"
+  "fetchUrlClose": "Cerrar",
+
+  "commonDarkMode": "Modo oscuro",
+  "commonLightMode": "Modo claro"
 }

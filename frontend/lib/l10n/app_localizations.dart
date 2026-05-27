@@ -5779,6 +5779,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'If you are an administrator, please follow the password recovery process.'**
   String get loginPasswordRecoveryAdminGuide;
+
+  /// No description provided for @commonDarkMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark Mode'**
+  String get commonDarkMode;
+
+  /// No description provided for @commonLightMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Light Mode'**
+  String get commonLightMode;
 }
 
 class _AppLocalizationsDelegate

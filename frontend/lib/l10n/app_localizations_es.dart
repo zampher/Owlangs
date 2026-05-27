@@ -3341,4 +3341,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get loginPasswordRecoveryAdminGuide =>
       'Si es administrador, siga el procedimiento de recuperación de contraseña.';
+
+  @override
+  String get commonDarkMode => 'Modo oscuro';
+
+  @override
+  String get commonLightMode => 'Modo claro';
 }

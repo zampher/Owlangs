@@ -3177,4 +3177,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get loginPasswordRecoveryAdminGuide => '管理者の方は、パスワード復旧手順に従ってください。';
+
+  @override
+  String get commonDarkMode => 'ダークモード';
+
+  @override
+  String get commonLightMode => 'ライトモード';
 }

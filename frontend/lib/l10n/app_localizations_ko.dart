@@ -3182,4 +3182,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get loginPasswordRecoveryAdminGuide => '관리자라면 비밀번호 복구 절차를 따라주세요.';
+
+  @override
+  String get commonDarkMode => '다크 모드';
+
+  @override
+  String get commonLightMode => '라이트 모드';
 }

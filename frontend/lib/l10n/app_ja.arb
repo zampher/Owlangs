@@ -1122,5 +1122,8 @@
   "loginFeatureFormats": "PDF、DOCX、XLSX、HTML、EPUB、MOBI\nおよび15以上のフォーマット",
   "loginFeatureLayout": "レイアウトを保持した翻訳\n高い忠実度",
   "loginFeaturePlatforms": "20+ LLM プラットフォームに対応\nOpenAI、Claude、Ollama を含む",
-  "loginPasswordRecoveryAdminGuide": "管理者の方は、パスワード復旧手順に従ってください。"
+  "loginPasswordRecoveryAdminGuide": "管理者の方は、パスワード復旧手順に従ってください。",
+
+  "commonDarkMode": "ダークモード",
+  "commonLightMode": "ライトモード"
 }

@@ -1122,5 +1122,8 @@
   "loginFeatureFormats": "PDF, DOCX, XLSX, HTML, EPUB, MOBI\n및 15개 이상의 형식",
   "loginFeatureLayout": "레이아웃을 보존하는 번역\n높은 충실도",
   "loginFeaturePlatforms": "20+ LLM 플랫폼 지원\nOpenAI, Claude, Ollama 포함",
-  "loginPasswordRecoveryAdminGuide": "관리자라면 비밀번호 복구 절차를 따라주세요."
+  "loginPasswordRecoveryAdminGuide": "관리자라면 비밀번호 복구 절차를 따라주세요.",
+
+  "commonDarkMode": "다크 모드",
+  "commonLightMode": "라이트 모드"
 }

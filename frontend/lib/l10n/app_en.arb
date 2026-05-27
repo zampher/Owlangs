@@ -1185,5 +1185,8 @@
   "loginFeatureFormats": "PDF, DOCX, XLSX, HTML, EPUB, MOBI\nand 15+ more formats",
   "loginFeatureLayout": "Layout-preserving translation\nwith high fidelity",
   "loginFeaturePlatforms": "20+ LLM platforms supported\nincluding OpenAI, Claude, Ollama",
-  "loginPasswordRecoveryAdminGuide": "If you are an administrator, please follow the password recovery process."
+  "loginPasswordRecoveryAdminGuide": "If you are an administrator, please follow the password recovery process.",
+
+  "commonDarkMode": "Dark Mode",
+  "commonLightMode": "Light Mode"
 }

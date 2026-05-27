@@ -3154,4 +3154,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get loginPasswordRecoveryAdminGuide => '如果您是管理员，请按照密码恢复流程进行处理。';
+
+  @override
+  String get commonDarkMode => '深色模式';
+
+  @override
+  String get commonLightMode => '浅色模式';
 }
