@@ -411,11 +411,8 @@ def list_supported_formats() -> List[Dict[str, Any]]:
     formats = [
         {"extension": ".pdf", "workflow_type": "markdown_based", "description": "PDF Document"},
         {"extension": ".docx", "workflow_type": "docx", "description": "Word Document"},
-        {"extension": ".doc", "workflow_type": "docx", "description": "Word Document (legacy)"},
         {"extension": ".pptx", "workflow_type": "pptx", "description": "PowerPoint Presentation"},
-        {"extension": ".ppt", "workflow_type": "pptx", "description": "PowerPoint Presentation (legacy)"},
         {"extension": ".xlsx", "workflow_type": "xlsx", "description": "Excel Spreadsheet"},
-        {"extension": ".xls", "workflow_type": "xlsx", "description": "Excel Spreadsheet (legacy)"},
         {"extension": ".csv", "workflow_type": "xlsx", "description": "CSV File"},
         {"extension": ".txt", "workflow_type": "txt", "description": "Plain Text"},
         {"extension": ".md", "workflow_type": "markdown_based", "description": "Markdown"},

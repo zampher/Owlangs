@@ -517,7 +517,11 @@ def main():
         "translate", "convert", "batch", "status", "download",
         "cancel", "platform", "formats", "glossary", "config",
     }
-    if len(sys.argv) > 1 and sys.argv[1] in CLI_COMMANDS:
+    # Skip global flags (e.g. --json, -v) placed before the subcommand
+    _cli_idx = 1
+    while _cli_idx < len(sys.argv) and sys.argv[_cli_idx].startswith("-"):
+        _cli_idx += 1
+    if _cli_idx < len(sys.argv) and sys.argv[_cli_idx] in CLI_COMMANDS:
         from backend.owlangs_cli import main as cli_main
         sys.exit(cli_main())
 

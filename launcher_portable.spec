@@ -12,8 +12,21 @@ import shutil
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_all
 
-# Ensure Flutter Web frontend is built and synced before packaging
+# Ensure local source takes precedence over editable installs in the active venv
 _project_root = Path(os.getcwd())
+_project_root_str = str(_project_root)
+_project_backend_str = str(_project_root / 'backend')
+# Remove old editable-install path hooks that shadow local backend
+sys.path = [
+    p for p in sys.path
+    if not (isinstance(p, str) and 'owlangs' in p.lower() and 'editable' in p.lower())
+]
+if _project_backend_str not in sys.path:
+    sys.path.insert(0, _project_backend_str)
+if _project_root_str not in sys.path:
+    sys.path.insert(0, _project_root_str)
+
+# Ensure Flutter Web frontend is built and synced before packaging
 _frontend_build_dir = _project_root / 'frontend' / 'build' / 'web'
 _backend_flutter_dir = _project_root / 'backend' / 'static' / 'flutter-web'
 

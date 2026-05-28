@@ -234,23 +234,31 @@ def _get_pandoc_path() -> Optional[Path]:
         if hasattr(sys, '_MEIPASS'):
             # Running from PyInstaller - try to find Pandoc relative to executable
             exe_path = Path(sys.executable)
-            # Try parent directory (if EXE is in bin/, Pandoc is in ../3rdParty/...)
+            # Onedir: EXE and 3rdParty are in the same folder
+            onedir_base = exe_path.parent
+            pandoc_base = onedir_base / "3rdParty" / "windows"
+            if pandoc_base.exists():
+                for pandoc_dir in pandoc_base.glob("pandoc-*"):
+                    pandoc_exe = pandoc_dir / "pandoc.exe"
+                    if pandoc_exe.exists():
+                        logger.debug(LogModule.TRANS, f"Found Pandoc in onedir directory: {pandoc_exe}")
+                        return pandoc_exe
+            # Onedir / onefile fallback: _MEIPASS contains bundled 3rdParty
+            meipass_pandoc_base = Path(sys._MEIPASS) / "3rdParty" / "windows"
+            if meipass_pandoc_base.exists():
+                for pandoc_dir in meipass_pandoc_base.glob("pandoc-*"):
+                    pandoc_exe = pandoc_dir / "pandoc.exe"
+                    if pandoc_exe.exists():
+                        logger.info(LogModule.TRANS, f"Found Pandoc in PyInstaller bundle directory: {pandoc_exe}")
+                        return pandoc_exe
+            # Legacy: EXE is in a subdir (e.g. bin/), 3rdParty is in parent
             install_base = exe_path.parent.parent
-            # Check for pandoc-* directories
             pandoc_base = install_base / "3rdParty" / "windows"
             if pandoc_base.exists():
                 for pandoc_dir in pandoc_base.glob("pandoc-*"):
                     pandoc_exe = pandoc_dir / "pandoc.exe"
                     if pandoc_exe.exists():
                         logger.debug(LogModule.TRANS, f"Found Pandoc in installation directory: {pandoc_exe}")
-                        return pandoc_exe
-            # Also check in _MEIPASS (PyInstaller temp directory)
-            meipass_pandoc_base = Path(sys._MEIPASS) / "3rdParty" / "windows"
-            if meipass_pandoc_base.exists():
-                for pandoc_dir in meipass_pandoc_base.glob("pandoc-*"):
-                    pandoc_exe = pandoc_dir / "pandoc.exe"
-                    if pandoc_exe.exists():
-                        logger.info(LogModule.TRANS, f"Found Pandoc in PyInstaller temp directory: {pandoc_exe}")
                         return pandoc_exe
         
         # 2. Check installation directory (production - detect via registry/env/common paths)
@@ -433,7 +441,10 @@ def _get_xelatex_path() -> Optional[Path]:
         candidates.append(program_data)
     # 1. PyInstaller environment (packaged executable)
     if hasattr(sys, "_MEIPASS"):
+        # Onedir: EXE and 3rdParty are in the same folder
+        candidates.append(Path(sys.executable).parent / "3rdParty" / "windows")
         candidates.append(Path(sys._MEIPASS) / "3rdParty" / "windows")
+        # Legacy: EXE is in a subdir, 3rdParty is in parent
         candidates.append(Path(sys.executable).parent.parent / "3rdParty" / "windows")
     # 2. Installation directory (production)
     install_dir = _get_owlangs_install_dir()

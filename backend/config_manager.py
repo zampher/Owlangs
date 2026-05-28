@@ -232,6 +232,49 @@ class ConfigManager:
                 subprocess.run(['xdg-open', str(config_file)])
 
 
+def _setup_frozen_env(skip_app=False):
+    """Set up frozen environment for PyInstaller single-file mode.
+
+    Args:
+        skip_app: If True, skip importing backend.app (used in CLI mode
+                  to avoid the heavy FastAPI startup cost).
+    """
+    if not hasattr(sys, 'frozen'):
+        return
+
+    # Set up utils alias: code imports "from utils.xxx", bundled as backend.utils
+    import backend.utils
+    sys.modules['utils'] = backend.utils
+
+    # Pre-register key submodules so lazy imports in frozen build resolve
+    _submodules = [
+        'backend.utils.resource_utils',
+        'backend.utils.redis_manager',
+        'backend.utils.utils',
+        'backend.utils.language_utils',
+        'backend.utils.path_utils',
+        'backend.utils.font_utils',
+        'backend.utils.json_utils',
+        'backend.utils.translation_segments',
+        'backend.utils.markdown_splitter',
+        'backend.utils.markdown_utils',
+    ]
+    for mod_name in _submodules:
+        try:
+            __import__(mod_name)
+        except Exception:
+            pass
+
+    if skip_app:
+        return
+
+    # Pre-import backend.app so sys.modules["app"] is set for uvicorn's import_from_string
+    try:
+        import backend.app  # noqa: F401
+    except Exception:
+        pass
+
+
 class PortableLauncher:
     """Launcher for portable executable mode."""
     
@@ -280,38 +323,8 @@ class PortableLauncher:
         return False
     
     def _setup_frozen_env(self):
-        """Set up frozen environment for PyInstaller single-file mode."""
-        if not hasattr(sys, 'frozen'):
-            return
-
-        # Set up utils alias: code imports "from utils.xxx", bundled as backend.utils
-        import backend.utils
-        sys.modules['utils'] = backend.utils
-
-        # Pre-register key submodules so lazy imports in frozen build resolve
-        _submodules = [
-            'backend.utils.resource_utils',
-            'backend.utils.redis_manager',
-            'backend.utils.utils',
-            'backend.utils.language_utils',
-            'backend.utils.path_utils',
-            'backend.utils.font_utils',
-            'backend.utils.json_utils',
-            'backend.utils.translation_segments',
-            'backend.utils.markdown_splitter',
-            'backend.utils.markdown_utils',
-        ]
-        for mod_name in _submodules:
-            try:
-                __import__(mod_name)
-            except Exception:
-                pass
-
-        # Pre-import backend.app so sys.modules["app"] is set for uvicorn's import_from_string
-        try:
-            import backend.app  # noqa: F401
-        except Exception:
-            pass
+        """Delegate to module-level frozen environment setup."""
+        _setup_frozen_env(skip_app=False)
 
     def start_server(self) -> bool:
         """Start the backend server in-process using uvicorn in a daemon thread."""
@@ -454,7 +467,34 @@ class PortableLauncher:
 
 
 def main():
-    """Main entry point for single-file launcher."""
+    """Main entry point for single-file launcher.
+
+    Supports both CLI mode (translate/convert/batch/etc.) and launcher mode
+    (start server + open browser). Double-clicking with no arguments runs
+    launcher mode; passing a CLI subcommand runs CLI mode.
+    """
+    # ── CLI mode: delegate to owlangs_cli for translate/convert/batch etc. ──
+    CLI_COMMANDS = {
+        "translate", "convert", "batch", "status", "download",
+        "cancel", "platform", "formats", "glossary", "config",
+    }
+    # Skip global flags (e.g. --json, -v) placed before the subcommand
+    _cli_idx = 1
+    while _cli_idx < len(sys.argv) and sys.argv[_cli_idx].startswith("-"):
+        _cli_idx += 1
+    if _cli_idx < len(sys.argv) and sys.argv[_cli_idx] in CLI_COMMANDS:
+        # Skip Redis startup in CLI mode to improve cold-start speed
+        # Must be set BEFORE _setup_frozen_env() imports backend.app
+        os.environ["REDIS_ENABLED"] = "false"
+        _setup_frozen_env(skip_app=True)
+        # Initialize user configs so CLI can find secrets.json and other configs
+        config_mgr = ConfigManager()
+        config_dir = config_mgr.init_user_configs()
+        os.environ['OWLANGS_CONFIG_PATH'] = str(config_dir.parent)
+        from backend.owlangs_cli import main as cli_main
+        sys.exit(cli_main())
+
+    # ── Launcher mode ──
     import argparse
     
     parser = argparse.ArgumentParser(description='Owlangs Single-File Launcher')

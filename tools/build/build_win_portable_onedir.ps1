@@ -1,5 +1,6 @@
-﻿# Build Owlangs Portable Executable
-# Creates a standalone .exe that auto-starts server and opens browser
+# Build Owlangs Portable Edition (Onedir)
+# Creates a folder-based portable build with fast CLI startup
+# No onefile extraction overhead — files stay in a folder
 
 param(
     [switch]$SkipFlutter,
@@ -25,13 +26,14 @@ $RootDir = Split-Path -Parent (Split-Path -Parent $ScriptDir)
 Set-Location $RootDir
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Building Owlangs Portable Edition" -ForegroundColor Cyan
+Write-Host "Building Owlangs Portable Edition (Onedir)" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Features:" -ForegroundColor Yellow
-Write-Host "  - Single .exe file (double-click to run)" -ForegroundColor Gray
+Write-Host "  - Folder-based (no extraction overhead)" -ForegroundColor Gray
+Write-Host "  - Fast CLI startup (~2s vs ~50s onefile)" -ForegroundColor Gray
 Write-Host "  - Auto-initializes user configs" -ForegroundColor Gray
-Write-Host "  - Auto-starts server and opens browser" -ForegroundColor Gray
+Write-Host "  - Auto-starts server and opens browser (double-click)" -ForegroundColor Gray
 Write-Host "  - Configs persisted in C:\ProgramData\Owlangs" -ForegroundColor Gray
 Write-Host ""
 
@@ -66,7 +68,7 @@ if (-not $SkipFlutter) {
         exit 1
     }
     Write-Host ""
-    
+
     # Verify CanvasKit configuration
     $indexHtmlPath = Join-Path $RootDir "backend\static\flutter-web\index.html"
     Test-CanvasKitConfig -IndexHtmlPath $indexHtmlPath
@@ -81,9 +83,9 @@ Write-Host "[env] Installing project dependencies..." -ForegroundColor Cyan
 python -m pip install -e . | Out-Null
 Write-Host ""
 
-# Build single-file executable
-Write-Host "[build] Building single-file executable..." -ForegroundColor Cyan
-Write-Host "[build] Using launcher_portable.spec" -ForegroundColor Yellow
+# Build onedir executable
+Write-Host "[build] Building onedir portable executable..." -ForegroundColor Cyan
+Write-Host "[build] Using launcher_portable_onedir.spec" -ForegroundColor Yellow
 
 $env:OWLANGS_VERSION = $Version
 $env:OWLANGS_FRONTEND = "web"
@@ -103,14 +105,14 @@ if ($IncludePandoc) {
 }
 
 try {
-    pyinstaller -y --clean launcher_portable.spec
-    
+    pyinstaller -y --clean launcher_portable_onedir.spec
+
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[build] ERROR: PyInstaller build failed!" -ForegroundColor Red
         exit 1
     }
-    
-    Write-Host "[build] Portable executable built successfully!" -ForegroundColor Green
+
+    Write-Host "[build] Onedir portable build successful!" -ForegroundColor Green
 } finally {
     Remove-Item Env:\OWLANGS_VERSION -ErrorAction SilentlyContinue
     Remove-Item Env:\OWLANGS_FRONTEND -ErrorAction SilentlyContinue
@@ -120,44 +122,13 @@ try {
 
 Write-Host ""
 
-# Stage 3rdParty files alongside the EXE (portable mode)
-Write-Host "[staging] Staging 3rdParty files..." -ForegroundColor Cyan
-$distDir = "dist"
-
-# Clean old 3rdParty in dist to prevent Copy-Item nesting on re-runs
-if (Test-Path "$distDir\3rdParty") {
-    Remove-Item -Path "$distDir\3rdParty" -Recurse -Force
-    Write-Host "[staging] Cleaned old dist/3rdParty" -ForegroundColor Yellow
+# Verify output
+$distDirName = "Owlangs-$Version"
+$distDir = Join-Path "dist" $distDirName
+if (-not (Test-Path $distDir)) {
+    Write-Host "[build] ERROR: Expected output directory not found: $distDir" -ForegroundColor Red
+    exit 1
 }
-
-# Copy Redis
-if (Test-Path "3rdParty\windows\Redis-x64-3.0.504") {
-    $dest = Join-Path $distDir "3rdParty\windows\Redis-x64-3.0.504"
-    Write-Host "[staging] Copying Redis..." -ForegroundColor Yellow
-    New-Item -ItemType Directory -Path $dest -Force | Out-Null
-    Copy-Item -Path "3rdParty\windows\Redis-x64-3.0.504\*" -Destination $dest -Recurse -Force
-}
-
-# Copy Pandoc if available
-if (Test-Path "3rdParty\windows") {
-    $pandocDirs = Get-ChildItem -Path "3rdParty\windows" -Directory -Filter "pandoc-*" -ErrorAction SilentlyContinue
-    foreach ($d in $pandocDirs) {
-        $dest = Join-Path $distDir "3rdParty\windows\$($d.Name)"
-        Write-Host "[staging] Copying $($d.Name)..." -ForegroundColor Yellow
-        Copy-Item -Path $d.FullName -Destination $dest -Recurse -Force
-    }
-}
-
-# Copy pdflatex if available
-if (Test-Path "3rdParty\windows\pdflatex") {
-    $dest = Join-Path $distDir "3rdParty\windows\pdflatex"
-    Write-Host "[staging] Copying pdflatex..." -ForegroundColor Yellow
-    Copy-Item -Path "3rdParty\windows\pdflatex" -Destination $dest -Recurse -Force
-}
-
-Write-Host "[staging] 3rdParty files staged" -ForegroundColor Green
-
-Write-Host ""
 
 # Create output directory
 $packageName = "Owlangs-win64-portable-$Version"
@@ -170,29 +141,41 @@ if (Test-Path $buildDir) {
 }
 New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
 
-# Copy the single-file executable
-$exeName = "Owlangs-$Version.exe"
-Copy-Item -Path "dist\$exeName" -Destination $buildDir -Force
-Write-Host "[package] Executable: $exeName" -ForegroundColor Green
+# Copy the entire onedir folder to package
+Write-Host "[package] Copying onedir folder..." -ForegroundColor Yellow
+Copy-Item -Path $distDir\* -Destination $buildDir -Recurse -Force
+Write-Host "[package] Onedir folder copied" -ForegroundColor Green
 
-# Copy 3rdParty alongside the EXE in the package directory
-if (Test-Path "dist\3rdParty") {
-    Write-Host "[package] Copying 3rdParty to package..." -ForegroundColor Yellow
-    Copy-Item -Path "dist\3rdParty" -Destination $buildDir -Recurse -Force
-    Write-Host "[package] 3rdParty files packaged" -ForegroundColor Green
+# Stage 3rdParty files alongside the EXE (for easy user upgrades + path resolution)
+Write-Host "[staging] Staging 3rdParty files to package root..." -ForegroundColor Cyan
+$src3rdParty = Join-Path $RootDir "3rdParty"
+if (Test-Path $src3rdParty) {
+    $dst3rdParty = Join-Path $buildDir "3rdParty"
+    if (Test-Path $dst3rdParty) {
+        Remove-Item -Path $dst3rdParty -Recurse -Force
+    }
+    Copy-Item -Path $src3rdParty -Destination $dst3rdParty -Recurse -Force
+    Write-Host "[staging] 3rdParty copied to package root" -ForegroundColor Green
+} else {
+    Write-Host "[staging] WARNING: 3rdParty source not found" -ForegroundColor Yellow
 }
 
 # Create README
 $readmeContent = @"
-Owlangs Portable Edition v$Version
-===================================
+Owlangs Portable Edition (Onedir) v$Version
+==========================================
 
 Quick Start
 -----------
-Double-click `Owlangs-$Version.exe` to automatically:
+Double-click Owlangs-$Version.exe to automatically:
 1. Initialize config files (first run only)
 2. Start the backend service
 3. Open http://localhost:8800 in your browser
+
+For fast CLI usage, run from terminal:
+  Owlangs-$Version.exe translate report.pdf --to Chinese
+  Owlangs-$Version.exe platform list --json
+  Owlangs-$Version.exe formats
 
 Config File Location
 --------------------
@@ -208,7 +191,7 @@ Owlangs-$Version.exe [options]
 
   (no arguments)      Start server and open browser (double-click friendly)
   --init-config       Initialize config files and exit
-  --edit-config NAME  Edit a config file (e.g. `--edit-config secrets`)
+  --edit-config NAME  Edit a config file (e.g. --edit-config secrets)
   --port PORT         Specify port (default: 8800)
   --silent            Silent mode (no console output)
 
@@ -233,9 +216,11 @@ Examples:
 
 Notes
 -----
+- This is a folder-based (onedir) build — keep all files together
+- Do not move Owlangs-$Version.exe out of this folder
 - Configure API keys before first use
 - Close the window to stop the service
-- Config files are stored in C:\ProgramData\Owlangs and persist across reinstalls
+- Config files persist across reinstalls
 
 Support
 -------
@@ -250,14 +235,17 @@ Write-Host "[package] Package created at: $buildDir" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "Portable Build Complete!" -ForegroundColor Green
+Write-Host "Portable Onedir Build Complete!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "输出文件:" -ForegroundColor Yellow
-Write-Host "  $buildDir\$exeName" -ForegroundColor Cyan
+Write-Host "Output:" -ForegroundColor Yellow
+Write-Host "  $buildDir\Owlangs-$Version.exe" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "使用方法:" -ForegroundColor Yellow
-Write-Host "  1. 复制 Owlangs.exe 到任意位置" -ForegroundColor Gray
-Write-Host "  2. 双击运行" -ForegroundColor Gray
-Write-Host "  3. 首次运行配置 API 密钥" -ForegroundColor Gray
+Write-Host "Distribution:" -ForegroundColor Yellow
+Write-Host "  Zip the entire folder: $buildDir" -ForegroundColor Gray
+Write-Host ""
+Write-Host "Usage:" -ForegroundColor Yellow
+Write-Host "  1. Copy the $packageName folder to any location" -ForegroundColor Gray
+Write-Host "  2. Double-click Owlangs-$Version.exe to run server" -ForegroundColor Gray
+Write-Host "  3. Or use CLI from terminal in that folder" -ForegroundColor Gray
 Write-Host ""
