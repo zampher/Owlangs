@@ -66,6 +66,38 @@ setup_path()
 
 # ── Translation Tools ──────────────────────────────────────────────────────────
 
+def _glossary_content_to_simple_dict(glossary_content: Dict[str, Any]) -> Dict[str, str]:
+    """Convert glossary manager entries (src -> {dst, ...}) to src -> dst strings."""
+    simple: Dict[str, str] = {}
+    for src, entry in glossary_content.items():
+        if isinstance(entry, dict):
+            simple[src] = entry.get("dst", "") or ""
+        else:
+            simple[src] = str(entry) if entry is not None else ""
+    return simple
+
+
+def _resolve_glossary_dict(
+    glossary: Optional[Dict[str, str]] = None,
+    glossary_ids: Optional[List[str]] = None,
+) -> Optional[Dict[str, str]]:
+    """Merge inline glossary dict with terms loaded from glossary IDs."""
+    merged: Dict[str, str] = {}
+    if glossary:
+        merged.update(glossary)
+    if glossary_ids:
+        from backend.glossary.manager import get_glossary_manager
+
+        manager = get_glossary_manager()
+        for glossary_id in glossary_ids:
+            content = manager.get_glossary_content_with_languages(glossary_id)
+            if content is None:
+                content = manager.get_glossary_content_with_categories(glossary_id) or {}
+            if content:
+                merged.update(_glossary_content_to_simple_dict(content))
+    return merged if merged else None
+
+
 def _resolve_platform_config(
     base_url: str, api_key: str, model_id: str
 ) -> tuple:
@@ -141,6 +173,8 @@ async def translate_file(
     # Resolve LLM platform from backend config when not explicitly provided
     base_url, api_key, model_id = _resolve_platform_config(base_url, api_key, model_id)
 
+    resolved_glossary = _resolve_glossary_dict(glossary, glossary_ids)
+
     # Build payload (workflow params model)
     payload = _build_translation_payload(
         file_name=file_name,
@@ -157,7 +191,7 @@ async def translate_file(
         prompt_mode=prompt_mode,
         prompt_style=prompt_style,
         deep_split=deep_split,
-        glossary_dict=glossary,
+        glossary_dict=resolved_glossary,
         glossary_generate_enable=glossary_generate,
     )
 
@@ -174,11 +208,17 @@ async def translate_file(
             owner_username=None,  # MCP is unauthenticated
         )
 
-        # If glossary_ids provided, store them in task state for reference
-        if glossary_ids and task_manager.get_task(task_id):
-            task_manager.update_task(task_id, {
-                "mcp_glossary_ids": glossary_ids,
-            })
+        if resolved_glossary and task_manager.get_task(task_id):
+            task_update: Dict[str, Any] = {
+                "applied_glossary": {
+                    "glossary_ids": list(glossary_ids) if glossary_ids else [],
+                    "glossary_dict": resolved_glossary,
+                    "applied_by": "mcp",
+                },
+            }
+            if glossary_ids:
+                task_update["mcp_glossary_ids"] = glossary_ids
+            task_manager.update_task(task_id, task_update)
 
         return {
             "task_started": True,

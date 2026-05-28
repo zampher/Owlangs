@@ -512,6 +512,15 @@ def _console_port_dialog(port: int, processes: list) -> tuple:
 
 def main():
     """Main entry point for the CLI"""
+    # ── CLI mode: delegate to owlangs_cli for translate/convert/batch etc. ──
+    CLI_COMMANDS = {
+        "translate", "convert", "batch", "status", "download",
+        "cancel", "platform", "formats", "glossary", "config",
+    }
+    if len(sys.argv) > 1 and sys.argv[1] in CLI_COMMANDS:
+        from backend.owlangs_cli import main as cli_main
+        sys.exit(cli_main())
+
     # Create parser with description that includes version info
     parser = argparse.ArgumentParser(
         description="Owlangs CLI - Command line interface for Owlangs backend"

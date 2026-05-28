@@ -192,6 +192,7 @@ hiddenimports = [
     'backend.mcp_server',
     'backend.mcp_server.server',
     'backend.mcp_server.service_layer',
+    'backend.owlangs_cli',
     'backend.mcp_server.tools',
     'backend.mcp_server.tools.config_tools',
     'backend.mcp_server.tools.translate_tools',
