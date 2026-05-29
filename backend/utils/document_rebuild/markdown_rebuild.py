@@ -23,12 +23,56 @@ from .table_layout_utils import (
     _extract_equation_from_layout_block,
 )
 
-# Temporary feature flag: high-fidelity PDF layout rebuild.
-# When False, PDF rebuild will always use text-based segments instead of
-# layout_document-based block types. This keeps the PDF path simple and
-# focused on formula debugging while layout-based "high fidelity" export
-# is still under development.
-ENABLE_PDF_LAYOUT_REBUILD: bool = False
+def _recover_layout_block_indices_from_prepared_chunks(
+    segments: List[Dict[str, Any]],
+    task_state: Optional[Dict[str, Any]],
+) -> int:
+    """Map segment_index -> layout block indices via layout_prepared_chunks.segment_indices."""
+    prepared = (task_state or {}).get("layout_prepared_chunks") or []
+    if not prepared:
+        return 0
+    seg_to_blocks: Dict[int, List[int]] = {}
+    for chunk in prepared:
+        if not isinstance(chunk, dict):
+            continue
+        block_indices = chunk.get("block_indices") or []
+        if not block_indices:
+            continue
+        for raw_seg_idx in chunk.get("segment_indices") or []:
+            try:
+                seg_idx = int(raw_seg_idx)
+            except (TypeError, ValueError):
+                continue
+            existing = seg_to_blocks.setdefault(seg_idx, [])
+            for raw_bidx in block_indices:
+                try:
+                    bidx = int(raw_bidx)
+                except (TypeError, ValueError):
+                    continue
+                if bidx not in existing:
+                    existing.append(bidx)
+    recovered = 0
+    for segment in segments:
+        if segment.get("layout_block_indices"):
+            continue
+        seg_idx = segment.get("segment_index")
+        if seg_idx is None:
+            continue
+        blocks = seg_to_blocks.get(int(seg_idx))
+        if blocks:
+            segment["layout_block_indices"] = list(blocks)
+            recovered += 1
+    return recovered
+
+
+# Feature flag: high-fidelity PDF layout rebuild.
+# When True, PDF rebuild uses layout_document-based block types,
+# supporting equation_format/table_body_format switching (e.g. export
+# formulas/tables as images instead of LaTeX/HTML text).
+# When False, PDF rebuild falls back to text-based segment concatenation,
+# which ignores format parameters — this prevents image-format export
+# from working correctly.
+ENABLE_PDF_LAYOUT_REBUILD: bool = True
 
 
 def has_revised_segments(task_state: Dict[str, Any]) -> bool:
@@ -748,9 +792,25 @@ def rebuild_markdown_document_from_segments(
     if source_input_type not in ("layout", "text"):
         source_input_type = "text"
     layout_doc = task_state.get("layout_document") if task_state else None
+
+    # P0a: Auto-promote to layout when layout_doc AND layout_chunk_block_map are both present.
+    # layout_chunk_block_map is the definitive indicator of a PDF layout workflow.
+    # Without this promotion, newly-created tasks (inherited from convert phase) may still have
+    # source_input_type="text", causing the layout-based format regeneration to be skipped
+    # (e.g. equation_format=image / table_body_format=image have no effect).
+    if layout_doc is not None and source_input_type != "layout":
+        _has_layout_map = bool(task_state.get("layout_chunk_block_map")) if task_state else False
+        if _has_layout_map:
+            source_input_type = "layout"
+            logger.info(
+                LogModule.RESTOR,
+                "[REBUILD] Auto-promoted source_input_type to 'layout' "
+                "(layout_document + layout_chunk_block_map present)",
+            )
+
     is_pdf_with_layout = layout_doc is not None and source_input_type == "layout"
     segments_with_layout_indices = sum(1 for s in segments if s.get("layout_block_indices"))
-    
+
     # P1: Log key branch and WARNING on mixed usage for quick diagnosis
     if layout_doc is not None and source_input_type != "layout":
         logger.info(LogModule.RESTOR, f"[REBUILD] MD path: using text-based segment type (source_input_type={source_input_type}, skipping layout)")
@@ -762,9 +822,24 @@ def rebuild_markdown_document_from_segments(
     if is_pdf_with_layout and segments_with_layout_indices == 0:
         logger.info(
             LogModule.RESTOR,
-            "[REBUILD] Layout branch taken but no segment has layout_block_indices; block types may not apply (check segment recording)",
+            "[REBUILD] Layout branch taken but no segment has layout_block_indices; attempting recovery",
         )
-    
+        recovered_count = _recover_layout_block_indices_from_prepared_chunks(segments, task_state)
+        segments_with_layout_indices = sum(
+            1 for s in segments if s.get("layout_block_indices")
+        )
+        if recovered_count:
+            logger.info(
+                LogModule.RESTOR,
+                f"[REBUILD] Recovered layout_block_indices for {recovered_count} segments "
+                f"from layout_prepared_chunks",
+            )
+        elif segments_with_layout_indices == 0:
+            logger.info(
+                LogModule.RESTOR,
+                "[REBUILD] layout_block_indices recovery failed; block types may not apply (check segment recording)",
+            )
+
     # Sort segments by segment_index so text path and layout path have a consistent baseline order.
     # For PDF layout path, _rebuild_markdown_from_layout_segments will re-sort by layout order (page + bbox y)
     # so that image/paragraph position matches the source PDF when segment_index does not follow layout.

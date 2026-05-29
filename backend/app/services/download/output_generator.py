@@ -740,8 +740,9 @@ class OutputGenerator:
             if is_pdf_with_layout:
                 try:
                     from utils.document_rebuild import rebuild_markdown_document_from_segments
-                    eq_fmt = task_state.get("equation_format") or (payload.get("equation_format") if isinstance(payload, dict) else getattr(payload, "equation_format", None)) or "image"
-                    tbl_fmt = task_state.get("table_body_format") or (payload.get("table_body_format") if isinstance(payload, dict) else getattr(payload, "table_body_format", None)) or "image"
+                    from backend.app.services.download.download_service import _resolve_export_format_settings
+
+                    eq_fmt, tbl_fmt = _resolve_export_format_settings(task_state, payload)
                     rebuilt_doc = rebuild_markdown_document_from_segments(
                         task_state,
                         file_stem=file_stem,
@@ -759,10 +760,10 @@ class OutputGenerator:
                         )
                         logger.debug(
                             LogModule.EXPORT,
-                            f"[OUTPUT-GENERATOR] Task {task_id}: Rebuilt Markdown from segments for Pandoc DOCX "
-                            f"(equation_format={eq_fmt}, table_body_format={tbl_fmt}) so images are included",
+                            f"[OUTPUT-GENERATOR] Task {task_id}: Rebuilt Markdown from segments for DOCX "
+                            f"(equation_format={eq_fmt}, table_body_format={tbl_fmt})",
                         )
-                        self.task_manager.add_log(task_id, "info", f"Rebuilt Markdown from segments for Pandoc DOCX (equation_format={eq_fmt}, table_body_format={tbl_fmt})")
+                        self.task_manager.add_log(task_id, "info", f"Rebuilt Markdown from segments for DOCX (equation_format={eq_fmt}, table_body_format={tbl_fmt})")
                 except Exception as rebuild_err:
                     logger.debug(LogModule.EXPORT, f"[OUTPUT-GENERATOR] Task {task_id}: rebuild from segments failed: {rebuild_err}")
             if md_content is None:
@@ -793,6 +794,71 @@ class OutputGenerator:
                     except Exception as rebuild_err:
                         logger.debug(LogModule.EXPORT, f"[OUTPUT-GENERATOR] Task {task_id}: rebuild from segments failed: {rebuild_err}")
             if md_content:
+                from backend.app.services.download.download_service import (
+                    _resolve_export_format_settings,
+                    _format_requires_md2docx,
+                    _export_md_content_to_docx_bytes,
+                )
+
+                eq_fmt, tbl_fmt = _resolve_export_format_settings(task_state, payload)
+                if is_pdf_with_layout and _format_requires_md2docx(eq_fmt, tbl_fmt):
+                    try:
+                        docx_bytes = _export_md_content_to_docx_bytes(
+                            task_state,
+                            md_content,
+                            eq_fmt,
+                            tbl_fmt,
+                            payload=payload,
+                            file_stem=file_stem,
+                        )
+                        docx_file.write_bytes(docx_bytes)
+                        if docx_file.exists():
+                            if "downloadable_files" not in task_state:
+                                task_state["downloadable_files"] = {}
+                            task_state["downloadable_files"]["docx"] = {
+                                "path": str(docx_file),
+                                "filename": f"{file_stem}_translated.docx",
+                            }
+                            self.task_manager.add_log(
+                                task_id,
+                                "success",
+                                f"DOCX generated via MD2DOCXExporter "
+                                f"(equation_format={eq_fmt}, table_body_format={tbl_fmt}).",
+                            )
+                            try:
+                                from utils.docx_math_fragment_check import (
+                                    apply_docx_math_fragment_issues_to_task_state,
+                                )
+
+                                frag_summary = apply_docx_math_fragment_issues_to_task_state(
+                                    task_state,
+                                    task_id=task_id,
+                                    task_manager=self.task_manager,
+                                )
+                                logger.debug(
+                                    LogModule.EXPORT,
+                                    f"[OUTPUT-GENERATOR] Task {task_id}: DOCX fragment math check "
+                                    f"segments={frag_summary.checked_segments} issues={len(frag_summary.issues)}",
+                                )
+                            except Exception as frag_err:
+                                logger.warning(
+                                    LogModule.EXPORT,
+                                    f"[OUTPUT-GENERATOR] Task {task_id}: DOCX fragment math check failed: {frag_err}",
+                                    exc_info=False,
+                                )
+                            return
+                    except Exception as md2docx_err:
+                        logger.warning(
+                            LogModule.EXPORT,
+                            f"[OUTPUT-GENERATOR] Task {task_id}: MD2DOCX image export failed, falling back to Pandoc: {md2docx_err}",
+                            exc_info=True,
+                        )
+                        self.task_manager.add_log(
+                            task_id,
+                            "warning",
+                            f"MD2DOCX image export failed ({md2docx_err}), trying Pandoc DOCX.",
+                        )
+
                 try:
                     from utils.format_convert_utils import convert_md_to_docx
                     if convert_md_to_docx(md_content, str(docx_file), output_dir=output_dir, to_lang=docx_font_lang):

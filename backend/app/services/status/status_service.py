@@ -4080,9 +4080,15 @@ class StatusService:
             for seg_idx in chunk_segment_indices:
                 if seg_idx < len(all_segments):
                     seg = all_segments[seg_idx]
-                    seg_block_indices = seg.get("layout_block_indices", [])
-                    if seg_block_indices:
-                        block_indices.extend(seg_block_indices)
+                    seg_block_indices = list(seg.get("layout_block_indices") or [])
+                    if not seg_block_indices and seg.get("block_index") is not None:
+                        try:
+                            seg_block_indices = [int(seg["block_index"])]
+                        except (TypeError, ValueError):
+                            pass
+                    for bidx in seg_block_indices:
+                        if bidx not in block_indices:
+                            block_indices.append(bidx)
                     seg_text = seg.get("text", "")
                     if seg_text:
                         block_texts.append(seg_text)

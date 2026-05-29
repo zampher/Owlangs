@@ -421,6 +421,32 @@ class BlockProcessor:
                 if image_data:
                     image_data_map[block.image_path] = image_data
         
+        # Extract interline_equation images (MinerU renders formulas as JPG with hash filenames)
+        for block in layout_doc.iter_blocks():
+            if block.type != "interline_equation":
+                continue
+            img_path = None
+            raw_block = block.raw if hasattr(block, "raw") and isinstance(block.raw, dict) else {}
+            for line in raw_block.get("lines") or []:
+                if not isinstance(line, dict):
+                    continue
+                for span in line.get("spans") or []:
+                    if not isinstance(span, dict):
+                        continue
+                    if span.get("type") == "interline_equation":
+                        candidate = span.get("image_path")
+                        if isinstance(candidate, str) and candidate.strip():
+                            img_path = candidate.strip()
+                            break
+                if img_path:
+                    break
+            if not img_path and getattr(block, "image_path", None):
+                img_path = str(block.image_path)
+            if img_path:
+                image_data = BlockProcessor.extract_image_from_zip(zip_file, img_path)
+                if image_data:
+                    image_data_map[img_path] = image_data
+
         # Extract table images from table blocks
         for block in layout_doc.iter_blocks():
             if block.type == "table":

@@ -133,6 +133,232 @@ def _merge_image_data_maps(
     return merged
 
 
+def _populate_image_data_map_from_extracted(
+    image_data_map: Dict[str, Dict[str, str]],
+    images_bytes_map: Dict[str, bytes],
+) -> None:
+    """Register every layout ZIP image under filename and common path key variants."""
+    for img_path, img_bytes in (images_bytes_map or {}).items():
+        if not img_bytes:
+            continue
+        norm_path = str(img_path).replace("\\", "/")
+        mime = mimetypes.guess_type(norm_path)[0] or "image/png"
+        data_uri = f"data:{mime};base64,{base64.b64encode(img_bytes).decode('ascii')}"
+        filename = norm_path.split("/")[-1]
+        entry = {"data": data_uri, "alt": filename}
+        keys = {
+            filename,
+            norm_path,
+            norm_path.lstrip("./"),
+            f"./{norm_path.lstrip('./')}",
+            f"images/{filename}",
+            f"./images/{filename}",
+        }
+        for key in keys:
+            if key and key not in image_data_map:
+                image_data_map[key] = dict(entry)
+
+
+def _resolve_export_format_settings(
+    task_state: Dict[str, Any],
+    payload: Any = None,
+    equation_format: Optional[str] = None,
+    table_body_format: Optional[str] = None,
+) -> tuple:
+    """Return normalized (equation_format, table_body_format) for export."""
+    payload_obj = payload if payload is not None else task_state.get("payload")
+    eq = equation_format if equation_format is not None else task_state.get("equation_format")
+    tbl = table_body_format if table_body_format is not None else task_state.get("table_body_format")
+    if payload_obj:
+        if isinstance(payload_obj, dict):
+            if eq is None:
+                eq = payload_obj.get("equation_format")
+            if tbl is None:
+                tbl = payload_obj.get("table_body_format")
+        else:
+            if eq is None:
+                eq = getattr(payload_obj, "equation_format", None)
+            if tbl is None:
+                tbl = getattr(payload_obj, "table_body_format", None)
+    eq = (eq or "text").lower().strip()
+    tbl = (tbl or "html").lower().strip()
+    if eq not in ("text", "latex", "image"):
+        eq = "text"
+    if tbl not in ("html", "image"):
+        tbl = "html"
+    return eq, tbl
+
+
+def _format_requires_md2docx(equation_format: str, table_body_format: str) -> bool:
+    return equation_format == "image" or table_body_format == "image"
+
+
+def _build_image_data_map_for_format_export(
+    task_state: Dict[str, Any],
+    md_content: str,
+    equation_format: str,
+    table_body_format: str,
+) -> Dict[str, Dict[str, str]]:
+    """Build image_data_map for equation/table image export from layout ZIP and task cache."""
+    image_data_map = _image_data_map_from_task_state(task_state)
+    layout_doc = task_state.get("layout_document")
+    orig_l = (task_state.get("original_filename") or "").lower()
+    if not _format_requires_md2docx(equation_format, table_body_format):
+        return image_data_map
+    if not orig_l.endswith(".pdf") or layout_doc is None:
+        return image_data_map
+    zip_bytes = task_state.get("layout_source_zip")
+    if not zip_bytes:
+        return image_data_map
+    zip_file = None
+    try:
+        from layout.pdf_renderer.shared.block_processor import BlockProcessor
+
+        zip_file = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        images_bytes_map = BlockProcessor.extract_all_images_from_layout(layout_doc, zip_file)
+        _populate_image_data_map_from_extracted(image_data_map, images_bytes_map)
+        logger.info(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Built image_data_map with {len(image_data_map)} entries from layout_source_zip "
+            f"(equation_format={equation_format}, table_body_format={table_body_format})",
+        )
+    except Exception as e:
+        logger.warning(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Failed to extract images from layout_source_zip for format export: {e}",
+            exc_info=True,
+        )
+    finally:
+        if zip_file:
+            try:
+                zip_file.close()
+            except Exception:
+                pass
+    return image_data_map
+
+
+def _export_md_content_to_docx_bytes(
+    task_state: Dict[str, Any],
+    md_content: str,
+    equation_format: str,
+    table_body_format: str,
+    payload: Any = None,
+    file_stem: Optional[str] = None,
+) -> bytes:
+    """
+    Export rebuilt markdown to DOCX via MD2DOCXExporter (supports equation/table as images).
+    Used by download_file and output_generator when format requires embedded images.
+    """
+    from workflow.md_based_workflow import MarkdownBasedWorkflow, MarkdownBasedWorkflowConfig
+    from exporter.md.md2html_exporter import MD2HTMLExporterConfig
+    from exporter.md.md2docx_exporter import MD2DOCXExporterConfig
+    from translator.ai_translator.md_translator import MDTranslatorConfig
+    from ir.markdown_document import MarkdownDocument
+    from utils.document_rebuild import _replace_placeholders_with_images
+
+    layout_doc = task_state.get("layout_document")
+    orig_l = (task_state.get("original_filename") or "").lower()
+    is_pdf_file = orig_l.endswith(".pdf")
+    file_stem = file_stem or task_state.get("original_filename_stem", "translated")
+
+    image_data_map = _build_image_data_map_for_format_export(
+        task_state, md_content, equation_format, table_body_format
+    )
+    if image_data_map:
+        task_state["image_data_map"] = image_data_map
+
+    to_lang, docx_font_name = _get_to_lang_and_docx_font(task_state, payload)
+    _img_bidx, _path_to_bidx, _layout = _get_image_layout_for_grouping(
+        task_state, equation_format=equation_format, table_body_format=table_body_format
+    )
+    html_config = MD2HTMLExporterConfig(
+        preserve_line_breaks=is_pdf_file,
+        layout_block_bbox=task_state.get("layout_block_bbox"),
+        image_block_indices=_img_bidx,
+        layout_document=_layout if _img_bidx else None,
+    )
+    _docx_debug_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output" / "debug"
+    docx_config = MD2DOCXExporterConfig(
+        table_body_format=table_body_format,
+        equation_format=equation_format,
+        image_data_map=image_data_map,
+        font_name=docx_font_name,
+        debug_output_dir=_docx_debug_dir,
+    )
+    if is_pdf_file and layout_doc is not None:
+        try:
+            from layout.base import LayoutDocument as _LD
+
+            if isinstance(layout_doc, _LD):
+                docx_config = MD2DOCXExporterConfig(
+                    layout_document=layout_doc,
+                    table_body_format=table_body_format,
+                    equation_format=equation_format,
+                    image_data_map=image_data_map,
+                    font_name=docx_font_name,
+                    debug_output_dir=_docx_debug_dir,
+                )
+        except Exception:
+            pass
+
+    translator_config = MDTranslatorConfig(skip_translate=True)
+    workflow_config = MarkdownBasedWorkflowConfig(
+        convert_engine="identity",
+        converter_config=None,
+        translator_config=translator_config,
+        html_exporter_config=html_config,
+        docx_exporter_config=docx_config,
+    )
+    workflow = MarkdownBasedWorkflow(workflow_config)
+
+    _docx_output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
+    _docx_output_dir.mkdir(parents=True, exist_ok=True)
+    md_for_docx, _ = _replace_placeholders_with_images(
+        md_content, image_data_map, output_dir=_docx_output_dir, update_image_data_map=True
+    )
+    import re as _re
+
+    _img_refs = _re.findall(r"!\[([^\]]*)\]\(([^)]+)\)", md_for_docx)
+    _filled = 0
+    for _alt, _ref in _img_refs:
+        if _ref in image_data_map or _ref.startswith("data:"):
+            continue
+        _norm = _ref.replace("\\", "/").lstrip("./")
+        _path = _docx_output_dir / _norm
+        if not _path.is_file():
+            _path = _docx_output_dir / "images" / (_norm.split("/")[-1])
+        if _path.is_file():
+            try:
+                _raw = _path.read_bytes()
+                _mime_type = mimetypes.guess_type(str(_path))[0] or "image/png"
+                _data_uri = f"data:{_mime_type};base64,{base64.b64encode(_raw).decode('ascii')}"
+                image_data_map[_ref] = {"data": _data_uri, "alt": _alt or _path.name}
+                _filled += 1
+            except Exception as _e:
+                logger.debug(LogModule.EXPORT, f"[DOWNLOAD] DOCX image fallback read failed: {_path}: {_e}")
+    if _filled:
+        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Filled {_filled} image refs from output dir for DOCX export")
+
+    workflow.document_translated = MarkdownDocument.from_bytes(
+        content=md_for_docx.encode("utf-8"),
+        suffix=".md",
+        stem=file_stem,
+    )
+    return workflow.export_to_docx(config=docx_config)
+
+
+def _docx_stash_download_kwargs(task_state: Dict[str, Any]) -> Dict[str, Any]:
+    """kwargs for download_file when persisting DOCX with image format settings."""
+    wt = resolve_task_export_workflow_type(task_state)
+    orig_l = (task_state.get("original_filename") or "").lower()
+    if wt != "markdown_based" or not orig_l.endswith(".pdf"):
+        return {}
+    eq, tbl = _resolve_export_format_settings(task_state)
+    if not _format_requires_md2docx(eq, tbl):
+        return {}
+    return {"equation_format": eq, "table_body_format": tbl}
+
+
 def _rebuild_html_from_task_state(task_state: Dict[str, Any]) -> Optional[str]:
     """
     Rebuild translated HTML for html workflow using updated html_translated_texts.
@@ -416,10 +642,11 @@ def _build_stash_export_plan(task_state: Dict[str, Any]) -> List[Tuple[str, str,
     wt = resolve_task_export_workflow_type(task_state)
 
     plan: List[Tuple[str, str, Dict[str, Any]]] = []
+    docx_kwargs = _docx_stash_download_kwargs(task_state)
     if wt == "markdown_based":
         allow_pdf = is_pdf and has_layout and not is_fmt_conv
         for ft in ("docx", "html", "md"):
-            plan.append((ft, ft, {}))
+            plan.append((ft, ft, docx_kwargs if ft == "docx" else {}))
         if allow_pdf:
             plan.append(("pdf", "pdf", {}))
         plan.append(("md_zip", "md", {"embed_images": False}))
@@ -670,6 +897,8 @@ def _markdown_based_html_file_response_from_segments(
             pass
     if table_body_format:
         docx_config_kwargs["table_body_format"] = table_body_format
+    if equation_format:
+        docx_config_kwargs["equation_format"] = equation_format
     existing_img_map = task_state.get("image_data_map")
     if isinstance(existing_img_map, dict):
         docx_config_kwargs["image_data_map"] = existing_img_map
@@ -765,7 +994,9 @@ class DownloadService:
                 status_code=400,
                 detail=f"Task '{task_id}' has failed and cannot download files. Error: {error_message}"
             )
-        
+
+        payload = task_state.get("payload")
+
         # CRITICAL: If requested file is missing, generate only that format on-demand (no PDF when only HTML requested)
         downloadable_files = task_state.get("downloadable_files", {})
         need_generate = not downloadable_files or file_type not in downloadable_files
@@ -889,7 +1120,15 @@ class DownloadService:
         # When user requests equation_format or table_body_format (e.g. image), do not use cached DOCX; regenerate to respect format.
         if workflow_type == "markdown_based" and file_type == "docx":
             docx_info = task_state.get("downloadable_files", {}).get("docx")
-            if (equation_format or table_body_format) and docx_info:
+            stored_eq, stored_tbl = _resolve_export_format_settings(
+                task_state, payload, equation_format, table_body_format
+            )
+            needs_format_regen = bool(
+                equation_format
+                or table_body_format
+                or _format_requires_md2docx(stored_eq, stored_tbl)
+            )
+            if needs_format_regen and docx_info:
                 docx_info = None  # Force regeneration so format params are applied
             if docx_info:
                 docx_path = (
@@ -1128,6 +1367,9 @@ class DownloadService:
                                         image_data_by_filename[filename] = data_uri
                                     
                                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Extracted {len(image_data_by_filename)} images from layout_source_zip")
+
+                                    # Register all extracted images (required for equation_format=image hash filenames)
+                                    _populate_image_data_map_from_extracted(image_data_map, images_bytes_map)
                                     
                                     # Parse markdown to find image references and map them
                                     import re
@@ -1279,6 +1521,8 @@ class DownloadService:
                                                 image_data_by_filename[filename] = data_uri
                                             
                                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Extracted {len(image_data_by_filename)} images from layout_source_zip for format-switched content")
+
+                                            _populate_image_data_map_from_extracted(image_data_map, images_bytes_map)
                                             
                                             # Parse markdown to find image references (from format-switched tables/equations)
                                             import re
@@ -1370,6 +1614,7 @@ class DownloadService:
                             _docx_debug_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output" / "debug"
                             docx_config = MD2DOCXExporterConfig(
                                 table_body_format=table_format_for_docx,
+                                equation_format=eq_format,
                                 image_data_map=image_data_map,
                                 font_name=docx_font_name,
                                 debug_output_dir=_docx_debug_dir,
@@ -1381,6 +1626,7 @@ class DownloadService:
                                         docx_config = MD2DOCXExporterConfig(
                                             layout_document=layout_doc,
                                             table_body_format=table_format_for_docx,
+                                            equation_format=eq_format,
                                             image_data_map=image_data_map,
                                             font_name=docx_font_name,
                                             debug_output_dir=_docx_debug_dir,
@@ -1820,6 +2066,7 @@ class DownloadService:
                     _docx_debug_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output" / "debug"
                     docx_config = MD2DOCXExporterConfig(
                         table_body_format=table_format_for_docx,
+                        equation_format=eq_format,
                         image_data_map=image_data_map,
                         font_name=docx_font_name,
                         debug_output_dir=_docx_debug_dir,
@@ -1831,6 +2078,7 @@ class DownloadService:
                                 docx_config = MD2DOCXExporterConfig(
                                     layout_document=layout_doc,
                                     table_body_format=table_format_for_docx,
+                                    equation_format=eq_format,
                                     image_data_map=image_data_map,
                                     font_name=docx_font_name,
                                     debug_output_dir=_docx_debug_dir,
@@ -2100,6 +2348,8 @@ class DownloadService:
                                 pass
                         if table_body_format:
                             docx_config_kwargs["table_body_format"] = table_body_format
+                        if equation_format:
+                            docx_config_kwargs["equation_format"] = equation_format
                         # Get image_data_map for DOCX images
                         existing_img_map = task_state.get("image_data_map")
                         if isinstance(existing_img_map, dict):
@@ -2296,7 +2546,13 @@ class DownloadService:
                                             if isinstance(layout_doc, _LD):
                                                 from exporter.md.md2docx_exporter import MD2DOCXExporterConfig
                                                 _docx_debug_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output" / "debug"
-                                                docx_config = MD2DOCXExporterConfig(layout_document=layout_doc, font_name=docx_font_name, debug_output_dir=_docx_debug_dir)
+                                                docx_config = MD2DOCXExporterConfig(
+                                                    layout_document=layout_doc,
+                                                    equation_format=equation_format or "text",
+                                                    table_body_format=table_body_format or "html",
+                                                    font_name=docx_font_name,
+                                                    debug_output_dir=_docx_debug_dir,
+                                                )
                                                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using MD-to-DOCX export with layout-based formula detection for PDF file")
                                         except Exception as e:
                                             logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to create layout-based config: {e}, using code-based detection")
