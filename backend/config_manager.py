@@ -18,6 +18,8 @@ import socket
 from pathlib import Path
 from typing import Optional, Dict, Any
 
+from backend import __version__
+
 
 class ConfigManager:
     """Manages application configuration for single-file executable mode."""
@@ -496,9 +498,12 @@ def main():
 
     # ── Launcher mode ──
     import argparse
-    
+
     parser = argparse.ArgumentParser(description='Owlangs Single-File Launcher')
-    parser.add_argument('--silent', action='store_true', 
+    parser.add_argument('--version', action='version',
+                        version=f'%(prog)s {__version__}',
+                        help='Show version information and exit')
+    parser.add_argument('--silent', action='store_true',
                         help='Run in silent mode (no console output)')
     parser.add_argument('--port', type=int, default=8800,
                         help='Port to run server on (default: 8800)')
