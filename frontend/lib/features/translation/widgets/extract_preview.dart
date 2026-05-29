@@ -4011,6 +4011,9 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                                                         _calculateFilteredSegmentCount();
                                                     return PaginatedSliverList<
                                                         String>(
+                                                      key: ValueKey(
+                                                        'extract_sliver_${widget.taskId}_$totalItems',
+                                                      ),
                                                       paginationController:
                                                           paginationController,
                                                       heightCache:

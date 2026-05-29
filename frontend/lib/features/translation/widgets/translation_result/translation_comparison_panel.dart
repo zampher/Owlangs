@@ -476,6 +476,9 @@ class TranslationComparisonPanel extends ConsumerWidget {
                                                             null
                                                     ? PaginatedSliverList<
                                                         SegmentPair>(
+                                                        key: ValueKey(
+                                                          'comparison_sliver_${taskId}_$effectiveTotal',
+                                                        ),
                                                         paginationController:
                                                             segmentsPaginationController!,
                                                         heightCache:
