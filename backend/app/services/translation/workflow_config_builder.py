@@ -404,6 +404,7 @@ class WorkflowConfigBuilder:
                 logger.warning(LogModule.CONFIG, "[WARNING] MinerU API Key not found in secrets. Please configure in Settings -> AI Platform -> MinerU.")
             
             formula_ocr = getattr(payload, 'formula_ocr', True) if not isinstance(payload, dict) else payload.get('formula_ocr', True)
+            table_ocr = getattr(payload, 'table_ocr', True) if not isinstance(payload, dict) else payload.get('table_ocr', True)
             model_version = getattr(payload, 'model_version', 'vlm') if not isinstance(payload, dict) else payload.get('model_version', 'vlm')
             ocr_language = (payload.get('ocr_language') if isinstance(payload, dict) else getattr(payload, 'ocr_language', None)) or None
             if not (ocr_language and str(ocr_language).strip()):
@@ -413,12 +414,13 @@ class WorkflowConfigBuilder:
             from backend.config.config_loader import get_unified_config
             unified = get_unified_config()
             pdf_cfg = unified.system.pdf
-            logger.debug(LogModule.CONFIG, f"Creating ConverterMineruConfig: API Key={'***' if mineru_token else 'empty'}, formula_ocr={formula_ocr}, model_version={model_version}, ocr_language={ocr_language}")
+            logger.debug(LogModule.CONFIG, f"Creating ConverterMineruConfig: API Key={'***' if mineru_token else 'empty'}, formula_ocr={formula_ocr}, table_ocr={table_ocr}, model_version={model_version}, ocr_language={ocr_language}")
             if not mineru_token:
                 logger.warning(LogModule.CONFIG, "[WARNING] MinerU API Key is empty! Conversion will fail. Please configure MinerU API Key in Settings -> AI Platform -> MinerU.")
             converter_config = ConverterMineruConfig(
                 mineru_token=mineru_token,
                 formula_ocr=formula_ocr,
+                table_ocr=table_ocr,
                 model_version=model_version,
                 ocr_language=ocr_language,
                 pdf_split_enabled=pdf_cfg.pdf_split_enabled,
