@@ -1618,6 +1618,42 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsOcrLangArabic => 'Árabe';
 
   @override
+  String get settingsOcrLangAuto => 'Auto detectar';
+
+  @override
+  String get mineruLangAuto => 'Auto detectar';
+
+  @override
+  String get mineruLangChServer => 'Chino (Servidor)';
+
+  @override
+  String get mineruLangChLite => 'Chino (Ligero)';
+
+  @override
+  String get mineruLangTamil => 'Tamil';
+
+  @override
+  String get mineruLangTelugu => 'Telugu';
+
+  @override
+  String get mineruLangKannada => 'Canarés';
+
+  @override
+  String get mineruLangLatinScript => 'Escritura Latina';
+
+  @override
+  String get mineruLangArabicScript => 'Escritura Árabe';
+
+  @override
+  String get mineruLangEastSlavic => 'Eslavo Oriental';
+
+  @override
+  String get mineruLangCyrillicScript => 'Escritura Cirílica';
+
+  @override
+  String get mineruLangDevanagariScript => 'Escritura Devanagari';
+
+  @override
   String get settingsTabsGlossary => 'Glosario';
 
   @override

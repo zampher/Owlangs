@@ -38,7 +38,8 @@ class UserProfile:
     translator_html_insert_mode: str = "replace"
     translator_html_separator: str = " "
     translator_json_paths: str = ""
-    
+    translator_ocr_language: str = "auto"
+
     # AI translation settings (user personalization part)
     translator_thinking_mode: str = "disable"
     translator_target_language: str = "English"
@@ -164,6 +165,7 @@ class UserProfile:
                 'translationTimeout': 'timeout',
                 'previewFontSize': 'preview_font_size',
                 'editFontSize': 'edit_font_size',
+                'ocrLanguage': 'translator_ocr_language',
             }
             
             # Map frontend key to backend key if needed

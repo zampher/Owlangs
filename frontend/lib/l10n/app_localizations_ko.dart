@@ -1541,6 +1541,42 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsOcrLangArabic => '아랍어';
 
   @override
+  String get settingsOcrLangAuto => '자동 감지';
+
+  @override
+  String get mineruLangAuto => '자동 감지';
+
+  @override
+  String get mineruLangChServer => '중국어(서버)';
+
+  @override
+  String get mineruLangChLite => '중국어(라이트)';
+
+  @override
+  String get mineruLangTamil => '타밀어';
+
+  @override
+  String get mineruLangTelugu => '텔루구어';
+
+  @override
+  String get mineruLangKannada => '칸나다어';
+
+  @override
+  String get mineruLangLatinScript => '로마자';
+
+  @override
+  String get mineruLangArabicScript => '아랍 문자';
+
+  @override
+  String get mineruLangEastSlavic => '동슬라브어';
+
+  @override
+  String get mineruLangCyrillicScript => '키릴 문자';
+
+  @override
+  String get mineruLangDevanagariScript => '데바나가리 문자';
+
+  @override
   String get settingsTabsGlossary => '용어집';
 
   @override

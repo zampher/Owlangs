@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/providers/settings_provider.dart';
+import '../../../shared/utils/mineru_language_data.dart';
 
 // 解析引擎设置状态管理
 final StateNotifierProvider<ParsingEngineSettingsNotifier,
@@ -286,18 +287,8 @@ class ParsingEngineSettingsScreen extends ConsumerWidget {
     GlobalSettingsNotifier notifier,
   ) {
     final AppLocalizations l10n = AppLocalizations.of(context)!;
-    final List<String> langCodes = <String>[
-      'eng',
-      'chi_sim',
-      'chi_tra',
-      'jpn',
-      'kor',
-      'fra',
-      'deu',
-      'spa',
-      'rus',
-      'ara',
-    ];
+    final String effectiveLang =
+        _coerceLegacyOcrLang(settings.ocrLanguage);
 
     return Card(
       elevation: 4,
@@ -330,54 +321,110 @@ class ParsingEngineSettingsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              initialValue: settings.ocrLanguage,
+              initialValue: effectiveLang,
+              isExpanded: true,
               decoration: InputDecoration(
                 labelText: l10n.settingsOcrLanguageLabel,
                 border: const OutlineInputBorder(),
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               ),
-              items: langCodes
+              selectedItemBuilder: (BuildContext context) {
+                return mineruLanguageEntries.map((MineruLanguageEntry lang) {
+                  return Text(mineruLocalizedDisplayName(l10n, lang));
+                }).toList();
+              },
+              items: mineruLanguageEntries
                   .map(
-                    (String code) => DropdownMenuItem<String>(
-                      value: code,
-                      child: Text(_ocrLangDisplayName(l10n, code)),
+                    (MineruLanguageEntry lang) => DropdownMenuItem<String>(
+                      value: lang.code,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(mineruLocalizedDisplayName(l10n, lang)),
+                          if (lang.code != 'auto')
+                            Text(
+                              lang.description,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   )
                   .toList(),
-              onChanged: (String? value) =>
-                  notifier.updateParsingEngineSettings(ocrLanguage: value),
+              onChanged: (String? value) {
+                if (value != null) {
+                  notifier.updateParsingEngineSettings(ocrLanguage: value);
+                }
+              },
             ),
+            // Show description for selected language below the dropdown
+            if (effectiveLang != 'auto') ...<Widget>[
+              const SizedBox(height: 8),
+              _buildSelectedLangInfo(effectiveLang),
+            ],
           ],
         ),
       ),
     );
   }
 
-  String _ocrLangDisplayName(AppLocalizations l10n, String code) {
+  /// Map old Tesseract-style codes to MinerU native codes for backward compatibility.
+  String _coerceLegacyOcrLang(String code) {
     switch (code) {
       case 'eng':
-        return l10n.settingsOcrLangEnglish;
+        return 'en';
       case 'chi_sim':
-        return l10n.settingsOcrLangChineseSimplified;
+      case 'chs':
+        return 'ch';
       case 'chi_tra':
-        return l10n.settingsOcrLangChineseTraditional;
+      case 'cht':
+        return 'chinese_cht';
       case 'jpn':
-        return l10n.settingsOcrLangJapanese;
+        return 'japan';
       case 'kor':
-        return l10n.settingsOcrLangKorean;
+        return 'korean';
       case 'fra':
-        return l10n.settingsOcrLangFrench;
       case 'deu':
-        return l10n.settingsOcrLangGerman;
       case 'spa':
-        return l10n.settingsOcrLangSpanish;
+        return 'latin';
       case 'rus':
-        return l10n.settingsOcrLangRussian;
+        return 'east_slavic';
       case 'ara':
-        return l10n.settingsOcrLangArabic;
+        return 'arabic';
       default:
-        return code;
+        // Check if code is already a valid MinerU code
+        if (findMineruLanguage(code) != null) return code;
+        return 'auto';
     }
+  }
+
+  Widget _buildSelectedLangInfo(String effectiveLang) {
+    final MineruLanguageEntry? current = findMineruLanguage(effectiveLang);
+    if (current == null) return const SizedBox.shrink();
+    return Tooltip(
+      message: current.description,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          '${current.displayName}\n${current.description}',
+          style: TextStyle(
+            fontSize: 13,
+            color: Colors.grey.shade700,
+            height: 1.5,
+          ),
+        ),
+      ),
+    );
   }
 }

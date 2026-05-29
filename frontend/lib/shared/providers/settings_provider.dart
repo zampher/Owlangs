@@ -42,7 +42,7 @@ class GlobalSettings {
 
     // Parsing Engine
     this.parsingEngine = 'mineru',
-    this.ocrLanguage = 'eng',
+    this.ocrLanguage = 'auto',
     this.formulaOcr = true,
     this.tableOcr = true,
     this.parsingChunkSize = 1000,
@@ -117,7 +117,7 @@ class GlobalSettings {
         parsingEngine: (json['parsingEngine'] as String?)?.isNotEmpty ?? false
             ? json['parsingEngine']
             : 'mineru',
-        ocrLanguage: json['ocrLanguage'] ?? 'eng',
+        ocrLanguage: json['ocrLanguage'] ?? 'auto',
         formulaOcr: json['formulaOcr'] ?? true,
         tableOcr: json['tableOcr'] ?? true,
         parsingChunkSize: json['parsingChunkSize'] ?? 1000,

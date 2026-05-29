@@ -1541,6 +1541,42 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsOcrLangArabic => 'アラビア語';
 
   @override
+  String get settingsOcrLangAuto => '自動検出';
+
+  @override
+  String get mineruLangAuto => '自動検出';
+
+  @override
+  String get mineruLangChServer => '中国語（サーバー）';
+
+  @override
+  String get mineruLangChLite => '中国語（ライト）';
+
+  @override
+  String get mineruLangTamil => 'タミル語';
+
+  @override
+  String get mineruLangTelugu => 'テルグ語';
+
+  @override
+  String get mineruLangKannada => 'カンナダ語';
+
+  @override
+  String get mineruLangLatinScript => 'ラテン文字';
+
+  @override
+  String get mineruLangArabicScript => 'アラビア文字';
+
+  @override
+  String get mineruLangEastSlavic => '東スラブ語';
+
+  @override
+  String get mineruLangCyrillicScript => 'キリル文字';
+
+  @override
+  String get mineruLangDevanagariScript => 'デーヴァナーガリー文字';
+
+  @override
   String get settingsTabsGlossary => '用語集';
 
   @override

@@ -17,6 +17,7 @@ import '../../settings/screens/ai_platform_settings.dart';
 import '../models/preview_tab.dart';
 import '../providers/translation_state_provider_family.dart';
 import '../providers/preview_tabs_provider.dart';
+import '../../../shared/utils/mineru_language_data.dart';
 
 // 翻译快速设置状态管理
 final StateNotifierProvider<TranslationQuickSettingsNotifier,
@@ -192,6 +193,19 @@ class TranslationQuickSettingsNotifier
           // Force autoSelectWorkflow to true to ensure automatic workflow selection
           state = loadedSettings.copyWith(autoSelectWorkflow: true);
           return;
+        }
+      }
+
+      // First use: sync sourceLang from global_settings (Parsing Engine OCR Language)
+      // so new users get the default they set in Settings.
+      final String? globalJson = prefs.getString('global_settings');
+      if (globalJson != null) {
+        final Map<String, dynamic> globalMap =
+            jsonDecode(globalJson) as Map<String, dynamic>;
+        final String ocrLanguage =
+            (globalMap['ocrLanguage'] as String?) ?? 'auto';
+        if (ocrLanguage.isNotEmpty) {
+          state = state.copyWith(sourceLang: ocrLanguage);
         }
       }
     } catch (e) {
@@ -566,13 +580,11 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
             ),
             const SizedBox(height: 8), // Reduced from 16 to 8
 
-            // Group 1: Source Language + Parsing Platform (MinerU OCR)
+            // Group 1: MinerU OCR — Source Language + Parsing Platform
             // Shown only for markdown_based workflow (PDF, images, markdown)
             if (settings.workflowType == 'markdown_based') ...<Widget>[
-              _buildSourceLanguageSelector(
-                  context, settings, notifier, isTranslatePhase,),
-              const SizedBox(height: 8),
-              _buildParsingPlatformSection(context, ref),
+              _buildMineruOcrSection(
+                  context, settings, notifier, isTranslatePhase, ref),
               const SizedBox(height: 8), // Reduced from 16 to 8
             ],
 
@@ -774,82 +786,82 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
   }
 
   /// Source language selector for MinerU OCR (markdown_based workflow only).
-  /// Default is "auto" which lets MinerU auto-detect the language.
+  /// Assumes the caller wraps it in a section container.
   Widget _buildSourceLanguageSelector(
     BuildContext context,
     TranslationQuickSettings settings,
     TranslationQuickSettingsNotifier notifier,
     bool isTranslatePhase,
   ) {
-    // MinerU OCR supports a limited set of language codes.
-    // Align source language options with MinerU's supported values.
-    // 显示规则：括号外是可做 l10n 的英文描述，括号内是该语言自己的名称。
-    final List<Map<String, String>> languageEntries = <Map<String, String>>[
-      <String, String>{'code': 'auto',        'native': 'Auto'},
-      <String, String>{'code': 'ch',          'native': 'Chinese (中文)'},
-      <String, String>{'code': 'ch_server',   'native': 'Chinese (Server) (中文)'},
-      <String, String>{'code': 'ch_lite',     'native': 'Chinese (Lite) (中文)'},
-      <String, String>{'code': 'chinese_cht', 'native': 'Chinese (Traditional) (繁體中文)'},
-      <String, String>{'code': 'en',          'native': 'English (English)'},
-      <String, String>{'code': 'korean',      'native': 'Korean (한국어)'},
-      <String, String>{'code': 'japan',       'native': 'Japanese (日本語)'},
-      <String, String>{'code': 'ta',          'native': 'Tamil (தமிழ்)'},
-      <String, String>{'code': 'te',          'native': 'Telugu (తెలుగు)'},
-      <String, String>{'code': 'ka',          'native': 'Kannada (ಕನ್ನಡ)'},
-      <String, String>{'code': 'th',          'native': 'Thai (ไทย)'},
-      <String, String>{'code': 'el',          'native': 'Greek (Ελληνικά)'},
-      <String, String>{'code': 'latin',       'native': 'Latin (Latin)'},
-      <String, String>{'code': 'arabic',      'native': 'Arabic (العربية)'},
-      <String, String>{'code': 'east_slavic', 'native': 'East Slavic (East Slavic)'},
-      <String, String>{'code': 'cyrillic',    'native': 'Cyrillic (Cyrillic)'},
-      <String, String>{'code': 'devanagari',  'native': 'Devanagari (देवनागरी)'},
-    ];
-
-    final Set<String> mineruCodes = languageEntries
-        .map((Map<String, String> e) => e['code']!)
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final Set<String> mineruCodes = mineruLanguageEntries
+        .map((MineruLanguageEntry e) => e.code)
         .toSet();
     final String effectiveSourceLang =
         _coerceMineruOcrSourceLang(settings.sourceLang, mineruCodes);
 
-    return _wrapQuickSettingSection(
-      context,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            AppLocalizations.of(context)!.quickSettingsSourceLanguage,
-            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          l10n.quickSettingsSourceLanguage,
+          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+        ),
+        const SizedBox(height: 4),
+        DropdownButtonFormField<String>(
+          key: ValueKey<String>(
+            'mineruOcr:${settings.sourceLang}|$effectiveSourceLang',
           ),
-          const SizedBox(height: 4),
-          DropdownButtonFormField<String>(
-            key: ValueKey<String>(
-              'mineruOcr:${settings.sourceLang}|$effectiveSourceLang',
-            ),
-            initialValue: effectiveSourceLang,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              isDense: true,
-            ),
-            items: languageEntries
-                .map(
-                  (Map<String, String> lang) => DropdownMenuItem<String>(
-                    value: lang['code'],
-                    child: Text('${lang['native']} (${lang['code']})'),
+          initialValue: effectiveSourceLang,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            isDense: true,
+          ),
+          selectedItemBuilder: (BuildContext context) {
+            return mineruLanguageEntries.map((MineruLanguageEntry lang) {
+              final String displayText =
+                  mineruLocalizedDisplayName(l10n, lang);
+              return Tooltip(
+                message: lang.description,
+                child: Text(displayText),
+              );
+            }).toList();
+          },
+          items: mineruLanguageEntries
+              .map(
+                (MineruLanguageEntry lang) => DropdownMenuItem<String>(
+                  value: lang.code,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(mineruLocalizedDisplayName(l10n, lang)),
+                      if (lang.code != 'auto')
+                        Text(
+                          lang.description,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                    ],
                   ),
-                )
-                .toList(),
-            onChanged: isTranslatePhase
-                ? null
-                : (String? value) {
-                    if (value != null) {
-                      notifier.updateSourceLang(value);
-                    }
-                  },
-          ),
-        ],
-      ),
+                ),
+              )
+              .toList(),
+          onChanged: isTranslatePhase
+              ? null
+              : (String? value) {
+                  if (value != null) {
+                    notifier.updateSourceLang(value);
+                  }
+                },
+        ),
+      ],
     );
   }
 
@@ -932,8 +944,30 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
     return '$label ($native)';
   }
 
-  /// Parsing Platform section: same style as LLM Platform, supports both MinerU Cloud and Local.
+  /// Combined MinerU OCR section: Source Language + Parsing Platform in one box.
   /// Shown only for markdown_based workflow.
+  Widget _buildMineruOcrSection(
+    BuildContext context,
+    TranslationQuickSettings settings,
+    TranslationQuickSettingsNotifier notifier,
+    bool isTranslatePhase,
+    WidgetRef ref,
+  ) {
+    return _wrapQuickSettingSection(
+      context,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _buildSourceLanguageSelector(
+              context, settings, notifier, isTranslatePhase),
+          const SizedBox(height: 12),
+          _buildParsingPlatformSection(context, ref),
+        ],
+      ),
+    );
+  }
+
+  /// Parsing Platform section: supports both MinerU Cloud and Local.
   Widget _buildParsingPlatformSection(BuildContext context, WidgetRef ref) {
     final AIPlatformSettings aiPlatformSettings =
         ref.watch(aiPlatformSettingsProvider);
@@ -974,9 +1008,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
         ? 'MinerU Local'
         : 'MinerU';
 
-    return _wrapQuickSettingSection(
-      context,
-      child: Column(
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Row(
@@ -1124,8 +1156,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
             },
           ),
         ],
-      ),
-    );
+      );
   }
 
   Widget _buildPrimaryAIPlatform(BuildContext context, WidgetRef ref) {

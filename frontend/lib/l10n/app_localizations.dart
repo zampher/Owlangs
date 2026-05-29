@@ -2843,6 +2843,78 @@ abstract class AppLocalizations {
   /// **'Arabic'**
   String get settingsOcrLangArabic;
 
+  /// No description provided for @settingsOcrLangAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto Detect'**
+  String get settingsOcrLangAuto;
+
+  /// No description provided for @mineruLangAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto Detect'**
+  String get mineruLangAuto;
+
+  /// No description provided for @mineruLangChServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Chinese (Server)'**
+  String get mineruLangChServer;
+
+  /// No description provided for @mineruLangChLite.
+  ///
+  /// In en, this message translates to:
+  /// **'Chinese (Lite)'**
+  String get mineruLangChLite;
+
+  /// No description provided for @mineruLangTamil.
+  ///
+  /// In en, this message translates to:
+  /// **'Tamil'**
+  String get mineruLangTamil;
+
+  /// No description provided for @mineruLangTelugu.
+  ///
+  /// In en, this message translates to:
+  /// **'Telugu'**
+  String get mineruLangTelugu;
+
+  /// No description provided for @mineruLangKannada.
+  ///
+  /// In en, this message translates to:
+  /// **'Kannada'**
+  String get mineruLangKannada;
+
+  /// No description provided for @mineruLangLatinScript.
+  ///
+  /// In en, this message translates to:
+  /// **'Latin Script'**
+  String get mineruLangLatinScript;
+
+  /// No description provided for @mineruLangArabicScript.
+  ///
+  /// In en, this message translates to:
+  /// **'Arabic Script'**
+  String get mineruLangArabicScript;
+
+  /// No description provided for @mineruLangEastSlavic.
+  ///
+  /// In en, this message translates to:
+  /// **'East Slavic'**
+  String get mineruLangEastSlavic;
+
+  /// No description provided for @mineruLangCyrillicScript.
+  ///
+  /// In en, this message translates to:
+  /// **'Cyrillic Script'**
+  String get mineruLangCyrillicScript;
+
+  /// No description provided for @mineruLangDevanagariScript.
+  ///
+  /// In en, this message translates to:
+  /// **'Devanagari Script'**
+  String get mineruLangDevanagariScript;
+
   /// No description provided for @settingsTabsGlossary.
   ///
   /// In en, this message translates to:

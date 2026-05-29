@@ -1529,6 +1529,42 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsOcrLangArabic => '阿拉伯语';
 
   @override
+  String get settingsOcrLangAuto => '自动检测';
+
+  @override
+  String get mineruLangAuto => '自动检测';
+
+  @override
+  String get mineruLangChServer => '中文（服务器版）';
+
+  @override
+  String get mineruLangChLite => '中文（精简版）';
+
+  @override
+  String get mineruLangTamil => '泰米尔语';
+
+  @override
+  String get mineruLangTelugu => '泰卢固语';
+
+  @override
+  String get mineruLangKannada => '卡纳达语';
+
+  @override
+  String get mineruLangLatinScript => '拉丁字母';
+
+  @override
+  String get mineruLangArabicScript => '阿拉伯字母';
+
+  @override
+  String get mineruLangEastSlavic => '东斯拉夫语';
+
+  @override
+  String get mineruLangCyrillicScript => '西里尔字母';
+
+  @override
+  String get mineruLangDevanagariScript => '天城文';
+
+  @override
   String get settingsTabsGlossary => '术语表';
 
   @override
