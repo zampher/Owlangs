@@ -861,7 +861,11 @@ class OutputGenerator:
 
                 try:
                     from utils.format_convert_utils import convert_md_to_docx
-                    if convert_md_to_docx(md_content, str(docx_file), output_dir=output_dir, to_lang=docx_font_lang):
+                    # Run Pandoc in thread pool to avoid blocking the event loop
+                    if await asyncio.to_thread(
+                        convert_md_to_docx, md_content, str(docx_file),
+                        output_dir=output_dir, to_lang=docx_font_lang,
+                    ):
                         if docx_file.exists():
                             if "downloadable_files" not in task_state:
                                 task_state["downloadable_files"] = {}
