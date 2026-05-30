@@ -4821,8 +4821,10 @@ class _TranslationResultPreviewState
         formatSettingsProviderFamily(_apiTaskId()),
       );
       // Create state variables for dialog with current settings or defaults
-      var tableFormat = formatSettings.getTableFormat();
-      var equationFormat = formatSettings.getEquationFormat();
+      final bool isPdfFile = widget.fileName?.toLowerCase().endsWith('.pdf') ?? false;
+      final bool isPdfWorkflow = widget.workflowType == 'markdown_based' || isPdfFile;
+      var tableFormat = formatSettings.tableFormat ?? (isPdfWorkflow ? 'image' : 'html');
+      var equationFormat = formatSettings.equationFormat ?? (isPdfWorkflow ? 'latex' : 'text');
 
       await DialogHelper.showGeneralDialog(
         context: context,
@@ -5131,8 +5133,8 @@ class _TranslationResultPreviewState
           final formatSettings = ref.watch(
             formatSettingsProviderFamily(_apiTaskId()),
           );
-          String tableFormat = formatSettings.getTableFormat();
-          String equationFormat = formatSettings.getEquationFormat();
+          String tableFormat = formatSettings.tableFormat ?? (isPdfWorkflow ? 'image' : 'html');
+          String equationFormat = formatSettings.equationFormat ?? (isPdfWorkflow ? 'latex' : 'text');
 
           return StatefulBuilder(
             builder: (BuildContext context, setDialogState) => Material(
@@ -5394,6 +5396,8 @@ class _TranslationResultPreviewState
           Map<String, String>.from(uri.queryParameters);
 
       // Add format parameters for MD, HTML, DOCX, PDF
+      // Only send when user has explicitly set values (provider has non-null);
+      // otherwise let backend decide based on PDF/non-PDF flow.
       if (fileType == 'md' ||
           fileType == 'html' ||
           fileType == 'docx' ||
@@ -5401,10 +5405,14 @@ class _TranslationResultPreviewState
         final formatSettings = ref.read(
           formatSettingsProviderFamily(_apiTaskId()),
         );
-        queryParams['table_body_format'] =
-            tableFormat ?? formatSettings.getTableFormat();
-        queryParams['equation_format'] =
-            equationFormat ?? formatSettings.getEquationFormat();
+        if (formatSettings.tableFormat != null) {
+          queryParams['table_body_format'] =
+              tableFormat ?? formatSettings.tableFormat!;
+        }
+        if (formatSettings.equationFormat != null) {
+          queryParams['equation_format'] =
+              equationFormat ?? formatSettings.equationFormat!;
+        }
         if (fileType == 'md' && embedImages != null) {
           queryParams['embed_images'] = embedImages.toString();
         }

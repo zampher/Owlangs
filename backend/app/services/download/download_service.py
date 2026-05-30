@@ -180,12 +180,18 @@ def _resolve_export_format_settings(
                 eq = getattr(payload_obj, "equation_format", None)
             if tbl is None:
                 tbl = getattr(payload_obj, "table_body_format", None)
-    eq = (eq or "text").lower().strip()
-    tbl = (tbl or "html").lower().strip()
+    # PDF flow: default to image for tables, latex for equations
+    orig_filename = (task_state.get("original_filename") or "").lower()
+    is_pdf_flow = orig_filename.endswith(".pdf")
+    default_eq = "latex" if is_pdf_flow else "text"
+    default_tbl = "image" if is_pdf_flow else "html"
+
+    eq = (eq or default_eq).lower().strip()
+    tbl = (tbl or default_tbl).lower().strip()
     if eq not in ("text", "latex", "image"):
-        eq = "text"
+        eq = default_eq
     if tbl not in ("html", "image"):
-        tbl = "html"
+        tbl = default_tbl
     return eq, tbl
 
 
