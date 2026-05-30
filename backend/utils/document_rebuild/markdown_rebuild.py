@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
 from ir.markdown_document import MarkdownDocument
-from layout.pdf_font_extractor import infer_heading_levels_from_pdf
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from utils.translation_segments import get_translation_segments
@@ -380,17 +379,20 @@ def _rebuild_markdown_from_layout_segments(
         logger.debug(LogModule.RESTOR, f"Failed to build block index to block mapping: {e}")
         should_apply_format = False
 
-    # P0b: Infer heading levels from original PDF font sizes when available.
-    # MinerU Cloud API layout.json spans lack font size data, so all title
-    # blocks default to H1. This step reads the PDF directly via PyMuPDF to
-    # recover the true heading hierarchy.
-    original_pdf = task_state.get("original_file_path") if task_state else None
-    if original_pdf and layout_doc is not None:
+    # P0b: Post-process title blocks to filter out false positives (body text that
+    # MinerU misclassifies as "title"). Only self-hosted MinerU (middle.json) provides
+    # font size data in its layout.json — the Cloud API does not, so heading hierarchy
+    # from font sizes is unavailable and all valid titles use H1 (default).
+    if layout_doc is not None:
         try:
-            infer_heading_levels_from_pdf(layout_doc, original_pdf)
+            from layout.pdf_font_extractor import _is_likely_heading
+            for page in layout_doc.pages:
+                for block in page.blocks:
+                    if block.type == "title" and not _is_likely_heading(block):
+                        block.heading_level = 0  # false positive → body text
         except Exception as e:
             logger.debug(LogModule.RESTOR,
-                f"Failed to infer heading levels from PDF: {e}")
+                f"Failed to filter false-positive titles: {e}")
 
     # Format target texts based on block types; record table block segment role for caption-before-body reorder
     formatted_texts = []

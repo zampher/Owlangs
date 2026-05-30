@@ -961,21 +961,23 @@ def _build_layout_markdown(
             continue
 
         # Convert title blocks to markdown heading format
-        # Use heading level inferred from font size in MinerU span data
+        # Use heading level inferred from MinerU font size data.
+        # heading_level=0 means false-positive title (body text) — no heading prefix.
+        # Only self-hosted MinerU (middle.json) provides font size in layout.json;
+        # Cloud API titles all default to H1.
         is_title = block.type == "title"
         if is_title:
             # Convert to markdown heading: remove existing # if present, then add correct level
             text_stripped = text.strip()
             # Remove any existing markdown heading markers
             text_stripped = re.sub(r'^#+\s*', '', text_stripped)
-            # Infer heading level from block metadata (default H1 if unavailable).
-            # heading_level=0 means the block was rejected as a false-positive title
-            # (body text misclassified by MinerU) — treat as body text.
+            # Safety net: reject blocks that are clearly body text
             level = getattr(block, "heading_level", None)
-            if level is None or not isinstance(level, int) or level < 0 or level > 6:
-                level = 1
             if level == 0:
                 formatted_text = text_stripped
+            elif level is None or not isinstance(level, int) or level < 1 or level > 6:
+                level = 1
+                formatted_text = f"{'#' * level} {text_stripped}"
             else:
                 # Add markdown heading format with correct level
                 formatted_text = f"{'#' * level} {text_stripped}"

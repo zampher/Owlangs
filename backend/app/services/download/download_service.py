@@ -1045,20 +1045,21 @@ class DownloadService:
             modified_count = sum(1 for seg in segments if seg.get("modified", False))
             logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Task {task_id}, total segments: {len(segments)}, modified segments: {modified_count}")
         
-        # P0: Infer heading levels from original PDF font sizes when available.
-        # This must run before any export path (rebuild, workflow, or direct MD) so
-        # that heading_level metadata is up-to-date for all downstream consumers.
+        # P0: Post-process title blocks to filter out false positives (body text that
+        # MinerU misclassified as "title"). Only self-hosted MinerU (middle.json) provides
+        # font size data in its layout.json — the Cloud API does not, so heading hierarchy
+        # from font sizes is unavailable and all valid titles use H1 (default).
         _layout_doc = task_state.get("layout_document")
-        _original_pdf = task_state.get("original_file_path") if task_state else None
-        if _layout_doc is not None and _original_pdf:
+        if _layout_doc is not None:
             try:
-                from layout.pdf_font_extractor import infer_heading_levels_from_pdf
-                infer_heading_levels_from_pdf(_layout_doc, _original_pdf)
-                logger.debug(LogModule.EXPORT,
-                    f"[DOWNLOAD] Task {task_id}: Inferred heading levels from PDF font sizes")
+                from layout.pdf_font_extractor import _is_likely_heading
+                for page in _layout_doc.pages:
+                    for block in page.blocks:
+                        if block.type == "title" and not _is_likely_heading(block):
+                            block.heading_level = 0  # false positive → body text
             except Exception as e:
                 logger.debug(LogModule.EXPORT,
-                    f"[DOWNLOAD] Task {task_id}: Failed to infer heading levels from PDF: {e}")
+                    f"[DOWNLOAD] Task {task_id}: Failed to filter false-positive titles: {e}")
 
         # Store original has_revisions status before any fallback logic
         has_revisions_original = has_revised_segments(task_state)
