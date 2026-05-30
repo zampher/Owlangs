@@ -107,6 +107,8 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
   FormatSettings?
       _lastFormatSettings; // Track last format settings to detect changes
 
+  bool get _isPdfWorkflow => widget.downloads.containsKey('pdf');
+
   @override
   void initState() {
     super.initState();
@@ -326,12 +328,14 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
         formatSettingsProviderFamily(widget.taskId),
       );
 
-      queryParams['table_body_format'] = formatSettings.getTableFormat();
-      queryParams['equation_format'] = formatSettings.getEquationFormat();
+      queryParams['table_body_format'] =
+          formatSettings.getTableFormat(isPdfWorkflow: _isPdfWorkflow);
+      queryParams['equation_format'] =
+          formatSettings.getEquationFormat(isPdfWorkflow: _isPdfWorkflow);
 
       downloadUrl = uri.replace(queryParameters: queryParams).toString();
       _unifiedPreviewWidgetLog(
-        'Final download URL: $downloadUrl, tableFormat=${formatSettings.getTableFormat()}, equationFormat=${formatSettings.getEquationFormat()}',
+        'Final download URL: $downloadUrl, tableFormat=${formatSettings.getTableFormat(isPdfWorkflow: _isPdfWorkflow)}, equationFormat=${formatSettings.getEquationFormat(isPdfWorkflow: _isPdfWorkflow)}',
         level: LogLevel.info,
       );
 
@@ -457,8 +461,10 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
         formatSettingsProviderFamily(widget.taskId),
       );
       // Create state variables for dialog with current settings or defaults
-      var tableFormat = formatSettings.getTableFormat();
-      var equationFormat = formatSettings.getEquationFormat();
+      var tableFormat =
+          formatSettings.getTableFormat(isPdfWorkflow: _isPdfWorkflow);
+      var equationFormat =
+          formatSettings.getEquationFormat(isPdfWorkflow: _isPdfWorkflow);
 
       await DialogHelper.showGeneralDialog(
         context: context,
@@ -755,8 +761,10 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
             formatSettingsProviderFamily(widget.taskId),
           );
 
-          queryParams['table_body_format'] = formatSettings.getTableFormat();
-          queryParams['equation_format'] = formatSettings.getEquationFormat();
+          queryParams['table_body_format'] =
+              formatSettings.getTableFormat(isPdfWorkflow: _isPdfWorkflow);
+          queryParams['equation_format'] =
+              formatSettings.getEquationFormat(isPdfWorkflow: _isPdfWorkflow);
 
           // For MD downloads, add embed_images parameter
           if (fileType == 'md' && embedImages != null) {
@@ -804,8 +812,10 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
           formatSettingsProviderFamily(widget.taskId),
         );
 
-        queryParams['table_body_format'] = formatSettings.getTableFormat();
-        queryParams['equation_format'] = formatSettings.getEquationFormat();
+        queryParams['table_body_format'] =
+            formatSettings.getTableFormat(isPdfWorkflow: _isPdfWorkflow);
+        queryParams['equation_format'] =
+            formatSettings.getEquationFormat(isPdfWorkflow: _isPdfWorkflow);
 
         // For MD downloads, add embed_images parameter
         if (fileType == 'md' && embedImages != null) {

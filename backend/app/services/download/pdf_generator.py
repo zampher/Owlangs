@@ -132,43 +132,15 @@ class PDFGenerator:
                 except Exception as e:
                     logger.debug(LogModule.EXPORT, f"Failed to get ZIP bytes from attachments: {e}")
             
-            # Resolve table body format
-            # Priority: function parameter > task payload > default "html"
-            table_body_format_resolved = "html"
-            if table_body_format and table_body_format.lower() in ("html", "image"):
-                table_body_format_resolved = table_body_format.lower()
-            else:
-                payload_obj = task_state.get("payload")
-                try:
-                    if isinstance(payload_obj, dict):
-                        table_body_format_resolved = (payload_obj.get("table_body_format") or payload_obj.get("table_format") or "html").lower()
-                    elif payload_obj is not None:
-                        table_body_format_resolved = (
-                            getattr(payload_obj, "table_body_format", None)
-                            or getattr(payload_obj, "table_format", None)
-                            or "html"
-                        ).lower()
-                except Exception:
-                    table_body_format_resolved = "html"
-            if table_body_format_resolved not in ("html", "image"):
-                table_body_format_resolved = "html"
-            
-            # Resolve equation format
-            # Priority: function parameter > task payload > default "text"
-            equation_format_resolved = "text"
-            if equation_format and equation_format.lower() in ("text", "image"):
-                equation_format_resolved = equation_format.lower()
-            else:
-                payload_obj = task_state.get("payload")
-                try:
-                    if isinstance(payload_obj, dict):
-                        equation_format_resolved = (payload_obj.get("equation_format") or "text").lower()
-                    elif payload_obj is not None:
-                        equation_format_resolved = (getattr(payload_obj, "equation_format", None) or "text").lower()
-                except Exception:
-                    equation_format_resolved = "text"
-            if equation_format_resolved not in ("text", "image"):
-                equation_format_resolved = "text"
+            # Resolve table/equation format (PDF defaults: table=image, equation=latex)
+            from backend.app.services.download.download_service import _resolve_export_format_settings
+
+            equation_format_resolved, table_body_format_resolved = _resolve_export_format_settings(
+                task_state,
+                task_state.get("payload"),
+                equation_format,
+                table_body_format,
+            )
             
             # Check if we should use ReportLab for direct PDF generation
             from backend.config.system_config import get_system_config

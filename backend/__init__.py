@@ -3,4 +3,4 @@
 # SPDX-License-Identifier: MPL-2.0
 
 __version__ = "1.4.0.0"
-__version_type__ = "DEV"
+__version_type__ = ""

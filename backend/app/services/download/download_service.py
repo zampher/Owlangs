@@ -1168,7 +1168,11 @@ class DownloadService:
 
         payload = task_state.get("payload")
 
-        # CRITICAL: If requested file is missing, generate only that format on-demand (no PDF when only HTML requested)
+        equation_format, table_body_format = _resolve_export_format_settings(
+            task_state, payload, equation_format, table_body_format
+        )
+
+        # Generate missing file on-demand if not in downloadable_files
         downloadable_files = task_state.get("downloadable_files", {})
         need_generate = not downloadable_files or file_type not in downloadable_files
         if need_generate:
@@ -1395,7 +1399,7 @@ class DownloadService:
                 source_input_type = "layout"
                 task_state["source_input_type"] = "layout"
         
-        if (equation_format or table_body_format) and is_pdf_file and layout_doc and source_input_type == "layout":
+        if is_pdf_file and layout_doc and source_input_type == "layout":
             should_regenerate_from_layout = True
             # Concise high-level log; detailed image handling logs are emitted later.
             logger.info(
@@ -1448,27 +1452,28 @@ class DownloadService:
                             else:
                                 deep_split_enabled = bool(getattr(payload, 'deep_split', True))
                     
-                        # Validate and use format parameters
-                        eq_format = (equation_format or "text").lower().strip()
-                        if eq_format not in ("text", "latex", "image"):
-                            eq_format = "text"
-                    
-                        table_format = (table_body_format or "html").lower().strip()
-                        if table_format not in ("html", "image"):
-                            table_format = "html"
+                        # Validate and use format parameters (already resolved for PDF defaults)
+                        eq_format = equation_format
+                        table_format = table_body_format
                     
                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Regenerating from translated segments with equation_format={eq_format}, table_body_format={table_format}")
                     
                         # Check if format parameters differ from translation time
                         _pl = task_state.get("payload")
-                        original_eq_format = (task_state.get("equation_format") or (_pl.get("equation_format") if isinstance(_pl, dict) else (getattr(_pl, "equation_format", None) if _pl else None)) or "text")
+                        original_eq_format = (task_state.get("equation_format") or (_pl.get("equation_format") if isinstance(_pl, dict) else (getattr(_pl, "equation_format", None) if _pl else None)) or ("latex" if is_pdf_file else "text"))
                         if isinstance(original_eq_format, str):
                             original_eq_format = original_eq_format.lower().strip()
                         if original_eq_format not in ("text", "latex", "image"):
-                            original_eq_format = "text"
+                            original_eq_format = "latex" if is_pdf_file else "text"
+
+                        original_tbl_format = (task_state.get("table_body_format") or (_pl.get("table_body_format") if isinstance(_pl, dict) else (getattr(_pl, "table_body_format", None) if _pl else None)) or ("image" if is_pdf_file else "html"))
+                        if isinstance(original_tbl_format, str):
+                            original_tbl_format = original_tbl_format.lower().strip()
+                        if original_tbl_format not in ("html", "image"):
+                            original_tbl_format = "image" if is_pdf_file else "html"
                         
                         # If format changed or we have layout_document, regenerate markdown with new format
-                        format_changed = (eq_format != original_eq_format) or (table_format != "html")
+                        format_changed = (eq_format != original_eq_format) or (table_format != original_tbl_format)
                         should_regenerate_from_layout = is_pdf_file and layout_doc is not None and format_changed
                         
                         if should_regenerate_from_layout:
@@ -2005,14 +2010,9 @@ class DownloadService:
                             else:
                                 deep_split_enabled = bool(getattr(payload, 'deep_split', True))
                     
-                        # Validate and use format parameters
-                        eq_format = equation_format.lower() if equation_format else "text"
-                        if eq_format not in ("text", "latex", "image"):
-                            eq_format = "text"
-                    
-                        table_format = (table_body_format or "html").lower().strip()
-                        if table_format not in ("html", "image"):
-                            table_format = "html"
+                        # Use resolved format parameters (PDF defaults: equation=latex, table=image)
+                        eq_format = equation_format
+                        table_format = table_body_format
                     
                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Regenerating from layout_document with equation_format={eq_format}, table_body_format={table_format}, chunk_size={chunk_size}, deep_split={deep_split_enabled}")
                     
@@ -2712,7 +2712,7 @@ class DownloadService:
                                                 docx_config = MD2DOCXExporterConfig(
                                                     layout_document=layout_doc,
                                                     equation_format=equation_format or "text",
-                                                    table_body_format=table_body_format or "html",
+                                                    table_body_format=table_body_format,
                                                     font_name=docx_font_name,
                                                     debug_output_dir=_docx_debug_dir,
                                                 )
@@ -3463,7 +3463,7 @@ class DownloadService:
                                     layout_doc,
                                     layout_result=None,
                                     equation_format=eq_format,
-                                    table_body_format=table_body_format or "html",
+                                    table_body_format=table_body_format,
                                 )
                             
                             file_stem = task_state.get("original_filename_stem", "translated")

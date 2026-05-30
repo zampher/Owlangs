@@ -532,8 +532,8 @@ class _TranslationResultPreviewState
         // Attachments are available but not used in this widget
       }
 
-      // Set default formats (image) for tables and equations if present
-      // No dialog popup - use defaults directly for review phase
+      // PDF layout: display defaults come from FormatSettings getters (table=image, equation=latex).
+      // Do not auto-persist legacy html/text values into task state.
       final bool isPdfFile =
           widget.fileName?.toLowerCase().endsWith('.pdf') ?? false;
       final bool hasTables = status['has_tables'] as bool? ?? false;
@@ -543,16 +543,15 @@ class _TranslationResultPreviewState
           (hasTables || hasInterlineEquations) &&
           !_formatDialogShown &&
           mounted) {
-        // Set default formats to backend defaults (html for table, text for equation)
-        // without showing dialog
         final formatNotifier = ref.read(
           formatSettingsProviderFamily(taskId).notifier,
         );
-        if (hasTables) {
-          formatNotifier.setTableFormat('html'); // Backend default
-        }
-        if (hasInterlineEquations) {
-          formatNotifier.setEquationFormat('text'); // Backend default
+        final FormatSettings current = ref.read(
+          formatSettingsProviderFamily(taskId),
+        );
+        // Clear legacy auto-persisted table default from older builds (html).
+        if (hasTables && current.tableFormat == 'html') {
+          formatNotifier.clearTableFormat();
         }
         setState(() {
           _formatDialogShown = true;
@@ -4471,7 +4470,7 @@ class _TranslationResultPreviewState
       return;
     }
 
-    final String tableFormat = exportOptions['tableFormat'] ?? 'html';
+    final String tableFormat = exportOptions['tableFormat'] ?? 'image';
     final String pdfType = exportOptions['pdfType'] ?? 'translated';
 
     if (mounted) {
@@ -4823,8 +4822,10 @@ class _TranslationResultPreviewState
       // Create state variables for dialog with current settings or defaults
       final bool isPdfFile = widget.fileName?.toLowerCase().endsWith('.pdf') ?? false;
       final bool isPdfWorkflow = widget.workflowType == 'markdown_based' || isPdfFile;
-      var tableFormat = formatSettings.tableFormat ?? (isPdfWorkflow ? 'image' : 'html');
-      var equationFormat = formatSettings.equationFormat ?? (isPdfWorkflow ? 'latex' : 'text');
+      var tableFormat =
+          formatSettings.getTableFormat(isPdfWorkflow: isPdfWorkflow);
+      var equationFormat =
+          formatSettings.getEquationFormat(isPdfWorkflow: isPdfWorkflow);
 
       await DialogHelper.showGeneralDialog(
         context: context,
@@ -5133,8 +5134,10 @@ class _TranslationResultPreviewState
           final formatSettings = ref.watch(
             formatSettingsProviderFamily(_apiTaskId()),
           );
-          String tableFormat = formatSettings.tableFormat ?? (isPdfWorkflow ? 'image' : 'html');
-          String equationFormat = formatSettings.equationFormat ?? (isPdfWorkflow ? 'latex' : 'text');
+          String tableFormat =
+              formatSettings.getTableFormat(isPdfWorkflow: isPdfWorkflow);
+          String equationFormat =
+              formatSettings.getEquationFormat(isPdfWorkflow: isPdfWorkflow);
 
           return StatefulBuilder(
             builder: (BuildContext context, setDialogState) => Material(
@@ -5405,14 +5408,14 @@ class _TranslationResultPreviewState
         final formatSettings = ref.read(
           formatSettingsProviderFamily(_apiTaskId()),
         );
-        if (formatSettings.tableFormat != null) {
-          queryParams['table_body_format'] =
-              tableFormat ?? formatSettings.tableFormat!;
-        }
-        if (formatSettings.equationFormat != null) {
-          queryParams['equation_format'] =
-              equationFormat ?? formatSettings.equationFormat!;
-        }
+        final bool isPdfFile =
+            widget.fileName?.toLowerCase().endsWith('.pdf') ?? false;
+        final bool isPdfWorkflow =
+            widget.workflowType == 'markdown_based' || isPdfFile;
+        queryParams['table_body_format'] = tableFormat ??
+            formatSettings.getTableFormat(isPdfWorkflow: isPdfWorkflow);
+        queryParams['equation_format'] = equationFormat ??
+            formatSettings.getEquationFormat(isPdfWorkflow: isPdfWorkflow);
         if (fileType == 'md' && embedImages != null) {
           queryParams['embed_images'] = embedImages.toString();
         }
@@ -5450,11 +5453,17 @@ class _TranslationResultPreviewState
 
   /// Show PDF export dialog with table format and PDF type (translated/original) options
   /// Returns a Map with 'tableFormat' and 'pdfType' keys, or null if cancelled
-  Future<Map<String, String>?> _showPdfExportDialog() async =>
-      DialogHelper.showDialog<Map<String, String>>(
+  Future<Map<String, String>?> _showPdfExportDialog() async {
+    final FormatSettings formatSettings = ref.read(
+      formatSettingsProviderFamily(_apiTaskId()),
+    );
+    final String initialTableFormat =
+        formatSettings.getTableFormat(isPdfWorkflow: true);
+
+    return DialogHelper.showDialog<Map<String, String>>(
         context: context,
         builder: (BuildContext context) {
-          String selectedFormat = 'html'; // Default value
+          String selectedFormat = initialTableFormat;
           String selectedPdfType = 'translated'; // Default: translated PDF
 
           return AlertDialog(
@@ -5585,4 +5594,5 @@ class _TranslationResultPreviewState
           );
         },
       );
+  }
 }

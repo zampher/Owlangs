@@ -775,6 +775,8 @@ class OutputGenerator:
                         from utils.document_rebuild import rebuild_markdown_document_from_segments
                         eq_fmt = task_state.get("equation_format") or (payload.get("equation_format") if isinstance(payload, dict) else getattr(payload, "equation_format", None)) or "text"
                         tbl_fmt = task_state.get("table_body_format") or (payload.get("table_body_format") if isinstance(payload, dict) else getattr(payload, "table_body_format", None)) or "html"
+                        from backend.app.services.download.download_service import _resolve_export_format_settings
+                        eq_fmt, tbl_fmt = _resolve_export_format_settings(task_state, payload, eq_fmt, tbl_fmt)
                         rebuilt_doc = rebuild_markdown_document_from_segments(
                             task_state,
                             file_stem=file_stem,
@@ -918,13 +920,10 @@ class OutputGenerator:
                         from layout.base import LayoutDocument as _LD
                         if isinstance(layout_doc, _LD):
                             from exporter.md.md2docx_exporter import MD2DOCXExporterConfig
-                            # For PDF workflow, respect table_body_format and equation_format
-                            table_body_format = task_state.get("table_body_format") or "html"
-                            if table_body_format not in ("html", "image"):
-                                table_body_format = "html"
-                            equation_format = task_state.get("equation_format") or "text"
-                            if equation_format not in ("text", "latex", "image"):
-                                equation_format = "text"
+                            from backend.app.services.download.download_service import _resolve_export_format_settings
+                            equation_format, table_body_format = _resolve_export_format_settings(
+                                task_state, payload
+                            )
                             docx_config = MD2DOCXExporterConfig(
                                 layout_document=layout_doc,
                                 table_body_format=table_body_format,
@@ -976,9 +975,8 @@ class OutputGenerator:
                         from layout.base import LayoutDocument as _LD
                         if isinstance(layout_doc, _LD):
                             from exporter.md.md2docx_exporter import MD2DOCXExporterConfig
-                            table_body_format = task_state.get("table_body_format") or "html"
-                            if table_body_format not in ("html", "image"):
-                                table_body_format = "html"
+                            from backend.app.services.download.download_service import _resolve_export_format_settings
+                            _, table_body_format = _resolve_export_format_settings(task_state, payload)
                             docx_config = MD2DOCXExporterConfig(
                                 layout_document=layout_doc,
                                 table_body_format=table_body_format,

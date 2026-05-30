@@ -14,18 +14,28 @@ class FormatSettings {
   });
 
   /// Table format: 'html' or 'image'
-  /// Default: 'html' (matches backend default)
+  /// Default: 'html' for non-PDF; 'image' for PDF layout workflow
   final String? tableFormat;
 
   /// Equation format: 'text', 'latex', or 'image'
-  /// Default: 'text' (matches backend default)
+  /// UI radios use 'text' for LaTeX; default is 'text' (LaTeX)
   final String? equationFormat;
 
   /// Get table format with default fallback
-  String getTableFormat() => tableFormat ?? 'html';
+  String getTableFormat({bool isPdfWorkflow = false}) =>
+      tableFormat ?? (isPdfWorkflow ? 'image' : 'html');
 
-  /// Get equation format with default fallback
-  String getEquationFormat() => equationFormat ?? 'text';
+  /// Get equation format with default fallback (UI radio values: text=LaTeX, image=Image)
+  String getEquationFormat({bool isPdfWorkflow = false}) {
+    final String? stored = equationFormat;
+    if (stored != null) {
+      // Backend may store 'latex'; UI radios use 'text' for LaTeX
+      if (stored == 'latex') return 'text';
+      return stored;
+    }
+    // LaTeX default (stored/sent as 'text' in UI; backend also accepts 'latex')
+    return 'text';
+  }
 
   FormatSettings copyWith({
     String? tableFormat,
