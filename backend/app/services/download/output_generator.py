@@ -1922,6 +1922,35 @@ class OutputGenerator:
                 markdown_content = workflow.export_to_markdown()
                 self.task_manager.add_log(task_id, "info", "Markdown file generated from workflow export")
 
+            # Clean metadata headings in the fallback path (rebuild path already cleans).
+            if markdown_content and not is_mobi_epub:
+                try:
+                    import re
+                    _MD_META_PATTERNS = (
+                        r'^#\s+\S+\s+\\?\^?\{\d',
+                        r'^#\s+\\?\^?\{\d+\}',
+                        r'^#\s+Correspondence:',
+                        r'^#\s+Received:', r'^#\s+Revised:', r'^#\s+Accepted:',
+                        r'^#\s+Handling Editor:', r'^#\s+Funding:', r'^#\s+Keywords:',
+                        r'^#\s+通讯作者', r'^#\s+收稿日期', r'^#\s+修订日期',
+                        r'^#\s+接收日期', r'^#\s+责任编辑', r'^#\s+基金项目', r'^#\s+关键词',
+                        r'^#\s+\S+[\s·,，][\u2070-\u209F\u00B2\u00B3¹²³]',
+                        r'^#\s+\S+\s*\|\s*\S+[\u2070-\u209F\u00B2\u00B3¹²³]',
+                        r'^#\s+.{120,}$',
+                    )
+                    _MD_COMPILED = [re.compile(p) for p in _MD_META_PATTERNS]
+                    lines = markdown_content.split("\n")
+                    cleaned = []
+                    for line in lines:
+                        stripped = line.lstrip()
+                        if any(p.match(stripped) for p in _MD_COMPILED):
+                            cleaned.append(stripped.lstrip("#").strip())
+                        else:
+                            cleaned.append(line)
+                    markdown_content = "\n".join(cleaned)
+                except Exception:
+                    pass
+
             # XLSX/PPTX: if in-memory export is tiny but translated HTML was written, use disk HTML
             html_saved = output_dir / f"{file_stem}_translated.html"
             if prefer_html_table_md and html_saved.is_file():

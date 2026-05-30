@@ -1045,6 +1045,21 @@ class DownloadService:
             modified_count = sum(1 for seg in segments if seg.get("modified", False))
             logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Task {task_id}, total segments: {len(segments)}, modified segments: {modified_count}")
         
+        # P0: Infer heading levels from original PDF font sizes when available.
+        # This must run before any export path (rebuild, workflow, or direct MD) so
+        # that heading_level metadata is up-to-date for all downstream consumers.
+        _layout_doc = task_state.get("layout_document")
+        _original_pdf = task_state.get("original_file_path") if task_state else None
+        if _layout_doc is not None and _original_pdf:
+            try:
+                from layout.pdf_font_extractor import infer_heading_levels_from_pdf
+                infer_heading_levels_from_pdf(_layout_doc, _original_pdf)
+                logger.debug(LogModule.EXPORT,
+                    f"[DOWNLOAD] Task {task_id}: Inferred heading levels from PDF font sizes")
+            except Exception as e:
+                logger.debug(LogModule.EXPORT,
+                    f"[DOWNLOAD] Task {task_id}: Failed to infer heading levels from PDF: {e}")
+
         # Store original has_revisions status before any fallback logic
         has_revisions_original = has_revised_segments(task_state)
         has_revisions = has_revisions_original

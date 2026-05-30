@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
 from ir.markdown_document import MarkdownDocument
+from layout.pdf_font_extractor import infer_heading_levels_from_pdf
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from utils.translation_segments import get_translation_segments
@@ -367,19 +368,30 @@ def _rebuild_markdown_from_layout_segments(
         equation_format is not None or table_body_format is not None
     )
     
-    # Build block index to block mapping for format processing
+    # Build block index to block mapping (used for format processing and title heading level)
     block_index_to_block: Dict[int, Any] = {}
-    if should_apply_format:
+    try:
+        from layout.base import LayoutDocument as _LD
+        if isinstance(layout_doc, _LD):
+            for block in layout_doc.iter_blocks():
+                if block.index is not None:
+                    block_index_to_block[block.index] = block
+    except Exception as e:
+        logger.debug(LogModule.RESTOR, f"Failed to build block index to block mapping: {e}")
+        should_apply_format = False
+
+    # P0b: Infer heading levels from original PDF font sizes when available.
+    # MinerU Cloud API layout.json spans lack font size data, so all title
+    # blocks default to H1. This step reads the PDF directly via PyMuPDF to
+    # recover the true heading hierarchy.
+    original_pdf = task_state.get("original_file_path") if task_state else None
+    if original_pdf and layout_doc is not None:
         try:
-            from layout.base import LayoutDocument as _LD
-            if isinstance(layout_doc, _LD):
-                for block in layout_doc.iter_blocks():
-                    if block.index is not None:
-                        block_index_to_block[block.index] = block
+            infer_heading_levels_from_pdf(layout_doc, original_pdf)
         except Exception as e:
-            logger.debug(LogModule.RESTOR,f"Failed to build block index to block mapping: {e}")
-            should_apply_format = False
-    
+            logger.debug(LogModule.RESTOR,
+                f"Failed to infer heading levels from PDF: {e}")
+
     # Format target texts based on block types; record table block segment role for caption-before-body reorder
     formatted_texts = []
     target_idx_to_table_block: Dict[int, int] = {}
@@ -543,15 +555,34 @@ def _rebuild_markdown_from_layout_segments(
             
             # Handle title formatting (independent of format parameters)
             if "title" in block_types:
-                # Convert to markdown heading format
                 text_stripped = formatted.strip()
                 # Remove any existing markdown heading markers
                 text_stripped = re.sub(r'^#+\s*', '', text_stripped)
-                # Add markdown heading format if not already present
-                if not text_stripped.startswith("#"):
-                    formatted = f"# {text_stripped}"
-                else:
+                # Infer heading level from block metadata (font size in layout blocks)
+                level = 1  # default H1
+                block_indices: List[int] = []
+                for seg in segments:
+                    if seg.get("segment_index") == segment_index:
+                        block_indices = seg.get("layout_block_indices", [])
+                        break
+                is_body_text = False
+                for bidx in block_indices:
+                    if block_index_to_type.get(bidx) == "title":
+                        block = block_index_to_block.get(bidx)
+                        if block is not None:
+                            bl = getattr(block, "heading_level", 1)
+                            if isinstance(bl, int) and 0 <= bl <= 6:
+                                if bl == 0:
+                                    # heading_level=0 means false-positive title (body text)
+                                    is_body_text = True
+                                else:
+                                    level = bl
+                                break
+                if is_body_text:
                     formatted = text_stripped
+                else:
+                    # Add markdown heading format with correct level
+                    formatted = f"{'#' * level} {text_stripped}"
         formatted_texts.append(formatted)
     
     # Reorder table block segments so caption comes before table body (image) in exported DOCX/HTML/PDF
@@ -887,7 +918,11 @@ def rebuild_markdown_document_from_segments(
     if not markdown_content:
         logger.warning(LogModule.RESTOR,"No markdown content generated from segments")
         return None
-    
+
+    # P0c: Clean up metadata lines (authors, dates, funding, keywords) that MinerU
+    # may have incorrectly marked as headings. These are always body text.
+    markdown_content = _clean_metadata_headings(markdown_content)
+
     # Process images and create MarkdownDocument (shared logic)
     return _process_images_and_create_markdown_document(
         markdown_content=markdown_content,
@@ -897,3 +932,47 @@ def rebuild_markdown_document_from_segments(
         metadata=metadata,
         output_dir=output_dir,
     )
+
+
+def _clean_metadata_headings(markdown_text: str) -> str:
+    """
+    Remove heading markers from metadata lines that MinerU may have incorrectly
+    marked as headings — authors with superscripts, dates, funding info, keywords.
+
+    These are always body text and should not appear as ``# Author Name`` in output.
+    """
+    _METADATA_HEADING_PATTERNS = (
+        r'^#\s+\S+\s+\\?\^?\{\d',          # Author: # Yun Li ^{1}
+        r'^#\s+\\?\^?\{\d+\}',              # Affiliation: # ^{1} Department...
+        r'^#\s+Correspondence:',             # English metadata
+        r'^#\s+Received:',
+        r'^#\s+Revised:',
+        r'^#\s+Accepted:',
+        r'^#\s+Handling Editor:',
+        r'^#\s+Funding:',
+        r'^#\s+Keywords:',
+        r'^#\s+通讯作者',                     # Chinese metadata
+        r'^#\s+收稿日期',
+        r'^#\s+修订日期',
+        r'^#\s+接收日期',
+        r'^#\s+责任编辑',
+        r'^#\s+基金项目',
+        r'^#\s+关键词',
+        # Author list with Unicode superscript characters (¹²³...)
+        r'^#\s+\S+[\s·,，][\u2070-\u209F\u00B2\u00B3¹²³]',
+        # Author list separated by | with superscripts
+        r'^#\s+\S+\s*\|\s*\S+[\u2070-\u209F\u00B2\u00B3¹²³]',
+        # Overlong heading lines (> 120 chars after #) — certainly body text
+        r'^#\s+.{120,}$',
+    )
+    compiled = [re.compile(p) for p in _METADATA_HEADING_PATTERNS]
+
+    lines = markdown_text.split("\n")
+    cleaned = []
+    for line in lines:
+        stripped = line.lstrip()
+        if any(p.match(stripped) for p in compiled):
+            cleaned.append(stripped.lstrip("#").strip())
+        else:
+            cleaned.append(line)
+    return "\n".join(cleaned)

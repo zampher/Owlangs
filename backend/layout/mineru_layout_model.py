@@ -118,6 +118,77 @@ def _extract_image_path_from_layout_block(block_data: Dict[str, Any]) -> Optiona
     return None
 
 
+def _get_max_span_font_size(block_data: Dict[str, Any]) -> float:
+    """
+    Extract the maximum font size from MinerU span data in a block.
+
+    MinerU layout.json spans include a ``size`` field (font size in points).
+    Returns 0.0 if no size data is found.
+    """
+    max_size = 0.0
+    lines = block_data.get("lines", [])
+    if not isinstance(lines, list):
+        return max_size
+    for line in lines:
+        if not isinstance(line, dict):
+            continue
+        spans = line.get("spans", [])
+        if not isinstance(spans, list):
+            continue
+        for span in spans:
+            if not isinstance(span, dict):
+                continue
+            size = span.get("size")
+            if size is not None:
+                try:
+                    max_size = max(max_size, float(size))
+                except (TypeError, ValueError):
+                    continue
+    return max_size
+
+
+def _infer_heading_level_from_font_size(font_size: float) -> int:
+    """
+    Map a font size (in points) to a heading level (1-6).
+
+    Thresholds are based on common document patterns where body text is
+    typically 9-11pt and headings scale upward:
+        >= 20pt  -> H1 (chapter / document title)
+        >= 15pt  -> H2 (major section)
+        >= 12pt  -> H3 (subsection)
+        >= 10.5pt -> H4 (sub-subsection)
+        >= 9pt   -> H5 (minor heading)
+        else     -> H6
+    """
+    if font_size >= 20.0:
+        return 1
+    elif font_size >= 15.0:
+        return 2
+    elif font_size >= 12.0:
+        return 3
+    elif font_size >= 10.5:
+        return 4
+    elif font_size >= 9.0:
+        return 5
+    else:
+        return 6
+
+
+def _infer_title_heading_levels(doc: LayoutDocument) -> None:
+    """
+    Post-process a LayoutDocument to infer heading levels for title blocks.
+
+    Uses font size from MinerU span data (stored in ``block.raw``) to determine
+    the hierarchy level. Non-title blocks are left unchanged.
+    """
+    for page in doc.pages:
+        for block in page.blocks:
+            if block.type == "title" and isinstance(block.raw, dict):
+                font_size = _get_max_span_font_size(block.raw)
+                if font_size > 0:
+                    block.heading_level = _infer_heading_level_from_font_size(font_size)
+
+
 def parse_layout_json(layout_path: Path) -> LayoutDocument:
     """
     Parse MinerU layout.json file into LayoutDocument.
@@ -304,7 +375,9 @@ def parse_layout_json(layout_path: Path) -> LayoutDocument:
         "_version_name": data.get("_version_name")
     }
     
-    return LayoutDocument(pages=pages, engine="mineru", metadata=metadata)
+    doc = LayoutDocument(pages=pages, engine="mineru", metadata=metadata)
+    _infer_title_heading_levels(doc)
+    return doc
 
 
 def parse_content_list_json(content_list_path: Path) -> LayoutDocument:
@@ -371,8 +444,10 @@ def parse_content_list_json(content_list_path: Path) -> LayoutDocument:
             page_index=page_idx,
             blocks=pages_dict[page_idx]
         ))
-    
-    return LayoutDocument(pages=pages, engine="mineru")
+
+    doc = LayoutDocument(pages=pages, engine="mineru")
+    _infer_title_heading_levels(doc)
+    return doc
 
 
 def parse_mineru_layout_from_zip_bytes(zip_bytes: bytes) -> Optional[LayoutDocument]:
@@ -571,7 +646,9 @@ def parse_mineru_layout_from_zip_bytes(zip_bytes: bytes) -> Optional[LayoutDocum
                     }
                     
                     logger.debug(LogModule.EXTRACT, f"Parsed MinerU layout.json: {len(pages)} pages, {global_index} blocks")
-                    return LayoutDocument(pages=pages, engine="mineru", metadata=metadata)
+                    doc = LayoutDocument(pages=pages, engine="mineru", metadata=metadata)
+                    _infer_title_heading_levels(doc)
+                    return doc
             except Exception as e:
                 logger.debug(LogModule.LAYOUT, f"Failed to parse layout.json, trying middle.json: {e}")
         
@@ -682,7 +759,9 @@ def parse_mineru_layout_from_zip_bytes(zip_bytes: bytes) -> Optional[LayoutDocum
                     }
                     
                     logger.info(LogModule.EXTRACT, f"Parsed MinerU middle.json: {len(pages)} pages, {global_index} blocks")
-                    return LayoutDocument(pages=pages, engine="mineru", metadata=metadata)
+                    doc = LayoutDocument(pages=pages, engine="mineru", metadata=metadata)
+                    _infer_title_heading_levels(doc)
+                    return doc
             except Exception as e:
                 logger.debug(LogModule.LAYOUT, f"Failed to parse middle.json, trying content_list.json: {e}")
         
@@ -754,8 +833,10 @@ def parse_mineru_layout_from_zip_bytes(zip_bytes: bytes) -> Optional[LayoutDocum
             ))
         
         logger.info(LogModule.LAYOUT, f"Parsed MinerU *_content_list.json: {len(pages)} pages, {global_index} blocks")
-        return LayoutDocument(pages=pages, engine="mineru")
-        
+        doc = LayoutDocument(pages=pages, engine="mineru")
+        _infer_title_heading_levels(doc)
+        return doc
+
     except Exception as e:
         logger.warning(LogModule.EXTRACT, f"Failed to parse MinerU layout from ZIP: {e}")
         return None

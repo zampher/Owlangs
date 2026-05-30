@@ -25,6 +25,7 @@ class LayoutBlock:
         text: Text content (if type is text)
         image_path: Relative path to image file (if type is image)
         raw: Raw engine-specific data for debugging/extensions
+        heading_level: Inferred heading level (1-6) for title blocks, defaults to 1
     """
     page_index: int
     bbox: Tuple[float, float, float, float]  # (x0, y0, x1, y1)
@@ -33,6 +34,7 @@ class LayoutBlock:
     text: Optional[str] = None
     image_path: Optional[str] = None
     raw: Dict[str, Any] = field(default_factory=dict)
+    heading_level: int = 1  # Inferred heading level for title blocks
     
     def has_text(self) -> bool:
         """Check if block has text content."""
