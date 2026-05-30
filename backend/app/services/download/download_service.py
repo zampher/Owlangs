@@ -159,6 +159,159 @@ def _populate_image_data_map_from_extracted(
                 image_data_map[key] = dict(entry)
 
 
+def _populate_layout_placeholder_image_map(
+    image_data_map: Dict[str, Dict[str, str]],
+    task_state: Dict[str, Any],
+    layout_doc: Any,
+    *,
+    layout_result: Any = None,
+    equation_format: str = "text",
+    table_body_format: str = "html",
+) -> int:
+    """
+    Register layoutimg{N} keys (and filename aliases) for PDF figure placeholders.
+
+    When layout_result is None (segment rebuild path), rebuild chunk metadata via
+    LayoutMarkdownBuilder so placeholder IDs match <ph-layoutimgN> in markdown.
+    """
+    zip_bytes = task_state.get("layout_source_zip")
+    if not zip_bytes or layout_doc is None:
+        return 0
+
+    if layout_result is None:
+        from layout.markdown_builder import LayoutMarkdownBuilder
+
+        chunk_size = task_state.get("chunk_size", 2000) or 2000
+        deep_split = bool(task_state.get("deep_split_enabled", False))
+        builder = LayoutMarkdownBuilder(
+            max_chunk_chars=chunk_size,
+            deep_split=deep_split,
+            equation_format=equation_format,
+            table_body_format=table_body_format,
+        )
+        layout_result = builder.build(layout_doc)
+
+    chunks = getattr(layout_result, "chunks", None) if layout_result else None
+    if not chunks:
+        return 0
+
+    zip_file = None
+    registered = 0
+    try:
+        zip_file = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        zip_entry_map = {
+            name.replace("\\", "/"): name for name in zip_file.namelist()
+        }
+
+        def _normalize_image_path(path: str | None) -> str | None:
+            if not path:
+                return None
+            return path.replace("\\", "/").lstrip("./")
+
+        placeholder_cache: dict[str, str] = {}
+
+        def _read_image_data_uri(image_path: str | None) -> str | None:
+            if not image_path or zip_file is None or not zip_entry_map:
+                return None
+            normalized = _normalize_image_path(image_path)
+            if not normalized:
+                return None
+            if normalized in placeholder_cache:
+                return placeholder_cache[normalized]
+
+            candidate = zip_entry_map.get(normalized)
+            if candidate is None:
+                filename_only = os.path.basename(normalized)
+                for name, original in zip_entry_map.items():
+                    if (
+                        name == filename_only
+                        or name.endswith("/" + filename_only)
+                        or name.endswith("\\" + filename_only)
+                    ):
+                        candidate = original
+                        break
+                    if name.endswith(normalized):
+                        candidate = original
+                        break
+                    if (
+                        name.endswith("/images/" + filename_only)
+                        or name.endswith("\\images\\" + filename_only)
+                    ):
+                        candidate = original
+                        break
+            if not candidate:
+                for name, original in zip_entry_map.items():
+                    fn = os.path.basename(normalized)
+                    if (
+                        name.endswith("/" + fn)
+                        or name.endswith("\\" + fn)
+                        or name == fn
+                    ):
+                        candidate = original
+                        break
+            if not candidate:
+                logger.warning(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] layoutimg ZIP lookup failed for '{image_path}' "
+                    f"(normalized: '{normalized}')",
+                )
+                return None
+            try:
+                raw_bytes = zip_file.read(candidate)
+            except KeyError as e:
+                logger.warning(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] Failed to read layout image '{candidate}' from ZIP: {e}",
+                )
+                return None
+            mime = mimetypes.guess_type(candidate)[0] or "image/png"
+            data_uri = f"data:{mime};base64,{base64.b64encode(raw_bytes).decode('ascii')}"
+            placeholder_cache[normalized] = data_uri
+            return data_uri
+
+        for idx, chunk in enumerate(chunks):
+            if chunk.chunk_type != "image":
+                continue
+            placeholder_id = chunk.image_placeholder or f"layoutimg{idx}"
+            alt_text = chunk.image_alt or (chunk.image_path or "Image")
+            data_uri = _read_image_data_uri(chunk.image_path)
+            if not data_uri:
+                continue
+            image_data_map[placeholder_id] = {
+                "data": data_uri,
+                "alt": alt_text or "Image",
+            }
+            registered += 1
+            if chunk.image_path:
+                filename_key = os.path.basename(
+                    chunk.image_path.replace("\\", "/")
+                )
+                if filename_key and filename_key not in image_data_map:
+                    image_data_map[filename_key] = {
+                        "data": data_uri,
+                        "alt": chunk.image_path,
+                    }
+    except Exception as e:
+        logger.warning(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Failed to populate layoutimg placeholder map: {e}",
+            exc_info=True,
+        )
+    finally:
+        if zip_file:
+            try:
+                zip_file.close()
+            except Exception:
+                pass
+
+    if registered:
+        logger.info(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Registered {registered} layoutimg placeholder(s) in image_data_map",
+        )
+    return registered
+
+
 def _resolve_export_format_settings(
     task_state: Dict[str, Any],
     payload: Any = None,
@@ -209,13 +362,25 @@ def _build_image_data_map_for_format_export(
     image_data_map = _image_data_map_from_task_state(task_state)
     layout_doc = task_state.get("layout_document")
     orig_l = (task_state.get("original_filename") or "").lower()
-    if not _format_requires_md2docx(equation_format, table_body_format):
-        return image_data_map
     if not orig_l.endswith(".pdf") or layout_doc is None:
         return image_data_map
     zip_bytes = task_state.get("layout_source_zip")
     if not zip_bytes:
         return image_data_map
+
+    # Always map layoutimg{N} for PDF figures (<ph-layoutimgN>), even when equation/table stay text/html.
+    _populate_layout_placeholder_image_map(
+        image_data_map,
+        task_state,
+        layout_doc,
+        layout_result=None,
+        equation_format=equation_format,
+        table_body_format=table_body_format,
+    )
+
+    if not _format_requires_md2docx(equation_format, table_body_format):
+        return image_data_map
+
     zip_file = None
     try:
         from layout.pdf_renderer.shared.block_processor import BlockProcessor
@@ -1392,6 +1557,15 @@ class DownloadService:
 
                                     # Register all extracted images (required for equation_format=image hash filenames)
                                     _populate_image_data_map_from_extracted(image_data_map, images_bytes_map)
+
+                                    _populate_layout_placeholder_image_map(
+                                        image_data_map,
+                                        task_state,
+                                        layout_doc,
+                                        layout_result=layout_result,
+                                        equation_format=eq_format,
+                                        table_body_format=table_format,
+                                    )
                                     
                                     # Parse markdown to find image references and map them
                                     import re
@@ -1413,59 +1587,6 @@ class DownloadService:
                                             logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Mapped image: {filename} (alt: {alt_text})")
                                         else:
                                             logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Image data not found for filename: {filename} (alt: {alt_text})")
-                                    
-                                    # Pattern 2: ![alt](placeholder_id) - placeholder-based images (tables)
-                                    # Examples: ![Table](layoutimg3), ![Equation](layoutimg0)
-                                    placeholder_image_pattern = r'!\[([^\]]*)\]\(([a-zA-Z0-9]+)\)'
-                                    placeholder_matches = re.findall(placeholder_image_pattern, md_content)
-                                    
-                                    # Build mapping from placeholder ID to image_path using layout_result chunks
-                                    # Only if layout_result is available (not when using rebuilt_doc from segments)
-                                    placeholder_to_path: dict[str, str] = {}
-                                    if layout_result is not None and hasattr(layout_result, 'chunks') and layout_result.chunks:
-                                        for chunk in layout_result.chunks:
-                                            if hasattr(chunk, 'image_placeholder') and hasattr(chunk, 'image_path'):
-                                                if chunk.image_placeholder and chunk.image_path:
-                                                    placeholder_to_path[chunk.image_placeholder] = chunk.image_path
-                                    else:
-                                        # When using rebuilt_doc from segments, try to get placeholder mapping from existing image_data_map
-                                        # or from layout_document blocks directly
-                                        existing_image_map = task_state.get("image_data_map")
-                                        if isinstance(existing_image_map, dict):
-                                            # Extract placeholder IDs from existing image_data_map
-                                            for ph_id in existing_image_map.keys():
-                                                if isinstance(ph_id, str) and ph_id.startswith('layoutimg'):
-                                                    placeholder_to_path[ph_id] = ph_id  # Use placeholder ID as path hint
-                                    
-                                    for alt_text, placeholder_id in placeholder_matches:
-                                        # Check if this is a placeholder (not a filename with extension)
-                                        if '.' not in placeholder_id and placeholder_id.startswith('layoutimg'):
-                                            # Look up image_path from chunks
-                                            image_path = placeholder_to_path.get(placeholder_id)
-                                            if image_path:
-                                                # Extract filename from path
-                                                filename = image_path.split('/')[-1].split('\\')[-1]
-                                                
-                                                # Look up image data by filename
-                                                if filename in image_data_by_filename:
-                                                    image_data_map[placeholder_id] = {
-                                                        "data": image_data_by_filename[filename],
-                                                        "alt": alt_text or placeholder_id,
-                                                    }
-                                                    logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Mapped placeholder image: {placeholder_id} -> {filename} (alt: {alt_text})")
-                                                else:
-                                                    logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Image data not found for placeholder {placeholder_id} (path: {image_path}, alt: {alt_text})")
-                                            else:
-                                                logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Image path not found for placeholder {placeholder_id} (alt: {alt_text})")
-                                    
-                                    # Pattern 3: <ph-xxx> - XML-style placeholders
-                                    xml_placeholder_pattern = r'<ph-([a-zA-Z0-9]+)>'
-                                    xml_placeholder_matches = re.findall(xml_placeholder_pattern, md_content)
-                                    for ph_id in xml_placeholder_matches:
-                                        # Try to find image by placeholder ID in existing image_data_map
-                                        existing_image_map = task_state.get("image_data_map")
-                                        if isinstance(existing_image_map, dict) and ph_id in existing_image_map:
-                                            image_data_map[ph_id] = existing_image_map[ph_id]
                                 
                                 except Exception as e:
                                     logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to extract images from layout_source_zip: {e}", exc_info=True)
@@ -1545,6 +1666,15 @@ class DownloadService:
                                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Extracted {len(image_data_by_filename)} images from layout_source_zip for format-switched content")
 
                                             _populate_image_data_map_from_extracted(image_data_map, images_bytes_map)
+
+                                            _populate_layout_placeholder_image_map(
+                                                image_data_map,
+                                                task_state,
+                                                layout_doc,
+                                                layout_result=None,
+                                                equation_format=eq_format,
+                                                table_body_format=table_format,
+                                            )
                                             
                                             # Parse markdown to find image references (from format-switched tables/equations)
                                             import re
@@ -2054,6 +2184,17 @@ class DownloadService:
                                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to read image data for filename in chunk text: {image_filename} (zip_file={zip_file is not None}, zip_entries={len(zip_entries) if zip_entries else 0})")
                     
                         # Update task_state with image_data_map for frontend preview
+                        if image_data_map:
+                            task_state["image_data_map"] = image_data_map
+                    elif layout_doc is not None:
+                        _populate_layout_placeholder_image_map(
+                            image_data_map,
+                            task_state,
+                            layout_doc,
+                            layout_result=None,
+                            equation_format=eq_format,
+                            table_body_format=table_format,
+                        )
                         if image_data_map:
                             task_state["image_data_map"] = image_data_map
                 
@@ -3316,16 +3457,14 @@ class DownloadService:
                                                     "alt": chunk.image_path,
                                                 }
                             else:
-                                # When using rebuilt_doc from segments, try to get image mapping from existing image_data_map
-                                existing_image_map = task_state.get("image_data_map")
-                                if isinstance(existing_image_map, dict):
-                                    # Merge existing image mappings
-                                    for ph_id, img_data in existing_image_map.items():
-                                        if ph_id not in image_data_map:
-                                            image_data_map[str(ph_id)] = {
-                                                "data": (img_data or {}).get("data", ""),
-                                                "alt": (img_data or {}).get("alt", str(ph_id)),
-                                            }
+                                _populate_layout_placeholder_image_map(
+                                    image_data_map,
+                                    task_state,
+                                    layout_doc,
+                                    layout_result=None,
+                                    equation_format=eq_format,
+                                    table_body_format=table_body_format or "html",
+                                )
                             
                             file_stem = task_state.get("original_filename_stem", "translated")
                             if image_data_map:

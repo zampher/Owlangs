@@ -135,3 +135,86 @@ def test_md2docx_table_body_format_image_inserts_table_image():
             mock_table.assert_not_called()
             mock_img.assert_called_once()
             assert hash_name in mock_img.call_args[0][1]
+
+
+def test_populate_layout_placeholder_image_map_registers_layoutimg_keys():
+    import io
+    import zipfile
+
+    from layout.markdown_builder import LayoutChunk
+    from backend.app.services.download.download_service import _populate_layout_placeholder_image_map
+
+    hash_name = "abc123figure.jpg"
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w") as zf:
+        zf.writestr(f"images/{hash_name}", b"\xff\xd8\xff fake jpeg")
+    zip_bytes = zip_buf.getvalue()
+
+    layout_result = MagicMock()
+    layout_result.chunks = [
+        LayoutChunk(
+            text="<ph-layoutimg0>",
+            chunk_type="image",
+            block_indices=[1],
+            image_path=f"images/{hash_name}",
+            image_placeholder="layoutimg0",
+            image_alt="Figure 1",
+        ),
+    ]
+    task_state = {"layout_source_zip": zip_bytes, "chunk_size": 2000, "deep_split_enabled": False}
+    image_data_map: dict = {}
+
+    count = _populate_layout_placeholder_image_map(
+        image_data_map,
+        task_state,
+        layout_doc=MagicMock(),
+        layout_result=layout_result,
+        equation_format="text",
+        table_body_format="html",
+    )
+
+    assert count == 1
+    assert "layoutimg0" in image_data_map
+    assert image_data_map["layoutimg0"]["data"].startswith("data:image/")
+    assert hash_name in image_data_map
+
+
+def test_build_image_data_map_text_html_includes_layoutimg_for_pdf():
+    import io
+    import zipfile
+
+    from layout.markdown_builder import LayoutChunk
+    from backend.app.services.download.download_service import _build_image_data_map_for_format_export
+
+    hash_name = "figure001.jpg"
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w") as zf:
+        zf.writestr(f"images/{hash_name}", b"\xff\xd8\xff fake jpeg")
+    zip_bytes = zip_buf.getvalue()
+
+    layout_result = MagicMock()
+    layout_result.chunks = [
+        LayoutChunk(
+            text="<ph-layoutimg0>",
+            chunk_type="image",
+            block_indices=[0],
+            image_path=f"images/{hash_name}",
+            image_placeholder="layoutimg0",
+        ),
+    ]
+
+    with patch("layout.markdown_builder.LayoutMarkdownBuilder") as mock_builder_cls:
+        mock_builder_cls.return_value.build.return_value = layout_result
+        task_state = {
+            "original_filename": "paper.pdf",
+            "layout_document": MagicMock(),
+            "layout_source_zip": zip_bytes,
+            "chunk_size": 2000,
+            "deep_split_enabled": False,
+        }
+        image_map = _build_image_data_map_for_format_export(
+            task_state, md_content="", equation_format="text", table_body_format="html"
+        )
+
+    assert "layoutimg0" in image_map
+    assert image_map["layoutimg0"]["data"].startswith("data:image/")
