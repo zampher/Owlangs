@@ -46,7 +46,7 @@ class TranslationQuickSettings {
   const TranslationQuickSettings({
     this.sourceLang = 'auto',
     this.toLang = 'en',
-    this.workflowType = 'docx',
+    this.workflowType = 'markdown_based',
     this.usePrompt = false,
     this.selectedGlossaries = const <String>[],
     this.glossarySelectorExpanded = true, // Default: expanded
@@ -66,7 +66,7 @@ class TranslationQuickSettings {
       TranslationQuickSettings(
         sourceLang: json['sourceLang'] ?? 'auto',
         toLang: json['toLang'] ?? 'zh',
-        workflowType: json['workflowType'] ?? 'docx',
+        workflowType: json['workflowType'] ?? 'markdown_based',
         selectedGlossaries:
             List<String>.from(json['selectedGlossaries'] ?? <dynamic>[]),
         glossarySelectorExpanded:
