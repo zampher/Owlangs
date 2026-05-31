@@ -1213,5 +1213,25 @@
   "fetchUrlClose": "Cerrar",
 
   "commonDarkMode": "Modo oscuro",
-  "commonLightMode": "Modo claro"
+  "commonLightMode": "Modo claro",
+
+  "translationExportBilingualExport": "Exportación Bilingüe",
+  "translationExportBilingualOrderTargetAfter": "Destino Después de Origen",
+  "translationExportBilingualOrderTargetAfterSub": "Origen primero, destino después",
+  "translationExportBilingualOrderTargetBefore": "Destino Antes de Origen",
+  "translationExportBilingualOrderTargetBeforeSub": "Destino primero, origen después",
+  "translationExportSourceTextItalic": "Texto original en cursiva",
+  "translationExportSourceTextColor": "Color del texto original:",
+  "translationExportTargetTextItalic": "Texto traducido en cursiva",
+  "translationExportTargetTextColor": "Color del texto traducido:",
+  "translationExportColorDefault": "Predeterminado",
+  "translationExportColorGray": "Gris",
+  "translationExportColorBlue": "Azul",
+  "translationExportColorRed": "Rojo",
+  "translationExportColorGreen": "Verde",
+  "translationExportColorOrange": "Naranja",
+  "translationExportColorBlack": "Negro",
+
+  "translationExportMdEmbeddedImages": "MD (con imágenes incrustadas)",
+  "translationExportMdWithImagesFolder": "MD (con carpeta de imágenes)"
 }

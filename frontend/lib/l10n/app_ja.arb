@@ -1137,5 +1137,25 @@
   "loginPasswordRecoveryAdminGuide": "管理者の方は、パスワード復旧手順に従ってください。",
 
   "commonDarkMode": "ダークモード",
-  "commonLightMode": "ライトモード"
+  "commonLightMode": "ライトモード",
+
+  "translationExportBilingualExport": "バイリンガル書き出し",
+  "translationExportBilingualOrderTargetAfter": "訳文を後ろに",
+  "translationExportBilingualOrderTargetAfterSub": "原文を前に、訳文を後ろに",
+  "translationExportBilingualOrderTargetBefore": "訳文を前に",
+  "translationExportBilingualOrderTargetBeforeSub": "訳文を前に、原文を後ろに",
+  "translationExportSourceTextItalic": "原文を斜体",
+  "translationExportSourceTextColor": "原文の色:",
+  "translationExportTargetTextItalic": "訳文を斜体",
+  "translationExportTargetTextColor": "訳文の色:",
+  "translationExportColorDefault": "デフォルト",
+  "translationExportColorGray": "グレー",
+  "translationExportColorBlue": "青",
+  "translationExportColorRed": "赤",
+  "translationExportColorGreen": "緑",
+  "translationExportColorOrange": "オレンジ",
+  "translationExportColorBlack": "黒",
+
+  "translationExportMdEmbeddedImages": "MD（画像埋め込み）",
+  "translationExportMdWithImagesFolder": "MD（画像フォルダ）"
 }

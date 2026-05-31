@@ -117,6 +117,7 @@ hiddenimports = [
     'backend.utils.docx_math_fragment_llm_repair',
     'backend.utils.llm_client',
     'backend.utils.extract_segments_debug',
+    'backend.utils.bilingual_export_utils',
     'backend.utils.epub_fix',
     'backend.utils.ebook_metadata',
     # App modules

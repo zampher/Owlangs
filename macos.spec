@@ -127,6 +127,7 @@ hiddenimports = [
     # LLM client used by latex repair
     'backend.utils.llm_client',
     'backend.utils.extract_segments_debug',
+    'backend.utils.bilingual_export_utils',
     # backend.app (uvicorn "app.factory:app"; app = backend/app when backend_dir on path)
     'backend.app',
     'backend.app.factory',

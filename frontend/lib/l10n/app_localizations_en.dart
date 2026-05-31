@@ -498,6 +498,64 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationExportEquationFormatLatex => 'LaTeX';
 
   @override
+  String get translationExportBilingualExport => 'Bilingual Export';
+
+  @override
+  String get translationExportBilingualOrderTargetAfter =>
+      'Target After Source';
+
+  @override
+  String get translationExportBilingualOrderTargetAfterSub =>
+      'Source first, target after';
+
+  @override
+  String get translationExportBilingualOrderTargetBefore =>
+      'Target Before Source';
+
+  @override
+  String get translationExportBilingualOrderTargetBeforeSub =>
+      'Target first, source after';
+
+  @override
+  String get translationExportSourceTextItalic => 'Source text italic';
+
+  @override
+  String get translationExportSourceTextColor => 'Source text color:';
+
+  @override
+  String get translationExportTargetTextItalic => 'Target text italic';
+
+  @override
+  String get translationExportTargetTextColor => 'Target text color:';
+
+  @override
+  String get translationExportColorDefault => 'Default';
+
+  @override
+  String get translationExportColorGray => 'Gray';
+
+  @override
+  String get translationExportColorBlue => 'Blue';
+
+  @override
+  String get translationExportColorRed => 'Red';
+
+  @override
+  String get translationExportColorGreen => 'Green';
+
+  @override
+  String get translationExportColorOrange => 'Orange';
+
+  @override
+  String get translationExportColorBlack => 'Black';
+
+  @override
+  String get translationExportMdEmbeddedImages => 'MD (Embedded Images)';
+
+  @override
+  String get translationExportMdWithImagesFolder => 'MD (With Images Folder)';
+
+  @override
   String get translationLeftPanelExpandTooltip => 'Expand left panel';
 
   @override

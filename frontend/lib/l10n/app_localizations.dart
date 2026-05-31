@@ -981,6 +981,114 @@ abstract class AppLocalizations {
   /// **'LaTeX'**
   String get translationExportEquationFormatLatex;
 
+  /// No description provided for @translationExportBilingualExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Bilingual Export'**
+  String get translationExportBilingualExport;
+
+  /// No description provided for @translationExportBilingualOrderTargetAfter.
+  ///
+  /// In en, this message translates to:
+  /// **'Target After Source'**
+  String get translationExportBilingualOrderTargetAfter;
+
+  /// No description provided for @translationExportBilingualOrderTargetAfterSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Source first, target after'**
+  String get translationExportBilingualOrderTargetAfterSub;
+
+  /// No description provided for @translationExportBilingualOrderTargetBefore.
+  ///
+  /// In en, this message translates to:
+  /// **'Target Before Source'**
+  String get translationExportBilingualOrderTargetBefore;
+
+  /// No description provided for @translationExportBilingualOrderTargetBeforeSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Target first, source after'**
+  String get translationExportBilingualOrderTargetBeforeSub;
+
+  /// No description provided for @translationExportSourceTextItalic.
+  ///
+  /// In en, this message translates to:
+  /// **'Source text italic'**
+  String get translationExportSourceTextItalic;
+
+  /// No description provided for @translationExportSourceTextColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Source text color:'**
+  String get translationExportSourceTextColor;
+
+  /// No description provided for @translationExportTargetTextItalic.
+  ///
+  /// In en, this message translates to:
+  /// **'Target text italic'**
+  String get translationExportTargetTextItalic;
+
+  /// No description provided for @translationExportTargetTextColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Target text color:'**
+  String get translationExportTargetTextColor;
+
+  /// No description provided for @translationExportColorDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get translationExportColorDefault;
+
+  /// No description provided for @translationExportColorGray.
+  ///
+  /// In en, this message translates to:
+  /// **'Gray'**
+  String get translationExportColorGray;
+
+  /// No description provided for @translationExportColorBlue.
+  ///
+  /// In en, this message translates to:
+  /// **'Blue'**
+  String get translationExportColorBlue;
+
+  /// No description provided for @translationExportColorRed.
+  ///
+  /// In en, this message translates to:
+  /// **'Red'**
+  String get translationExportColorRed;
+
+  /// No description provided for @translationExportColorGreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Green'**
+  String get translationExportColorGreen;
+
+  /// No description provided for @translationExportColorOrange.
+  ///
+  /// In en, this message translates to:
+  /// **'Orange'**
+  String get translationExportColorOrange;
+
+  /// No description provided for @translationExportColorBlack.
+  ///
+  /// In en, this message translates to:
+  /// **'Black'**
+  String get translationExportColorBlack;
+
+  /// No description provided for @translationExportMdEmbeddedImages.
+  ///
+  /// In en, this message translates to:
+  /// **'MD (Embedded Images)'**
+  String get translationExportMdEmbeddedImages;
+
+  /// No description provided for @translationExportMdWithImagesFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'MD (With Images Folder)'**
+  String get translationExportMdWithImagesFolder;
+
   /// No description provided for @translationLeftPanelExpandTooltip.
   ///
   /// In en, this message translates to:

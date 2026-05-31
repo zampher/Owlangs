@@ -153,6 +153,7 @@ hiddenimports = [
     'backend.utils.docx_math_fragment_llm_repair',
     'backend.utils.llm_client',
     'backend.utils.extract_segments_debug',
+    'backend.utils.bilingual_export_utils',
     # Ensure app module is imported
     'app',
     'app.app_main',

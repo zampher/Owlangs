@@ -3,6 +3,7 @@
 
 """DOCX document rebuild from translation segments."""
 
+import ast
 import base64
 import io
 import os
@@ -203,7 +204,13 @@ def _insert_text_and_images(paragraph, text: str, image_data_map: Dict[str, Dict
 
 def rebuild_docx_document_from_segments(
     task_state: Dict[str, Any],
-    translated_docx_document
+    translated_docx_document,
+    bilingual_export: bool = False,
+    target_first: bool = False,
+    source_text_italic: bool = True,
+    source_text_color: str = "gray",
+    target_text_italic: bool = False,
+    target_text_color: Optional[str] = None,
 ) -> Optional[Any]:
     """
     Rebuild DOCX Document from revised translation segments.
@@ -214,6 +221,8 @@ def rebuild_docx_document_from_segments(
     Args:
         task_state: Task state dictionary containing translation_segments
         translated_docx_document: Translated DOCX Document object from workflow
+        bilingual_export: If True, insert source text paragraphs alongside translations.
+        target_first: If True and bilingual_export is True, place source before target paragraph.
         
     Returns:
         Modified DOCX Document, or None if rebuilding failed
@@ -375,7 +384,9 @@ def rebuild_docx_document_from_segments(
                     segment_data_map[segment_index] = {
                         "target_text": final_target_text,
                         "source_text": source_text,  # Store source_text for logging
-                        "segment_info": segment_info
+                        "segment_info": segment_info,
+                        "is_excluded": is_excluded,
+                        "is_failed": is_failed,
                     }
                     if is_modified:
                         modified_segments.append(segment_index)
@@ -1175,9 +1186,41 @@ def rebuild_docx_document_from_segments(
                         f"'{target_text_stripped[:50] if target_text_stripped else '(empty)'}...'"
                     )
         
-        if updated_count == 0:
+        if updated_count == 0 and not bilingual_export:
             logger.warning(LogModule.RESTOR,"No text elements were updated in DOCX document")
             return None
+        
+        # Bilingual export: insert source text paragraphs alongside translations
+        if bilingual_export:
+            extras_original = task_state.get("docx_extras_original", {})
+            logger.info(
+                LogModule.RESTOR,
+                f"[BILINGUAL-DOCX] extras_original from task_state: keys={list(extras_original.keys()) if extras_original else 'empty'}"
+            )
+            if extras_original and "textboxes_sdts" in extras_original:
+                tb_items = extras_original["textboxes_sdts"]
+                tb_debug = []
+                for item in tb_items:
+                    if isinstance(item, (list, tuple)) and len(item) >= 2:
+                        k = item[0]
+                        tb_debug.append(f"type={type(k).__name__},val={k}")
+                    else:
+                        tb_debug.append(f"bad_item:type={type(item).__name__},val={item!r}")
+                logger.info(
+                    LogModule.RESTOR,
+                    f"[BILINGUAL-DOCX] textboxes_sdts has {len(tb_items)} items: {tb_debug}"
+                )
+            _insert_bilingual_source_paragraphs(
+                doc,
+                segment_data_map,
+                para_index_map,
+                target_first=target_first,
+                extras_original=extras_original,
+                source_text_italic=source_text_italic,
+                source_text_color=source_text_color,
+                target_text_italic=target_text_italic,
+                target_text_color=target_text_color,
+            )
         
         # Save modified DOCX back to bytes
         output_io = io.BytesIO()
@@ -1203,5 +1246,460 @@ def rebuild_docx_document_from_segments(
         logger.error(LogModule.RESTOR,"python-docx not available, cannot rebuild DOCX document")
         return None
     except Exception as e:
-        logger.error(LogModule.RESTOR,f"Failed to rebuild DOCX document: {e}", exc_info=True)
+        import traceback
+        tb = traceback.format_exc()
+        logger.error(LogModule.RESTOR,f"Failed to rebuild DOCX document: {e}\n{tb}")
         return None
+
+
+def _normalize_key(k) -> tuple:
+    """Convert a key to a canonical tuple form.
+
+    Task state data may go through JSON serialization, which converts
+    tuples to lists. This helper ensures we can compare reliably.
+    """
+    if isinstance(k, (list, tuple)):
+        return tuple(_normalize_key(item) for item in k)
+    return k
+
+
+def _insert_bilingual_source_paragraphs(
+    doc,
+    segment_data_map: Dict[int, Dict[str, Any]],
+    para_index_map: Dict[Tuple, Any],
+    target_first: bool = False,
+    extras_original: Optional[Dict[str, Any]] = None,
+    source_text_italic: bool = True,
+    source_text_color: str = "gray",
+    target_text_italic: bool = False,
+    target_text_color: Optional[str] = None,
+) -> None:
+    """Insert source-text paragraphs next to translated paragraphs for bilingual export.
+
+    Strategy for body / table cells:
+      - Skip excluded or failed segments (emit target only).
+      - Group remaining segments by para_index.
+      - For each paragraph that has at least one translated segment, create a
+        new paragraph containing the concatenated source_text of its segments.
+      - Insert BEFORE the translated paragraph when target_first=False
+        (source first, target after), otherwise AFTER it.
+      - Process paragraphs in *descending* para_index order so insertions do
+        not shift the positions of paragraphs yet to be processed.
+
+    Strategy for headers/footers / textboxes:
+      - Use extras_original saved during translation to obtain source text.
+      - Insert a styled source paragraph after (or before) the translated text.
+    """
+    from docx.text.paragraph import Paragraph
+    from docx.shared import RGBColor
+
+    _SOURCE_COLOR_MAP = {
+        "gray": RGBColor(0x80, 0x80, 0x80),
+        "red": RGBColor(0xFF, 0x00, 0x00),
+        "blue": RGBColor(0x00, 0x00, 0xFF),
+        "green": RGBColor(0x00, 0x80, 0x00),
+        "orange": RGBColor(0xFF, 0xA5, 0x00),
+        "black": RGBColor(0x00, 0x00, 0x00),
+    }
+    _resolved_color = _SOURCE_COLOR_MAP.get(source_text_color) if source_text_color else None
+
+    def _apply_target_style(para: Paragraph) -> None:
+        """Apply target-text style (italic/color) to all runs in a paragraph."""
+        if not para:
+            return
+        _target_color = None
+        if target_text_color:
+            _target_color = _SOURCE_COLOR_MAP.get(target_text_color)
+        for run in para.runs:
+            if target_text_italic:
+                run.italic = True
+            if _target_color:
+                try:
+                    run.font.color.rgb = _target_color
+                except Exception:
+                    pass
+
+    def _copy_source_format(src_para: Paragraph, dst_para: Paragraph) -> None:
+        """Copy font/bold/italic/size from src_para runs to dst_para runs.
+        Only overrides color when a non-default color was explicitly chosen.
+        """
+        for src_run, dst_run in zip(src_para.runs, dst_para.runs):
+            try:
+                if src_run.font.name:
+                    dst_run.font.name = src_run.font.name
+                if src_run.bold is not None:
+                    dst_run.bold = src_run.bold
+                if src_run.font.size:
+                    dst_run.font.size = src_run.font.size
+                # Preserve italic from original; do not override with source_text_italic
+                if src_run.italic is not None:
+                    dst_run.italic = src_run.italic
+                # Color: if user chose a non-default color, override; else keep original
+                if _resolved_color:
+                    dst_run.font.color.rgb = _resolved_color
+                elif src_run.font.color and src_run.font.color.rgb:
+                    dst_run.font.color.rgb = src_run.font.color.rgb
+            except Exception:
+                pass
+
+    # ------------------------------------------------------------------
+    # 1. Body paragraphs + table cells (from translation_segments)
+    # ------------------------------------------------------------------
+    para_key_to_sources: Dict[Tuple, List[str]] = {}
+    para_key_to_element: Dict[Tuple, Paragraph] = {}
+
+    for segment_index, segment_data in segment_data_map.items():
+        # Skip excluded or failed segments: emit target only, no bilingual
+        is_excluded = segment_data.get("is_excluded", False)
+        is_failed = segment_data.get("is_failed", False)
+        if is_excluded or is_failed:
+            continue
+
+        seg_info = segment_data.get("segment_info", {})
+        source_text = segment_data.get("source_text", "")
+        if not source_text or not source_text.strip():
+            continue
+
+        is_table_cell = seg_info.get("is_table_cell", False)
+        table_idx = seg_info.get("table_index")
+        row_idx = seg_info.get("row_index")
+        cell_idx = seg_info.get("cell_index")
+        cell_local_idx = seg_info.get("cell_local_idx", 0)
+        para_index = seg_info.get("para_index")
+
+        if is_table_cell and table_idx is not None and row_idx is not None and cell_idx is not None:
+            para_key = (True, table_idx, row_idx, cell_idx, cell_local_idx)
+        else:
+            if para_index is not None:
+                para_key = (False, None, None, None, para_index)
+            else:
+                continue
+
+        element = para_index_map.get(para_key)
+        if element is None:
+            logger.debug(
+                LogModule.RESTOR,
+                f"[BILINGUAL-DOCX] Could not locate paragraph for segment {segment_index}, key={para_key}"
+            )
+            continue
+
+        para_key_to_element[para_key] = element
+        para_key_to_sources.setdefault(para_key, []).append(source_text)
+
+    inserted_count = 0
+
+    if para_key_to_sources:
+        # Process in descending order so earlier insertions do not affect later ones
+        sorted_para_keys = sorted(para_key_to_sources.keys(), reverse=True)
+
+        for para_key in sorted_para_keys:
+            sources = para_key_to_sources[para_key]
+            if not sources:
+                continue
+
+            combined_source = " ".join(s.strip() for s in sources if s.strip())
+            if not combined_source:
+                continue
+
+            element = para_key_to_element.get(para_key)
+            if element is None:
+                continue
+
+            try:
+                parent = element._element.getparent()
+                if parent is None:
+                    continue
+
+                new_para = doc.add_paragraph(combined_source)
+                _copy_source_format(element, new_para)
+
+                # target_first=False -> source should come BEFORE target
+                # target_first=True  -> source should come AFTER target
+                if target_first:
+                    element._element.addnext(new_para._element)
+                else:
+                    element._element.addprevious(new_para._element)
+
+                _apply_target_style(element)
+                inserted_count += 1
+            except Exception as e:
+                logger.warning(
+                    LogModule.RESTOR,
+                    f"[BILINGUAL-DOCX] Failed to insert source paragraph for key={para_key}: {e}"
+                )
+
+    # ------------------------------------------------------------------
+    # 2. Headers / footers
+    # ------------------------------------------------------------------
+    if extras_original:
+        hf_items = extras_original.get("headers_footers", [])
+        if hf_items:
+            for idx, section in enumerate(doc.sections):
+                for name, part in (("header", section.header), ("footer", section.footer)):
+                    key = (name, idx)
+                    # Find the matching original text
+                    original_text = None
+                    for item in hf_items:
+                        if not isinstance(item, (list, tuple)) or len(item) != 2:
+                            continue
+                        k, text = item
+                        if _normalize_key(k) == key and text and text.strip():
+                            original_text = text
+                            break
+                    if not original_text:
+                        continue
+
+                    try:
+                        if part.paragraphs:
+                            target_para = part.paragraphs[0]
+                            new_para = part.add_paragraph(original_text)
+                            _copy_source_format(target_para, new_para)
+
+                            if target_first:
+                                target_para._element.addnext(new_para._element)
+                            else:
+                                target_para._element.addprevious(new_para._element)
+
+                            _apply_target_style(target_para)
+                            inserted_count += 1
+                    except Exception as e:
+                        logger.warning(
+                            LogModule.RESTOR,
+                            f"[BILINGUAL-DOCX] Failed to insert bilingual header/footer for {key}: {e}"
+                        )
+
+    # ------------------------------------------------------------------
+    # 3. Textboxes / SDTs
+    # ------------------------------------------------------------------
+        raw_tb_items = extras_original.get("textboxes_sdts", [])
+        # Parse string items back to (key, text) tuples — task state data may have
+        # been serialized/deserialized, converting tuples to string representations.
+        tb_items = []
+        for item in raw_tb_items:
+            if isinstance(item, str):
+                try:
+                    parsed = ast.literal_eval(item)
+                    if isinstance(parsed, (list, tuple)) and len(parsed) >= 2:
+                        tb_items.append(parsed)
+                    else:
+                        logger.warning(
+                            LogModule.RESTOR,
+                            f"[BILINGUAL-DOCX] String item not a valid pair: {item[:120]!r}"
+                        )
+                except Exception:
+                    logger.warning(
+                        LogModule.RESTOR,
+                        f"[BILINGUAL-DOCX] Failed to parse string item: {item[:120]!r}"
+                    )
+            else:
+                tb_items.append(item)
+        logger.info(
+            LogModule.RESTOR,
+            f"[BILINGUAL-DOCX] Textbox/SDT section: extras_original has textboxes_sdts={bool(raw_tb_items)}, "
+            f"count={len(raw_tb_items)}, parsed={len(tb_items)} items"
+        )
+        if tb_items:
+            # Log what keys are available
+            keys_found = [_normalize_key(item[0]) if isinstance(item, (list, tuple)) and len(item) >= 2 else f"BAD:{type(item).__name__}:{item!r}" for item in tb_items]
+            logger.info(
+                LogModule.RESTOR,
+                f"[BILINGUAL-DOCX] Textbox/SDT keys in tb_items: {keys_found}"
+            )
+            # Locate textbox containers in document XML
+            try:
+                from lxml import etree
+                nsmap = doc._element.nsmap
+                # Search all w:txbxContent and legacy v:textbox nodes
+                txbx_nodes = doc._element.xpath('.//*[local-name()="txbxContent"]')
+                pict_nodes = doc._element.xpath('.//*[local-name()="pict"]//*[local-name()="textbox"]')
+                all_containers = txbx_nodes + pict_nodes
+
+                # Also include drawing elements with text (same iteration order as extraction)
+                drawing_nodes = doc._element.xpath('.//*[local-name()="drawing"]')
+                for drawing in drawing_nodes:
+                    text_elements = drawing.xpath('.//*[local-name()="t"]')
+                    if text_elements:
+                        all_containers.append(drawing)
+
+                logger.info(
+                    LogModule.RESTOR,
+                    f"[BILINGUAL-DOCX] Found {len(txbx_nodes)} txbxContent nodes, {len(pict_nodes)} pict/textbox nodes, "
+                    f"{len(drawing_nodes)} drawing nodes -> {len(all_containers)} total containers"
+                )
+
+                container_idx = 0
+                for container in all_containers:
+                    key = ("textbox", container_idx)
+                    # Try to match with saved original text
+                    original_text = None
+                    for item in tb_items:
+                        if not isinstance(item, (list, tuple)) or len(item) != 2:
+                            continue
+                        k, text = item
+                        if _normalize_key(k) == key and text and text.strip():
+                            original_text = text
+                            break
+
+                    container_idx += 1
+
+                    logger.info(
+                        LogModule.RESTOR,
+                        f"[BILINGUAL-DOCX] Textbox container {container_idx - 1}: key={key}, match_found={original_text is not None}"
+                    )
+
+                    if not original_text:
+                        continue
+
+                    # Find first paragraph inside this container
+                    para_elems = container.xpath('.//*[local-name()="p"]')
+                    logger.info(
+                        LogModule.RESTOR,
+                        f"[BILINGUAL-DOCX] Textbox {key}: {len(para_elems)} paragraph(s) found in container"
+                    )
+                    if para_elems:
+                        try:
+                            target_para = Paragraph(para_elems[0], None)
+                            new_para = doc.add_paragraph(original_text)
+                            _copy_source_format(target_para, new_para)
+
+                            if target_first:
+                                target_para._element.addnext(new_para._element)
+                            else:
+                                target_para._element.addprevious(new_para._element)
+
+                            _apply_target_style(target_para)
+                            inserted_count += 1
+                            logger.info(
+                                LogModule.RESTOR,
+                                f"[BILINGUAL-DOCX] Successfully inserted bilingual textbox for {key}"
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                LogModule.RESTOR,
+                                f"[BILINGUAL-DOCX] Failed to insert bilingual textbox for {key}: {e}"
+                            )
+
+                # Handle SDTs
+                sdt_elems = doc._element.body.xpath('.//*[local-name()="sdt"]')
+                logger.info(
+                    LogModule.RESTOR,
+                    f"[BILINGUAL-DOCX] SDT section: found {len(sdt_elems)} body SDT elements"
+                )
+                sdt_index = 0
+                for sdt in sdt_elems:
+                    parent_sdt = sdt.xpath('./ancestor::*[local-name()="sdt"]')
+                    if parent_sdt:
+                        continue
+
+                    # Try sdt_content keys
+                    for sub_idx in range(10):  # reasonable upper bound
+                        key = ("sdt_content", sdt_index, sub_idx)
+                        original_text = None
+                        for item in tb_items:
+                            if not isinstance(item, (list, tuple)) or len(item) != 2:
+                                continue
+                            k, text = item
+                            if _normalize_key(k) == key and text and text.strip():
+                                original_text = text
+                                break
+                        if not original_text:
+                            continue
+
+                        sdt_contents = sdt.xpath('.//*[local-name()="sdtContent"]')
+                        if sub_idx < len(sdt_contents):
+                            para_elems = sdt_contents[sub_idx].xpath('.//*[local-name()="p"]')
+                            if para_elems:
+                                try:
+                                    target_para = Paragraph(para_elems[0], None)
+                                    new_para = doc.add_paragraph(original_text)
+                                    _copy_source_format(target_para, new_para)
+
+                                    if target_first:
+                                        target_para._element.addnext(new_para._element)
+                                    else:
+                                        target_para._element.addprevious(new_para._element)
+
+                                    _apply_target_style(target_para)
+                                    inserted_count += 1
+                                except Exception as e:
+                                    logger.warning(
+                                        LogModule.RESTOR,
+                                        f"[BILINGUAL-DOCX] Failed to insert bilingual SDT for {key}: {e}"
+                                    )
+
+                    # Try direct sdt key
+                    key = ("sdt", sdt_index)
+                    original_text = None
+                    for item in tb_items:
+                        if not isinstance(item, (list, tuple)) or len(item) != 2:
+                            continue
+                        k, text = item
+                        if _normalize_key(k) == key and text and text.strip():
+                            original_text = text
+                            break
+                    if original_text:
+                        para_elems = sdt.xpath('.//*[local-name()="p"]')
+                        if para_elems:
+                            try:
+                                target_para = Paragraph(para_elems[0], None)
+                                new_para = doc.add_paragraph(original_text)
+                                _copy_source_format(target_para, new_para)
+
+                                if target_first:
+                                    target_para._element.addnext(new_para._element)
+                                else:
+                                    target_para._element.addprevious(new_para._element)
+
+                                _apply_target_style(target_para)
+                                inserted_count += 1
+                            except Exception as e:
+                                logger.warning(
+                                    LogModule.RESTOR,
+                                    f"[BILINGUAL-DOCX] Failed to insert bilingual SDT for {key}: {e}"
+                                )
+
+                    # Try sdt_child keys — iterate child SDTs inside this parent
+                    child_sdts = sdt.xpath('.//*[local-name()="sdt"]')
+                    for child_idx, child_sdt in enumerate(child_sdts):
+                        key = ("sdt_child", sdt_index, child_idx)
+                        original_text = None
+                        for item in tb_items:
+                            if not isinstance(item, (list, tuple)) or len(item) != 2:
+                                continue
+                            k, text = item
+                            if _normalize_key(k) == key and text and text.strip():
+                                original_text = text
+                                break
+                        if not original_text:
+                            continue
+                        para_elems = child_sdt.xpath('.//*[local-name()="p"]')
+                        if para_elems:
+                            try:
+                                target_para = Paragraph(para_elems[0], None)
+                                new_para = doc.add_paragraph(original_text)
+                                _copy_source_format(target_para, new_para)
+
+                                if target_first:
+                                    target_para._element.addnext(new_para._element)
+                                else:
+                                    target_para._element.addprevious(new_para._element)
+
+                                _apply_target_style(target_para)
+                                inserted_count += 1
+                            except Exception as e:
+                                logger.warning(
+                                    LogModule.RESTOR,
+                                    f"[BILINGUAL-DOCX] Failed to insert bilingual SDT child for {key}: {e}"
+                                )
+
+                    sdt_index += 1
+            except Exception as e:
+                logger.warning(
+                    LogModule.RESTOR,
+                    f"[BILINGUAL-DOCX] Failed to process textbox/SDT bilingual insertion: {e}"
+                )
+
+    logger.info(
+        LogModule.RESTOR,
+        f"[BILINGUAL-DOCX] Inserted {inserted_count} source paragraphs (target_first={target_first})"
+    )

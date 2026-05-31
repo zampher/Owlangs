@@ -24,18 +24,24 @@ class TranslationResultExportService {
     String? tableFormat,
     String? equationFormat,
     bool? embedImages,
+    bool? bilingualExport,
+    String? bilingualOrder,
+    bool? sourceTextItalic,
+    String? sourceTextColor,
+    bool? targetTextItalic,
+    String? targetTextColor,
   }) {
     final svc = TranslationService();
     String downloadUrl = svc.buildDownloadUrl(taskId, fileType);
+
+    final uri = Uri.parse(downloadUrl);
+    final queryParams = Map<String, String>.from(uri.queryParameters);
 
     // Add format parameters as query parameters for MD, HTML, DOCX, PDF
     if (fileType == 'md' ||
         fileType == 'html' ||
         fileType == 'docx' ||
         fileType == 'pdf') {
-      final uri = Uri.parse(downloadUrl);
-      final queryParams = Map<String, String>.from(uri.queryParameters);
-
       // Add table format parameter if selected
       if (tableFormat != null) {
         queryParams['table_body_format'] = tableFormat;
@@ -50,10 +56,30 @@ class TranslationResultExportService {
       if (fileType == 'md' && embedImages != null) {
         queryParams['embed_images'] = embedImages.toString();
       }
-
-      // Rebuild URI with query parameters
-      downloadUrl = uri.replace(queryParameters: queryParams).toString();
     }
+
+    // Bilingual parameters apply to all supported formats
+    if (bilingualExport != null) {
+      queryParams['bilingual_export'] = bilingualExport.toString();
+    }
+    if (bilingualOrder != null) {
+      queryParams['bilingual_order'] = bilingualOrder;
+    }
+    if (sourceTextItalic != null) {
+      queryParams['source_text_italic'] = sourceTextItalic.toString();
+    }
+    if (sourceTextColor != null) {
+      queryParams['source_text_color'] = sourceTextColor;
+    }
+    if (targetTextItalic != null) {
+      queryParams['target_text_italic'] = targetTextItalic.toString();
+    }
+    if (targetTextColor != null) {
+      queryParams['target_text_color'] = targetTextColor;
+    }
+
+    // Rebuild URI with query parameters
+    downloadUrl = uri.replace(queryParameters: queryParams).toString();
 
     return downloadUrl;
   }
@@ -64,6 +90,12 @@ class TranslationResultExportService {
     String? tableFormat,
     String? equationFormat,
     bool? embedImages,
+    bool? bilingualExport,
+    String? bilingualOrder,
+    bool? sourceTextItalic,
+    String? sourceTextColor,
+    bool? targetTextItalic,
+    String? targetTextColor,
   }) async {
     try {
       final svc = TranslationService();
@@ -72,6 +104,12 @@ class TranslationResultExportService {
         tableFormat: tableFormat,
         equationFormat: equationFormat,
         embedImages: embedImages,
+        bilingualExport: bilingualExport,
+        bilingualOrder: bilingualOrder,
+        sourceTextItalic: sourceTextItalic,
+        sourceTextColor: sourceTextColor,
+        targetTextItalic: targetTextItalic,
+        targetTextColor: targetTextColor,
       );
 
       AppLogger.log(

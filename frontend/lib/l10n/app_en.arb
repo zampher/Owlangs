@@ -162,6 +162,26 @@
   "translationExportEquationFormatImage": "Image",
   "translationExportEquationFormatLatex": "LaTeX",
 
+  "translationExportBilingualExport": "Bilingual Export",
+  "translationExportBilingualOrderTargetAfter": "Target After Source",
+  "translationExportBilingualOrderTargetAfterSub": "Source first, target after",
+  "translationExportBilingualOrderTargetBefore": "Target Before Source",
+  "translationExportBilingualOrderTargetBeforeSub": "Target first, source after",
+  "translationExportSourceTextItalic": "Source text italic",
+  "translationExportSourceTextColor": "Source text color:",
+  "translationExportTargetTextItalic": "Target text italic",
+  "translationExportTargetTextColor": "Target text color:",
+  "translationExportColorDefault": "Default",
+  "translationExportColorGray": "Gray",
+  "translationExportColorBlue": "Blue",
+  "translationExportColorRed": "Red",
+  "translationExportColorGreen": "Green",
+  "translationExportColorOrange": "Orange",
+  "translationExportColorBlack": "Black",
+
+  "translationExportMdEmbeddedImages": "MD (Embedded Images)",
+  "translationExportMdWithImagesFolder": "MD (With Images Folder)",
+
   "translationLeftPanelExpandTooltip": "Expand left panel",
   "translationLeftPanelCollapseTooltip": "Collapse left panel",
 

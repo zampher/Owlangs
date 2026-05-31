@@ -485,6 +485,60 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationExportEquationFormatLatex => 'LaTeX';
 
   @override
+  String get translationExportBilingualExport => '双语导出';
+
+  @override
+  String get translationExportBilingualOrderTargetAfter => '译文在后';
+
+  @override
+  String get translationExportBilingualOrderTargetAfterSub => '原文在前，译文在后';
+
+  @override
+  String get translationExportBilingualOrderTargetBefore => '译文在前';
+
+  @override
+  String get translationExportBilingualOrderTargetBeforeSub => '译文在前，原文在后';
+
+  @override
+  String get translationExportSourceTextItalic => '原文斜体';
+
+  @override
+  String get translationExportSourceTextColor => '原文颜色：';
+
+  @override
+  String get translationExportTargetTextItalic => '译文斜体';
+
+  @override
+  String get translationExportTargetTextColor => '译文颜色：';
+
+  @override
+  String get translationExportColorDefault => '默认';
+
+  @override
+  String get translationExportColorGray => '灰色';
+
+  @override
+  String get translationExportColorBlue => '蓝色';
+
+  @override
+  String get translationExportColorRed => '红色';
+
+  @override
+  String get translationExportColorGreen => '绿色';
+
+  @override
+  String get translationExportColorOrange => '橙色';
+
+  @override
+  String get translationExportColorBlack => '黑色';
+
+  @override
+  String get translationExportMdEmbeddedImages => 'MD（嵌入图片）';
+
+  @override
+  String get translationExportMdWithImagesFolder => 'MD（图片文件夹）';
+
+  @override
   String get translationLeftPanelExpandTooltip => '展开左侧面板';
 
   @override

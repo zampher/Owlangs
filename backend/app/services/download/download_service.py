@@ -348,6 +348,49 @@ def _resolve_export_format_settings(
     return eq, tbl
 
 
+def _resolve_bilingual_settings(
+    task_state: Dict[str, Any],
+    payload: Any = None,
+    bilingual_export: Optional[bool] = None,
+    bilingual_order: Optional[str] = None,
+    source_text_italic: Optional[bool] = None,
+    source_text_color: Optional[str] = None,
+    target_text_italic: Optional[bool] = None,
+    target_text_color: Optional[str] = None,
+) -> Tuple[bool, bool, bool, str, bool, Optional[str]]:
+    """Return normalized (bilingual_enabled, target_first, source_text_italic, source_text_color, target_text_italic, target_text_color) for export.
+
+    Resolution order: explicit query param -> task_state -> payload -> defaults.
+    """
+    from utils.bilingual_export_utils import get_bilingual_config
+
+    # If explicit query params are provided, use them directly
+    if bilingual_export is not None:
+        enabled = bool(bilingual_export)
+        if bilingual_order is not None:
+            target_first = str(bilingual_order).lower() == "target_before_source"
+        else:
+            target_first = False
+    else:
+        # Default to non-bilingual when not explicitly specified
+        enabled = False
+        target_first = False
+
+    # Resolve source text style
+    italic = source_text_italic if source_text_italic is not None else task_state.get("source_text_italic", False)
+    color = source_text_color if source_text_color is not None else task_state.get("source_text_color")
+    if color and str(color).strip().lower() not in ("gray", "blue", "red", "green", "orange", "black"):
+        color = None
+
+    # Resolve target text style
+    target_italic = target_text_italic if target_text_italic is not None else task_state.get("target_text_italic", True)
+    target_color = target_text_color if target_text_color is not None else task_state.get("target_text_color", "gray")
+    if target_color and str(target_color).strip().lower() not in ("gray", "blue", "red", "green", "orange", "black"):
+        target_color = None
+
+    return enabled, target_first, bool(italic), str(color).strip().lower(), bool(target_italic), (str(target_color).strip().lower() if target_color else None)
+
+
 def _format_requires_md2docx(equation_format: str, table_body_format: str) -> bool:
     return equation_format == "image" or table_body_format == "image"
 
@@ -1117,6 +1160,12 @@ class DownloadService:
         equation_format: Optional[str] = None,
         embed_images: Optional[bool] = None,
         ebook_engine: Optional[str] = None,
+        bilingual_export: Optional[bool] = None,
+        bilingual_order: Optional[str] = None,
+        source_text_italic: Optional[bool] = None,
+        source_text_color: Optional[str] = None,
+        target_text_italic: Optional[bool] = None,
+        target_text_color: Optional[str] = None,
     ) -> FileResponse:
         """
         Download translation result file.
@@ -1171,6 +1220,24 @@ class DownloadService:
         equation_format, table_body_format = _resolve_export_format_settings(
             task_state, payload, equation_format, table_body_format
         )
+
+        # Resolve bilingual settings from query params -> task_state -> payload
+        bilingual_enabled, target_first, source_italic, source_color, target_italic, target_color = _resolve_bilingual_settings(
+            task_state, payload, bilingual_export, bilingual_order, source_text_italic, source_text_color, target_text_italic, target_text_color
+        )
+        # Store into task_state so downstream rebuild helpers can read it consistently
+        if bilingual_export is not None:
+            task_state["bilingual_export"] = bilingual_export
+        if bilingual_order is not None:
+            task_state["bilingual_order"] = bilingual_order
+        if source_text_italic is not None:
+            task_state["source_text_italic"] = source_text_italic
+        if source_text_color is not None:
+            task_state["source_text_color"] = source_text_color
+        if target_text_italic is not None:
+            task_state["target_text_italic"] = target_text_italic
+        if target_text_color is not None:
+            task_state["target_text_color"] = target_text_color
 
         # Generate missing file on-demand if not in downloadable_files
         downloadable_files = task_state.get("downloadable_files", {})
@@ -1496,6 +1563,8 @@ class DownloadService:
                                     file_stem=task_state.get("original_filename_stem"),
                                     equation_format=eq_format,
                                     table_body_format=table_format,
+                                    bilingual_export=bilingual_enabled,
+                                    target_first=target_first,
                                 )
                                 
                                 if rebuilt_doc and hasattr(rebuilt_doc, 'content'):
@@ -1625,6 +1694,8 @@ class DownloadService:
                                 file_stem=task_state.get("original_filename_stem"),
                                 equation_format=eq_format,
                                 table_body_format=table_format,
+                                bilingual_export=bilingual_enabled,
+                                target_first=target_first,
                             )
                         
                             if not rebuilt_doc:
@@ -2448,13 +2519,22 @@ class DownloadService:
                 logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to regenerate from layout_document with format parameters: {e}, falling back to normal flow", exc_info=True)
                 should_regenerate_from_layout = False
     
-        # If requesting Markdown, DOCX, or HTML (markdown workflow) rebuild regardless of revision status.
+        # If requesting Markdown, DOCX, or HTML rebuild regardless of revision status.
         # HTML is included so that table_body_format / equation_format are applied to the rebuild.
+        # html/epub/mobi workflows also route through markdown rebuild for md/docx/html exports.
         if (
-            workflow_type == "markdown_based"
+            workflow_type in {"markdown_based", "html", "epub", "mobi"}
             and file_type in {"md", "docx", "html"}
             and task_state.get("translation_segments", {}).get("segments")
         ):
+            has_revisions = True
+
+        # Bilingual export for TXT/SRT/DOCX/HTML/EPUB/MOBI requires segment rebuild to interleave source/target text.
+        if bilingual_enabled and workflow_type in ("txt", "srt", "docx", "html", "epub", "mobi", "pptx", "xlsx") and task_state.get("translation_segments", {}).get("segments"):
+            logger.info(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Bilingual export enabled for {workflow_type} workflow, forcing segment rebuild",
+            )
             has_revisions = True
     
         # If there are revisions (or forced for md), rebuild the document and regenerate the file
@@ -2462,14 +2542,16 @@ class DownloadService:
             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Found revised segments for task {task_id}, rebuilding {file_type} file with revisions")
         
             try:
-                # Rebuild based on workflow type
-                if workflow_type == "markdown_based":
+                # Rebuild based on workflow type (markdown_based, html, epub, mobi all use markdown rebuild)
+                if workflow_type in ("markdown_based", "html", "epub", "mobi"):
                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Starting rebuild for markdown_based workflow")
                     rebuilt_doc = rebuild_markdown_document_from_segments(
                         task_state,
                         file_stem=task_state.get("original_filename_stem"),
                         equation_format=equation_format,
                         table_body_format=table_body_format,
+                        bilingual_export=bilingual_enabled,
+                        target_first=target_first,
                     )
                 
                     if rebuilt_doc:
@@ -2900,6 +2982,63 @@ class DownloadService:
                                 table_body_format,
                             )
                     
+                        elif file_type in ("epub", "mobi") and bilingual_enabled:
+                            # Export bilingual MD as EPUB/MOBI via Pandoc
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Exporting bilingual {file_type} from rebuilt markdown for task {task_id}",
+                            )
+                            md_content = workflow.export_to_markdown()
+                            if md_content:
+                                if isinstance(md_content, bytes):
+                                    md_content = md_content.decode("utf-8", errors="replace")
+                                try:
+                                    from utils.format_convert_utils import _get_pandoc_path
+                                    pandoc_path = _get_pandoc_path()
+                                    if pandoc_path:
+                                        md_temp = tempfile.NamedTemporaryFile(
+                                            mode="w", suffix=".md", delete=False, encoding="utf-8"
+                                        )
+                                        md_temp.write(md_content)
+                                        md_temp.close()
+                                        out_temp = tempfile.NamedTemporaryFile(
+                                            mode="wb", suffix=f".{file_type}", delete=False
+                                        )
+                                        out_temp.close()
+                                        import subprocess
+                                        result = subprocess.run(
+                                            [str(pandoc_path), md_temp.name, "-o", out_temp.name],
+                                            capture_output=True, text=True, timeout=300,
+                                        )
+                                        if result.returncode == 0 and os.path.getsize(out_temp.name) > 0:
+                                            filename = f"{file_stem}_translated.{file_type}"
+                                            media_type = MEDIA_TYPES.get(file_type, "application/octet-stream")
+                                            logger.info(
+                                                LogModule.EXPORT,
+                                                f"[DOWNLOAD] Generated bilingual {file_type} via Pandoc "
+                                                f"(size={os.path.getsize(out_temp.name)} bytes)",
+                                            )
+                                            return FileResponse(
+                                                path=out_temp.name, media_type=media_type, filename=filename
+                                            )
+                                        else:
+                                            logger.warning(
+                                                LogModule.EXPORT,
+                                                f"[DOWNLOAD] Pandoc {file_type} conversion failed: "
+                                                f"returncode={result.returncode}, stderr={result.stderr[:200]}",
+                                            )
+                                except Exception as e:
+                                    logger.warning(
+                                        LogModule.EXPORT,
+                                        f"[DOWNLOAD] Pandoc {file_type} conversion failed: {e}",
+                                        exc_info=True,
+                                    )
+                            logger.warning(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Bilingual {file_type} export failed for task {task_id}, falling back",
+                            )
+                            has_revisions = False
+
                         else:
                             # For unsupported file types with revisions, fall back to original
                             logger.warning(LogModule.EXPORT, f"File type {file_type} not supported for revision rebuild, using original file")
@@ -2960,7 +3099,16 @@ class DownloadService:
                             # CRITICAL: Always rebuild DOCX document from segments to ensure latest user edits are included
                             # This ensures that any frontend modifications are applied, even if modified flag is not set
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Rebuilding DOCX document from segments for task {task_id} to ensure latest edits are included")
-                            rebuilt_doc = rebuild_docx_document_from_segments(task_state, translated_doc)
+                            rebuilt_doc = rebuild_docx_document_from_segments(
+                                task_state,
+                                translated_doc,
+                                bilingual_export=bilingual_enabled,
+                                target_first=target_first,
+                                source_text_italic=source_italic,
+                                source_text_color=source_color,
+                                target_text_italic=target_italic,
+                                target_text_color=target_color,
+                            )
                         except Exception as rebuild_error:
                             logger.error(LogModule.EXPORT, f"Failed to rebuild DOCX document from segments for task {task_id}: {rebuild_error}", exc_info=True)
                             has_revisions = False
@@ -3160,6 +3308,82 @@ class DownloadService:
                     else:
                         logger.warning(LogModule.EXPORT, f"Original file not found for DOCX rebuild, using original file")
                         has_revisions = False
+                elif workflow_type == "txt" and bilingual_enabled:
+                    # Rebuild TXT from segments with bilingual interleaving
+                    from utils.bilingual_export_utils import rebuild_bilingual_plain_text_from_segments
+                    rebuilt_text = rebuild_bilingual_plain_text_from_segments(
+                        task_state, target_first=target_first
+                    )
+                    if rebuilt_text:
+                        temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8')
+                        temp_file.write(rebuilt_text)
+                        temp_file.close()
+                        file_stem = task_state.get("original_filename_stem", "rebuilt")
+                        filename = f"{file_stem}_translated.txt"
+                        media_type = MEDIA_TYPES.get(file_type, "text/plain; charset=utf-8")
+                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual TXT file: {temp_file.name}")
+                        return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                    else:
+                        logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Bilingual TXT rebuild produced empty content, falling back")
+                        has_revisions = False
+                
+                elif workflow_type == "srt" and bilingual_enabled:
+                    # Rebuild SRT from segments with bilingual interleaving
+                    from utils.bilingual_export_utils import rebuild_bilingual_srt_from_segments
+                    rebuilt_srt = rebuild_bilingual_srt_from_segments(
+                        task_state, target_first=target_first
+                    )
+                    if rebuilt_srt:
+                        temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.srt', delete=False, encoding='utf-8')
+                        temp_file.write(rebuilt_srt)
+                        temp_file.close()
+                        file_stem = task_state.get("original_filename_stem", "rebuilt")
+                        filename = f"{file_stem}_translated.srt"
+                        media_type = MEDIA_TYPES.get(file_type, "text/plain; charset=utf-8")
+                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual SRT file: {temp_file.name}")
+                        return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                    else:
+                        logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Bilingual SRT rebuild produced empty content, falling back")
+                        has_revisions = False
+
+                elif workflow_type == "pptx":
+                    logger.info(LogModule.EXPORT, f"[DOWNLOAD] Rebuilding bilingual PPTX from segments")
+                    from utils.bilingual_export_utils import rebuild_bilingual_pptx_from_segments
+                    rebuilt_bytes = rebuild_bilingual_pptx_from_segments(
+                        task_state, target_first=target_first,
+                    )
+                    if rebuilt_bytes:
+                        temp_file = tempfile.NamedTemporaryFile(suffix='.pptx', delete=False)
+                        temp_file.write(rebuilt_bytes)
+                        temp_file.close()
+                        file_stem = task_state.get("original_filename_stem", "rebuilt")
+                        filename = f"{file_stem}_translated.pptx"
+                        media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.presentationml.presentation")
+                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual PPTX file: {temp_file.name}")
+                        return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                    else:
+                        logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Bilingual PPTX rebuild produced empty content, falling back")
+                        has_revisions = False
+
+                elif workflow_type == "xlsx":
+                    logger.info(LogModule.EXPORT, f"[DOWNLOAD] Rebuilding bilingual XLSX from segments")
+                    from utils.bilingual_export_utils import rebuild_bilingual_xlsx_from_segments
+                    rebuilt_bytes = rebuild_bilingual_xlsx_from_segments(
+                        task_state, target_first=target_first,
+                    )
+                    if rebuilt_bytes:
+                        temp_file = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
+                        temp_file.write(rebuilt_bytes)
+                        temp_file.close()
+                        file_stem = task_state.get("original_filename_stem", "rebuilt")
+                        filename = f"{file_stem}_translated.xlsx"
+                        media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual XLSX file: {temp_file.name}")
+                        return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                    else:
+                        logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Bilingual XLSX rebuild produced empty content, falling back")
+                        has_revisions = False
+
                 else:
                     # Other workflow types - not yet implemented for revision rebuild
                     logger.info(LogModule.EXPORT, f"Revision rebuild not yet implemented for workflow type: {workflow_type}, using original file")
@@ -3217,6 +3441,8 @@ class DownloadService:
                             file_stem=task_state.get("original_filename_stem"),
                             equation_format=equation_format,
                             table_body_format=table_body_format,
+                            bilingual_export=bilingual_enabled,
+                            target_first=target_first,
                         )
                         if rebuilt_doc and getattr(rebuilt_doc, "content", None):
                             raw = rebuilt_doc.content

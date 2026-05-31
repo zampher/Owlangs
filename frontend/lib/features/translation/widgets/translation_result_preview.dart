@@ -5075,18 +5075,20 @@ class _TranslationResultPreviewState
       return;
     }
 
+    final l10n = AppLocalizations.of(context)!;
+
     // Build download options (for MD, always offer embedded and with-images variants)
     final List<Map<String, dynamic>> downloadOptions = <Map<String, dynamic>>[];
     for (final String format in availableFormats) {
       if (format == 'md') {
         downloadOptions.add(<String, dynamic>{
           'type': 'md',
-          'label': 'MD (Embedded Images)',
+          'label': l10n.translationExportMdEmbeddedImages,
           'embedImages': true,
         });
         downloadOptions.add(<String, dynamic>{
           'type': 'md',
-          'label': 'MD (With Images Folder)',
+          'label': l10n.translationExportMdWithImagesFolder,
           'embedImages': false,
         });
       } else if (format == 'epub' || format == 'mobi') {
@@ -5116,7 +5118,28 @@ class _TranslationResultPreviewState
     final bool showFormatOptions =
         isPdfWorkflow && (hasTables || hasInterlineEquations);
 
-    final l10n = AppLocalizations.of(context)!;
+    // Determine whether bilingual export option should be shown
+    final bool supportsBilingual = <String>{
+      'markdown_based',
+      'txt',
+      'html',
+      'srt',
+      'epub',
+      'mobi',
+      'docx',
+      'pptx',
+      'xlsx',
+    }.contains(resolvedWorkflowType);
+
+    final List<Map<String, dynamic>> _colorOptions = [
+      {'value': '', 'color': Colors.transparent, 'label': l10n.translationExportColorDefault},
+      {'value': 'gray', 'color': Colors.grey, 'label': l10n.translationExportColorGray},
+      {'value': 'blue', 'color': Colors.blue, 'label': l10n.translationExportColorBlue},
+      {'value': 'red', 'color': Colors.red, 'label': l10n.translationExportColorRed},
+      {'value': 'green', 'color': Colors.green, 'label': l10n.translationExportColorGreen},
+      {'value': 'orange', 'color': Colors.orange, 'label': l10n.translationExportColorOrange},
+      {'value': 'black', 'color': Colors.black, 'label': l10n.translationExportColorBlack},
+    ];
 
     DialogHelper.showGeneralDialog(
       context: context,
@@ -5138,17 +5161,36 @@ class _TranslationResultPreviewState
               formatSettings.getTableFormat(isPdfWorkflow: isPdfWorkflow);
           String equationFormat =
               formatSettings.getEquationFormat(isPdfWorkflow: isPdfWorkflow);
+          bool bilingualExport = formatSettings.bilingualExport ?? false;
+          String bilingualOrder =
+              formatSettings.bilingualOrder ?? 'target_after_source';
+          bool sourceTextItalic = formatSettings.sourceTextItalic ?? false;
+          String sourceTextColor =
+              formatSettings.sourceTextColor ?? ''; // empty means default color
+          bool targetTextItalic = formatSettings.targetTextItalic ?? true;
+          String targetTextColor =
+              formatSettings.targetTextColor ?? 'gray';
 
           return StatefulBuilder(
             builder: (BuildContext context, setDialogState) => Material(
               type: MaterialType.transparency,
               child: AlertDialog(
                 title: Text(l10n.translationExportDialogTitle),
-                content: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                content: SizedBox(
+                  width: 720,
+                  height: 480,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      // Format options for PDF workflow (moved to top)
+                      // LEFT: Parameter options
+                      Expanded(
+                        flex: 3,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              // Format options for PDF workflow
                       if (showFormatOptions) ...<Widget>[
                         Text(
                           l10n.translationExportFormatOptionsTitle,
@@ -5294,61 +5336,330 @@ class _TranslationResultPreviewState
                         ],
                         const Divider(height: 24),
                       ],
-
-                      // Download format options (moved to bottom)
-                      ...downloadOptions.map((option) {
-                        final fileType = option['type'] as String;
-                        final label = option['label'] as String;
-                        final embedImages = option['embedImages'] as bool?;
-                        final ebookEngine = option['ebookEngine'] as String?;
-                        final downloadKey = embedImages != null
-                            ? '${fileType}_${embedImages ? 'embedded' : 'with_images'}'
-                            : (ebookEngine != null ? '${fileType}_$ebookEngine' : fileType);
-                        final isFormatDownloading =
-                            _downloading[downloadKey] ?? false;
-                        return ListTile(
-                          enabled: !isFormatDownloading,
-                          leading: isFormatDownloading
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : Icon(
-                                  _getFormatIcon(fileType),
-                                  color: Theme.of(context).colorScheme.primary,
+                      // Bilingual export options
+                      if (supportsBilingual) ...<Widget>[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: <Widget>[
+                            Checkbox(
+                              value: bilingualExport,
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setDialogState(() {
+                                    bilingualExport = value;
+                                  });
+                                  ref
+                                      .read(
+                                        formatSettingsProviderFamily(
+                                                _apiTaskId(),)
+                                            .notifier,
+                                      )
+                                      .setBilingualExport(value);
+                                }
+                              },
+                            ),
+                            Expanded(
+                              child: Text(
+                                l10n.translationExportBilingualExport,
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                        // Always show options, but disable when bilingual is off
+                        Opacity(
+                          opacity: bilingualExport ? 1.0 : 0.4,
+                          child: AbsorbPointer(
+                            absorbing: !bilingualExport,
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 32.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                RadioListTile<String>(
+                                  title: Text(l10n.translationExportBilingualOrderTargetAfter),
+                                  subtitle: Text(l10n.translationExportBilingualOrderTargetAfterSub),
+                                  value: 'target_after_source',
+                                  groupValue: bilingualOrder,
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      setDialogState(() {
+                                        bilingualOrder = value;
+                                      });
+                                      ref
+                                          .read(
+                                            formatSettingsProviderFamily(
+                                                    _apiTaskId(),)
+                                                .notifier,
+                                          )
+                                          .setBilingualOrder(value);
+                                    }
+                                  },
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
                                 ),
-                          title: Text(
-                            label,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w500,
-                              color: Theme.of(context).colorScheme.primary,
+                                RadioListTile<String>(
+                                  title: Text(l10n.translationExportBilingualOrderTargetBefore),
+                                  subtitle: Text(l10n.translationExportBilingualOrderTargetBeforeSub),
+                                  value: 'target_before_source',
+                                  groupValue: bilingualOrder,
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      setDialogState(() {
+                                        bilingualOrder = value;
+                                      });
+                                      ref
+                                          .read(
+                                            formatSettingsProviderFamily(
+                                                    _apiTaskId(),)
+                                                .notifier,
+                                          )
+                                          .setBilingualOrder(value);
+                                    }
+                                  },
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: <Widget>[
+                                    Checkbox(
+                                      value: sourceTextItalic,
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          setDialogState(() {
+                                            sourceTextItalic = value;
+                                          });
+                                          ref
+                                              .read(
+                                                formatSettingsProviderFamily(
+                                                        _apiTaskId(),)
+                                                    .notifier,
+                                              )
+                                              .setSourceTextItalic(value);
+                                        }
+                                      },
+                                    ),
+                                    Text(l10n.translationExportSourceTextItalic),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: <Widget>[
+                                    Text(l10n.translationExportSourceTextColor),
+                                    const SizedBox(width: 8),
+                                    ..._colorOptions.map((option) {
+                                      final value = option['value'] as String;
+                                      final color = option['color'] as Color;
+                                      final label = option['label'] as String?;
+                                      final isSelected =
+                                          sourceTextColor == value;
+                                      final Widget circle = GestureDetector(
+                                        onTap: () {
+                                          setDialogState(() {
+                                            sourceTextColor = value;
+                                          });
+                                          ref
+                                              .read(
+                                                formatSettingsProviderFamily(
+                                                        _apiTaskId(),)
+                                                    .notifier,
+                                              )
+                                              .setSourceTextColor(value);
+                                        },
+                                        child: Container(
+                                          margin: const EdgeInsets.symmetric(
+                                              horizontal: 4),
+                                          width: 24,
+                                          height: 24,
+                                          decoration: BoxDecoration(
+                                            color: color,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: isSelected
+                                                  ? Theme.of(context)
+                                                      .colorScheme
+                                                      .primary
+                                                  : (color == Colors.transparent
+                                                      ? Colors.grey.shade300
+                                                      : Colors.transparent),
+                                              width: 2,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                      return label != null
+                                          ? Tooltip(
+                                              message: label,
+                                              child: circle,
+                                            )
+                                          : circle;
+                                    }).toList(),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: <Widget>[
+                                    Checkbox(
+                                      value: targetTextItalic,
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          setDialogState(() {
+                                            targetTextItalic = value;
+                                          });
+                                          ref
+                                              .read(
+                                                formatSettingsProviderFamily(
+                                                        _apiTaskId(),)
+                                                    .notifier,
+                                              )
+                                              .setTargetTextItalic(value);
+                                        }
+                                      },
+                                    ),
+                                    Text(l10n.translationExportTargetTextItalic),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: <Widget>[
+                                    Text(l10n.translationExportTargetTextColor),
+                                    const SizedBox(width: 8),
+                                    ..._colorOptions.map((option) {
+                                      final value = option['value'] as String;
+                                      final color = option['color'] as Color;
+                                      final label = option['label'] as String?;
+                                      final isSelected = targetTextColor == value;
+                                      final Widget circle = GestureDetector(
+                                        onTap: () {
+                                          setDialogState(() {
+                                            targetTextColor = value;
+                                          });
+                                          ref
+                                              .read(
+                                                formatSettingsProviderFamily(
+                                                        _apiTaskId(),)
+                                                    .notifier,
+                                              )
+                                              .setTargetTextColor(value);
+                                        },
+                                        child: Container(
+                                          margin: const EdgeInsets.symmetric(
+                                              horizontal: 4),
+                                          width: 24,
+                                          height: 24,
+                                          decoration: BoxDecoration(
+                                            color: color,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: isSelected
+                                                  ? Theme.of(context)
+                                                      .colorScheme
+                                                      .primary
+                                                  : (color == Colors.transparent
+                                                      ? Colors.grey.shade300
+                                                      : Colors.transparent),
+                                              width: 2,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                      return label != null
+                                          ? Tooltip(
+                                              message: label,
+                                              child: circle,
+                                            )
+                                          : circle;
+                                    }).toList(),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
-                          trailing: Icon(
-                            Icons.download,
-                            color: Theme.of(context).colorScheme.primary,
+                        ),
+                        ),
+                        const Divider(height: 24),
+                      ],
+                            ],
                           ),
-                          onTap: isFormatDownloading
-                              ? null
-                              : () {
-                                  // Capture current format values from dialog state before closing
-                                  final currentTableFormat = tableFormat;
-                                  final currentEquationFormat = equationFormat;
-                                  final ebookEngine = option['ebookEngine'] as String?;
-                                  Navigator.of(context, rootNavigator: true)
-                                      .pop();
-                                  _handlePreviewFormatDownload(
-                                    fileType,
-                                    embedImages: embedImages,
-                                    tableFormat: currentTableFormat,
-                                    equationFormat: currentEquationFormat,
-                                    ebookEngine: ebookEngine,
-                                  );
-                                },
-                        );
-                      }),
+                        ),
+                      ),
+                      const VerticalDivider(width: 1),
+                      // RIGHT: Download buttons
+                      Expanded(
+                        flex: 2,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Text(
+                                  l10n.translationExportDialogTitle,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ...downloadOptions.map((option) {
+                              final fileType = option['type'] as String;
+                              final label = option['label'] as String;
+                              final embedImages = option['embedImages'] as bool?;
+                              final ebookEngine = option['ebookEngine'] as String?;
+                              final downloadKey = embedImages != null
+                                  ? '${fileType}_${embedImages ? 'embedded' : 'with_images'}'
+                                  : (ebookEngine != null ? '${fileType}_$ebookEngine' : fileType);
+                              final isFormatDownloading =
+                                  _downloading[downloadKey] ?? false;
+                              return ListTile(
+                                enabled: !isFormatDownloading,
+                                leading: isFormatDownloading
+                                    ? const SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child:
+                                            CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : Icon(
+                                        _getFormatIcon(fileType),
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
+                                title: Text(
+                                  label,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                                trailing: Icon(
+                                  Icons.download,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                onTap: isFormatDownloading
+                                    ? null
+                                    : () {
+                                        // Capture current format values from dialog state before closing
+                                        final currentTableFormat = tableFormat;
+                                        final currentEquationFormat = equationFormat;
+                                        final ebookEngine = option['ebookEngine'] as String?;
+                                        Navigator.of(context, rootNavigator: true)
+                                            .pop();
+                                        _handlePreviewFormatDownload(
+                                          fileType,
+                                          embedImages: embedImages,
+                                          tableFormat: currentTableFormat,
+                                          equationFormat: currentEquationFormat,
+                                          ebookEngine: ebookEngine,
+                                        );
+                                      },
+                              );
+                            }),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -5424,6 +5735,31 @@ class _TranslationResultPreviewState
       // For EPUB/MOBI, add ebook_engine when user chose Pandoc or Calibre
       if ((fileType == 'epub' || fileType == 'mobi') && ebookEngine != null) {
         queryParams['ebook_engine'] = ebookEngine;
+      }
+
+      // Add bilingual parameters if enabled
+      final formatSettings = ref.read(
+        formatSettingsProviderFamily(_apiTaskId()),
+      );
+      if (formatSettings.bilingualExport == true) {
+        queryParams['bilingual_export'] = 'true';
+        queryParams['bilingual_order'] =
+            formatSettings.bilingualOrder ?? 'target_after_source';
+        if (formatSettings.sourceTextItalic != null) {
+          queryParams['source_text_italic'] =
+              formatSettings.sourceTextItalic.toString();
+        }
+        if (formatSettings.sourceTextColor != null) {
+          queryParams['source_text_color'] = formatSettings.sourceTextColor!;
+        }
+        if (formatSettings.targetTextItalic != null) {
+          queryParams['target_text_italic'] =
+              formatSettings.targetTextItalic.toString();
+        }
+        if (formatSettings.targetTextColor != null &&
+            formatSettings.targetTextColor!.isNotEmpty) {
+          queryParams['target_text_color'] = formatSettings.targetTextColor!;
+        }
       }
 
       downloadUrl = uri.replace(queryParameters: queryParams).toString();

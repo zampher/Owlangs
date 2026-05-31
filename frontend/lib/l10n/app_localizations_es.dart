@@ -510,6 +510,66 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationExportEquationFormatLatex => 'LaTeX';
 
   @override
+  String get translationExportBilingualExport => 'Exportación Bilingüe';
+
+  @override
+  String get translationExportBilingualOrderTargetAfter =>
+      'Destino Después de Origen';
+
+  @override
+  String get translationExportBilingualOrderTargetAfterSub =>
+      'Origen primero, destino después';
+
+  @override
+  String get translationExportBilingualOrderTargetBefore =>
+      'Destino Antes de Origen';
+
+  @override
+  String get translationExportBilingualOrderTargetBeforeSub =>
+      'Destino primero, origen después';
+
+  @override
+  String get translationExportSourceTextItalic => 'Texto original en cursiva';
+
+  @override
+  String get translationExportSourceTextColor => 'Color del texto original:';
+
+  @override
+  String get translationExportTargetTextItalic => 'Texto traducido en cursiva';
+
+  @override
+  String get translationExportTargetTextColor => 'Color del texto traducido:';
+
+  @override
+  String get translationExportColorDefault => 'Predeterminado';
+
+  @override
+  String get translationExportColorGray => 'Gris';
+
+  @override
+  String get translationExportColorBlue => 'Azul';
+
+  @override
+  String get translationExportColorRed => 'Rojo';
+
+  @override
+  String get translationExportColorGreen => 'Verde';
+
+  @override
+  String get translationExportColorOrange => 'Naranja';
+
+  @override
+  String get translationExportColorBlack => 'Negro';
+
+  @override
+  String get translationExportMdEmbeddedImages =>
+      'MD (con imágenes incrustadas)';
+
+  @override
+  String get translationExportMdWithImagesFolder =>
+      'MD (con carpeta de imágenes)';
+
+  @override
   String get translationLeftPanelExpandTooltip => 'Expandir panel izquierdo';
 
   @override

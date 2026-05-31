@@ -207,7 +207,23 @@ async def service_update_format_settings_route(
     task_id: str = FastApiPath(..., description="Unique task identifier."),
     table_body_format: Optional[str] = FastApiQuery(None, description="Table format: 'html' or 'image'"),
     equation_format: Optional[str] = FastApiQuery(None, description="Equation format: 'text' or 'image'"),
+    bilingual_export: Optional[bool] = FastApiQuery(None, description="Enable bilingual export: true or false"),
+    bilingual_order: Optional[str] = FastApiQuery(None, description="Bilingual order: 'target_after_source' or 'target_before_source'"),
+    source_text_italic: Optional[bool] = FastApiQuery(None, description="Source text italic: true or false"),
+    source_text_color: Optional[str] = FastApiQuery(None, description="Source text color: 'gray', 'blue', 'red', 'green', 'orange', 'black'"),
+    target_text_italic: Optional[bool] = FastApiQuery(None, description="Target text italic: true or false"),
+    target_text_color: Optional[str] = FastApiQuery(None, description="Target text color: 'gray', 'blue', 'red', 'green', 'orange', 'black'"),
 ):
     """Update format settings for a task."""
-    result = status_service.update_format_settings(task_id, table_body_format, equation_format)
+    result = status_service.update_format_settings(
+        task_id,
+        table_body_format=table_body_format,
+        equation_format=equation_format,
+        bilingual_export=bilingual_export,
+        bilingual_order=bilingual_order,
+        source_text_italic=source_text_italic,
+        source_text_color=source_text_color,
+        target_text_italic=target_text_italic,
+        target_text_color=target_text_color,
+    )
     return JSONResponse(content=result)

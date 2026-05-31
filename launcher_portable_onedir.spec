@@ -47,7 +47,7 @@ hiddenimports = [
     'backend.utils.math_md_normalize', 'backend.utils.docx_md_normalize',
     'backend.utils.docx_algorithm_latex_wrap', 'backend.utils.docx_math_fragment_check',
     'backend.utils.docx_math_fragment_llm_repair', 'backend.utils.llm_client',
-    'backend.utils.extract_segments_debug', 'backend.utils.epub_fix',
+    'backend.utils.extract_segments_debug', 'backend.utils.bilingual_export_utils', 'backend.utils.epub_fix',
     'backend.utils.ebook_metadata', 'backend.utils.pdf_splitter',
     'backend.utils.layout_merger', 'backend.utils.mineru_zip_merger',
     'app', 'app.app_main', 'app.factory', 'app.__init__',

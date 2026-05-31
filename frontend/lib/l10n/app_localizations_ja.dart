@@ -486,6 +486,60 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationExportEquationFormatLatex => 'LaTeX';
 
   @override
+  String get translationExportBilingualExport => 'バイリンガル書き出し';
+
+  @override
+  String get translationExportBilingualOrderTargetAfter => '訳文を後ろに';
+
+  @override
+  String get translationExportBilingualOrderTargetAfterSub => '原文を前に、訳文を後ろに';
+
+  @override
+  String get translationExportBilingualOrderTargetBefore => '訳文を前に';
+
+  @override
+  String get translationExportBilingualOrderTargetBeforeSub => '訳文を前に、原文を後ろに';
+
+  @override
+  String get translationExportSourceTextItalic => '原文を斜体';
+
+  @override
+  String get translationExportSourceTextColor => '原文の色:';
+
+  @override
+  String get translationExportTargetTextItalic => '訳文を斜体';
+
+  @override
+  String get translationExportTargetTextColor => '訳文の色:';
+
+  @override
+  String get translationExportColorDefault => 'デフォルト';
+
+  @override
+  String get translationExportColorGray => 'グレー';
+
+  @override
+  String get translationExportColorBlue => '青';
+
+  @override
+  String get translationExportColorRed => '赤';
+
+  @override
+  String get translationExportColorGreen => '緑';
+
+  @override
+  String get translationExportColorOrange => 'オレンジ';
+
+  @override
+  String get translationExportColorBlack => '黒';
+
+  @override
+  String get translationExportMdEmbeddedImages => 'MD（画像埋め込み）';
+
+  @override
+  String get translationExportMdWithImagesFolder => 'MD（画像フォルダ）';
+
+  @override
   String get translationLeftPanelExpandTooltip => '左パネルを展開';
 
   @override

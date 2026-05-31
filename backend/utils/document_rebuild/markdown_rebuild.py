@@ -257,6 +257,8 @@ def _rebuild_markdown_from_layout_segments(
     block_index_to_type: Dict[int, str],
     equation_format: Optional[str] = None,
     table_body_format: Optional[str] = None,
+    bilingual_export: bool = False,
+    target_first: bool = False,
 ) -> str:
     """
     Rebuild markdown content from segments using layout information (PDF path).
@@ -622,6 +624,59 @@ def _rebuild_markdown_from_layout_segments(
     target_idx_to_segment_idx = reordered_target_idx_to_segment_idx
     separators = reordered_separators
     
+    # Bilingual export: interleave source and target for text/title blocks, and for
+    # table/equation blocks when rendered in text format (HTML/LaTeX). Image-rendered
+    # tables (table_body_format=image) and equations (equation_format=image) skip
+    # bilingual since binary images cannot be interleaved.
+    if bilingual_export:
+        from utils.bilingual_export_utils import build_bilingual_segment_text
+        bilingual_formatted_texts = []
+        for i, formatted in enumerate(formatted_texts):
+            segment_index = target_idx_to_segment_idx.get(i, -1)
+            segment = None
+            for seg in segments:
+                if seg.get("segment_index") == segment_index:
+                    segment = seg
+                    break
+            if not segment:
+                bilingual_formatted_texts.append(formatted)
+                continue
+
+            source_text = segment.get("source_text", "")
+            is_excluded = bool(segment.get("is_excluded", False))
+            is_cleared = bool(
+                segment.get("status") == "cleared"
+                or (not formatted and segment.get("modified", False) and segment.get("target_length", -1) == 0)
+            )
+
+            # Skip bilingual for blocks rendered as images (cannot interleave binary images)
+            block_types = segment_to_block_types.get(segment_index, [])
+            _is_image_block = any(bt in ("image",) for bt in block_types)
+            if not _is_image_block and "table" in block_types and table_body_format == "image":
+                _is_image_block = True
+            if not _is_image_block and "interline_equation" in block_types and equation_format == "image":
+                _is_image_block = True
+            if _is_image_block:
+                bilingual_formatted_texts.append(formatted)
+                continue
+
+            # For text/title blocks, and table/equation blocks in text format, build bilingual
+            combined = build_bilingual_segment_text(
+                source_text=source_text,
+                target_text=formatted,
+                target_first=target_first,
+                is_excluded=is_excluded,
+                is_cleared=is_cleared,
+                inner_separator="\n\n",
+            )
+            bilingual_formatted_texts.append(combined)
+        
+        formatted_texts = bilingual_formatted_texts
+        logger.debug(
+            LogModule.TRANS,
+            f"Bilingual layout rebuild: {len(formatted_texts)} interleaved segments"
+        )
+    
     # Use bbox from Layout extraction phase (task_state["layout_block_bbox"]); normalize int keys and float bbox (JSON round-trip safe)
     _raw_bbox = task_state.get("layout_block_bbox") or {}
     block_index_to_bbox: Dict[int, Tuple[float, float, float, float]] = {}
@@ -724,6 +779,8 @@ def _rebuild_markdown_from_layout_segments(
 
 def _rebuild_markdown_from_text_segments(
     segments: List[Dict[str, Any]],
+    bilingual_export: bool = False,
+    target_first: bool = False,
 ) -> str:
     """
     Rebuild markdown content from segments using text-based logic (MD/TXT path).
@@ -732,10 +789,14 @@ def _rebuild_markdown_from_text_segments(
     
     Args:
         segments: List of translation segments (already sorted by segment_index)
+        bilingual_export: If True, interleave source and target text for each segment.
+        target_first: If True and bilingual_export is True, place target before source.
         
     Returns:
         Rebuilt markdown content string
     """
+    from utils.bilingual_export_utils import build_bilingual_segment_text
+
     # Collect all target texts and separators (use modified_text if available, otherwise use target_text)
     target_texts = []
     separators = []  # separators[i] is the separator between target_texts[i] and target_texts[i+1]
@@ -764,6 +825,33 @@ def _rebuild_markdown_from_text_segments(
         logger.warning(LogModule.RESTOR,"No target texts found in segments")
         return ""
 
+    # Apply bilingual interleaving if requested
+    if bilingual_export:
+        bilingual_texts = []
+        text_idx = 0
+        for segment in segments:
+            target_text = segment.get("modified_text") or segment.get("target_text", "")
+            is_modified = segment.get("modified", False) or segment.get("retry_count", 0) > 0
+            is_cleared = segment.get("status") == "cleared" or (not target_text and is_modified and segment.get("target_length", -1) == 0)
+            if not target_text and not is_cleared:
+                continue
+            if text_idx >= len(target_texts):
+                break
+            source_text = segment.get("source_text", "")
+            is_excluded = bool(segment.get("is_excluded", False))
+            combined = build_bilingual_segment_text(
+                source_text=source_text,
+                target_text=target_text if not is_cleared else "",
+                target_first=target_first,
+                is_excluded=is_excluded,
+                is_cleared=is_cleared,
+                inner_separator="\n\n",
+            )
+            bilingual_texts.append(combined)
+            text_idx += 1
+        target_texts = bilingual_texts
+        logger.debug(LogModule.TRANS, f"Bilingual markdown rebuild: {len(target_texts)} interleaved segments")
+
     # Rebuild markdown using preserved separators or intelligent joining
     if len(separators) == len(target_texts) - 1 and all(s is not None for s in separators):
         # All separators preserved, use them; empty/whitespace-only -> paragraph break (double newline)
@@ -790,6 +878,8 @@ def rebuild_markdown_document_from_segments(
     output_dir: Optional[Path] = None,
     equation_format: Optional[str] = None,
     table_body_format: Optional[str] = None,
+    bilingual_export: bool = False,
+    target_first: bool = False,
 ) -> Optional[MarkdownDocument]:
     """
     Rebuild MarkdownDocument from revised translation segments.
@@ -803,10 +893,22 @@ def rebuild_markdown_document_from_segments(
         output_dir: Optional output directory for saving images
         equation_format: Optional format for equations ('text' or 'image')
         table_body_format: Optional format for tables ('html' or 'image')
+        bilingual_export: If True, interleave source and target text for each segment.
+        target_first: If True and bilingual_export is True, place target before source.
         
     Returns:
         Rebuilt MarkdownDocument, or None if segments are not available
     """
+    # Resolve bilingual settings from explicit args -> task_state
+    # Note: only use stored value if bilingual_export was not explicitly provided
+    # (None means "not specified", not "False")
+    if bilingual_export is None and task_state:
+        from utils.bilingual_export_utils import get_bilingual_config
+        _be, _tf = get_bilingual_config(task_state)
+        if _be:
+            bilingual_export = True
+            target_first = _tf
+
     segments_data = get_translation_segments(None, task_state)
     if not segments_data:
         logger.warning(LogModule.RESTOR,"No translation segments found for rebuilding document")
@@ -906,16 +1008,26 @@ def rebuild_markdown_document_from_segments(
                 block_index_to_type=block_index_to_type,
                 equation_format=equation_format,
                 table_body_format=table_body_format,
+                bilingual_export=bilingual_export,
+                target_first=target_first,
             )
         else:
             # Fallback to text-based rebuild if layout loading failed
             logger.warning(LogModule.RESTOR, "[REBUILD] Layout loading failed, falling back to text-based rebuild")
-            markdown_content = _rebuild_markdown_from_text_segments(segments=segments)
+            markdown_content = _rebuild_markdown_from_text_segments(
+                segments=segments,
+                bilingual_export=bilingual_export,
+                target_first=target_first,
+            )
     else:
         # Use text-based rebuild for MD/TXT paths
         if not is_pdf_with_layout:
             logger.debug(LogModule.RESTOR, "[REBUILD] Text path: using text-based segment type for rebuild")
-        markdown_content = _rebuild_markdown_from_text_segments(segments=segments)
+        markdown_content = _rebuild_markdown_from_text_segments(
+            segments=segments,
+            bilingual_export=bilingual_export,
+            target_first=target_first,
+        )
     
     if not markdown_content:
         logger.warning(LogModule.RESTOR,"No markdown content generated from segments")

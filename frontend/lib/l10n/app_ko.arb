@@ -1137,5 +1137,25 @@
   "loginPasswordRecoveryAdminGuide": "관리자라면 비밀번호 복구 절차를 따라주세요.",
 
   "commonDarkMode": "다크 모드",
-  "commonLightMode": "라이트 모드"
+  "commonLightMode": "라이트 모드",
+
+  "translationExportBilingualExport": "이중 언어 내보내기",
+  "translationExportBilingualOrderTargetAfter": "번역문을 뒤에",
+  "translationExportBilingualOrderTargetAfterSub": "원문을 앞에, 번역문을 뒤에",
+  "translationExportBilingualOrderTargetBefore": "번역문을 앞에",
+  "translationExportBilingualOrderTargetBeforeSub": "번역문을 앞에, 원문을 뒤에",
+  "translationExportSourceTextItalic": "원문 기울임",
+  "translationExportSourceTextColor": "원문 색상:",
+  "translationExportTargetTextItalic": "번역문 기울임",
+  "translationExportTargetTextColor": "번역문 색상:",
+  "translationExportColorDefault": "기본값",
+  "translationExportColorGray": "회색",
+  "translationExportColorBlue": "파란색",
+  "translationExportColorRed": "빨간색",
+  "translationExportColorGreen": "초록색",
+  "translationExportColorOrange": "주황색",
+  "translationExportColorBlack": "검은색",
+
+  "translationExportMdEmbeddedImages": "MD (이미지 포함)",
+  "translationExportMdWithImagesFolder": "MD (이미지 폴더)"
 }

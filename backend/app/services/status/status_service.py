@@ -2343,7 +2343,41 @@ class StatusService:
                     f"({positioned_count} positioned based on HTML structure, {len(mobi_image_segments) - positioned_count} appended to end). "
                     f"Total segments: {total} (original: {len(all_segments)}, images: {len(mobi_image_segments)})"
                     )
-        
+
+        # CRITICAL: For DOCX files with textbox/SDT content, append these segments
+        # from translation_segments_data so the frontend can display them
+        if translation_segments_data and isinstance(translation_segments_data, dict):
+            _tb_segments_list = translation_segments_data.get("segments", [])
+            _textbox_sdt_segments = []
+            for _seg in _tb_segments_list:
+                if isinstance(_seg, dict):
+                    _seg_type = _seg.get("segment_type", "")
+                    if "textbox" in _seg_type:
+                        _textbox_sdt_segments.append(_seg)
+
+            if _textbox_sdt_segments:
+                _added_count = 0
+                for _tb_seg in _textbox_sdt_segments:
+                    _tb_obj = {
+                        "segment_index": len(segments_with_metadata),
+                        "source_text": _tb_seg.get("source_text", ""),
+                        "target_text": _tb_seg.get("target_text", ""),
+                        "is_excluded": _tb_seg.get("is_excluded", False),
+                        "is_image": _tb_seg.get("is_image", False),
+                        "is_failed": _tb_seg.get("is_failed", False),
+                        "segment_type": _tb_seg.get("segment_type", "textbox_sdt"),
+                        "textbox_key": _tb_seg.get("textbox_key", ""),
+                    }
+                    segments_with_metadata.append(_tb_obj)
+                    _added_count += 1
+
+                total += _added_count
+                logger.info(
+                    LogModule.WORKFLOW,
+                    f"[PREVIEW-API] Task {task_id}: Appended {_added_count} textbox/SDT segments "
+                    f"to segments_with_metadata. New total: {total}"
+                )
+
         # CRITICAL: Handle case where available segments < total_segments
         # This can happen if source_chunks_cache.segments was truncated during storage
         available_segments_count = len(segments_with_metadata)
@@ -5544,7 +5578,18 @@ class StatusService:
             "equation_format": equation_format,
         }
     
-    def update_format_settings(self, task_id: str, table_body_format: Optional[str] = None, equation_format: Optional[str] = None) -> Dict[str, Any]:
+    def update_format_settings(
+        self,
+        task_id: str,
+        table_body_format: Optional[str] = None,
+        equation_format: Optional[str] = None,
+        bilingual_export: Optional[bool] = None,
+        bilingual_order: Optional[str] = None,
+        source_text_italic: Optional[bool] = None,
+        source_text_color: Optional[str] = None,
+        target_text_italic: Optional[bool] = None,
+        target_text_color: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Update format settings in task state.
         
@@ -5552,6 +5597,12 @@ class StatusService:
             task_id: Unique task identifier
             table_body_format: Table format ('html' or 'image')
             equation_format: Equation format ('text' or 'image')
+            bilingual_export: Enable bilingual export (True/False)
+            bilingual_order: Bilingual order ('target_after_source' or 'target_before_source')
+            source_text_italic: Source text italic (True/False)
+            source_text_color: Source text color ('gray', 'blue', 'red', 'green', 'orange', 'black')
+            target_text_italic: Target text italic (True/False)
+            target_text_color: Target text color ('gray', 'blue', 'red', 'green', 'orange', 'black')
             
         Returns:
             Dictionary with updated format settings
@@ -5568,6 +5619,12 @@ class StatusService:
             raise HTTPException(status_code=400, detail=f"Invalid table_body_format: {table_body_format}. Must be 'html' or 'image'.")
         if equation_format is not None and equation_format not in ("text", "latex", "image"):
             raise HTTPException(status_code=400, detail=f"Invalid equation_format: {equation_format}. Must be 'text', 'latex', or 'image'.")
+        if bilingual_order is not None and bilingual_order not in ("target_after_source", "target_before_source"):
+            raise HTTPException(status_code=400, detail=f"Invalid bilingual_order: {bilingual_order}. Must be 'target_after_source' or 'target_before_source'.")
+        if source_text_color is not None and source_text_color not in ("gray", "blue", "red", "green", "orange", "black"):
+            raise HTTPException(status_code=400, detail=f"Invalid source_text_color: {source_text_color}. Must be 'gray', 'blue', 'red', 'green', 'orange', or 'black'.")
+        if target_text_color is not None and target_text_color not in ("gray", "blue", "red", "green", "orange", "black"):
+            raise HTTPException(status_code=400, detail=f"Invalid target_text_color: {target_text_color}. Must be 'gray', 'blue', 'red', 'green', 'orange', or 'black'.")
         
         # Update task_state directly
         updates = {}
@@ -5575,6 +5632,18 @@ class StatusService:
             updates["table_body_format"] = table_body_format
         if equation_format is not None:
             updates["equation_format"] = equation_format
+        if bilingual_export is not None:
+            updates["bilingual_export"] = bilingual_export
+        if bilingual_order is not None:
+            updates["bilingual_order"] = bilingual_order
+        if source_text_italic is not None:
+            updates["source_text_italic"] = source_text_italic
+        if source_text_color is not None:
+            updates["source_text_color"] = source_text_color
+        if target_text_italic is not None:
+            updates["target_text_italic"] = target_text_italic
+        if target_text_color is not None:
+            updates["target_text_color"] = target_text_color
         
         if updates:
             self.task_manager.update_task(task_id, updates)
@@ -5588,6 +5657,18 @@ class StatusService:
                     payload["table_body_format"] = table_body_format
                 if equation_format is not None:
                     payload["equation_format"] = equation_format
+                if bilingual_export is not None:
+                    payload["bilingual_export"] = bilingual_export
+                if bilingual_order is not None:
+                    payload["bilingual_order"] = bilingual_order
+                if source_text_italic is not None:
+                    payload["source_text_italic"] = source_text_italic
+                if source_text_color is not None:
+                    payload["source_text_color"] = source_text_color
+                if target_text_italic is not None:
+                    payload["target_text_italic"] = target_text_italic
+                if target_text_color is not None:
+                    payload["target_text_color"] = target_text_color
             elif hasattr(payload, 'table_body_format') or hasattr(payload, 'equation_format'):
                 # For object payload, update attributes if possible
                 try:
@@ -5595,6 +5676,18 @@ class StatusService:
                         setattr(payload, 'table_body_format', table_body_format)
                     if equation_format is not None:
                         setattr(payload, 'equation_format', equation_format)
+                    if bilingual_export is not None:
+                        setattr(payload, 'bilingual_export', bilingual_export)
+                    if bilingual_order is not None:
+                        setattr(payload, 'bilingual_order', bilingual_order)
+                    if source_text_italic is not None:
+                        setattr(payload, 'source_text_italic', source_text_italic)
+                    if source_text_color is not None:
+                        setattr(payload, 'source_text_color', source_text_color)
+                    if target_text_italic is not None:
+                        setattr(payload, 'target_text_italic', target_text_italic)
+                    if target_text_color is not None:
+                        setattr(payload, 'target_text_color', target_text_color)
                 except Exception as e:
                     logger.debug(LogModule.WORKFLOW, f"[STATUS] Failed to update payload format settings: {e}")
         
@@ -5602,6 +5695,12 @@ class StatusService:
             "task_id": task_id,
             "table_body_format": table_body_format or task_state.get("table_body_format"),
             "equation_format": equation_format or task_state.get("equation_format"),
+            "bilingual_export": bilingual_export if bilingual_export is not None else task_state.get("bilingual_export"),
+            "bilingual_order": bilingual_order or task_state.get("bilingual_order"),
+            "source_text_italic": source_text_italic if source_text_italic is not None else task_state.get("source_text_italic"),
+            "source_text_color": source_text_color or task_state.get("source_text_color"),
+            "target_text_italic": target_text_italic if target_text_italic is not None else task_state.get("target_text_italic"),
+            "target_text_color": target_text_color or task_state.get("target_text_color"),
             "message": "Format settings updated successfully"
         }
 

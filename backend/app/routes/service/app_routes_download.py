@@ -68,6 +68,12 @@ async def service_download_file_route(
         equation_format: Optional[str] = FastApiQuery(None, description="Equation format for PDF rendering: 'text' (LaTeX) or 'image' (overrides task payload setting, only applies to PDF/MD downloads)", examples=["text", "image"]),
         embed_images: Optional[bool] = FastApiQuery(None, description="For MD downloads: if True, embed images as data URIs; if False, save images to folder and return ZIP. Default: True (embed).", examples=[True, False]),
         ebook_engine: Optional[str] = FastApiQuery(None, description="For epub/mobi: 'pandoc' or 'calibre'. Only used when both converters are available; choose which path to use for export.", examples=["pandoc", "calibre"]),
+        bilingual_export: Optional[bool] = FastApiQuery(None, description="Enable bilingual export: include both source and target text in the output file.", examples=[True, False]),
+        bilingual_order: Optional[str] = FastApiQuery(None, description="Bilingual paragraph order: 'target_after_source' (default) or 'target_before_source'.", examples=["target_after_source", "target_before_source"]),
+        source_text_italic: Optional[bool] = FastApiQuery(None, description="Render source text in italic for bilingual export.", examples=[True, False]),
+        source_text_color: Optional[str] = FastApiQuery(None, description="Source text color for bilingual export: 'gray', 'blue', 'red', 'green', 'orange', 'black'.", examples=["gray", "blue", "red"]),
+        target_text_italic: Optional[bool] = FastApiQuery(None, description="Render target text in italic for bilingual export.", examples=[True, False]),
+        target_text_color: Optional[str] = FastApiQuery(None, description="Target text color for bilingual export: 'gray', 'blue', 'red', 'green', 'orange', 'black'.", examples=["gray", "blue", "red"]),
 ):
     """Download translation result files."""
     resp = await download_service.download_file(
@@ -77,9 +83,20 @@ async def service_download_file_route(
         equation_format=equation_format,
         embed_images=embed_images,
         ebook_engine=ebook_engine,
+        bilingual_export=bilingual_export,
+        bilingual_order=bilingual_order,
+        source_text_italic=source_text_italic,
+        source_text_color=source_text_color,
+        target_text_italic=target_text_italic,
+        target_text_color=target_text_color,
     )
     try:
         if isinstance(resp, FileResponse):
+            # Prevent browser caching — ensures bilingual toggle works correctly
+            resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            resp.headers["Pragma"] = "no-cache"
+            resp.headers["Expires"] = "0"
+
             path = getattr(resp, "path", None)
             ts = task_manager.get_task(task_id)
             if path and ts:

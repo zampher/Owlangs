@@ -161,6 +161,12 @@ class TranslationService {
     String taskId, {
     String? tableBodyFormat,
     String? equationFormat,
+    bool? bilingualExport,
+    String? bilingualOrder,
+    bool? sourceTextItalic,
+    String? sourceTextColor,
+    bool? targetTextItalic,
+    String? targetTextColor,
   }) async {
     final dio = _buildAuthedDio();
     final queryParams = <String, dynamic>{};
@@ -169,6 +175,24 @@ class TranslationService {
     }
     if (equationFormat != null) {
       queryParams['equation_format'] = equationFormat;
+    }
+    if (bilingualExport != null) {
+      queryParams['bilingual_export'] = bilingualExport;
+    }
+    if (bilingualOrder != null) {
+      queryParams['bilingual_order'] = bilingualOrder;
+    }
+    if (sourceTextItalic != null) {
+      queryParams['source_text_italic'] = sourceTextItalic;
+    }
+    if (sourceTextColor != null) {
+      queryParams['source_text_color'] = sourceTextColor;
+    }
+    if (targetTextItalic != null) {
+      queryParams['target_text_italic'] = targetTextItalic;
+    }
+    if (targetTextColor != null) {
+      queryParams['target_text_color'] = targetTextColor;
     }
     final resp = await dio.put(
       '/service/format-settings/$taskId',
