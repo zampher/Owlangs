@@ -344,6 +344,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationStatsTranslatedLabel => 'Traducido';
 
   @override
+  String get translationStatsPendingLabel => 'Pendiente';
+
+  @override
+  String get translationStatsClearedLabel => 'Borrado';
+
+  @override
+  String get translationStatsImagesLabel => 'Imágenes';
+
+  @override
   String get translationStatsLoadingContent => 'Cargando contenido...';
 
   @override

@@ -325,6 +325,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationStatsTranslatedLabel => '번역됨';
 
   @override
+  String get translationStatsPendingLabel => '보류 중';
+
+  @override
+  String get translationStatsClearedLabel => '삭제됨';
+
+  @override
+  String get translationStatsImagesLabel => '이미지';
+
+  @override
   String get translationStatsLoadingContent => '콘텐츠 로딩 중...';
 
   @override

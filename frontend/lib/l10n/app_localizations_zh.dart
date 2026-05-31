@@ -323,6 +323,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationStatsTranslatedLabel => '已翻译';
 
   @override
+  String get translationStatsPendingLabel => '待翻译';
+
+  @override
+  String get translationStatsClearedLabel => '已清除';
+
+  @override
+  String get translationStatsImagesLabel => '图片';
+
+  @override
   String get translationStatsLoadingContent => '正在加载内容...';
 
   @override

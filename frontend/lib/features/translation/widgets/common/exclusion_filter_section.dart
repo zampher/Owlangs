@@ -261,10 +261,20 @@ class ExclusionFilterSection extends StatelessWidget {
             selected: selectedFilters.contains(reason),
             onSelected: (selected) {
               final newFilters = Set<String>.from(selectedFilters);
-              // Remove "included", "all_excluded", and "failed" if selecting an exclusion reason filter
-              newFilters.remove('included');
-              newFilters.remove('all_excluded');
-              newFilters.remove('failed');
+              // Remove state-based filter keys when selecting an exclusion reason (type) filter
+              for (final k in <String>[
+                'included',
+                'all_excluded',
+                'failed',
+                'translated',
+                'pending',
+                'excluded',
+                'retry',
+                'cleared',
+                'images',
+              ]) {
+                newFilters.remove(k);
+              }
               if (selected) {
                 newFilters.add(reason);
               } else {

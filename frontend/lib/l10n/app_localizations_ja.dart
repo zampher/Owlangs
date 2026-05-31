@@ -324,6 +324,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationStatsTranslatedLabel => '翻訳済み';
 
   @override
+  String get translationStatsPendingLabel => '保留中';
+
+  @override
+  String get translationStatsClearedLabel => 'クリア済み';
+
+  @override
+  String get translationStatsImagesLabel => '画像';
+
+  @override
   String get translationStatsLoadingContent => 'コンテンツを読み込み中...';
 
   @override

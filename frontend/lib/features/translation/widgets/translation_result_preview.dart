@@ -502,6 +502,24 @@ class _TranslationResultPreviewState
     _selectedExclusionFiltersNotifier.value = filters;
   }
 
+  /// Handle filter change from status bar filter chips
+  Future<void> _handleFiltersChanged(Set<String> filters) async {
+    if (_isRefreshingForFilter) return;
+
+    _setSelectedExclusionFilters(filters);
+    _clearFilteredIndicesCache();
+
+    _isRefreshingForFilter = true;
+    try {
+      await _segmentsPaginationController?.loadFirstPage();
+      if (mounted) setState(() {});
+    } finally {
+      if (mounted) {
+        _isRefreshingForFilter = false;
+      }
+    }
+  }
+
   /// Load task status to get attachments (e.g., glossary) and token usage
   /// Token usage is only loaded when translation is completed (called once when status changes to completed)
   Future<void> _loadTaskStatus() async {
@@ -974,6 +992,52 @@ class _TranslationResultPreviewState
     // all_excluded 过滤：直接使用 _excludedSegments
     if (_selectedExclusionFilters.contains('all_excluded')) {
       final List<int> filteredIndices = _excludedSegments.keys.toList()..sort();
+      // Update cache
+      _cachedFilteredIndices = filteredIndices;
+      _cachedFilteredIndicesFilters =
+          Set<String>.from(_selectedExclusionFilters);
+      _cachedFilteredIndicesTotalCount = _totalSegmentsCount;
+      return filteredIndices;
+    }
+
+    // State-based filters (translated, pending, excluded, retry, cleared, images)
+    const Set<String> stateKeys = <String>{
+      'translated', 'pending', 'excluded', 'retry', 'cleared', 'images',
+    };
+    if (_selectedExclusionFilters.length == 1 &&
+        stateKeys.contains(_selectedExclusionFilters.first)) {
+      final String stateFilter = _selectedExclusionFilters.first;
+      final List<int> filteredIndices = <int>[];
+      for (int index = 0; index < _totalSegmentsCount; index++) {
+        final Map<String, dynamic> metadata =
+            _allSegmentsMetadata[index] ?? <String, dynamic>{};
+        final bool isImage = metadata['is_image'] as bool? ?? false;
+        final bool isFailed = metadata['is_failed'] as bool? ?? false;
+        final bool isExcluded = metadata['is_excluded'] as bool? ?? false;
+        final String? targetText = metadata['target_text'] as String?;
+        final String? status = metadata['status'] as String?;
+        final bool needsRetry = metadata['needs_retry'] as bool? ?? false;
+        final bool isCleared = status == 'cleared';
+
+        bool match = false;
+        switch (stateFilter) {
+          case 'translated':
+            match = !isImage && !isExcluded && !isFailed && !isCleared &&
+                targetText != null && targetText.isNotEmpty;
+          case 'pending':
+            match = !isImage && !isExcluded && !isFailed && !isCleared &&
+                (targetText == null || targetText.isEmpty);
+          case 'excluded':
+            match = isExcluded && !isFailed;
+          case 'retry':
+            match = needsRetry || isFailed;
+          case 'cleared':
+            match = isCleared;
+          case 'images':
+            match = isImage;
+        }
+        if (match) filteredIndices.add(index);
+      }
       // Update cache
       _cachedFilteredIndices = filteredIndices;
       _cachedFilteredIndicesFilters =
@@ -3884,40 +3948,6 @@ class _TranslationResultPreviewState
                 onRepairDocxMath: (widget.workflowType == 'markdown_based')
                     ? () => _repairDocxMathFragments(context)
                     : null,
-                // Filter buttons state (for toolbar filter buttons)
-                selectedFilters: selectedFilters,
-                onFiltersChanged: (Set<String> filters) async {
-                  // PERFORMANCE: Prevent duplicate refresh calls
-                  if (_isRefreshingForFilter) {
-                    return;
-                  }
-
-                  final start = DateTime.now();
-
-                  _setSelectedExclusionFilters(filters);
-                  _clearFilteredIndicesCache();
-
-                  _isRefreshingForFilter = true;
-                  try {
-                    // Load from first page so filter change shows correct dataset (All vs Excluded vs Included).
-                    await _segmentsPaginationController?.loadFirstPage();
-                    if (mounted) setState(() {});
-                  } catch (e) {
-                    if (kDebugMode) {
-                      final end = DateTime.now();
-                      _translationResultLog(
-                        '[FILTER_PERF] Refresh ERROR: filters=$filters, error=$e, duration=${end.difference(start).inMilliseconds}ms',
-                        level: LogLevel.error,
-                      );
-                    }
-                  } finally {
-                    if (mounted) {
-                      _isRefreshingForFilter = false;
-                    }
-                  }
-                },
-                totalSegments: _totalSegmentsCount,
-                failedCount: _calculateFailedCount(),
                 // Search functionality
                 isSearchBoxVisible: _isSearchBoxVisible,
                 searchQuery: _searchQuery,
@@ -4337,6 +4367,7 @@ class _TranslationResultPreviewState
       translationState: translationState,
       tokenUsage: tokenUsage,
       selectedExclusionFilters: _selectedExclusionFilters,
+      onFiltersChanged: _handleFiltersChanged,
       onFormulaFix: _handleFormulaFixForSegment,
     );
   }

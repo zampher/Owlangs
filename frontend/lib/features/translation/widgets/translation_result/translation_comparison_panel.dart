@@ -13,34 +13,16 @@ import '../../models/segment_pair.dart';
 import '../../utils/segment_height_cache.dart';
 import 'translation_segment_item.dart';
 
-/// Segment statistics data structure
-class SegmentStatistics {
-  const SegmentStatistics({
-    required this.total,
-    required this.translated,
-    required this.pending,
-    required this.excluded,
-    required this.retry,
-    required this.failed,
-    required this.cleared,
-    required this.images,
-  });
-
-  final int total;
-  final int translated;
-  final int pending;
-  final int excluded;
-  final int retry;
-  final int failed;
-  final int cleared;
-  final int images;
-
-  /// Calculate completion rate percentage
-  double get completionRate {
-    if (total == 0) return 0;
-    return (translated / total) * 100;
-  }
-}
+/// State-based filter keys (mutually exclusive - single select)
+const Set<String> _stateFilterKeys = <String>{
+  'translated',
+  'pending',
+  'failed',
+  'excluded',
+  'retry',
+  'cleared',
+  'images',
+};
 
 /// Comparison panel for displaying source and target segments side by side
 class TranslationComparisonPanel extends ConsumerWidget {
@@ -76,6 +58,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
     this.translationState,
     this.tokenUsage,
     this.selectedExclusionFilters,
+    this.onFiltersChanged,
     this.onExclusionUpdated,
     this.onFormulaFix,
     this.isConvertOnly = false,
@@ -114,6 +97,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
   final dynamic translationState;
   final Map<String, int>? tokenUsage;
   final Set<String>? selectedExclusionFilters;
+  final void Function(Set<String>)? onFiltersChanged;
   final void Function(int)? onFormulaFix;
   final bool isConvertOnly;
 
@@ -124,8 +108,8 @@ class TranslationComparisonPanel extends ConsumerWidget {
     return status == 'cleared' || (targetText ?? '').isEmpty;
   }
 
-  /// Calculate segment statistics from metadata
-  SegmentStatistics _calculateStatistics(
+  /// Calculate counts for state-based filter chips
+  Map<String, int> _calculateFilterCounts(
     Map<int, Map<String, dynamic>> segmentMetadata,
   ) {
     var total = 0;
@@ -150,34 +134,15 @@ class TranslationComparisonPanel extends ConsumerWidget {
 
       total++;
 
-      // Count images (highest priority - images are not counted in other categories)
       if (isImage) {
         images++;
-      }
-      // Count excluded (excluding images and failed segments)
-      // CRITICAL: Only count as excluded if explicitly marked as excluded AND not failed
-      // Failed segments should be counted in retry/failed, not in excluded
-      // This ensures failed segments are properly shown in retry count, not hidden in excluded count
-      // If a segment is both isFailed and isExcluded, prioritize failed status (count as failed, not excluded)
-      else if (isExcluded && !isFailed) {
+      } else if (isExcluded && !isFailed) {
         excluded++;
-      }
-      // Count cleared (excluding images, excluded, and failed)
-      // Cleared segments should not be counted in translated/pending/retry/failed
-      else if (isCleared) {
+      } else if (isCleared) {
         cleared++;
-      }
-      // Count failed segments (excluding images, excluded, and cleared)
-      // CRITICAL: Failed segments should NOT be counted in translated/pending
-      // They should only be counted in failed (which appears in Retry count)
-      // This prevents double counting: a failed segment should not be both translated and failed
-      else if (isFailed) {
-        // Failed segments are counted in the failed counter below
-        // Do not count them here in translated/pending to avoid double counting
-      }
-      // Count translated or pending (excluding images, excluded, cleared, and failed)
-      // Only count segments that are not failed, not excluded, not cleared, and not images
-      else {
+      } else if (isFailed) {
+        // counted in failed below
+      } else {
         if (targetText != null && targetText.isNotEmpty) {
           translated++;
         } else {
@@ -185,108 +150,114 @@ class TranslationComparisonPanel extends ConsumerWidget {
         }
       }
 
-      // Count retry and failed separately (these can overlap with translated/pending)
-      // BUT: excluded (without failed) and cleared segments should NOT be counted in retry/failed
-      // failed: segments that failed during translation (isFailed, even if also isExcluded)
-      // retry: segments manually marked for retry but not failed (needsRetry && !isFailed, but not excluded without failed)
-      // Display: "Retry: X" where X = failed + retry (no overlap)
-      // CRITICAL: Count failed segments even if they are also excluded (failed takes priority over excluded)
-      // Only exclude from retry/failed count if cleared or if excluded but not failed
       if (!isCleared && !isImage) {
-        // Count failed segments (even if also excluded - failed takes priority)
         if (isFailed) failed++;
-        // Count retry segments (but not if failed, and not if excluded without failed)
-        // Simplified: if excluded without failed, don't count as retry
         if (needsRetry && !isFailed && !(isExcluded && !isFailed)) retry++;
       }
     }
 
-    return SegmentStatistics(
-      total: total,
-      translated: translated,
-      pending: pending,
-      excluded: excluded,
-      retry: retry,
-      failed:
-          failed, // Failed segments are displayed as "Retry" but counted separately
-      cleared: cleared,
-      images: images,
-    );
+    return <String, int>{
+      '': total,
+      'translated': translated,
+      'pending': pending,
+      'failed': failed,
+      'excluded': excluded,
+      'retry': retry + failed, // "Retry" shows failed + manual retry
+      'cleared': cleared,
+      'images': images,
+    };
   }
 
-  /// Build statistics widget
-  Widget _buildStatisticsWidget(BuildContext context, SegmentStatistics stats) {
-    final AppLocalizations l10n = AppLocalizations.of(context)!;
-    final scheme = Theme.of(context).colorScheme;
+  /// Build filter chips bar (replaces the old statistics widget)
+  Widget _buildFilterChipsBar(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final counts = _calculateFilterCounts(segmentMetadata);
+    final selected = selectedExclusionFilters ?? <String>{};
 
-    // Use Wrap to prevent overflow when statistics are too long
-    return Wrap(
-      runSpacing: 2,
+    // Define filter chip configs: key, label, color
+    final filters = <_FilterChipConfig>[
+      _FilterChipConfig('', l10n.translationToolbarFilterAll, Colors.blue),
+      _FilterChipConfig('translated', l10n.translationStatsTranslatedLabel, Colors.green),
+      _FilterChipConfig('pending', l10n.translationStatsPendingLabel, Colors.orange),
+      _FilterChipConfig('failed', l10n.translationToolbarFilterFailed, Colors.red),
+      _FilterChipConfig('excluded', l10n.translationToolbarFilterExcluded, Colors.grey),
+      _FilterChipConfig('retry', l10n.translationToolbarRetry, Colors.orange),
+      _FilterChipConfig('cleared', l10n.translationStatsClearedLabel, Colors.purple),
+      _FilterChipConfig('images', l10n.translationStatsImagesLabel, Colors.blue),
+    ];
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        const SizedBox(width: 4), // Reduced spacing
-        Text(
-          '[${l10n.translationStatsTotal(stats.total.toString())}',
-          style: TextStyle(
-            fontSize: 10, // Reduced from 12 to 10
-            color: scheme.onSurfaceVariant,
+        Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: Text(
+            '${l10n.settingsGlossaryFilterLabel} ',
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
-        Text(
-          l10n.translationStatsTranslated(stats.translated.toString()),
-          style: TextStyle(
-            fontSize: 10, // Reduced from 12 to 10
-            color: Colors.green.shade700,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        Text(
-          l10n.translationStatsPending(stats.pending.toString()),
-          style: TextStyle(
-            fontSize: 10, // Reduced from 12 to 10
-            color: Colors.orange.shade700,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        if (stats.excluded > 0)
-          Text(
-            l10n.translationStatsExcluded(stats.excluded.toString()),
-            style: TextStyle(
-              fontSize: 10, // Reduced from 12 to 10
-              color: Colors.grey.shade700,
+        Flexible(
+          child: Wrap(
+            spacing: 3,
+            runSpacing: 2,
+            children: filters.map((cfg) {
+        final count = counts[cfg.key] ?? 0;
+        // Hide chips with 0 count (except "All")
+        if (count == 0 && cfg.key.isNotEmpty) {
+          return const SizedBox.shrink();
+        }
+        final isSelected = cfg.key.isEmpty
+            ? selected.isEmpty
+            : selected.contains(cfg.key);
+        return Tooltip(
+          message: '${cfg.label} ($count)',
+          child: ActionChip(
+            label: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (isSelected)
+                  Icon(Icons.check, size: 10, color: cfg.color.shade700),
+                if (isSelected) const SizedBox(width: 2),
+                Text(
+                  '${cfg.label} ($count)',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: isSelected ? cfg.color.shade700 : Colors.grey.shade700,
+                  ),
+                ),
+              ],
+            ),
+            onPressed: onFiltersChanged != null
+                ? () {
+                    if (cfg.key.isEmpty) {
+                      // "All" clears all state filters
+                      onFiltersChanged!(<String>{});
+                    } else {
+                      // Toggle: if already selected, clear; else set this filter
+                      if (isSelected) {
+                        onFiltersChanged!(<String>{});
+                      } else {
+                        onFiltersChanged!(<String>{cfg.key});
+                      }
+                    }
+                  }
+                : null,
+            backgroundColor: isSelected ? cfg.color.shade100 : Colors.grey.shade200,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(999),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            visualDensity: VisualDensity.compact,
+            side: BorderSide(
+              color: isSelected ? cfg.color.shade300 : Colors.grey.shade400,
             ),
           ),
-        // Display retry count (failed + manually marked retry, no overlap)
-        if (stats.failed > 0 || stats.retry > 0)
-          Text(
-            l10n.translationStatsRetryCount(
-              (stats.failed + stats.retry).toString(),
-            ),
-            style: TextStyle(
-              fontSize: 10, // Reduced from 12 to 10
-              color: Colors.orange.shade700,
-            ),
-          ),
-        if (stats.cleared > 0)
-          Text(
-            l10n.translationStatsCleared(stats.cleared.toString()),
-            style: TextStyle(
-              fontSize: 10, // Reduced from 12 to 10
-              color: Colors.purple.shade700,
-            ),
-          ),
-        if (stats.images > 0)
-          Text(
-            l10n.translationStatsImages(stats.images.toString()),
-            style: TextStyle(
-              fontSize: 10, // Reduced from 12 to 10
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
-        Text(
-          ']',
-          style: TextStyle(
-            fontSize: 10, // Reduced from 12 to 10
-            color: scheme.onSurfaceVariant,
+        );
+      }).toList(),
           ),
         ),
       ],
@@ -322,22 +293,11 @@ class TranslationComparisonPanel extends ConsumerWidget {
               ),
               child: Row(
                 children: <Widget>[
-                  // Middle section: Statistics (left-aligned)
-                  Expanded(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        // Statistics display
-                        if (segmentMetadata.isNotEmpty)
-                          Flexible(
-                            child: _buildStatisticsWidget(
-                              context,
-                              _calculateStatistics(segmentMetadata),
-                            ),
-                          ),
-                      ],
+                  // Middle section: Filter chips bar (left-aligned)
+                  if (segmentMetadata.isNotEmpty)
+                    Expanded(
+                      child: _buildFilterChipsBar(context),
                     ),
-                  ),
                   // Right section: Segment info, Translated label and stats
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -610,28 +570,53 @@ class TranslationComparisonPanel extends ConsumerWidget {
           // Apply filter: if filters are selected, only show matching segments
           if (selectedExclusionFilters != null &&
               selectedExclusionFilters!.isNotEmpty) {
-            // Special case: "failed" filter - show only failed segments
-            if (selectedExclusionFilters!.contains('failed')) {
+            // Check if a state-based filter is active (mutually exclusive)
+            final String stateFilter = selectedExclusionFilters!.firstWhere(
+              (k) => _stateFilterKeys.contains(k),
+              orElse: () => '',
+            );
+
+            if (stateFilter.isNotEmpty) {
+              // State-based filtering
+              final isImage = metadata['is_image'] as bool? ?? false;
               final isFailed = metadata['is_failed'] as bool? ?? false;
-              if (!isFailed) {
+              final targetText = metadata['target_text'] as String?;
+              final status = metadata['status'] as String?;
+              final needsRetry = metadata['needs_retry'] as bool? ?? false;
+              final isCleared = status == 'cleared';
+
+              bool show = false;
+              switch (stateFilter) {
+                case 'translated':
+                  show = !isImage &&
+                      !isExcluded &&
+                      !isFailed &&
+                      !isCleared &&
+                      targetText != null &&
+                      targetText.isNotEmpty;
+                case 'pending':
+                  show = !isImage &&
+                      !isExcluded &&
+                      !isFailed &&
+                      !isCleared &&
+                      (targetText == null || targetText.isEmpty);
+                case 'failed':
+                  show = isFailed;
+                case 'excluded':
+                  show = isExcluded && !isFailed;
+                case 'retry':
+                  show = needsRetry || isFailed;
+                case 'cleared':
+                  show = isCleared;
+                case 'images':
+                  show = isImage;
+              }
+
+              if (!show) {
                 return const SizedBox.shrink();
               }
-            }
-            // Special case: "included" filter - show only included segments (will be translated)
-            else if (selectedExclusionFilters!.contains('included')) {
-              if (isExcluded) {
-                return const SizedBox.shrink();
-              }
-            }
-            // Special case: "all_excluded" filter - show only excluded segments
-            else if (selectedExclusionFilters!.contains('all_excluded')) {
-              if (!isExcluded) {
-                return const SizedBox.shrink();
-              }
-            }
-            // Normal filter: show only segments matching selected exclusion reasons
-            else {
-              // If segment is not excluded, or exclusion reason is not in selected filters, hide it
+            } else {
+              // Type-based filtering (exclusion reason types from exclusion panel)
               if (!isExcluded ||
                   exclusionReason == null ||
                   !selectedExclusionFilters!.contains(exclusionReason)) {
@@ -777,6 +762,54 @@ class TranslationComparisonPanel extends ConsumerWidget {
         final isExcluded = metadata['is_excluded'] as bool? ?? false;
         final exclusionReason = metadata['exclusion_reason'] as String?;
         final isCleared = isImage ? false : _isSegmentCleared(metadata);
+
+        // Apply filter: if filters are selected, only show matching segments
+        if (selectedExclusionFilters != null &&
+            selectedExclusionFilters!.isNotEmpty) {
+          final String stateFilter = selectedExclusionFilters!.firstWhere(
+            (k) => _stateFilterKeys.contains(k),
+            orElse: () => '',
+          );
+
+          if (stateFilter.isNotEmpty) {
+            bool show = false;
+            switch (stateFilter) {
+              case 'translated':
+                show = !isImage &&
+                    !isExcluded &&
+                    !isFailed &&
+                    !isCleared &&
+                    metadata['target_text'] != null &&
+                    (metadata['target_text'] as String).isNotEmpty;
+              case 'pending':
+                show = !isImage &&
+                    !isExcluded &&
+                    !isFailed &&
+                    !isCleared &&
+                    (metadata['target_text'] == null ||
+                        (metadata['target_text'] as String).isEmpty);
+              case 'failed':
+                show = isFailed;
+              case 'excluded':
+                show = isExcluded && !isFailed;
+              case 'retry':
+                show = needsRetry || isFailed;
+              case 'cleared':
+                show = isCleared;
+              case 'images':
+                show = isImage;
+            }
+            if (!show) {
+              return const SizedBox.shrink();
+            }
+          } else {
+            if (!isExcluded ||
+                exclusionReason == null ||
+                !selectedExclusionFilters!.contains(exclusionReason)) {
+              return const SizedBox.shrink();
+            }
+          }
+        }
 
         // Build target segment widget (reused for both modes)
         final Widget targetSegmentWidget = hasTarget
@@ -1017,4 +1050,12 @@ class TranslationComparisonPanel extends ConsumerWidget {
       return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
     }
   }
+}
+
+/// Configuration for a filter chip in the filter bar.
+class _FilterChipConfig {
+  const _FilterChipConfig(this.key, this.label, this.color);
+  final String key;
+  final String label;
+  final MaterialColor color;
 }

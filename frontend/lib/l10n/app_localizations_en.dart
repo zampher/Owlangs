@@ -336,6 +336,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationStatsTranslatedLabel => 'Translated';
 
   @override
+  String get translationStatsPendingLabel => 'Pending';
+
+  @override
+  String get translationStatsClearedLabel => 'Cleared';
+
+  @override
+  String get translationStatsImagesLabel => 'Images';
+
+  @override
   String get translationStatsLoadingContent => 'Loading content...';
 
   @override

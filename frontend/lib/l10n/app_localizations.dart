@@ -669,6 +669,24 @@ abstract class AppLocalizations {
   /// **'Translated'**
   String get translationStatsTranslatedLabel;
 
+  /// No description provided for @translationStatsPendingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get translationStatsPendingLabel;
+
+  /// No description provided for @translationStatsClearedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleared'**
+  String get translationStatsClearedLabel;
+
+  /// No description provided for @translationStatsImagesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Images'**
+  String get translationStatsImagesLabel;
+
   /// No description provided for @translationStatsLoadingContent.
   ///
   /// In en, this message translates to:
