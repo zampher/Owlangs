@@ -1598,6 +1598,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsTableOcrSubtitle => '表のOCRを有効にします';
 
   @override
+  String get settingsMineruModelVersion => 'モデルバージョン';
+
+  @override
+  String get settingsMineruModelVersionSubtitle =>
+      'MinerU解析モードを選択（pipelineは高速、vlmは高精度、hybridは両方）';
+
+  @override
   String get settingsAnonymizationNewTaskNotice => '変更は新規タスクにのみ適用されます';
 
   @override
@@ -2592,7 +2599,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get aiPlatformModelVersion => 'モデルバージョン';
 
   @override
-  String get aiPlatformModelVersionHint => 'vlm';
+  String get aiPlatformModelVersionHint => 'hybrid-auto-engine';
 
   @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';

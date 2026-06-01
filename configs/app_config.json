@@ -19,7 +19,7 @@
     "translator_json_paths": "",
     "translator_convert_engine": "mineru",
     "translator_mineru_token": "test_token",
-    "translator_mineru_model_version": "vlm",
+    "translator_mineru_model_version": "hybrid-auto-engine",
     "translator_formula_ocr": true,
     "translator_table_ocr": true,
     "translator_skip_translate": false,

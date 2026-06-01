@@ -225,16 +225,16 @@ class FormatConversionService:
             model_version = request.model_version
             if model_version is None:
                 if isinstance(parsing_engine, dict):
-                    model_version = parsing_engine.get('mineru_model_version', 'vlm')
+                    model_version = parsing_engine.get('mineru_model_version', 'hybrid-auto-engine')
                 elif parsing_engine:
-                    model_version = getattr(parsing_engine, 'mineru_model_version', 'vlm')
+                    model_version = getattr(parsing_engine, 'mineru_model_version', 'hybrid-auto-engine')
                 else:
-                    model_version = 'vlm'
+                    model_version = 'hybrid-auto-engine'
                 # Prefer hybrid for images (better OCR/layout); keep vlm/pipeline if explicitly set
                 if file_ext in (".jpg", ".jpeg", ".png"):
-                    model_version = "hybrid"
+                    model_version = "hybrid-auto-engine"
                     logger.info(LogModule.WORKFLOW, "[FORMAT_CONVERSION] Image file: using MinerU hybrid backend for OCR")
-            elif file_ext in (".jpg", ".jpeg", ".png") and model_version not in ("hybrid", "pipeline"):
+            elif file_ext in (".jpg", ".jpeg", ".png") and model_version not in ("hybrid-auto-engine", "hybrid-http-client", "hybrid", "pipeline"):
                 logger.info(LogModule.WORKFLOW, f"[FORMAT_CONVERSION] Image file with model_version={model_version}; consider 'hybrid' for better OCR")
             # OCR language: explicit request.ocr_language, else to_lang as hint (e.g. zh/en), else auto
             ocr_language = getattr(request, "ocr_language", None)
@@ -873,7 +873,7 @@ class FormatConversionService:
                                 # Also refresh related settings from global config
                                 payload['formula_ocr'] = parsing_engine_cfg.get('formula_ocr', payload.get('formula_ocr', True))
                                 payload['table_ocr'] = parsing_engine_cfg.get('table_ocr', payload.get('table_ocr', True))
-                                payload['model_version'] = parsing_engine_cfg.get('mineru_model_version', payload.get('model_version', 'vlm'))
+                                payload['model_version'] = parsing_engine_cfg.get('mineru_model_version', payload.get('model_version', 'hybrid-auto-engine'))
                                 # Clear cached workflow_config so it gets rebuilt with updated settings
                                 payload['workflow_config'] = None
                             else:

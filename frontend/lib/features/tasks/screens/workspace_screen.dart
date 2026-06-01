@@ -913,7 +913,6 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               children: <Widget>[
                 Flexible(
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
                       // Leading: Logo
                       Padding(

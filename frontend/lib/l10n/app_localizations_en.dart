@@ -1660,6 +1660,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTableOcrSubtitle => 'Enable OCR for tables';
 
   @override
+  String get settingsMineruModelVersion => 'Model Version';
+
+  @override
+  String get settingsMineruModelVersionSubtitle =>
+      'Select the MinerU parsing mode (pipeline, vlm-auto-engine, hybrid-auto-engine, vlm-http-client, or hybrid-http-client)';
+
+  @override
   String get settingsAnonymizationNewTaskNotice =>
       'Changes apply to new tasks only';
 
@@ -2680,7 +2687,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiPlatformModelVersion => 'Model Version';
 
   @override
-  String get aiPlatformModelVersionHint => 'vlm';
+  String get aiPlatformModelVersionHint => 'hybrid-auto-engine';
 
   @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';

@@ -1598,6 +1598,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsTableOcrSubtitle => '표에 대한 OCR 활성화';
 
   @override
+  String get settingsMineruModelVersion => '모델 버전';
+
+  @override
+  String get settingsMineruModelVersionSubtitle =>
+      'MinerU 구문 분석 모드 선택 (pipeline은 속도, vlm은 정확도, hybrid는 둘 다)';
+
+  @override
   String get settingsAnonymizationNewTaskNotice => '변경 사항은 새 작업에만 적용됩니다';
 
   @override
@@ -2596,7 +2603,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get aiPlatformModelVersion => '모델 버전';
 
   @override
-  String get aiPlatformModelVersionHint => 'vlm';
+  String get aiPlatformModelVersionHint => 'hybrid-auto-engine';
 
   @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';

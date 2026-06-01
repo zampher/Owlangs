@@ -1586,6 +1586,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTableOcrSubtitle => '为表格启用OCR';
 
   @override
+  String get settingsMineruModelVersion => '模型版本';
+
+  @override
+  String get settingsMineruModelVersionSubtitle =>
+      '选择 MinerU 解析模式（pipeline 速度快，vlm 精度高，hybrid 两者兼顾）';
+
+  @override
   String get settingsAnonymizationNewTaskNotice => '更改仅对新任务生效';
 
   @override
@@ -2576,7 +2583,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiPlatformModelVersion => '模型版本';
 
   @override
-  String get aiPlatformModelVersionHint => 'vlm';
+  String get aiPlatformModelVersionHint => 'hybrid-auto-engine';
 
   @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';

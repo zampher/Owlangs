@@ -30,11 +30,19 @@ LOCAL_MINERU_LANG_MAP = {
     "auto": "ch",  # Default to Chinese for auto
 }
 
+# Model version migration map (old short names -> official names)
+MIGRATION_MAP = {
+    "vlm": "vlm-auto-engine",
+    "hybrid": "hybrid-auto-engine",
+}
+
 # Model version to backend mapping
 MODEL_TO_BACKEND = {
     "pipeline": "pipeline",
-    "vlm": "vlm-auto-engine",
-    "hybrid": "hybrid-auto-engine",
+    "vlm-auto-engine": "vlm-auto-engine",
+    "hybrid-auto-engine": "hybrid-auto-engine",
+    "vlm-http-client": "vlm-http-client",
+    "hybrid-http-client": "hybrid-http-client",
 }
 
 
@@ -309,8 +317,11 @@ def get_local_mineru_language(ocr_language: str) -> str:
 
 
 def get_local_mineru_backend(model_version: str) -> str:
-    """Convert model version to local MinerU backend type."""
-    return MODEL_TO_BACKEND.get(model_version, "hybrid-auto-engine")
+    """Convert model version to local MinerU backend type, with migration for old names."""
+    mv = model_version
+    if mv in MIGRATION_MAP:
+        mv = MIGRATION_MAP[mv]
+    return MODEL_TO_BACKEND.get(mv, "hybrid-auto-engine")
 
 
 # Keep legacy function for backward compatibility

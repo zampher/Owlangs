@@ -104,11 +104,19 @@ LOCAL_MINERU_LANG_MAP = {
 }
 
 
+# Model version migration map (old short names -> official names)
+MIGRATION_MAP = {
+    "vlm": "vlm-auto-engine",
+    "hybrid": "hybrid-auto-engine",
+}
+
 # Model version to backend mapping for local MinerU
 MODEL_TO_BACKEND = {
     "pipeline": "pipeline",
-    "vlm": "vlm-auto-engine",
-    "hybrid": "hybrid-auto-engine",
+    "vlm-auto-engine": "vlm-auto-engine",
+    "hybrid-auto-engine": "hybrid-auto-engine",
+    "vlm-http-client": "vlm-http-client",
+    "hybrid-http-client": "hybrid-http-client",
 }
 
 
@@ -134,7 +142,7 @@ class ConverterMineruConfig(X2MarkdownConverterConfig):
     mineru_token: str
     formula_ocr: bool = True
     table_ocr: bool = True
-    model_version: Literal["pipeline", "vlm", "hybrid"] = "vlm"
+    model_version: Literal["pipeline", "vlm", "hybrid", "vlm-auto-engine", "hybrid-auto-engine", "vlm-http-client", "hybrid-http-client"] = "hybrid-auto-engine"
     ocr_language: Optional[str] = "auto"
     base_url: Optional[str] = None
     # API endpoint configuration (from platforms.json)
@@ -201,7 +209,7 @@ class MinerUBackend(ABC):
         mineru_token: str,
         formula_ocr: bool = True,
         table_ocr: bool = True,
-        model_version: str = "vlm",
+        model_version: str = "hybrid-auto-engine",
         ocr_language: str = "auto",
         api_endpoints: Optional[Dict[str, str]] = None,
         retry_count: int = 2,
@@ -272,12 +280,21 @@ class MinerUCloudBackend(MinerUBackend):
     def _build_upload_payload(self, document: Document) -> Dict:
         """Build upload request payload for cloud API."""
         model_version = self.model_version
-        if model_version == "hybrid":
+        # Normalize old short names
+        if model_version in MIGRATION_MAP:
+            new_mv = MIGRATION_MAP[model_version]
+            logger.info(
+                LogModule.CONVERT,
+                f"[MINERU] Auto-migrating model_version '{model_version}' -> '{new_mv}'"
+            )
+            model_version = new_mv
+        # Cloud MinerU does not support hybrid variants; fall back to vlm-auto-engine
+        if model_version in ("hybrid-auto-engine", "hybrid-http-client"):
             logger.warning(
                 LogModule.CONVERT,
-                "[MINERU] model_version 'hybrid' is not supported by MinerU cloud, falling back to 'vlm'."
+                f"[MINERU] model_version '{model_version}' is not supported by MinerU cloud, falling back to 'vlm-auto-engine'."
             )
-            model_version = "vlm"
+            model_version = "vlm-auto-engine"
         
         # Map language codes
         lang = (self.ocr_language or "").strip().lower()
@@ -615,8 +632,15 @@ class MinerULocalBackend(MinerUBackend):
         return [mapped]
     
     def _convert_backend(self) -> str:
-        """Convert model version to local MinerU backend type."""
-        return MODEL_TO_BACKEND.get(self.model_version, "hybrid-auto-engine")
+        """Convert model version to local MinerU backend type, with migration for old names."""
+        mv = self.model_version
+        if mv in MIGRATION_MAP:
+            logger.info(
+                LogModule.CONVERT,
+                f"[MINERU] Auto-migrating model_version '{mv}' -> '{MIGRATION_MAP[mv]}'"
+            )
+            mv = MIGRATION_MAP[mv]
+        return MODEL_TO_BACKEND.get(mv, "hybrid-auto-engine")
     
     def _build_multipart_request(self, document: Document, return_zip: bool = True) -> Tuple[Dict, bytes, str]:
         """

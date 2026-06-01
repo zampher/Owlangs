@@ -405,7 +405,7 @@ class WorkflowConfigBuilder:
             
             formula_ocr = getattr(payload, 'formula_ocr', True) if not isinstance(payload, dict) else payload.get('formula_ocr', True)
             table_ocr = getattr(payload, 'table_ocr', True) if not isinstance(payload, dict) else payload.get('table_ocr', True)
-            model_version = getattr(payload, 'model_version', 'vlm') if not isinstance(payload, dict) else payload.get('model_version', 'vlm')
+            model_version = getattr(payload, 'model_version', 'hybrid-auto-engine') if not isinstance(payload, dict) else payload.get('model_version', 'hybrid-auto-engine')
             ocr_language = (payload.get('ocr_language') if isinstance(payload, dict) else getattr(payload, 'ocr_language', None)) or None
             if not (ocr_language and str(ocr_language).strip()):
                 ocr_language = "auto"
@@ -436,7 +436,7 @@ class WorkflowConfigBuilder:
             base_url = (platform_cfg or {}).get('url') or 'http://localhost:8080/api/v4'
             mineru_token = (unified.get_platform_api_key('mineru_local') or '').strip()
             formula_ocr = getattr(payload, 'formula_ocr', True) if not isinstance(payload, dict) else payload.get('formula_ocr', True)
-            model_version = getattr(payload, 'model_version', 'vlm') if not isinstance(payload, dict) else payload.get('model_version', 'vlm')
+            model_version = getattr(payload, 'model_version', 'hybrid-auto-engine') if not isinstance(payload, dict) else payload.get('model_version', 'hybrid-auto-engine')
             ocr_language = (payload.get('ocr_language') if isinstance(payload, dict) else getattr(payload, 'ocr_language', None)) or None
             if not (ocr_language and str(ocr_language).strip()):
                 ocr_language = "auto"

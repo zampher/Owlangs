@@ -2357,7 +2357,6 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
   late TextEditingController _nameController;
   late TextEditingController _apiKeyController;
   late TextEditingController _apiUrlController;
-  late TextEditingController _modelVersionController;
   late TextEditingController _parserSubtypeController;
   bool _obscureText = true;
   String? _testResult;
@@ -2375,8 +2374,6 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
     _apiKeyController =
         TextEditingController(text: widget.platformInfo.apiKey ?? '');
     _apiUrlController = TextEditingController(text: widget.platformInfo.url);
-    _modelVersionController =
-        TextEditingController(text: 'vlm'); // MinerU default model version
     _parserSubtypeController =
         TextEditingController(text: widget.platformInfo.parserSubtype ?? 'cloud');
     _hasApiKey = widget.platformInfo.requiresApiKey;
@@ -2387,7 +2384,6 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
     _nameController.dispose();
     _apiKeyController.dispose();
     _apiUrlController.dispose();
-    _modelVersionController.dispose();
     _parserSubtypeController.dispose();
     super.dispose();
   }
@@ -2450,6 +2446,7 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
           : current.name,
       apiKey: _hasApiKey ? _apiKeyController.text.trim() : '',
       url: _apiUrlController.text.trim(),
+      model: 'vlm-auto-engine', // Cloud MinerU only supports vlm-auto-engine
       parserSubtype: _parserSubtypeController.text.trim().isNotEmpty
           ? _parserSubtypeController.text.trim()
           : current.parserSubtype,
@@ -2618,17 +2615,6 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
                             labelText: l10n.aiPlatformApiUrl,
                             hintText: l10n.aiPlatformMineruApiUrlHint,
                             prefixIcon: const Icon(Icons.link),
-                            border: const OutlineInputBorder(),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextFormField(
-                          controller: _modelVersionController,
-                          decoration: InputDecoration(
-                            labelText: l10n.aiPlatformModelVersion,
-                            hintText: l10n.aiPlatformModelVersionHint,
-                            prefixIcon: const Icon(Icons.model_training),
                             border: const OutlineInputBorder(),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           ),
@@ -2881,7 +2867,10 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
         TextEditingController(text: widget.platformInfo.apiKey ?? '');
     _apiUrlController = TextEditingController(text: widget.platformInfo.url);
     _modelVersionController =
-        TextEditingController(text: 'vlm'); // MinerU default model version
+        TextEditingController(text: _normalizeModelVersion(
+            widget.platformInfo.model.isNotEmpty
+                ? widget.platformInfo.model
+                : 'hybrid-auto-engine'));
     _parserSubtypeController =
         TextEditingController(text: widget.platformInfo.parserSubtype ?? 'local');
     _hasApiKey = widget.platformInfo.requiresApiKey;
@@ -2896,6 +2885,14 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
     _parserSubtypeController.dispose();
     super.dispose();
   }
+
+  /// Migrate old model version short names to official MinerU 3.2 names.
+  static const Map<String, String> _migrationMap = {
+    'vlm': 'vlm-auto-engine',
+    'hybrid': 'hybrid-auto-engine',
+  };
+  static String _normalizeModelVersion(String mv) =>
+      _migrationMap[mv] ?? mv;
 
   Future<void> _testConnection() async {
     final l10n = AppLocalizations.of(context)!;
@@ -2949,6 +2946,9 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
           : current.name,
       apiKey: _hasApiKey ? _apiKeyController.text.trim() : '',
       url: _apiUrlController.text.trim(),
+      model: _modelVersionController.text.trim().isNotEmpty
+          ? _modelVersionController.text.trim()
+          : current.model,
       parserSubtype: _parserSubtypeController.text.trim().isNotEmpty
           ? _parserSubtypeController.text.trim()
           : current.parserSubtype,
@@ -3122,15 +3122,26 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        TextFormField(
-                          controller: _modelVersionController,
+                        DropdownButtonFormField<String>(
+                          value: _modelVersionController.text,
                           decoration: InputDecoration(
                             labelText: l10n.aiPlatformModelVersion,
-                            hintText: l10n.aiPlatformModelVersionHint,
                             prefixIcon: const Icon(Icons.model_training),
                             border: const OutlineInputBorder(),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           ),
+                          items: const <DropdownMenuItem<String>>[
+                            DropdownMenuItem(value: 'pipeline', child: Text('pipeline')),
+                            DropdownMenuItem(value: 'vlm-auto-engine', child: Text('vlm-auto-engine')),
+                            DropdownMenuItem(value: 'hybrid-auto-engine', child: Text('hybrid-auto-engine')),
+                            DropdownMenuItem(value: 'vlm-http-client', child: Text('vlm-http-client')),
+                            DropdownMenuItem(value: 'hybrid-http-client', child: Text('hybrid-http-client')),
+                          ],
+                          onChanged: (String? value) {
+                            if (value != null) {
+                              _modelVersionController.text = value;
+                            }
+                          },
                         ),
                         const SizedBox(height: 8),
                         DropdownButtonFormField<String>(

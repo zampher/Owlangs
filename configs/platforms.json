@@ -555,7 +555,7 @@
     "mineru": {
       "name": "MinerU (Cloud)",
       "url": "https://mineru.net/api/v4",
-      "model": "vlm",
+      "model": "vlm-auto-engine",
       "max_tokens": 4096,
       "temperature": 0.3,
       "temperature_min": 0.0,
@@ -579,7 +579,7 @@
     "mineru_local": {
       "name": "MinerU (Local)",
       "url": "http://localhost:8920",
-      "model": "vlm",
+      "model": "hybrid-auto-engine",
       "max_tokens": 4096,
       "temperature": 0.3,
       "temperature_min": 0.0,

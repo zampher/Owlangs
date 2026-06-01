@@ -317,7 +317,7 @@ async def get_app_config():
             "mineru": {
                 "name": "MinerU",
                 "url": "https://mineru.net/api/v4",
-                "model": "vlm",
+                "model": "hybrid-auto-engine",
                 "max_tokens": 0,
                 "temperature": 0.0,
                 "recommended_tokens": None,

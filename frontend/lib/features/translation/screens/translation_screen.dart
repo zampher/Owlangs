@@ -5039,7 +5039,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           'convert_engine': globalSettings.parsingEngine,
           'formula_ocr': globalSettings.formulaOcr,
           'table_ocr': globalSettings.tableOcr,
-          'model_version': 'vlm',
+          'model_version': (aiPlatforms[globalSettings.parsingEngine]
+                  as Map<String, dynamic>?)?['model'] as String? ??
+              'hybrid-auto-engine',
           if (globalSettings.parsingEngine == 'mineru' &&
               mineruToken.isNotEmpty) ...<String, dynamic>{
             'mineru_token': mineruToken,

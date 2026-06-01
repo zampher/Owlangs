@@ -9,9 +9,9 @@
     "engines": {
       "mineru": {
         "name": "MinerU",
-        "model": "vlm",
+        "model": "vlm-auto-engine",
         "api_url": "https://mineru.net/api/v4",
-        "model_version": "vlm"
+        "model_version": "vlm-auto-engine"
       },
       "docling": {
         "name": "Docling",

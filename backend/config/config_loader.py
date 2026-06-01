@@ -71,7 +71,7 @@ class UnifiedConfig:
         mineru_engine = self.system.parsing_engine.engines.get('mineru', {})
         return {
             'convert_engine': self.system.parsing_engine.default_engine,
-            'mineru_model_version': mineru_engine.get('model_version', 'vlm'),
+            'mineru_model_version': mineru_engine.get('model_version', 'hybrid-auto-engine'),
             'formula_ocr': self.system.parsing_engine.default_engine_settings.get('formula_ocr', False),
             'table_ocr': self.system.parsing_engine.default_engine_settings.get('table_ocr', True),
             'skip_translate': self.system.parsing_engine.default_engine_settings.get('skip_translate', False),

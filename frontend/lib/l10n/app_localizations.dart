@@ -2957,6 +2957,18 @@ abstract class AppLocalizations {
   /// **'Enable OCR for tables'**
   String get settingsTableOcrSubtitle;
 
+  /// No description provided for @settingsMineruModelVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Model Version'**
+  String get settingsMineruModelVersion;
+
+  /// No description provided for @settingsMineruModelVersionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select the MinerU parsing mode (pipeline, vlm-auto-engine, hybrid-auto-engine, vlm-http-client, or hybrid-http-client)'**
+  String get settingsMineruModelVersionSubtitle;
+
   /// No description provided for @settingsAnonymizationNewTaskNotice.
   ///
   /// In en, this message translates to:
@@ -4739,7 +4751,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiPlatformModelVersionHint.
   ///
   /// In en, this message translates to:
-  /// **'vlm'**
+  /// **'hybrid-auto-engine'**
   String get aiPlatformModelVersionHint;
 
   /// No description provided for @aiPlatformMineruApiUrlHint.

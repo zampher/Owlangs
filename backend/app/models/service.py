@@ -48,7 +48,7 @@ class ConvertRequest(BaseModel):
     mineru_token: Optional[str] = None
     formula_ocr: bool = True
     table_ocr: bool = True
-    model_version: Literal["pipeline", "vlm", "hybrid"] = "vlm"
+    model_version: Literal["pipeline", "vlm", "hybrid", "vlm-auto-engine", "hybrid-auto-engine", "vlm-http-client", "hybrid-http-client"] = "hybrid-auto-engine"
 
 
 class ConvertResponse(BaseModel):
@@ -125,7 +125,7 @@ class ConvertFormatRequest(BaseModel):
     convert_engine: Optional[ConvertEngineType] = Field(default=None, description="Convert engine for PDF/images.")
     formula_ocr: Optional[bool] = Field(default=None, description="Enable formula OCR.")
     table_ocr: Optional[bool] = Field(default=None, description="Enable table OCR.")
-    model_version: Optional[Literal["pipeline", "vlm", "hybrid"]] = Field(default=None, description="MinerU backend: pipeline, vlm, or hybrid (better for images).")
+    model_version: Optional[Literal["pipeline", "vlm", "hybrid", "vlm-auto-engine", "hybrid-auto-engine", "vlm-http-client", "hybrid-http-client"]] = Field(default=None, description="MinerU backend: pipeline, vlm-auto-engine, hybrid-auto-engine, vlm-http-client, hybrid-http-client.")
     ocr_language: Optional[str] = Field(default=None, description="OCR language code (e.g. 'auto', 'zh', 'en'). Used by MinerU for recognition.")
     mineru_token: Optional[str] = Field(default=None, description="MinerU API token.")
     deep_split: Optional[bool] = Field(
@@ -284,8 +284,8 @@ class MarkdownWorkflowParams(BaseWorkflowParams):
     mineru_token: Optional[str] = Field(None, description="Required API token when `convert_engine` is 'mineru'.")
     formula_ocr: bool = Field(True, description="Whether to perform OCR recognition on formulas. Effective for both `mineru` and `docling`.")
     code_ocr: bool = Field(True, description="Whether to perform OCR recognition on code blocks. Only effective for `docling` engine.")
-    model_version: Literal["pipeline", "vlm", "hybrid"] = Field("vlm",
-                                                               description="MinerU backend: pipeline, vlm, or hybrid (better for images). Only effective for `mineru` engine.")
+    model_version: Literal["pipeline", "vlm", "hybrid", "vlm-auto-engine", "hybrid-auto-engine", "vlm-http-client", "hybrid-http-client"] = Field("hybrid-auto-engine",
+                                                               description="MinerU backend: pipeline, vlm-auto-engine, hybrid-auto-engine, vlm-http-client, or hybrid-http-client.")
     ocr_language: Optional[str] = Field(None, description="OCR language (e.g. 'auto', 'zh', 'en'). Only effective for `mineru` engine.")
 
     @field_validator('mineru_token')
@@ -499,7 +499,7 @@ class TranslateServiceRequest(BaseModel):
                         "convert_engine": "mineru",
                         "formula_ocr": True,
                         "table_ocr": True,
-                        "model_version": "vlm"
+                        "model_version": "hybrid-auto-engine"
                     }
                 }
             ]

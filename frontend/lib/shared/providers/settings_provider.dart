@@ -512,7 +512,6 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
           } else if (appConfig.containsKey('translator_table_ocr')) {
             backendSettings['tableOcr'] = appConfig['translator_table_ocr'];
           }
-
           // Map PDF split settings from backend
           if (appConfig.containsKey('translator_pdf_split_max_pages')) {
             backendSettings['pdfSplitMaxPages'] = appConfig['translator_pdf_split_max_pages'];

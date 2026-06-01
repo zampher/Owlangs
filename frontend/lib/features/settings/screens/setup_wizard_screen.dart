@@ -39,7 +39,6 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   late TextEditingController _mineruNameController;
   late TextEditingController _mineruApiKeyController;
   late TextEditingController _mineruApiUrlController;
-  late TextEditingController _mineruModelVersionController;
   late TextEditingController _mineruParserSubtypeController;
   bool _mineruObscureText = true;
   bool _mineruHasApiKey = true;  // Whether MinerU Cloud requires API key
@@ -157,13 +156,12 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _mineruNameController = TextEditingController();
     _mineruApiKeyController = TextEditingController();
     _mineruApiUrlController = TextEditingController();
-    _mineruModelVersionController = TextEditingController(text: 'vlm');
     _mineruParserSubtypeController = TextEditingController(text: 'cloud');
     // Local MinerU controllers
     _mineruLocalNameController = TextEditingController();
     _mineruLocalApiKeyController = TextEditingController();
     _mineruLocalApiUrlController = TextEditingController();
-    _mineruLocalModelVersionController = TextEditingController(text: 'vlm');
+    _mineruLocalModelVersionController = TextEditingController(text: 'hybrid-auto-engine');
     _mineruLocalParserSubtypeController = TextEditingController(text: 'local');
     // LLM controllers
     _llmNameController = TextEditingController();
@@ -188,7 +186,6 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _mineruNameController.dispose();
     _mineruApiKeyController.dispose();
     _mineruApiUrlController.dispose();
-    _mineruModelVersionController.dispose();
     _mineruParserSubtypeController.dispose();
     // Local MinerU controllers
     _mineruLocalNameController.dispose();
@@ -208,6 +205,14 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _llmTemperatureFocusNode.dispose();
     super.dispose();
   }
+
+  /// Migrate old model version short names to official MinerU 3.2 names.
+  static const Map<String, String> _migrationMap = {
+    'vlm': 'vlm-auto-engine',
+    'hybrid': 'hybrid-auto-engine',
+  };
+  static String _normalizeModelVersion(String mv) =>
+      _migrationMap[mv] ?? mv;
 
   void _nextStep() {
     setState(() {
@@ -380,9 +385,6 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       _mineruNameController.text = mineru.name;
       _mineruApiKeyController.text = mineru.apiKey ?? '';
       _mineruApiUrlController.text = mineru.url;
-      // Model version: load from saved config or use default
-      _mineruModelVersionController.text =
-          mineru.model.isNotEmpty ? mineru.model : 'vlm';
       // Parser subtype: default to 'cloud' for cloud MinerU
       _mineruParserSubtypeController.text = mineru.parserSubtype ?? 'cloud';
       // Requires API key: load from saved config (default true for cloud)
@@ -400,7 +402,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       _mineruLocalApiUrlController.text = mineruLocal.url;
       // Model version: load from saved config or use default
       _mineruLocalModelVersionController.text =
-          mineruLocal.model.isNotEmpty ? mineruLocal.model : 'vlm';
+          _normalizeModelVersion(mineruLocal.model.isNotEmpty ? mineruLocal.model : 'hybrid-auto-engine');
       // Parser subtype: default to 'local' for local MinerU
       _mineruLocalParserSubtypeController.text = mineruLocal.parserSubtype ?? 'local';
       // Requires API key: load from saved config (default false for local)
@@ -610,17 +612,6 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                       labelText: l10n.aiPlatformApiUrl,
                       hintText: l10n.aiPlatformMineruApiUrlHint,
                       prefixIcon: const Icon(Icons.link),
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _mineruModelVersionController,
-                    decoration: InputDecoration(
-                      labelText: l10n.aiPlatformModelVersion,
-                      hintText: l10n.aiPlatformModelVersionHint,
-                      prefixIcon: const Icon(Icons.schema_outlined),
                       border: const OutlineInputBorder(),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     ),
@@ -888,15 +879,26 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _mineruLocalModelVersionController,
+                  DropdownButtonFormField<String>(
+                    value: _mineruLocalModelVersionController.text,
                     decoration: InputDecoration(
                       labelText: l10n.aiPlatformModelVersion,
-                      hintText: l10n.aiPlatformModelVersionHint,
                       prefixIcon: const Icon(Icons.schema_outlined),
                       border: const OutlineInputBorder(),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     ),
+                    items: const <DropdownMenuItem<String>>[
+                      DropdownMenuItem(value: 'pipeline', child: Text('pipeline')),
+                      DropdownMenuItem(value: 'vlm-auto-engine', child: Text('vlm-auto-engine')),
+                      DropdownMenuItem(value: 'hybrid-auto-engine', child: Text('hybrid-auto-engine')),
+                      DropdownMenuItem(value: 'vlm-http-client', child: Text('vlm-http-client')),
+                      DropdownMenuItem(value: 'hybrid-http-client', child: Text('hybrid-http-client')),
+                    ],
+                    onChanged: (String? value) {
+                      if (value != null) {
+                        _mineruLocalModelVersionController.text = value;
+                      }
+                    },
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
@@ -1238,9 +1240,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ? _mineruNameController.text.trim()
             : 'MinerU (Cloud)',
         url: _mineruApiUrlController.text.trim(),
-        model: _mineruModelVersionController.text.trim().isNotEmpty
-            ? _mineruModelVersionController.text.trim()
-            : 'vlm',
+        model: 'vlm-auto-engine', // Cloud MinerU only supports vlm-auto-engine
         apiKey: _mineruApiKeyController.text.trim(),
         parserSubtype: _mineruParserSubtypeController.text.trim().isNotEmpty
             ? _mineruParserSubtypeController.text.trim()
@@ -1261,9 +1261,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             : current.name,
         apiKey: _mineruApiKeyController.text.trim(),
         url: _mineruApiUrlController.text.trim(),
-        model: _mineruModelVersionController.text.trim().isNotEmpty
-            ? _mineruModelVersionController.text.trim()
-            : current.model,
+        model: 'vlm-auto-engine', // Cloud MinerU only supports vlm-auto-engine
         parserSubtype: _mineruParserSubtypeController.text.trim().isNotEmpty
             ? _mineruParserSubtypeController.text.trim()
             : current.parserSubtype,
@@ -1299,7 +1297,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         url: _mineruLocalApiUrlController.text.trim(),
         model: _mineruLocalModelVersionController.text.trim().isNotEmpty
             ? _mineruLocalModelVersionController.text.trim()
-            : 'vlm',
+            : 'hybrid-auto-engine',
         apiKey: _mineruLocalApiKeyController.text.trim(),
         parserSubtype: _mineruLocalParserSubtypeController.text.trim().isNotEmpty
             ? _mineruLocalParserSubtypeController.text.trim()

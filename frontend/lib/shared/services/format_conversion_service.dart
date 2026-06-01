@@ -253,7 +253,7 @@ class FormatConversionService {
     required String parsingEngine,
     required bool formulaOcr,
     required bool tableOcr,
-    String modelVersion = 'vlm',
+    String modelVersion = 'hybrid-auto-engine',
   }) async {
     String? mineruToken;
     if (parsingEngine == 'mineru') {
@@ -280,7 +280,7 @@ class FormatConvertParserOptions {
     required this.convertEngine,
     required this.formulaOcr,
     required this.tableOcr,
-    this.modelVersion = 'vlm',
+    this.modelVersion = 'hybrid-auto-engine',
     this.mineruToken,
   });
 

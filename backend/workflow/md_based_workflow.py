@@ -507,7 +507,7 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
                 convert_config = ConverterMineruConfig(
                     mineru_token="",  # Will be injected from local config
                     formula_ocr=True,
-                    model_version="vlm",
+                    model_version="hybrid-auto-engine",
                     pdf_split_enabled=pdf_cfg.pdf_split_enabled,
                     pdf_split_max_pages=pdf_cfg.pdf_split_max_pages,
                     pdf_split_max_workers=pdf_cfg.pdf_split_max_workers,

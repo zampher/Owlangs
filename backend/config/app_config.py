@@ -44,7 +44,7 @@ class AppConfig:
     # Parsing settings
     translator_convert_engine: str = "mineru"
     translator_mineru_token: str = ""
-    translator_mineru_model_version: str = "vlm"
+    translator_mineru_model_version: str = "hybrid-auto-engine"
     translator_formula_ocr: bool = True
     translator_table_ocr: bool = True
     
