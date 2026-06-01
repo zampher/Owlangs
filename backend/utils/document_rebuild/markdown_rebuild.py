@@ -290,6 +290,10 @@ def _rebuild_markdown_from_layout_segments(
     table_body_format: Optional[str] = None,
     bilingual_export: bool = False,
     target_first: bool = False,
+    source_text_italic: bool = False,
+    source_text_color: Optional[str] = None,
+    target_text_italic: bool = False,
+    target_text_color: Optional[str] = None,
 ) -> str:
     """
     Rebuild markdown content from segments using layout information (PDF path).
@@ -704,6 +708,11 @@ def _rebuild_markdown_from_layout_segments(
                 is_excluded=is_excluded,
                 is_cleared=is_cleared,
                 inner_separator="\n\n",
+                source_text_italic=source_text_italic,
+                source_text_color=source_text_color,
+                target_text_italic=target_text_italic,
+                target_text_color=target_text_color,
+                use_html_styles=True,
             )
             bilingual_formatted_texts.append(combined)
         
@@ -817,6 +826,10 @@ def _rebuild_markdown_from_text_segments(
     segments: List[Dict[str, Any]],
     bilingual_export: bool = False,
     target_first: bool = False,
+    source_text_italic: bool = False,
+    source_text_color: Optional[str] = None,
+    target_text_italic: bool = False,
+    target_text_color: Optional[str] = None,
 ) -> str:
     """
     Rebuild markdown content from segments using text-based logic (MD/TXT path).
@@ -882,6 +895,11 @@ def _rebuild_markdown_from_text_segments(
                 is_excluded=is_excluded,
                 is_cleared=is_cleared,
                 inner_separator="\n\n",
+                source_text_italic=source_text_italic,
+                source_text_color=source_text_color,
+                target_text_italic=target_text_italic,
+                target_text_color=target_text_color,
+                use_html_styles=True,
             )
             bilingual_texts.append(combined)
             text_idx += 1
@@ -944,6 +962,19 @@ def rebuild_markdown_document_from_segments(
         if _be:
             bilingual_export = True
             target_first = _tf
+
+    style_source_italic = False
+    style_source_color: Optional[str] = None
+    style_target_italic = False
+    style_target_color: Optional[str] = None
+    if bilingual_export and task_state:
+        from utils.bilingual_export_utils import get_bilingual_style_config
+        (
+            style_source_italic,
+            style_source_color,
+            style_target_italic,
+            style_target_color,
+        ) = get_bilingual_style_config(task_state)
 
     segments_data = get_translation_segments(None, task_state)
     if not segments_data:
@@ -1046,6 +1077,10 @@ def rebuild_markdown_document_from_segments(
                 table_body_format=table_body_format,
                 bilingual_export=bilingual_export,
                 target_first=target_first,
+                source_text_italic=style_source_italic,
+                source_text_color=style_source_color,
+                target_text_italic=style_target_italic,
+                target_text_color=style_target_color,
             )
         else:
             # Fallback to text-based rebuild if layout loading failed
@@ -1054,6 +1089,10 @@ def rebuild_markdown_document_from_segments(
                 segments=segments,
                 bilingual_export=bilingual_export,
                 target_first=target_first,
+                source_text_italic=style_source_italic,
+                source_text_color=style_source_color,
+                target_text_italic=style_target_italic,
+                target_text_color=style_target_color,
             )
     else:
         # Use text-based rebuild for MD/TXT paths
@@ -1063,6 +1102,10 @@ def rebuild_markdown_document_from_segments(
             segments=segments,
             bilingual_export=bilingual_export,
             target_first=target_first,
+            source_text_italic=style_source_italic,
+            source_text_color=style_source_color,
+            target_text_italic=style_target_italic,
+            target_text_color=style_target_color,
         )
     
     if not markdown_content:

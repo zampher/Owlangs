@@ -8,9 +8,21 @@ original and translated text at the segment level. It is used by
 DownloadService when the user enables bilingual export.
 """
 
+import html as html_module
 import os
 from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
+
+# Preset colors for bilingual export (shared by markdown HTML spans and DOCX rebuild)
+BILINGUAL_EXPORT_COLOR_NAMES = frozenset({"gray", "blue", "red", "green", "orange", "black"})
+BILINGUAL_EXPORT_COLOR_HEX: Dict[str, str] = {
+    "gray": "#808080",
+    "red": "#FF0000",
+    "blue": "#0000FF",
+    "green": "#008000",
+    "orange": "#FFA500",
+    "black": "#000000",
+}
 
 from logger import unified_logger as logger
 from logger.logger import LogModule
@@ -57,6 +69,48 @@ def get_bilingual_config(task_state: Optional[Dict[str, Any]]) -> Tuple[bool, bo
     return enabled, target_first
 
 
+def _normalize_bilingual_color(color: Optional[str]) -> Optional[str]:
+    if not color:
+        return None
+    normalized = str(color).strip().lower()
+    if normalized not in BILINGUAL_EXPORT_COLOR_NAMES:
+        return None
+    return normalized
+
+
+def get_bilingual_style_config(
+    task_state: Optional[Dict[str, Any]],
+) -> Tuple[bool, Optional[str], bool, Optional[str]]:
+    """Return (source_italic, source_color, target_italic, target_color) from task_state."""
+    if not task_state:
+        return False, None, True, "gray"
+    source_italic = bool(task_state.get("source_text_italic", False))
+    source_color = _normalize_bilingual_color(task_state.get("source_text_color"))
+    target_italic = bool(task_state.get("target_text_italic", True))
+    target_color = _normalize_bilingual_color(task_state.get("target_text_color")) or "gray"
+    return source_italic, source_color, target_italic, target_color
+
+
+def wrap_bilingual_html_part(
+    text: str,
+    italic: bool = False,
+    color: Optional[str] = None,
+) -> str:
+    """Wrap text in an inline HTML span for styled bilingual markdown/DOCX export."""
+    if not text:
+        return ""
+    escaped = html_module.escape(text)
+    styles: List[str] = []
+    if italic:
+        styles.append("font-style:italic")
+    normalized_color = _normalize_bilingual_color(color)
+    if normalized_color:
+        styles.append(f"color:{BILINGUAL_EXPORT_COLOR_HEX[normalized_color]}")
+    if not styles:
+        return escaped
+    return f'<span style="{";".join(styles)}">{escaped}</span>'
+
+
 def build_bilingual_segment_text(
     source_text: str,
     target_text: str,
@@ -64,6 +118,12 @@ def build_bilingual_segment_text(
     is_excluded: bool = False,
     is_cleared: bool = False,
     inner_separator: str = "\n\n",
+    *,
+    source_text_italic: bool = False,
+    source_text_color: Optional[str] = None,
+    target_text_italic: bool = False,
+    target_text_color: Optional[str] = None,
+    use_html_styles: bool = False,
 ) -> str:
     """Build bilingual text for a single segment.
 
@@ -91,6 +151,22 @@ def build_bilingual_segment_text(
 
     # Avoid duplication when translation failed or was identical
     if target.strip() and target.strip() != source.strip():
+        if use_html_styles:
+            if target_first:
+                first_part = wrap_bilingual_html_part(
+                    target, italic=target_text_italic, color=target_text_color
+                )
+                second_part = wrap_bilingual_html_part(
+                    source, italic=source_text_italic, color=source_text_color
+                )
+            else:
+                first_part = wrap_bilingual_html_part(
+                    source, italic=source_text_italic, color=source_text_color
+                )
+                second_part = wrap_bilingual_html_part(
+                    target, italic=target_text_italic, color=target_text_color
+                )
+            return f"{first_part}{inner_separator}{second_part}"
         first = target if target_first else source
         second = source if target_first else target
         return f"{first}{inner_separator}{second}"

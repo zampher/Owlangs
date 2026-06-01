@@ -44,9 +44,13 @@ _TEX_SPLIT_PARTS_SINGLE_LINE_INLINE = (
     r"(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|"
     r"\*\*.*?\*\*|\*.*?\*|`.*?`|\[.*?\]\(.*?\))"
 )
-# Inline HTML from translators/rebuild: <sup>n</sup>, <sub>n</sub> inside prose (author affiliations, etc.)
-_HTML_SUP_SUB_TAGS = re.compile(
-    r"(<sup>\s*[\s\S]*?</sup>|<sub>\s*[\s\S]*?</sub>)",
+# Inline HTML from translators/rebuild: <sup>n</sup>, <sub>n</sub>, styled <span> for bilingual export
+_HTML_INLINE_TAGS = re.compile(
+    r"(<sup>\s*[\s\S]*?</sup>|<sub>\s*[\s\S]*?</sub>|<span\s+style=\"[^\"]*\">\s*[\s\S]*?</span>)",
+    re.IGNORECASE,
+)
+_HTML_SPAN_STYLE = re.compile(
+    r'<span\s+style="([^"]*)">\s*([\s\S]*?)\s*</span>',
     re.IGNORECASE,
 )
 
@@ -126,20 +130,37 @@ class MD2DOCXExporter(MDExporter):
         run.font.size = Pt(self.font_size)
         self._set_run_east_asia_font(run)
 
+    def _apply_span_style_to_run(self, run, style: str) -> None:
+        """Apply font-style/color from bilingual export HTML span."""
+        style_lower = style.replace(" ", "").lower()
+        if "font-style:italic" in style_lower:
+            run.italic = True
+        color_match = re.search(r"color:(#[0-9a-fA-F]{6})", style_lower)
+        if color_match:
+            hex_color = color_match.group(1)
+            try:
+                run.font.color.rgb = RGBColor(
+                    int(hex_color[1:3], 16),
+                    int(hex_color[3:5], 16),
+                    int(hex_color[5:7], 16),
+                )
+            except Exception:
+                pass
+
     def _add_runs_with_html_sup_sub(self, para, text: str) -> None:
-        """Add paragraph runs; interpret <sup>/<sub> as Word superscript/subscript."""
+        """Add paragraph runs; interpret inline HTML (sup/sub/styled span)."""
         if not text:
             return
         clean = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]", "", text)
         if not clean:
             return
         lower = clean.lower()
-        if "<sup" not in lower and "<sub" not in lower:
+        if "<sup" not in lower and "<sub" not in lower and "<span" not in lower:
             run = para.add_run(clean)
             self._apply_default_body_font(run)
             return
         pos = 0
-        for m in _HTML_SUP_SUB_TAGS.finditer(clean):
+        for m in _HTML_INLINE_TAGS.finditer(clean):
             if m.start() > pos:
                 run = para.add_run(clean[pos : m.start()])
                 self._apply_default_body_font(run)
@@ -160,8 +181,16 @@ class MD2DOCXExporter(MDExporter):
                         self._apply_default_body_font(run)
                         run.font.subscript = True
                 else:
-                    run = para.add_run(tag)
-                    self._apply_default_body_font(run)
+                    span_match = _HTML_SPAN_STYLE.search(tag)
+                    if span_match:
+                        inner = html.unescape(span_match.group(2).strip())
+                        if inner:
+                            run = para.add_run(inner)
+                            self._apply_default_body_font(run)
+                            self._apply_span_style_to_run(run, span_match.group(1))
+                    else:
+                        run = para.add_run(tag)
+                        self._apply_default_body_font(run)
             pos = m.end()
         if pos < len(clean):
             run = para.add_run(clean[pos:])

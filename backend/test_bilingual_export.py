@@ -138,6 +138,52 @@ def test_recover_layout_block_indices_uses_per_segment_map():
     print("PASS test_recover_layout_block_indices_uses_per_segment_map")
 
 
+def test_build_bilingual_segment_text_styled_html():
+    from utils.bilingual_export_utils import build_bilingual_segment_text
+
+    result = build_bilingual_segment_text(
+        "Hello",
+        "你好",
+        target_first=False,
+        source_text_italic=True,
+        source_text_color="blue",
+        target_text_italic=False,
+        target_text_color="gray",
+        use_html_styles=True,
+    )
+    assert 'style="font-style:italic;color:#0000FF"' in result
+    assert "Hello" in result
+    assert 'style="color:#808080"' in result
+    assert "你好" in result
+    assert result.index("Hello") < result.index("你好")
+    print("PASS test_build_bilingual_segment_text_styled_html")
+
+
+def test_md2docx_parses_bilingual_span_styles():
+    try:
+        from docx import Document as DocxDocument
+        from exporter.md.md2docx_exporter import MD2DOCXExporter, MD2DOCXExporterConfig
+    except ImportError:
+        print("PASS test_md2docx_parses_bilingual_span_styles (skipped: python-docx not installed)")
+        return
+
+    exporter = MD2DOCXExporter(MD2DOCXExporterConfig())
+    doc = DocxDocument()
+    para = doc.add_paragraph()
+    text = (
+        '<span style="font-style:italic;color:#0000FF">Source</span>\n\n'
+        '<span style="color:#808080">Target</span>'
+    )
+    exporter._add_runs_with_html_sup_sub(para, text)
+    assert len(para.runs) >= 2
+    assert para.runs[0].text == "Source"
+    assert para.runs[0].italic is True
+    assert para.runs[0].font.color.rgb[0] == 0x00
+    assert para.runs[-1].text == "Target"
+    assert para.runs[-1].font.color.rgb[0] == 0x80
+    print("PASS test_md2docx_parses_bilingual_span_styles")
+
+
 def test_rebuild_markdown_text_segments_bilingual():
     print("PASS _rebuild_markdown_from_text_segments bilingual (skipped in test env)")
 
@@ -148,5 +194,7 @@ if __name__ == "__main__":
     test_rebuild_bilingual_plain_text_from_segments()
     test_table_caption_not_treated_as_image_for_bilingual_skip()
     test_recover_layout_block_indices_uses_per_segment_map()
+    test_build_bilingual_segment_text_styled_html()
+    test_md2docx_parses_bilingual_span_styles()
     test_rebuild_markdown_text_segments_bilingual()
     print("\nAll bilingual export smoke tests passed!")

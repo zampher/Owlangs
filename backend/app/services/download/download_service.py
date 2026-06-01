@@ -357,24 +357,26 @@ def _resolve_bilingual_settings(
     source_text_color: Optional[str] = None,
     target_text_italic: Optional[bool] = None,
     target_text_color: Optional[str] = None,
-) -> Tuple[bool, bool, bool, str, bool, Optional[str]]:
-    """Return normalized (bilingual_enabled, target_first, source_text_italic, source_text_color, target_text_italic, target_text_color) for export.
+) -> Tuple[bool, bool, bool, Optional[str], bool, Optional[str]]:
+    """Return normalized bilingual export settings for export.
 
-    Resolution order: explicit query param -> task_state -> payload -> defaults.
+    Returns:
+        (bilingual_enabled, target_first, source_text_italic, source_text_color,
+         target_text_italic, target_text_color)
     """
     from utils.bilingual_export_utils import get_bilingual_config
 
-    # If explicit query params are provided, use them directly
+    stored_enabled, stored_target_first = get_bilingual_config(task_state)
+
     if bilingual_export is not None:
         enabled = bool(bilingual_export)
-        if bilingual_order is not None:
-            target_first = str(bilingual_order).lower() == "target_before_source"
-        else:
-            target_first = False
     else:
-        # Default to non-bilingual when not explicitly specified
-        enabled = False
-        target_first = False
+        enabled = stored_enabled
+
+    if bilingual_order is not None:
+        target_first = str(bilingual_order).lower() == "target_before_source"
+    else:
+        target_first = stored_target_first if enabled else False
 
     # Resolve source text style
     italic = source_text_italic if source_text_italic is not None else task_state.get("source_text_italic", False)
@@ -388,7 +390,17 @@ def _resolve_bilingual_settings(
     if target_color and str(target_color).strip().lower() not in ("gray", "blue", "red", "green", "orange", "black"):
         target_color = None
 
-    return enabled, target_first, bool(italic), str(color).strip().lower(), bool(target_italic), (str(target_color).strip().lower() if target_color else None)
+    resolved_source_color = str(color).strip().lower() if color else None
+    resolved_target_color = str(target_color).strip().lower() if target_color else None
+
+    return (
+        enabled,
+        target_first,
+        bool(italic),
+        resolved_source_color,
+        bool(target_italic),
+        resolved_target_color,
+    )
 
 
 def _format_requires_md2docx(equation_format: str, table_body_format: str) -> bool:
@@ -562,15 +574,28 @@ def _export_md_content_to_docx_bytes(
 
 
 def _docx_stash_download_kwargs(task_state: Dict[str, Any]) -> Dict[str, Any]:
-    """kwargs for download_file when persisting DOCX with image format settings."""
+    """kwargs for download_file when persisting exports (format + bilingual settings)."""
     wt = resolve_task_export_workflow_type(task_state)
     orig_l = (task_state.get("original_filename") or "").lower()
-    if wt != "markdown_based" or not orig_l.endswith(".pdf"):
-        return {}
-    eq, tbl = _resolve_export_format_settings(task_state)
-    if not _format_requires_md2docx(eq, tbl):
-        return {}
-    return {"equation_format": eq, "table_body_format": tbl}
+    kwargs: Dict[str, Any] = {}
+    if wt == "markdown_based" and orig_l.endswith(".pdf"):
+        eq, tbl = _resolve_export_format_settings(task_state)
+        if _format_requires_md2docx(eq, tbl):
+            kwargs["equation_format"] = eq
+            kwargs["table_body_format"] = tbl
+    enabled, target_first, src_italic, src_color, tgt_italic, tgt_color = _resolve_bilingual_settings(
+        task_state
+    )
+    if enabled:
+        kwargs["bilingual_export"] = True
+        kwargs["bilingual_order"] = "target_before_source" if target_first else "target_after_source"
+        kwargs["source_text_italic"] = src_italic
+        if src_color:
+            kwargs["source_text_color"] = src_color
+        kwargs["target_text_italic"] = tgt_italic
+        if tgt_color:
+            kwargs["target_text_color"] = tgt_color
+    return kwargs
 
 
 def _rebuild_html_from_task_state(task_state: Dict[str, Any]) -> Optional[str]:
@@ -1225,19 +1250,17 @@ class DownloadService:
         bilingual_enabled, target_first, source_italic, source_color, target_italic, target_color = _resolve_bilingual_settings(
             task_state, payload, bilingual_export, bilingual_order, source_text_italic, source_text_color, target_text_italic, target_text_color
         )
-        # Store into task_state so downstream rebuild helpers can read it consistently
-        if bilingual_export is not None:
-            task_state["bilingual_export"] = bilingual_export
-        if bilingual_order is not None:
-            task_state["bilingual_order"] = bilingual_order
-        if source_text_italic is not None:
-            task_state["source_text_italic"] = source_text_italic
-        if source_text_color is not None:
-            task_state["source_text_color"] = source_text_color
-        if target_text_italic is not None:
-            task_state["target_text_italic"] = target_text_italic
-        if target_text_color is not None:
-            task_state["target_text_color"] = target_text_color
+        # Store resolved bilingual settings so markdown/DOCX rebuild applies styles consistently
+        task_state["bilingual_export"] = bilingual_enabled
+        task_state["bilingual_order"] = "target_before_source" if target_first else "target_after_source"
+        task_state["source_text_italic"] = source_italic
+        task_state["target_text_italic"] = target_italic
+        if source_color:
+            task_state["source_text_color"] = source_color
+        elif "source_text_color" in task_state and not task_state.get("source_text_color"):
+            task_state.pop("source_text_color", None)
+        if target_color:
+            task_state["target_text_color"] = target_color
 
         # Generate missing file on-demand if not in downloadable_files
         downloadable_files = task_state.get("downloadable_files", {})
@@ -1385,6 +1408,7 @@ class DownloadService:
                 equation_format
                 or table_body_format
                 or _format_requires_md2docx(stored_eq, stored_tbl)
+                or bilingual_enabled
             )
             if needs_format_regen and docx_info:
                 docx_info = None  # Force regeneration so format params are applied
