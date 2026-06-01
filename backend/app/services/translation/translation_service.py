@@ -892,6 +892,9 @@ class TranslationService:
                     if "layout_chunk_block_map" in convert_state:
                         task_state["layout_chunk_block_map"] = convert_state["layout_chunk_block_map"]
                         copied_keys.append("layout_chunk_block_map")
+                    if "segment_layout_block_map" in convert_state:
+                        task_state["segment_layout_block_map"] = convert_state["segment_layout_block_map"]
+                        copied_keys.append("segment_layout_block_map")
                     if "layout_chunk_block_texts" in convert_state:
                         task_state["layout_chunk_block_texts"] = convert_state["layout_chunk_block_texts"]
                         copied_keys.append("layout_chunk_block_texts")
@@ -1965,6 +1968,12 @@ class TranslationService:
                     logger.debug(
                         LogModule.EXTRACT,
                         f"[MINERU-REUSE] Copied layout_chunk_block_map from Extract phase to translation phase"
+                    )
+                if "segment_layout_block_map" in extract_task_state:
+                    task_state["segment_layout_block_map"] = extract_task_state["segment_layout_block_map"]
+                    logger.debug(
+                        LogModule.EXTRACT,
+                        f"[MINERU-REUSE] Copied segment_layout_block_map from Extract phase to translation phase"
                     )
                 if "layout_chunk_block_texts" in extract_task_state:
                     task_state["layout_chunk_block_texts"] = extract_task_state["layout_chunk_block_texts"]

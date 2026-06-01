@@ -2473,29 +2473,33 @@ def record_translation_segments(
         source_input_type=source_input_type,
     )
     
-    # P1: Write layout_block_indices when layout path (layout_chunk_block_map or layout_document).
-    # When neither is available (pure MD/TXT), do not write so downstream uses text-only rebuild.
-    if layout_chunk_block_map and segments:
-        for idx, segment_dict in enumerate(segments):
-            if idx >= len(layout_chunk_block_map):
-                break
-            block_indices = layout_chunk_block_map[idx] or []
-            if block_indices:
-                unique_indices: List[int] = []
-                seen_indices: set[int] = set()
-                for raw_idx in block_indices:
-                    try:
-                        value = int(raw_idx)
-                    except (TypeError, ValueError):
-                        continue
-                    if value not in seen_indices:
-                        seen_indices.add(value)
-                        unique_indices.append(value)
-                if unique_indices:
-                    segment_dict["layout_block_indices"] = unique_indices
+    # P1: Write layout_block_indices when layout path (segment_layout_block_map, layout_chunk_block_map, or layout_document).
+    # segment_layout_block_map is per-segment (Extract phase). layout_chunk_block_map is per translation chunk
+    # and must NOT be indexed by segment_index when chunk count != segment count.
+    segment_layout_block_map = (
+        task_state.get("segment_layout_block_map") if task_state else None
+    )
+    if segment_layout_block_map and segments:
+        mapped_count = _apply_layout_block_indices_to_segments(
+            segments, segment_layout_block_map, use_segment_index=True
+        )
         logger.info(
             LogModule.TRANS,
-            f"[RECORD_SEGMENTS] Task {task_id}: PDF path - wrote layout_block_indices (layout_chunk_block_map present, source_input_type={source_input_type})"
+            f"[RECORD_SEGMENTS] Task {task_id}: PDF path - wrote layout_block_indices for "
+            f"{mapped_count} segments from segment_layout_block_map (source_input_type={source_input_type})"
+        )
+    elif (
+        layout_chunk_block_map
+        and segments
+        and len(layout_chunk_block_map) == len(segments)
+    ):
+        mapped_count = _apply_layout_block_indices_to_segments(
+            segments, layout_chunk_block_map, use_segment_index=False
+        )
+        logger.info(
+            LogModule.TRANS,
+            f"[RECORD_SEGMENTS] Task {task_id}: PDF path - wrote layout_block_indices for "
+            f"{mapped_count} segments from 1:1 layout_chunk_block_map (source_input_type={source_input_type})"
         )
     else:
         # Fallback: map using layout_document when available (format conversion / PDF path may not pass layout_chunk_block_map)
@@ -2632,6 +2636,100 @@ def record_translation_segments(
         f"Recorded {len(segments)} translation segments for task {task_id} "
         f"(format: {source_format}, workflow: {workflow_type})"
     )
+
+
+def build_segment_layout_block_indices(
+    chunk_block_indices: Optional[List[int]],
+    block_index: Optional[int],
+) -> List[int]:
+    """Build per-segment layout block indices from LayoutChunk metadata."""
+    unique_indices: List[int] = []
+    seen: set[int] = set()
+    for raw_idx in chunk_block_indices or []:
+        try:
+            value = int(raw_idx)
+        except (TypeError, ValueError):
+            continue
+        if value not in seen:
+            seen.add(value)
+            unique_indices.append(value)
+    if unique_indices:
+        return unique_indices
+    if block_index is not None:
+        try:
+            return [int(block_index)]
+        except (TypeError, ValueError):
+            pass
+    return []
+
+
+def build_segment_layout_block_map(all_segments: List[dict]) -> List[List[int]]:
+    """Build segment_index-indexed layout block map from extract-phase segment dicts."""
+    if not all_segments:
+        return []
+    max_idx = -1
+    for i, seg in enumerate(all_segments):
+        try:
+            seg_idx = int(seg.get("segment_index", i))
+        except (TypeError, ValueError):
+            seg_idx = i
+        if seg_idx > max_idx:
+            max_idx = seg_idx
+    if max_idx < 0:
+        return []
+    block_map: List[List[int]] = [[] for _ in range(max_idx + 1)]
+    for i, seg in enumerate(all_segments):
+        try:
+            seg_idx = int(seg.get("segment_index", i))
+        except (TypeError, ValueError):
+            seg_idx = i
+        if seg_idx < 0 or seg_idx > max_idx:
+            continue
+        indices = seg.get("layout_block_indices") or seg.get("block_indices")
+        if not indices:
+            indices = build_segment_layout_block_indices([], seg.get("block_index"))
+        block_map[seg_idx] = list(indices or [])
+    return block_map
+
+
+def _dedupe_layout_block_indices(block_indices: List[int]) -> List[int]:
+    unique_indices: List[int] = []
+    seen_indices: set[int] = set()
+    for raw_idx in block_indices:
+        try:
+            value = int(raw_idx)
+        except (TypeError, ValueError):
+            continue
+        if value not in seen_indices:
+            seen_indices.add(value)
+            unique_indices.append(value)
+    return unique_indices
+
+
+def _apply_layout_block_indices_to_segments(
+    segments: List[dict],
+    block_map: List[List[int]],
+    *,
+    use_segment_index: bool = True,
+) -> int:
+    """Write layout_block_indices onto translation segment dicts; returns count updated."""
+    updated = 0
+    for idx, segment_dict in enumerate(segments):
+        if use_segment_index:
+            seg_idx = segment_dict.get("segment_index", idx)
+            try:
+                seg_idx = int(seg_idx)
+            except (TypeError, ValueError):
+                continue
+        else:
+            seg_idx = idx
+        if seg_idx < 0 or seg_idx >= len(block_map):
+            continue
+        unique_indices = _dedupe_layout_block_indices(block_map[seg_idx] or [])
+        if unique_indices:
+            segment_dict["layout_block_indices"] = unique_indices
+            updated += 1
+    return updated
 
 
 def _map_segments_to_layout_blocks(

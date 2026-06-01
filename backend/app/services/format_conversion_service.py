@@ -1224,6 +1224,9 @@ class FormatConversionService:
                         "text": chunk_text,
                         "block_type": block_type,
                         "block_index": block_index,
+                        "layout_block_indices": list(chunk_block_indices)
+                        if chunk_block_indices
+                        else ([block_index] if block_index is not None else []),
                         "chunk_index": chunk_idx,
                         "segment_index": chunk_idx,  # CRITICAL: Store original segment index for proper mapping
                         "is_image": is_image,
@@ -1389,6 +1392,8 @@ class FormatConversionService:
                     "total_segments": len(cache_segments),
                     "created_at": time.time(),
                 }
+                from utils.translation_segments import build_segment_layout_block_map
+                st["segment_layout_block_map"] = build_segment_layout_block_map(all_segments)
                 st["segments_metadata"] = {
                     "source": workflow_type,
                     "workflow_type": workflow_type,

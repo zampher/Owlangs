@@ -71,9 +71,74 @@ def test_rebuild_bilingual_plain_text_from_segments():
     print("PASS rebuild_bilingual_plain_text_from_segments")
 
 
+def test_table_caption_not_treated_as_image_for_bilingual_skip():
+    """Table/image captions share layout block indices; only image placeholders skip bilingual."""
+
+    from utils.bilingual_export_utils import should_skip_bilingual_for_image_render
+
+    table_body_format = "image"
+    equation_format = "latex"
+    target_idx_to_is_table_body = {4: True}
+
+    assert should_skip_bilingual_for_image_render(
+        {"source_text": "7.1 Reagents"},
+        ["table"],
+        table_body_format=table_body_format,
+        equation_format=equation_format,
+        is_table_body=False,
+    ) is False
+    assert should_skip_bilingual_for_image_render(
+        {"source_text": "![Table](<ph-layoutimg1>)"},
+        ["table"],
+        table_body_format=table_body_format,
+        equation_format=equation_format,
+        is_table_body=True,
+    ) is True
+    assert should_skip_bilingual_for_image_render(
+        {"source_text": "6.1 Reagents"},
+        ["image"],
+        table_body_format=table_body_format,
+        equation_format=equation_format,
+        is_table_body=False,
+    ) is False
+    assert should_skip_bilingual_for_image_render(
+        {"source_text": "<ph-layoutimg0>"},
+        ["image"],
+        table_body_format=table_body_format,
+        equation_format=equation_format,
+        is_table_body=False,
+    ) is True
+    print("PASS test_table_caption_not_treated_as_image_for_bilingual_skip")
+
+
+def test_recover_layout_block_indices_uses_per_segment_map():
+    from utils.translation_segments import (
+        build_segment_layout_block_map,
+        _apply_layout_block_indices_to_segments,
+    )
+
+    all_segments = [
+        {"segment_index": 3, "layout_block_indices": [3], "block_index": 3},
+        {"segment_index": 4, "layout_block_indices": [5], "block_index": 5},
+        {"segment_index": 5, "layout_block_indices": [4], "block_index": 4},
+    ]
+    segment_layout_block_map = build_segment_layout_block_map(all_segments)
+    assert segment_layout_block_map[4] == [5]
+    assert 3 not in segment_layout_block_map[4]
+
+    segments = [
+        {"segment_index": 4, "target_text": "6.1 Reagents"},
+    ]
+    updated = _apply_layout_block_indices_to_segments(
+        segments, segment_layout_block_map, use_segment_index=True
+    )
+    assert updated == 1
+    assert segments[0]["layout_block_indices"] == [5]
+    assert 3 not in segments[0]["layout_block_indices"]
+    print("PASS test_recover_layout_block_indices_uses_per_segment_map")
+
+
 def test_rebuild_markdown_text_segments_bilingual():
-    # This test is skipped in this environment due to Python version compatibility.
-    # The _rebuild_markdown_from_text_segments function has been updated in source.
     print("PASS _rebuild_markdown_from_text_segments bilingual (skipped in test env)")
 
 
@@ -81,5 +146,7 @@ if __name__ == "__main__":
     test_get_bilingual_config()
     test_build_bilingual_segment_text()
     test_rebuild_bilingual_plain_text_from_segments()
+    test_table_caption_not_treated_as_image_for_bilingual_skip()
+    test_recover_layout_block_indices_uses_per_segment_map()
     test_rebuild_markdown_text_segments_bilingual()
     print("\nAll bilingual export smoke tests passed!")

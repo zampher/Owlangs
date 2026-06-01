@@ -27,7 +27,34 @@ def _recover_layout_block_indices_from_prepared_chunks(
     segments: List[Dict[str, Any]],
     task_state: Optional[Dict[str, Any]],
 ) -> int:
-    """Map segment_index -> layout block indices via layout_prepared_chunks.segment_indices."""
+    """Map segment_index -> layout block indices via extract-phase metadata or prepared chunks."""
+    segment_layout_map = (task_state or {}).get("segment_layout_block_map")
+    if segment_layout_map:
+        recovered = 0
+        for segment in segments:
+            if segment.get("layout_block_indices"):
+                continue
+            seg_idx = segment.get("segment_index")
+            if seg_idx is None:
+                continue
+            try:
+                seg_idx = int(seg_idx)
+            except (TypeError, ValueError):
+                continue
+            if seg_idx < 0 or seg_idx >= len(segment_layout_map):
+                continue
+            blocks = segment_layout_map[seg_idx] or []
+            if blocks:
+                segment["layout_block_indices"] = list(blocks)
+                recovered += 1
+        if recovered:
+            logger.info(
+                LogModule.RESTOR,
+                f"[REBUILD] Recovered layout_block_indices for {recovered} segments "
+                f"from segment_layout_block_map",
+            )
+            return recovered
+
     prepared = (task_state or {}).get("layout_prepared_chunks") or []
     if not prepared:
         return 0
@@ -38,19 +65,23 @@ def _recover_layout_block_indices_from_prepared_chunks(
         block_indices = chunk.get("block_indices") or []
         if not block_indices:
             continue
-        for raw_seg_idx in chunk.get("segment_indices") or []:
+        segment_indices = chunk.get("segment_indices") or []
+        if len(segment_indices) != 1:
+            # Multiple segments share one translation chunk; aggregated block_indices must not
+            # be copied to every segment (would mark text segments as image blocks).
+            continue
+        try:
+            seg_idx = int(segment_indices[0])
+        except (TypeError, ValueError, IndexError):
+            continue
+        existing = seg_to_blocks.setdefault(seg_idx, [])
+        for raw_bidx in block_indices:
             try:
-                seg_idx = int(raw_seg_idx)
+                bidx = int(raw_bidx)
             except (TypeError, ValueError):
                 continue
-            existing = seg_to_blocks.setdefault(seg_idx, [])
-            for raw_bidx in block_indices:
-                try:
-                    bidx = int(raw_bidx)
-                except (TypeError, ValueError):
-                    continue
-                if bidx not in existing:
-                    existing.append(bidx)
+            if bidx not in existing:
+                existing.append(bidx)
     recovered = 0
     for segment in segments:
         if segment.get("layout_block_indices"):
@@ -649,14 +680,19 @@ def _rebuild_markdown_from_layout_segments(
                 or (not formatted and segment.get("modified", False) and segment.get("target_length", -1) == 0)
             )
 
-            # Skip bilingual for blocks rendered as images (cannot interleave binary images)
+            # Skip bilingual only for segments rendered as images (cannot interleave binary images).
+            # Image/table captions share layout block indices with image/table blocks but contain
+            # real text — use segment content, not layout block type alone.
             block_types = segment_to_block_types.get(segment_index, [])
-            _is_image_block = any(bt in ("image",) for bt in block_types)
-            if not _is_image_block and "table" in block_types and table_body_format == "image":
-                _is_image_block = True
-            if not _is_image_block and "interline_equation" in block_types and equation_format == "image":
-                _is_image_block = True
-            if _is_image_block:
+            from utils.bilingual_export_utils import should_skip_bilingual_for_image_render
+
+            if should_skip_bilingual_for_image_render(
+                segment,
+                block_types,
+                table_body_format=table_body_format,
+                equation_format=equation_format,
+                is_table_body=target_idx_to_is_table_body.get(i, False),
+            ):
                 bilingual_formatted_texts.append(formatted)
                 continue
 

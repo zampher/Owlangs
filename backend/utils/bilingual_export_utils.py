@@ -99,6 +99,37 @@ def build_bilingual_segment_text(
     return source
 
 
+def should_skip_bilingual_for_image_render(
+    segment: Dict[str, Any],
+    block_types: List[str],
+    *,
+    table_body_format: Optional[str] = None,
+    equation_format: Optional[str] = None,
+    is_table_body: bool = False,
+) -> bool:
+    """Return True when a segment is rendered as an image and cannot be bilingual.
+
+    Image/table captions share layout block indices with image/table blocks but contain
+    real text; they must NOT be skipped. Only placeholder-only image segments and
+    segments explicitly exported as image (table body / equation) are skipped.
+    """
+    from utils.translation_segments import _is_image_segment
+
+    source_text = segment.get("source_text") or segment.get("text") or ""
+    if _is_image_segment(source_text):
+        return True
+
+    tbl_fmt = (table_body_format or "html").strip().lower()
+    if tbl_fmt == "image" and is_table_body:
+        return True
+
+    eq_fmt = (equation_format or "text").strip().lower()
+    if eq_fmt == "image" and "interline_equation" in block_types:
+        return True
+
+    return False
+
+
 def rebuild_bilingual_plain_text_from_segments(
     task_state: Dict[str, Any],
     target_first: bool = False,

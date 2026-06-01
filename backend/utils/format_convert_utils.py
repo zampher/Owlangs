@@ -1857,7 +1857,13 @@ def get_image_block_indices_from_layout(
     segs_with_layout = 0
     eq_fmt = (equation_format or "text").strip().lower()
     tbl_fmt = (table_body_format or "html").strip().lower()
+    from utils.translation_segments import _is_image_segment
+
     for seg in segments:
+        source_text = seg.get("source_text") or seg.get("text") or ""
+        # Captions after images share layout block indices; only map true image segments
+        if not _is_image_segment(source_text):
+            continue
         bidxs = seg.get("layout_block_indices", [])
         if bidxs:
             segs_with_layout += 1

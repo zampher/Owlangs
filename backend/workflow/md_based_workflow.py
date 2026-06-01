@@ -716,7 +716,9 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
                         # Do not overwrite layout_prepared_chunks when already present (e.g. inherited from convert).
                         # Reusing Extract-phase chunks preserves is_excluded and segment_indices; overwriting would drop them and cause wrong exclusions.
                         if task_state_ref.get("layout_prepared_chunks") is None:
-                            task_state_ref["layout_prepared_chunks"] = [
+                            from utils.translation_segments import build_segment_layout_block_map
+
+                            prepared_chunks = [
                                 {
                                     "text": chunk.text,
                                     "chunk_type": chunk.chunk_type,
@@ -729,9 +731,20 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
                                 }
                                 for chunk in layout_result.chunks
                             ]
+                            task_state_ref["layout_prepared_chunks"] = prepared_chunks
                             task_state_ref["layout_chunk_block_map"] = [
-                                chunk.block_indices for chunk in layout_result.chunks
+                                chunk.get("block_indices") or [] for chunk in prepared_chunks
                             ]
+                            # One layout chunk == one segment here; reuse shared builder.
+                            task_state_ref["segment_layout_block_map"] = build_segment_layout_block_map(
+                                [
+                                    {
+                                        "segment_index": idx,
+                                        "block_indices": chunk.get("block_indices") or [],
+                                    }
+                                    for idx, chunk in enumerate(prepared_chunks)
+                                ]
+                            )
                             task_state_ref["layout_markdown_source"] = layout_markdown_text
                             # P0: Mark layout-driven so export/rebuild use only layout block types (no text heuristics)
                             task_state_ref["source_input_type"] = "layout"

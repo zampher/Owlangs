@@ -3470,7 +3470,8 @@ class StatusService:
             # CRITICAL: If segment has actual text content (e.g., image caption), do NOT exclude it as image
             # even if block_type is "image" (because image captions share block_indices with image blocks)
             elif has_actual_text and is_image:
-                # This is likely an image caption segment - it has actual text content, so don't exclude it
+                # Image caption: real text shares layout block index with image block — not an image segment
+                is_image = False
                 is_excluded = False
                 logger.debug(
                     LogModule.EXCLUSION,
@@ -3544,6 +3545,9 @@ class StatusService:
                 "text": chunk_text,
                 "block_type": block_type,  # For table_body, this will be "table_body"
                 "block_index": block_index,
+                "layout_block_indices": list(chunk_block_indices)
+                if chunk_block_indices
+                else ([block_index] if block_index is not None else []),
                 "chunk_index": chunk_idx,
                 "segment_index": chunk_idx,  # CRITICAL: Store original segment index for proper mapping
                 "is_image": is_image,
@@ -4185,6 +4189,8 @@ class StatusService:
         st["layout_prepared_chunks"] = serialized_chunks
         st["layout_chunk_block_map"] = chunk_block_map
         st["layout_chunk_block_texts"] = chunk_block_texts_map
+        from utils.translation_segments import build_segment_layout_block_map
+        st["segment_layout_block_map"] = build_segment_layout_block_map(all_segments)
         logger.info(LogModule.EXTRACT, f"[LAYOUT-EXTRACT] Task {task_id}: Updated layout_prepared_chunks with {len(serialized_chunks)} chunks (excluding {excluded_count} excluded segments)")
         
         # Build chunks text (merged segments, excluding headers and footers)
