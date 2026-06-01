@@ -800,7 +800,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                     ConstrainedBox(
                       constraints: const BoxConstraints(
                         minWidth:
-                            220, // Minimum width
+                            200, // Minimum width
                         maxWidth: 260, // Maximum width
                       ),
                       child: DecoratedBox(
