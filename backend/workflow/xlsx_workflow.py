@@ -97,7 +97,10 @@ class XlsxWorkflow(Workflow[XlsxWorkflowConfig, Document, Document], HTMLExporta
     def export_to_html(self, config: Xlsx2HTMLExporterConfig = None) -> str:
         config = config or self.config.html_exporter_config
         docu = self._export(Xlsx2HTMLExporter(config))
-        return docu.content.decode()
+        content = docu.content
+        if isinstance(content, bytes):
+            return content.decode("utf-8")
+        return str(content)
 
     def export_to_markdown(self, _: ExporterConfig | None = None) -> str:
         from workflow.html_to_markdown_export import html_content_to_markdown

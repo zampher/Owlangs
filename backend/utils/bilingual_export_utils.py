@@ -10,6 +10,8 @@ DownloadService when the user enables bilingual export.
 
 import html as html_module
 import os
+import re
+import zipfile
 from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -36,10 +38,22 @@ except ImportError:
 
 try:
     import openpyxl
+    from openpyxl.cell.rich_text import CellRichText, TextBlock
+    from openpyxl.cell.text import InlineFont
     XLSX_AVAILABLE = True
 except ImportError:
     XLSX_AVAILABLE = False
     openpyxl = None
+    CellRichText = None
+    TextBlock = None
+    InlineFont = None
+
+try:
+    from pptx.dml.color import RGBColor as PptxRGBColor
+    PPTX_COLOR_AVAILABLE = PPTX_AVAILABLE
+except ImportError:
+    PPTX_COLOR_AVAILABLE = False
+    PptxRGBColor = None
 
 
 def get_bilingual_config(task_state: Optional[Dict[str, Any]]) -> Tuple[bool, bool]:
@@ -99,7 +113,7 @@ def wrap_bilingual_html_part(
     """Wrap text in an inline HTML span for styled bilingual markdown/DOCX export."""
     if not text:
         return ""
-    escaped = html_module.escape(text)
+    escaped = html_module.escape(text).replace("\n", "<br/>")
     styles: List[str] = []
     if italic:
         styles.append("font-style:italic")
@@ -173,6 +187,472 @@ def build_bilingual_segment_text(
 
     # Untranslated / identical / empty target
     return source
+
+
+def _bilingual_rgb_triplet(color: Optional[str]) -> Optional[Tuple[int, int, int]]:
+    normalized = _normalize_bilingual_color(color)
+    if not normalized:
+        return None
+    hex_str = BILINGUAL_EXPORT_COLOR_HEX[normalized].lstrip("#")
+    return int(hex_str[0:2], 16), int(hex_str[2:4], 16), int(hex_str[4:6], 16)
+
+
+def get_bilingual_styled_run_parts(
+    source_text: str,
+    target_text: str,
+    target_first: bool,
+    is_excluded: bool = False,
+    is_cleared: bool = False,
+    *,
+    source_text_italic: bool = False,
+    source_text_color: Optional[str] = None,
+    target_text_italic: bool = False,
+    target_text_color: Optional[str] = None,
+) -> Optional[List[Tuple[str, bool, Optional[str]]]]:
+    """Return ordered (text, italic, color) parts for rich bilingual export, or None if plain text only."""
+    source = source_text or ""
+    target = target_text or ""
+
+    if is_excluded or is_cleared:
+        return None
+    if not target.strip() or target.strip() == source.strip():
+        return None
+
+    if target_first:
+        return [
+            (target, target_text_italic, target_text_color),
+            (source, source_text_italic, source_text_color),
+        ]
+    return [
+        (source, source_text_italic, source_text_color),
+        (target, target_text_italic, target_text_color),
+    ]
+
+
+def bilingual_segment_to_html(
+    source_text: str,
+    target_text: str,
+    target_first: bool,
+    is_excluded: bool = False,
+    is_cleared: bool = False,
+    inner_separator: str = "<br/>",
+    *,
+    source_text_italic: bool = False,
+    source_text_color: Optional[str] = None,
+    target_text_italic: bool = False,
+    target_text_color: Optional[str] = None,
+) -> str:
+    """Build styled bilingual HTML for one spreadsheet cell."""
+    source = source_text or ""
+    target = target_text or ""
+
+    if is_excluded or is_cleared:
+        return html_module.escape(source).replace("\n", "<br/>")
+    if not target.strip() or target.strip() == source.strip():
+        return html_module.escape(source).replace("\n", "<br/>")
+
+    styled_parts = get_bilingual_styled_run_parts(
+        source_text,
+        target_text,
+        target_first,
+        is_excluded=is_excluded,
+        is_cleared=is_cleared,
+        source_text_italic=source_text_italic,
+        source_text_color=source_text_color,
+        target_text_italic=target_text_italic,
+        target_text_color=target_text_color,
+    )
+    if not styled_parts:
+        return html_module.escape(source).replace("\n", "<br/>")
+
+    chunks: List[str] = []
+    for idx, (text, italic, color) in enumerate(styled_parts):
+        if idx > 0 and inner_separator:
+            chunks.append(inner_separator)
+        chunks.append(
+            wrap_bilingual_html_part(text, italic=italic, color=color)
+        )
+    return "".join(chunks)
+
+
+def _render_bilingual_xlsx_sheet_html(sheet, cell_html_rows: List[List[str]]) -> str:
+    if not cell_html_rows:
+        return ""
+    max_cols = max(len(row) for row in cell_html_rows)
+    lines = [f'<h2>{html_module.escape(sheet.title)}</h2>', "<table>"]
+    for row in cell_html_rows:
+        lines.append("<tr>")
+        for col_idx in range(max_cols):
+            cell_html = row[col_idx] if col_idx < len(row) else ""
+            lines.append(f"<td>{cell_html}</td>")
+        lines.append("</tr>")
+    lines.append("</table>")
+    return "\n".join(lines)
+
+
+def rebuild_bilingual_xlsx_html_from_segments(
+    task_state: Dict[str, Any],
+    target_first: bool = False,
+) -> Optional[str]:
+    """Rebuild bilingual XLSX content as an HTML table with styled source/target spans."""
+    if not XLSX_AVAILABLE:
+        logger.warning(LogModule.EXPORT, "[BILINGUAL] openpyxl not available for XLSX bilingual HTML rebuild")
+        return None
+
+    segments_data = task_state.get("translation_segments")
+    if not isinstance(segments_data, dict):
+        logger.warning(LogModule.EXPORT, "[BILINGUAL] No translation_segments dict found for XLSX HTML rebuild")
+        return None
+
+    segments = segments_data.get("segments", [])
+    if not segments:
+        logger.warning(LogModule.EXPORT, "[BILINGUAL] Empty segments list for XLSX HTML rebuild")
+        return None
+
+    segments_by_index: Dict[int, Dict[str, Any]] = {}
+    for seg in segments:
+        idx = seg.get("segment_index")
+        if idx is not None:
+            segments_by_index[int(idx)] = seg
+
+    (
+        source_text_italic,
+        source_text_color,
+        target_text_italic,
+        target_text_color,
+    ) = get_bilingual_style_config(task_state)
+
+    content = _get_source_document_bytes(task_state, "xlsx")
+    if not content:
+        return None
+
+    try:
+        workbook = openpyxl.load_workbook(BytesIO(content))
+    except Exception as e:
+        logger.error(LogModule.EXPORT, f"[BILINGUAL] Failed to load XLSX for HTML rebuild: {e}", exc_info=True)
+        return None
+
+    segment_index = 0
+    sheet_sections: List[str] = []
+
+    try:
+        for sheet in workbook.worksheets:
+            cell_html_rows: List[List[str]] = []
+            for row in sheet.iter_rows():
+                row_html: List[str] = []
+                for cell in row:
+                    if isinstance(cell.value, str) and cell.data_type == "s":
+                        seg = segments_by_index.get(segment_index)
+                        source = seg.get("source_text", "") if seg else ""
+                        target = seg.get("modified_text") or seg.get("target_text", "") if seg else ""
+                        is_excluded = bool(seg.get("is_excluded", False)) if seg else False
+                        is_cleared = bool(seg.get("status") == "cleared") if seg else False
+                        row_html.append(
+                            bilingual_segment_to_html(
+                                source_text=source,
+                                target_text=target,
+                                target_first=target_first,
+                                is_excluded=is_excluded,
+                                is_cleared=is_cleared,
+                                inner_separator="<br/>",
+                                source_text_italic=source_text_italic,
+                                source_text_color=source_text_color,
+                                target_text_italic=target_text_italic,
+                                target_text_color=target_text_color,
+                            )
+                        )
+                        segment_index += 1
+                    elif cell.value is not None:
+                        row_html.append(html_module.escape(str(cell.value)))
+                    else:
+                        row_html.append("")
+                if any(cell.strip() for cell in row_html):
+                    cell_html_rows.append(row_html)
+
+            section = _render_bilingual_xlsx_sheet_html(sheet, cell_html_rows)
+            if section:
+                sheet_sections.append(section)
+    finally:
+        workbook.close()
+
+    if not sheet_sections:
+        return None
+
+    body = "\n<br/>\n".join(sheet_sections)
+    html_doc = (
+        "<!DOCTYPE html>\n"
+        '<html lang="en">\n'
+        "<head>\n"
+        '<meta charset="utf-8"/>\n'
+        "<title>Translated Spreadsheet</title>\n"
+        "<style>\n"
+        "table { border-collapse: collapse; margin-bottom: 1.5em; }\n"
+        "td, th { border: 1px solid #ccc; padding: 6px 8px; vertical-align: top; }\n"
+        "</style>\n"
+        "</head>\n"
+        f"<body>\n{body}\n</body>\n"
+        "</html>\n"
+    )
+    logger.info(
+        LogModule.EXPORT,
+        f"[BILINGUAL] Rebuilt XLSX HTML: {segment_index} text cells processed, "
+        f"target_first={target_first}",
+    )
+    return html_doc
+
+
+def _clear_pptx_paragraph_runs(paragraph) -> None:
+    from pptx.oxml.ns import qn
+
+    p_elem = paragraph._p
+    for run_elem in list(p_elem.findall(qn("a:r"))):
+        p_elem.remove(run_elem)
+
+
+def _apply_pptx_run_style(run, italic: bool, color: Optional[str]) -> None:
+    if not run:
+        return
+    try:
+        if italic:
+            run.font.italic = True
+        rgb = _bilingual_rgb_triplet(color)
+        if rgb and PptxRGBColor is not None:
+            run.font.color.rgb = PptxRGBColor(*rgb)
+    except Exception:
+        pass
+
+
+def apply_bilingual_styled_segment_to_pptx_paragraph(
+    paragraph,
+    source_text: str,
+    target_text: str,
+    target_first: bool,
+    is_excluded: bool = False,
+    is_cleared: bool = False,
+    inner_separator: str = "\n",
+    *,
+    source_text_italic: bool = False,
+    source_text_color: Optional[str] = None,
+    target_text_italic: bool = False,
+    target_text_color: Optional[str] = None,
+) -> None:
+    """Write bilingual segment text into a PPTX paragraph with per-run styling."""
+    styled_parts = get_bilingual_styled_run_parts(
+        source_text,
+        target_text,
+        target_first,
+        is_excluded=is_excluded,
+        is_cleared=is_cleared,
+        source_text_italic=source_text_italic,
+        source_text_color=source_text_color,
+        target_text_italic=target_text_italic,
+        target_text_color=target_text_color,
+    )
+
+    if styled_parts is None:
+        plain = build_bilingual_segment_text(
+            source_text=source_text,
+            target_text=target_text,
+            target_first=target_first,
+            is_excluded=is_excluded,
+            is_cleared=is_cleared,
+            inner_separator=inner_separator,
+        )
+        _clear_pptx_paragraph_runs(paragraph)
+        run = paragraph.add_run()
+        run.text = plain
+        return
+
+    _clear_pptx_paragraph_runs(paragraph)
+    for idx, (text, italic, color) in enumerate(styled_parts):
+        if idx > 0 and inner_separator:
+            sep_run = paragraph.add_run()
+            sep_run.text = inner_separator
+        run = paragraph.add_run()
+        run.text = text
+        _apply_pptx_run_style(run, italic, color)
+
+
+def _xlsx_escape_cell_text(text: str) -> str:
+    """Escape control characters for Excel OOXML text nodes.
+
+    Literal newlines inside ``<t>`` without ``xml:space=\"preserve\"`` cause Excel
+    to repair worksheet string properties. Use ST_Xstring escapes instead.
+    """
+    if not text:
+        return text
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return normalized.replace("\n", "_x000A_")
+
+
+def _sanitize_xlsx_worksheet_xml(xml_text: str) -> str:
+    """Replace literal newlines inside ``<t>`` nodes with Excel ST_Xstring escapes."""
+    def _fix_t_element(match: re.Match[str]) -> str:
+        attrs = match.group(1) or ""
+        content = match.group(2)
+        if "\n" not in content and "\r" not in content:
+            return match.group(0)
+        fixed = (
+            content.replace("\r\n", "\n")
+            .replace("\r", "\n")
+            .replace("\n", "_x000A_")
+        )
+        return f"<t{attrs}>{fixed}</t>"
+
+    return re.sub(r"<t([^>]*)>(.*?)</t>", _fix_t_element, xml_text, flags=re.DOTALL)
+
+
+def _sanitize_xlsx_bytes(xlsx_bytes: bytes) -> bytes:
+    """Post-process saved XLSX bytes so worksheet inline strings comply with Excel OOXML."""
+    in_buf = BytesIO(xlsx_bytes)
+    out_buf = BytesIO()
+    sanitized_parts = 0
+
+    with zipfile.ZipFile(in_buf, "r") as zin:
+        with zipfile.ZipFile(out_buf, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                if (
+                    item.filename.startswith("xl/worksheets/sheet")
+                    and item.filename.endswith(".xml")
+                ):
+                    xml_text = data.decode("utf-8")
+                    sanitized = _sanitize_xlsx_worksheet_xml(xml_text)
+                    if sanitized != xml_text:
+                        sanitized_parts += 1
+                        data = sanitized.encode("utf-8")
+                zout.writestr(item, data)
+
+    if sanitized_parts:
+        logger.info(
+            LogModule.EXPORT,
+            f"[BILINGUAL] Sanitized inline string XML in {sanitized_parts} worksheet part(s)",
+        )
+    return out_buf.getvalue()
+
+
+def _xlsx_cell_display_text(value: Any) -> str:
+    """Flatten a cell value to display text for line-count heuristics."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.replace("_x000A_", "\n")
+    if CellRichText is not None and isinstance(value, CellRichText):
+        parts: List[str] = []
+        for block in value:
+            if isinstance(block, str):
+                parts.append(block)
+            else:
+                parts.append(getattr(block, "text", str(block)))
+        return "".join(parts).replace("_x000A_", "\n")
+    return str(value)
+
+
+def _xlsx_base_inline_font_kwargs(cell: Any) -> Dict[str, Any]:
+    """Return base InlineFont fields required by Excel OOXML (rFont + sz at minimum)."""
+    base: Dict[str, Any] = {"rFont": "Calibri", "sz": 11}
+    try:
+        cell_font = getattr(cell, "font", None)
+        if cell_font is not None:
+            if cell_font.name:
+                base["rFont"] = cell_font.name
+            if cell_font.size:
+                base["sz"] = int(cell_font.size)
+    except Exception:
+        pass
+    return base
+
+
+def _xlsx_inline_font(
+    italic: bool,
+    color: Optional[str],
+    *,
+    base_font: Optional[Dict[str, Any]] = None,
+) -> Optional[Any]:
+    """Build an InlineFont for XLSX rich-text runs with Excel-required base fields."""
+    if InlineFont is None:
+        return None
+
+    kwargs = dict(base_font or {"rFont": "Calibri", "sz": 11})
+    if italic:
+        kwargs["i"] = True
+    rgb = _bilingual_rgb_triplet(color)
+    if rgb:
+        kwargs["color"] = f"FF{rgb[0]:02X}{rgb[1]:02X}{rgb[2]:02X}"
+    if not italic and not rgb:
+        return None
+    return InlineFont(**kwargs)
+
+
+def apply_bilingual_styled_segment_to_xlsx_cell(
+    cell,
+    source_text: str,
+    target_text: str,
+    target_first: bool,
+    is_excluded: bool = False,
+    is_cleared: bool = False,
+    inner_separator: str = "\n",
+    *,
+    source_text_italic: bool = False,
+    source_text_color: Optional[str] = None,
+    target_text_italic: bool = False,
+    target_text_color: Optional[str] = None,
+) -> None:
+    """Write bilingual segment text into an XLSX cell with rich-text styling when supported."""
+    styled_parts = get_bilingual_styled_run_parts(
+        source_text,
+        target_text,
+        target_first,
+        is_excluded=is_excluded,
+        is_cleared=is_cleared,
+        source_text_italic=source_text_italic,
+        source_text_color=source_text_color,
+        target_text_italic=target_text_italic,
+        target_text_color=target_text_color,
+    )
+
+    if styled_parts is None:
+        cell.value = _xlsx_escape_cell_text(
+            build_bilingual_segment_text(
+                source_text=source_text,
+                target_text=target_text,
+                target_first=target_first,
+                is_excluded=is_excluded,
+                is_cleared=is_cleared,
+                inner_separator=inner_separator,
+            )
+        )
+        return
+
+    if CellRichText is None or TextBlock is None:
+        cell.value = _xlsx_escape_cell_text(
+            build_bilingual_segment_text(
+                source_text=source_text,
+                target_text=target_text,
+                target_first=target_first,
+                is_excluded=is_excluded,
+                is_cleared=is_cleared,
+                inner_separator=inner_separator,
+            )
+        )
+        return
+
+    base_font = _xlsx_base_inline_font_kwargs(cell)
+    rich_blocks: List[Any] = []
+    escaped_separator = _xlsx_escape_cell_text(inner_separator) if inner_separator else ""
+    last_index = len(styled_parts) - 1
+    for idx, (text, italic, color) in enumerate(styled_parts):
+        block_text = _xlsx_escape_cell_text(text)
+        # Append bilingual separator to the styled run to avoid a bare unstyled newline run.
+        if idx < last_index and escaped_separator:
+            block_text += escaped_separator
+        font = _xlsx_inline_font(italic, color, base_font=base_font)
+        if font is not None:
+            rich_blocks.append(TextBlock(font, block_text))
+        else:
+            rich_blocks.append(block_text)
+
+    cell.value = CellRichText(*rich_blocks)
 
 
 def should_skip_bilingual_for_image_render(
@@ -462,6 +942,13 @@ def rebuild_bilingual_pptx_from_segments(
         if idx is not None:
             segments_by_index[int(idx)] = seg
 
+    (
+        source_text_italic,
+        source_text_color,
+        target_text_italic,
+        target_text_color,
+    ) = get_bilingual_style_config(task_state)
+
     # Get source PPTX content from multiple fallback sources
     content = _get_source_document_bytes(task_state, "pptx")
     if not content:
@@ -484,26 +971,23 @@ def rebuild_bilingual_pptx_from_segments(
             is_excluded = bool(seg.get("is_excluded", False)) if seg else False
             is_cleared = bool(seg.get("status") == "cleared") if seg else False
 
-            final_text = build_bilingual_segment_text(
-                source_text=source,
-                target_text=target,
-                target_first=target_first,
-                is_excluded=is_excluded,
-                is_cleared=is_cleared,
-                inner_separator="\n",
-            )
-
             # Write back to title
             text_frame = slide.shapes.title.text_frame
             if text_frame.paragraphs:
                 para = text_frame.paragraphs[0]
-                if para.runs:
-                    para.runs[0].text = final_text
-                    for run in para.runs[1:]:
-                        run.text = ""
-                else:
-                    run = para.add_run()
-                    run.text = final_text
+                apply_bilingual_styled_segment_to_pptx_paragraph(
+                    para,
+                    source_text=source,
+                    target_text=target,
+                    target_first=target_first,
+                    is_excluded=is_excluded,
+                    is_cleared=is_cleared,
+                    inner_separator="\n",
+                    source_text_italic=source_text_italic,
+                    source_text_color=source_text_color,
+                    target_text_italic=target_text_italic,
+                    target_text_color=target_text_color,
+                )
 
             segment_index += 1
 
@@ -526,20 +1010,19 @@ def rebuild_bilingual_pptx_from_segments(
                     is_excluded = bool(seg.get("is_excluded", False)) if seg else False
                     is_cleared = bool(seg.get("status") == "cleared") if seg else False
 
-                    final_text = build_bilingual_segment_text(
+                    apply_bilingual_styled_segment_to_pptx_paragraph(
+                        paragraph,
                         source_text=source,
                         target_text=target,
                         target_first=target_first,
                         is_excluded=is_excluded,
                         is_cleared=is_cleared,
                         inner_separator="\n",
+                        source_text_italic=source_text_italic,
+                        source_text_color=source_text_color,
+                        target_text_italic=target_text_italic,
+                        target_text_color=target_text_color,
                     )
-
-                    # Write back to first run, clear others
-                    if paragraph.runs:
-                        paragraph.runs[0].text = final_text
-                        for run in paragraph.runs[1:]:
-                            run.text = ""
 
                     segment_index += 1
 
@@ -558,16 +1041,29 @@ def rebuild_bilingual_pptx_from_segments(
                         is_excluded = bool(seg.get("is_excluded", False)) if seg else False
                         is_cleared = bool(seg.get("status") == "cleared") if seg else False
 
-                        final_text = build_bilingual_segment_text(
-                            source_text=source,
-                            target_text=target,
-                            target_first=target_first,
-                            is_excluded=is_excluded,
-                            is_cleared=is_cleared,
-                            inner_separator="\n",
-                        )
-
-                        cell.text = final_text
+                        if cell.text_frame.paragraphs:
+                            apply_bilingual_styled_segment_to_pptx_paragraph(
+                                cell.text_frame.paragraphs[0],
+                                source_text=source,
+                                target_text=target,
+                                target_first=target_first,
+                                is_excluded=is_excluded,
+                                is_cleared=is_cleared,
+                                inner_separator="\n",
+                                source_text_italic=source_text_italic,
+                                source_text_color=source_text_color,
+                                target_text_italic=target_text_italic,
+                                target_text_color=target_text_color,
+                            )
+                        else:
+                            cell.text = build_bilingual_segment_text(
+                                source_text=source,
+                                target_text=target,
+                                target_first=target_first,
+                                is_excluded=is_excluded,
+                                is_cleared=is_cleared,
+                                inner_separator="\n",
+                            )
                         segment_index += 1
 
     try:
@@ -624,6 +1120,13 @@ def rebuild_bilingual_xlsx_from_segments(
         if idx is not None:
             segments_by_index[int(idx)] = seg
 
+    (
+        source_text_italic,
+        source_text_color,
+        target_text_italic,
+        target_text_color,
+    ) = get_bilingual_style_config(task_state)
+
     # Get source XLSX content from multiple fallback sources
     content = _get_source_document_bytes(task_state, "xlsx")
     if not content:
@@ -651,16 +1154,19 @@ def rebuild_bilingual_xlsx_from_segments(
                 is_excluded = bool(seg.get("is_excluded", False)) if seg else False
                 is_cleared = bool(seg.get("status") == "cleared") if seg else False
 
-                final_text = build_bilingual_segment_text(
+                apply_bilingual_styled_segment_to_xlsx_cell(
+                    cell,
                     source_text=source,
                     target_text=target,
                     target_first=target_first,
                     is_excluded=is_excluded,
                     is_cleared=is_cleared,
                     inner_separator="\n",
+                    source_text_italic=source_text_italic,
+                    source_text_color=source_text_color,
+                    target_text_italic=target_text_italic,
+                    target_text_color=target_text_color,
                 )
-
-                cell.value = final_text
 
                 # Enable text wrapping so bilingual newlines display correctly
                 from openpyxl.styles import Alignment as OpenpyxlAlignment
@@ -676,15 +1182,16 @@ def rebuild_bilingual_xlsx_from_segments(
         for row_number in modified_rows_by_sheet.get(sheet.title, set()):
             max_lines = 1
             for cell in sheet[row_number]:
-                if cell.value and isinstance(cell.value, str):
-                    line_count = cell.value.count("\n") + 1
-                    max_lines = max(max_lines, line_count)
+                if cell.value is None:
+                    continue
+                line_count = _xlsx_cell_display_text(cell.value).count("\n") + 1
+                max_lines = max(max_lines, line_count)
             sheet.row_dimensions[row_number].height = max_lines * _DEFAULT_LINE_HEIGHT
 
     try:
         bio = BytesIO()
         workbook.save(bio)
-        result = bio.getvalue()
+        result = _sanitize_xlsx_bytes(bio.getvalue())
     except Exception as e:
         logger.error(LogModule.EXPORT, f"[BILINGUAL] Failed to save bilingual XLSX: {e}", exc_info=True)
         return None

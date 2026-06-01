@@ -3371,41 +3371,155 @@ class DownloadService:
                         has_revisions = False
 
                 elif workflow_type == "pptx":
-                    logger.info(LogModule.EXPORT, f"[DOWNLOAD] Rebuilding bilingual PPTX from segments")
+                    logger.info(LogModule.EXPORT, f"[DOWNLOAD] Rebuilding bilingual PPTX from segments for {file_type}")
                     from utils.bilingual_export_utils import rebuild_bilingual_pptx_from_segments
                     rebuilt_bytes = rebuild_bilingual_pptx_from_segments(
                         task_state, target_first=target_first,
                     )
                     if rebuilt_bytes:
-                        temp_file = tempfile.NamedTemporaryFile(suffix='.pptx', delete=False)
-                        temp_file.write(rebuilt_bytes)
-                        temp_file.close()
                         file_stem = task_state.get("original_filename_stem", "rebuilt")
-                        filename = f"{file_stem}_translated.pptx"
-                        media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.presentationml.presentation")
-                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual PPTX file: {temp_file.name}")
-                        return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                        if file_type == "pptx":
+                            temp_file = tempfile.NamedTemporaryFile(suffix='.pptx', delete=False)
+                            temp_file.write(rebuilt_bytes)
+                            temp_file.close()
+                            filename = f"{file_stem}_translated.pptx"
+                            media_type = MEDIA_TYPES.get(
+                                file_type,
+                                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                            )
+                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual PPTX file: {temp_file.name}")
+                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                        if file_type in ("html", "md"):
+                            from ir.document import Document
+                            from workflow.pptx_workflow import (
+                                PptxWorkflow,
+                                PptxWorkflowConfig,
+                                Pptx2HTMLExporterConfig,
+                            )
+                            from translator.ai_translator.pptx_translator import PptxTranslatorConfig
+
+                            rebuilt_doc = Document.from_bytes(
+                                content=rebuilt_bytes, suffix=".pptx", stem=file_stem
+                            )
+                            workflow = PptxWorkflow(
+                                PptxWorkflowConfig(
+                                    translator_config=PptxTranslatorConfig(skip_translate=True),
+                                    html_exporter_config=Pptx2HTMLExporterConfig(cdn=True),
+                                )
+                            )
+                            workflow.document_translated = rebuilt_doc
+                            if file_type == "html":
+                                html_content = workflow.export_to_html()
+                                if isinstance(html_content, bytes):
+                                    html_content = html_content.decode("utf-8")
+                                temp_file = tempfile.NamedTemporaryFile(
+                                    mode='w', suffix='.html', delete=False, encoding='utf-8'
+                                )
+                                temp_file.write(html_content)
+                                temp_file.close()
+                                filename = f"{file_stem}_translated.html"
+                                media_type = MEDIA_TYPES.get(file_type, "text/html; charset=utf-8")
+                                logger.info(
+                                    LogModule.EXPORT,
+                                    f"[DOWNLOAD] Generated bilingual HTML from PPTX: {temp_file.name}",
+                                )
+                                return FileResponse(
+                                    path=temp_file.name, media_type=media_type, filename=filename
+                                )
+                            md_content = workflow.export_to_markdown()
+                            temp_file = tempfile.NamedTemporaryFile(
+                                mode='w', suffix='.md', delete=False, encoding='utf-8'
+                            )
+                            temp_file.write(md_content)
+                            temp_file.close()
+                            filename = f"{file_stem}_translated.md"
+                            media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Generated bilingual MD from PPTX: {temp_file.name}",
+                            )
+                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                        logger.warning(
+                            LogModule.EXPORT,
+                            f"[DOWNLOAD] Bilingual PPTX rebuild does not support file_type={file_type}, falling back",
+                        )
+                        has_revisions = False
                     else:
                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Bilingual PPTX rebuild produced empty content, falling back")
                         has_revisions = False
 
                 elif workflow_type == "xlsx":
-                    logger.info(LogModule.EXPORT, f"[DOWNLOAD] Rebuilding bilingual XLSX from segments")
-                    from utils.bilingual_export_utils import rebuild_bilingual_xlsx_from_segments
-                    rebuilt_bytes = rebuild_bilingual_xlsx_from_segments(
-                        task_state, target_first=target_first,
-                    )
-                    if rebuilt_bytes:
-                        temp_file = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
-                        temp_file.write(rebuilt_bytes)
-                        temp_file.close()
-                        file_stem = task_state.get("original_filename_stem", "rebuilt")
-                        filename = f"{file_stem}_translated.xlsx"
-                        media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual XLSX file: {temp_file.name}")
-                        return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
-                    else:
+                    logger.info(LogModule.EXPORT, f"[DOWNLOAD] Rebuilding bilingual XLSX from segments for {file_type}")
+                    file_stem = task_state.get("original_filename_stem", "rebuilt")
+                    if file_type in ("html", "md"):
+                        from utils.bilingual_export_utils import rebuild_bilingual_xlsx_html_from_segments
+
+                        html_content = rebuild_bilingual_xlsx_html_from_segments(
+                            task_state, target_first=target_first
+                        )
+                        if not html_content:
+                            logger.warning(
+                                LogModule.EXPORT,
+                                "[DOWNLOAD] Bilingual XLSX HTML rebuild produced empty content, falling back",
+                            )
+                            has_revisions = False
+                        elif file_type == "html":
+                            temp_file = tempfile.NamedTemporaryFile(
+                                mode='w', suffix='.html', delete=False, encoding='utf-8'
+                            )
+                            temp_file.write(html_content)
+                            temp_file.close()
+                            filename = f"{file_stem}_translated.html"
+                            media_type = MEDIA_TYPES.get(file_type, "text/html; charset=utf-8")
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Generated bilingual HTML from XLSX segments: {temp_file.name}",
+                            )
+                            return FileResponse(
+                                path=temp_file.name, media_type=media_type, filename=filename
+                            )
+                        else:
+                            from workflow.html_to_markdown_export import html_content_to_markdown
+
+                            md_content = html_content_to_markdown(html_content)
+                            temp_file = tempfile.NamedTemporaryFile(
+                                mode='w', suffix='.md', delete=False, encoding='utf-8'
+                            )
+                            temp_file.write(md_content)
+                            temp_file.close()
+                            filename = f"{file_stem}_translated.md"
+                            media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Generated bilingual MD from XLSX segments: {temp_file.name}",
+                            )
+                            return FileResponse(
+                                path=temp_file.name, media_type=media_type, filename=filename
+                            )
+                    elif file_type == "xlsx":
+                        from utils.bilingual_export_utils import rebuild_bilingual_xlsx_from_segments
+
+                        rebuilt_bytes = rebuild_bilingual_xlsx_from_segments(
+                            task_state, target_first=target_first,
+                        )
+                        if rebuilt_bytes:
+                            temp_file = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
+                            temp_file.write(rebuilt_bytes)
+                            temp_file.close()
+                            filename = f"{file_stem}_translated.xlsx"
+                            media_type = MEDIA_TYPES.get(
+                                file_type,
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            )
+                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual XLSX file: {temp_file.name}")
+                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Bilingual XLSX rebuild produced empty content, falling back")
+                        has_revisions = False
+                    else:
+                        logger.warning(
+                            LogModule.EXPORT,
+                            f"[DOWNLOAD] Bilingual XLSX rebuild does not support file_type={file_type}, falling back",
+                        )
                         has_revisions = False
 
                 else:

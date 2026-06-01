@@ -1319,11 +1319,23 @@ def _insert_bilingual_source_paragraphs(
                 except Exception:
                     pass
 
+    def _apply_source_run_style(dst_run) -> None:
+        """Apply bilingual source italic/color to a single run."""
+        try:
+            if source_text_italic:
+                dst_run.italic = True
+            if _resolved_color:
+                dst_run.font.color.rgb = _resolved_color
+        except Exception:
+            pass
+
     def _copy_source_format(src_para: Paragraph, dst_para: Paragraph) -> None:
         """Copy font/bold/italic/size from src_para runs to dst_para runs.
-        Only overrides color when a non-default color was explicitly chosen.
+
+        Applies source_text_italic and source_text_color when configured.
         """
-        for src_run, dst_run in zip(src_para.runs, dst_para.runs):
+        paired = list(zip(src_para.runs, dst_para.runs))
+        for src_run, dst_run in paired:
             try:
                 if src_run.font.name:
                     dst_run.font.name = src_run.font.name
@@ -1331,16 +1343,23 @@ def _insert_bilingual_source_paragraphs(
                     dst_run.bold = src_run.bold
                 if src_run.font.size:
                     dst_run.font.size = src_run.font.size
-                # Preserve italic from original; do not override with source_text_italic
-                if src_run.italic is not None:
+                if source_text_italic:
+                    dst_run.italic = True
+                elif src_run.italic is not None:
                     dst_run.italic = src_run.italic
-                # Color: if user chose a non-default color, override; else keep original
                 if _resolved_color:
                     dst_run.font.color.rgb = _resolved_color
                 elif src_run.font.color and src_run.font.color.rgb:
                     dst_run.font.color.rgb = src_run.font.color.rgb
             except Exception:
                 pass
+
+        # Single-run paragraphs from add_paragraph() may not pair with multi-run originals
+        for dst_run in dst_para.runs[len(paired):]:
+            _apply_source_run_style(dst_run)
+        if not paired and dst_para.runs:
+            for dst_run in dst_para.runs:
+                _apply_source_run_style(dst_run)
 
     # ------------------------------------------------------------------
     # 1. Body paragraphs + table cells (from translation_segments)
