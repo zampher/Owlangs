@@ -78,6 +78,52 @@ def test_rebuild_bilingual_xlsx_html_from_segments():
     print("PASS test_rebuild_bilingual_xlsx_html_from_segments")
 
 
+def test_rebuild_bilingual_pptx_html_from_segments():
+    try:
+        from pptx import Presentation
+        from pptx.util import Inches
+        from utils.bilingual_export_utils import rebuild_bilingual_pptx_html_from_segments
+    except ImportError as exc:
+        print(f"PASS test_rebuild_bilingual_pptx_html_from_segments (skipped: {exc})")
+        return
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[5])
+    slide.shapes.title.text = "Hello"
+    body = slide.shapes.add_textbox(Inches(1), Inches(2), Inches(8), Inches(1))
+    body.text_frame.text = "World"
+    bio = BytesIO()
+    prs.save(bio)
+    src_bytes = bio.getvalue()
+
+    class _Doc:
+        content = src_bytes
+
+    class _WF:
+        document_original = _Doc()
+
+    task_state = {
+        "workflow_instance": _WF(),
+        "source_text_italic": True,
+        "source_text_color": "blue",
+        "target_text_italic": True,
+        "target_text_color": "gray",
+        "translation_segments": {
+            "segments": [
+                {"segment_index": 0, "source_text": "Hello", "target_text": "你好", "is_excluded": False},
+                {"segment_index": 1, "source_text": "World", "target_text": "世界", "is_excluded": False},
+            ]
+        },
+    }
+    html = rebuild_bilingual_pptx_html_from_segments(task_state, target_first=False)
+    assert html and "Slide 1" in html
+    assert "Hello" in html and "你好" in html
+    assert "World" in html and "世界" in html
+    assert "font-style:italic" in html
+    assert "color:#" in html
+    print("PASS test_rebuild_bilingual_pptx_html_from_segments")
+
+
 def test_bilingual_xlsx_html_is_not_zip_bytes():
     try:
         import openpyxl
@@ -149,5 +195,6 @@ def test_bilingual_xlsx_html_is_not_zip_bytes():
 if __name__ == "__main__":
     test_bilingual_segment_to_html_styles_and_line_breaks()
     test_rebuild_bilingual_xlsx_html_from_segments()
+    test_rebuild_bilingual_pptx_html_from_segments()
     test_bilingual_xlsx_html_is_not_zip_bytes()
     print("\nAll bilingual XLSX HTML tests passed!")

@@ -401,6 +401,155 @@ def rebuild_bilingual_xlsx_html_from_segments(
     return html_doc
 
 
+def _segment_bilingual_html(
+    seg: Optional[Dict[str, Any]],
+    target_first: bool,
+    inner_separator: str,
+    *,
+    source_text_italic: bool,
+    source_text_color: Optional[str],
+    target_text_italic: bool,
+    target_text_color: Optional[str],
+) -> str:
+    source = seg.get("source_text", "") if seg else ""
+    target = seg.get("modified_text") or seg.get("target_text", "") if seg else ""
+    is_excluded = bool(seg.get("is_excluded", False)) if seg else False
+    is_cleared = bool(seg.get("status") == "cleared") if seg else False
+    return bilingual_segment_to_html(
+        source_text=source,
+        target_text=target,
+        target_first=target_first,
+        is_excluded=is_excluded,
+        is_cleared=is_cleared,
+        inner_separator=inner_separator,
+        source_text_italic=source_text_italic,
+        source_text_color=source_text_color,
+        target_text_italic=target_text_italic,
+        target_text_color=target_text_color,
+    )
+
+
+def rebuild_bilingual_pptx_html_from_segments(
+    task_state: Dict[str, Any],
+    target_first: bool = False,
+) -> Optional[str]:
+    """Rebuild bilingual PPTX content as HTML slides with styled source/target spans."""
+    if not PPTX_AVAILABLE:
+        logger.warning(LogModule.EXPORT, "[BILINGUAL] python-pptx not available for PPTX bilingual HTML rebuild")
+        return None
+
+    segments_data = task_state.get("translation_segments")
+    if not isinstance(segments_data, dict):
+        logger.warning(LogModule.EXPORT, "[BILINGUAL] No translation_segments dict found for PPTX HTML rebuild")
+        return None
+
+    segments = segments_data.get("segments", [])
+    if not segments:
+        logger.warning(LogModule.EXPORT, "[BILINGUAL] Empty segments list for PPTX HTML rebuild")
+        return None
+
+    segments_by_index: Dict[int, Dict[str, Any]] = {}
+    for seg in segments:
+        idx = seg.get("segment_index")
+        if idx is not None:
+            segments_by_index[int(idx)] = seg
+
+    (
+        source_text_italic,
+        source_text_color,
+        target_text_italic,
+        target_text_color,
+    ) = get_bilingual_style_config(task_state)
+
+    content = _get_source_document_bytes(task_state, "pptx")
+    if not content:
+        return None
+
+    try:
+        prs = Presentation(BytesIO(content))
+    except Exception as e:
+        logger.error(LogModule.EXPORT, f"[BILINGUAL] Failed to load PPTX for HTML rebuild: {e}", exc_info=True)
+        return None
+
+    segment_index = 0
+    slide_sections: List[str] = []
+
+    for slide_idx, slide in enumerate(prs.slides):
+        parts: List[str] = [
+            f'<div class="slide" style="page-break-after: always; padding: 20px;">',
+            f"<h2>Slide {slide_idx + 1}</h2>",
+        ]
+
+        if slide.shapes.title and slide.shapes.title.text.strip():
+            seg = segments_by_index.get(segment_index)
+            parts.append(
+                f"<h3>{_segment_bilingual_html(seg, target_first, '<br/>', source_text_italic=source_text_italic, source_text_color=source_text_color, target_text_italic=target_text_italic, target_text_color=target_text_color)}</h3>"
+            )
+            segment_index += 1
+
+        for shape in slide.shapes:
+            if shape == slide.shapes.title:
+                continue
+
+            if shape.has_text_frame:
+                for paragraph in shape.text_frame.paragraphs:
+                    has_text = any(run.text.strip() for run in paragraph.runs)
+                    if not has_text:
+                        continue
+                    seg = segments_by_index.get(segment_index)
+                    parts.append(
+                        f"<p>{_segment_bilingual_html(seg, target_first, '<br/>', source_text_italic=source_text_italic, source_text_color=source_text_color, target_text_italic=target_text_italic, target_text_color=target_text_color)}</p>"
+                    )
+                    segment_index += 1
+
+            elif shape.has_table:
+                parts.append(
+                    '<table border="1" style="border-collapse: collapse; width: 100%;">'
+                )
+                for row in shape.table.rows:
+                    parts.append("<tr>")
+                    for cell in row.cells:
+                        if not cell.text.strip():
+                            parts.append("<td></td>")
+                            continue
+                        seg = segments_by_index.get(segment_index)
+                        parts.append(
+                            f"<td>{_segment_bilingual_html(seg, target_first, '<br/>', source_text_italic=source_text_italic, source_text_color=source_text_color, target_text_italic=target_text_italic, target_text_color=target_text_color)}</td>"
+                        )
+                        segment_index += 1
+                    parts.append("</tr>")
+                parts.append("</table>")
+
+        parts.append("</div>")
+        slide_sections.append("\n".join(parts))
+
+    if not slide_sections:
+        return None
+
+    body = "\n".join(slide_sections)
+    html_doc = (
+        "<!DOCTYPE html>\n"
+        '<html lang="en">\n'
+        "<head>\n"
+        '<meta charset="utf-8"/>\n'
+        "<title>Translated Presentation</title>\n"
+        "<style>\n"
+        "table { border-collapse: collapse; margin: 0.5em 0; width: 100%; }\n"
+        "td, th { border: 1px solid #ccc; padding: 6px 8px; vertical-align: top; }\n"
+        ".slide { margin-bottom: 2em; }\n"
+        "</style>\n"
+        "</head>\n"
+        f"<body>\n{body}\n</body>\n"
+        "</html>\n"
+    )
+    logger.info(
+        LogModule.EXPORT,
+        f"[BILINGUAL] Rebuilt PPTX HTML: {segment_index} text elements processed, "
+        f"target_first={target_first}",
+    )
+    return html_doc
+
+
 def _clear_pptx_paragraph_runs(paragraph) -> None:
     from pptx.oxml.ns import qn
 
