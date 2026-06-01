@@ -103,8 +103,6 @@ class _TranslationResultPreviewState
       ValueNotifier<int?>(null);
   // Single scroll controller for the unified comparison panel
   final ScrollController _comparisonScrollController = ScrollController();
-  final Map<String, bool> _downloading =
-      <String, bool>{}; // Track download state for each file type
 
   // Scroll manager for maintaining scroll position during pagination
   PaginatedScrollManager? _scrollManager;
@@ -3929,7 +3927,6 @@ class _TranslationResultPreviewState
                 onNavigateToFailedSegment: (direction) =>
                     _navigateToFailedSegment(direction: direction),
                 onViewPreview: _viewTranslationPreview,
-                onShowSettings: _showPreviewSettingsDialog,
                 onShowDownload: _showDownloadDialog,
                 onViewPdfPreview: _viewPdfPreview,
                 onToggleFullscreen: _toggleFullscreen,
@@ -5202,6 +5199,7 @@ class _TranslationResultPreviewState
           String targetTextColor =
               formatSettings.targetTextColor ?? 'gray';
 
+          int selectedDownloadIndex = 0;
           return StatefulBuilder(
             builder: (BuildContext context, setDialogState) => Material(
               type: MaterialType.transparency,
@@ -5209,7 +5207,7 @@ class _TranslationResultPreviewState
                 title: Text(l10n.translationExportDialogTitle),
                 content: SizedBox(
                   width: 720,
-                  height: 480,
+                  height: 380,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -5407,51 +5405,52 @@ class _TranslationResultPreviewState
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: <Widget>[
-                                RadioListTile<String>(
-                                  title: Text(l10n.translationExportBilingualOrderTargetAfter),
-                                  subtitle: Text(l10n.translationExportBilingualOrderTargetAfterSub),
-                                  value: 'target_after_source',
-                                  groupValue: bilingualOrder,
-                                  onChanged: (value) {
-                                    if (value != null) {
-                                      setDialogState(() {
-                                        bilingualOrder = value;
-                                      });
-                                      ref
-                                          .read(
-                                            formatSettingsProviderFamily(
-                                                    _apiTaskId(),)
-                                                .notifier,
-                                          )
-                                          .setBilingualOrder(value);
-                                    }
-                                  },
-                                  dense: true,
-                                  contentPadding: EdgeInsets.zero,
+                                // Order: inline radios
+                                Row(
+                                  children: <Widget>[
+                                    Radio<String>(
+                                      value: 'target_after_source',
+                                      groupValue: bilingualOrder,
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          setDialogState(() {
+                                            bilingualOrder = value;
+                                          });
+                                          ref
+                                              .read(
+                                                formatSettingsProviderFamily(
+                                                        _apiTaskId(),)
+                                                    .notifier,
+                                              )
+                                              .setBilingualOrder(value);
+                                        }
+                                      },
+                                    ),
+                                    Text(l10n.translationExportBilingualOrderTargetAfter),
+                                    const SizedBox(width: 16),
+                                    Radio<String>(
+                                      value: 'target_before_source',
+                                      groupValue: bilingualOrder,
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          setDialogState(() {
+                                            bilingualOrder = value;
+                                          });
+                                          ref
+                                              .read(
+                                                formatSettingsProviderFamily(
+                                                        _apiTaskId(),)
+                                                    .notifier,
+                                              )
+                                              .setBilingualOrder(value);
+                                        }
+                                      },
+                                    ),
+                                    Text(l10n.translationExportBilingualOrderTargetBefore),
+                                  ],
                                 ),
-                                RadioListTile<String>(
-                                  title: Text(l10n.translationExportBilingualOrderTargetBefore),
-                                  subtitle: Text(l10n.translationExportBilingualOrderTargetBeforeSub),
-                                  value: 'target_before_source',
-                                  groupValue: bilingualOrder,
-                                  onChanged: (value) {
-                                    if (value != null) {
-                                      setDialogState(() {
-                                        bilingualOrder = value;
-                                      });
-                                      ref
-                                          .read(
-                                            formatSettingsProviderFamily(
-                                                    _apiTaskId(),)
-                                                .notifier,
-                                          )
-                                          .setBilingualOrder(value);
-                                    }
-                                  },
-                                  dense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                                const SizedBox(height: 8),
+                                const Divider(height: 20),
+                                // Italic: source and target side by side
                                 Row(
                                   children: <Widget>[
                                     Checkbox(
@@ -5472,9 +5471,29 @@ class _TranslationResultPreviewState
                                       },
                                     ),
                                     Text(l10n.translationExportSourceTextItalic),
+                                    const SizedBox(width: 24),
+                                    Checkbox(
+                                      value: targetTextItalic,
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          setDialogState(() {
+                                            targetTextItalic = value;
+                                          });
+                                          ref
+                                              .read(
+                                                formatSettingsProviderFamily(
+                                                        _apiTaskId(),)
+                                                    .notifier,
+                                              )
+                                              .setTargetTextItalic(value);
+                                        }
+                                      },
+                                    ),
+                                    Text(l10n.translationExportTargetTextItalic),
                                   ],
                                 ),
-                                const SizedBox(height: 4),
+                                const Divider(height: 20),
+                                // Colors: source color row
                                 Row(
                                   children: <Widget>[
                                     Text(l10n.translationExportSourceTextColor),
@@ -5528,30 +5547,8 @@ class _TranslationResultPreviewState
                                     }).toList(),
                                   ],
                                 ),
-                                const SizedBox(height: 12),
-                                Row(
-                                  children: <Widget>[
-                                    Checkbox(
-                                      value: targetTextItalic,
-                                      onChanged: (value) {
-                                        if (value != null) {
-                                          setDialogState(() {
-                                            targetTextItalic = value;
-                                          });
-                                          ref
-                                              .read(
-                                                formatSettingsProviderFamily(
-                                                        _apiTaskId(),)
-                                                    .notifier,
-                                              )
-                                              .setTargetTextItalic(value);
-                                        }
-                                      },
-                                    ),
-                                    Text(l10n.translationExportTargetTextItalic),
-                                  ],
-                                ),
                                 const SizedBox(height: 4),
+                                // Target color row
                                 Row(
                                   children: <Widget>[
                                     Text(l10n.translationExportTargetTextColor),
@@ -5627,64 +5624,28 @@ class _TranslationResultPreviewState
                               Padding(
                                 padding: const EdgeInsets.all(16.0),
                                 child: Text(
-                                  l10n.translationExportDialogTitle,
+                                  l10n.translationExportDocumentType,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 16,
                                   ),
                                 ),
                               ),
-                            ...downloadOptions.map((option) {
-                              final fileType = option['type'] as String;
-                              final label = option['label'] as String;
-                              final embedImages = option['embedImages'] as bool?;
-                              final ebookEngine = option['ebookEngine'] as String?;
-                              final downloadKey = embedImages != null
-                                  ? '${fileType}_${embedImages ? 'embedded' : 'with_images'}'
-                                  : (ebookEngine != null ? '${fileType}_$ebookEngine' : fileType);
-                              final isFormatDownloading =
-                                  _downloading[downloadKey] ?? false;
-                              return ListTile(
-                                enabled: !isFormatDownloading,
-                                leading: isFormatDownloading
-                                    ? const SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child:
-                                            CircularProgressIndicator(strokeWidth: 2),
-                                      )
-                                    : Icon(
-                                        _getFormatIcon(fileType),
-                                        color: Theme.of(context).colorScheme.primary,
-                                      ),
-                                title: Text(
-                                  label,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
-                                ),
-                                trailing: Icon(
-                                  Icons.download,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                onTap: isFormatDownloading
-                                    ? null
-                                    : () {
-                                        // Capture current format values from dialog state before closing
-                                        final currentTableFormat = tableFormat;
-                                        final currentEquationFormat = equationFormat;
-                                        final ebookEngine = option['ebookEngine'] as String?;
-                                        Navigator.of(context, rootNavigator: true)
-                                            .pop();
-                                        _handlePreviewFormatDownload(
-                                          fileType,
-                                          embedImages: embedImages,
-                                          tableFormat: currentTableFormat,
-                                          equationFormat: currentEquationFormat,
-                                          ebookEngine: ebookEngine,
-                                        );
-                                      },
+                            ...downloadOptions.asMap().entries.map((entry) {
+                              final int index = entry.key;
+                              final Map<String, dynamic> option = entry.value;
+                              final String label = option['label'] as String;
+                              return RadioListTile<int>(
+                                value: index,
+                                groupValue: selectedDownloadIndex,
+                                title: Text(label),
+                                dense: true,
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    selectedDownloadIndex = value;
+                                    setDialogState(() {});
+                                  }
+                                },
                               );
                             }),
                             ],
@@ -5699,7 +5660,29 @@ class _TranslationResultPreviewState
                     onPressed: () {
                       Navigator.of(context, rootNavigator: true).pop();
                     },
-                    child: const Text('Cancel'),
+                    child: Text(l10n.translationToolbarCancelButton),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      final selectedOption =
+                          downloadOptions[selectedDownloadIndex];
+                      final fileType = selectedOption['type'] as String;
+                      final embedImages =
+                          selectedOption['embedImages'] as bool?;
+                      final ebookEngine =
+                          selectedOption['ebookEngine'] as String?;
+                      final currentTableFormat = tableFormat;
+                      final currentEquationFormat = equationFormat;
+                      Navigator.of(context, rootNavigator: true).pop();
+                      _handlePreviewFormatDownload(
+                        fileType,
+                        embedImages: embedImages,
+                        tableFormat: currentTableFormat,
+                        equationFormat: currentEquationFormat,
+                        ebookEngine: ebookEngine,
+                      );
+                    },
+                    child: Text(l10n.translationExportDownloadButton),
                   ),
                 ],
               ),
@@ -5799,22 +5782,6 @@ class _TranslationResultPreviewState
       if (mounted) {
         MessageService.showError(context, 'Failed to download $fileType: $e');
       }
-    }
-  }
-
-  /// Get icon for file format
-  IconData _getFormatIcon(String format) {
-    switch (format.toLowerCase()) {
-      case 'md':
-        return Icons.description;
-      case 'html':
-        return Icons.code;
-      case 'docx':
-        return Icons.description;
-      case 'pdf':
-        return Icons.picture_as_pdf;
-      default:
-        return Icons.file_download;
     }
   }
 

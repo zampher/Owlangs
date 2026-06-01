@@ -3,11 +3,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
-    show kIsWeb, kDebugMode, defaultTargetPlatform, TargetPlatform;
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/pagination_bar.dart';
-import '../../../../shared/widgets/page_size_selector.dart';
 import '../../../../shared/utils/pagination.dart';
 import '../../providers/segment_undo_redo_provider.dart';
 import '../../providers/translation_state_provider_family.dart';
@@ -35,7 +34,6 @@ class TranslationResultToolbar extends ConsumerWidget {
     this.onGlobalRedo,
     this.onNavigateToFailedSegment,
     this.onViewPreview,
-    this.onShowSettings,
     this.onShowDownload,
     this.onViewPdfPreview,
     this.onToggleFullscreen,
@@ -73,7 +71,6 @@ class TranslationResultToolbar extends ConsumerWidget {
   final VoidCallback? onGlobalRedo;
   final void Function(int direction)? onNavigateToFailedSegment;
   final VoidCallback? onViewPreview;
-  final VoidCallback? onShowSettings;
   final VoidCallback? onShowDownload;
   final VoidCallback? onViewPdfPreview;
   final VoidCallback? onToggleFullscreen;
@@ -136,12 +133,12 @@ class TranslationResultToolbar extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 12,
-        vertical: 4,
-      ), // Adjusted padding to achieve 36px total height
+        vertical: 2,
+      ),
       constraints: const BoxConstraints(
-        minHeight: 36,
-        maxHeight: 36,
-      ), // Fixed height at 36px
+        minHeight: 30,
+        maxHeight: 30,
+      ),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: Border(
@@ -320,6 +317,19 @@ class TranslationResultToolbar extends ConsumerWidget {
               ),
               const SizedBox(width: 3),
             ],
+            // PDF 公式完整性检查（左侧末尾）
+            if (onCheckPdfFormulas != null)
+              IconButton(
+                icon: const Icon(Icons.rule, size: 16),
+                tooltip: '检查 PDF 中的公式完整性',
+                onPressed: onCheckPdfFormulas,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 28,
+                  minHeight: 28,
+                ),
+              ),
+            if (onCheckPdfFormulas != null) const SizedBox(width: 3),
             // Spacer to push right group to the end
             const Spacer(),
           ],
@@ -364,28 +374,6 @@ class TranslationResultToolbar extends ConsumerWidget {
                   ),
                 ),
               ],
-              // Page size selector
-              const SizedBox(width: 6),
-              ListenableBuilder(
-                listenable: segmentsPaginationController!,
-                builder: (context, _) => PageSizeSelector(
-                  currentPageSize: segmentsPaginationController!.pageSize,
-                  onPageSizeChanged: (size) {
-                    segmentsPaginationController!.setPageSize(size);
-                  },
-                  preferenceKey: 'translation_result_segments_page_size',
-                  pageSizeOptions: const <int>[
-                    50,
-                    100,
-                    200,
-                    500,
-                    1000,
-                    2000,
-                  ],
-                  showLabel: false,
-                ),
-              ),
-              const SizedBox(width: 8),
             ],
             // Preview button
             if (_shouldShowPreviewButton()) ...<Widget>[
@@ -407,22 +395,11 @@ class TranslationResultToolbar extends ConsumerWidget {
               ),
               const SizedBox(width: 3),
             ],
-            // Settings and Download buttons
+            // Download button
             if (isCompleted &&
                 (statusLower == 'completed' ||
                     statusLower == 'failed' ||
                     hasDownloads)) ...<Widget>[
-              IconButton(
-                icon: const Icon(Icons.settings, size: 16),
-                tooltip: l10n.translationToolbarFormatSettingsTooltip,
-                onPressed: onShowSettings,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 28,
-                  minHeight: 28,
-                ),
-              ),
-              const SizedBox(width: 3),
               IconButton(
                 icon: const Icon(Icons.download, size: 16),
                 tooltip: l10n.translationToolbarExportTooltip,
@@ -434,34 +411,6 @@ class TranslationResultToolbar extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 3),
-            ],
-            // PDF Preview button (Debug mode only)
-            if (kDebugMode &&
-                (fileName?.toLowerCase().endsWith('.pdf') ?? false) &&
-                (downloads?.containsKey('pdf') ?? false)) ...<Widget>[
-              IconButton(
-                icon: const Icon(Icons.picture_as_pdf, size: 16),
-                tooltip: l10n.translationToolbarPdfPreviewTooltip,
-                onPressed: onViewPdfPreview,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 28,
-                  minHeight: 28,
-                ),
-              ),
-              const SizedBox(width: 3),
-              if (onCheckPdfFormulas != null)
-                IconButton(
-                  icon: const Icon(Icons.rule, size: 16),
-                  tooltip: '检查 PDF 中的公式完整性',
-                  onPressed: onCheckPdfFormulas,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 28,
-                    minHeight: 28,
-                  ),
-                ),
-              if (onCheckPdfFormulas != null) const SizedBox(width: 3),
             ],
             // Merged paragraph view toggle button (before fullscreen in right group)
             IconButton(

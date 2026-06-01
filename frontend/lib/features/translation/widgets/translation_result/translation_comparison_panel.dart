@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/paginated_sliver_list.dart';
+import '../../../../shared/widgets/page_size_selector.dart';
 import '../../../../shared/utils/pagination.dart';
 import '../../../../shared/providers/settings_provider.dart';
 import '../../providers/segment_undo_redo_provider.dart';
@@ -190,7 +191,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         Padding(
-          padding: const EdgeInsets.only(right: 4),
+          padding: const EdgeInsets.only(right: 3),
           child: Text(
             '${l10n.settingsGlossaryFilterLabel} ',
             style: TextStyle(
@@ -202,8 +203,8 @@ class TranslationComparisonPanel extends ConsumerWidget {
         ),
         Flexible(
           child: Wrap(
-            spacing: 3,
-            runSpacing: 2,
+            spacing: 2,
+            runSpacing: 1,
             children: filters.map((cfg) {
         final count = counts[cfg.key] ?? 0;
         // Hide chips with 0 count (except "All")
@@ -248,10 +249,13 @@ class TranslationComparisonPanel extends ConsumerWidget {
                 : null,
             backgroundColor: isSelected ? cfg.color.shade100 : Colors.grey.shade200,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.circular(6),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
+            visualDensity: const VisualDensity(
+              horizontal: -4,
+              vertical: -4,
+            ),
             side: BorderSide(
               color: isSelected ? cfg.color.shade300 : Colors.grey.shade400,
             ),
@@ -293,12 +297,13 @@ class TranslationComparisonPanel extends ConsumerWidget {
               ),
               child: Row(
                 children: <Widget>[
-                  // Middle section: Filter chips bar (left-aligned)
+                  // Filter chips bar (left-aligned)
                   if (segmentMetadata.isNotEmpty)
                     Expanded(
                       child: _buildFilterChipsBar(context),
                     ),
-                  // Right section: Segment info, Translated label and stats
+                  const SizedBox(width: 8),
+                  // Segment info and stats (right-aligned)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     mainAxisSize: MainAxisSize.min,
@@ -339,22 +344,34 @@ class TranslationComparisonPanel extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(width: 4), // Reduced spacing
-                      // Translation completion stats (success/fail counts, duration, token usage)
-                      if (translationState != null) ...<Widget>[
+                      // Translation completion stats
+                      if (translationState != null)
                         _buildTranslationStats(context, scheme),
-                        const SizedBox(
-                          width: 8,
-                        ), // Spacing before Translated label
-                      ],
-                      Text(
-                        AppLocalizations.of(context)!
-                            .translationStatsTranslatedLabel,
-                        style: TextStyle(
-                          fontSize: 12, // Reduced from 14 to 12
-                          fontWeight: FontWeight.w600,
-                          color: scheme.primary,
+                      // Page size selector (right of stats)
+                      if (segmentsPaginationController != null) ...<Widget>[
+                        const SizedBox(width: 6),
+                        ListenableBuilder(
+                          listenable: segmentsPaginationController!,
+                          builder: (context, _) => PageSizeSelector(
+                            currentPageSize:
+                                segmentsPaginationController!.pageSize,
+                            onPageSizeChanged: (size) {
+                              segmentsPaginationController!.setPageSize(size);
+                            },
+                            preferenceKey:
+                                'translation_result_segments_page_size',
+                            pageSizeOptions: const <int>[
+                              50,
+                              100,
+                              200,
+                              500,
+                              1000,
+                              2000,
+                            ],
+                            showLabel: false,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ],

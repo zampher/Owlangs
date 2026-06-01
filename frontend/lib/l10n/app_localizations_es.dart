@@ -497,6 +497,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationExportDialogTitle => 'Exportar Documento';
 
   @override
+  String get translationExportDocumentType => 'Tipo de Documento';
+
+  @override
   String get translationExportFormatOptionsTitle =>
       'Opciones de Formato (solo PDF)';
 
@@ -522,8 +525,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationExportBilingualExport => 'Exportación Bilingüe';
 
   @override
-  String get translationExportBilingualOrderTargetAfter =>
-      'Destino Después de Origen';
+  String get translationExportBilingualOrderTargetAfter => 'Origen Primero';
 
   @override
   String get translationExportBilingualOrderTargetAfterSub =>
@@ -569,6 +571,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get translationExportColorBlack => 'Negro';
+
+  @override
+  String get translationExportDownloadButton => 'Descargar';
 
   @override
   String get translationExportMdEmbeddedImages =>
@@ -809,8 +814,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationDialogCancelTaskYesCancel => 'Sí, Cancelar';
 
   @override
-  String get translationQuickSettingsTitle =>
-      'Configuración Rápida de Traducción';
+  String get translationQuickSettingsTitle => 'Configuración Rápida';
 
   @override
   String get quickSettingsTargetLanguage => 'Idioma Objetivo';
@@ -1020,10 +1024,21 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeBackendRetry => 'Reintentar';
 
   @override
+  String get homeNewTask => 'Nueva tarea';
+
+  @override
+  String get homeNewTaskImmersiveTooltip =>
+      'Comparar original y traducción lado a lado en la interfaz';
+
+  @override
+  String get homeNewTaskQueuedTooltip =>
+      'Importar archivos por lote y ejecutar en orden';
+
+  @override
   String get homeNavTranslate => 'Tarea inmersiva';
 
   @override
-  String get homeNavTranslationQueue => 'Gestión de tareas';
+  String get homeNavTranslationQueue => 'Tareas';
 
   @override
   String get homeNavAnonymize => 'Anonimizar';
@@ -1042,6 +1057,40 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get homeNavBatchUpload => 'Subida por lotes';
+
+  @override
+  String get homeNavTooltipNewTask =>
+      'Iniciar una nueva traducción — comparación lado a lado, o procesamiento por lotes';
+
+  @override
+  String get homeNavTooltipTasks =>
+      'Ver y gestionar todas las tareas, descargar traducciones completadas';
+
+  @override
+  String get homeNavTooltipAnonymize =>
+      'Anonimizar el contenido del documento para proteger información confidencial';
+
+  @override
+  String get homeNavTooltipSettings =>
+      'Configurar idioma, tema, notificaciones y más';
+
+  @override
+  String get homeNavTooltipSetupWizard =>
+      'Asistente de configuración guiada para tu entorno de traducción';
+
+  @override
+  String get homeNavTooltipHelp => 'Obtener ayuda y soporte técnico';
+
+  @override
+  String get homeNavTooltipDonate =>
+      'Apoyar nuestro proyecto de código abierto';
+
+  @override
+  String get homeNavTooltipHome => 'Volver a la página de inicio';
+
+  @override
+  String get homeNavTooltipGitHub =>
+      'Ver código fuente en GitHub — ¡danos una estrella si te resulta útil!';
 
   @override
   String get batchUploadTitle => 'Subida de archivos por lotes';
@@ -1415,7 +1464,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homePhaseTranslate => 'Traducir';
 
   @override
-  String get homePhaseViewer => 'Visor';
+  String get homePhaseViewer => 'Revisar';
 
   @override
   String get homePhaseAnonymize => 'Anonimizar';
@@ -1425,6 +1474,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get homePhaseExport => 'Exportar';
+
+  @override
+  String get taskDefaultTitleTranslate => 'Tarea';
+
+  @override
+  String get taskDefaultTitleAnonymize => 'Anonimización';
 
   @override
   String get homeReleaseNotesTitle => 'Notas de la Versión';

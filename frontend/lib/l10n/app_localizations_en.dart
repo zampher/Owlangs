@@ -486,6 +486,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationExportDialogTitle => 'Export Document';
 
   @override
+  String get translationExportDocumentType => 'Document Type';
+
+  @override
   String get translationExportFormatOptionsTitle => 'Format Options (PDF only)';
 
   @override
@@ -510,8 +513,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationExportBilingualExport => 'Bilingual Export';
 
   @override
-  String get translationExportBilingualOrderTargetAfter =>
-      'Target After Source';
+  String get translationExportBilingualOrderTargetAfter => 'Source First';
 
   @override
   String get translationExportBilingualOrderTargetAfterSub =>
@@ -557,6 +559,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get translationExportColorBlack => 'Black';
+
+  @override
+  String get translationExportDownloadButton => 'Download';
 
   @override
   String get translationExportMdEmbeddedImages => 'MD (Embedded Images)';
@@ -789,7 +794,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationDialogCancelTaskYesCancel => 'Yes, Cancel';
 
   @override
-  String get translationQuickSettingsTitle => 'Translation Quick Settings';
+  String get translationQuickSettingsTitle => 'Quick Settings';
 
   @override
   String get quickSettingsTargetLanguage => 'Target Language';
@@ -997,10 +1002,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeBackendRetry => 'Retry';
 
   @override
+  String get homeNewTask => 'New task';
+
+  @override
+  String get homeNewTaskImmersiveTooltip =>
+      'Compare source and translation side by side in the UI';
+
+  @override
+  String get homeNewTaskQueuedTooltip =>
+      'Batch import files and run the full pipeline in order';
+
+  @override
   String get homeNavTranslate => 'Immersive task';
 
   @override
-  String get homeNavTranslationQueue => 'Task management';
+  String get homeNavTranslationQueue => 'Tasks';
 
   @override
   String get homeNavAnonymize => 'Anonymize';
@@ -1019,6 +1035,39 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get homeNavBatchUpload => 'Batch upload';
+
+  @override
+  String get homeNavTooltipNewTask =>
+      'Start a new translation — immersive side-by-side, or queued batch processing';
+
+  @override
+  String get homeNavTooltipTasks =>
+      'View and manage all translation tasks, download completed results';
+
+  @override
+  String get homeNavTooltipAnonymize =>
+      'Anonymize document content to protect sensitive information';
+
+  @override
+  String get homeNavTooltipSettings =>
+      'Configure language, theme, notifications and more';
+
+  @override
+  String get homeNavTooltipSetupWizard =>
+      'Guided setup wizard to configure your translation environment';
+
+  @override
+  String get homeNavTooltipHelp => 'Get help and technical support';
+
+  @override
+  String get homeNavTooltipDonate => 'Support our open source project';
+
+  @override
+  String get homeNavTooltipHome => 'Return to home page';
+
+  @override
+  String get homeNavTooltipGitHub =>
+      'View source code on GitHub — star us if you find it useful!';
 
   @override
   String get batchUploadTitle => 'Batch file upload';
@@ -1392,7 +1441,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homePhaseTranslate => 'Translate';
 
   @override
-  String get homePhaseViewer => 'Viewer';
+  String get homePhaseViewer => 'Revise';
 
   @override
   String get homePhaseAnonymize => 'Anonymize';
@@ -1402,6 +1451,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get homePhaseExport => 'Export';
+
+  @override
+  String get taskDefaultTitleTranslate => 'Task';
+
+  @override
+  String get taskDefaultTitleAnonymize => 'Anonymization';
 
   @override
   String get homeReleaseNotesTitle => 'Release Notes';

@@ -528,9 +528,10 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
             }
             final activeTab =
                 tabsState.tabs[tabsState.activeTabIndex];
+            final l10n = AppLocalizations.of(context)!;
             return _TabLanguageFlags(
               extract: activeTab.id == 'extract_tab' ||
-                  activeTab.title == 'Extract',
+                  activeTab.title == l10n.homePhaseExtract,
               glossary: activeTab.type == PreviewTabType.glossary,
             );
           }),
@@ -723,6 +724,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                         lang['code']!,
                         lang['native']!,
                       ),
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ),
                 )
@@ -825,7 +827,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                   mineruLocalizedDisplayName(l10n, lang);
               return Tooltip(
                 message: lang.description,
-                child: Text(displayText),
+                child: Text(displayText, style: const TextStyle(fontSize: 12)),
               );
             }).toList();
           },
@@ -837,7 +839,8 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
-                      Text(mineruLocalizedDisplayName(l10n, lang)),
+                      Text(mineruLocalizedDisplayName(l10n, lang),
+                          style: const TextStyle(fontSize: 12)),
                       if (lang.code != 'auto')
                         Text(
                           lang.description,
@@ -1140,6 +1143,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                         child: Text(
                           label,
                           overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12),
                         ),
                       ),
                     ],
@@ -1325,6 +1329,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                       child: Text(
                         p.name,
                         overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
                       ),
                     ),
                   ],
@@ -1445,6 +1450,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                     child: Text(
                       type['name']!,
                       overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ))
               .toList(),
@@ -1717,7 +1723,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
               .map(
                 (Map<String, String> m) => DropdownMenuItem(
                   value: m['code'],
-                  child: Text(m['name']!),
+                  child: Text(m['name']!, style: const TextStyle(fontSize: 12)),
                 ),
               )
               .toList(),
@@ -1740,7 +1746,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                 .map(
                   (Map<String, String> s) => DropdownMenuItem(
                     value: s['code'],
-                    child: Text(s['name']!),
+                    child: Text(s['name']!, style: const TextStyle(fontSize: 12)),
                   ),
                 )
                 .toList(),

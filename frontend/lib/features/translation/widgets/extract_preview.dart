@@ -2856,12 +2856,12 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
       ),
       padding: const EdgeInsets.symmetric(
         horizontal: 12,
-        vertical: 4,
-      ), // Adjusted padding to achieve 36px total height
+        vertical: 2,
+      ), // Adjusted padding to achieve 30px total height
       constraints: const BoxConstraints(
-        minHeight: 36,
-        maxHeight: 36,
-      ), // Fixed height at 36px
+        minHeight: 30,
+        maxHeight: 30,
+      ), // Fixed height at 30px
       child: Row(
         children: <Widget>[
           Icon(
@@ -2871,7 +2871,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
           ),
           const SizedBox(width: 4), // Further reduced spacing
           Text(
-            'Extract',
+            AppLocalizations.of(context)!.homePhaseExtract,
             style: TextStyle(
               fontSize: 13, // Further reduced from 15 to 13
               fontWeight: FontWeight.bold,
@@ -3236,6 +3236,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
         child: ActionChip(
           label: Row(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
               if (isSelected)
                 Icon(
@@ -3256,16 +3257,19 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
             ],
           ),
           onPressed: onTap,
+          labelPadding: EdgeInsets.zero,
           backgroundColor: isSelected ? color.shade100 : Colors.grey.shade200,
-          // Explicit stadium shape: compact chips + small icons otherwise look almost square.
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(6),
           ),
           padding: const EdgeInsets.symmetric(
-            horizontal: 6,
-            vertical: 2,
+            horizontal: 2,
+            vertical: 0,
           ),
-          visualDensity: VisualDensity.compact,
+          visualDensity: const VisualDensity(
+            horizontal: -4,
+            vertical: -4,
+          ),
           side: BorderSide(
             color: isSelected ? color.shade300 : Colors.grey.shade400,
           ),

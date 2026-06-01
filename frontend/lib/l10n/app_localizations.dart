@@ -957,6 +957,12 @@ abstract class AppLocalizations {
   /// **'Export Document'**
   String get translationExportDialogTitle;
 
+  /// No description provided for @translationExportDocumentType.
+  ///
+  /// In en, this message translates to:
+  /// **'Document Type'**
+  String get translationExportDocumentType;
+
   /// No description provided for @translationExportFormatOptionsTitle.
   ///
   /// In en, this message translates to:
@@ -1008,7 +1014,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationExportBilingualOrderTargetAfter.
   ///
   /// In en, this message translates to:
-  /// **'Target After Source'**
+  /// **'Source First'**
   String get translationExportBilingualOrderTargetAfter;
 
   /// No description provided for @translationExportBilingualOrderTargetAfterSub.
@@ -1094,6 +1100,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Black'**
   String get translationExportColorBlack;
+
+  /// No description provided for @translationExportDownloadButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get translationExportDownloadButton;
 
   /// No description provided for @translationExportMdEmbeddedImages.
   ///
@@ -1460,7 +1472,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationQuickSettingsTitle.
   ///
   /// In en, this message translates to:
-  /// **'Translation Quick Settings'**
+  /// **'Quick Settings'**
   String get translationQuickSettingsTitle;
 
   /// No description provided for @quickSettingsTargetLanguage.
@@ -1829,6 +1841,24 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get homeBackendRetry;
 
+  /// No description provided for @homeNewTask.
+  ///
+  /// In en, this message translates to:
+  /// **'New task'**
+  String get homeNewTask;
+
+  /// No description provided for @homeNewTaskImmersiveTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare source and translation side by side in the UI'**
+  String get homeNewTaskImmersiveTooltip;
+
+  /// No description provided for @homeNewTaskQueuedTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch import files and run the full pipeline in order'**
+  String get homeNewTaskQueuedTooltip;
+
   /// No description provided for @homeNavTranslate.
   ///
   /// In en, this message translates to:
@@ -1838,7 +1868,7 @@ abstract class AppLocalizations {
   /// No description provided for @homeNavTranslationQueue.
   ///
   /// In en, this message translates to:
-  /// **'Task management'**
+  /// **'Tasks'**
   String get homeNavTranslationQueue;
 
   /// No description provided for @homeNavAnonymize.
@@ -1876,6 +1906,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Batch upload'**
   String get homeNavBatchUpload;
+
+  /// No description provided for @homeNavTooltipNewTask.
+  ///
+  /// In en, this message translates to:
+  /// **'Start a new translation — immersive side-by-side, or queued batch processing'**
+  String get homeNavTooltipNewTask;
+
+  /// No description provided for @homeNavTooltipTasks.
+  ///
+  /// In en, this message translates to:
+  /// **'View and manage all translation tasks, download completed results'**
+  String get homeNavTooltipTasks;
+
+  /// No description provided for @homeNavTooltipAnonymize.
+  ///
+  /// In en, this message translates to:
+  /// **'Anonymize document content to protect sensitive information'**
+  String get homeNavTooltipAnonymize;
+
+  /// No description provided for @homeNavTooltipSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure language, theme, notifications and more'**
+  String get homeNavTooltipSettings;
+
+  /// No description provided for @homeNavTooltipSetupWizard.
+  ///
+  /// In en, this message translates to:
+  /// **'Guided setup wizard to configure your translation environment'**
+  String get homeNavTooltipSetupWizard;
+
+  /// No description provided for @homeNavTooltipHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Get help and technical support'**
+  String get homeNavTooltipHelp;
+
+  /// No description provided for @homeNavTooltipDonate.
+  ///
+  /// In en, this message translates to:
+  /// **'Support our open source project'**
+  String get homeNavTooltipDonate;
+
+  /// No description provided for @homeNavTooltipHome.
+  ///
+  /// In en, this message translates to:
+  /// **'Return to home page'**
+  String get homeNavTooltipHome;
+
+  /// No description provided for @homeNavTooltipGitHub.
+  ///
+  /// In en, this message translates to:
+  /// **'View source code on GitHub — star us if you find it useful!'**
+  String get homeNavTooltipGitHub;
 
   /// No description provided for @batchUploadTitle.
   ///
@@ -2492,7 +2576,7 @@ abstract class AppLocalizations {
   /// No description provided for @homePhaseViewer.
   ///
   /// In en, this message translates to:
-  /// **'Viewer'**
+  /// **'Revise'**
   String get homePhaseViewer;
 
   /// No description provided for @homePhaseAnonymize.
@@ -2512,6 +2596,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Export'**
   String get homePhaseExport;
+
+  /// No description provided for @taskDefaultTitleTranslate.
+  ///
+  /// In en, this message translates to:
+  /// **'Task'**
+  String get taskDefaultTitleTranslate;
+
+  /// No description provided for @taskDefaultTitleAnonymize.
+  ///
+  /// In en, this message translates to:
+  /// **'Anonymization'**
+  String get taskDefaultTitleAnonymize;
 
   /// No description provided for @homeReleaseNotesTitle.
   ///

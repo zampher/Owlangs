@@ -474,6 +474,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationExportDialogTitle => 'ドキュメントをエクスポート';
 
   @override
+  String get translationExportDocumentType => 'ドキュメントタイプ';
+
+  @override
   String get translationExportFormatOptionsTitle => 'フォーマットオプション（PDFのみ）';
 
   @override
@@ -498,7 +501,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationExportBilingualExport => 'バイリンガル書き出し';
 
   @override
-  String get translationExportBilingualOrderTargetAfter => '訳文を後ろに';
+  String get translationExportBilingualOrderTargetAfter => '原文を前に';
 
   @override
   String get translationExportBilingualOrderTargetAfterSub => '原文を前に、訳文を後ろに';
@@ -541,6 +544,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get translationExportColorBlack => '黒';
+
+  @override
+  String get translationExportDownloadButton => 'ダウンロード';
 
   @override
   String get translationExportMdEmbeddedImages => 'MD（画像埋め込み）';
@@ -762,7 +768,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationDialogCancelTaskYesCancel => 'はい、キャンセルします';
 
   @override
-  String get translationQuickSettingsTitle => '翻訳クイック設定';
+  String get translationQuickSettingsTitle => 'クイック設定';
 
   @override
   String get quickSettingsTargetLanguage => 'ターゲット言語';
@@ -961,10 +967,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeBackendRetry => '再試行';
 
   @override
+  String get homeNewTask => '新規タスク';
+
+  @override
+  String get homeNewTaskImmersiveTooltip => '原文と訳文をUIで並べて比較';
+
+  @override
+  String get homeNewTaskQueuedTooltip => 'ファイルを一括インポートし、順番に自動翻訳';
+
+  @override
   String get homeNavTranslate => 'イマーシブタスク';
 
   @override
-  String get homeNavTranslationQueue => 'タスク管理';
+  String get homeNavTranslationQueue => 'タスク';
 
   @override
   String get homeNavAnonymize => '匿名化';
@@ -983,6 +998,33 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get homeNavBatchUpload => '一括アップロード';
+
+  @override
+  String get homeNavTooltipNewTask => '新しい翻訳を開始——イマーシブな対比、またはキューによるバッチ処理';
+
+  @override
+  String get homeNavTooltipTasks => 'すべての翻訳タスクを表示・管理し、完了した翻訳をダウンロード';
+
+  @override
+  String get homeNavTooltipAnonymize => 'ドキュメント内容を匿名化し、機密情報を保護';
+
+  @override
+  String get homeNavTooltipSettings => '言語、テーマ、通知などを設定';
+
+  @override
+  String get homeNavTooltipSetupWizard => 'ガイド付きセットアップウィザードで翻訳環境を構成';
+
+  @override
+  String get homeNavTooltipHelp => 'ヘルプとテクニカルサポートを入手';
+
+  @override
+  String get homeNavTooltipDonate => 'オープンソースプロジェクトを支援';
+
+  @override
+  String get homeNavTooltipHome => 'ホームページに戻る';
+
+  @override
+  String get homeNavTooltipGitHub => 'GitHubでソースコードを閲覧——気に入ったらスターをお願いします！';
 
   @override
   String get batchUploadTitle => '一括ファイルアップロード';
@@ -1344,7 +1386,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homePhaseTranslate => '翻訳';
 
   @override
-  String get homePhaseViewer => 'ビューア';
+  String get homePhaseViewer => '修正';
 
   @override
   String get homePhaseAnonymize => '匿名化';
@@ -1354,6 +1396,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get homePhaseExport => 'エクスポート';
+
+  @override
+  String get taskDefaultTitleTranslate => 'タスク';
+
+  @override
+  String get taskDefaultTitleAnonymize => '匿名化';
 
   @override
   String get homeReleaseNotesTitle => 'リリースノート';

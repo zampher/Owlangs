@@ -475,6 +475,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationExportDialogTitle => '문서 내보내기';
 
   @override
+  String get translationExportDocumentType => '문서 유형';
+
+  @override
   String get translationExportFormatOptionsTitle => '형식 옵션 (PDF만)';
 
   @override
@@ -499,7 +502,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationExportBilingualExport => '이중 언어 내보내기';
 
   @override
-  String get translationExportBilingualOrderTargetAfter => '번역문을 뒤에';
+  String get translationExportBilingualOrderTargetAfter => '원문을 앞에';
 
   @override
   String get translationExportBilingualOrderTargetAfterSub => '원문을 앞에, 번역문을 뒤에';
@@ -543,6 +546,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get translationExportColorBlack => '검은색';
+
+  @override
+  String get translationExportDownloadButton => '다운로드';
 
   @override
   String get translationExportMdEmbeddedImages => 'MD (이미지 포함)';
@@ -764,7 +770,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationDialogCancelTaskYesCancel => '예, 취소합니다';
 
   @override
-  String get translationQuickSettingsTitle => '번역 빠른 설정';
+  String get translationQuickSettingsTitle => '빠른 설정';
 
   @override
   String get quickSettingsTargetLanguage => '대상 언어';
@@ -962,10 +968,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homeBackendRetry => '재시도';
 
   @override
+  String get homeNewTask => '새 작업';
+
+  @override
+  String get homeNewTaskImmersiveTooltip => 'UI에서 원문과 번역문을 나란히 비교';
+
+  @override
+  String get homeNewTaskQueuedTooltip => '여러 파일을 가져와 순서대로 자동 번역';
+
+  @override
   String get homeNavTranslate => '몰입형 작업';
 
   @override
-  String get homeNavTranslationQueue => '작업 관리';
+  String get homeNavTranslationQueue => '작업';
 
   @override
   String get homeNavAnonymize => '익명화';
@@ -984,6 +999,33 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get homeNavBatchUpload => '일괄 업로드';
+
+  @override
+  String get homeNavTooltipNewTask => '새 번역 시작——몰입형 비교 또는 대기열 일괄 처리';
+
+  @override
+  String get homeNavTooltipTasks => '모든 번역 작업을 확인·관리하고 완료된 번역을 다운로드';
+
+  @override
+  String get homeNavTooltipAnonymize => '문서 내용을 익명화하여 민감한 정보를 보호';
+
+  @override
+  String get homeNavTooltipSettings => '언어, 테마, 알림 등 설정';
+
+  @override
+  String get homeNavTooltipSetupWizard => '안내형 설정 마법사로 번역 환경을 구성';
+
+  @override
+  String get homeNavTooltipHelp => '도움말 및 기술 지원 받기';
+
+  @override
+  String get homeNavTooltipDonate => '오픈소스 프로젝트를 지원';
+
+  @override
+  String get homeNavTooltipHome => '홈페이지로 돌아가기';
+
+  @override
+  String get homeNavTooltipGitHub => 'GitHub에서 소스 코드 보기 — 유용하시다면 Star를 부탁드립니다!';
 
   @override
   String get batchUploadTitle => '일괄 파일 업로드';
@@ -1344,7 +1386,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homePhaseTranslate => '번역';
 
   @override
-  String get homePhaseViewer => '뷰어';
+  String get homePhaseViewer => '교정';
 
   @override
   String get homePhaseAnonymize => '익명화';
@@ -1354,6 +1396,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get homePhaseExport => '내보내기';
+
+  @override
+  String get taskDefaultTitleTranslate => '작업';
+
+  @override
+  String get taskDefaultTitleAnonymize => '익명화';
 
   @override
   String get homeReleaseNotesTitle => '릴리스 노트';

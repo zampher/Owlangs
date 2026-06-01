@@ -800,8 +800,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                     ConstrainedBox(
                       constraints: const BoxConstraints(
                         minWidth:
-                            280, // Minimum width to accommodate 250px ad + padding
-                        maxWidth: 320, // Maximum width to keep panel compact
+                            220, // Minimum width
+                        maxWidth: 260, // Maximum width
                       ),
                       child: DecoratedBox(
                         decoration: BoxDecoration(
@@ -2285,7 +2285,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                       : l10n.translationPersistQueueAlreadySyncedTooltip;
                   return Tooltip(
                     message: persistTooltip,
-                    child: OutlinedButton.icon(
+                    child: IconButton(
                       onPressed: _queuePersistInFlight
                           ? null
                           : queueDirty
@@ -2298,16 +2298,10 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.save_alt, size: 16),
-                      label: Text(
-                        l10n.translationPersistQueueButton,
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        minimumSize: const Size(0, 32),
+                      padding: const EdgeInsets.all(4),
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
                       ),
                     ),
                   );
@@ -2315,13 +2309,11 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
               ),
             ),
           const SizedBox(width: 16),
-          // File name display (docked to the right of buttons)
-          // Constrained max width so Row has bounded width inside scroll view
+          // File name display (fills available space)
           if (hasImportedFile)
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 280),
+            Flexible(
               child: Row(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize: MainAxisSize.max,
                 children: <Widget>[
                   Icon(
                     Icons.description,

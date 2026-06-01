@@ -510,7 +510,15 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     _isCreatingFlow = true;
     try {
       final notifier = ref.read(tasksProvider.notifier);
-      await notifier.createFlow(sourceType: TaskType.file, flowType: flowType);
+      final l10n = AppLocalizations.of(context)!;
+      final titlePrefix = flowType == TaskFlow.anonymize
+          ? l10n.taskDefaultTitleAnonymize
+          : l10n.taskDefaultTitleTranslate;
+      await notifier.createFlow(
+        sourceType: TaskType.file,
+        flowType: flowType,
+        titlePrefix: titlePrefix,
+      );
       if (mounted) {
         setState(() {
           _bannerOwlPoseSeed++;
@@ -546,6 +554,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       _buildActionButton(
         icon: Icons.settings_outlined,
         label: l10n.homeNavSettings,
+        tooltip: l10n.homeNavTooltipSettings,
         onPressed: () {
           if (kIsWeb && isUnauthenticated) {
             showAdminRequiredDialog(context);
@@ -558,6 +567,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       _buildActionButton(
         icon: Icons.auto_fix_high,
         label: l10n.setupWizardTitle,
+        tooltip: l10n.homeNavTooltipSetupWizard,
         onPressed: () {
           if (kIsWeb && isUnauthenticated) {
             showAdminRequiredDialog(context);
@@ -565,7 +575,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
           }
           context.go(AppRouter.setupWizardRoute);
         },
-        width: 96,
+        width: 84,
         highlight: highlightSetupWizardButton,
       ),
       const SizedBox(width: 4),
@@ -882,14 +892,14 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
 
     return Scaffold(
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(90),
+        preferredSize: const Size.fromHeight(72),
         child: AnimatedSize(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
           child: AppBar(
             elevation: 0,
             backgroundColor: Theme.of(context).colorScheme.surface,
-            toolbarHeight: 90,
+            toolbarHeight: 72,
             centerTitle: false,
             titleSpacing: 0,
             automaticallyImplyLeading: false,
@@ -960,33 +970,25 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
           },
         ),
         actions: <Widget>[
-              // Immersive translate (flow tab)
-              _buildActionButton(
-                icon: Icons.translate,
-                label: l10n.homeNavTranslate,
-                width: 92,
-                maxLabelLines: 2,
-                onPressed: _isCreatingFlow
-                    ? null
-                    : () => _createFlowWithProtection(
-                          TaskFlow.translate,
-                        ),
-              ),
-              const SizedBox(width: 4),
-              // Queued translation: standalone flow (same entry as task queue "new" button)
-              _buildActionButton(
-                icon: Icons.playlist_add,
-                label: l10n.translationQueueNewQueuedTask,
-                width: 92,
-                maxLabelLines: 2,
-                onPressed: () => _showSourceTypeDialog(context),
+              // New task dropdown (immersive + queued)
+              _NewTaskDropdown(
+                isCreatingFlow: _isCreatingFlow,
+                immersiveLabel: l10n.homeNavTranslate,
+                queuedLabel: l10n.translationQueueNewQueuedTask,
+                newTaskLabel: l10n.homeNewTask,
+                tooltip: l10n.homeNavTooltipNewTask,
+                immersiveTooltip: l10n.homeNewTaskImmersiveTooltip,
+                queuedTooltip: l10n.homeNewTaskQueuedTooltip,
+                onImmersiveTap: () => _createFlowWithProtection(TaskFlow.translate),
+                onQueuedTap: () => _showSourceTypeDialog(context),
               ),
               const SizedBox(width: 4),
               // Translation queue (list + poll + download)
               _buildActionButton(
-                icon: Icons.queue_play_next_outlined,
+                icon: Icons.list_alt,
                 label: l10n.homeNavTranslationQueue,
-                width: 92,
+                tooltip: l10n.homeNavTooltipTasks,
+                width: 84,
                 maxLabelLines: 2,
                 onPressed: () => context.push(AppRouter.translationQueueRoute),
               ),
@@ -996,6 +998,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 _buildActionButton(
                   icon: Icons.visibility_off,
                   label: l10n.homeNavAnonymize,
+                  tooltip: l10n.homeNavTooltipAnonymize,
                   onPressed: _isCreatingFlow
                       ? null
                       : () {
@@ -1019,22 +1022,24 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 key: _helpButtonKey,
                 icon: Icons.help_outline,
                 label: l10n.homeNavDonateHelp,
+                tooltip: l10n.homeNavTooltipHelp,
                 onPressed: () => context.push(
                   AppRouter.donateRoute,
                   extra: <String, dynamic>{'mode': 'help'},
                 ),
-                width: 72,
+                width: 64,
               ),
               const SizedBox(width: 4),
               // Donate button
               _buildActionButton(
                 icon: Icons.volunteer_activism,
                 label: l10n.homeNavDonate,
+                tooltip: l10n.homeNavTooltipDonate,
                 onPressed: () => context.push(
                   AppRouter.donateRoute,
                   extra: <String, dynamic>{'mode': 'donate'},
                 ),
-                width: 72,
+                width: 64,
               ),
               const SizedBox(width: 4),
               const _GitHubStarButton(),
@@ -1057,6 +1062,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                       _buildActionButton(
                         icon: Icons.home_outlined,
                         label: l10n.homeNavHome,
+                        tooltip: l10n.homeNavTooltipHome,
                         onPressed: () => context.go(AppRouter.homeRoute),
                       ),
                     ],
@@ -1409,6 +1415,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   Widget _buildActionButton({
     required IconData icon,
     required String label,
+    String? tooltip,
     Key? key,
     VoidCallback? onPressed,
     double? width,
@@ -1417,47 +1424,195 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     double? height,
   }) {
     // Use uniform height for all action buttons regardless of label line count
-    final double boxHeight = height ?? 76;
-    return Card(
-      elevation: highlight ? 4 : 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(4),
-        side: highlight
-            ? BorderSide(color: Colors.orange.shade400, width: 2)
-            : const BorderSide(color: Colors.transparent, width: 0),
-      ),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          key: key,
-          width: width ?? 70,
-          height: boxHeight,
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Icon(
-                icon,
-                color: Theme.of(context).colorScheme.primary,
-                size: 28,
-              ),
-              const SizedBox(height: 3),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  height: maxLabelLines > 1 ? 1.15 : null,
-                  color: Theme.of(context).colorScheme.onSurface,
+    final double boxHeight = height ?? 56;
+    return Tooltip(
+      message: tooltip ?? label,
+      child: Card(
+        elevation: highlight ? 4 : 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: highlight
+              ? BorderSide(color: Colors.orange.shade400, width: 2)
+              : const BorderSide(color: Colors.transparent, width: 0),
+        ),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            key: key,
+            width: width ?? 64,
+            height: boxHeight,
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(
+                  icon,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 24,
                 ),
-                textAlign: TextAlign.center,
-                softWrap: true,
-                maxLines: maxLabelLines,
-                overflow: TextOverflow.ellipsis,
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    height: maxLabelLines > 1 ? 1.15 : null,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                  textAlign: TextAlign.center,
+                  softWrap: true,
+                  maxLines: maxLabelLines,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// New task dropdown button that shows immersive/queued options on hover.
+class _NewTaskDropdown extends StatefulWidget {
+  const _NewTaskDropdown({
+    required this.isCreatingFlow,
+    required this.immersiveLabel,
+    required this.queuedLabel,
+    required this.newTaskLabel,
+    required this.tooltip,
+    required this.immersiveTooltip,
+    required this.queuedTooltip,
+    required this.onImmersiveTap,
+    required this.onQueuedTap,
+  });
+
+  final bool isCreatingFlow;
+  final String immersiveLabel;
+  final String queuedLabel;
+  final String newTaskLabel;
+  final String tooltip;
+  final String immersiveTooltip;
+  final String queuedTooltip;
+  final VoidCallback onImmersiveTap;
+  final VoidCallback onQueuedTap;
+
+  @override
+  State<_NewTaskDropdown> createState() => _NewTaskDropdownState();
+}
+
+class _NewTaskDropdownState extends State<_NewTaskDropdown> {
+  bool _isMenuOpen = false;
+
+  Future<void> _showDropdown() async {
+    if (_isMenuOpen) return;
+    _isMenuOpen = true;
+
+    final RenderBox? renderBox =
+        context.findRenderObject() as RenderBox?;
+    if (renderBox == null) {
+      _isMenuOpen = false;
+      return;
+    }
+
+    final Offset offset = renderBox.localToGlobal(Offset.zero);
+    final Size size = renderBox.size;
+
+    final String? result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        offset.dx,
+        offset.dy + size.height,
+        offset.dx + size.width,
+        offset.dy + size.height,
+      ),
+      items: <PopupMenuEntry<String>>[
+        PopupMenuItem<String>(
+          value: 'immersive',
+          enabled: !widget.isCreatingFlow,
+          child: Tooltip(
+            message: widget.immersiveTooltip,
+            child: Row(
+              children: <Widget>[
+                const Icon(Icons.play_arrow, size: 20),
+                const SizedBox(width: 8),
+                Flexible(child: Text(widget.immersiveLabel)),
+              ],
+            ),
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'queued',
+          child: Tooltip(
+            message: widget.queuedTooltip,
+            child: Row(
+              children: <Widget>[
+                const Icon(Icons.playlist_add_check, size: 20),
+                const SizedBox(width: 8),
+                Flexible(child: Text(widget.queuedLabel)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+
+    _isMenuOpen = false;
+
+    if (!mounted) return;
+
+    if (result == 'immersive') {
+      widget.onImmersiveTap();
+    } else if (result == 'queued') {
+      widget.onQueuedTap();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => _showDropdown(),
+      child: Tooltip(
+        message: widget.tooltip,
+        child: Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: InkWell(
+            onTap: _showDropdown,
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              width: 84,
+              height: 56,
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Icon(
+                    Icons.add_circle_outline,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 24,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.newTaskLabel,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                    textAlign: TextAlign.center,
+                    softWrap: true,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1524,33 +1679,35 @@ class _GitHubStarButtonState extends State<_GitHubStarButton> {
     } else {
       label = 'GitHub';
     }
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: InkWell(
-        onTap: () async {
-          await launchUrl(
-            Uri.parse('https://github.com/zampher/Owlangs'),
-            mode: LaunchMode.externalApplication,
-          );
-        },
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          width: 80,
-          height: 70,
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Icon(
-                MdiIcons.github,
-                color: Theme.of(context).colorScheme.primary,
-                size: 32,
-              ),
-              const SizedBox(height: 4),
+    return Tooltip(
+      message: AppLocalizations.of(context)!.homeNavTooltipGitHub,
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: InkWell(
+          onTap: () async {
+            await launchUrl(
+              Uri.parse('https://github.com/zampher/Owlangs'),
+              mode: LaunchMode.externalApplication,
+            );
+          },
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            width: 80,
+            height: 56,
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(
+                  MdiIcons.github,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 24,
+                ),
+                const SizedBox(height: 2),
               Text(
                 label,
                 style: TextStyle(
@@ -1564,6 +1721,7 @@ class _GitHubStarButtonState extends State<_GitHubStarButton> {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

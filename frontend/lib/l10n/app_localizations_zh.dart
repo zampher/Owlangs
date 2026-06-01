@@ -473,6 +473,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationExportDialogTitle => '导出文档';
 
   @override
+  String get translationExportDocumentType => '文档类型';
+
+  @override
   String get translationExportFormatOptionsTitle => '格式选项（仅限 PDF）';
 
   @override
@@ -497,7 +500,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationExportBilingualExport => '双语导出';
 
   @override
-  String get translationExportBilingualOrderTargetAfter => '译文在后';
+  String get translationExportBilingualOrderTargetAfter => '原文在前';
 
   @override
   String get translationExportBilingualOrderTargetAfterSub => '原文在前，译文在后';
@@ -540,6 +543,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get translationExportColorBlack => '黑色';
+
+  @override
+  String get translationExportDownloadButton => '下载';
 
   @override
   String get translationExportMdEmbeddedImages => 'MD（嵌入图片）';
@@ -755,7 +761,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationDialogCancelTaskYesCancel => '是，取消';
 
   @override
-  String get translationQuickSettingsTitle => '翻译快速设置';
+  String get translationQuickSettingsTitle => '快速设置';
 
   @override
   String get quickSettingsTargetLanguage => '目标语言';
@@ -952,10 +958,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeBackendRetry => '重试';
 
   @override
+  String get homeNewTask => '新建任务';
+
+  @override
+  String get homeNewTaskImmersiveTooltip => '在界面内即时对照原文与译文';
+
+  @override
+  String get homeNewTaskQueuedTooltip => '批量导入文件，加入队列按序自动翻译';
+
+  @override
   String get homeNavTranslate => '沉浸式任务';
 
   @override
-  String get homeNavTranslationQueue => '任务管理';
+  String get homeNavTranslationQueue => '任务';
 
   @override
   String get homeNavAnonymize => '匿名化';
@@ -974,6 +989,33 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get homeNavBatchUpload => '批量上传';
+
+  @override
+  String get homeNavTooltipNewTask => '开始新的翻译任务——沉浸式逐句对照，或队列式批量处理';
+
+  @override
+  String get homeNavTooltipTasks => '查看和管理所有翻译任务，下载已完成的译文';
+
+  @override
+  String get homeNavTooltipAnonymize => '对文档内容进行匿名化处理，保护敏感信息';
+
+  @override
+  String get homeNavTooltipSettings => '配置语言、主题、通知等应用选项';
+
+  @override
+  String get homeNavTooltipSetupWizard => '引导式设置向导，快速完成翻译环境配置';
+
+  @override
+  String get homeNavTooltipHelp => '获取使用帮助和技术支持';
+
+  @override
+  String get homeNavTooltipDonate => '支持我们的开源项目';
+
+  @override
+  String get homeNavTooltipHome => '返回应用首页';
+
+  @override
+  String get homeNavTooltipGitHub => '查看项目源码，欢迎给我们 Star！';
 
   @override
   String get batchUploadTitle => '批量文件上传';
@@ -1333,7 +1375,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homePhaseTranslate => '翻译';
 
   @override
-  String get homePhaseViewer => '查看器';
+  String get homePhaseViewer => '修订';
 
   @override
   String get homePhaseAnonymize => '匿名化';
@@ -1343,6 +1385,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get homePhaseExport => '导出';
+
+  @override
+  String get taskDefaultTitleTranslate => '任务';
+
+  @override
+  String get taskDefaultTitleAnonymize => '匿名化';
 
   @override
   String get homeReleaseNotesTitle => '更新说明';
