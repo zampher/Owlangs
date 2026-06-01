@@ -2853,18 +2853,56 @@ class DownloadService:
                                             os.unlink(temp_file.name)
                                         raise
                             else:
-                                # Use HTML-based conversion for other file types (uses pandoc)
-                                logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using HTML-to-DOCX conversion (pandoc) for non-markdown workflow")
+                                # EPUB/MOBI/HTML workflows: Pandoc DOCX (bilingual uses MD+raw_html so spans survive as text)
                                 temp_file = None
                                 try:
-                                    html_content = workflow.export_to_html()
-                                    temp_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.docx', delete=False)
+                                    temp_file = tempfile.NamedTemporaryFile(
+                                        mode="wb", suffix=".docx", delete=False
+                                    )
                                     temp_file.close()
-                                    convert_html_to_docx(html_content, temp_file.name, to_lang=to_lang)
+                                    out_dir = Path(temp_file.name).parent
+                                    if bilingual_enabled:
+                                        from utils.format_convert_utils import convert_md_to_docx
+
+                                        logger.info(
+                                            LogModule.EXPORT,
+                                            f"[DOWNLOAD] Using Pandoc MD->DOCX for bilingual {workflow_type} workflow",
+                                        )
+                                        md_content = workflow.export_to_markdown()
+                                        if isinstance(md_content, bytes):
+                                            md_content = md_content.decode("utf-8", errors="replace")
+                                        if not md_content or not convert_md_to_docx(
+                                            md_content,
+                                            temp_file.name,
+                                            output_dir=out_dir,
+                                            to_lang=to_lang,
+                                        ):
+                                            raise RuntimeError(
+                                                "Pandoc MD->DOCX failed for bilingual export"
+                                            )
+                                    else:
+                                        logger.info(
+                                            LogModule.EXPORT,
+                                            f"[DOWNLOAD] Using HTML-to-DOCX conversion (pandoc) for {workflow_type}",
+                                        )
+                                        html_content = workflow.export_to_html()
+                                        convert_html_to_docx(
+                                            html_content,
+                                            temp_file.name,
+                                            output_dir=out_dir,
+                                            to_lang=to_lang,
+                                        )
                                     filename = f"{file_stem}_translated.docx"
-                                    media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                                    media_type = MEDIA_TYPES.get(
+                                        file_type,
+                                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                    )
                                 except Exception as html_error:
-                                    logger.error(LogModule.EXPORT, f"[DOWNLOAD] HTML-to-DOCX conversion failed: {html_error}", exc_info=True)
+                                    logger.error(
+                                        LogModule.EXPORT,
+                                        f"[DOWNLOAD] Pandoc DOCX conversion failed: {html_error}",
+                                        exc_info=True,
+                                    )
                                     if temp_file and os.path.exists(temp_file.name):
                                         os.unlink(temp_file.name)
                                     raise

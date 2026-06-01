@@ -185,6 +185,42 @@ def test_md2docx_parses_bilingual_span_styles():
     print("PASS test_md2docx_parses_bilingual_span_styles")
 
 
+def test_apply_bilingual_styled_spans_to_pandoc_docx():
+    """Pandoc keeps text but drops span CSS; post-process restores italic/color on runs."""
+    try:
+        from docx import Document as DocxDocument
+        from utils.format_convert_utils import apply_bilingual_styled_spans_to_docx
+    except ImportError:
+        print("PASS test_apply_bilingual_styled_spans_to_pandoc_docx (skipped: python-docx missing)")
+        return
+
+    import tempfile
+
+    md = (
+        '<span style="font-style:italic;color:#0000FF">Original</span>\n\n'
+        '<span style="color:#808080">Translated</span>'
+    )
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tf:
+        path = tf.name
+    doc = DocxDocument()
+    para = doc.add_paragraph()
+    para.add_run("Original")
+    para.add_run("\n\n")
+    para.add_run("Translated")
+    doc.save(path)
+
+    applied = apply_bilingual_styled_spans_to_docx(path, md)
+    assert applied == 2, applied
+    doc2 = DocxDocument(path)
+    runs = doc2.paragraphs[0].runs
+    orig = next(r for r in runs if r.text == "Original")
+    tgt = next(r for r in runs if r.text == "Translated")
+    assert orig.italic is True
+    assert orig.font.color.rgb[0] == 0x00
+    assert tgt.font.color.rgb[0] == 0x80
+    print("PASS test_apply_bilingual_styled_spans_to_pandoc_docx")
+
+
 def test_get_bilingual_styled_run_parts():
     from utils.bilingual_export_utils import get_bilingual_styled_run_parts
 
@@ -303,5 +339,6 @@ if __name__ == "__main__":
     test_xlsx_sanitize_worksheet_xml_escapes_literal_newlines()
     test_xlsx_rich_text_includes_excel_inline_font_fields()
     test_md2docx_parses_bilingual_span_styles()
+    test_apply_bilingual_styled_spans_to_pandoc_docx()
     test_rebuild_markdown_text_segments_bilingual()
     print("\nAll bilingual export smoke tests passed!")

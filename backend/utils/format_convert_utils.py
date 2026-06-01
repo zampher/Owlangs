@@ -477,6 +477,153 @@ def _get_xelatex_path() -> Optional[Path]:
     return found_path
 
 
+_BILINGUAL_STYLED_SPAN_RE = re.compile(
+    r'<span\s+style="([^"]*)">\s*([\s\S]*?)\s*</span>',
+    re.IGNORECASE,
+)
+
+
+def parse_bilingual_styled_spans(source_content: str) -> List[Tuple[str, bool, Optional[str]]]:
+    """Parse styled bilingual spans from markdown/HTML; return (plain_text, italic, #RRGGBB) in order."""
+    import html as html_module
+
+    parts: List[Tuple[str, bool, Optional[str]]] = []
+    if not source_content or "<span" not in source_content.lower():
+        return parts
+    for match in _BILINGUAL_STYLED_SPAN_RE.finditer(source_content):
+        style = match.group(1).lower()
+        inner = html_module.unescape(match.group(2).strip())
+        inner = inner.replace("<br/>", "\n").replace("<br>", "\n")
+        if not inner:
+            continue
+        italic = "font-style:italic" in style
+        color_match = re.search(r"color:(#[0-9a-f]{6})", style, re.IGNORECASE)
+        color_hex = color_match.group(1).upper() if color_match else None
+        parts.append((inner, italic, color_hex))
+    return parts
+
+
+def _iter_all_docx_runs(doc: Document):
+    """Yield runs in document order (body, tables, headers, footers)."""
+    for para in doc.paragraphs:
+        for run in para.runs:
+            yield run
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    for run in para.runs:
+                        yield run
+    for section in doc.sections:
+        for para in section.header.paragraphs:
+            for run in para.runs:
+                yield run
+        for para in section.footer.paragraphs:
+            for run in para.runs:
+                yield run
+
+
+def _flatten_docx_run_text(doc: Document) -> Tuple[str, List[Tuple[Any, int, int]]]:
+    """Build flat text and (run, start, end) index map for styled-span matching."""
+    flat_parts: List[str] = []
+    index_map: List[Tuple[Any, int, int]] = []
+    pos = 0
+    for run in _iter_all_docx_runs(doc):
+        text = run.text or ""
+        if not text:
+            continue
+        start = pos
+        pos += len(text)
+        flat_parts.append(text)
+        index_map.append((run, start, pos))
+    return "".join(flat_parts), index_map
+
+
+def _runs_covering_range(
+    index_map: List[Tuple[Any, int, int]], start: int, end: int
+) -> List[Any]:
+    """Return runs whose text overlaps [start, end) in flattened document text."""
+    selected: List[Any] = []
+    seen: set[int] = set()
+    for run, run_start, run_end in index_map:
+        if run_end <= start or run_start >= end:
+            continue
+        run_id = id(run)
+        if run_id in seen:
+            continue
+        seen.add(run_id)
+        selected.append(run)
+    return selected
+
+
+def apply_bilingual_styled_spans_to_docx(docx_path: str, source_content: str) -> int:
+    """
+    Post-process a Pandoc-generated DOCX: re-apply italic/color from bilingual <span style="..."> tags.
+
+    Pandoc (MD/HTML -> DOCX) keeps text but drops inline CSS; this walks source spans and matches
+    plain text back onto DOCX runs.
+    """
+    styled_parts = parse_bilingual_styled_spans(source_content)
+    if not styled_parts:
+        return 0
+
+    try:
+        from docx.shared import RGBColor
+    except ImportError:
+        logger.warning(
+            LogModule.RESTOR,
+            "[DOCX-EXPORT] apply_bilingual_styled_spans_to_docx: python-docx unavailable, skip",
+        )
+        return 0
+
+    doc = Document(docx_path)
+    flat_text, index_map = _flatten_docx_run_text(doc)
+    if not flat_text:
+        logger.warning(
+            LogModule.RESTOR,
+            "[DOCX-EXPORT] apply_bilingual_styled_spans_to_docx: empty DOCX text, skip",
+        )
+        return 0
+
+    cursor = 0
+    applied = 0
+    for plain_text, italic, color_hex in styled_parts:
+        idx = flat_text.find(plain_text, cursor)
+        if idx < 0:
+            logger.warning(
+                LogModule.RESTOR,
+                "[DOCX-EXPORT] Bilingual span text not found in DOCX after Pandoc: "
+                f"{plain_text[:80]!r}",
+            )
+            continue
+        end = idx + len(plain_text)
+        for run in _runs_covering_range(index_map, idx, end):
+            if italic:
+                run.italic = True
+            if color_hex:
+                hex_digits = color_hex.lstrip("#")
+                run.font.color.rgb = RGBColor(
+                    int(hex_digits[0:2], 16),
+                    int(hex_digits[2:4], 16),
+                    int(hex_digits[4:6], 16),
+                )
+        applied += 1
+        cursor = end
+
+    if applied:
+        doc.save(docx_path)
+        logger.info(
+            LogModule.RESTOR,
+            f"[DOCX-EXPORT] Applied bilingual styled spans to Pandoc DOCX: {applied}/{len(styled_parts)}",
+        )
+    elif styled_parts:
+        logger.warning(
+            LogModule.RESTOR,
+            "[DOCX-EXPORT] Bilingual spans present in source but none matched in Pandoc DOCX",
+        )
+    return applied
+
+
 def _apply_font_to_run(run, font_name: str) -> None:
     """Set run font name and w:eastAsia so Word uses our font for CJK (avoids 等线 default)."""
     run.font.name = font_name
@@ -704,6 +851,13 @@ def convert_html_to_docx(
                         logger.info(LogModule.TRANS, f"[DOCX-EXPORT] Applied font '{font_name}' to all runs in DOCX (post-process)")
                 except Exception as font_err:
                     logger.warning(LogModule.RESTOR,f"[DOCX-EXPORT] Post-process font apply failed: {font_err}, DOCX keeps Pandoc default font")
+            try:
+                apply_bilingual_styled_spans_to_docx(output_path, html_content)
+            except Exception as style_err:
+                logger.warning(
+                    LogModule.RESTOR,
+                    f"[DOCX-EXPORT] convert_html_to_docx bilingual span post-process failed: {style_err}",
+                )
         finally:
             # Clean up temp HTML file
             try:
@@ -1033,6 +1187,13 @@ def convert_md_to_docx(
                     _apply_font_to_docx_runs(output_path, font_name)
             except Exception as font_err:
                 logger.warning(LogModule.RESTOR, f"[DOCX-EXPORT] convert_md_to_docx font post-process failed: {font_err}")
+        try:
+            apply_bilingual_styled_spans_to_docx(output_path, md_content)
+        except Exception as style_err:
+            logger.warning(
+                LogModule.RESTOR,
+                f"[DOCX-EXPORT] convert_md_to_docx bilingual span post-process failed: {style_err}",
+            )
         logger.info(LogModule.TRANS, f"[DOCX-EXPORT] convert_md_to_docx succeeded: {output_path}")
         return True
     except Exception as e:
