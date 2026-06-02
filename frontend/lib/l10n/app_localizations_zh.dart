@@ -1337,6 +1337,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationQueueView => '阅读编辑模式';
 
   @override
+  String get translationQueueViewSourcePath => '查看原始文件路径';
+
+  @override
+  String get translationQueueSourcePathTitle => '源文件路径';
+
+  @override
+  String get translationQueueFileNameLabel => '文件名';
+
+  @override
+  String get translationQueueRelativePathLabel => '相对路径';
+
+  @override
   String get homeFeatureUnderDevelopment => '此功能正在开发中。';
 
   @override

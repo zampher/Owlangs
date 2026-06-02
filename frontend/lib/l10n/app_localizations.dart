@@ -2501,6 +2501,30 @@ abstract class AppLocalizations {
   /// **'Reading Edit'**
   String get translationQueueView;
 
+  /// No description provided for @translationQueueViewSourcePath.
+  ///
+  /// In en, this message translates to:
+  /// **'View original file path'**
+  String get translationQueueViewSourcePath;
+
+  /// No description provided for @translationQueueSourcePathTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Source File Path'**
+  String get translationQueueSourcePathTitle;
+
+  /// No description provided for @translationQueueFileNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'File Name'**
+  String get translationQueueFileNameLabel;
+
+  /// No description provided for @translationQueueRelativePathLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Relative Path'**
+  String get translationQueueRelativePathLabel;
+
   /// No description provided for @homeFeatureUnderDevelopment.
   ///
   /// In en, this message translates to:

@@ -110,6 +110,19 @@ MIGRATION_MAP = {
     "hybrid": "hybrid-auto-engine",
 }
 
+# Cloud API v4 model version mapping (maps all variants to currently supported values)
+# Official cloud API v4 values: pipeline, vlm, MinerU-HTML
+CLOUD_MODEL_VERSION_MAP = {
+    "pipeline": "pipeline",
+    "vlm": "vlm",
+    "vlm-auto-engine": "vlm",
+    "hybrid-auto-engine": "vlm",
+    "vlm-http-client": "vlm",
+    "hybrid-http-client": "vlm",
+    "hybrid": "vlm",
+    "MinerU-HTML": "MinerU-HTML",
+}
+
 # Model version to backend mapping for local MinerU
 MODEL_TO_BACKEND = {
     "pipeline": "pipeline",
@@ -280,21 +293,20 @@ class MinerUCloudBackend(MinerUBackend):
     def _build_upload_payload(self, document: Document) -> Dict:
         """Build upload request payload for cloud API."""
         model_version = self.model_version
-        # Normalize old short names
-        if model_version in MIGRATION_MAP:
-            new_mv = MIGRATION_MAP[model_version]
-            logger.info(
-                LogModule.CONVERT,
-                f"[MINERU] Auto-migrating model_version '{model_version}' -> '{new_mv}'"
-            )
-            model_version = new_mv
-        # Cloud MinerU does not support hybrid variants; fall back to vlm-auto-engine
-        if model_version in ("hybrid-auto-engine", "hybrid-http-client"):
+        # Map to cloud API v4 supported values: pipeline, vlm, MinerU-HTML
+        mapped = CLOUD_MODEL_VERSION_MAP.get(model_version)
+        if mapped is None:
             logger.warning(
                 LogModule.CONVERT,
-                f"[MINERU] model_version '{model_version}' is not supported by MinerU cloud, falling back to 'vlm-auto-engine'."
+                f"[MINERU] Unknown model_version '{model_version}', falling back to 'vlm'"
             )
-            model_version = "vlm-auto-engine"
+            model_version = "vlm"
+        elif mapped != model_version:
+            logger.info(
+                LogModule.CONVERT,
+                f"[MINERU] Auto-migrating model_version '{model_version}' -> '{mapped}'"
+            )
+            model_version = mapped
         
         # Map language codes
         lang = (self.ocr_language or "").strip().lower()

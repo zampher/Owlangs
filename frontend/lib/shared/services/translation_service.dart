@@ -52,6 +52,7 @@ class TranslationService {
     required String fileName,
     required Map<String, dynamic> payload,
     String executionMode = 'immediate',
+    String? relativePath,
   }) async {
     // Use long timeout for file upload and translation task submission
     final dio = _buildAuthedDio(useLongTimeout: true);
@@ -60,6 +61,8 @@ class TranslationService {
       'file_name': fileName,
       'payload': payload,
       'execution_mode': executionMode,
+      if (relativePath != null && relativePath.isNotEmpty)
+        'relative_path': relativePath,
     };
     final resp = await dio.post(
       '/service/translate',

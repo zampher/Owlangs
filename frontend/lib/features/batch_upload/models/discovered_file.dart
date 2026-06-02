@@ -10,6 +10,7 @@ class DiscoveredFile {
   final int fileSizeBytes;
   List<int>? fileBytes;
   String? filePath;
+  String? relativePath;
   bool isSelected;
 
   DiscoveredFile({
@@ -17,6 +18,7 @@ class DiscoveredFile {
     required this.fileSizeBytes,
     this.fileBytes,
     this.filePath,
+    this.relativePath,
     this.isSelected = true,
   });
 

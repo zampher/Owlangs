@@ -2475,7 +2475,7 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
           : current.name,
       apiKey: _hasApiKey ? _apiKeyController.text.trim() : '',
       url: _apiUrlController.text.trim(),
-      model: 'vlm-auto-engine', // Cloud MinerU only supports vlm-auto-engine
+      model: 'vlm', // Cloud MinerU API v4 supports: pipeline, vlm, MinerU-HTML
       parserSubtype: _parserSubtypeController.text.trim().isNotEmpty
           ? _parserSubtypeController.text.trim()
           : current.parserSubtype,
@@ -2738,33 +2738,29 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Row(
+                        Column(
                           children: <Widget>[
-                            Expanded(
-                              child: SwitchListTile(
-                                title: Text(l10n.aiPlatformFormulaOcr),
-                                subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle),
-                                value: _formulaOcr,
-                                onChanged: (bool value) {
-                                  setState(() {
-                                    _formulaOcr = value;
-                                  });
-                                },
-                                contentPadding: EdgeInsets.zero,
-                              ),
+                            SwitchListTile(
+                              title: Text(l10n.aiPlatformFormulaOcr),
+                              subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle),
+                              value: _formulaOcr,
+                              onChanged: (bool value) {
+                                setState(() {
+                                  _formulaOcr = value;
+                                });
+                              },
+                              contentPadding: EdgeInsets.zero,
                             ),
-                            Expanded(
-                              child: SwitchListTile(
-                                title: Text(l10n.aiPlatformTableOcr),
-                                subtitle: Text(l10n.aiPlatformTableOcrSubtitle),
-                                value: _tableOcr,
-                                onChanged: (bool value) {
-                                  setState(() {
-                                    _tableOcr = value;
-                                  });
-                                },
-                                contentPadding: EdgeInsets.zero,
-                              ),
+                            SwitchListTile(
+                              title: Text(l10n.aiPlatformTableOcr),
+                              subtitle: Text(l10n.aiPlatformTableOcrSubtitle),
+                              value: _tableOcr,
+                              onChanged: (bool value) {
+                                setState(() {
+                                  _tableOcr = value;
+                                });
+                              },
+                              contentPadding: EdgeInsets.zero,
                             ),
                           ],
                         ),
@@ -3251,33 +3247,29 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Row(
+                        Column(
                           children: <Widget>[
-                            Expanded(
-                              child: SwitchListTile(
-                                title: Text(l10n.aiPlatformFormulaOcr),
-                                subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle),
-                                value: _formulaOcr,
-                                onChanged: (bool value) {
-                                  setState(() {
-                                    _formulaOcr = value;
-                                  });
-                                },
-                                contentPadding: EdgeInsets.zero,
-                              ),
+                            SwitchListTile(
+                              title: Text(l10n.aiPlatformFormulaOcr),
+                              subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle),
+                              value: _formulaOcr,
+                              onChanged: (bool value) {
+                                setState(() {
+                                  _formulaOcr = value;
+                                });
+                              },
+                              contentPadding: EdgeInsets.zero,
                             ),
-                            Expanded(
-                              child: SwitchListTile(
-                                title: Text(l10n.aiPlatformTableOcr),
-                                subtitle: Text(l10n.aiPlatformTableOcrSubtitle),
-                                value: _tableOcr,
-                                onChanged: (bool value) {
-                                  setState(() {
-                                    _tableOcr = value;
-                                  });
-                                },
-                                contentPadding: EdgeInsets.zero,
-                              ),
+                            SwitchListTile(
+                              title: Text(l10n.aiPlatformTableOcr),
+                              subtitle: Text(l10n.aiPlatformTableOcrSubtitle),
+                              value: _tableOcr,
+                              onChanged: (bool value) {
+                                setState(() {
+                                  _tableOcr = value;
+                                });
+                              },
+                              contentPadding: EdgeInsets.zero,
                             ),
                           ],
                         ),

@@ -454,6 +454,7 @@ class TranslationService:
         *,
         execution_mode: str = "immediate",
         owner_username: Optional[str] = None,
+        relative_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Start a translation task in the background.
@@ -557,6 +558,7 @@ class TranslationService:
             "workflow_instance": None,
             "original_filename_stem": Path(original_filename).stem,
             "original_filename": original_filename,
+            "original_relative_path": relative_path or "",
             "task_start_time": time.time(),
             "task_end_time": 0,
             "current_task_ref": None,

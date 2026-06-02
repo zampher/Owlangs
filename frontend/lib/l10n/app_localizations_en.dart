@@ -1400,6 +1400,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationQueueView => 'Reading Edit';
 
   @override
+  String get translationQueueViewSourcePath => 'View original file path';
+
+  @override
+  String get translationQueueSourcePathTitle => 'Source File Path';
+
+  @override
+  String get translationQueueFileNameLabel => 'File Name';
+
+  @override
+  String get translationQueueRelativePathLabel => 'Relative Path';
+
+  @override
   String get homeFeatureUnderDevelopment =>
       'This feature is under development.';
 

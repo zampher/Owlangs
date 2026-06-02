@@ -1250,7 +1250,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ? _mineruNameController.text.trim()
             : 'MinerU (Cloud)',
         url: _mineruApiUrlController.text.trim(),
-        model: 'vlm-auto-engine', // Cloud MinerU only supports vlm-auto-engine
+        model: 'vlm', // Cloud MinerU API v4 supports: pipeline, vlm, MinerU-HTML
         apiKey: _mineruApiKeyController.text.trim(),
         parserSubtype: _mineruParserSubtypeController.text.trim().isNotEmpty
             ? _mineruParserSubtypeController.text.trim()
@@ -1271,7 +1271,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             : current.name,
         apiKey: _mineruApiKeyController.text.trim(),
         url: _mineruApiUrlController.text.trim(),
-        model: 'vlm-auto-engine', // Cloud MinerU only supports vlm-auto-engine
+        model: 'vlm', // Cloud MinerU API v4 supports: pipeline, vlm, MinerU-HTML
         parserSubtype: _mineruParserSubtypeController.text.trim().isNotEmpty
             ? _mineruParserSubtypeController.text.trim()
             : current.parserSubtype,

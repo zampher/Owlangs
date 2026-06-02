@@ -1348,6 +1348,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationQueueView => '읽기 편집';
 
   @override
+  String get translationQueueViewSourcePath => '원본 파일 경로 보기';
+
+  @override
+  String get translationQueueSourcePathTitle => '소스 파일 경로';
+
+  @override
+  String get translationQueueFileNameLabel => '파일 이름';
+
+  @override
+  String get translationQueueRelativePathLabel => '상대 경로';
+
+  @override
   String get homeFeatureUnderDevelopment => '이 기능은 개발 중입니다.';
 
   @override

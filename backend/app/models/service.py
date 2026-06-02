@@ -475,6 +475,12 @@ class TranslateServiceRequest(BaseModel):
         default="immediate",
         description="immediate: start processing now (legacy). queued: wait for in-process worker pool.",
     )
+    relative_path: Optional[str] = Field(
+        default=None,
+        description="File's relative directory path within the import root (folder or ZIP). "
+                    "E.g., 'subdir/chapter1'. Null/empty means root level.",
+        examples=[None, "subdir/chapter1"],
+    )
 
     class Config:
         json_schema_extra = {

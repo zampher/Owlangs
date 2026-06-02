@@ -49,6 +49,7 @@ class TaskManager:
             "download_ready": False,
             "workflow_instance": None,  # Only used during processing
             "original_filename_stem": None,
+            "original_relative_path": None,
             "task_start_time": 0,
             "task_end_time": 0,
             "current_task_ref": None,

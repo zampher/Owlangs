@@ -1423,6 +1423,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationQueueView => 'Edición lectura';
 
   @override
+  String get translationQueueViewSourcePath => 'Ver ruta original del archivo';
+
+  @override
+  String get translationQueueSourcePathTitle => 'Ruta del archivo fuente';
+
+  @override
+  String get translationQueueFileNameLabel => 'Nombre del archivo';
+
+  @override
+  String get translationQueueRelativePathLabel => 'Ruta relativa';
+
+  @override
   String get homeFeatureUnderDevelopment =>
       'Esta característica está en desarrollo.';
 

@@ -137,6 +137,7 @@ class BatchSubmissionService {
         fileName: file.fileName,
         payload: payload,
         executionMode: 'queued',
+        relativePath: file.relativePath,
       );
 
       final taskId = response['task_id'] as String? ?? 'unknown';

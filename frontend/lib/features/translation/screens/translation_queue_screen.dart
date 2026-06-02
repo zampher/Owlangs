@@ -749,6 +749,8 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                         final String name =
                             row['original_filename']?.toString() ??
                                 taskId;
+                        final String relativePath =
+                            row['original_relative_path']?.toString() ?? '';
                         final String status =
                             row['status']?.toString() ?? '';
                         final dynamic progressRaw = row['progress'];
@@ -844,14 +846,31 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                     Expanded(
                                       child: Tooltip(
                                         message: row['message']?.toString() ?? name,
-                                        child: Text(
-                                          name,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: theme.textTheme.titleSmall?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                            height: 1.3,
-                                          ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (relativePath.isNotEmpty)
+                                              Text(
+                                                relativePath,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: cs.onSurfaceVariant,
+                                                  height: 1.2,
+                                                ),
+                                              ),
+                                            Text(
+                                              name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: theme.textTheme.titleSmall?.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                                height: 1.3,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),

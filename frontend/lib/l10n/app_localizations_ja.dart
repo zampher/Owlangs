@@ -1347,6 +1347,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationQueueView => '閲覧編集';
 
   @override
+  String get translationQueueViewSourcePath => '元のファイルパスを表示';
+
+  @override
+  String get translationQueueSourcePathTitle => 'ソースファイルパス';
+
+  @override
+  String get translationQueueFileNameLabel => 'ファイル名';
+
+  @override
+  String get translationQueueRelativePathLabel => '相対パス';
+
+  @override
   String get homeFeatureUnderDevelopment => 'この機能は開発中です。';
 
   @override
