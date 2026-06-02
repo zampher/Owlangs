@@ -665,7 +665,10 @@ class AIPlatformInfo {
     this.apiProtocol = 'openai',
     this.chunkSize = 3000,
     this.concurrent = 5,
-  });
+    int? timeout,
+    int? writeTimeout,
+  }) : timeout = (timeout != null && timeout > 0) ? timeout : (_isLocalUrl(url) ? 300 : 200),
+       writeTimeout = (writeTimeout != null && writeTimeout > 0) ? writeTimeout : 300;
 
   factory AIPlatformInfo.fromJson(
     String key,
@@ -726,7 +729,34 @@ class AIPlatformInfo {
       apiProtocol: apiProtocol,
       chunkSize: _toInt(json['chunk_size'], 3000),
       concurrent: _toInt(json['concurrent'], 5),
+      timeout: _toInt(json['timeout'], null),
+      writeTimeout: _toInt(json['write_timeout'], null),
     );
+  }
+
+  /// Detect if a URL points to a locally deployed model.
+  static bool _isLocalUrl(String url) {
+    try {
+      final uri = Uri.parse(url.trim());
+      final host = uri.host.toLowerCase();
+      if (host == 'localhost' || host == '127.0.0.1' || host == '[::1]') {
+        return true;
+      }
+      // Private IP ranges: 10.x, 192.168.x, 172.16-31.x
+      final parts = host.split('.');
+      if (parts.length == 4) {
+        final first = int.tryParse(parts[0]);
+        final second = int.tryParse(parts[1]);
+        if (first != null && second != null) {
+          if (first == 10) return true;
+          if (first == 192 && second == 168) return true;
+          if (first == 172 && second >= 16 && second <= 31) return true;
+        }
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
   }
 
   // Helper methods for safe type conversion
@@ -770,6 +800,8 @@ class AIPlatformInfo {
   final String apiProtocol;
   final int chunkSize;
   final int concurrent;
+  final int timeout;
+  final int writeTimeout;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'name': name,
@@ -792,6 +824,8 @@ class AIPlatformInfo {
         'api_endpoints': apiEndpoints,
         'chunk_size': chunkSize,
         'concurrent': concurrent,
+        'timeout': timeout,
+        'write_timeout': writeTimeout,
         // Intentionally exclude lastTestError from persisted JSON
       };
 
@@ -820,6 +854,8 @@ class AIPlatformInfo {
     String? apiProtocol,
     int? chunkSize,
     int? concurrent,
+    int? timeout,
+    int? writeTimeout,
   }) =>
       AIPlatformInfo(
         key: key,
@@ -848,5 +884,7 @@ class AIPlatformInfo {
         apiProtocol: apiProtocol ?? this.apiProtocol,
         chunkSize: chunkSize ?? this.chunkSize,
         concurrent: concurrent ?? this.concurrent,
+        timeout: timeout ?? this.timeout,
+        writeTimeout: writeTimeout ?? this.writeTimeout,
       );
 }

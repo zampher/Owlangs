@@ -22,7 +22,9 @@
       "parser_subtype": null,
       "api_protocol": "openai",
       "chunk_size": 4000,
-      "concurrent": 2
+      "concurrent": 2,
+      "timeout": 300,
+      "write_timeout": 300
     },
     "ollama": {
       "name": "Local (Ollama)",
@@ -44,7 +46,9 @@
       "parser_subtype": null,
       "api_protocol": "ollama",
       "chunk_size": 2500,
-      "concurrent": 1
+      "concurrent": 1,
+      "timeout": 300,
+      "write_timeout": 300
     },
     "anthropic_local": {
       "name": "Local (Anthropic)",
@@ -65,7 +69,9 @@
       "api_endpoints": {},
       "api_protocol": "anthropic",
       "chunk_size": 8000,
-      "concurrent": 2
+      "concurrent": 2,
+      "timeout": 300,
+      "write_timeout": 300
     },
     "openai": {
       "name": "OpenAI",
@@ -87,7 +93,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "azure": {
       "name": "Azure OpenAI",
@@ -109,7 +117,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "anthropic": {
       "name": "Anthropic Claude",
@@ -131,7 +141,9 @@
       "api_protocol": "anthropic",
       "requires_api_key": true,
       "chunk_size": 16000,
-      "concurrent": 5
+      "concurrent": 5,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "google": {
       "name": "Google Gemini",
@@ -153,7 +165,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "deepseek": {
       "name": "DeepSeek",
@@ -175,7 +189,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "dashscope": {
       "name": "Alibaba DashScope",
@@ -197,7 +213,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "volcengine_ark": {
       "name": "VolcEngine ARK (鏂硅垷)",
@@ -219,7 +237,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "zhipu": {
       "name": "Zhipu AI",
@@ -241,7 +261,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "groq": {
       "name": "Groq",
@@ -263,7 +285,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "together": {
       "name": "Together AI",
@@ -285,7 +309,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "mistral": {
       "name": "Mistral AI",
@@ -307,7 +333,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "cohere": {
       "name": "Cohere",
@@ -329,7 +357,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "xai": {
       "name": "xAI",
@@ -351,7 +381,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "siliconflow": {
       "name": "SiliconFlow",
@@ -373,7 +405,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "dmxapi": {
       "name": "DMX API",
@@ -395,7 +429,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "openrouter": {
       "name": "OpenRouter",
@@ -417,7 +453,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "hunyuan": {
       "name": "Hunyuan",
@@ -439,7 +477,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "baidu": {
       "name": "Baidu ERNIE",
@@ -461,7 +501,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "moonshot": {
       "name": "Moonshot AI",
@@ -483,7 +525,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "aleph_alpha": {
       "name": "Aleph Alpha (Germany)",
@@ -505,7 +549,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "rinna": {
       "name": "Rinna (Japan)",
@@ -527,7 +573,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "naver": {
       "name": "Naver HyperClova (Korea)",
@@ -549,7 +597,9 @@
       "api_protocol": "openai",
       "requires_api_key": true,
       "chunk_size": 8000,
-      "concurrent": 10
+      "concurrent": 10,
+      "timeout": 200,
+      "write_timeout": 300
     },
     "mineru": {
       "name": "MinerU (Cloud)",

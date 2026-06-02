@@ -60,7 +60,8 @@ class GlossaryGenerationService {
         'api_type': translationParams['api_type'] as String? ?? 'openai',  // API protocol type
         'temperature': translationParams['temperature'] ?? 0.3,
         'thinking': translationParams['thinking'] ?? 'disable',
-        'timeout': translationParams['timeout'] ?? 30,
+        'timeout': translationParams['timeout'] ?? 120,
+        'write_timeout': translationParams['write_timeout'] ?? 300,
         'retry': translationParams['retry'] ?? 3,
         'custom_prompt': customPrompt,
         'detection_mode': detectionMode, // 'uncertain' or 'deep'
@@ -199,7 +200,8 @@ class GlossaryGenerationService {
         'api_type': apiType,  // Pass API protocol type (openai/anthropic/ollama)
         'temperature': globalSettings['temperature'] ?? 0.3,
         'thinking': globalSettings['thinking'] ?? 'disable',
-        'timeout': globalSettings['timeout'] ?? 30,
+        'timeout': platformInfo['timeout'] ?? 120,
+        'write_timeout': platformInfo['write_timeout'] ?? 300,
         'retry': globalSettings['retry'] ?? 3,
       };
     } catch (e, stackTrace) {
@@ -216,7 +218,8 @@ class GlossaryGenerationService {
         'model_id': 'deepseek-chat',
         'temperature': 0.3,
         'thinking': 'disable',
-        'timeout': 30,
+        'timeout': 120,
+        'write_timeout': 300,
         'retry': 3,
         'chunk_size': 3000,
       };
@@ -233,7 +236,6 @@ class GlossaryGenerationService {
         return <String, dynamic>{
           'temperature': settings['temperature'] ?? 0.3,
           'thinking': settings['thinking'] ?? 'disable',
-          'timeout': settings['translationTimeout'] ?? 30,
           'retry': settings['retry'] ?? 3,
         };
       }

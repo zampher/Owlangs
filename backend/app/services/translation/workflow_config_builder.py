@@ -205,6 +205,12 @@ class WorkflowConfigBuilder:
         connect_timeout = self._get_connect_timeout_from_config_or_payload(payload)
         logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using connect_timeout={connect_timeout}s from app_config (translator_connect_timeout)")
 
+        # Write timeout: from payload, fallback to 300
+        if isinstance(payload, dict):
+            write_timeout = payload.get('write_timeout', 300)
+        else:
+            write_timeout = getattr(payload, 'write_timeout', 300)
+
         translator_args = {
             'task_id': self.task_id,  # CRITICAL: Pass task_id so apply_smart_glossary_matching can access task_state
             'skip_translate': getattr(payload, 'skip_translate', False),
@@ -220,6 +226,7 @@ class WorkflowConfigBuilder:
             'concurrent': concurrent,
             'connect_timeout': connect_timeout,
             'timeout': timeout,  # Use the timeout value we extracted above (handles both dict and object payloads)
+            'write_timeout': write_timeout,
             'retry': getattr(payload, 'retry', default_params["retry"])
         }
         

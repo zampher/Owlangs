@@ -802,20 +802,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                   // const SizedBox(height: 16),
 
                   // Performance Parameters
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: _buildTimeoutField(
-                          globalSettings,
-                          globalNotifier,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _buildRetryField(globalSettings, globalNotifier),
-                      ),
-                    ],
-                  ),
+                  _buildRetryField(globalSettings, globalNotifier),
                   const SizedBox(height: 16),
                   _buildSegmentAutoRetryField(globalSettings, globalNotifier),
                   const SizedBox(height: 16),
@@ -1017,37 +1004,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   // Removed: _buildTemperatureSlider (moved to Quick Settings)
   // Removed: _buildThinkingDropdown (moved to AI Platform Settings)
 
-  Widget _buildTimeoutField(
-    GlobalSettings settings,
-    GlobalSettingsNotifier notifier,
-  ) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            AppLocalizations.of(context)!.settingsTranslationTimeoutTitle,
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(height: 8),
-          TextFormField(
-            initialValue: settings.timeout.toString(),
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              border: const OutlineInputBorder(),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              hintText:
-                  AppLocalizations.of(context)!.settingsTranslationTimeoutHint,
-            ),
-            onChanged: (String value) {
-              final int? intValue = int.tryParse(value);
-              if (intValue != null && intValue > 0) {
-                notifier.updateTranslationSettings(timeout: intValue);
-              }
-            },
-          ),
-        ],
-      );
+
 
   Widget _buildRetryField(
     GlobalSettings settings,

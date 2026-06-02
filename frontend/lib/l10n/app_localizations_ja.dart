@@ -2602,6 +2602,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get aiPlatformModelVersionHint => 'hybrid-auto-engine';
 
   @override
+  String get aiPlatformTimeout => '読み取りタイムアウト（秒）';
+
+  @override
+  String get aiPlatformTimeoutHint => '200（クラウド）または 300（ローカル）。LLM応答の最大待機時間。';
+
+  @override
+  String get aiPlatformWriteTimeout => '書き込みタイムアウト（秒）';
+
+  @override
+  String get aiPlatformWriteTimeoutHint => '300（デフォルト）。LLMへのデータ送信の最大待機時間。';
+
+  @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';
 
   @override
@@ -2646,12 +2658,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsTranslationConcurrentHint => '推奨：3（モデルとクォータに基づき1〜8に調整）';
-
-  @override
-  String get settingsTranslationTimeoutTitle => 'タイムアウト（秒）';
-
-  @override
-  String get settingsTranslationTimeoutHint => '120（推奨：120-300秒）';
 
   @override
   String get settingsTranslationChunkRetryTitle => 'チャンク/API リトライ';

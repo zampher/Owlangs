@@ -2690,6 +2690,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiPlatformModelVersionHint => 'hybrid-auto-engine';
 
   @override
+  String get aiPlatformTimeout => 'Read Timeout (seconds)';
+
+  @override
+  String get aiPlatformTimeoutHint =>
+      '200 (cloud) or 300 (local). Max wait time for LLM response.';
+
+  @override
+  String get aiPlatformWriteTimeout => 'Write Timeout (seconds)';
+
+  @override
+  String get aiPlatformWriteTimeoutHint =>
+      '300 (default). Max wait time for sending data to LLM.';
+
+  @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';
 
   @override
@@ -2738,13 +2752,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsTranslationConcurrentHint =>
       'Recommended: 3 (adjust 1–8 based on model and quota)';
-
-  @override
-  String get settingsTranslationTimeoutTitle => 'Timeout (seconds)';
-
-  @override
-  String get settingsTranslationTimeoutHint =>
-      '120 (recommended: 120-300 seconds)';
 
   @override
   String get settingsTranslationChunkRetryTitle => 'Chunk retry (per request)';

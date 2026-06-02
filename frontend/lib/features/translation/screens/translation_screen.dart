@@ -5010,7 +5010,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         // chunk_size and concurrent are now per-platform settings, read by backend from platforms.json
         'temperature': translationParams['temperature'],
         'thinking': translationParams['thinking'],
-        'timeout': translationParams['timeout'],
+        'timeout': (platformInfo['timeout'] as int?) ?? 120,
+        'write_timeout': (platformInfo['write_timeout'] as int?) ?? 300,
         'retry': translationParams['retry'],
         'segment_auto_retry_rounds':
             translationParams['segment_auto_retry_rounds'],

@@ -4754,6 +4754,30 @@ abstract class AppLocalizations {
   /// **'hybrid-auto-engine'**
   String get aiPlatformModelVersionHint;
 
+  /// No description provided for @aiPlatformTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Read Timeout (seconds)'**
+  String get aiPlatformTimeout;
+
+  /// No description provided for @aiPlatformTimeoutHint.
+  ///
+  /// In en, this message translates to:
+  /// **'200 (cloud) or 300 (local). Max wait time for LLM response.'**
+  String get aiPlatformTimeoutHint;
+
+  /// No description provided for @aiPlatformWriteTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Write Timeout (seconds)'**
+  String get aiPlatformWriteTimeout;
+
+  /// No description provided for @aiPlatformWriteTimeoutHint.
+  ///
+  /// In en, this message translates to:
+  /// **'300 (default). Max wait time for sending data to LLM.'**
+  String get aiPlatformWriteTimeoutHint;
+
   /// No description provided for @aiPlatformMineruApiUrlHint.
   ///
   /// In en, this message translates to:
@@ -4843,18 +4867,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recommended: 3 (adjust 1–8 based on model and quota)'**
   String get settingsTranslationConcurrentHint;
-
-  /// No description provided for @settingsTranslationTimeoutTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Timeout (seconds)'**
-  String get settingsTranslationTimeoutTitle;
-
-  /// No description provided for @settingsTranslationTimeoutHint.
-  ///
-  /// In en, this message translates to:
-  /// **'120 (recommended: 120-300 seconds)'**
-  String get settingsTranslationTimeoutHint;
 
   /// No description provided for @settingsTranslationChunkRetryTitle.
   ///

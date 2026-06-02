@@ -1504,13 +1504,15 @@ class _NewTaskDropdown extends StatefulWidget {
 
 class _NewTaskDropdownState extends State<_NewTaskDropdown> {
   bool _isMenuOpen = false;
+  OverlayEntry? _overlayEntry;
+  bool _mouseOnButton = false;
+  bool _mouseOnMenu = false;
 
-  Future<void> _showDropdown() async {
+  void _openDropdown() {
     if (_isMenuOpen) return;
     _isMenuOpen = true;
 
-    final RenderBox? renderBox =
-        context.findRenderObject() as RenderBox?;
+    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
     if (renderBox == null) {
       _isMenuOpen = false;
       return;
@@ -1519,69 +1521,160 @@ class _NewTaskDropdownState extends State<_NewTaskDropdown> {
     final Offset offset = renderBox.localToGlobal(Offset.zero);
     final Size size = renderBox.size;
 
-    final String? result = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        offset.dx,
-        offset.dy + size.height,
-        offset.dx + size.width,
-        offset.dy + size.height,
-      ),
-      items: <PopupMenuEntry<String>>[
-        PopupMenuItem<String>(
-          value: 'immersive',
-          enabled: !widget.isCreatingFlow,
-          child: Tooltip(
-            message: widget.immersiveTooltip,
-            child: Row(
-              children: <Widget>[
-                const Icon(Icons.play_arrow, size: 20),
-                const SizedBox(width: 8),
-                Flexible(child: Text(widget.immersiveLabel)),
-              ],
-            ),
+    _overlayEntry = OverlayEntry(
+      builder: (BuildContext overlayContext) {
+        return MouseRegion(
+          onEnter: (_) {
+            _mouseOnMenu = true;
+          },
+          onExit: (_) {
+            _mouseOnMenu = false;
+            _scheduleClose();
+          },
+          child: Stack(
+            children: <Widget>[
+              // Invisible barrier to catch clicks outside
+              GestureDetector(
+                onTap: _closeDropdown,
+                behavior: HitTestBehavior.translucent,
+                child: const SizedBox.expand(),
+              ),
+              Positioned(
+                left: offset.dx,
+                top: offset.dy + size.height,
+                width: 240,
+                child: Material(
+                  elevation: 8,
+                  borderRadius: BorderRadius.circular(8),
+                  color: Theme.of(context).colorScheme.surface,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      _buildMenuItem(
+                        icon: Icons.play_arrow,
+                        label: widget.immersiveLabel,
+                        tooltip: widget.immersiveTooltip,
+                        enabled: !widget.isCreatingFlow,
+                        onTap: () {
+                          _closeDropdown();
+                          widget.onImmersiveTap();
+                        },
+                      ),
+                      _buildMenuItem(
+                        icon: Icons.playlist_add_check,
+                        label: widget.queuedLabel,
+                        tooltip: widget.queuedTooltip,
+                        onTap: () {
+                          _closeDropdown();
+                          widget.onQueuedTap();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-        PopupMenuItem<String>(
-          value: 'queued',
-          child: Tooltip(
-            message: widget.queuedTooltip,
-            child: Row(
-              children: <Widget>[
-                const Icon(Icons.playlist_add_check, size: 20),
-                const SizedBox(width: 8),
-                Flexible(child: Text(widget.queuedLabel)),
-              ],
-            ),
-          ),
-        ),
-      ],
+        );
+      },
     );
 
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String label,
+    required String tooltip,
+    required VoidCallback onTap,
+    bool enabled = true,
+  }) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: <Widget>[
+            Icon(icon, size: 20, color: enabled ? null : Theme.of(context).disabledColor),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: enabled ? null : Theme.of(context).disabledColor,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    tooltip,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: enabled
+                          ? Theme.of(context).colorScheme.onSurfaceVariant
+                          : Theme.of(context).disabledColor,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _closeDropdown() {
+    if (!_isMenuOpen) return;
     _isMenuOpen = false;
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
 
-    if (!mounted) return;
+  Timer? _closeTimer;
+  void _scheduleClose() {
+    if (_mouseOnButton || _mouseOnMenu) return;
+    _closeTimer?.cancel();
+    _closeTimer = Timer(const Duration(milliseconds: 200), () {
+      if (!_mouseOnButton && !_mouseOnMenu) {
+        _closeDropdown();
+      }
+    });
+  }
 
-    if (result == 'immersive') {
-      widget.onImmersiveTap();
-    } else if (result == 'queued') {
-      widget.onQueuedTap();
-    }
+  @override
+  void dispose() {
+    _closeTimer?.cancel();
+    _closeDropdown();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      onEnter: (_) => _showDropdown(),
-      child: Tooltip(
-        message: widget.tooltip,
-        child: Card(
+      onEnter: (_) {
+        _mouseOnButton = true;
+        _closeTimer?.cancel();
+        _openDropdown();
+      },
+      onExit: (_) {
+        _mouseOnButton = false;
+        _scheduleClose();
+      },
+      child: Card(
           elevation: 2,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(4),
           ),
           child: InkWell(
-            onTap: _showDropdown,
+            onTap: _openDropdown,
             borderRadius: BorderRadius.circular(4),
             child: Container(
               width: 84,
@@ -1614,7 +1707,6 @@ class _NewTaskDropdownState extends State<_NewTaskDropdown> {
             ),
           ),
         ),
-      ),
     );
   }
 }

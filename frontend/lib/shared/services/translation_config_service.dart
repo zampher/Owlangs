@@ -71,7 +71,6 @@ class TranslationConfigService {
       <String, dynamic>{
         'temperature': settings.temperature,
         'thinking': settings.thinking,
-        'timeout': settings.timeout,
         'retry': settings.retry,
         'segment_auto_retry_rounds': settings.segmentAutoRetryRounds,
         'custom_prompt': settings.customPrompt,
@@ -84,7 +83,6 @@ class TranslationConfigService {
         'model_id': 'gpt-4o',
         'temperature': 0.3,
         'thinking': 'disable',
-        'timeout': 30,
         'retry': 3,
         'custom_prompt': null,
       };

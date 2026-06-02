@@ -52,6 +52,7 @@ class AgentConfig:
     concurrent: int = 30
     connect_timeout: int = 15  # HTTP connect timeout (seconds), configurable via app_config.translator_connect_timeout
     timeout: int = 120  # Unit (seconds), this value is the read value in httpx.TimeOut, not the total timeout time
+    write_timeout: int = 300  # HTTP write timeout (seconds), configurable per platform
     thinking: ThinkingMode = "default"
     retry: int = 5
     max_tokens: int | None = None  # Max tokens for API response (None means use platform default)
@@ -385,13 +386,14 @@ class Agent:
         self.temperature = config.temperature
         self.max_concurrent = config.concurrent
         connect_timeout = getattr(config, 'connect_timeout', 15)
-        self.timeout = httpx.Timeout(connect=connect_timeout, read=config.timeout, write=300, pool=10)
+        write_timeout = getattr(config, 'write_timeout', 300)
+        self.timeout = httpx.Timeout(connect=connect_timeout, read=config.timeout, write=write_timeout, pool=10)
         self.thinking = config.thinking
         self.logger = config.logger
         # Log timeout configuration (DEBUG level to reduce verbosity for retranslation)
         unified_logger.debug(
             LogModule.TRANS,
-            f"[TIMEOUT_CONFIG] Timeout settings: connect={connect_timeout}s, read={config.timeout}s, write=300s, pool=10s, concurrent={config.concurrent}"
+            f"[TIMEOUT_CONFIG] Timeout settings: connect={connect_timeout}s, read={config.timeout}s, write={write_timeout}s, pool=10s, concurrent={config.concurrent}"
         )
         self.total_error_counter = TotalErrorCounter(logger=self.logger)
         # New: for counting final unresolved errors

@@ -75,8 +75,6 @@ class GlobalSettings {
     // Detailed Translation Parameters
     this.temperature = 0.3,
     this.thinking = 'disable',
-    this.timeout =
-        120, // Changed from 30 to 120 seconds (2 minutes) for better reliability
     this.retry = 3,
     this.segmentAutoRetryRounds = 3,
     this.customPrompt,
@@ -146,8 +144,6 @@ class GlobalSettings {
         usePrompt: json['usePrompt'] ?? false,
         temperature: (json['temperature'] ?? 0.3).toDouble(),
         thinking: json['thinking'] ?? 'disable',
-        timeout:
-            json['translationTimeout'] ?? 120, // Changed from 30 to 120 seconds
         retry: json['retry'] ?? 3,
         segmentAutoRetryRounds: json['segment_auto_retry_rounds'] ?? 3,
         customPrompt: json['customPrompt'],
@@ -219,7 +215,6 @@ class GlobalSettings {
   // Detailed Translation Parameters (新任务生效)
   final double temperature;
   final String thinking;
-  final int timeout;
   final int retry;
   /// Queued mode: post-translation failed-segment auto batch rounds (not chunk retry).
   final int segmentAutoRetryRounds;
@@ -288,7 +283,6 @@ class GlobalSettings {
     // Detailed Translation Parameters
     double? temperature,
     String? thinking,
-    int? timeout,
     int? retry,
     int? segmentAutoRetryRounds,
     String? customPrompt,
@@ -354,7 +348,6 @@ class GlobalSettings {
         // Detailed Translation Parameters
         temperature: temperature ?? this.temperature,
         thinking: thinking ?? this.thinking,
-        timeout: timeout ?? this.timeout,
         retry: retry ?? this.retry,
         segmentAutoRetryRounds:
             segmentAutoRetryRounds ?? this.segmentAutoRetryRounds,
@@ -404,7 +397,6 @@ class GlobalSettings {
         'usePrompt': usePrompt,
         'temperature': temperature,
         'thinking': thinking,
-        'translationTimeout': timeout,
         'retry': retry,
         'segment_auto_retry_rounds': segmentAutoRetryRounds,
         'customPrompt': customPrompt,
@@ -463,11 +455,6 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
         if (appConfig != null) {
           // Map backend fields to frontend fields
           final backendSettings = <String, dynamic>{};
-
-          // Map timeout from backend to translationTimeout for frontend
-          if (appConfig.containsKey('timeout')) {
-            backendSettings['translationTimeout'] = appConfig['timeout'];
-          }
 
           // Map other translation settings
           if (appConfig.containsKey('translator_temperature')) {
@@ -768,7 +755,6 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     bool? usePrompt,
     double? temperature,
     String? thinking,
-    int? timeout,
     int? retry,
     int? segmentAutoRetryRounds,
     String? customPrompt,
@@ -782,7 +768,6 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
       usePrompt: usePrompt,
       temperature: temperature,
       thinking: thinking,
-      timeout: timeout,
       retry: retry,
       segmentAutoRetryRounds: segmentAutoRetryRounds,
       customPrompt: customPrompt,
@@ -825,9 +810,6 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     }
     if (thinking != null) {
       await _settingsService.saveSetting('', 'thinking', thinking);
-    }
-    if (timeout != null) {
-      await _settingsService.saveSetting('', 'timeout', timeout);
     }
     if (retry != null) {
       await _settingsService.saveSetting('', 'retry', retry);

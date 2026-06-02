@@ -2586,6 +2586,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiPlatformModelVersionHint => 'hybrid-auto-engine';
 
   @override
+  String get aiPlatformTimeout => '读取超时（秒）';
+
+  @override
+  String get aiPlatformTimeoutHint => '200（云端）或 300（本地）。等待LLM响应的最长时间。';
+
+  @override
+  String get aiPlatformWriteTimeout => '写入超时（秒）';
+
+  @override
+  String get aiPlatformWriteTimeoutHint => '300（默认）。发送数据到LLM的最长等待时间。';
+
+  @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';
 
   @override
@@ -2629,12 +2641,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsTranslationConcurrentHint => '推荐：3（根据模型和配额调整1–8）';
-
-  @override
-  String get settingsTranslationTimeoutTitle => '超时（秒）';
-
-  @override
-  String get settingsTranslationTimeoutHint => '120（推荐：120-300秒）';
 
   @override
   String get settingsTranslationChunkRetryTitle => '分块/API 重试次数';

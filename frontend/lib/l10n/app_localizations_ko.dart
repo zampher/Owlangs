@@ -2606,6 +2606,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get aiPlatformModelVersionHint => 'hybrid-auto-engine';
 
   @override
+  String get aiPlatformTimeout => '읽기 시간 초과 (초)';
+
+  @override
+  String get aiPlatformTimeoutHint =>
+      '200 (클라우드) 또는 300 (로컬). LLM 응답 최대 대기 시간.';
+
+  @override
+  String get aiPlatformWriteTimeout => '쓰기 시간 초과 (초)';
+
+  @override
+  String get aiPlatformWriteTimeoutHint => '300 (기본값). LLM으로 데이터 전송 최대 대기 시간.';
+
+  @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';
 
   @override
@@ -2650,12 +2663,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsTranslationConcurrentHint => '권장: 3 (모델 및 할당량에 따라 1–8 조정)';
-
-  @override
-  String get settingsTranslationTimeoutTitle => '시간 초과 (초)';
-
-  @override
-  String get settingsTranslationTimeoutHint => '120 (권장: 120-300초)';
 
   @override
   String get settingsTranslationChunkRetryTitle => '청크/API 재시도';
