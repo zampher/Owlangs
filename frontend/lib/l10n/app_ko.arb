@@ -1124,6 +1124,10 @@
   "aiPlatformParserSubtypeLocal": "로컬",
 
   "translationQueueEdit": "레이블 편집",
+  "translationQueueSelectFormats": "선택",
+  "translationQueueSelectFormatsTitle": "다운로드 형식 선택",
+  "translationQueueSelectFormatsFormatLabel": "형식",
+  "translationQueueSelectFormatsDownload": "다운로드",
   "reeditTitle": "번역 편집",
   "reeditSaveExport": "저장 및 내보내기",
   "reeditFetchError": "번역 세그먼트를 불러오지 못했습니다.",

@@ -5918,6 +5918,30 @@ abstract class AppLocalizations {
   /// **'Labeled Edit'**
   String get translationQueueEdit;
 
+  /// No description provided for @translationQueueSelectFormats.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get translationQueueSelectFormats;
+
+  /// No description provided for @translationQueueSelectFormatsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Download Formats'**
+  String get translationQueueSelectFormatsTitle;
+
+  /// No description provided for @translationQueueSelectFormatsFormatLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Format'**
+  String get translationQueueSelectFormatsFormatLabel;
+
+  /// No description provided for @translationQueueSelectFormatsDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get translationQueueSelectFormatsDownload;
+
   /// No description provided for @reeditTitle.
   ///
   /// In en, this message translates to:

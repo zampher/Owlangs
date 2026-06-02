@@ -3246,6 +3246,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationQueueEdit => 'ラベル編集';
 
   @override
+  String get translationQueueSelectFormats => '選択';
+
+  @override
+  String get translationQueueSelectFormatsTitle => 'ダウンロード形式を選択';
+
+  @override
+  String get translationQueueSelectFormatsFormatLabel => '形式';
+
+  @override
+  String get translationQueueSelectFormatsDownload => 'ダウンロード';
+
+  @override
   String get reeditTitle => '翻訳を編集';
 
   @override

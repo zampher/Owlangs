@@ -3416,6 +3416,19 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationQueueEdit => 'Edición etiquetada';
 
   @override
+  String get translationQueueSelectFormats => 'Seleccionar';
+
+  @override
+  String get translationQueueSelectFormatsTitle =>
+      'Seleccionar formatos de descarga';
+
+  @override
+  String get translationQueueSelectFormatsFormatLabel => 'Formato';
+
+  @override
+  String get translationQueueSelectFormatsDownload => 'Descargar';
+
+  @override
   String get reeditTitle => 'Editar traducción';
 
   @override

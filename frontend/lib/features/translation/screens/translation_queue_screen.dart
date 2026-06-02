@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -658,7 +659,11 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                   _tasks,
                 ),
                 onDownloadFormat: _batchDownload,
+                onDownloadAll: _batchDownloadAll,
                 onClear: () => _batchClear(_selectedTaskIds.toList(growable: false)),
+                onSelectFormats: () => _showSelectFormatsDialog(
+                  _selectedTaskIds.toList(growable: false),
+                ),
               ),
             // Select-all row
             if (_tasks.isNotEmpty)
@@ -1091,6 +1096,315 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     }
   }
 
+  Future<void> _batchDownloadAll(List<String> taskIds) async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    try {
+      // Collect all download entries from selected tasks
+      final List<_TaskDownloadEntry> entries = <_TaskDownloadEntry>[];
+      for (final Map<String, dynamic> row in _tasks) {
+        final String? tid = row['task_id']?.toString();
+        if (tid == null || !taskIds.contains(tid)) continue;
+        final String name =
+            row['original_filename']?.toString() ?? tid;
+        final String baseName = name.contains('.')
+            ? name.substring(0, name.lastIndexOf('.'))
+            : name;
+        final dynamic d = row['downloads'];
+        if (d is! Map) continue;
+        for (final MapEntry<dynamic, dynamic> e in d.entries) {
+          final String ft = e.key.toString();
+          // Skip non-file entries
+          if (ft.isEmpty || e.value == null) continue;
+          entries.add(_TaskDownloadEntry(
+            taskId: tid,
+            baseName: baseName,
+            format: ft,
+            url: e.value.toString(),
+          ));
+        }
+      }
+
+      if (entries.isEmpty) {
+        if (mounted) {
+          MessageService.showWarning(context, 'No downloads available');
+        }
+        return;
+      }
+
+      // Download each file and pack into a single ZIP, preserving relative paths
+      final Archive archive = Archive();
+      // Track per-directory name conflicts
+      final Map<String, int> dirCounters = <String, int>{};
+
+      for (final _TaskDownloadEntry dl in entries) {
+        try {
+          final List<int> fileBytes = await _svc.downloadFile(dl.url);
+          final String ext = _extensionForFormat(dl.format);
+
+          // Look up relative path for this task
+          String relativePath = '';
+          for (final Map<String, dynamic> row in _tasks) {
+            if (row['task_id']?.toString() == dl.taskId) {
+              relativePath =
+                  row['original_relative_path']?.toString() ?? '';
+              break;
+            }
+          }
+
+          String entryName;
+          if (relativePath.isNotEmpty) {
+            String name = '${dl.baseName}_${dl.format}.$ext';
+            // Windows-style conflict resolution
+            final String key = '$relativePath/$name';
+            final int count = (dirCounters[key] ?? 0) + 1;
+            dirCounters[key] = count;
+            if (count > 1) {
+              final String baseNameNoExt =
+                  name.substring(0, name.lastIndexOf('.'));
+              name = '$baseNameNoExt ($count).$ext';
+            }
+            entryName = '$relativePath/$name';
+          } else {
+            entryName = '${dl.taskId}/${dl.baseName}_${dl.format}.$ext';
+          }
+
+          archive.addFile(ArchiveFile(entryName, fileBytes.length, fileBytes));
+        } catch (_) {
+          // Skip failed individual downloads
+        }
+      }
+
+      if (archive.files.isEmpty) {
+        if (mounted) {
+          MessageService.showWarning(context, 'No files could be downloaded');
+        }
+        return;
+      }
+
+      final List<int>? encoded = ZipEncoder().encode(archive);
+      if (encoded == null) {
+        if (mounted) {
+          MessageService.showWarning(context, 'Failed to create ZIP archive');
+        }
+        return;
+      }
+      final List<int> zipBytes = Uint8List.fromList(encoded);
+      final String timestamp =
+          DateTime.now().millisecondsSinceEpoch.toString();
+      await _saveDownloadedBytes(
+        bytes: zipBytes,
+        filename: 'batch_all_$timestamp.zip',
+        ext: 'zip',
+      );
+      if (mounted) {
+        MessageService.showInfo(
+          context,
+          '${entries.length} files from ${taskIds.length} tasks packaged into ZIP',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showWarning(
+          context,
+          l10n.translationQueueBatchDownloadFailed(e.toString()),
+        );
+      }
+    }
+  }
+
+  Future<void> _showSelectFormatsDialog(List<String> taskIds) async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+
+    // Group selected tasks by source file extension.
+    // Each group shares one target-format dropdown.
+    final Map<String, _SourceFormatGroup> groups = <String, _SourceFormatGroup>{};
+    for (final Map<String, dynamic> row in _tasks) {
+      final String? tid = row['task_id']?.toString();
+      if (tid == null || !taskIds.contains(tid)) continue;
+      final String name = row['original_filename']?.toString() ?? tid;
+      final String sourceExt = name.contains('.')
+          ? name.substring(name.lastIndexOf('.') + 1).toLowerCase()
+          : '';
+      if (sourceExt.isEmpty) continue;
+      final dynamic d = row['downloads'];
+      if (d is! Map || d.isEmpty) continue;
+
+      _SourceFormatGroup group = groups.putIfAbsent(
+        sourceExt,
+        () {
+          final List<String> fmts = d.keys.map((k) => k.toString()).toList()
+            ..sort(
+              (String a, String b) =>
+                  _downloadFormatSortOrder(a).compareTo(
+                    _downloadFormatSortOrder(b),
+                  ),
+            );
+          // Default: PDF → docx, others → same as source
+          final String defaultFormat = sourceExt == 'pdf'
+              ? 'docx'
+              : (fmts.contains(sourceExt) ? sourceExt : fmts.first);
+          return _SourceFormatGroup(
+            sourceFormat: sourceExt,
+            availableTargetFormats: fmts,
+            selectedTargetFormat: defaultFormat,
+          );
+        },
+      );
+      group.taskIds.add(tid);
+    }
+
+    if (groups.isEmpty) {
+      if (mounted) {
+        MessageService.showWarning(
+          context,
+          'No downloads available for selected tasks',
+        );
+      }
+      return;
+    }
+
+    // Sort groups for stable display
+    final List<_SourceFormatGroup> groupList = groups.values.toList()
+      ..sort((a, b) => a.sourceFormat.compareTo(b.sourceFormat));
+
+    final bool? result = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => _SelectFormatsDialog(
+        groups: groupList,
+        l10n: l10n,
+      ),
+    );
+
+    if (result != true) return;
+
+    // Map taskId → selected target format via its source-format group
+    final Map<String, String> selections = <String, String>{};
+    for (final _SourceFormatGroup group in groupList) {
+      for (final String tid in group.taskIds) {
+        selections[tid] = group.selectedTargetFormat;
+      }
+    }
+    await _batchDownloadSelectedFormats(selections);
+  }
+
+  Future<void> _batchDownloadSelectedFormats(
+    Map<String, String> selections,
+  ) async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    try {
+      // Collect download entries from user selections
+      final List<_TaskDownloadEntry> entries = <_TaskDownloadEntry>[];
+      for (final Map<String, dynamic> row in _tasks) {
+        final String? tid = row['task_id']?.toString();
+        if (tid == null || !selections.containsKey(tid)) continue;
+        final String name = row['original_filename']?.toString() ?? tid;
+        final String baseName = name.contains('.')
+            ? name.substring(0, name.lastIndexOf('.'))
+            : name;
+        final dynamic d = row['downloads'];
+        if (d is! Map) continue;
+        final String format = selections[tid]!;
+        final dynamic url = d[format];
+        if (url == null) continue;
+        entries.add(_TaskDownloadEntry(
+          taskId: tid,
+          baseName: baseName,
+          format: format,
+          url: url.toString(),
+        ));
+      }
+
+      if (entries.isEmpty) {
+        if (mounted) {
+          MessageService.showWarning(context, 'No downloads available');
+        }
+        return;
+      }
+
+      // Download each file and pack into a single ZIP, preserving relative paths
+      final Archive archive = Archive();
+      // Track per-directory name conflicts
+      final Map<String, int> dirCounters = <String, int>{};
+
+      for (final _TaskDownloadEntry dl in entries) {
+        try {
+          final List<int> fileBytes = await _svc.downloadFile(dl.url);
+          final String ext = _extensionForFormat(dl.format);
+
+          // Look up relative path for this task
+          String relativePath = '';
+          for (final Map<String, dynamic> row in _tasks) {
+            if (row['task_id']?.toString() == dl.taskId) {
+              relativePath =
+                  row['original_relative_path']?.toString() ?? '';
+              break;
+            }
+          }
+
+          String entryName;
+          if (relativePath.isNotEmpty) {
+            String name = '${dl.baseName}_translated.$ext';
+            // Windows-style conflict resolution
+            final String key = '$relativePath/$name';
+            final int count = (dirCounters[key] ?? 0) + 1;
+            dirCounters[key] = count;
+            if (count > 1) {
+              final String baseNameNoExt =
+                  name.substring(0, name.lastIndexOf('.'));
+              name = '$baseNameNoExt ($count).$ext';
+            }
+            entryName = '$relativePath/$name';
+          } else {
+            entryName = '${dl.taskId}/${dl.baseName}_${dl.format}.$ext';
+          }
+
+          archive.addFile(ArchiveFile(entryName, fileBytes.length, fileBytes));
+        } catch (_) {
+          // Skip failed individual downloads
+        }
+      }
+
+      if (archive.files.isEmpty) {
+        if (mounted) {
+          MessageService.showWarning(context, 'No files could be downloaded');
+        }
+        return;
+      }
+
+      final List<int>? encoded = ZipEncoder().encode(archive);
+      if (encoded == null) {
+        if (mounted) {
+          MessageService.showWarning(
+            context,
+            'Failed to create ZIP archive',
+          );
+        }
+        return;
+      }
+      final List<int> zipBytes = Uint8List.fromList(encoded);
+      final String timestamp =
+          DateTime.now().millisecondsSinceEpoch.toString();
+      await _saveDownloadedBytes(
+        bytes: zipBytes,
+        filename: 'batch_selected_$timestamp.zip',
+        ext: 'zip',
+      );
+      if (mounted) {
+        MessageService.showInfo(
+          context,
+          '${entries.length} files from ${selections.length} tasks packaged into ZIP',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showWarning(
+          context,
+          l10n.translationQueueBatchDownloadFailed(e.toString()),
+        );
+      }
+    }
+  }
+
   /// Count how many of the selected tasks support each download format.
   static Map<String, int> _computeFormatCounts(
     Set<String> selectedTaskIds,
@@ -1260,13 +1574,17 @@ class _BatchDownloadBottomBar extends StatelessWidget {
   final List<String> taskIds;
   final Map<String, int> formatCounts;
   final Future<void> Function(List<String>, String) onDownloadFormat;
+  final Future<void> Function(List<String>) onDownloadAll;
   final VoidCallback? onClear;
+  final VoidCallback? onSelectFormats;
 
   const _BatchDownloadBottomBar({
     required this.taskIds,
     required this.formatCounts,
     required this.onDownloadFormat,
+    required this.onDownloadAll,
     this.onClear,
+    this.onSelectFormats,
   });
 
   @override
@@ -1299,7 +1617,7 @@ class _BatchDownloadBottomBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          // Format chips
+          // Format chips (includes "Select" chip at the end)
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -1323,6 +1641,24 @@ class _BatchDownloadBottomBar extends StatelessWidget {
   }
 
   List<Widget> _buildFormatChips(AppLocalizations l10n) {
+    final List<Widget> chips = <Widget>[
+      // "All" button — download all formats in one ZIP
+      Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: ActionChip(
+          avatar: const Icon(Icons.all_inclusive, size: 16),
+          label: Text(
+            'All (${formatCounts.values.fold(0, (a, b) => a + b)})',
+            style: const TextStyle(fontSize: 12),
+          ),
+          onPressed: () => onDownloadAll(taskIds),
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+        ),
+      ),
+    ];
+
     const List<(String, IconData)> formats = <(String, IconData)>[
       ('docx', Icons.description),
       ('html', Icons.language),
@@ -1331,11 +1667,11 @@ class _BatchDownloadBottomBar extends StatelessWidget {
       ('pdf', Icons.picture_as_pdf),
       ('txt', Icons.text_snippet),
     ];
-    return formats.map((f) {
+    for (final f in formats) {
       final String ft = f.$1;
       final int count = formatCounts[ft] ?? 0;
-      if (count == 0) return const SizedBox.shrink();
-      return Padding(
+      if (count == 0) continue;
+      chips.add(Padding(
         padding: const EdgeInsets.only(right: 6),
         child: ActionChip(
           avatar: Icon(f.$2, size: 16),
@@ -1348,8 +1684,26 @@ class _BatchDownloadBottomBar extends StatelessWidget {
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           padding: const EdgeInsets.symmetric(horizontal: 4),
         ),
-      );
-    }).toList();
+      ));
+    }
+    // "Select" chip — choose per-source-format target
+    if (onSelectFormats != null) {
+      chips.add(Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: ActionChip(
+          avatar: const Icon(Icons.tune, size: 16),
+          label: Text(
+            '${l10n.translationQueueSelectFormats} (${taskIds.length})',
+            style: const TextStyle(fontSize: 12),
+          ),
+          onPressed: onSelectFormats,
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+        ),
+      ));
+    }
+    return chips;
   }
 }
 
@@ -1444,6 +1798,18 @@ class _TinyBadge extends StatelessWidget {
 // ─── Download popup menu button ──────────────────────────────────────────────
 
 /// Map download format key to a localized button label.
+String _extensionForFormat(String formatKey) {
+  switch (formatKey) {
+    case 'docx': return 'docx';
+    case 'html': return 'html';
+    case 'md': return 'md';
+    case 'md_zip': return 'zip';
+    case 'pdf': return 'pdf';
+    case 'txt': return 'txt';
+    default: return formatKey;
+  }
+}
+
 String _downloadFormatButtonLabel(String formatKey, AppLocalizations l10n) {
   switch (formatKey) {
     case 'md':
@@ -1521,6 +1887,120 @@ class _DownloadFormatButton extends StatelessWidget {
       onPressed: url.isNotEmpty
           ? () => onDownload(taskId, ft, url, name, isFormatConversion)
           : null,
+    );
+  }
+}
+
+class _TaskDownloadEntry {
+  final String taskId;
+  final String baseName;
+  final String format;
+  final String url;
+  const _TaskDownloadEntry({
+    required this.taskId,
+    required this.baseName,
+    required this.format,
+    required this.url,
+  });
+}
+
+// ─── Select formats dialog ───────────────────────────────────────────────────
+
+/// Groups tasks by their source file extension so the user picks one target
+/// format per source type, not per individual task.
+class _SourceFormatGroup {
+  final String sourceFormat;
+  final List<String> availableTargetFormats;
+  final List<String> taskIds = <String>[];
+  String selectedTargetFormat;
+
+  _SourceFormatGroup({
+    required this.sourceFormat,
+    required this.availableTargetFormats,
+    required this.selectedTargetFormat,
+  });
+}
+
+class _SelectFormatsDialog extends StatefulWidget {
+  final List<_SourceFormatGroup> groups;
+  final AppLocalizations l10n;
+
+  const _SelectFormatsDialog({
+    required this.groups,
+    required this.l10n,
+  });
+
+  @override
+  State<_SelectFormatsDialog> createState() => _SelectFormatsDialogState();
+}
+
+class _SelectFormatsDialogState extends State<_SelectFormatsDialog> {
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+
+    return AlertDialog(
+      title: Text(widget.l10n.translationQueueSelectFormatsTitle),
+      content: SizedBox(
+        width: 480,
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: widget.groups.length,
+          itemBuilder: (BuildContext context, int index) {
+            final _SourceFormatGroup group = widget.groups[index];
+            final IconData icon = _downloadFormatIcon(group.sourceFormat);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Row(
+                children: <Widget>[
+                  Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${group.sourceFormat.toUpperCase()} '
+                      '(${group.taskIds.length})',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  DropdownButton<String>(
+                    value: group.selectedTargetFormat,
+                    isDense: true,
+                    underline: const SizedBox(),
+                    style: theme.textTheme.bodySmall,
+                    items: group.availableTargetFormats.map((String ft) {
+                      return DropdownMenuItem<String>(
+                        value: ft,
+                        child: Text(
+                          _downloadFormatButtonLabel(ft, widget.l10n),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (String? value) {
+                      if (value != null) {
+                        setState(() {
+                          group.selectedTargetFormat = value;
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text(widget.l10n.translationQueueClearAllCancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: Text(widget.l10n.translationQueueSelectFormatsDownload),
+        ),
+      ],
     );
   }
 }

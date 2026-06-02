@@ -1222,6 +1222,10 @@
   "loginPasswordRecoveryAdminGuide": "Si es administrador, siga el procedimiento de recuperación de contraseña.",
 
   "translationQueueEdit": "Edición etiquetada",
+  "translationQueueSelectFormats": "Seleccionar",
+  "translationQueueSelectFormatsTitle": "Seleccionar formatos de descarga",
+  "translationQueueSelectFormatsFormatLabel": "Formato",
+  "translationQueueSelectFormatsDownload": "Descargar",
   "reeditTitle": "Editar traducción",
   "reeditSaveExport": "Guardar y exportar",
   "reeditFetchError": "Error al cargar segmentos de traducción.",

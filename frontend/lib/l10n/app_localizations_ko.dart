@@ -3253,6 +3253,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationQueueEdit => '레이블 편집';
 
   @override
+  String get translationQueueSelectFormats => '선택';
+
+  @override
+  String get translationQueueSelectFormatsTitle => '다운로드 형식 선택';
+
+  @override
+  String get translationQueueSelectFormatsFormatLabel => '형식';
+
+  @override
+  String get translationQueueSelectFormatsDownload => '다운로드';
+
+  @override
   String get reeditTitle => '번역 편집';
 
   @override

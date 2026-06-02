@@ -1124,6 +1124,10 @@
   "aiPlatformParserSubtypeLocal": "ローカル",
 
   "translationQueueEdit": "ラベル編集",
+  "translationQueueSelectFormats": "選択",
+  "translationQueueSelectFormatsTitle": "ダウンロード形式を選択",
+  "translationQueueSelectFormatsFormatLabel": "形式",
+  "translationQueueSelectFormatsDownload": "ダウンロード",
   "reeditTitle": "翻訳を編集",
   "reeditSaveExport": "保存してエクスポート",
   "reeditFetchError": "翻訳セグメントの読み込みに失敗しました。",

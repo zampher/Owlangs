@@ -1146,6 +1146,10 @@
   "aiPlatformParserSubtypeLocal": "本地",
 
   "translationQueueEdit": "标签编辑模式",
+  "translationQueueSelectFormats": "选择",
+  "translationQueueSelectFormatsTitle": "选择下载格式",
+  "translationQueueSelectFormatsFormatLabel": "格式",
+  "translationQueueSelectFormatsDownload": "下载",
   "reeditTitle": "编辑译文",
   "reeditSaveExport": "保存并导出",
   "reeditFetchError": "加载翻译片段失败。",

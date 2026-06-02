@@ -3226,6 +3226,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationQueueEdit => '标签编辑模式';
 
   @override
+  String get translationQueueSelectFormats => '选择';
+
+  @override
+  String get translationQueueSelectFormatsTitle => '选择下载格式';
+
+  @override
+  String get translationQueueSelectFormatsFormatLabel => '格式';
+
+  @override
+  String get translationQueueSelectFormatsDownload => '下载';
+
+  @override
   String get reeditTitle => '编辑译文';
 
   @override
