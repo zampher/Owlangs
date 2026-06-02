@@ -98,9 +98,6 @@ class ConfigService {
   String? get authorizationHeader =>
       _dio.options.headers['Authorization'] as String?;
 
-  // UI文本配置
-  Map<String, dynamic>? _uiTexts;
-
   // Track if we've already logged config load to avoid duplicate logs
   bool _hasLoggedConfigLoad = false;
 
@@ -123,10 +120,6 @@ class ConfigService {
         final response = await _dio.get('/auth/app-config');
         if (response.statusCode == 200) {
           final data = response.data;
-          // 缓存UI文本
-          if (data != null && data['ui_texts'] != null) {
-            _uiTexts = data['ui_texts'];
-          }
           // Only log once when config is first loaded (avoid duplicate logs)
           if (kDebugMode && !_hasLoggedConfigLoad) {
             _log(
@@ -166,27 +159,6 @@ class ConfigService {
     }
     // All retries exhausted
     return null;
-  }
-
-  /// Get UI texts from configuration
-  Map<String, dynamic>? getUITexts() => _uiTexts;
-
-  /// Get specific UI text by path (e.g., 'platform_categories.us_platforms')
-  String? getUIText(String path) {
-    if (_uiTexts == null) return null;
-
-    final parts = path.split('.');
-    dynamic current = _uiTexts;
-
-    for (final part in parts) {
-      if (current is Map<String, dynamic> && current.containsKey(part)) {
-        current = current[part];
-      } else {
-        return null;
-      }
-    }
-
-    return current?.toString();
   }
 
   /// Get secrets configuration including API keys

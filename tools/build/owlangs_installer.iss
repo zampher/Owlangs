@@ -58,7 +58,6 @@ Source: "dist\{#MyAppFullExeName}"; DestDir: "{app}\bin"; Flags: ignoreversion; 
 ; Configuration templates (new config structure)
 Source: "configs\system.json.template"; DestDir: "{app}\config"; Flags: ignoreversion
 Source: "configs\platforms.json.template"; DestDir: "{app}\config"; Flags: ignoreversion
-Source: "configs\ui.json.template"; DestDir: "{app}\config"; Flags: ignoreversion
 Source: "configs\secrets.json.template"; DestDir: "{app}\config"; Flags: ignoreversion
 Source: "configs\local.json.template"; DestDir: "{app}\config"; Flags: ignoreversion
 Source: "configs\local_users.json.template"; DestDir: "{app}\config"; Flags: ignoreversion; Check: FileExists("configs\local_users.json.template")
@@ -147,6 +146,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   ConfigDir: String;
   ConfigFiles: TArrayOfString;
+  TemplateFiles: TArrayOfString;
   ConfigFileName: String;
   I: Integer;
 begin
@@ -155,11 +155,10 @@ begin
     ConfigDir := ConfigDirPage.Values[0];
     
     // Copy configuration files to the selected directory (new config structure)
-    SetArrayLength(ConfigFiles, 5);
+    SetArrayLength(ConfigFiles, 4);
     ConfigFiles[0] := 'system.json.template';
     ConfigFiles[1] := 'platforms.json.template';
-    ConfigFiles[2] := 'ui.json.template';
-    ConfigFiles[3] := 'secrets.json.template';
+    ConfigFiles[2] := 'secrets.json.template';
     ConfigFiles[4] := 'local.json.template';
     
     for I := 0 to GetArrayLength(ConfigFiles) - 1 do
@@ -205,6 +204,29 @@ begin
       begin
         FileCopy(ExpandConstant('{app}\config\app_config.json'), ConfigDir + '\app_config.json', False);
       end;
+    end;
+
+    // Force-copy template files to config directory (overwrite existing).
+    // This ensures schema upgrades from templates are applied on reinstall/upgrade.
+    // secrets.json.template is excluded: API keys are managed by the backend merge logic.
+    SetArrayLength(TemplateFiles, 4);
+    TemplateFiles[0] := 'system.json.template';
+    TemplateFiles[1] := 'platforms.json.template';
+    TemplateFiles[2] := 'local.json.template';
+    TemplateFiles[3] := 'local_users.json.template';
+
+    for I := 0 to GetArrayLength(TemplateFiles) - 1 do
+    begin
+      if FileExists(ExpandConstant('{app}\config\' + TemplateFiles[I])) then
+      begin
+        FileCopy(ExpandConstant('{app}\config\' + TemplateFiles[I]), ConfigDir + '\' + TemplateFiles[I], False);
+      end;
+    end;
+
+    // Also copy app_config.json as template if it exists (for schema upgrades)
+    if FileExists(ExpandConstant('{app}\config\app_config.json')) then
+    begin
+      FileCopy(ExpandConstant('{app}\config\app_config.json'), ConfigDir + '\app_config.json.template', False);
     end;
   end;
 end;

@@ -183,7 +183,6 @@ C:\ProgramData\Owlangs\configs\
   - secrets.json    : API keys (required on first run)
   - system.json     : System settings
   - platforms.json  : Translation platform settings
-  - ui.json         : UI settings
 
 Command-Line Options
 --------------------

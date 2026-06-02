@@ -302,9 +302,10 @@ def get_system_config() -> SystemConfig:
 def save_system_config() -> bool:
     """Save system configuration"""
     global _system_config
-    if _system_config is not None:
-        return _system_config.save_to_file()
-    return False
+    if _system_config is None:
+        logger.warning(LogModule.CONFIG, "system.json save skipped: _system_config is None (not loaded or was cleared)")
+        return False
+    return _system_config.save_to_file()
 
 
 def clear_system_config_cache() -> None:

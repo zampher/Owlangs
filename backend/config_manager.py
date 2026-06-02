@@ -96,7 +96,6 @@ class ConfigManager:
             'system.json',
             'system.json.template',
             'platforms.json.template',
-            'ui.json.template',
             'secrets.json.template',
             'local.json.template',
             'logging.yaml',

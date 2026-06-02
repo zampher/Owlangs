@@ -61,7 +61,7 @@ datas = [
     # New config structure templates
     ('./configs/system.json.template', 'configs/'),  # System configuration template
     ('./configs/platforms.json.template', 'configs/'),  # Platforms configuration template
-    ('./configs/ui.json.template', 'configs/'),  # UI configuration template
+
     ('./configs/secrets.json.template', 'configs/'),  # Secrets configuration template
     ('./configs/local.json.template', 'configs/'),  # Local configuration template
     ('./configs/translation_config.json.template', 'configs/'),  # Translation configuration template

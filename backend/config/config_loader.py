@@ -15,7 +15,6 @@ from backend.logger.logger import LogModule
 # Import all config modules
 from .system_config import get_system_config, SystemConfig, ExclusionDefaultsConfig
 from .platforms_config import get_platforms_config, PlatformsConfig, platform_type_uses_llm_chunk_concurrent
-from .ui_config import get_ui_config, UIConfig
 from .secrets_manager import get_secrets_manager
 from .local_config import LocalConfig
 def load_all_configs() -> dict:
@@ -25,7 +24,6 @@ def load_all_configs() -> dict:
     configs = {
         'system': get_system_config(),
         'platforms': get_platforms_config(),
-        'ui': get_ui_config(),
         'secrets': get_secrets_manager(),
         'local': LocalConfig.load_from_file(),
     }
@@ -40,7 +38,6 @@ class UnifiedConfig:
     def __init__(self):
         self.system = get_system_config()
         self.platforms = get_platforms_config()
-        self.ui = get_ui_config()
         self.secrets = get_secrets_manager()
         self.local = LocalConfig.get_config()  # Use get_config() to leverage caching
     
@@ -124,11 +121,6 @@ class UnifiedConfig:
         platforms_dict['default_platform'] = self.platforms.default_platform
         return platforms_dict
     
-    @property
-    def ui_texts(self) -> dict:
-        """Get UI texts (for backward compatibility)"""
-        return self.ui.i18n
-    
     def get_platform_api_key(self, platform: str) -> str:
         """Get platform API key. Backward compat: 'custom' -> 'local'; also try 'custom' when key is 'local'."""
         key = "local" if platform == "custom" else platform
@@ -190,9 +182,6 @@ class UnifiedConfig:
         # AI platforms
         config_dict['ai_platforms'] = self.ai_platforms
         config_dict['ai_platforms_default_platform'] = self.ai_platforms_default_platform
-        
-        # UI texts
-        config_dict['ui_texts'] = self.ui_texts
         
         # Flatten parsing_engine for backward compatibility
         if flatten:
@@ -295,24 +284,25 @@ class UnifiedConfig:
         Args:
             config_file: Ignored parameter (kept for backward compatibility).
                         This method always saves to the new config structure
-                        (system.json, platforms.json, ui.json).
+                        (system.json, platforms.json).
         
         Returns:
             True if all config files were saved successfully, False otherwise.
         """
         from .system_config import save_system_config
         from .platforms_config import save_platforms_config
-        from .ui_config import save_ui_config
-        
-        success = True
-        success &= save_system_config()
-        success &= save_platforms_config()
-        success &= save_ui_config()
-        
+
+        ok1 = save_system_config()
+        ok2 = save_platforms_config()
+        success = ok1 and ok2
+
         if success:
-            logger.info(LogModule.CONFIG, "Unified configuration saved to new config structure (system.json, platforms.json, ui.json)")
+            logger.info(LogModule.CONFIG, "Unified configuration saved to new config structure (system.json, platforms.json)")
         else:
-            logger.warning(LogModule.CONFIG, "Some configuration files failed to save")
+            failed = []
+            if not ok1: failed.append("system.json")
+            if not ok2: failed.append("platforms.json")
+            logger.warning(LogModule.CONFIG, f"Some configuration files failed to save: {', '.join(failed)}")
         
         return success
     

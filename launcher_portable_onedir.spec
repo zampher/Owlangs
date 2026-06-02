@@ -139,7 +139,7 @@ custom_datas = [
     ('./backend/static/flutter-web', 'backend/static/flutter-web'),
     ('./configs/system.json.template', 'configs/'),
     ('./configs/platforms.json.template', 'configs/'),
-    ('./configs/ui.json.template', 'configs/'),
+
     ('./configs/secrets.json.template', 'configs/'),
     ('./configs/local.json.template', 'configs/'),
     ('./configs/translation_config.json.template', 'configs/'),

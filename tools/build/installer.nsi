@@ -338,7 +338,7 @@ Section "Uninstall"
     FileWrite $0 '"'
     FileWrite $0 "$\r$\n"
     FileWrite $0 "if (Test-Path $$configsPath) {$\r$\n"
-    FileWrite $0 "  $$installedFiles = @('system.json', 'system.json.template', 'platforms.json', 'platforms.json.template', 'ai_platform_status.json', 'ui.json', 'ui.json.template', 'local.json', 'local.json.template', 'app_config.json', 'app_config.json.template', 'local_users.json', 'local_users.json.template')$\r$\n"
+    FileWrite $0 "  $$installedFiles = @('system.json', 'system.json.template', 'platforms.json', 'platforms.json.template', 'ai_platform_status.json', 'local.json', 'local.json.template', 'app_config.json', 'app_config.json.template', 'local_users.json', 'local_users.json.template')$\r$\n"
     FileWrite $0 "  foreach ($$file in $$installedFiles) {$\r$\n"
     FileWrite $0 "    $$filePath = Join-Path $$configsPath $$file$\r$\n"
     FileWrite $0 "    if (Test-Path $$filePath) {$\r$\n"

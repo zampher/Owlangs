@@ -37,7 +37,6 @@ Owlangs 使用分层配置：仓库或安装目录下的 **`configs/`** 存放�
 |------|------|
 | `system.json` | 系统级行为、解析引擎、日志等 |
 | `platforms.json` | AI 平台、模型、并发、分块等 |
-| `ui.json` | 界面与客户端相关默认项 |
 | `secrets.json` | 敏感信息（API Key 等），勿提交版本库 |
 | `local.json` | 本机/部署环境：Redis、会话、LDAP、认证默认值等 |
 | `local_users.json` | 本地用户与角色（与统一用户存储配合） |

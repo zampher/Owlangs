@@ -255,9 +255,10 @@ def get_platforms_config() -> PlatformsConfig:
 def save_platforms_config() -> bool:
     """Save platforms configuration"""
     global _platforms_config
-    if _platforms_config is not None:
-        return _platforms_config.save_to_file()
-    return False
+    if _platforms_config is None:
+        logger.warning(LogModule.CONFIG, "platforms.json save skipped: _platforms_config is None (not loaded or was cleared)")
+        return False
+    return _platforms_config.save_to_file()
 
 
 def clear_platforms_config_cache() -> None:

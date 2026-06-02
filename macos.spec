@@ -38,7 +38,7 @@ datas = [
     # Config templates: first run copies these to ~/Library/Application Support/Owlangs/config/
     ('./configs/system.json.template', 'config/templates/'),
     ('./configs/platforms.json.template', 'config/templates/'),
-    ('./configs/ui.json.template', 'config/templates/'),
+
     ('./configs/secrets.json.template', 'config/templates/'),
     ('./configs/local.json.template', 'config/templates/'),
     ('./configs/translation_config.json.template', 'config/templates/'),
