@@ -412,11 +412,36 @@ class TranslationService {
       } on DioException catch (e, stackTrace) {
         final int? statusCode = e.response?.statusCode;
         final bool is404 = statusCode == 404;
+        final bool is202 = statusCode == 202;
         final bool retryableStatus =
-            is404 || statusCode == 500 || statusCode == 503;
+            is404 || is202 || statusCode == 500 || statusCode == 503;
 
-        // Special handling for 404: this is often "segments not ready yet" while task is still processing.
-        // In that case we keep retrying without treating it as a hard error, even if attempt >= maxRetries.
+        // 202: backend confirmed task is still processing, segments not ready yet.
+        // No need for a separate status check – just retry.
+        if (is202 && attempt < maxRetries) {
+          AppLogger.log(
+            'TranslationService',
+            '[SEGMENTS] getTranslationSegments 202 (segments not ready) for '
+            'taskId=$taskId, attempt=$attempt',
+            level: LogLevel.warn,
+          );
+          await Future.delayed(retryDelay);
+          continue;
+        }
+        if (is202 && attempt >= maxRetries) {
+          AppLogger.log(
+            'TranslationService',
+            '[SEGMENTS] getTranslationSegments 202 exhausted after $attempt attempts '
+            'for taskId=$taskId',
+            level: LogLevel.error,
+          );
+          throw Exception(
+            'Translation segments not ready after $attempt attempts for task $taskId',
+          );
+        }
+
+        // 404: task not found or terminal with no segments.
+        // Check status to distinguish "still processing" (retry) from terminal (stop).
         if (is404) {
           String taskStatus = '';
           try {
