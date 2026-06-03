@@ -129,8 +129,9 @@ class ConfigService {
       }
     }
 
-    // In-flight dedup: if a request is already in progress, wait on it
-    if (_inFlightAppConfigFuture != null) {
+    // In-flight dedup: if a request is already in progress, wait on it.
+    // Skip dedup when forceRefresh is requested so callers get fresh data.
+    if (!forceRefresh && _inFlightAppConfigFuture != null) {
       return _inFlightAppConfigFuture;
     }
 

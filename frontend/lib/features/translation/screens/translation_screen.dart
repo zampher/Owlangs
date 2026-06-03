@@ -2309,11 +2309,12 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
               ),
             ),
           const SizedBox(width: 16),
-          // File name display (fills available space)
+          // File name display (constrained width inside horizontal scroll)
           if (hasImportedFile)
-            Flexible(
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 200),
               child: Row(
-                mainAxisSize: MainAxisSize.max,
+                mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   Icon(
                     Icons.description,
@@ -4015,6 +4016,14 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       }
     }
 
+    // Reset operation state after file processing completes.
+    // MUST be done before the mounted check — the notifier persists across widget
+    // lifecycles via Riverpod. If we skip this when !mounted, the next widget
+    // instance for the same flow will see currentOperation stuck as "importing"
+    // and ALL toolbar buttons (Translate, Glossary, Re-extract, etc.) will be
+    // permanently disabled.
+    notifier.setCurrentOperation(TranslationOperation.none);
+
     // Widget may have been disposed during the async file processing above.
     if (!mounted) return;
 
@@ -4038,10 +4047,6 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         qsNotifier.updateWorkflowType(selectedWorkflow);
       }
     }
-
-    // Reset operation state after file processing completes
-    // This ensures toolbar buttons are enabled when segments/chunks are loaded
-    notifier.setCurrentOperation(TranslationOperation.none);
 
     // Log completion with current taskId from state
     final dynamic currentState = widget.flowId != null
@@ -4214,6 +4219,11 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     } finally {
       _fetchUrlCancelToken = null;
     }
+
+    // Reset operation state after URL fetch completes.
+    // MUST be done before the mounted check to prevent permanently-disabled
+    // toolbar buttons if the widget was disposed during async fetch.
+    translationNotifier.setCurrentOperation(TranslationOperation.none);
 
     if (!mounted) return;
 
