@@ -4,7 +4,7 @@
 
 面向需要**准确、保格式**文档翻译的专业场景的 AI 翻译平台，支持多种文档类型。**可完全私有化部署**（本地后端、Ollama 或其它 OpenAI 兼容端点），也可对接云端大模型服务。
 
-<img width="1000" height="1000" alt="3dbe724efe2622363cc092da2c352de6" src="https://github.com/user-attachments/assets/7223558f-4dc5-40d1-8b05-49f89d888600" />
+<img width="512" height="512" alt="3dbe724efe2622363cc092da2c352de6" src="https://github.com/user-attachments/assets/7223558f-4dc5-40d1-8b05-49f89d888600" />
 
 ## 关键功能
 
