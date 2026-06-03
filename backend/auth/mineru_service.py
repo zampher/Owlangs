@@ -7,6 +7,8 @@ from typing import Dict, Any, Optional
 import httpx
 
 from backend.config.config_loader import get_unified_config
+from backend.logger import unified_logger as logger
+from backend.logger.logger import LogModule
 
 
 # Language code mapping for local MinerU
@@ -64,6 +66,7 @@ async def test_mineru_connectivity(
     """
     # Get config from platform config if not provided
     parser_subtype = None
+    model_version = None
     if not base_url:
         config = get_unified_config()
         platform_config = config.ai_platforms.get(platform_key)
@@ -76,15 +79,26 @@ async def test_mineru_connectivity(
                 parser_subtype = platform_config.parser_subtype
             else:
                 parser_subtype = platform_config.get('parser_subtype')
-    
+            if hasattr(platform_config, 'model'):
+                model_version = platform_config.model
+            else:
+                model_version = platform_config.get('model')
+
     if not base_url:
         return {"success": False, "message": f"No base URL configured for {platform_key}"}
-    
+
     base_url = base_url.rstrip('/')
-    
+
     # Detect backend type: prefer parser_subtype, fallback to URL detection
     is_cloud = parser_subtype == "cloud" or base_url.startswith('https://mineru.net')
-    
+
+    logger.info(
+        LogModule.AUTH,
+        f"[MINERU_TEST] platform={platform_key}, base_url={base_url}, "
+        f"model={model_version or 'unknown'}, parser_subtype={parser_subtype or 'detected'}, "
+        f"is_cloud={is_cloud}"
+    )
+
     if is_cloud:
         return await _test_cloud_connectivity(base_url, mineru_token)
     else:

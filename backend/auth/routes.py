@@ -758,6 +758,7 @@ async def get_app_config_api(
             "ui_language",
             "translator_last_workflow",
             "translator_auto_workflow_enabled",
+            "translator_convert_engine",
         }
         for key in app_config_user_level_keys:
             if key in app_config_dict and key in config_dict:
@@ -3313,6 +3314,8 @@ async def batch_update_settings(
                     
                     if parsing_engine_updates:
                         # Update parsing engine via update_from_dict
+                        if 'convert_engine' in parsing_engine_updates:
+                            logger.info(LogModule.AUTH, f"[BATCH] Setting convert_engine to '{parsing_engine_updates['convert_engine']}' (key={key})")
                         global_config.update_from_dict({'parsing_engine': parsing_engine_updates})
                 
                 elif key == 'ai_platforms':
@@ -3334,6 +3337,15 @@ async def batch_update_settings(
                             )
                             try:
                                 _pt = p_val.get('platform_type', 'llm')
+                                # Normalize legacy platform_type values (e.g. 'pdf_parser' → 'parser')
+                                if _pt == 'pdf_parser':
+                                    _pt = 'parser'
+                                # Normalize cloud MinerU model: 'vlm' → 'vlm-auto-engine'
+                                _model = p_val.get('model', '')
+                                _subtype = p_val.get('parser_subtype')
+                                if p_key == 'mineru' and _model == 'vlm':
+                                    _model = 'vlm-auto-engine'
+                                    logger.info(LogModule.AUTH, f"[AI_PLATFORMS] Normalized mineru model: 'vlm' → 'vlm-auto-engine'")
                                 if platform_type_uses_llm_chunk_concurrent(_pt):
                                     _cs = (
                                         int(p_val['chunk_size'])
@@ -3350,7 +3362,7 @@ async def batch_update_settings(
                                 cfg = AIPlatformConfig(
                                     name=p_val.get('name', ''),
                                     url=p_val.get('url', ''),
-                                    model=p_val.get('model', ''),
+                                    model=_model,
                                     max_tokens=p_val.get('max_tokens', 4096),
                                     temperature=float(p_val.get('temperature', 0.3)),
                                     temperature_min=float(p_val.get('temperature_min', 0.0)),
@@ -3368,6 +3380,8 @@ async def batch_update_settings(
                                     api_endpoints=p_val.get('api_endpoints') if p_val.get('api_endpoints') is not None else {},
                                     chunk_size=_cs,
                                     concurrent=_cc,
+                                    timeout=int(p_val['timeout']) if p_val.get('timeout') is not None else None,
+                                    write_timeout=int(p_val['write_timeout']) if p_val.get('write_timeout') is not None else None,
                                 )
                                 platforms_config.update_platform_config(p_key, cfg)
                                 logger.info(LogModule.AUTH, f"[AI_PLATFORMS] Updated platform '{p_key}': url={cfg.url}, model={cfg.model}")
@@ -3803,16 +3817,20 @@ async def update_single_setting(
                         raise HTTPException(status_code=400, detail=f"Invalid value for ai_platforms_default_platform: {str(e)}")
                 elif key in ['parsingEngine', 'translator_convert_engine', 'translator_mineru_model_version', 'translator_formula_ocr', 'translator_table_ocr', 'translator_skip_translate']:
                     # Handle fields in parsing_engine (accept both camelCase from frontend and snake_case)
+                    # Must use update_from_dict rather than direct attribute access because
+                    # UnifiedConfig.parsing_engine is a @property returning a plain dict.
                     if key in ('parsingEngine', 'translator_convert_engine'):
-                        global_config.parsing_engine.convert_engine = value
+                        global_config.update_from_dict({'parsing_engine': {'convert_engine': value}})
                     elif key == 'translator_mineru_model_version':
-                        global_config.parsing_engine.mineru_model_version = value
+                        # Update model version in platforms.json (source of truth) and system.json (backward compat)
+                        normalized = 'vlm-auto-engine' if value == 'vlm' else value
+                        global_config.update_from_dict({'parsing_engine': {'mineru_model_version': normalized}})
                     elif key == 'translator_formula_ocr':
-                        global_config.parsing_engine.formula_ocr = value
+                        global_config.update_from_dict({'parsing_engine': {'formula_ocr': value}})
                     elif key == 'translator_table_ocr':
-                        global_config.parsing_engine.table_ocr = value
+                        global_config.update_from_dict({'parsing_engine': {'table_ocr': value}})
                     elif key == 'translator_skip_translate':
-                        global_config.parsing_engine.skip_translate = value
+                        global_config.update_from_dict({'parsing_engine': {'skip_translate': value}})
                 else:
                     raise HTTPException(status_code=400, detail=f"Unknown global setting key: {key}")
             

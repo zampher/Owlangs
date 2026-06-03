@@ -160,6 +160,10 @@ class SystemConfig:
                         f"Failed to merge system.json with template: {merge_err}",
                     )
 
+                # Migrate: strip legacy engines dict from parsing_engine (model info now lives in platforms.json)
+                if isinstance(data.get('parsing_engine'), dict):
+                    data['parsing_engine'].pop('engines', None)
+
                 config = cls()
                 config.update_from_dict(data)
                 logger.debug(LogModule.CONFIG, "System configuration loaded successfully")
@@ -223,7 +227,6 @@ class SystemConfig:
             pe_data = data['parsing_engine']
             self.parsing_engine = ParsingEngineConfig(
                 default_engine=pe_data.get('default_engine', 'mineru'),
-                engines=pe_data.get('engines', {}),
                 default_engine_settings=pe_data.get('default_engine_settings', {
                     "formula_ocr": False,
                     "table_ocr": True,
@@ -269,7 +272,10 @@ class SystemConfig:
         return {
             '_schema_version': self._schema_version,
             'auth': asdict(self.auth),
-            'parsing_engine': asdict(self.parsing_engine),
+            'parsing_engine': {
+                'default_engine': self.parsing_engine.default_engine,
+                'default_engine_settings': dict(self.parsing_engine.default_engine_settings),
+            },
             'logging': asdict(self.logging),
             'features': asdict(self.features),
             'pdf': asdict(self.pdf),

@@ -43,6 +43,8 @@ class AIPlatformConfig:
     api_endpoints: Dict[str, str] = field(default_factory=dict)
     chunk_size: int = 3000  # Per-platform chunk size (tokens). Overrides global app_config setting.
     concurrent: int = 5  # Per-platform concurrent requests. Overrides global app_config setting.
+    timeout: Optional[int] = None  # Per-platform read timeout (seconds). Overrides global default.
+    write_timeout: Optional[int] = None  # Per-platform write timeout (seconds). Overrides global default.
 
 
 @dataclass
@@ -94,6 +96,13 @@ class PlatformsConfig:
 
                 config = cls()
                 config.update_from_dict(data)
+                # If migration added defaults for old platforms, persist back to disk
+                if getattr(config, '_needs_migration', False):
+                    try:
+                        config.save_to_file()
+                        logger.info(LogModule.CONFIG, f"Saved migrated platforms.json (timeout/write_timeout defaults): {config_path}")
+                    except Exception as save_err:
+                        logger.warning(LogModule.CONFIG, f"Failed to save migrated platforms.json: {save_err}")
                 logger.debug(LogModule.CONFIG, "Platforms configuration loaded successfully")
                 return config
             else:
@@ -153,15 +162,22 @@ class PlatformsConfig:
         if 'platforms' in data:
             platforms_data = data['platforms']
             self.platforms = {}
+            needs_migration = False
             for platform_key, platform_data in platforms_data.items():
                 if platform_key == 'default_platform':
                     continue
                 if isinstance(platform_data, dict):
                     pdata = dict(platform_data)
                     ptype = pdata.get("platform_type", "llm")
+                    # Normalize legacy platform_type values (e.g. 'pdf_parser' → 'parser')
+                    if ptype == 'pdf_parser':
+                        ptype = 'parser'
+                        pdata['platform_type'] = 'parser'
                     if not platform_type_uses_llm_chunk_concurrent(ptype):
                         pdata.pop("chunk_size", None)
                         pdata.pop("concurrent", None)
+                        pdata.pop("timeout", None)
+                        pdata.pop("write_timeout", None)
                     allowed = {f.name for f in fields(AIPlatformConfig)}
                     unknown = sorted(k for k in pdata if k not in allowed)
                     if unknown:
@@ -170,7 +186,18 @@ class PlatformsConfig:
                             f"Platforms '{platform_key}': ignoring keys not defined on AIPlatformConfig: {unknown}",
                         )
                     pdata_filtered = {k: v for k, v in pdata.items() if k in allowed}
+                    # Migrate: fill default timeout/write_timeout for old LLM platforms missing these fields
+                    if ptype == 'llm':
+                        if pdata_filtered.get('timeout') is None:
+                            pdata_filtered['timeout'] = 300
+                            needs_migration = True
+                        if pdata_filtered.get('write_timeout') is None:
+                            pdata_filtered['write_timeout'] = 300
+                            needs_migration = True
                     self.platforms[platform_key] = AIPlatformConfig(**pdata_filtered)
+            if needs_migration:
+                self._needs_migration = True
+                logger.info(LogModule.CONFIG, "Migrated old platforms.json: added default timeout/write_timeout for LLM platforms")
     
     def get_config_dict(self) -> Dict[str, Any]:
         """Get configuration dictionary"""
@@ -186,6 +213,8 @@ class PlatformsConfig:
             if not platform_type_uses_llm_chunk_concurrent(platform_config.platform_type):
                 plat_dict.pop("chunk_size", None)
                 plat_dict.pop("concurrent", None)
+                plat_dict.pop("timeout", None)
+                plat_dict.pop("write_timeout", None)
             config_dict["platforms"][platform_key] = plat_dict
 
         return config_dict

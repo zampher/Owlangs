@@ -34,6 +34,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
 
   // MinerU platform selection
   String _selectedMineruPlatform = 'mineru'; // 'mineru' or 'mineru_local'
+  bool _mineruPlatformSelectionInitialized = false;
 
   // MinerU Cloud config state (embedded form)
   late TextEditingController _mineruNameController;
@@ -247,6 +248,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _ensureMineruLocalInitialValues(aiSettings);
     _ensureSelectedPlatformInitialized(aiSettings);
     final GlobalSettings globalSettings = ref.watch(globalSettingsProvider);
+    _ensureMineruPlatformSelectionInitialized(globalSettings);
     final GlobalSettingsNotifier globalNotifier =
         ref.read(globalSettingsProvider.notifier);
 
@@ -266,6 +268,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         ],
       ),
       body: SafeArea(
+        minimum: const EdgeInsets.only(bottom: 52),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 900),
@@ -417,6 +420,15 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       _mineruLocalHasApiKey = mineruLocal.requiresApiKey;
     }
     _mineruLocalInitializedFromSettings = true;
+  }
+
+  void _ensureMineruPlatformSelectionInitialized(GlobalSettings globalSettings) {
+    if (_mineruPlatformSelectionInitialized) return;
+    final engine = globalSettings.parsingEngine;
+    if (engine == 'mineru' || engine == 'mineru_local') {
+      _selectedMineruPlatform = engine;
+    }
+    _mineruPlatformSelectionInitialized = true;
   }
 
   void _ensureSelectedPlatformInitialized(AIPlatformSettings settings) {
@@ -1261,7 +1273,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         temperatureMax: 0,
         thinkingModeSupported: false,
         thinkingMode: 'disable',
-        platformType: 'pdf_parser',
+        platformType: 'parser',
         requiresApiKey: _mineruHasApiKey,
       );
     } else {
@@ -1318,7 +1330,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         temperatureMax: 0,
         thinkingModeSupported: false,
         thinkingMode: 'disable',
-        platformType: 'pdf_parser',
+        platformType: 'parser',
         requiresApiKey: _mineruLocalHasApiKey,
       );
     } else {
@@ -2422,6 +2434,14 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     AIPlatformSettingsNotifier notifier,
   ) {
     if (_selectedPlatformKey != null) {
+      // Ensure LLM form reflects the actual platform config before saving.
+      // The form is normally synced via addPostFrameCallback when the LLM step
+      // is first rendered; this guard handles edge cases where the sync hasn't
+      // fired yet (e.g. rapid navigation) to prevent hardcoded controller
+      // defaults from overwriting the platform's real configuration.
+      if (_llmFormPlatformKey != _selectedPlatformKey) {
+        _syncLlmFormFromPlatform(_selectedPlatformKey!, settings);
+      }
       final AIPlatformInfo? platform =
           settings.platforms[_selectedPlatformKey!];
       if (platform != null) {

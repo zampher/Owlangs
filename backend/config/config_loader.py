@@ -62,22 +62,39 @@ class UnifiedConfig:
         """Get exclusion default settings from system config"""
         return self.system.exclusion_defaults
 
+    # Cloud MinerU only supports vlm-auto-engine; legacy 'vlm' is equivalent.
+    _MINERU_CLOUD_MODEL_NORMALIZE = {'vlm': 'vlm-auto-engine'}
+
     @property
     def parsing_engine(self) -> dict:
-        """Get parsing engine configuration (for backward compatibility)"""
-        mineru_engine = self.system.parsing_engine.engines.get('mineru', {})
+        """Get parsing engine configuration (for backward compatibility).
+
+        model_version is read from platforms.json (source of truth for MinerU config).
+        """
+        default_engine = self.system.parsing_engine.default_engine
+        mineru_model_version = self._get_model_version_from_platforms(default_engine)
         return {
-            'convert_engine': self.system.parsing_engine.default_engine,
-            'mineru_model_version': mineru_engine.get('model_version', 'hybrid-auto-engine'),
+            'convert_engine': default_engine,
+            'mineru_model_version': mineru_model_version,
             'formula_ocr': self.system.parsing_engine.default_engine_settings.get('formula_ocr', False),
             'table_ocr': self.system.parsing_engine.default_engine_settings.get('table_ocr', True),
             'skip_translate': self.system.parsing_engine.default_engine_settings.get('skip_translate', False),
-            'engines': self.system.parsing_engine.engines,
             'pdf_split_enabled': self.system.pdf.pdf_split_enabled,
             'pdf_split_max_pages': self.system.pdf.pdf_split_max_pages,
             'pdf_split_max_workers': self.system.pdf.pdf_split_max_workers,
             'request_retry_count': self.system.pdf.request_retry_count,
         }
+
+    def _get_model_version_from_platforms(self, engine_key: str) -> str:
+        """Read model version from platforms.json for the given engine key."""
+        platform = self.platforms.platforms.get(engine_key)
+        if platform and platform.model:
+            model = platform.model
+            # Normalize: cloud MinerU only supports vlm-auto-engine
+            if engine_key == 'mineru':
+                model = self._MINERU_CLOUD_MODEL_NORMALIZE.get(model, model)
+            return model
+        return 'hybrid-auto-engine'
     
     @property
     def ai_platforms(self) -> dict:
@@ -117,6 +134,12 @@ class UnifiedConfig:
                 )
                 platforms_dict[key]['concurrent'] = (
                     int(platform.concurrent) if platform.concurrent is not None else 5
+                )
+                platforms_dict[key]['timeout'] = (
+                    int(platform.timeout) if platform.timeout is not None else None
+                )
+                platforms_dict[key]['write_timeout'] = (
+                    int(platform.write_timeout) if platform.write_timeout is not None else None
                 )
         platforms_dict['default_platform'] = self.platforms.default_platform
         return platforms_dict
@@ -210,16 +233,21 @@ class UnifiedConfig:
             if 'convert_engine' in parsing_data:
                 self.system.parsing_engine.default_engine = parsing_data['convert_engine']
             if 'mineru_model_version' in parsing_data:
-                if 'mineru' in self.system.parsing_engine.engines:
-                    self.system.parsing_engine.engines['mineru']['model_version'] = parsing_data['mineru_model_version']
+                new_version = parsing_data['mineru_model_version']
+                # Normalize: cloud MinerU only supports vlm-auto-engine
+                if new_version == 'vlm':
+                    new_version = 'vlm-auto-engine'
+                # Update platforms.json (source of truth for MinerU model)
+                default_engine = self.system.parsing_engine.default_engine
+                if default_engine in self.platforms.platforms:
+                    self.platforms.platforms[default_engine].model = new_version
+                    save_platforms_config()
             if 'formula_ocr' in parsing_data:
                 self.system.parsing_engine.default_engine_settings['formula_ocr'] = parsing_data['formula_ocr']
             if 'table_ocr' in parsing_data:
                 self.system.parsing_engine.default_engine_settings['table_ocr'] = parsing_data['table_ocr']
             if 'skip_translate' in parsing_data:
                 self.system.parsing_engine.default_engine_settings['skip_translate'] = parsing_data['skip_translate']
-            if 'engines' in parsing_data:
-                self.system.parsing_engine.engines.update(parsing_data['engines'])
             if 'pdf_split_enabled' in parsing_data:
                 self.system.pdf.pdf_split_enabled = bool(parsing_data['pdf_split_enabled'])
             if 'pdf_split_max_pages' in parsing_data:

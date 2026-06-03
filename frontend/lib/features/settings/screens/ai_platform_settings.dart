@@ -916,7 +916,7 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
                           ),
                           const SizedBox(height: 8),
                           _buildModelField(),
-                          if (widget.platformInfo.platformType == 'pdf_parser') ...<Widget>[
+                          if (widget.platformInfo.platformType == 'parser') ...<Widget>[
                             const SizedBox(height: 8),
                             _buildParserSubtypeDropdown(),
                           ],
@@ -1693,7 +1693,7 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
     baseUpdates['requiresApiKey'] = _hasApiKey;
     
     // Save parser subtype for PDF parser platforms
-    if (current.platformType == 'pdf_parser') {
+    if (current.platformType == 'parser') {
       baseUpdates['parserSubtype'] = widget.platformInfo.parserSubtype ?? 'cloud';
     }
     

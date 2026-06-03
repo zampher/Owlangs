@@ -753,7 +753,7 @@ class AIPlatformInfo {
       apiKey: apiKey,
       isConfigured: isConfigured,
       isApiAvailable: isApiAvailable,
-      platformType: json['platform_type'] ?? 'llm',
+      platformType: _normalizePlatformType(json['platform_type']),
       parserSubtype: json['parser_subtype']?.toString(),
       apiEndpoints: json['api_endpoints'] != null
           ? Map<String, String>.from(
@@ -809,6 +809,13 @@ class AIPlatformInfo {
     if (value is int) return value.toDouble();
     if (value is String) return double.tryParse(value) ?? defaultValue;
     return defaultValue;
+  }
+
+  /// Normalize legacy platform_type values (e.g. 'pdf_parser' → 'parser').
+  static String _normalizePlatformType(String? value) {
+    if (value == null) return 'llm';
+    if (value == 'pdf_parser') return 'parser'; // migrate legacy value
+    return value;
   }
   final String key;
   final String name;

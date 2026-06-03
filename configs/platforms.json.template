@@ -604,7 +604,7 @@
     "mineru": {
       "name": "MinerU (Cloud)",
       "url": "https://mineru.net/api/v4",
-      "model": "vlm",
+      "model": "vlm-auto-engine",
       "performance_note": "Advanced document parsing and conversion service with OCR capabilities",
       "platform_type": "parser",
       "parser_subtype": "cloud",
