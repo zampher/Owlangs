@@ -1,8 +1,45 @@
 # Owlangs
 
+> English: [README.md](README.md)
+
 面向需要**准确、保格式**文档翻译的专业场景的 AI 翻译平台，支持多种文档类型。**可完全私有化部署**（本地后端、Ollama 或其它 OpenAI 兼容端点），也可对接云端大模型服务。
 
-> English: [README.md](README.md)
+## 关键功能
+
+### 多格式支持与高保真排版
+- **15+ 种格式**：PDF、DOCX、XLSX、PPTX、HTML、TXT、PNG、EPUB、MOBI 等
+- **版式保留**：翻译后保持原文排版、布局与样式
+- **超大文件**：支持超大 PDF 和电子书的自动拆分翻译处理
+
+### 20+ AI 平台集成
+- 主流云端平台：OpenAI、Claude、DeepSeek、Google Gemini 等
+- 自部署方案：Ollama、本地 OpenAI 兼容端点
+
+### 精细翻译控制
+- **逐段编辑**：对每个翻译片段单独审阅和修订
+- **双语阅读**：原文与译文并列对照显示
+- **双语文档导出**：生成双语文档方便审校协作
+
+### 智能术语管理
+- **自动识别**：从文档中自动识别和提取术语
+- **术语表导入**：支持导入CSV术语表和TBX专业术语表
+- **一致性**：确保多次翻译中的术语一致
+
+### 灵活部署方案
+- **跨平台**：Windows、macOS、Linux 桌面应用 + Web 访问
+- **本地部署**：完全离线运行，无需外部网络
+- **团队协作**：支持域控对接，适配企业环境
+
+### 批量处理与队列管理
+- **批量导入**：一次导入多个文件或 ZIP 压缩包
+- **翻译队列**：管理、排序和追踪全部翻译任务
+- **任务回溯**：任务列表中的任务可重新进入修订/编辑模式
+- **批量导出**：将多个任务一键打包导出，并保留原相对路径。
+
+### 集成
+- **MCP 与 CLI**：可对接主流 AI Agent 框架
+- **文档预处理**：可用于搭建知识库的文档预处理
+
 
 <img width="1000" height="477" alt="Image002" src="https://github.com/user-attachments/assets/a04713c1-7a0f-4b70-8c19-e14f468288e8" />
 
@@ -18,7 +55,7 @@
 
 ### 🤖 AI 平台与模型
 
-- 在 `configs/platforms.json` 中预置 **27+** 类平台配置，覆盖主流云端 API **与自建方案**：
+- 在 `configs/platforms.json` 中预置 **20+** 类平台配置，覆盖主流云端 API **与自建方案**：
   - **本地 / 自建**：OpenAI 兼容（`local`）、**Ollama**、可选 Anthropic 兼容本地端、解析管线用的 **MinerU** / **Mineru_local** 等
   - **云端示例**：OpenAI、Azure OpenAI、Anthropic、Google Gemini、DeepSeek、DashScope、火山方舟、智谱、Groq、Together、Mistral、Cohere、xAI、硅基流动、DMX API、OpenRouter、腾讯混元、百度、月之暗面、Aleph Alpha、Rinna、Naver 等
 - **自定义平台**：通过 `local` 等 profile 接入任意 OpenAI 兼容 API（Base URL + 模型 + 可选 API Key）
@@ -47,6 +84,12 @@
 - **版本管理**：跟踪与管理不同版本的译文
 - **任务历史**：完整的翻译活动记录
 
+### 🔌 集成与扩展
+
+- **MCP 与 CLI**：可对接主流 AI Agent 框架，实现自动化工作流
+- **文档预处理**：可用于搭建知识库与 RAG 管线的文档预处理
+- **PBX 支持**：支持导入导出 PBX 专业术语库
+
 ### 🌐 跨平台
 
 - **Windows**：原生桌面应用
@@ -55,6 +98,7 @@
 - **Android**：移动应用（规划中）
 - **iOS**：移动应用（规划中）
 - **Web**：浏览器访问随包提供的 Flutter Web 界面
+- **团队协作**：支持域控对接，适配企业环境
 
 ### 🌙 界面与体验
 

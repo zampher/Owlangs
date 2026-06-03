@@ -4,6 +4,43 @@
 
 A powerful AI-powered document translation platform designed for professionals who need accurate, format-preserving translations across a wide range of document types. **You can run it fully on-premise** (local backend, Ollama, or other OpenAI-compatible endpoints) or connect to cloud AI providers.
 
+## Key Features
+
+### Multi-Format Support with High-Fidelity Layout
+- **15+ formats**: PDF, DOCX, XLSX, PPTX, HTML, TXT, PNG, EPUB, MOBI, and more
+- **Layout preservation**: Maintains original formatting, layout, and styles in translated output
+- **Large files**: Handles massive PDFs and e-books with automatic split-file processing
+
+### 20+ AI Platform Integrations
+- Major cloud providers: OpenAI, Claude, DeepSeek, Google Gemini, and more
+- Self-hosted options: Ollama, local OpenAI-compatible endpoints
+
+### Precision Translation Control
+- **Segment-level editing**: Review and refine individual translation segments
+- **Bilingual reading**: Side-by-side source and target text comparison
+- **Bilingual export**: Generate bilingual documents for review and collaboration
+
+### Smart Glossary Management
+- **Auto-detection**: Automatically identify and extract terminology from documents
+- **Glossary import**: Import CSV glossaries and TBX professional terminology databases
+- **Consistency**: Maintain terminology consistency across all translations
+
+### Flexible Deployment
+- **Cross-platform**: Windows, macOS, Linux desktop apps + Web access
+- **On-premise**: Fully local deployment with no external network required
+- **Team collaboration**: Domain controller integration for enterprise environments
+
+### Batch Processing & Queue Management
+- **Batch import**: Import multiple files or ZIP archives at once
+- **Translation queue**: Manage, prioritize, and track all translation tasks
+- **Re-edit tasks**: Re-enter completed tasks in the queue for revision and editing
+- **Batch export**: Export multiple tasks in a single archive, preserving original relative paths
+
+### Integration
+- **MCP & CLI**: Integrates with mainstream AI agent frameworks
+- **Document pre-processing**: Prepare documents for knowledge base construction
+
+
 <img width="1000" height="477" alt="image001" src="https://github.com/user-attachments/assets/0c4e42f6-5ed1-41c1-9db6-c5b4c57871b9" />
 
 ## Features
@@ -18,7 +55,7 @@ A powerful AI-powered document translation platform designed for professionals w
 
 ### 🤖 AI Platform Flexibility
 
-- **27+ Preconfigured Platform Profiles** in `configs/platforms.json`, including major cloud APIs **and self-hosted options**:
+- **20+ Preconfigured Platform Profiles** in `configs/platforms.json`, including major cloud APIs **and self-hosted options**:
   - **Local / self-hosted**: OpenAI-compatible (`local`), **Ollama**, optional Anthropic-compatible local, **MinerU** / **Mineru_local** for parsing pipelines
   - **Cloud examples**: OpenAI, Azure OpenAI, Anthropic, Google Gemini, DeepSeek, DashScope, VolcEngine ARK, Zhipu, Groq, Together, Mistral, Cohere, xAI, SiliconFlow, DMX API, OpenRouter, Tencent Hunyuan, Baidu, Moonshot, Aleph Alpha, Rinna, Naver, and more
 - **Custom Platform Support**: Integrate any OpenAI-compatible API via the `local` profile (base URL + model + optional API key)
@@ -47,6 +84,12 @@ A powerful AI-powered document translation platform designed for professionals w
 - **Version Management**: Track and manage different versions of your translations
 - **Task History**: Complete history of all translation activities
 
+### 🔌 Integration & Extensibility
+
+- **MCP & CLI**: Integrate with mainstream AI agent frameworks for automated workflows
+- **Document Pre-Processing**: Prepare documents for knowledge base construction and RAG pipelines
+- **PBX Support**: Import and export PBX professional terminology databases
+
 ### 🌐 Cross-Platform Access
 
 - **Windows**: Native desktop application
@@ -55,6 +98,7 @@ A powerful AI-powered document translation platform designed for professionals w
 - **Android**: Mobile application (TBD)
 - **iOS**: Mobile application (TBD)
 - **Web**: Browser-based access to the bundled Flutter Web UI
+- **Team Collaboration**: Domain controller integration for enterprise environments
 
 ### 🎨 User Experience
 
