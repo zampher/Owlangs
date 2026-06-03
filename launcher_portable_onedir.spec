@@ -160,14 +160,9 @@ if sys.platform.startswith('win'):
     for _src, _dst in _redis_files:
         if os.path.exists(_src):
             datas.append((_src, _dst))
-    _pandoc_dir = os.path.join(os.getcwd(), '3rdParty', 'windows')
-    if os.path.isdir(_pandoc_dir):
-        for _name in os.listdir(_pandoc_dir):
-            if _name.startswith('pandoc-'):
-                _path = os.path.join(_pandoc_dir, _name)
-                if os.path.isdir(_path) and os.path.isfile(os.path.join(_path, 'pandoc.exe')):
-                    datas.append((_path, os.path.join('3rdParty', 'windows', _name)))
-                    break
+# Pandoc is staged externally by the build script (build_win_portable_onedir.ps1 copies
+# 3rdParty/ to the package root). _get_pandoc_path() resolves to that copy first,
+# so bundling inside _internal/ is redundant for onedir builds.
 
 for data in custom_datas:
     if data not in datas:
