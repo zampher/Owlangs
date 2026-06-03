@@ -457,8 +457,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           l10n.setupWizardMineruQuestion,
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         RadioListTile<bool>(
+          dense: true,
+          visualDensity: VisualDensity.compact,
           title: Text(l10n.setupWizardMineruYes),
           value: true,
           groupValue: _needsPdfTranslation,
@@ -470,6 +472,8 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           },
         ),
         RadioListTile<bool>(
+          dense: true,
+          visualDensity: VisualDensity.compact,
           title: Text(l10n.setupWizardMineruNo),
           value: false,
           groupValue: _needsPdfTranslation,
@@ -480,10 +484,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             });
           },
         ),
-        const SizedBox(height: 16),
         if (_needsPdfTranslation) ...<Widget>[
+          const SizedBox(height: 8),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.blue.shade50,
               borderRadius: BorderRadius.circular(8),
@@ -491,10 +495,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ),
             child: Text(
               l10n.setupWizardMineruDescription,
-              style: const TextStyle(fontSize: 13),
+              style: const TextStyle(fontSize: 12),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           // MinerU Platform Selection
           Text(
             l10n.setupWizardSelectMineruPlatform,
@@ -597,7 +601,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   hintText: 'MinerU (Cloud)',
                   prefixIcon: const Icon(Icons.label_outline),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
               ),
             ),
@@ -611,7 +615,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   labelText: l10n.aiPlatformParserSubtype,
                   prefixIcon: const Icon(Icons.category_outlined),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
                 items: <DropdownMenuItem<String>>[
                   DropdownMenuItem<String>(
@@ -633,51 +637,55 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           ],
         ),
         const SizedBox(height: 8),
-        TextFormField(
-          controller: _mineruApiUrlController,
-          decoration: InputDecoration(
-            labelText: l10n.aiPlatformApiUrl,
-            hintText: l10n.aiPlatformMineruApiUrlHint,
-            prefixIcon: const Icon(Icons.link),
-            border: const OutlineInputBorder(),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          ),
-        ),
-        const SizedBox(height: 8),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Expanded(
-              child: _buildMineruHasApiKeySwitch(l10n, tokenLink: mineruTokenLink),
+              child: TextFormField(
+                controller: _mineruApiUrlController,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformApiUrl,
+                  hintText: l10n.aiPlatformMineruApiUrlHint,
+                  prefixIcon: const Icon(Icons.link),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _wrapIfUnavailable(
                 showUnavailableHint && _mineruHasApiKey,
-                child: TextFormField(
-                  controller: _mineruApiKeyController,
-                  obscureText: _mineruObscureText,
-                  decoration: InputDecoration(
-                    labelText: _mineruHasApiKey
-                        ? l10n.aiPlatformApiKey
-                        : '${l10n.aiPlatformApiKey} (${l10n.optional})',
-                    hintText: _mineruHasApiKey
-                        ? l10n.aiPlatformEnterMineruApiKey
-                        : l10n.aiPlatformApiKeyOptionalHint,
-                    prefixIcon: const Icon(Icons.key),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _mineruObscureText ? Icons.visibility : Icons.visibility_off,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    _buildMineruHasApiKeySwitch(l10n, tokenLink: mineruTokenLink),
+                    TextFormField(
+                      controller: _mineruApiKeyController,
+                      obscureText: _mineruObscureText,
+                      decoration: InputDecoration(
+                        labelText: _mineruHasApiKey
+                            ? l10n.aiPlatformApiKey
+                            : '${l10n.aiPlatformApiKey} (${l10n.optional})',
+                        hintText: _mineruHasApiKey
+                            ? l10n.aiPlatformEnterMineruApiKey
+                            : l10n.aiPlatformApiKeyOptionalHint,
+                        prefixIcon: const Icon(Icons.key),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _mineruObscureText ? Icons.visibility : Icons.visibility_off,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _mineruObscureText = !_mineruObscureText;
+                            });
+                          },
+                        ),
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _mineruObscureText = !_mineruObscureText;
-                        });
-                      },
                     ),
-                    border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -689,8 +697,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           children: <Widget>[
             Expanded(
               child: SwitchListTile.adaptive(
-                title: Text(l10n.aiPlatformFormulaOcr),
-                subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle),
+                dense: true,
+                title: Text(l10n.aiPlatformFormulaOcr, style: const TextStyle(fontSize: 13)),
+                subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle, style: const TextStyle(fontSize: 11)),
                 value: _mineruFormulaOcr,
                 onChanged: (bool value) {
                   setState(() {
@@ -701,8 +710,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ),
             Expanded(
               child: SwitchListTile.adaptive(
-                title: Text(l10n.aiPlatformTableOcr),
-                subtitle: Text(l10n.aiPlatformTableOcrSubtitle),
+                dense: true,
+                title: Text(l10n.aiPlatformTableOcr, style: const TextStyle(fontSize: 13)),
+                subtitle: Text(l10n.aiPlatformTableOcrSubtitle, style: const TextStyle(fontSize: 11)),
                 value: _mineruTableOcr,
                 onChanged: (bool value) {
                   setState(() {
@@ -866,7 +876,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   hintText: 'MinerU (Local)',
                   prefixIcon: const Icon(Icons.label_outline),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
               ),
             ),
@@ -878,7 +888,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   labelText: l10n.aiPlatformModelVersion,
                   prefixIcon: const Icon(Icons.schema_outlined),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
                 items: const <DropdownMenuItem<String>>[
                   DropdownMenuItem(value: 'pipeline', child: Text('pipeline')),
@@ -908,7 +918,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   hintText: 'http://localhost:8920',
                   prefixIcon: const Icon(Icons.link),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
               ),
             ),
@@ -922,7 +932,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   labelText: l10n.aiPlatformParserSubtype,
                   prefixIcon: const Icon(Icons.category_outlined),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
                 items: <DropdownMenuItem<String>>[
                   DropdownMenuItem<String>(
@@ -974,7 +984,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                     },
                   ),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
               ),
             ),
@@ -986,8 +996,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           children: <Widget>[
             Expanded(
               child: SwitchListTile.adaptive(
-                title: Text(l10n.aiPlatformFormulaOcr),
-                subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle),
+                dense: true,
+                title: Text(l10n.aiPlatformFormulaOcr, style: const TextStyle(fontSize: 13)),
+                subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle, style: const TextStyle(fontSize: 11)),
                 value: _mineruLocalFormulaOcr,
                 onChanged: (bool value) {
                   setState(() {
@@ -998,8 +1009,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ),
             Expanded(
               child: SwitchListTile.adaptive(
-                title: Text(l10n.aiPlatformTableOcr),
-                subtitle: Text(l10n.aiPlatformTableOcrSubtitle),
+                dense: true,
+                title: Text(l10n.aiPlatformTableOcr, style: const TextStyle(fontSize: 13)),
+                subtitle: Text(l10n.aiPlatformTableOcrSubtitle, style: const TextStyle(fontSize: 11)),
                 value: _mineruLocalTableOcr,
                 onChanged: (bool value) {
                   setState(() {
@@ -1413,7 +1425,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             decoration: InputDecoration(
               labelText: l10n.setupWizardSelectLlmPlatform,
               border: const OutlineInputBorder(),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
             items: llmPlatforms.map(
               (AIPlatformInfo p) {
@@ -1935,7 +1947,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       decoration: InputDecoration(
         labelText: l10n.aiPlatformThinkingMode,
         border: const OutlineInputBorder(),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       ),
       items: options
           .map(
@@ -2032,7 +2044,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   /// MinerU Cloud "Requires API Key" switch
   Widget _buildMineruHasApiKeySwitch(AppLocalizations l10n, {String? tokenLink}) {
     return SizedBox(
-      height: 60,
+      height: 36,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
         decoration: BoxDecoration(
@@ -2047,43 +2059,28 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           children: <Widget>[
           Icon(
             _mineruHasApiKey ? Icons.vpn_key : Icons.vpn_key_off_outlined,
-            size: 20,
+            size: 18,
             color: Theme.of(context).colorScheme.primary,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  l10n.aiPlatformHasApiKey,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  l10n.aiPlatformHasApiKeyHint,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+            child: Text(
+              l10n.aiPlatformHasApiKey,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           if (tokenLink != null && tokenLink.isNotEmpty)
             TextButton(
               onPressed: () => _openApiKeyUrl(tokenLink),
               style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: const Size(0, 28),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                minimumSize: const Size(0, 24),
               ),
               child: Text(
                 l10n.aiPlatformGetApiKey,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: 12,
                   color: Colors.blue.shade700,
                   decoration: TextDecoration.underline,
                 ),
@@ -2106,7 +2103,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   /// MinerU Local "Requires API Key" switch
   Widget _buildMineruLocalHasApiKeySwitch(AppLocalizations l10n, {String? tokenLink}) {
     return SizedBox(
-      height: 60,
+      height: 36,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
         decoration: BoxDecoration(
@@ -2121,43 +2118,28 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           children: <Widget>[
           Icon(
             _mineruLocalHasApiKey ? Icons.vpn_key : Icons.vpn_key_off_outlined,
-            size: 20,
+            size: 18,
             color: Theme.of(context).colorScheme.primary,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  l10n.aiPlatformHasApiKey,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  l10n.aiPlatformHasApiKeyHint,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+            child: Text(
+              l10n.aiPlatformHasApiKey,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           if (tokenLink != null && tokenLink.isNotEmpty)
             TextButton(
               onPressed: () => _openApiKeyUrl(tokenLink),
               style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: const Size(0, 28),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                minimumSize: const Size(0, 24),
               ),
               child: Text(
                 l10n.aiPlatformGetApiKey,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: 12,
                   color: Colors.blue.shade700,
                   decoration: TextDecoration.underline,
                 ),

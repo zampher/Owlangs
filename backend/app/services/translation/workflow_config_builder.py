@@ -397,6 +397,8 @@ class WorkflowConfigBuilder:
         if convert_engine == 'mineru':
             from converter.x2md.converter_mineru import ConverterMineruConfig
             from backend.config.secrets_manager import SecretsManager
+            from backend.config.config_loader import get_unified_config
+            unified = get_unified_config()
             secrets = SecretsManager()
             # Prefer current token from SecretsManager so Re-Extract uses updated key after user fixes it
             mineru_token = (secrets.get_mineru_token() or '').strip()
@@ -409,17 +411,19 @@ class WorkflowConfigBuilder:
                 logger.debug(LogModule.CONFIG, f"MinerU API Key from secrets: provided (used for conversion/Re-Extract)")
             if not mineru_token:
                 logger.warning(LogModule.CONFIG, "[WARNING] MinerU API Key not found in secrets. Please configure in Settings -> AI Platform -> MinerU.")
-            
+
             formula_ocr = getattr(payload, 'formula_ocr', True) if not isinstance(payload, dict) else payload.get('formula_ocr', True)
             table_ocr = getattr(payload, 'table_ocr', True) if not isinstance(payload, dict) else payload.get('table_ocr', True)
-            model_version = getattr(payload, 'model_version', 'hybrid-auto-engine') if not isinstance(payload, dict) else payload.get('model_version', 'hybrid-auto-engine')
+            # Read model_version from platforms.json (source of truth), fall back to payload, then default
+            platform_cfg = unified.get_ai_platform_config('mineru')
+            model_version = (platform_cfg or {}).get('model', '') or ''
+            if not model_version:
+                model_version = getattr(payload, 'model_version', 'hybrid-auto-engine') if not isinstance(payload, dict) else payload.get('model_version', 'hybrid-auto-engine')
             ocr_language = (payload.get('ocr_language') if isinstance(payload, dict) else getattr(payload, 'ocr_language', None)) or None
             if not (ocr_language and str(ocr_language).strip()):
                 ocr_language = "auto"
             else:
                 ocr_language = str(ocr_language).strip()
-            from backend.config.config_loader import get_unified_config
-            unified = get_unified_config()
             pdf_cfg = unified.system.pdf
             logger.debug(LogModule.CONFIG, f"Creating ConverterMineruConfig: API Key={'***' if mineru_token else 'empty'}, formula_ocr={formula_ocr}, table_ocr={table_ocr}, model_version={model_version}, ocr_language={ocr_language}")
             if not mineru_token:
@@ -443,7 +447,10 @@ class WorkflowConfigBuilder:
             base_url = (platform_cfg or {}).get('url') or 'http://localhost:8080/api/v4'
             mineru_token = (unified.get_platform_api_key('mineru_local') or '').strip()
             formula_ocr = getattr(payload, 'formula_ocr', True) if not isinstance(payload, dict) else payload.get('formula_ocr', True)
-            model_version = getattr(payload, 'model_version', 'hybrid-auto-engine') if not isinstance(payload, dict) else payload.get('model_version', 'hybrid-auto-engine')
+            # Read model_version from platforms.json (source of truth), fall back to payload, then default
+            model_version = (platform_cfg or {}).get('model', '') or ''
+            if not model_version:
+                model_version = getattr(payload, 'model_version', 'hybrid-auto-engine') if not isinstance(payload, dict) else payload.get('model_version', 'hybrid-auto-engine')
             ocr_language = (payload.get('ocr_language') if isinstance(payload, dict) else getattr(payload, 'ocr_language', None)) or None
             if not (ocr_language and str(ocr_language).strip()):
                 ocr_language = "auto"

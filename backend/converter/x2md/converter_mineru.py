@@ -1025,7 +1025,7 @@ class ConverterMineru(X2MarkdownConverter):
     
     def convert(self, document: Document) -> MarkdownDocument:
         """Convert document to markdown."""
-        self.logger.info(LogModule.WORKFLOW, f"Converting document with MinerU, backend: {type(self.backend).__name__}")
+        self.logger.info(LogModule.WORKFLOW, f"Converting document with MinerU, backend: {type(self.backend).__name__}, model: {self.config.model_version}")
         time1 = time.time()
 
         # Check if PDF splitting is needed
@@ -1172,7 +1172,7 @@ class ConverterMineru(X2MarkdownConverter):
     
     async def convert_async(self, document: Document) -> MarkdownDocument:
         """Async convert document to markdown."""
-        self.logger.info(LogModule.WORKFLOW, f"Converting document with MinerU (async), backend: {type(self.backend).__name__}")
+        self.logger.info(LogModule.WORKFLOW, f"Converting document with MinerU (async), backend: {type(self.backend).__name__}, model: {self.config.model_version}")
         time1 = time.time()
 
         # Check if PDF splitting is needed
