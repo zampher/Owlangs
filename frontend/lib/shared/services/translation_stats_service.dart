@@ -3,8 +3,6 @@
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:dio/dio.dart';
-import '../../app/app_config.dart';
 import '../utils/app_logger.dart';
 import 'config_service.dart';
 
@@ -109,30 +107,13 @@ class TranslationStatsService {
 
   /// Get statistics from backend API (Web only)
   Future<TranslationStats> _getStatsFromApi({int maxRetries = 2}) async {
+    // Reuse ConfigService's shared Dio to avoid creating redundant HTTP connections
+    // that compete for Chrome's limited per-origin connection pool.
+    final dio = ConfigService().dio;
+
     // Retry logic for startup requests (backend may not be ready immediately)
     for (int attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        final dio = Dio(
-          BaseOptions(
-            baseUrl: AppConfig.baseUrl,
-            // CRITICAL: Increase timeout for startup requests to handle slow backend initialization
-            // Increased to 30 seconds to handle backend startup delays
-            connectTimeout: const Duration(seconds: 30),
-            // Increased to 30 seconds to handle backend processing delays
-            receiveTimeout: const Duration(seconds: 30),
-            headers: <String, dynamic>{
-              'Content-Type': 'application/json',
-            },
-          ),
-        );
-
-        // Add auth header if available
-        final configService = ConfigService();
-        final authHeader = configService.authorizationHeader;
-        if (authHeader != null) {
-          dio.options.headers['Authorization'] = authHeader;
-        }
-
         final response = await dio.get('/api/settings/static-json');
         if (response.statusCode == 200 &&
             response.data is Map<String, dynamic>) {
@@ -215,26 +196,7 @@ class TranslationStatsService {
   /// Save statistics to backend API (Web only)
   Future<void> _saveStatsToApi(TranslationStats stats) async {
     try {
-      final dio = Dio(
-        BaseOptions(
-          baseUrl: AppConfig.baseUrl,
-          // CRITICAL: Increase timeout for startup requests to handle slow backend initialization
-          // Increased to 15 seconds to handle backend startup delays
-          connectTimeout: const Duration(seconds: 15),
-          // Increased to 15 seconds to handle backend processing delays
-          receiveTimeout: const Duration(seconds: 15),
-          headers: <String, dynamic>{
-            'Content-Type': 'application/json',
-          },
-        ),
-      );
-
-      // Add auth header if available
-      final configService = ConfigService();
-      final authHeader = configService.authorizationHeader;
-      if (authHeader != null) {
-        dio.options.headers['Authorization'] = authHeader;
-      }
+      final dio = ConfigService().dio;
 
       // Read current data first to preserve other fields
       Map<String, dynamic> data;
@@ -296,26 +258,7 @@ class TranslationStatsService {
     }
 
     try {
-      final dio = Dio(
-        BaseOptions(
-          baseUrl: AppConfig.baseUrl,
-          // CRITICAL: Increase timeout for startup requests to handle slow backend initialization
-          // Increased to 15 seconds to handle backend startup delays
-          connectTimeout: const Duration(seconds: 15),
-          // Increased to 15 seconds to handle backend processing delays
-          receiveTimeout: const Duration(seconds: 15),
-          headers: <String, dynamic>{
-            'Content-Type': 'application/json',
-          },
-        ),
-      );
-
-      // Add auth header if available
-      final configService = ConfigService();
-      final authHeader = configService.authorizationHeader;
-      if (authHeader != null) {
-        dio.options.headers['Authorization'] = authHeader;
-      }
+      final dio = ConfigService().dio;
 
       final response = await dio.get('/api/settings/paths');
       if (response.statusCode == 200 && response.data is Map<String, dynamic>) {

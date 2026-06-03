@@ -101,8 +101,54 @@ class ConfigService {
   // Track if we've already logged config load to avoid duplicate logs
   bool _hasLoggedConfigLoad = false;
 
-  /// Get application configuration including AI platforms
-  Future<Map<String, dynamic>?> getAppConfig({int maxRetries = 2}) async {
+  /// Expose shared Dio instance so other services can reuse the same HTTP connection pool.
+  Dio get dio => _dio;
+
+  // In-flight dedup: multiple concurrent callers share one Future
+  Future<Map<String, dynamic>?>? _inFlightAppConfigFuture;
+  Future<Map<String, dynamic>?>? _inFlightSecretsConfigFuture;
+
+  // Short-lived cache for getAppConfig to avoid repeated requests at startup
+  Map<String, dynamic>? _cachedAppConfig;
+  DateTime? _appConfigCacheTime;
+  static const Duration _appConfigCacheTtl = Duration(seconds: 30);
+
+  /// Get application configuration including AI platforms.
+  ///
+  /// Uses in-flight dedup (concurrent callers share one request) and a short-lived
+  /// cache (30s TTL) to reduce redundant network calls during startup.
+  Future<Map<String, dynamic>?> getAppConfig({
+    int maxRetries = 2,
+    bool forceRefresh = false,
+  }) async {
+    // Return cached result if valid
+    if (!forceRefresh && _cachedAppConfig != null && _appConfigCacheTime != null) {
+      final age = DateTime.now().difference(_appConfigCacheTime!);
+      if (age < _appConfigCacheTtl) {
+        return _cachedAppConfig;
+      }
+    }
+
+    // In-flight dedup: if a request is already in progress, wait on it
+    if (_inFlightAppConfigFuture != null) {
+      return _inFlightAppConfigFuture;
+    }
+
+    _inFlightAppConfigFuture = _doGetAppConfig(maxRetries: maxRetries);
+    try {
+      final result = await _inFlightAppConfigFuture;
+      // Cache the result
+      if (result != null) {
+        _cachedAppConfig = result;
+        _appConfigCacheTime = DateTime.now();
+      }
+      return result;
+    } finally {
+      _inFlightAppConfigFuture = null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> _doGetAppConfig({int maxRetries = 2}) async {
     // Gate by auth config: if web要求登录且未携带token，则不请求，直接返回null
     await loadAuthConfigOnce();
     final needsAuth = _authRequired ?? false;
@@ -161,8 +207,24 @@ class ConfigService {
     return null;
   }
 
-  /// Get secrets configuration including API keys
+  /// Get secrets configuration including API keys.
+  ///
+  /// Uses in-flight dedup so concurrent callers share one request.
   Future<Map<String, dynamic>?> getSecretsConfig() async {
+    // In-flight dedup: if a request is already in progress, wait on it
+    if (_inFlightSecretsConfigFuture != null) {
+      return _inFlightSecretsConfigFuture;
+    }
+
+    _inFlightSecretsConfigFuture = _doGetSecretsConfig();
+    try {
+      return await _inFlightSecretsConfigFuture;
+    } finally {
+      _inFlightSecretsConfigFuture = null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> _doGetSecretsConfig() async {
     try {
       final response = await _dio.get('/auth/app-config/raw-secrets');
       if (response.statusCode == 200) {
