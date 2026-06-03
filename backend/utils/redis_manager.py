@@ -8,6 +8,7 @@ import shutil
 import time
 import signal
 import atexit
+import threading
 from pathlib import Path
 from typing import Optional
 import redis
@@ -187,13 +188,29 @@ class LocalRedisManager:
         return None
     
     def _is_redis_running(self) -> bool:
-        """Check if Redis is already running (optimized with shorter timeout)"""
-        try:
-            client = redis.Redis(host=self.redis_host, port=self.redis_port, socket_connect_timeout=0.5)
-            client.ping()
-            return True
-        except:
-            return False
+        """Check if Redis is already running.
+
+        Uses a thread-level timeout so that a stalled TCP connect (e.g. Windows
+        firewall silently dropping SYN to 6379) does not block startup for 20+ seconds.
+        """
+        result = [False]
+
+        def _try():
+            try:
+                client = redis.Redis(
+                    host=self.redis_host,
+                    port=self.redis_port,
+                    socket_connect_timeout=1.0,
+                )
+                client.ping()
+                result[0] = True
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_try, daemon=True)
+        t.start()
+        t.join(timeout=2.0)  # Hard timeout: never block startup longer than 2 seconds
+        return result[0]
     
     def start_redis(self) -> bool:
         """Start Redis service"""
