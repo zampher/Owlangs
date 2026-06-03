@@ -4,6 +4,9 @@
 
 A powerful AI-powered document translation platform designed for professionals who need accurate, format-preserving translations across a wide range of document types. **You can run it fully on-premise** (local backend, Ollama, or other OpenAI-compatible endpoints) or connect to cloud AI providers.
 
+<img width="1000" height="1000" alt="40db738c439a580cc6fa49c0b3b0fc86" src="https://github.com/user-attachments/assets/131afdf3-c0a2-4b1f-a4a3-03c170b678d8" />
+
+
 ## Key Features
 
 ### Multi-Format Support with High-Fidelity Layout
