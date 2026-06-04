@@ -1,7 +1,6 @@
 import copy
 import json
 import os
-import logging
 import secrets
 from dataclasses import dataclass
 from enum import Enum
@@ -10,8 +9,7 @@ from typing import Dict, Optional, Tuple
 import hashlib
 
 from logger.logger import LogModule
-
-logger = logging.getLogger(__name__)
+from backend.logger import unified_logger as logger
 
 
 class LocalUserRole(str, Enum):

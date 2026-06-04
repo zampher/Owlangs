@@ -288,9 +288,7 @@ class XlsxTranslator(AiTranslator):
                 chunk_to_segment_map_for_recording = metadata.get("chunk_to_segment_map")
             except Exception as e:
                 # Fallback to direct translation if helper fails
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.warning(LogModule.TRANS, f"[XLSX_TRANSLATOR] Failed to use chunk translation helper: {e}, falling back to direct translation")
+                self.logger.warning(LogModule.TRANS, f"[XLSX_TRANSLATOR] Failed to use chunk translation helper: {e}, falling back to direct translation")
                 translated_segments = self.translate_agent.send_segments(texts_for_translation, self.chunk_size)
         else:
             translated_segments = texts_for_translation
@@ -566,9 +564,7 @@ class XlsxTranslator(AiTranslator):
                 chunk_to_segment_map_for_recording = metadata.get("chunk_to_segment_map")
             except Exception as e:
                 # Fallback to direct translation if helper fails
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.warning(LogModule.TRANS, f"[XLSX_TRANSLATOR] Failed to use chunk translation helper: {e}, falling back to direct translation")
+                self.logger.warning(LogModule.TRANS, f"[XLSX_TRANSLATOR] Failed to use chunk translation helper: {e}, falling back to direct translation")
                 translated_segments = await self.translate_agent.send_segments_async(texts_for_translation, self.chunk_size, progress_callback)
         else:
             translated_segments = texts_for_translation

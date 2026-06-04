@@ -13,8 +13,7 @@ import logging
 from typing import Optional
 
 from logger.logger import LogModule
-
-logger = logging.getLogger(__name__)
+from backend.logger import unified_logger as logger
 
 
 class PasswordManager:

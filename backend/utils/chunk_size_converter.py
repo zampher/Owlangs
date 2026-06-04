@@ -9,12 +9,11 @@ This module helps calculate the maximum text content tokens allowed within that 
 All calculations are token-based, not byte-based.
 """
 
-import logging
+from backend.logger import unified_logger as logger
+from logger.logger import LogModule
 from typing import Optional
 
 from utils.token_estimator import estimate_tokens
-
-logger = logging.getLogger(__name__)
 
 
 def get_text_content_token_limit(
