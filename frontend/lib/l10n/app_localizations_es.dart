@@ -2339,6 +2339,131 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get settingsLocalUsersTitle => 'Usuarios locales';
+
+  @override
+  String get settingsLocalUsersAddUser => 'Agregar usuario';
+
+  @override
+  String get settingsLocalUsersNoUsers => 'No se encontraron usuarios locales.';
+
+  @override
+  String get settingsLocalUsersDialogAddTitle => 'Agregar usuario local';
+
+  @override
+  String get settingsLocalUsersDialogEditTitle => 'Editar usuario local';
+
+  @override
+  String get settingsLocalUsersFieldUsername => 'Nombre de usuario';
+
+  @override
+  String get settingsLocalUsersFieldDisplayName =>
+      'Nombre para mostrar (opcional)';
+
+  @override
+  String get settingsLocalUsersFieldEmail => 'Correo electrónico (opcional)';
+
+  @override
+  String get settingsLocalUsersFieldRole => 'Rol';
+
+  @override
+  String get settingsLocalUsersRoleUser => 'Usuario';
+
+  @override
+  String get settingsLocalUsersRoleAdmin => 'Administrador';
+
+  @override
+  String get settingsLocalUsersFieldPassword => 'Contraseña';
+
+  @override
+  String get settingsLocalUsersPasswordHelper =>
+      '8-128 caracteres, mayúscula, minúscula, dígito';
+
+  @override
+  String get settingsLocalUsersValidationUsernameRequired =>
+      'Se requiere nombre de usuario';
+
+  @override
+  String get settingsLocalUsersValidationPasswordRequired =>
+      'Se requiere contraseña';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooShort =>
+      'La contraseña debe tener al menos 8 caracteres';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooLong =>
+      'La contraseña debe tener como máximo 128 caracteres';
+
+  @override
+  String get settingsLocalUsersValidationPasswordComplexity =>
+      'La contraseña debe contener mayúsculas, minúsculas y dígitos';
+
+  @override
+  String get settingsLocalUsersOperationFailed => 'Operación fallida';
+
+  @override
+  String get settingsLocalUsersResetPassword => 'Restablecer contraseña';
+
+  @override
+  String settingsLocalUsersResetPasswordTitle(Object username) {
+    return 'Restablecer contraseña: $username';
+  }
+
+  @override
+  String get settingsLocalUsersFieldNewPassword => 'Nueva contraseña';
+
+  @override
+  String get settingsLocalUsersPasswordResetSuccess =>
+      'Contraseña restablecida con éxito';
+
+  @override
+  String get settingsLocalUsersPasswordResetFailed =>
+      'Error al restablecer la contraseña';
+
+  @override
+  String get settingsLocalUsersDeleteUser => 'Eliminar';
+
+  @override
+  String settingsLocalUsersDeleteUserTitle(Object username) {
+    return 'Eliminar usuario: $username';
+  }
+
+  @override
+  String get settingsLocalUsersDeleteConfirmation =>
+      'Esta acción eliminará permanentemente al usuario del almacén local de usuarios. Esto no se puede deshacer.';
+
+  @override
+  String get settingsLocalUsersDeleteSuccess => 'Usuario eliminado';
+
+  @override
+  String get settingsLocalUsersDeleteFailed => 'Error al eliminar usuario';
+
+  @override
+  String get settingsLocalUsersEdit => 'Editar';
+
+  @override
+  String get settingsLocalUsersCancel => 'Cancelar';
+
+  @override
+  String get settingsLocalUsersSave => 'Guardar';
+
+  @override
+  String get settingsLocalUsersConfirm => 'Confirmar';
+
+  @override
+  String get settingsLocalUsersTableUsername => 'Nombre de usuario';
+
+  @override
+  String get settingsLocalUsersTableDisplayName => 'Nombre para mostrar';
+
+  @override
+  String get settingsLocalUsersTableEmail => 'Correo electrónico';
+
+  @override
+  String get settingsLocalUsersTableRole => 'Rol';
+
+  @override
   String get settingsLdapEnabled => 'Habilitar inicio de sesión LDAP';
 
   @override

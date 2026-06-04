@@ -2234,6 +2234,122 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get settingsLocalUsersTitle => '로컬 사용자';
+
+  @override
+  String get settingsLocalUsersAddUser => '사용자 추가';
+
+  @override
+  String get settingsLocalUsersNoUsers => '로컬 사용자가 없습니다.';
+
+  @override
+  String get settingsLocalUsersDialogAddTitle => '로컬 사용자 추가';
+
+  @override
+  String get settingsLocalUsersDialogEditTitle => '로컬 사용자 편집';
+
+  @override
+  String get settingsLocalUsersFieldUsername => '사용자 이름';
+
+  @override
+  String get settingsLocalUsersFieldDisplayName => '표시 이름 (선택 사항)';
+
+  @override
+  String get settingsLocalUsersFieldEmail => '이메일 (선택 사항)';
+
+  @override
+  String get settingsLocalUsersFieldRole => '역할';
+
+  @override
+  String get settingsLocalUsersRoleUser => '사용자';
+
+  @override
+  String get settingsLocalUsersRoleAdmin => '관리자';
+
+  @override
+  String get settingsLocalUsersFieldPassword => '비밀번호';
+
+  @override
+  String get settingsLocalUsersPasswordHelper => '8-128자, 대문자, 소문자, 숫자 포함';
+
+  @override
+  String get settingsLocalUsersValidationUsernameRequired => '사용자 이름이 필요합니다';
+
+  @override
+  String get settingsLocalUsersValidationPasswordRequired => '비밀번호가 필요합니다';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooShort => '비밀번호는 8자 이상이어야 합니다';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooLong => '비밀번호는 128자를 초과할 수 없습니다';
+
+  @override
+  String get settingsLocalUsersValidationPasswordComplexity => '비밀번호에는 대문자, 소문자, 숫자가 포함되어야 합니다';
+
+  @override
+  String get settingsLocalUsersOperationFailed => '작업 실패';
+
+  @override
+  String get settingsLocalUsersResetPassword => '비밀번호 재설정';
+
+  @override
+  String settingsLocalUsersResetPasswordTitle(Object username) {
+    return '비밀번호 재설정: $username';
+  }
+
+  @override
+  String get settingsLocalUsersFieldNewPassword => '새 비밀번호';
+
+  @override
+  String get settingsLocalUsersPasswordResetSuccess => '비밀번호가 재설정되었습니다';
+
+  @override
+  String get settingsLocalUsersPasswordResetFailed => '비밀번호 재설정 실패';
+
+  @override
+  String get settingsLocalUsersDeleteUser => '삭제';
+
+  @override
+  String settingsLocalUsersDeleteUserTitle(Object username) {
+    return '사용자 삭제: $username';
+  }
+
+  @override
+  String get settingsLocalUsersDeleteConfirmation =>
+      '이 작업은 로컬 사용자 저장소에서 사용자를 영구적으로 삭제합니다. 이 작업은 취소할 수 없습니다.';
+
+  @override
+  String get settingsLocalUsersDeleteSuccess => '사용자가 삭제되었습니다';
+
+  @override
+  String get settingsLocalUsersDeleteFailed => '사용자 삭제 실패';
+
+  @override
+  String get settingsLocalUsersEdit => '편집';
+
+  @override
+  String get settingsLocalUsersCancel => '취소';
+
+  @override
+  String get settingsLocalUsersSave => '저장';
+
+  @override
+  String get settingsLocalUsersConfirm => '확인';
+
+  @override
+  String get settingsLocalUsersTableUsername => '사용자 이름';
+
+  @override
+  String get settingsLocalUsersTableDisplayName => '표시 이름';
+
+  @override
+  String get settingsLocalUsersTableEmail => '이메일';
+
+  @override
+  String get settingsLocalUsersTableRole => '역할';
+
+  @override
   String get settingsLdapEnabled => 'LDAP 로그인 사용';
 
   @override

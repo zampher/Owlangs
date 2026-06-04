@@ -4058,6 +4058,216 @@ abstract class AppLocalizations {
   /// **'Save failed: {message}'**
   String settingsUserManagementSaveFailed(Object message);
 
+  /// No description provided for @settingsLocalUsersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Local Users'**
+  String get settingsLocalUsersTitle;
+
+  /// No description provided for @settingsLocalUsersAddUser.
+  ///
+  /// In en, this message translates to:
+  /// **'Add user'**
+  String get settingsLocalUsersAddUser;
+
+  /// No description provided for @settingsLocalUsersNoUsers.
+  ///
+  /// In en, this message translates to:
+  /// **'No local users found.'**
+  String get settingsLocalUsersNoUsers;
+
+  /// No description provided for @settingsLocalUsersDialogAddTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add local user'**
+  String get settingsLocalUsersDialogAddTitle;
+
+  /// No description provided for @settingsLocalUsersDialogEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit local user'**
+  String get settingsLocalUsersDialogEditTitle;
+
+  /// No description provided for @settingsLocalUsersFieldUsername.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get settingsLocalUsersFieldUsername;
+
+  /// No description provided for @settingsLocalUsersFieldDisplayName.
+  ///
+  /// In en, this message translates to:
+  /// **'Display name (optional)'**
+  String get settingsLocalUsersFieldDisplayName;
+
+  /// No description provided for @settingsLocalUsersFieldEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Email (optional)'**
+  String get settingsLocalUsersFieldEmail;
+
+  /// No description provided for @settingsLocalUsersFieldRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Role'**
+  String get settingsLocalUsersFieldRole;
+
+  /// No description provided for @settingsLocalUsersRoleUser.
+  ///
+  /// In en, this message translates to:
+  /// **'User'**
+  String get settingsLocalUsersRoleUser;
+
+  /// No description provided for @settingsLocalUsersRoleAdmin.
+  ///
+  /// In en, this message translates to:
+  /// **'Admin'**
+  String get settingsLocalUsersRoleAdmin;
+
+  /// No description provided for @settingsLocalUsersFieldPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get settingsLocalUsersFieldPassword;
+
+  /// No description provided for @settingsLocalUsersPasswordHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'8-128 chars, upper, lower, digit'**
+  String get settingsLocalUsersPasswordHelper;
+
+  /// No description provided for @settingsLocalUsersValidationUsernameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Username is required'**
+  String get settingsLocalUsersValidationUsernameRequired;
+
+  /// No description provided for @settingsLocalUsersValidationPasswordRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Password is required'**
+  String get settingsLocalUsersValidationPasswordRequired;
+
+  String get settingsLocalUsersValidationPasswordTooShort;
+
+  String get settingsLocalUsersValidationPasswordTooLong;
+
+  String get settingsLocalUsersValidationPasswordComplexity;
+
+  /// No description provided for @settingsLocalUsersOperationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Operation failed'**
+  String get settingsLocalUsersOperationFailed;
+
+  /// No description provided for @settingsLocalUsersResetPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset password'**
+  String get settingsLocalUsersResetPassword;
+
+  /// No description provided for @settingsLocalUsersResetPasswordTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset password: {username}'**
+  String settingsLocalUsersResetPasswordTitle(Object username);
+
+  /// No description provided for @settingsLocalUsersFieldNewPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'New password'**
+  String get settingsLocalUsersFieldNewPassword;
+
+  /// No description provided for @settingsLocalUsersPasswordResetSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Password reset successfully'**
+  String get settingsLocalUsersPasswordResetSuccess;
+
+  /// No description provided for @settingsLocalUsersPasswordResetFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to reset password'**
+  String get settingsLocalUsersPasswordResetFailed;
+
+  /// No description provided for @settingsLocalUsersDeleteUser.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get settingsLocalUsersDeleteUser;
+
+  /// No description provided for @settingsLocalUsersDeleteUserTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete user: {username}'**
+  String settingsLocalUsersDeleteUserTitle(Object username);
+
+  /// No description provided for @settingsLocalUsersDeleteConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'This action will permanently delete the user from local user store. This cannot be undone.'**
+  String get settingsLocalUsersDeleteConfirmation;
+
+  /// No description provided for @settingsLocalUsersDeleteSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'User deleted'**
+  String get settingsLocalUsersDeleteSuccess;
+
+  /// No description provided for @settingsLocalUsersDeleteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to delete user'**
+  String get settingsLocalUsersDeleteFailed;
+
+  /// No description provided for @settingsLocalUsersEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get settingsLocalUsersEdit;
+
+  /// No description provided for @settingsLocalUsersCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get settingsLocalUsersCancel;
+
+  /// No description provided for @settingsLocalUsersSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get settingsLocalUsersSave;
+
+  /// No description provided for @settingsLocalUsersConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get settingsLocalUsersConfirm;
+
+  /// No description provided for @settingsLocalUsersTableUsername.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get settingsLocalUsersTableUsername;
+
+  /// No description provided for @settingsLocalUsersTableDisplayName.
+  ///
+  /// In en, this message translates to:
+  /// **'Display name'**
+  String get settingsLocalUsersTableDisplayName;
+
+  /// No description provided for @settingsLocalUsersTableEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Email'**
+  String get settingsLocalUsersTableEmail;
+
+  /// No description provided for @settingsLocalUsersTableRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Role'**
+  String get settingsLocalUsersTableRole;
+
   /// No description provided for @settingsLdapEnabled.
   ///
   /// In en, this message translates to:

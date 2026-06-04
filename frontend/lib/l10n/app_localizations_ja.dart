@@ -2230,6 +2230,122 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get settingsLocalUsersTitle => 'ローカルユーザー';
+
+  @override
+  String get settingsLocalUsersAddUser => 'ユーザー追加';
+
+  @override
+  String get settingsLocalUsersNoUsers => 'ローカルユーザーが見つかりません。';
+
+  @override
+  String get settingsLocalUsersDialogAddTitle => 'ローカルユーザー追加';
+
+  @override
+  String get settingsLocalUsersDialogEditTitle => 'ローカルユーザー編集';
+
+  @override
+  String get settingsLocalUsersFieldUsername => 'ユーザー名';
+
+  @override
+  String get settingsLocalUsersFieldDisplayName => '表示名（任意）';
+
+  @override
+  String get settingsLocalUsersFieldEmail => 'メール（任意）';
+
+  @override
+  String get settingsLocalUsersFieldRole => '役割';
+
+  @override
+  String get settingsLocalUsersRoleUser => 'ユーザー';
+
+  @override
+  String get settingsLocalUsersRoleAdmin => '管理者';
+
+  @override
+  String get settingsLocalUsersFieldPassword => 'パスワード';
+
+  @override
+  String get settingsLocalUsersPasswordHelper => '8〜128文字、大文字・小文字・数字を含む';
+
+  @override
+  String get settingsLocalUsersValidationUsernameRequired => 'ユーザー名が必要です';
+
+  @override
+  String get settingsLocalUsersValidationPasswordRequired => 'パスワードが必要です';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooShort => 'パスワードは8文字以上必要です';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooLong => 'パスワードは128文字以内で入力してください';
+
+  @override
+  String get settingsLocalUsersValidationPasswordComplexity => 'パスワードには大文字、小文字、数字を含める必要があります';
+
+  @override
+  String get settingsLocalUsersOperationFailed => '操作に失敗しました';
+
+  @override
+  String get settingsLocalUsersResetPassword => 'パスワードをリセット';
+
+  @override
+  String settingsLocalUsersResetPasswordTitle(Object username) {
+    return 'パスワードリセット: $username';
+  }
+
+  @override
+  String get settingsLocalUsersFieldNewPassword => '新しいパスワード';
+
+  @override
+  String get settingsLocalUsersPasswordResetSuccess => 'パスワードがリセットされました';
+
+  @override
+  String get settingsLocalUsersPasswordResetFailed => 'パスワードのリセットに失敗しました';
+
+  @override
+  String get settingsLocalUsersDeleteUser => '削除';
+
+  @override
+  String settingsLocalUsersDeleteUserTitle(Object username) {
+    return 'ユーザー削除: $username';
+  }
+
+  @override
+  String get settingsLocalUsersDeleteConfirmation =>
+      'この操作により、ローカルユーザーストアからユーザーが完全に削除されます。この操作は元に戻せません。';
+
+  @override
+  String get settingsLocalUsersDeleteSuccess => 'ユーザーが削除されました';
+
+  @override
+  String get settingsLocalUsersDeleteFailed => 'ユーザーの削除に失敗しました';
+
+  @override
+  String get settingsLocalUsersEdit => '編集';
+
+  @override
+  String get settingsLocalUsersCancel => 'キャンセル';
+
+  @override
+  String get settingsLocalUsersSave => '保存';
+
+  @override
+  String get settingsLocalUsersConfirm => '確認';
+
+  @override
+  String get settingsLocalUsersTableUsername => 'ユーザー名';
+
+  @override
+  String get settingsLocalUsersTableDisplayName => '表示名';
+
+  @override
+  String get settingsLocalUsersTableEmail => 'メール';
+
+  @override
+  String get settingsLocalUsersTableRole => '役割';
+
+  @override
   String get settingsLdapEnabled => 'LDAP ログインを有効にする';
 
   @override

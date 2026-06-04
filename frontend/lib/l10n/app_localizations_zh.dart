@@ -2217,6 +2217,122 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get settingsLocalUsersTitle => '本地用户';
+
+  @override
+  String get settingsLocalUsersAddUser => '添加用户';
+
+  @override
+  String get settingsLocalUsersNoUsers => '未找到本地用户。';
+
+  @override
+  String get settingsLocalUsersDialogAddTitle => '添加本地用户';
+
+  @override
+  String get settingsLocalUsersDialogEditTitle => '编辑本地用户';
+
+  @override
+  String get settingsLocalUsersFieldUsername => '用户名';
+
+  @override
+  String get settingsLocalUsersFieldDisplayName => '显示名称（可选）';
+
+  @override
+  String get settingsLocalUsersFieldEmail => '邮箱（可选）';
+
+  @override
+  String get settingsLocalUsersFieldRole => '角色';
+
+  @override
+  String get settingsLocalUsersRoleUser => '用户';
+
+  @override
+  String get settingsLocalUsersRoleAdmin => '管理员';
+
+  @override
+  String get settingsLocalUsersFieldPassword => '密码';
+
+  @override
+  String get settingsLocalUsersPasswordHelper => '8-128位字符，需包含大写、小写和数字';
+
+  @override
+  String get settingsLocalUsersValidationUsernameRequired => '用户名为必填项';
+
+  @override
+  String get settingsLocalUsersValidationPasswordRequired => '密码为必填项';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooShort => '密码长度至少8位';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooLong => '密码长度不能超过128位';
+
+  @override
+  String get settingsLocalUsersValidationPasswordComplexity => '密码必须包含大写字母、小写字母和数字';
+
+  @override
+  String get settingsLocalUsersOperationFailed => '操作失败';
+
+  @override
+  String get settingsLocalUsersResetPassword => '重置密码';
+
+  @override
+  String settingsLocalUsersResetPasswordTitle(Object username) {
+    return '重置密码：$username';
+  }
+
+  @override
+  String get settingsLocalUsersFieldNewPassword => '新密码';
+
+  @override
+  String get settingsLocalUsersPasswordResetSuccess => '密码重置成功';
+
+  @override
+  String get settingsLocalUsersPasswordResetFailed => '密码重置失败';
+
+  @override
+  String get settingsLocalUsersDeleteUser => '删除';
+
+  @override
+  String settingsLocalUsersDeleteUserTitle(Object username) {
+    return '删除用户：$username';
+  }
+
+  @override
+  String get settingsLocalUsersDeleteConfirmation =>
+      '此操作将永久从本地用户存储中删除该用户。此操作不可撤销。';
+
+  @override
+  String get settingsLocalUsersDeleteSuccess => '用户已删除';
+
+  @override
+  String get settingsLocalUsersDeleteFailed => '删除用户失败';
+
+  @override
+  String get settingsLocalUsersEdit => '编辑';
+
+  @override
+  String get settingsLocalUsersCancel => '取消';
+
+  @override
+  String get settingsLocalUsersSave => '保存';
+
+  @override
+  String get settingsLocalUsersConfirm => '确认';
+
+  @override
+  String get settingsLocalUsersTableUsername => '用户名';
+
+  @override
+  String get settingsLocalUsersTableDisplayName => '显示名称';
+
+  @override
+  String get settingsLocalUsersTableEmail => '邮箱';
+
+  @override
+  String get settingsLocalUsersTableRole => '角色';
+
+  @override
   String get settingsLdapEnabled => '启用 LDAP 登录';
 
   @override
