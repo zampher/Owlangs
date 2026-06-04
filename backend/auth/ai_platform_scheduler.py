@@ -18,13 +18,14 @@ async def _test_one_platform(
     base_url: str,
     model_name: str,
     api_key: str,
+    requires_api_key: bool = True,
 ) -> None:
     """Run connectivity test for one platform and persist result."""
     from .ai_platform_service import test_ai_platform_connectivity
     from backend.config.ai_platform_status import update_platform_status
 
     result = await test_ai_platform_connectivity(
-        platform_type, base_url, model_name or "", api_key, detect_max_tokens=False
+        platform_type, base_url, model_name or "", api_key, detect_max_tokens=False, requires_api_key=requires_api_key
     )
     update_platform_status(
         platform_type,
@@ -77,7 +78,7 @@ async def run_one_round_ai_platform_tests() -> None:
         if not base_url or (not model_name and platform_key not in ("volcengine_ark", "doubao", "ark")):
             continue
         try:
-            await _test_one_platform(platform_key, base_url, model_name or "", api_key)
+            await _test_one_platform(platform_key, base_url, model_name or "", api_key, requires_api_key=requires_api_key)
         except asyncio.CancelledError:
             raise
         except Exception as e:

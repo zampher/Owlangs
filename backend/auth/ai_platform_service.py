@@ -85,6 +85,7 @@ async def detect_max_tokens_limit(
     base_url: str,
     model_name: str,
     api_key: str,
+    requires_api_key: bool = True,
 ) -> Optional[int]:
     """
     Detect max_tokens limit for a platform by trying different values.
@@ -98,7 +99,7 @@ async def detect_max_tokens_limit(
     try:
         async with httpx.AsyncClient(timeout=10.0, proxy=None, mounts={'http://': None, 'https://': None}) as client:
             headers = {"Content-Type": "application/json"}
-            if api_key and api_key.strip():
+            if requires_api_key and api_key and api_key.strip():
                 headers["Authorization"] = f"Bearer {api_key}"
             
             # Try /v1/models endpoint (OpenAI-compatible)
@@ -166,7 +167,7 @@ async def detect_max_tokens_limit(
                     else:
                         # OpenAI-compatible
                         headers = {"Content-Type": "application/json"}
-                        if api_key and api_key.strip():
+                        if requires_api_key and api_key and api_key.strip():
                             headers["Authorization"] = f"Bearer {api_key}"
                         payload = {
                             "model": model_name,
@@ -239,6 +240,7 @@ async def test_ai_platform_connectivity(
     model_name: str,
     api_key: str,
     detect_max_tokens: bool = True,
+    requires_api_key: bool = True,
 ) -> Dict[str, Any]:
     """Unified AI 平台连通性测试。
 
@@ -305,7 +307,7 @@ async def test_ai_platform_connectivity(
                         # Try to detect max tokens if requested
                         if detect_max_tokens:
                             try:
-                                detected_max = await detect_max_tokens_limit(platform_type, base_url, model_name, api_key)
+                                detected_max = await detect_max_tokens_limit(platform_type, base_url, model_name, api_key, requires_api_key=requires_api_key)
                                 if detected_max:
                                     result["max_tokens"] = detected_max
                                     result["message"] += f" (max_tokens: {detected_max})"
@@ -348,7 +350,7 @@ async def test_ai_platform_connectivity(
             elif platform == 'local':
                 # Local (OpenAI-compatible): use /v1/models endpoint
                 headers = {"Content-Type": "application/json"}
-                if api_key and api_key.strip():
+                if requires_api_key and api_key and api_key.strip():
                     headers["Authorization"] = f"Bearer {api_key}"
                 try:
                     models_resp = await client.get(f"{base_url}/models", headers=headers, timeout=10.0)
@@ -358,7 +360,7 @@ async def test_ai_platform_connectivity(
                         # Try to detect max tokens if requested
                         if detect_max_tokens:
                             try:
-                                detected_max = await detect_max_tokens_limit(platform_type, base_url, model_name, api_key)
+                                detected_max = await detect_max_tokens_limit(platform_type, base_url, model_name, api_key, requires_api_key=requires_api_key)
                                 if detected_max:
                                     result["max_tokens"] = detected_max
                                     result["message"] += f" (max_tokens: {detected_max})"
@@ -380,7 +382,7 @@ async def test_ai_platform_connectivity(
                 # Default: OpenAI-compatible cloud (DeepSeek, OpenAI, etc.)
                 # Use /v1/models endpoint (no token consumption)
                 headers = {"Content-Type": "application/json"}
-                if api_key and api_key.strip():
+                if requires_api_key and api_key and api_key.strip():
                     headers["Authorization"] = f"Bearer {api_key}"
                 
                 # Special handling for platforms with public /models endpoint (e.g., OpenRouter)
@@ -411,7 +413,7 @@ async def test_ai_platform_connectivity(
                                         # Try to detect max tokens if requested
                                         if detect_max_tokens:
                                             try:
-                                                detected_max = await detect_max_tokens_limit(platform_type, base_url, model_name, api_key)
+                                                detected_max = await detect_max_tokens_limit(platform_type, base_url, model_name, api_key, requires_api_key=requires_api_key)
                                                 if detected_max:
                                                     result["max_tokens"] = detected_max
                                                     result["message"] += f" (max_tokens: {detected_max})"
@@ -553,6 +555,7 @@ async def list_platform_models(
     base_url: str,
     api_key: str,
     api_protocol: Optional[str] = None,
+    requires_api_key: bool = True,
 ) -> list[str]:
     """
     List available models for an AI platform.
@@ -618,9 +621,7 @@ async def list_platform_models(
                 # Anthropic protocol (e.g. platform_type=llm, api_protocol=anthropic): try GET /models once, then static Claude IDs
                 if proto == "anthropic":
                     models_url = f"{base_url.rstrip('/')}/models"
-                    if platform == 'local' and not (api_key and api_key.strip()):
-                        pass
-                    else:
+                    if requires_api_key and api_key and api_key.strip():
                         headers["Authorization"] = f"Bearer {api_key}"
                     resp = await client.get(models_url, headers=headers)
                     if resp.status_code == 200:
@@ -639,10 +640,7 @@ async def list_platform_models(
 
                 # OpenAI-compatible /v1/models or /models endpoint
                 models_url = f"{base_url.rstrip('/')}/models"
-                if platform == 'local' and not (api_key and api_key.strip()):
-                    # Local (OpenAI API): no key required
-                    pass
-                else:
+                if requires_api_key and api_key and api_key.strip():
                     headers["Authorization"] = f"Bearer {api_key}"
                 resp = await client.get(models_url, headers=headers)
             

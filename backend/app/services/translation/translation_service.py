@@ -267,6 +267,19 @@ class TranslationService:
         if not platform_key_for_status:
             platform_key_for_status = platform_type  # fallback to api_protocol
         
+        # Look up requires_api_key from platform config
+        requires_api_key = True
+        try:
+            from backend.config.config_loader import get_unified_config
+            unified_config = get_unified_config()
+            pk = platform_key_for_status or platform_key
+            if pk:
+                platform_cfg = unified_config.platforms.get_platform_config(pk)
+                if platform_cfg:
+                    requires_api_key = getattr(platform_cfg, 'requires_api_key', True)
+        except Exception:
+            pass
+
         try:
             from backend.auth.ai_platform_service import test_ai_platform_connectivity
             result = await test_ai_platform_connectivity(
@@ -275,6 +288,7 @@ class TranslationService:
                 model_name=model_id,
                 api_key=api_key or "",
                 detect_max_tokens=False,  # Keep test fast; max_tokens detection is optional
+                requires_api_key=requires_api_key,
             )
             
             # Update QuickSettings / Settings LLM status regardless of success/failure

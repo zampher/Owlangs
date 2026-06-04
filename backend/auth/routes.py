@@ -4260,7 +4260,7 @@ async def test_ai_platform(
         
         # Detect max_tokens if requested (default: True)
         detect_max_tokens = data.get('detect_max_tokens', True)
-        result = await test_ai_platform_connectivity(platform_type, base_url, safe_model, api_key, detect_max_tokens=detect_max_tokens)
+        result = await test_ai_platform_connectivity(platform_type, base_url, safe_model, api_key, detect_max_tokens=detect_max_tokens, requires_api_key=requires_api_key)
         
         # If max_tokens was detected and test was successful, update platform configuration
         if result.get('success') and 'max_tokens' in result:
@@ -4383,7 +4383,7 @@ async def list_ai_platform_models(
         
         # Delegate to service
         from .ai_platform_service import list_platform_models
-        models = await list_platform_models(platform_type, base_url, api_key, api_protocol=api_protocol)
+        models = await list_platform_models(platform_type, base_url, api_key, api_protocol=api_protocol, requires_api_key=requires_api_key)
         return {"success": True, "models": models}
     
     except HTTPException:
