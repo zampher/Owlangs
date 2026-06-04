@@ -1707,6 +1707,7 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
       chunkSize: baseUpdates['chunkSize'] as int? ?? current.chunkSize,
       concurrent: baseUpdates['concurrent'] as int? ?? current.concurrent,
       timeout: baseUpdates['timeout'] as int? ?? current.timeout,
+      writeTimeout: baseUpdates['write_timeout'] as int? ?? current.writeTimeout,
       thinkingMode: baseUpdates['thinkingMode'] as String? ?? current.thinkingMode,
       apiProtocol: baseUpdates['apiProtocol'] as String,
       requiresApiKey: baseUpdates['requiresApiKey'] as bool,
