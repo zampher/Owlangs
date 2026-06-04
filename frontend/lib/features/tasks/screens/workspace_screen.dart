@@ -934,15 +934,17 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                         ),
                       ),
                       // Title
-                      Text(
-                        'Owlangs',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
+                      Flexible(
+                        child: Text(
+                          'Owlangs',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
                         ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 2,
                       ),
                       // Unified menu: user, language, dark mode, login
                       if (spacious) ...<Widget>[

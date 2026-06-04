@@ -248,12 +248,8 @@ class _UserManagementSettingsScreenState
               } catch (e) {
                 final String msg = e.toString();
                 if (!dialogContext.mounted) return;
-                final bool isPasswordError = msg.toLowerCase().contains('password') ||
-                    msg.contains('8 character') ||
-                    msg.contains('at least');
                 setDialogState(() {
                   errorMessage = msg;
-                  if (isPasswordError) passwordError = msg;
                   saving = false;
                 });
               }
@@ -261,21 +257,28 @@ class _UserManagementSettingsScreenState
 
             return AlertDialog(
               title: Text(isEdit ? 'Edit local user' : 'Add local user'),
-              content: SingleChildScrollView(
+              content: SizedBox(
+                width: 420,
+                child: SingleChildScrollView(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    if (errorMessage != null && errorMessage!.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          errorMessage!,
-                          style: TextStyle(
-                            color: errorBorderColor,
-                            fontSize: 13,
-                          ),
-                        ),
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      // Reserve fixed space for error message to prevent layout jumps
+                      SizedBox(
+                        height: errorMessage != null && errorMessage!.isNotEmpty ? null : 24,
+                        child: errorMessage != null && errorMessage!.isNotEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Text(
+                                  errorMessage!,
+                                  style: TextStyle(
+                                    color: errorBorderColor,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              )
+                            : null,
                       ),
                     TextField(
                       controller: usernameController,
@@ -338,7 +341,10 @@ class _UserManagementSettingsScreenState
                         obscureText: true,
                         decoration: InputDecoration(
                           labelText: 'Password',
+                          helperText: '8-128 chars, upper, lower, digit',
+                          helperMaxLines: 2,
                           errorText: passwordError,
+                          errorMaxLines: 2,
                           errorBorder: passwordError != null
                               ? OutlineInputBorder(
                                   borderSide: BorderSide(color: errorBorderColor),
@@ -352,9 +358,10 @@ class _UserManagementSettingsScreenState
                         ),
                       ),
                     ],
-                  ],
+                    ],
                 ),
               ),
+            ),
               actions: <Widget>[
                 TextButton(
                   onPressed: saving
