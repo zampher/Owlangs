@@ -15,6 +15,7 @@ from logger import LogModule
 class AiTranslatorConfig(TranslatorConfig, AgentConfig):
     base_url: str | None = field(default=None,
                                  metadata={"description": "OpenAI compatible address, required when skip_translate is False"})
+    api_key: str | None = field(default=None, metadata={"description": "API key (optional for local services like Ollama)"})
     model_id: str | None = field(default=None, metadata={"description": "Required when skip_translate is False"})
     to_lang: str = "English"
     custom_prompt: str | None = None
@@ -39,8 +40,10 @@ class AiTranslator(Translator[T]):
         self.skip_translate = config.skip_translate
         self.glossary_agent = None
         self.glossary_dict_gen = None
-        if not self.skip_translate and (config.base_url is None or config.api_key is None or config.model_id is None):
-            raise ValueError("When skip_translate is not false, base_url, api_key, and model_id are required")
+        # api_key can be empty for local services (Ollama, etc.) that don't require auth.
+        # Use truthiness check (not "is None") so empty strings are accepted.
+        if not self.skip_translate and (not config.base_url or not config.model_id):
+            raise ValueError("When skip_translate is not false, base_url and model_id are required")
         
         # Wrap logger to automatically add module=LogModule.TRANS to all log calls
         original_logger = self.logger

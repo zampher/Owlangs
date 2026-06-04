@@ -214,9 +214,9 @@ class WorkflowConfigBuilder:
         translator_args = {
             'task_id': self.task_id,  # CRITICAL: Pass task_id so apply_smart_glossary_matching can access task_state
             'skip_translate': getattr(payload, 'skip_translate', False),
-            'base_url': getattr(payload, 'base_url', ''),
-            'api_key': getattr(payload, 'api_key', ''),
-            'model_id': getattr(payload, 'model_id', ''),
+            'base_url': getattr(payload, 'base_url', '') or '',
+            'api_key': getattr(payload, 'api_key', '') or '',
+            'model_id': getattr(payload, 'model_id', '') or '',
             'to_lang': getattr(payload, 'to_lang', 'en'),
             'custom_prompt': synthesized_prompt,
             'temperature': getattr(payload, 'temperature', 0.3),

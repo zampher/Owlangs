@@ -97,10 +97,9 @@ async def detect_max_tokens_limit(
     # Try to get from models API first (OpenAI-compatible)
     try:
         async with httpx.AsyncClient(timeout=10.0, proxy=None, mounts={'http://': None, 'https://': None}) as client:
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            }
+            headers = {"Content-Type": "application/json"}
+            if api_key and api_key.strip():
+                headers["Authorization"] = f"Bearer {api_key}"
             
             # Try /v1/models endpoint (OpenAI-compatible)
             models_url = f"{base_url.rstrip('/')}/models"
@@ -166,10 +165,9 @@ async def detect_max_tokens_limit(
                         )
                     else:
                         # OpenAI-compatible
-                        headers = {
-                            "Content-Type": "application/json",
-                            "Authorization": f"Bearer {api_key}",
-                        }
+                        headers = {"Content-Type": "application/json"}
+                        if api_key and api_key.strip():
+                            headers["Authorization"] = f"Bearer {api_key}"
                         payload = {
                             "model": model_name,
                             "messages": [
@@ -381,10 +379,9 @@ async def test_ai_platform_connectivity(
             else:
                 # Default: OpenAI-compatible cloud (DeepSeek, OpenAI, etc.)
                 # Use /v1/models endpoint (no token consumption)
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}",
-                }
+                headers = {"Content-Type": "application/json"}
+                if api_key and api_key.strip():
+                    headers["Authorization"] = f"Bearer {api_key}"
                 
                 # Special handling for platforms with public /models endpoint (e.g., OpenRouter)
                 # These platforms return model list without authentication, so we need to
