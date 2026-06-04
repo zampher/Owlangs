@@ -452,6 +452,10 @@ class DocxWorkflow(Workflow[DocxWorkflowConfig, Document, Document], HTMLExporta
         docu = self._export(Docx2HTMLExporter(config))
         return docu.content.decode()
 
+    def export_to_markdown(self, _: ExporterConfig | None = None) -> str:
+        from workflow.html_to_markdown_export import html_content_to_markdown
+        return html_content_to_markdown(self.export_to_html())
+
     def export_to_docx(self, _: ExporterConfig | None = None) -> bytes:
         docu = self._export(Docx2DocxExporter())
         return docu.content
