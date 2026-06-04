@@ -70,6 +70,7 @@
 - **手动维护**：完全可控地创建与编辑术语表
 - **多术语表**：同一项目可挂载多份术语表，覆盖更全面
 - **一致性**：在多次翻译中保持术语翻译一致
+<img width="952" height="439" alt="03b4f8c9e573187e20db9f71557b43ca" src="https://github.com/user-attachments/assets/5608a87a-b97e-4278-9532-efa29a376ee1" />
 
 ### 🔒 隐私与脱敏
 
