@@ -8,12 +8,12 @@ Ollama API is designed for running open-source models locally.
 No API key required, different request/response format from OpenAI.
 """
 
-import logging
 from typing import Dict, Any, Tuple, List, Optional
 
-from .base import LLMProtocol
+from backend.logger import unified_logger as logger
+from logger.logger import LogModule
 
-logger = logging.getLogger(__name__)
+from .base import LLMProtocol
 
 
 class OllamaProtocol(LLMProtocol):
@@ -160,7 +160,7 @@ class OllamaProtocol(LLMProtocol):
         if not content or content.strip() == "":
             thinking = message.get("thinking", "")
             if thinking and thinking.strip():
-                logger.warning(
+                logger.warning(LogModule.TRANS,
                     f"[OLLAMA] Model returned empty content but has thinking. "
                     f"Finish reason: {response_data.get('done_reason', 'unknown')}. "
                     f"Using thinking content as fallback (may contain reasoning text)."

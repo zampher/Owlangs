@@ -5,10 +5,10 @@ Utilities for merging markdown chunks to reduce API calls and system prompt repe
 Similar to segments2json_chunks but for markdown text chunks.
 """
 
-import logging
 from typing import List, Tuple, Optional
 
-logger = logging.getLogger(__name__)
+from backend.logger import unified_logger as logger
+from logger.logger import LogModule
 
 
 def chunks2merged_chunks(chunks: List[str], chunk_size_max: int, segment_indices: Optional[List] = None) -> Tuple[List[str], List[Tuple[int, int]]]:
@@ -52,7 +52,7 @@ def chunks2merged_chunks(chunks: List[str], chunk_size_max: int, segment_indices
     if not chunks:
         return [], []
     
-    logger.info(
+    logger.info(LogModule.TRANS,
         f"[CHUNKS2MERGED] Starting merge: {len(chunks)} chunks, "
         f"chunk_size_max={chunk_size_max} bytes"
     )
@@ -77,7 +77,7 @@ def chunks2merged_chunks(chunks: List[str], chunk_size_max: int, segment_indices
             # Extract the first segment index for tracking
             first_index_match = re.match(r'^(\d+):', chunk)
             seg_idx = int(first_index_match.group(1)) if first_index_match else idx
-            logger.debug(
+            logger.debug(LogModule.TRANS,
                 f"[CHUNKS2MERGED] Chunk {idx} already contains indexed segments. "
                 f"First segment index: {seg_idx}, chunk preview: {chunk[:100]}..."
             )
@@ -89,7 +89,7 @@ def chunks2merged_chunks(chunks: List[str], chunk_size_max: int, segment_indices
                 if isinstance(seg_idx_or_list, list):
                     # Multiple segments per chunk - use first segment index for chunk-level tracking
                     seg_idx = seg_idx_or_list[0] if seg_idx_or_list else idx
-                    logger.debug(
+                    logger.debug(LogModule.TRANS,
                         f"[CHUNKS2MERGED] Chunk {idx} has multiple segment indices {seg_idx_or_list[:5]}..."
                         f"{'...' if len(seg_idx_or_list) > 5 else ''}. Using first index {seg_idx} for chunk-level tracking."
                     )
@@ -102,7 +102,7 @@ def chunks2merged_chunks(chunks: List[str], chunk_size_max: int, segment_indices
             # Format chunk with index prefix: "{index}: {chunk_text}"
             # This preserves leading spaces in chunk_text
             indexed_chunk = f"{seg_idx}: {chunk}"
-            logger.debug(
+            logger.debug(LogModule.TRANS,
                 f"[CHUNKS2MERGED] Chunk {idx} needs index prefix. "
                 f"Segment index: {seg_idx}, chunk size: {len(chunk)} chars, "
                 f"chunk preview: {chunk[:100]}..."
@@ -136,7 +136,7 @@ def chunks2merged_chunks(chunks: List[str], chunk_size_max: int, segment_indices
         prospective_text = separator.join(prospective_parts)
         prospective_size = len(prospective_text.encode('utf-8'))
         
-        logger.debug(
+        logger.debug(LogModule.TRANS,
             f"[CHUNKS2MERGED] Chunk {idx}: prospective_size={prospective_size} bytes, "
             f"chunk_size_max={chunk_size_max} bytes, "
             f"current_chunk_parts={len(current_chunk_parts)}, "
@@ -161,7 +161,7 @@ def chunks2merged_chunks(chunks: List[str], chunk_size_max: int, segment_indices
                     # Needs index prefix
                     merged_parts.append(f"{si}: {ct}")
             merged_text = "\n".join(merged_parts)
-            logger.debug(
+            logger.debug(LogModule.TRANS,
                 f"[CHUNKS2MERGED] Merged chunk {len(merged_chunks)}: "
                 f"{len(current_chunk_parts)} parts, "
                 f"text_preview={merged_text[:200]}..."
@@ -182,13 +182,13 @@ def chunks2merged_chunks(chunks: List[str], chunk_size_max: int, segment_indices
                 # Store with None as seg_idx to indicate it's already indexed
                 # The chunk itself contains all segment indices: "0: text1\n1: text2\n2: text3"
                 current_chunk_parts = [(None, indexed_chunk)]
-                logger.debug(
+                logger.debug(LogModule.TRANS,
                     f"[CHUNKS2MERGED] Starting new merged chunk with pre-indexed chunk {idx}. "
                     f"Chunk preview: {indexed_chunk[:150]}..."
                 )
             else:
                 current_chunk_parts = [(seg_idx, indexed_chunk)]
-                logger.debug(
+                logger.debug(LogModule.TRANS,
                     f"[CHUNKS2MERGED] Starting new merged chunk with indexed chunk {idx} (seg_idx={seg_idx}). "
                     f"Chunk preview: {indexed_chunk[:150]}..."
                 )
@@ -203,13 +203,13 @@ def chunks2merged_chunks(chunks: List[str], chunk_size_max: int, segment_indices
                 # Store with None as seg_idx to indicate it's already indexed
                 # The chunk itself contains all segment indices: "0: text1\n1: text2\n2: text3"
                 current_chunk_parts.append((None, indexed_chunk))
-                logger.debug(
+                logger.debug(LogModule.TRANS,
                     f"[CHUNKS2MERGED] Adding pre-indexed chunk {idx} to current merged chunk. "
                     f"Chunk preview: {indexed_chunk[:150]}..."
                 )
             else:
                 current_chunk_parts.append((seg_idx, indexed_chunk))
-                logger.debug(
+                logger.debug(LogModule.TRANS,
                     f"[CHUNKS2MERGED] Adding indexed chunk {idx} (seg_idx={seg_idx}) to current merged chunk. "
                     f"Chunk preview: {indexed_chunk[:150]}..."
                 )
@@ -233,7 +233,7 @@ def chunks2merged_chunks(chunks: List[str], chunk_size_max: int, segment_indices
                 # Needs index prefix
                 merged_parts.append(f"{si}: {ct}")
         merged_text = "\n".join(merged_parts)
-        logger.debug(
+        logger.debug(LogModule.TRANS,
             f"[CHUNKS2MERGED] Final merged chunk {len(merged_chunks)}: "
             f"{len(current_chunk_parts)} parts, "
             f"text_preview={merged_text[:200]}..."
@@ -246,7 +246,7 @@ def chunks2merged_chunks(chunks: List[str], chunk_size_max: int, segment_indices
         if current_end_idx > current_start_idx:
             merged_indices_list.append((current_start_idx, current_end_idx))
     
-    logger.info(
+    logger.info(LogModule.TRANS,
         f"[CHUNKS2MERGED] Completed merge: {len(chunks)} input chunks -> {len(merged_chunks)} merged chunks, "
         f"merged_indices_list={merged_indices_list}"
     )
@@ -411,7 +411,7 @@ def split_merged_chunks(translated_merged_chunks: List[str], merged_indices_list
                     # Use the first expected segment index (int, not list)
                     first_seg_idx = expected_flat[0]
                     indexed_lines.insert(0, (first_seg_idx, '\n'.join(current_text_lines)))
-                    logger.debug(
+                    logger.debug(LogModule.TRANS,
                         f"[SPLIT_MERGED] First segment in merged chunk {merged_idx} doesn't have index prefix. "
                         f"Inferred index {first_seg_idx} from expected segment indices. "
                         f"Text preview: {current_text_lines[0][:100] if current_text_lines else ''}..."
@@ -426,7 +426,7 @@ def split_merged_chunks(translated_merged_chunks: List[str], merged_indices_list
         
         if indexed_lines and segment_indices_map:
             # Successfully parsed indexed format
-            logger.info(
+            logger.info(LogModule.TRANS,
                 f"[SPLIT_MERGED] Found indexed format in merged chunk {merged_idx}: "
                 f"parsed {len(indexed_lines)} indexed segments, "
                 f"expected {end_idx - start_idx} chunks, "
@@ -435,7 +435,7 @@ def split_merged_chunks(translated_merged_chunks: List[str], merged_indices_list
             )
             # Log first few indexed lines for debugging
             if indexed_lines:
-                logger.debug(
+                logger.debug(LogModule.TRANS,
                     f"[SPLIT_MERGED] First 5 indexed segments: "
                     f"{[(seg_idx, text[:50]) for seg_idx, text in indexed_lines[:5]]}"
                 )
@@ -470,17 +470,17 @@ def split_merged_chunks(translated_merged_chunks: List[str], merged_indices_list
                             chunk_segments_map[chunk_idx] = []
                         chunk_segments_map[chunk_idx].append((seg_idx, text))
                         mapped_count += 1
-                        logger.debug(
+                        logger.debug(LogModule.TRANS,
                             f"[SPLIT_MERGED] Mapped segment {seg_idx} -> chunk {chunk_idx}, "
                             f"text_preview={text[:80]!r}..."
                         )
                     else:
-                        logger.warning(
+                        logger.warning(LogModule.TRANS,
                             f"[SPLIT_MERGED] Segment {seg_idx} mapped to chunk {chunk_idx} which is out of bounds "
                             f"(result length: {len(result)}). Skipping."
                         )
                 else:
-                    logger.warning(
+                    logger.warning(LogModule.TRANS,
                         f"[SPLIT_MERGED] Segment {seg_idx} not found in segment_indices_map. "
                         f"This may indicate a mapping error. segment_indices_map has {len(segment_indices_map)} entries. "
                         f"Sample keys: {sorted(list(segment_indices_map.keys()))[:20]}..."
@@ -496,7 +496,7 @@ def split_merged_chunks(translated_merged_chunks: List[str], merged_indices_list
                     segments_list.sort(key=lambda x: x[0])
                     combined_text = "\n".join([f"{seg_idx}: {text}" for seg_idx, text in segments_list])
                     result[chunk_idx] = combined_text
-                    logger.debug(
+                    logger.debug(LogModule.TRANS,
                         f"[SPLIT_MERGED] Chunk {chunk_idx} contains {len(segments_list)} segments. "
                         f"Combined into indexed format (length: {len(combined_text)}). "
                         f"Segment indices: {[seg_idx for seg_idx, _ in segments_list][:10]}..."
@@ -505,12 +505,12 @@ def split_merged_chunks(translated_merged_chunks: List[str], merged_indices_list
                     # Single segment - use text directly (no index prefix)
                     seg_idx, text = segments_list[0]
                     result[chunk_idx] = text
-                    logger.debug(
+                    logger.debug(LogModule.TRANS,
                         f"[SPLIT_MERGED] Chunk {chunk_idx} contains 1 segment (index {seg_idx}). "
                         f"Using text directly (length: {len(text)})."
                     )
             
-            logger.info(
+            logger.info(LogModule.TRANS,
                 f"[SPLIT_MERGED] Mapped {mapped_count}/{len(indexed_lines)} segments to {len(chunk_segments_map)} chunks in merged chunk {merged_idx}"
             )
             
@@ -519,7 +519,7 @@ def split_merged_chunks(translated_merged_chunks: List[str], merged_indices_list
             if expected_segment_indices_flat:
                 missing = set(expected_segment_indices_flat) - set(found_segment_indices)
                 if missing:
-                    logger.warning(
+                    logger.warning(LogModule.TRANS,
                         f"[SPLIT_MERGED] Missing segments in merged chunk {merged_idx}: "
                         f"expected segments {expected_segment_indices_flat}, "
                         f"found segments {found_segment_indices}. "
@@ -537,7 +537,7 @@ def split_merged_chunks(translated_merged_chunks: List[str], merged_indices_list
                                 if result[chunk_idx] is None or result[chunk_idx] == "":
                                     result[chunk_idx] = ""
                                 else:
-                                    logger.debug(
+                                    logger.debug(LogModule.TRANS,
                                         f"[SPLIT_MERGED] Chunk {chunk_idx} already has content from other segments, "
                                         f"not overwriting with empty for missing segment {seg_idx}."
                                     )
@@ -546,7 +546,7 @@ def split_merged_chunks(translated_merged_chunks: List[str], merged_indices_list
             if expected_segment_indices_flat:
                 extra = set(found_segment_indices) - set(expected_segment_indices_flat)
                 if extra:
-                    logger.debug(
+                    logger.debug(LogModule.TRANS,
                         f"[SPLIT_MERGED] Extra segments in merged chunk {merged_idx}: "
                         f"expected segments {expected_segment_indices_flat}, "
                         f"found segments {found_segment_indices}. "
@@ -557,7 +557,7 @@ def split_merged_chunks(translated_merged_chunks: List[str], merged_indices_list
             # Fallback: Try old format with <seg:...> marker (for backward compatibility)
             segment_marker_match = re.match(r'<seg:([0-9,]+)>\n?', merged_text)
             if segment_marker_match and segment_indices_map:
-                logger.debug(
+                logger.debug(LogModule.TRANS,
                     f"[SPLIT_MERGED] Found old segment marker format in merged chunk {merged_idx}: "
                     f"marker={segment_marker_match.group(0)}, "
                     f"expected_chunks={end_idx - start_idx}, "
@@ -582,7 +582,7 @@ def split_merged_chunks(translated_merged_chunks: List[str], merged_indices_list
                                 result[chunk_idx] = part
                 else:
                     # Mismatch - mark all as failed
-                    logger.warning(
+                    logger.warning(LogModule.TRANS,
                         f"[SPLIT_MERGED] Cannot split merged chunk {merged_idx} (old format): "
                         f"expected {len(segment_indices)} segments but got {len(split_parts)} parts. "
                         f"Marking segments {segment_indices} as failed (empty string). "
@@ -599,7 +599,7 @@ def split_merged_chunks(translated_merged_chunks: List[str], merged_indices_list
                 split_parts = text_without_marker.split("\n\n")
                 
                 expected_parts = end_idx - start_idx
-                logger.debug(
+                logger.debug(LogModule.TRANS,
                     f"[SPLIT_MERGED] No indexed format or segment marker in merged chunk {merged_idx}: "
                     f"expected_parts={expected_parts}, "
                     f"actual_parts={len(split_parts)}, "
@@ -613,7 +613,7 @@ def split_merged_chunks(translated_merged_chunks: List[str], merged_indices_list
                             result[chunk_idx] = split_parts[i]
                 else:
                     # Mismatch - mark all as failed
-                    logger.warning(
+                    logger.warning(LogModule.TRANS,
                         f"[SPLIT_MERGED] Cannot split merged chunk {merged_idx}: "
                         f"expected {expected_parts} chunks but got {len(split_parts)} parts. "
                         f"Marking chunks {start_idx}-{end_idx-1} as failed (empty string). "

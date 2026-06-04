@@ -60,7 +60,7 @@ def get_text_content_token_limit(
         # For small chunk sizes, use 0.85 instead of 0.9 to be more conservative
         effective_safety_margin = min(safety_margin, 0.85)
         if effective_safety_margin < safety_margin:
-            logger.debug(
+            logger.debug(LogModule.CONVERT,
                 f"Using more conservative safety_margin={effective_safety_margin} "
                 f"(instead of {safety_margin}) for small chunk_size={total_token_limit}"
             )
@@ -69,14 +69,14 @@ def get_text_content_token_limit(
     available_text_tokens = int((total_token_limit - system_prompt_tokens - api_overhead_tokens) * effective_safety_margin)
     
     if available_text_tokens <= 0:
-        logger.warning(
+        logger.warning(LogModule.CONVERT,
             f"total_token_limit ({total_token_limit}) is too small after subtracting "
             f"system_prompt_tokens ({system_prompt_tokens}) and overhead ({api_overhead_tokens}). "
             f"Using minimum 500 tokens."
         )
         return 500
     
-    logger.debug(
+    logger.debug(LogModule.CONVERT,
         f"Calculated text_content_token_limit={available_text_tokens} from total_token_limit={total_token_limit} "
         f"(system_prompt={system_prompt_tokens}, overhead={api_overhead_tokens}, "
         f"safety_margin={effective_safety_margin})"
@@ -95,7 +95,7 @@ def convert_token_chunk_size_to_bytes(
     DEPRECATED: Use get_text_content_token_limit instead.
     This function is kept for backward compatibility but now returns token limit instead of bytes.
     """
-    logger.warning(
+    logger.warning(LogModule.CONVERT,
         "convert_token_chunk_size_to_bytes is deprecated. "
         "Use get_text_content_token_limit instead (which returns tokens, not bytes)."
     )
