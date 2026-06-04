@@ -2268,7 +2268,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsLocalUsersValidationPasswordTooLong => '密码长度不能超过128位';
 
   @override
-  String get settingsLocalUsersValidationPasswordComplexity => '密码必须包含大写字母、小写字母和数字';
+  String get settingsLocalUsersValidationPasswordComplexity =>
+      '密码必须包含大写字母、小写字母和数字';
 
   @override
   String get settingsLocalUsersOperationFailed => '操作失败';

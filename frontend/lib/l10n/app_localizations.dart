@@ -4148,10 +4148,22 @@ abstract class AppLocalizations {
   /// **'Password is required'**
   String get settingsLocalUsersValidationPasswordRequired;
 
+  /// No description provided for @settingsLocalUsersValidationPasswordTooShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must be at least 8 characters'**
   String get settingsLocalUsersValidationPasswordTooShort;
 
+  /// No description provided for @settingsLocalUsersValidationPasswordTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must be no more than 128 characters'**
   String get settingsLocalUsersValidationPasswordTooLong;
 
+  /// No description provided for @settingsLocalUsersValidationPasswordComplexity.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must contain uppercase, lowercase, and digit'**
   String get settingsLocalUsersValidationPasswordComplexity;
 
   /// No description provided for @settingsLocalUsersOperationFailed.

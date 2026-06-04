@@ -2278,10 +2278,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsLocalUsersValidationPasswordTooShort => 'パスワードは8文字以上必要です';
 
   @override
-  String get settingsLocalUsersValidationPasswordTooLong => 'パスワードは128文字以内で入力してください';
+  String get settingsLocalUsersValidationPasswordTooLong =>
+      'パスワードは128文字以内で入力してください';
 
   @override
-  String get settingsLocalUsersValidationPasswordComplexity => 'パスワードには大文字、小文字、数字を含める必要があります';
+  String get settingsLocalUsersValidationPasswordComplexity =>
+      'パスワードには大文字、小文字、数字を含める必要があります';
 
   @override
   String get settingsLocalUsersOperationFailed => '操作に失敗しました';

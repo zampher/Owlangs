@@ -2279,13 +2279,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsLocalUsersValidationPasswordRequired => '비밀번호가 필요합니다';
 
   @override
-  String get settingsLocalUsersValidationPasswordTooShort => '비밀번호는 8자 이상이어야 합니다';
+  String get settingsLocalUsersValidationPasswordTooShort =>
+      '비밀번호는 8자 이상이어야 합니다';
 
   @override
-  String get settingsLocalUsersValidationPasswordTooLong => '비밀번호는 128자를 초과할 수 없습니다';
+  String get settingsLocalUsersValidationPasswordTooLong =>
+      '비밀번호는 128자를 초과할 수 없습니다';
 
   @override
-  String get settingsLocalUsersValidationPasswordComplexity => '비밀번호에는 대문자, 소문자, 숫자가 포함되어야 합니다';
+  String get settingsLocalUsersValidationPasswordComplexity =>
+      '비밀번호에는 대문자, 소문자, 숫자가 포함되어야 합니다';
 
   @override
   String get settingsLocalUsersOperationFailed => '작업 실패';
