@@ -288,8 +288,6 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                       child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    _buildStepHeader(aiSettings, aiNotifier),
-                    const SizedBox(height: 12),
                     Expanded(
                       child: SingleChildScrollView(
                         child: _buildStepContent(
@@ -301,6 +299,8 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    _buildStepHeader(aiSettings, aiNotifier),
                   ],
                     ),
                   ),
@@ -336,6 +336,22 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                 : _mineruLocalIsTestingConnection)
             : false;
 
+    // Determine current step's test result
+    String? testResult;
+    bool? testSuccess;
+    if (isLLMStep) {
+      testResult = _llmTestResult;
+      testSuccess = _llmLastTestSuccess;
+    } else if (isMineruStep) {
+      if (_selectedMineruPlatform == 'mineru') {
+        testResult = _mineruTestResult;
+        testSuccess = _mineruLastTestSuccess;
+      } else {
+        testResult = _mineruLocalTestResult;
+        testSuccess = _mineruLocalLastTestSuccess;
+      }
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
@@ -348,18 +364,54 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         else
           const SizedBox(width: 8),
         const SizedBox(width: 12),
-        // Title + progress bar
+        // Title + test result + progress bar
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Text(
-                titles[_currentStep],
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+              Row(
+                children: <Widget>[
+                  Flexible(
+                    child: Text(
+                      titles[_currentStep],
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  if (hasTest && testResult != null) ...[
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (testSuccess ?? false)
+                              ? Colors.green.shade50
+                              : Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: (testSuccess ?? false)
+                                ? Colors.green.shade300
+                                : Colors.red.shade300,
+                          ),
+                        ),
+                        child: Text(
+                          testResult!,
+                          style: TextStyle(
+                            color: (testSuccess ?? false)
+                                ? Colors.green.shade700
+                                : Colors.red.shade700,
+                            fontSize: 11,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 4),
               LinearProgressIndicator(
@@ -530,22 +582,6 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   ) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SizedBox(
-          width: double.infinity,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue.shade200),
-            ),
-            child: Text(
-              l10n.setupWizardMineruDescription,
-              style: const TextStyle(fontSize: 12),
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
         // MinerU Platform Selection
         Text(
           l10n.setupWizardSelectMineruPlatform,
@@ -585,6 +621,22 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           _buildEmbeddedMineruCloudForm(settings, notifier)
         else
           _buildEmbeddedMineruLocalForm(settings, notifier),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Text(
+              l10n.setupWizardMineruDescription,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+        ),
       ],
     );
 
@@ -764,47 +816,6 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ],
           ),
         ),
-        if (_mineruTestResult != null) ...<Widget>[
-          const SizedBox(height: 6),
-          Builder(
-            builder: (BuildContext ctx) {
-              final bool isSuccess = _mineruLastTestSuccess ?? false;
-              final Color bgColor =
-                  isSuccess ? Colors.green.shade50 : Colors.red.shade50;
-              final Color borderColor =
-                  isSuccess ? Colors.green.shade300 : Colors.red.shade300;
-              final Color contentColor =
-                  isSuccess ? Colors.green.shade700 : Colors.red.shade700;
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: bgColor,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: borderColor),
-                ),
-                child: Row(
-                  children: <Widget>[
-                    Icon(
-                      isSuccess ? Icons.check_circle : Icons.error,
-                      color: contentColor,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: SelectableText(
-                        _mineruTestResult!,
-                        style: TextStyle(
-                          color: contentColor,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
       ],
     );
   }
@@ -1007,47 +1018,6 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ],
           ),
         ),
-        if (_mineruLocalTestResult != null) ...<Widget>[
-          const SizedBox(height: 6),
-          Builder(
-            builder: (BuildContext ctx) {
-              final bool isSuccess = _mineruLocalLastTestSuccess ?? false;
-              final Color bgColor =
-                  isSuccess ? Colors.green.shade50 : Colors.red.shade50;
-              final Color borderColor =
-                  isSuccess ? Colors.green.shade300 : Colors.red.shade300;
-              final Color contentColor =
-                  isSuccess ? Colors.green.shade700 : Colors.red.shade700;
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: bgColor,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: borderColor),
-                ),
-                child: Row(
-                  children: <Widget>[
-                    Icon(
-                      isSuccess ? Icons.check_circle : Icons.error,
-                      color: contentColor,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: SelectableText(
-                        _mineruLocalTestResult!,
-                        style: TextStyle(
-                          color: contentColor,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
       ],
     );
   }
@@ -1682,49 +1652,6 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        if (_llmTestResult != null) ...<Widget>[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: (_llmLastTestSuccess ?? false)
-                  ? Colors.green.shade50
-                  : Colors.red.shade50,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: (_llmLastTestSuccess ?? false)
-                    ? Colors.green.shade300
-                    : Colors.red.shade300,
-              ),
-            ),
-            child: Row(
-              children: <Widget>[
-                Icon(
-                  (_llmLastTestSuccess ?? false)
-                      ? Icons.check_circle
-                      : Icons.error,
-                  color: (_llmLastTestSuccess ?? false)
-                      ? Colors.green.shade700
-                      : Colors.red.shade700,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: SelectableText(
-                    _llmTestResult!,
-                    style: TextStyle(
-                      color: (_llmLastTestSuccess ?? false)
-                          ? Colors.green.shade700
-                          : Colors.red.shade700,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
       ],
     );
   }
