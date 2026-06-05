@@ -250,6 +250,12 @@ async def test_ai_platform_connectivity(
     """
     platform = (platform_type or '').lower()
 
+    logger.info(
+        LogModule.AUTH,
+        f"[CONNECTIVITY_TEST] platform={platform}, model={model_name}, "
+        f"test_connect_timeout={test_connect_timeout}s, test_request_timeout={test_request_timeout}s"
+    )
+
     # MinerU cloud: dedicated test (create minimal task)
     if platform == 'mineru':
         try:
