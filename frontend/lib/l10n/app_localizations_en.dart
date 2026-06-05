@@ -2704,24 +2704,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setupWizardUiLanguageLabel => 'UI Language';
 
   @override
-  String get setupWizardMineruQuestion =>
-      'Do you need to translate PDF / images on this device?';
-
-  @override
-  String get setupWizardMineruYes =>
-      'Yes (recommended; enables MinerU document parsing)';
-
-  @override
-  String get setupWizardMineruNo =>
-      'Not for now (LLM-only translation for plain text, etc.)';
-
-  @override
   String get setupWizardMineruDescription =>
       'MinerU handles layout parsing and segmentation for PDF / images.\nEnter MinerU API Key and URL below, then click \"Test Connection\" to verify.';
-
-  @override
-  String get setupWizardMineruSkipped =>
-      'You chose not to configure MinerU. You can enable PDF translation later in Settings.';
 
   @override
   String get setupWizardMineruConfigTitle => 'MinerU (parsing engine)';

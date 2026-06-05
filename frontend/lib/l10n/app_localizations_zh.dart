@@ -2600,21 +2600,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setupWizardUiLanguageLabel => '界面语言';
 
   @override
-  String get setupWizardMineruQuestion => '是否需要在本机翻译 PDF / 图片等文档？';
-
-  @override
-  String get setupWizardMineruYes => '需要（推荐，启用 MinerU 文档解析能力）';
-
-  @override
-  String get setupWizardMineruNo => '暂时不需要（仅使用大语言模型翻译纯文本等）';
-
-  @override
   String get setupWizardMineruDescription =>
       'MinerU 负责 PDF / 图片等文档的版面解析与切分。\n请在下方填写 MinerU 的 API Key 和接口地址，并点击「测试连接」确认可用。';
-
-  @override
-  String get setupWizardMineruSkipped =>
-      '你选择了暂时不配置 MinerU，后续仍可在设置中随时开启 PDF 翻译能力。';
 
   @override
   String get setupWizardMineruConfigTitle => 'MinerU 配置（解析引擎）';

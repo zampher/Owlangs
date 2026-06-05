@@ -3382,6 +3382,8 @@ async def batch_update_settings(
                                     concurrent=_cc,
                                     timeout=int(p_val['timeout']) if p_val.get('timeout') is not None else None,
                                     write_timeout=int(p_val['write_timeout']) if p_val.get('write_timeout') is not None else None,
+                                    test_connect_timeout=int(p_val['test_connect_timeout']) if p_val.get('test_connect_timeout') is not None else 30,
+                                    test_request_timeout=int(p_val['test_request_timeout']) if p_val.get('test_request_timeout') is not None else 10,
                                 )
                                 platforms_config.update_platform_config(p_key, cfg)
                                 logger.info(LogModule.AUTH, f"[AI_PLATFORMS] Updated platform '{p_key}': url={cfg.url}, model={cfg.model}")

@@ -4784,35 +4784,11 @@ abstract class AppLocalizations {
   /// **'UI Language'**
   String get setupWizardUiLanguageLabel;
 
-  /// No description provided for @setupWizardMineruQuestion.
-  ///
-  /// In en, this message translates to:
-  /// **'Do you need to translate PDF / images on this device?'**
-  String get setupWizardMineruQuestion;
-
-  /// No description provided for @setupWizardMineruYes.
-  ///
-  /// In en, this message translates to:
-  /// **'Yes (recommended; enables MinerU document parsing)'**
-  String get setupWizardMineruYes;
-
-  /// No description provided for @setupWizardMineruNo.
-  ///
-  /// In en, this message translates to:
-  /// **'Not for now (LLM-only translation for plain text, etc.)'**
-  String get setupWizardMineruNo;
-
   /// No description provided for @setupWizardMineruDescription.
   ///
   /// In en, this message translates to:
   /// **'MinerU handles layout parsing and segmentation for PDF / images.\nEnter MinerU API Key and URL below, then click \"Test Connection\" to verify.'**
   String get setupWizardMineruDescription;
-
-  /// No description provided for @setupWizardMineruSkipped.
-  ///
-  /// In en, this message translates to:
-  /// **'You chose not to configure MinerU. You can enable PDF translation later in Settings.'**
-  String get setupWizardMineruSkipped;
 
   /// No description provided for @setupWizardMineruConfigTitle.
   ///

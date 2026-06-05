@@ -2622,21 +2622,8 @@ class AppLocalizationsKo extends AppLocalizations {
   String get setupWizardUiLanguageLabel => 'UI 언어';
 
   @override
-  String get setupWizardMineruQuestion => 'PDF/이미지 등 문서를 이 기기에서 번역하시겠습니까?';
-
-  @override
-  String get setupWizardMineruYes => '예(권장, MinerU 문서 파싱 사용)';
-
-  @override
-  String get setupWizardMineruNo => '아니오(LLM만으로 텍스트 번역 등)';
-
-  @override
   String get setupWizardMineruDescription =>
       'MinerU는 PDF/이미지의 레이아웃 파싱과 분할을 담당합니다.\n아래에 API Key와 URL을 입력한 뒤 \"연결 테스트\"로 확인하세요.';
-
-  @override
-  String get setupWizardMineruSkipped =>
-      'MinerU를 설정하지 않았습니다. 설정에서 나중에 PDF 번역을 켤 수 있습니다.';
 
   @override
   String get setupWizardMineruConfigTitle => 'MinerU(파싱 엔진)';

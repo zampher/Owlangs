@@ -2617,21 +2617,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setupWizardUiLanguageLabel => 'UI言語';
 
   @override
-  String get setupWizardMineruQuestion => 'PDF・画像などのドキュメントを翻訳しますか？';
-
-  @override
-  String get setupWizardMineruYes => 'はい（推奨・MinerUドキュメント解析を有効化）';
-
-  @override
-  String get setupWizardMineruNo => 'いいえ（LLMのみでテキスト翻訳など）';
-
-  @override
   String get setupWizardMineruDescription =>
       'MinerUはPDF・画像のレイアウト解析とセグメント化を行います。\n下記にAPI KeyとURLを入力し、「接続テスト」で確認してください。';
-
-  @override
-  String get setupWizardMineruSkipped =>
-      'MinerUは設定しませんでした。設定からいつでもPDF翻訳を有効にできます。';
 
   @override
   String get setupWizardMineruConfigTitle => 'MinerU（解析エンジン）';
