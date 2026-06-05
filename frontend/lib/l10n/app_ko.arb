@@ -494,6 +494,7 @@
       "error": {}
     }
   },
+  "translationQueueErrorMessageCopied": "오류 메시지가 복사되었습니다",
   "translationQueueSelected": "selected",
   "translationQueueSelectMode": "Select",
   "translationQueueClearSelection": "Clear selection",

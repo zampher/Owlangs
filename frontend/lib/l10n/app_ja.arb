@@ -494,6 +494,7 @@
       "error": {}
     }
   },
+  "translationQueueErrorMessageCopied": "エラーメッセージをコピーしました",
   "translationQueueSelected": "selected",
   "translationQueueSelectMode": "Select",
   "translationQueueClearSelection": "Clear selection",

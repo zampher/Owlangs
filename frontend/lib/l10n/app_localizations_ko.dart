@@ -1326,6 +1326,9 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get translationQueueErrorMessageCopied => '오류 메시지가 복사되었습니다';
+
+  @override
   String get translationQueueSelected => 'selected';
 
   @override

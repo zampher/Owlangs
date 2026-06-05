@@ -128,6 +128,8 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
             row['progress'] = 100;
           }
           row['message'] = st['message'] ?? row['message'];
+          row['message_level'] = st['message_level'] ?? row['message_level'];
+          row['error'] = st['error'] ?? row['error'];
           // Merge translation stats and token usage for completed tasks
           if (st['translation_stats'] is Map) {
             row['translation_stats'] = Map<String, dynamic>.from(
@@ -643,11 +645,39 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
               ),
             ),
             if (_loadError != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  l10n.translationQueueLoadFailed(_loadError!),
-                  style: TextStyle(color: theme.colorScheme.error),
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.errorContainer.withOpacity(0.35),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: theme.colorScheme.error.withOpacity(0.3),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.error_outline,
+                        color: theme.colorScheme.error, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        l10n.translationQueueLoadFailed(_loadError!),
+                        style: TextStyle(
+                          color: theme.colorScheme.error,
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => setState(() => _loadError = null),
+                      child: Icon(Icons.close,
+                          color: theme.colorScheme.error.withOpacity(0.6),
+                          size: 16),
+                    ),
+                  ],
                 ),
               ),
             // Multi-select toolbar
@@ -918,6 +948,9 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                   ],
                                 ),
                                 const SizedBox(height: 6),
+                                // Show error message inline when task failed
+                                if (status.toLowerCase() == 'failed')
+                                  _buildFailedMessage(row, cs, theme),
                                 // ── Line 2: Meta + Actions ──
                                 Row(
                                   children: <Widget>[
@@ -1472,6 +1505,74 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
       }
     }
     await _refresh();
+  }
+
+
+  /// Build inline error message for failed tasks, shown between Line 1 and Line 2.
+  Widget _buildFailedMessage(
+    Map<String, dynamic> row,
+    ColorScheme cs,
+    ThemeData theme,
+  ) {
+    // For failed tasks, prefer 'error' (root cause) over 'message' (step progress).
+    // message_level: 0=info, 1=warning, 2=error.
+    final int level = (row['message_level'] ?? 0) as int;
+    final String msg = (level >= 2
+            ? ((row['error'] ?? row['message']) ?? '')
+            : (row['message'] ?? row['error'] ?? ''))
+        .toString();
+    if (msg.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: cs.errorContainer.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: cs.error.withOpacity(0.2)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.error_outline, color: cs.error, size: 15),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                msg,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: cs.error,
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            InkWell(
+              borderRadius: BorderRadius.circular(4),
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: msg));
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(AppLocalizations.of(context)!.translationQueueErrorMessageCopied),
+                      duration: const Duration(seconds: 1),
+                    ),
+                  );
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: Icon(Icons.copy, color: cs.error.withOpacity(0.6), size: 14),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Build inline stats widget for Line 1 (filename row).

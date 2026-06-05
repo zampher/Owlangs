@@ -532,6 +532,7 @@
       "error": {}
     }
   },
+  "translationQueueErrorMessageCopied": "Error message copied",
   "translationQueueSelected": "selected",
   "translationQueueSelectMode": "Select",
   "translationQueueClearSelection": "Clear selection",

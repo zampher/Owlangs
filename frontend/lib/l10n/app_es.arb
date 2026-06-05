@@ -505,6 +505,7 @@
       "error": {}
     }
   },
+  "translationQueueErrorMessageCopied": "Mensaje de error copiado",
   "translationQueueSelected": "selected",
   "translationQueueSelectMode": "Select",
   "translationQueueClearSelection": "Clear selection",

@@ -1325,6 +1325,9 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get translationQueueErrorMessageCopied => 'エラーメッセージをコピーしました';
+
+  @override
   String get translationQueueSelected => 'selected';
 
   @override

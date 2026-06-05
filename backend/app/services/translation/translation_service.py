@@ -20,7 +20,7 @@ from pathlib import Path
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from utils.translation_validator import log_segment_translation_stats
-from backend.app.services.task import TaskManager
+from backend.app.services.task import TaskManager, MSG_LEVEL_ERROR
 from backend.app.services.translation.workflow_factory import WorkflowFactory
 from backend.app.services.translation.workflow_config_builder import WorkflowConfigBuilder
 from backend.app.services.translation.workflow_executor import WorkflowExecutor
@@ -328,14 +328,16 @@ class TranslationService:
                 task_state["status"] = "failed"
                 task_state["error"] = error_msg
                 task_state["message"] = f"LLM platform connection test failed: {user_message}"
+                task_state["message_level"] = MSG_LEVEL_ERROR
                 task_state["llm_error"] = error_msg
                 self.task_manager.update_task(task_id, {
                     "status": "failed",
                     "error": error_msg,
                     "message": f"LLM platform connection test failed: {user_message}",
+                    "message_level": MSG_LEVEL_ERROR,
                 })
                 return False
-                
+
         except Exception as e:
             logger.error(
                 LogModule.WORKFLOW,
@@ -353,11 +355,13 @@ class TranslationService:
             task_state["status"] = "failed"
             task_state["error"] = error_msg
             task_state["message"] = f"LLM platform connection test failed: {error_msg}"
+            task_state["message_level"] = MSG_LEVEL_ERROR
             task_state["llm_error"] = error_msg
             self.task_manager.update_task(task_id, {
                 "status": "failed",
                 "error": error_msg,
                 "message": f"LLM platform connection test failed: {error_msg}",
+                "message_level": MSG_LEVEL_ERROR,
             })
             return False
 
@@ -452,6 +456,7 @@ class TranslationService:
                     error_with_hint = error_text
                 task_state["status"] = "failed"
                 task_state["error"] = error_text
+                task_state["message_level"] = MSG_LEVEL_ERROR
                 llm_error = task_state.get("llm_error")
                 if llm_error:
                     task_state["message"] = f"Translation failed: {llm_error}"

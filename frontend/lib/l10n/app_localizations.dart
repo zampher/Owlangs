@@ -2465,6 +2465,12 @@ abstract class AppLocalizations {
   /// **'Could not clear your queue: {error}'**
   String translationQueueClearMyQueueFailed(Object error);
 
+  /// No description provided for @translationQueueErrorMessageCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Error message copied'**
+  String get translationQueueErrorMessageCopied;
+
   /// No description provided for @translationQueueSelected.
   ///
   /// In en, this message translates to:

@@ -17,6 +17,12 @@ from pathlib import Path
 from logger import unified_logger as logger
 from logger.logger import LogModule
 
+# Message severity levels: lower-level messages must not overwrite higher-level ones.
+# Language detection maxes out at WARNING; LLM/translation failures are ERROR.
+MSG_LEVEL_INFO = 0
+MSG_LEVEL_WARNING = 1
+MSG_LEVEL_ERROR = 2
+
 # Task cleanup configuration
 TASK_CLEANUP_INTERVAL = 3600  # 1 hour in seconds
 TASK_MAX_AGE = 86400  # 24 hours in seconds
@@ -61,6 +67,7 @@ class TaskManager:
             "status": "pending",
             "progress": 0,
             "message": "Task created, waiting to start...",
+            "message_level": MSG_LEVEL_INFO,
             "downloads": {},
             "attachments": {},
             "error": None,
@@ -90,12 +97,23 @@ class TaskManager:
     def update_task(self, task_id: str, updates: Dict[str, Any]):
         """
         Update task state with new values.
-        
+
+        A lower-severity message will never overwrite a higher-severity one.
+        Severity: INFO(0) < WARNING(1) < ERROR(2).
+
         Args:
             task_id: Unique task identifier
             updates: Dictionary of updates to apply
         """
         if task_id in self._tasks:
+            if "message" in updates:
+                existing_level = self._tasks[task_id].get("message_level", MSG_LEVEL_INFO)
+                new_level = updates.get("message_level", MSG_LEVEL_INFO)
+                if new_level < existing_level:
+                    updates = {
+                        k: v for k, v in updates.items()
+                        if k not in ("message", "message_level")
+                    }
             self._tasks[task_id].update(updates)
         else:
             logger.warning(LogModule.SYSTEM, f"[TASK-MANAGER] Attempted to update non-existent task: {task_id}")

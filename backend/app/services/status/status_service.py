@@ -29,7 +29,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-from backend.app.services.task import task_manager
+from backend.app.services.task import task_manager, MSG_LEVEL_WARNING
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from utils.pagination import parse_pagination_params, PaginatedResponse
@@ -106,6 +106,7 @@ def _language_detection_fallback_langdetect_only(
                 "message": f"Detect Language: {idx}/{total_segments} segments ({int(100 * idx / total_segments)}%)",
                 "progress": min(100, int(100 * idx / total_segments)),
                 "status": "processing",
+                "message_level": MSG_LEVEL_WARNING,
             })
         s = (segment or "").strip()
         if len(s) < min_length:
@@ -132,6 +133,7 @@ def _language_detection_fallback_langdetect_only(
         "progress": 100,
         "message": f"Detect Language: {total_segments}/{total_segments} segments (100%)",
         "status": "processing",
+        "message_level": MSG_LEVEL_WARNING,
     }
 
 
@@ -165,6 +167,7 @@ def _language_detection_worker(
                 "message": f"Detect Language: short segments {completed}/{total} ({pct}%)",
                 "progress": min(99, 90 + pct // 10),
                 "status": "processing",
+                "message_level": MSG_LEVEL_WARNING,
             })
         else:
             pct = int((completed / total) * 100)
@@ -172,6 +175,7 @@ def _language_detection_worker(
                 "message": f"Detect Language: {completed}/{total} segments ({pct}%)",
                 "progress": min(100, pct),
                 "status": "processing",
+                "message_level": MSG_LEVEL_WARNING,
             })
 
     try:
@@ -193,6 +197,7 @@ def _language_detection_worker(
             "progress": 100,
             "message": f"Detect Language: {total_segments}/{total_segments} segments (100%)",
             "status": "processing",
+            "message_level": MSG_LEVEL_WARNING,
         })
     except Exception as e:
         err_str = str(e).lower()
@@ -958,6 +963,7 @@ class StatusService:
                             _language_detection_tasks.add(task_id)
                         self.task_manager.update_task(task_id, {
                             "message": f"Detect Language: 0/{total_segments} segments (0%)",
+                            "message_level": MSG_LEVEL_WARNING,
                             "progress": 0,
                             "status": task_state.get("status", "processing")
                         })
@@ -1037,6 +1043,8 @@ class StatusService:
                                         task_manager_ref.update_task(task_id, {
                                             "status": "failed",
                                             "error": result.get("error", "Language detection failed"),
+                                            "message": f"Language detection error: {result.get('error', 'Language detection failed')}",
+                                            "message_level": MSG_LEVEL_WARNING,
                                         })
                                 else:
                                     # Do not overwrite progress/message if task already in translation phase
@@ -1092,6 +1100,7 @@ class StatusService:
                         # Return immediately with progress 0 so frontend shows Extract tab and can poll for progress
                         language_distribution = None
                         task_state["message"] = f"Detect Language: 0/{total_segments} segments (0%)"
+                        task_state["message_level"] = MSG_LEVEL_WARNING
                         task_state["progress"] = 0
             except Exception as e:
                 # If detection fails, log but don't fail the request

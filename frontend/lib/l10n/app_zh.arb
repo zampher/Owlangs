@@ -516,6 +516,7 @@
       "error": {}
     }
   },
+  "translationQueueErrorMessageCopied": "错误信息已复制",
   "translationQueueSelected": "已选",
   "translationQueueSelectMode": "选择",
   "translationQueueClearSelection": "清除选择",

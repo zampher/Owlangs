@@ -1378,6 +1378,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get translationQueueErrorMessageCopied => 'Error message copied';
+
+  @override
   String get translationQueueSelected => 'selected';
 
   @override

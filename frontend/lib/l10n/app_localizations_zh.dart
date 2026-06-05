@@ -1315,6 +1315,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get translationQueueErrorMessageCopied => '错误信息已复制';
+
+  @override
   String get translationQueueSelected => '已选';
 
   @override
