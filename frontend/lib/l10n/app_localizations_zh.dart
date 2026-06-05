@@ -2739,6 +2739,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiPlatformWriteTimeoutHint => '300（默认）。发送数据到LLM的最长等待时间。';
 
   @override
+  String get aiPlatformTestConnectTimeout => '连接测试超时（秒）';
+
+  @override
+  String get aiPlatformTestConnectTimeoutHint => '30（默认）。翻译开始前连接测试的最大等待时间。';
+
+  @override
+  String get aiPlatformTestRequestTimeout => '测试请求超时（秒）';
+
+  @override
+  String get aiPlatformTestRequestTimeoutHint => '10（默认）。连接测试期间每个探测请求的最大等待时间。';
+
+  @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';
 
   @override

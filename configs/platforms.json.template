@@ -4,7 +4,7 @@
   "platforms": {
     "local": {
       "name": "Local (OpenAI API)",
-      "url": "http://localhost:8080/v1",
+      "url": "http://localhost:11434/v1",
       "model": "",
       "max_tokens": 4096,
       "temperature": 0.3,
@@ -24,7 +24,9 @@
       "chunk_size": 4000,
       "concurrent": 2,
       "timeout": 300,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 60,
+      "test_request_timeout": 20
     },
     "ollama": {
       "name": "Local (Ollama)",
@@ -48,7 +50,9 @@
       "chunk_size": 2500,
       "concurrent": 1,
       "timeout": 300,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 60,
+      "test_request_timeout": 20
     },
     "anthropic_local": {
       "name": "Local (Anthropic)",
@@ -71,7 +75,9 @@
       "chunk_size": 8000,
       "concurrent": 2,
       "timeout": 300,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 60,
+      "test_request_timeout": 20
     },
     "openai": {
       "name": "OpenAI",
@@ -95,7 +101,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "azure": {
       "name": "Azure OpenAI",
@@ -119,7 +127,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "anthropic": {
       "name": "Anthropic Claude",
@@ -143,7 +153,9 @@
       "chunk_size": 16000,
       "concurrent": 5,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "google": {
       "name": "Google Gemini",
@@ -167,7 +179,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "deepseek": {
       "name": "DeepSeek",
@@ -191,7 +205,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "dashscope": {
       "name": "Alibaba DashScope",
@@ -215,7 +231,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "volcengine_ark": {
       "name": "VolcEngine ARK (鏂硅垷)",
@@ -239,7 +257,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "zhipu": {
       "name": "Zhipu AI",
@@ -263,7 +283,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "groq": {
       "name": "Groq",
@@ -287,7 +309,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "together": {
       "name": "Together AI",
@@ -311,7 +335,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "mistral": {
       "name": "Mistral AI",
@@ -335,7 +361,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "cohere": {
       "name": "Cohere",
@@ -359,7 +387,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "xai": {
       "name": "xAI",
@@ -383,7 +413,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "siliconflow": {
       "name": "SiliconFlow",
@@ -407,7 +439,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "dmxapi": {
       "name": "DMX API",
@@ -431,7 +465,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "openrouter": {
       "name": "OpenRouter",
@@ -455,7 +491,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "hunyuan": {
       "name": "Hunyuan",
@@ -479,7 +517,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "baidu": {
       "name": "Baidu ERNIE",
@@ -503,7 +543,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "moonshot": {
       "name": "Moonshot AI",
@@ -527,7 +569,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "aleph_alpha": {
       "name": "Aleph Alpha (Germany)",
@@ -551,7 +595,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "rinna": {
       "name": "Rinna (Japan)",
@@ -575,7 +621,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "naver": {
       "name": "Naver HyperClova (Korea)",
@@ -599,7 +647,9 @@
       "chunk_size": 8000,
       "concurrent": 10,
       "timeout": 200,
-      "write_timeout": 300
+      "write_timeout": 300,
+      "test_connect_timeout": 30,
+      "test_request_timeout": 10
     },
     "mineru": {
       "name": "MinerU (Cloud)",

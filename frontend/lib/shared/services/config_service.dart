@@ -357,6 +357,8 @@ class ConfigService {
     String apiKey, {
     String? baseUrl,
     String? modelName,
+    int? testConnectTimeout,
+    int? testRequestTimeout,
   }) async {
     try {
       // 使用真正的API测试服务
@@ -366,6 +368,8 @@ class ConfigService {
         apiKey,
         baseUrl: baseUrl,
         modelName: modelName,
+        testConnectTimeout: testConnectTimeout,
+        testRequestTimeout: testRequestTimeout,
       );
       // 规范化失败信息：若存在 error，则将其映射到 message，避免仅显示 "Connection failed"
       if (result['success'] == false) {
@@ -702,8 +706,12 @@ class AIPlatformInfo {
     this.concurrent = 5,
     int? timeout,
     int? writeTimeout,
+    int? testConnectTimeout,
+    int? testRequestTimeout,
   }) : timeout = (timeout != null && timeout > 0) ? timeout : (_isLocalUrl(url) ? 300 : 200),
-       writeTimeout = (writeTimeout != null && writeTimeout > 0) ? writeTimeout : 300;
+       writeTimeout = (writeTimeout != null && writeTimeout > 0) ? writeTimeout : 300,
+       testConnectTimeout = (testConnectTimeout != null && testConnectTimeout > 0) ? testConnectTimeout : 30,
+       testRequestTimeout = (testRequestTimeout != null && testRequestTimeout > 0) ? testRequestTimeout : 10;
 
   factory AIPlatformInfo.fromJson(
     String key,
@@ -766,6 +774,8 @@ class AIPlatformInfo {
       concurrent: _toInt(json['concurrent'], 5),
       timeout: _toInt(json['timeout'], null),
       writeTimeout: _toInt(json['write_timeout'], null),
+      testConnectTimeout: _toInt(json['test_connect_timeout'], null),
+      testRequestTimeout: _toInt(json['test_request_timeout'], null),
     );
   }
 
@@ -844,6 +854,8 @@ class AIPlatformInfo {
   final int concurrent;
   final int timeout;
   final int writeTimeout;
+  final int testConnectTimeout;
+  final int testRequestTimeout;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'name': name,
@@ -868,6 +880,8 @@ class AIPlatformInfo {
         'concurrent': concurrent,
         'timeout': timeout,
         'write_timeout': writeTimeout,
+        'test_connect_timeout': testConnectTimeout,
+        'test_request_timeout': testRequestTimeout,
         // Intentionally exclude lastTestError from persisted JSON
       };
 
@@ -898,6 +912,8 @@ class AIPlatformInfo {
     int? concurrent,
     int? timeout,
     int? writeTimeout,
+    int? testConnectTimeout,
+    int? testRequestTimeout,
   }) =>
       AIPlatformInfo(
         key: key,
@@ -928,5 +944,7 @@ class AIPlatformInfo {
         concurrent: concurrent ?? this.concurrent,
         timeout: timeout ?? this.timeout,
         writeTimeout: writeTimeout ?? this.writeTimeout,
+        testConnectTimeout: testConnectTimeout ?? this.testConnectTimeout,
+        testRequestTimeout: testRequestTimeout ?? this.testRequestTimeout,
       );
 }

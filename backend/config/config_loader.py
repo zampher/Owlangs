@@ -141,6 +141,12 @@ class UnifiedConfig:
                 platforms_dict[key]['write_timeout'] = (
                     int(platform.write_timeout) if platform.write_timeout is not None else None
                 )
+                platforms_dict[key]['test_connect_timeout'] = (
+                    int(platform.test_connect_timeout) if platform.test_connect_timeout is not None else 30
+                )
+                platforms_dict[key]['test_request_timeout'] = (
+                    int(platform.test_request_timeout) if platform.test_request_timeout is not None else 10
+                )
         platforms_dict['default_platform'] = self.platforms.default_platform
         return platforms_dict
     

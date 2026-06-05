@@ -2756,6 +2756,20 @@ class AppLocalizationsJa extends AppLocalizations {
   String get aiPlatformWriteTimeoutHint => '300（デフォルト）。LLMへのデータ送信の最大待機時間。';
 
   @override
+  String get aiPlatformTestConnectTimeout => '接続テストタイムアウト（秒）';
+
+  @override
+  String get aiPlatformTestConnectTimeoutHint =>
+      '30（デフォルト）。翻訳開始前の接続テストの最大待機時間。';
+
+  @override
+  String get aiPlatformTestRequestTimeout => 'テストリクエストタイムアウト（秒）';
+
+  @override
+  String get aiPlatformTestRequestTimeoutHint =>
+      '10（デフォルト）。接続テスト中の各プローブリクエストの最大待機時間。';
+
+  @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';
 
   @override

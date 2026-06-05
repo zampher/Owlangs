@@ -16,6 +16,8 @@ class AIPlatformTestService {
     required String apiKey,
     String? baseUrl,
     String? modelName,
+    int? testConnectTimeout,
+    int? testRequestTimeout,
   }) async {
     final cfg = ConfigService();
     final authHeader = cfg.authorizationHeader;
@@ -31,11 +33,13 @@ class AIPlatformTestService {
     );
 
     try {
-      final payload = <String, String>{
+      final payload = <String, dynamic>{
         'platform_type': platformType,
         if (baseUrl != null) 'base_url': baseUrl,
         if (modelName != null) 'model_name': modelName,
         'api_key': apiKey,
+        if (testConnectTimeout != null) 'test_connect_timeout': testConnectTimeout,
+        if (testRequestTimeout != null) 'test_request_timeout': testRequestTimeout,
       };
       
       // DEBUG: Log payload
@@ -143,6 +147,8 @@ class AIPlatformTestService {
     String apiKey, {
     String? baseUrl,
     String? modelName,
+    int? testConnectTimeout,
+    int? testRequestTimeout,
   }) async {
     final p = platform.toLowerCase();
     // Both mineru (cloud) and mineru_local use the same test endpoint
@@ -154,6 +160,8 @@ class AIPlatformTestService {
       apiKey: apiKey,
       baseUrl: baseUrl,
       modelName: modelName,
+      testConnectTimeout: testConnectTimeout,
+      testRequestTimeout: testRequestTimeout,
     );
   }
 

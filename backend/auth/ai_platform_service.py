@@ -241,6 +241,8 @@ async def test_ai_platform_connectivity(
     api_key: str,
     detect_max_tokens: bool = True,
     requires_api_key: bool = True,
+    test_connect_timeout: int = 30,
+    test_request_timeout: int = 10,
 ) -> Dict[str, Any]:
     """Unified AI 平台连通性测试。
 
@@ -267,10 +269,10 @@ async def test_ai_platform_connectivity(
 
     # LLM platforms: use models list API for connectivity test (no token consumption)
     result: Dict[str, Any] = {}
-    
+
     try:
         # Disable proxy for local/remote direct connections
-        async with httpx.AsyncClient(timeout=30.0, proxy=None, mounts={'http://': None, 'https://': None}) as client:
+        async with httpx.AsyncClient(timeout=float(test_connect_timeout), proxy=None, mounts={'http://': None, 'https://': None}) as client:
             if platform == 'anthropic':
                 # Anthropic: use /v1/models endpoint (beta) or fallback to minimal request
                 headers = {
@@ -280,7 +282,7 @@ async def test_ai_platform_connectivity(
                 }
                 # Try models endpoint first (no token consumption)
                 try:
-                    models_resp = await client.get(f"{base_url}/v1/models", headers=headers, timeout=10.0)
+                    models_resp = await client.get(f"{base_url}/v1/models", headers=headers, timeout=float(test_request_timeout))
                     if models_resp.status_code == 200:
                         result["success"] = True
                         result["message"] = "Anthropic API connection successful (models endpoint)"
@@ -300,7 +302,7 @@ async def test_ai_platform_connectivity(
                 headers = {"Content-Type": "application/json"}
                 models_url = f"{base_url}/models?key={api_key}"
                 try:
-                    models_resp = await client.get(models_url, headers=headers, timeout=10.0)
+                    models_resp = await client.get(models_url, headers=headers, timeout=float(test_request_timeout))
                     if models_resp.status_code == 200:
                         result["success"] = True
                         result["message"] = "Google AI connection successful (models endpoint)"
@@ -330,7 +332,7 @@ async def test_ai_platform_connectivity(
             elif platform == 'ollama':
                 # Ollama: use /api/tags to list local models (no token consumption)
                 try:
-                    tags_resp = await client.get(f"{base_url}/api/tags", timeout=10.0)
+                    tags_resp = await client.get(f"{base_url}/api/tags", timeout=float(test_request_timeout))
                     if tags_resp.status_code == 200:
                         result["success"] = True
                         result["message"] = "Ollama connection successful (tags endpoint)"
@@ -353,7 +355,7 @@ async def test_ai_platform_connectivity(
                 if requires_api_key and api_key and api_key.strip():
                     headers["Authorization"] = f"Bearer {api_key}"
                 try:
-                    models_resp = await client.get(f"{base_url}/models", headers=headers, timeout=10.0)
+                    models_resp = await client.get(f"{base_url}/models", headers=headers, timeout=float(test_request_timeout))
                     if models_resp.status_code == 200:
                         result["success"] = True
                         result["message"] = "Local API connection successful (models endpoint)"
@@ -392,7 +394,7 @@ async def test_ai_platform_connectivity(
                 
                 if not skip_models_endpoint:
                     try:
-                        models_resp = await client.get(f"{base_url}/models", headers=headers, timeout=10.0)
+                        models_resp = await client.get(f"{base_url}/models", headers=headers, timeout=float(test_request_timeout))
                         if models_resp.status_code == 200:
                             # Validate response content - some platforms return 200 with error
                             try:

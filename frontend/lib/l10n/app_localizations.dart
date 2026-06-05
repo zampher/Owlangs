@@ -5048,6 +5048,30 @@ abstract class AppLocalizations {
   /// **'300 (default). Max wait time for sending data to LLM.'**
   String get aiPlatformWriteTimeoutHint;
 
+  /// No description provided for @aiPlatformTestConnectTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Test Timeout (seconds)'**
+  String get aiPlatformTestConnectTimeout;
+
+  /// No description provided for @aiPlatformTestConnectTimeoutHint.
+  ///
+  /// In en, this message translates to:
+  /// **'30 (default). Max wait time for connectivity test before starting translation.'**
+  String get aiPlatformTestConnectTimeoutHint;
+
+  /// No description provided for @aiPlatformTestRequestTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Test Request Timeout (seconds)'**
+  String get aiPlatformTestRequestTimeout;
+
+  /// No description provided for @aiPlatformTestRequestTimeoutHint.
+  ///
+  /// In en, this message translates to:
+  /// **'10 (default). Max wait for each probe request during connectivity test.'**
+  String get aiPlatformTestRequestTimeoutHint;
+
   /// No description provided for @aiPlatformMineruApiUrlHint.
   ///
   /// In en, this message translates to:

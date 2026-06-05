@@ -2853,6 +2853,20 @@ class AppLocalizationsEn extends AppLocalizations {
       '300 (default). Max wait time for sending data to LLM.';
 
   @override
+  String get aiPlatformTestConnectTimeout => 'Connect Test Timeout (seconds)';
+
+  @override
+  String get aiPlatformTestConnectTimeoutHint =>
+      '30 (default). Max wait time for connectivity test before starting translation.';
+
+  @override
+  String get aiPlatformTestRequestTimeout => 'Test Request Timeout (seconds)';
+
+  @override
+  String get aiPlatformTestRequestTimeoutHint =>
+      '10 (default). Max wait for each probe request during connectivity test.';
+
+  @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';
 
   @override

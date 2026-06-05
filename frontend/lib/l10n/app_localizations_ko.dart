@@ -2762,6 +2762,20 @@ class AppLocalizationsKo extends AppLocalizations {
   String get aiPlatformWriteTimeoutHint => '300 (기본값). LLM으로 데이터 전송 최대 대기 시간.';
 
   @override
+  String get aiPlatformTestConnectTimeout => '연결 테스트 타임아웃 (초)';
+
+  @override
+  String get aiPlatformTestConnectTimeoutHint =>
+      '30 (기본값). 번역 시작 전 연결 테스트 최대 대기 시간.';
+
+  @override
+  String get aiPlatformTestRequestTimeout => '테스트 요청 타임아웃 (초)';
+
+  @override
+  String get aiPlatformTestRequestTimeoutHint =>
+      '10 (기본값). 연결 테스트 중 각 프로브 요청의 최대 대기 시간.';
+
+  @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';
 
   @override

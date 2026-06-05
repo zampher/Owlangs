@@ -2891,6 +2891,22 @@ class AppLocalizationsEs extends AppLocalizations {
       '300 (predeterminado). Tiempo máximo de espera para enviar datos al LLM.';
 
   @override
+  String get aiPlatformTestConnectTimeout =>
+      'Timeout de prueba de conexión (segundos)';
+
+  @override
+  String get aiPlatformTestConnectTimeoutHint =>
+      '30 (predeterminado). Tiempo máximo de espera para la prueba de conectividad antes de iniciar la traducción.';
+
+  @override
+  String get aiPlatformTestRequestTimeout =>
+      'Timeout de solicitud de prueba (segundos)';
+
+  @override
+  String get aiPlatformTestRequestTimeoutHint =>
+      '10 (predeterminado). Tiempo máximo de espera para cada solicitud de prueba durante la prueba de conectividad.';
+
+  @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';
 
   @override

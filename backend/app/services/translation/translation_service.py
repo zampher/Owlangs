@@ -280,6 +280,21 @@ class TranslationService:
         except Exception:
             pass
 
+        # Read connectivity test timeout values from platform config
+        test_connect_timeout = 30
+        test_request_timeout = 10
+        try:
+            from backend.config.config_loader import get_unified_config
+            unified_config = get_unified_config()
+            pk = platform_key_for_status or platform_type
+            if pk:
+                platform_cfg = unified_config.platforms.get_platform_config(pk)
+                if platform_cfg:
+                    test_connect_timeout = getattr(platform_cfg, 'test_connect_timeout', 30) or 30
+                    test_request_timeout = getattr(platform_cfg, 'test_request_timeout', 10) or 10
+        except Exception:
+            pass
+
         try:
             from backend.auth.ai_platform_service import test_ai_platform_connectivity
             result = await test_ai_platform_connectivity(
@@ -289,6 +304,8 @@ class TranslationService:
                 api_key=api_key or "",
                 detect_max_tokens=False,  # Keep test fast; max_tokens detection is optional
                 requires_api_key=requires_api_key,
+                test_connect_timeout=test_connect_timeout,
+                test_request_timeout=test_request_timeout,
             )
             
             # Update QuickSettings / Settings LLM status regardless of success/failure

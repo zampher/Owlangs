@@ -45,6 +45,8 @@ class AIPlatformConfig:
     concurrent: int = 5  # Per-platform concurrent requests. Overrides global app_config setting.
     timeout: Optional[int] = None  # Per-platform read timeout (seconds). Overrides global default.
     write_timeout: Optional[int] = None  # Per-platform write timeout (seconds). Overrides global default.
+    test_connect_timeout: Optional[int] = None  # Per-platform connect-test client timeout (seconds). Default 30.
+    test_request_timeout: Optional[int] = None  # Per-platform connect-test sub-request timeout (seconds). Default 10.
 
 
 @dataclass
@@ -178,6 +180,8 @@ class PlatformsConfig:
                         pdata.pop("concurrent", None)
                         pdata.pop("timeout", None)
                         pdata.pop("write_timeout", None)
+                        pdata.pop("test_connect_timeout", None)
+                        pdata.pop("test_request_timeout", None)
                     allowed = {f.name for f in fields(AIPlatformConfig)}
                     unknown = sorted(k for k in pdata if k not in allowed)
                     if unknown:
@@ -193,6 +197,12 @@ class PlatformsConfig:
                             needs_migration = True
                         if pdata_filtered.get('write_timeout') is None:
                             pdata_filtered['write_timeout'] = 300
+                            needs_migration = True
+                        if pdata_filtered.get('test_connect_timeout') is None:
+                            pdata_filtered['test_connect_timeout'] = 30
+                            needs_migration = True
+                        if pdata_filtered.get('test_request_timeout') is None:
+                            pdata_filtered['test_request_timeout'] = 10
                             needs_migration = True
                     self.platforms[platform_key] = AIPlatformConfig(**pdata_filtered)
             if needs_migration:
@@ -215,6 +225,8 @@ class PlatformsConfig:
                 plat_dict.pop("concurrent", None)
                 plat_dict.pop("timeout", None)
                 plat_dict.pop("write_timeout", None)
+                plat_dict.pop("test_connect_timeout", None)
+                plat_dict.pop("test_request_timeout", None)
             config_dict["platforms"][platform_key] = plat_dict
 
         return config_dict

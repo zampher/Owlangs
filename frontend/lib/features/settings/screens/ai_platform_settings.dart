@@ -806,6 +806,8 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
   late TextEditingController _concurrentController;
   late TextEditingController _timeoutController;
   late TextEditingController _writeTimeoutController;
+  late TextEditingController _testConnectTimeoutController;
+  late TextEditingController _testRequestTimeoutController;
   late String _thinkingMode; // "enable", "disable", "default"
   late String _apiProtocol; // "openai", "ollama", "anthropic"
   late bool _hasApiKey; // Whether platform has API key (if false, API key is optional)
@@ -838,6 +840,10 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
         TextEditingController(text: widget.platformInfo.timeout.toString());
     _writeTimeoutController =
         TextEditingController(text: widget.platformInfo.writeTimeout.toString());
+    _testConnectTimeoutController =
+        TextEditingController(text: widget.platformInfo.testConnectTimeout.toString());
+    _testRequestTimeoutController =
+        TextEditingController(text: widget.platformInfo.testRequestTimeout.toString());
     _thinkingMode = widget.platformInfo.thinkingMode;
     _apiProtocol = widget.platformInfo.apiProtocol;
     _hasApiKey = widget.platformInfo.requiresApiKey;
@@ -861,6 +867,8 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
     _concurrentController.dispose();
     _timeoutController.dispose();
     _writeTimeoutController.dispose();
+    _testConnectTimeoutController.dispose();
+    _testRequestTimeoutController.dispose();
     _temperatureFocusNode.dispose();
     super.dispose();
   }
@@ -961,6 +969,29 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
                                     _writeTimeoutController,
                                     keyboardType: TextInputType.number,
                                     hintText: '300 (default). Max wait time for sending data to LLM.',
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Expanded(
+                                  child: _buildTextField(
+                                    l10n.aiPlatformTestConnectTimeout,
+                                    _testConnectTimeoutController,
+                                    keyboardType: TextInputType.number,
+                                    hintText: l10n.aiPlatformTestConnectTimeoutHint,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _buildTextField(
+                                    l10n.aiPlatformTestRequestTimeout,
+                                    _testRequestTimeoutController,
+                                    keyboardType: TextInputType.number,
+                                    hintText: l10n.aiPlatformTestRequestTimeoutHint,
                                   ),
                                 ),
                               ],
@@ -1683,6 +1714,8 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
       baseUpdates['concurrent'] = int.tryParse(_concurrentController.text) ?? current.concurrent;
       baseUpdates['timeout'] = int.tryParse(_timeoutController.text) ?? current.timeout;
       baseUpdates['write_timeout'] = int.tryParse(_writeTimeoutController.text) ?? current.writeTimeout;
+      baseUpdates['testConnectTimeout'] = int.tryParse(_testConnectTimeoutController.text) ?? current.testConnectTimeout;
+      baseUpdates['testRequestTimeout'] = int.tryParse(_testRequestTimeoutController.text) ?? current.testRequestTimeout;
       baseUpdates['thinkingMode'] = current.thinkingModeSupported ? _thinkingMode : current.thinkingMode;
     }
     
@@ -1708,6 +1741,8 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
       concurrent: baseUpdates['concurrent'] as int? ?? current.concurrent,
       timeout: baseUpdates['timeout'] as int? ?? current.timeout,
       writeTimeout: baseUpdates['write_timeout'] as int? ?? current.writeTimeout,
+      testConnectTimeout: baseUpdates['testConnectTimeout'] as int? ?? current.testConnectTimeout,
+      testRequestTimeout: baseUpdates['testRequestTimeout'] as int? ?? current.testRequestTimeout,
       thinkingMode: baseUpdates['thinkingMode'] as String? ?? current.thinkingMode,
       apiProtocol: baseUpdates['apiProtocol'] as String,
       requiresApiKey: baseUpdates['requiresApiKey'] as bool,
@@ -2099,6 +2134,8 @@ class AIPlatformSettingsNotifier extends StateNotifier<AIPlatformSettings> {
         modelName: (modelNameOverride != null)
             ? modelNameOverride.trim()
             : info?.model,
+        testConnectTimeout: info?.testConnectTimeout,
+        testRequestTimeout: info?.testRequestTimeout,
       );
 
       // Update platform API availability status and last error message

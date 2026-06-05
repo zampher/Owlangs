@@ -4260,7 +4260,15 @@ async def test_ai_platform(
         
         # Detect max_tokens if requested (default: True)
         detect_max_tokens = data.get('detect_max_tokens', True)
-        result = await test_ai_platform_connectivity(platform_type, base_url, safe_model, api_key, detect_max_tokens=detect_max_tokens, requires_api_key=requires_api_key)
+        test_connect_timeout = data.get('test_connect_timeout', 30)
+        test_request_timeout = data.get('test_request_timeout', 10)
+        result = await test_ai_platform_connectivity(
+            platform_type, base_url, safe_model, api_key,
+            detect_max_tokens=detect_max_tokens,
+            requires_api_key=requires_api_key,
+            test_connect_timeout=test_connect_timeout,
+            test_request_timeout=test_request_timeout,
+        )
         
         # If max_tokens was detected and test was successful, update platform configuration
         if result.get('success') and 'max_tokens' in result:

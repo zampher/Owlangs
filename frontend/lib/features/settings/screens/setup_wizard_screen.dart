@@ -77,6 +77,8 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   late TextEditingController _llmConcurrentController;
   late TextEditingController _llmTimeoutController;
   late TextEditingController _llmWriteTimeoutController;
+  late TextEditingController _llmTestConnectTimeoutController;
+  late TextEditingController _llmTestRequestTimeoutController;
   String _llmThinkingMode = 'disable';
   String _llmApiProtocol = 'openai';  // API protocol: openai, ollama, anthropic
   bool _llmHasApiKey = true;  // Whether platform has API key (if false, API key is optional)
@@ -177,6 +179,8 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _llmConcurrentController = TextEditingController(text: '5');
     _llmTimeoutController = TextEditingController(text: '200');
     _llmWriteTimeoutController = TextEditingController(text: '300');
+    _llmTestConnectTimeoutController = TextEditingController(text: '30');
+    _llmTestRequestTimeoutController = TextEditingController(text: '10');
     _llmTemperatureFocusNode = FocusNode();
     _llmTemperatureFocusNode.addListener(() {
       setState(() {
@@ -209,6 +213,8 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _llmConcurrentController.dispose();
     _llmTimeoutController.dispose();
     _llmWriteTimeoutController.dispose();
+    _llmTestConnectTimeoutController.dispose();
+    _llmTestRequestTimeoutController.dispose();
     _llmTemperatureFocusNode.dispose();
     super.dispose();
   }
@@ -322,7 +328,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         LinearProgressIndicator(
           value: (_currentStep + 1) / 3,
         ),
@@ -363,6 +369,8 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _llmConcurrentController.text = p.concurrent.toString();
     _llmTimeoutController.text = p.timeout.toString();
     _llmWriteTimeoutController.text = p.writeTimeout.toString();
+    _llmTestConnectTimeoutController.text = p.testConnectTimeout.toString();
+    _llmTestRequestTimeoutController.text = p.testRequestTimeout.toString();
     _llmThinkingMode = p.thinkingMode;
     _llmApiProtocol = p.apiProtocol;
     _llmHasApiKey = p.requiresApiKey;
@@ -455,7 +463,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       children: <Widget>[
         Text(
           l10n.setupWizardMineruQuestion,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 4),
         RadioListTile<bool>(
@@ -485,7 +493,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           },
         ),
         if (_needsPdfTranslation) ...<Widget>[
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
@@ -498,20 +506,22 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
               style: const TextStyle(fontSize: 12),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           // MinerU Platform Selection
           Text(
             l10n.setupWizardSelectMineruPlatform,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           DropdownButtonFormField<String>(
             initialValue: _selectedMineruPlatform,
             decoration: InputDecoration(
               labelText: l10n.setupWizardSelectMineruPlatform,
               border: const OutlineInputBorder(),
+              labelStyle: const TextStyle(fontSize: 12),
+              hintStyle: const TextStyle(fontSize: 11),
               contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             ),
             items: <DropdownMenuItem<String>>[
               DropdownMenuItem<String>(
@@ -571,7 +581,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           children: <Widget>[
             Text(
               l10n.setupWizardMineruConfigTitle,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
             ),
             const SizedBox(width: 12),
             Icon(Icons.circle, size: 10, color: statusColor),
@@ -589,7 +599,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -601,7 +611,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   hintText: 'MinerU (Cloud)',
                   prefixIcon: const Icon(Icons.label_outline),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 ),
               ),
             ),
@@ -615,7 +627,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   labelText: l10n.aiPlatformParserSubtype,
                   prefixIcon: const Icon(Icons.category_outlined),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 ),
                 items: <DropdownMenuItem<String>>[
                   DropdownMenuItem<String>(
@@ -636,7 +650,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -648,7 +662,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   hintText: l10n.aiPlatformMineruApiUrlHint,
                   prefixIcon: const Icon(Icons.link),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 ),
               ),
             ),
@@ -682,7 +698,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                           },
                         ),
                         border: const OutlineInputBorder(),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        labelStyle: const TextStyle(fontSize: 12),
+                        hintStyle: const TextStyle(fontSize: 11),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       ),
                     ),
                   ],
@@ -691,7 +709,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -724,7 +742,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           ],
         ),
         if (_mineruTestResult != null) ...<Widget>[
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Builder(
             builder: (BuildContext ctx) {
               final bool isSuccess = _mineruLastTestSuccess ?? false;
@@ -764,7 +782,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             },
           ),
         ],
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         _wrapIfUnavailable(
           showUnavailableHint,
           child: Row(
@@ -846,7 +864,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           children: <Widget>[
             Text(
               l10n.setupWizardMineruConfigTitle,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
             ),
             const SizedBox(width: 12),
             Icon(Icons.circle, size: 10, color: statusColor),
@@ -864,7 +882,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -876,7 +894,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   hintText: 'MinerU (Local)',
                   prefixIcon: const Icon(Icons.label_outline),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 ),
               ),
             ),
@@ -888,7 +908,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   labelText: l10n.aiPlatformModelVersion,
                   prefixIcon: const Icon(Icons.schema_outlined),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 ),
                 items: const <DropdownMenuItem<String>>[
                   DropdownMenuItem(value: 'pipeline', child: Text('pipeline')),
@@ -906,7 +928,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -918,7 +940,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   hintText: 'http://localhost:8920',
                   prefixIcon: const Icon(Icons.link),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 ),
               ),
             ),
@@ -932,7 +956,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   labelText: l10n.aiPlatformParserSubtype,
                   prefixIcon: const Icon(Icons.category_outlined),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 ),
                 items: <DropdownMenuItem<String>>[
                   DropdownMenuItem<String>(
@@ -953,7 +979,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -984,13 +1010,15 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                     },
                   ),
                   border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -1023,7 +1051,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           ],
         ),
         if (_mineruLocalTestResult != null) ...<Widget>[
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Builder(
             builder: (BuildContext ctx) {
               final bool isSuccess = _mineruLocalLastTestSuccess ?? false;
@@ -1063,7 +1091,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             },
           ),
         ],
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         _wrapIfUnavailable(
           showUnavailableHint,
           child: Row(
@@ -1409,7 +1437,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         Text(
           l10n.aiPlatformCategoryLanguageModels,
           style: const TextStyle(
-            fontSize: 14,
+            fontSize: 13,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1425,7 +1453,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             decoration: InputDecoration(
               labelText: l10n.setupWizardSelectLlmPlatform,
               border: const OutlineInputBorder(),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              labelStyle: const TextStyle(fontSize: 12),
+              hintStyle: const TextStyle(fontSize: 11),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             ),
             items: llmPlatforms.map(
               (AIPlatformInfo p) {
@@ -1497,33 +1527,37 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   Text(
                     l10n.aiPlatformBasicInformation,
                     style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   TextFormField(
                     controller: _llmNameController,
                     decoration: InputDecoration(
                       labelText: l10n.aiPlatformPlatformName,
                       hintText: l10n.aiPlatformPlatformNameHint,
                       border: const OutlineInputBorder(),
+                      labelStyle: const TextStyle(fontSize: 12),
+                      hintStyle: const TextStyle(fontSize: 11),
                       contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   TextFormField(
                     controller: _llmUrlController,
                     decoration: InputDecoration(
                       labelText: l10n.aiPlatformApiUrl,
                       hintText: l10n.aiPlatformApiUrlHint,
                       border: const OutlineInputBorder(),
+                      labelStyle: const TextStyle(fontSize: 12),
+                      hintStyle: const TextStyle(fontSize: 11),
                       contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Row(
                     children: <Widget>[
                       Expanded(
@@ -1533,8 +1567,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                             labelText: l10n.aiPlatformModel,
                             hintText: l10n.aiPlatformModelHint,
                             border: const OutlineInputBorder(),
+                            labelStyle: const TextStyle(fontSize: 12),
+                            hintStyle: const TextStyle(fontSize: 11),
                             contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           ),
                         ),
                       ),
@@ -1551,17 +1587,17 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                         label: Text(l10n.aiPlatformList),
                         style: OutlinedButton.styleFrom(
                           padding:
-                              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           minimumSize: const Size(0, 48),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   _buildLlmApiProtocolField(l10n),
                   const SizedBox(height: 16),
                   _buildLlmHasApiKeySwitch(l10n, tokenLink: platform.tokenLink),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   _wrapIfUnavailable(
                     showUnavailableHint && _llmHasApiKey,
                     child: TextFormField(
@@ -1575,8 +1611,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                             ? l10n.aiPlatformApiKeyOptionalHint
                             : null,
                         border: const OutlineInputBorder(),
+                        labelStyle: const TextStyle(fontSize: 12),
+                        hintStyle: const TextStyle(fontSize: 11),
                         contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _llmObscureText ? Icons.visibility : Icons.visibility_off,
@@ -1602,11 +1640,11 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   Text(
                     'Parameters',
                     style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -1618,8 +1656,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                             labelText: l10n.aiPlatformTimeout,
                             hintText: l10n.aiPlatformTimeoutHint,
                             border: const OutlineInputBorder(),
+                            labelStyle: const TextStyle(fontSize: 12),
+                            hintStyle: const TextStyle(fontSize: 11),
                             contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           ),
                         ),
                       ),
@@ -1632,14 +1672,53 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                             labelText: l10n.aiPlatformWriteTimeout,
                             hintText: l10n.aiPlatformWriteTimeoutHint,
                             border: const OutlineInputBorder(),
+                            labelStyle: const TextStyle(fontSize: 12),
+                            hintStyle: const TextStyle(fontSize: 11),
                             contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Expanded(
+                        child: TextFormField(
+                          controller: _llmTestConnectTimeoutController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: l10n.aiPlatformTestConnectTimeout,
+                            hintText: l10n.aiPlatformTestConnectTimeoutHint,
+                            border: const OutlineInputBorder(),
+                            labelStyle: const TextStyle(fontSize: 12),
+                            hintStyle: const TextStyle(fontSize: 11),
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _llmTestRequestTimeoutController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: l10n.aiPlatformTestRequestTimeout,
+                            hintText: l10n.aiPlatformTestRequestTimeoutHint,
+                            border: const OutlineInputBorder(),
+                            labelStyle: const TextStyle(fontSize: 12),
+                            hintStyle: const TextStyle(fontSize: 11),
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -1651,8 +1730,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                             labelText: l10n.aiPlatformMaxTokens,
                             hintText: l10n.aiPlatformMaxTokensHint,
                             border: const OutlineInputBorder(),
+                            labelStyle: const TextStyle(fontSize: 12),
+                            hintStyle: const TextStyle(fontSize: 11),
                             contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           ),
                         ),
                       ),
@@ -1665,14 +1746,16 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                             labelText: l10n.aiPlatformChunkSize,
                             hintText: l10n.aiPlatformChunkSizeHint,
                             border: const OutlineInputBorder(),
+                            labelStyle: const TextStyle(fontSize: 12),
+                            hintStyle: const TextStyle(fontSize: 11),
                             contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -1684,8 +1767,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                             labelText: l10n.aiPlatformConcurrent,
                             hintText: l10n.aiPlatformConcurrentHint,
                             border: const OutlineInputBorder(),
+                            labelStyle: const TextStyle(fontSize: 12),
+                            hintStyle: const TextStyle(fontSize: 11),
                             contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           ),
                         ),
                       ),
@@ -1694,7 +1779,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                     ],
                   ),
                   if (platform.thinkingModeSupported) ...<Widget>[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     _buildLlmThinkingModeField(l10n),
                   ],
                 ],
@@ -1814,7 +1899,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           labelText: l10n.aiPlatformTemperature,
           floatingLabelBehavior: FloatingLabelBehavior.always,
           border: const OutlineInputBorder(),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
         ),
         isFocused: _llmTemperatureFocused,
         child: Row(
@@ -1882,7 +1967,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             prefixIcon: Icon(Icons.api),
             border: OutlineInputBorder(),
             contentPadding:
-                EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           ),
           items: const <DropdownMenuItem<String>>[
             DropdownMenuItem<String>(
@@ -1947,7 +2032,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       decoration: InputDecoration(
         labelText: l10n.aiPlatformThinkingMode,
         border: const OutlineInputBorder(),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       ),
       items: options
           .map(
@@ -1996,7 +2081,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                 Text(
                   l10n.aiPlatformHasApiKey,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -2392,6 +2477,8 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       concurrent: int.tryParse(_llmConcurrentController.text) ?? current.concurrent,
       timeout: int.tryParse(_llmTimeoutController.text) ?? current.timeout,
       writeTimeout: int.tryParse(_llmWriteTimeoutController.text) ?? current.writeTimeout,
+      testConnectTimeout: int.tryParse(_llmTestConnectTimeoutController.text) ?? current.testConnectTimeout,
+      testRequestTimeout: int.tryParse(_llmTestRequestTimeoutController.text) ?? current.testRequestTimeout,
       thinkingMode: current.thinkingModeSupported
           ? _llmThinkingMode
           : current.thinkingMode,
