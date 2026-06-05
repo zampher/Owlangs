@@ -2309,10 +2309,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
               ),
             ),
           const SizedBox(width: 16),
-          // File name display (constrained width inside horizontal scroll)
+          // File name display (adaptive width inside horizontal scroll)
           if (hasImportedFile)
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 200),
+            Flexible(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
@@ -2391,16 +2390,18 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           ],
           // Show filename on the right side in reedit mode
           if (_isReeditMode && widget.reeditFileName != null)
-            Padding(
-              padding: const EdgeInsets.only(left: 12, right: 4),
-              child: Text(
-                widget.reeditFileName!,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w500,
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12, right: 4),
+                child: Text(
+                  widget.reeditFileName!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
               ),
             ),
         ],
