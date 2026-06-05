@@ -318,6 +318,8 @@
   "batchUploadSelectZip": "Seleccionar archivo ZIP",
   "batchUploadZipDescription": "Elija un archivo ZIP con archivos para traducir",
   "batchUploadSelectSingleFile": "Seleccionar archivo",
+  "batchUploadSingleFileDescription": "Elija un solo archivo para traducir",
+  "batchUploadAddFiles": "Agregar archivos",
   "batchUploadFilesFound": "{count} archivos compatibles encontrados",
   "@batchUploadFilesFound": {
     "placeholders": {
@@ -430,6 +432,7 @@
   "translationQueueCancelDialogConfirm": "Cancelar tarea",
   "translationQueueEmpty": "Aún no hay tareas de traducción.",
   "translationQueueNewQueuedTask": "Tarea en cola",
+  "translationQueueImport": "Importar",
   "translationQueueBackToQueueTooltip": "Volver a la cola de tareas",
   "translationQueuedStarted": "Tarea añadida a la cola. Consulte el progreso aquí.",
   "translationQueueRefresh": "Actualizar",

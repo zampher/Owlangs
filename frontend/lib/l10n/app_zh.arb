@@ -329,6 +329,8 @@
   "batchUploadSelectZip": "选择 ZIP 压缩包",
   "batchUploadZipDescription": "选择包含待翻译文件的 ZIP 压缩包",
   "batchUploadSelectSingleFile": "选择文件",
+  "batchUploadSingleFileDescription": "选择单个待翻译文件",
+  "batchUploadAddFiles": "添加文件",
   "batchUploadFilesFound": "找到 {count} 个支持的文件",
   "@batchUploadFilesFound": {
     "placeholders": {
@@ -441,6 +443,7 @@
   "translationQueueCancelDialogConfirm": "确认取消",
   "translationQueueEmpty": "暂无翻译任务。",
   "translationQueueNewQueuedTask": "队列式任务",
+  "translationQueueImport": "导入",
   "translationQueueBackToQueueTooltip": "返回任务队列",
   "translationQueuedStarted": "任务已加入队列，可在此查看进度。",
   "translationQueueRefresh": "刷新",

@@ -307,6 +307,8 @@
   "batchUploadSelectZip": "ZIP 아카이브 선택",
   "batchUploadZipDescription": "번역할 파일이 포함된 ZIP 아카이브 선택",
   "batchUploadSelectSingleFile": "파일 선택",
+  "batchUploadSingleFileDescription": "번역할 파일 하나 선택",
+  "batchUploadAddFiles": "파일 추가",
   "batchUploadFilesFound": "지원되는 파일 {count}개 발견",
   "@batchUploadFilesFound": {
     "placeholders": {
@@ -419,6 +421,7 @@
   "translationQueueCancelDialogConfirm": "취소 확인",
   "translationQueueEmpty": "번역 작업이 없습니다.",
   "translationQueueNewQueuedTask": "큐 방식 작업",
+  "translationQueueImport": "가져오기",
   "translationQueueBackToQueueTooltip": "작업 대기열로 돌아가기",
   "translationQueuedStarted": "대기열에 추가되었습니다. 여기서 진행 상황을 확인하세요.",
   "translationQueueRefresh": "새로 고침",

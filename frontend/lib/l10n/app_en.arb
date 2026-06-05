@@ -345,6 +345,8 @@
   "batchUploadSelectZip": "Select ZIP archive",
   "batchUploadZipDescription": "Pick a ZIP archive containing files to translate",
   "batchUploadSelectSingleFile": "Select file",
+  "batchUploadSingleFileDescription": "Pick a single file to translate",
+  "batchUploadAddFiles": "Add files",
   "batchUploadFilesFound": "{count} supported files found",
   "@batchUploadFilesFound": {
     "placeholders": {
@@ -457,6 +459,7 @@
   "translationQueueCancelDialogConfirm": "Cancel task",
   "translationQueueEmpty": "No translation tasks yet.",
   "translationQueueNewQueuedTask": "Queued task",
+  "translationQueueImport": "Import",
   "translationQueueBackToQueueTooltip": "Back to task queue",
   "translationQueuedStarted": "Task added to the queue. Track it here.",
   "translationQueueRefresh": "Refresh",

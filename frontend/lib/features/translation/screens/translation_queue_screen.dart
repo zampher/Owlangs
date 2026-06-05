@@ -10,6 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -588,11 +589,18 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
           ],
         ),
         actions: <Widget>[
-          // New task first
-          IconButton(
-            tooltip: l10n.translationQueueNewQueuedTask,
-            icon: const Icon(Icons.add, size: 20),
+          // Import button
+          TextButton.icon(
             onPressed: _showNewTaskDialog,
+            icon: const Icon(Icons.add, size: 18),
+            label: Text(l10n.translationQueueImport,
+              style: const TextStyle(fontSize: 13),
+            ),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
           ),
           adminGate.maybeWhen(
             data: (bool isAdmin) => isAdmin

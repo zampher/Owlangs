@@ -1120,6 +1120,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get batchUploadSelectSingleFile => 'Seleccionar archivo';
 
   @override
+  String get batchUploadSingleFileDescription =>
+      'Elija un solo archivo para traducir';
+
+  @override
+  String get batchUploadAddFiles => 'Agregar archivos';
+
+  @override
   String batchUploadFilesFound(Object count) {
     return '$count archivos compatibles encontrados';
   }
@@ -1274,6 +1281,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get translationQueueNewQueuedTask => 'Tarea en cola';
+
+  @override
+  String get translationQueueImport => 'Importar';
 
   @override
   String get translationQueueBackToQueueTooltip => 'Volver a la cola de tareas';

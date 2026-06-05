@@ -52,6 +52,8 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
   _DialogPhase _phase = _DialogPhase.chooseSource;
   final List<DiscoveredFile> _files = [];
   final List<String> _legacyFileNames = [];
+  String? _sourceType; // 'single', 'folder', or 'zip'
+  bool _isAppending = false; // true when adding more files to existing list
 
   // ── Batch-local quick settings (initialized from global providers) ──
   String _batchToLang = 'en';
@@ -77,6 +79,7 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
     super.initState();
     if (widget.initialSource != null) {
       // Skip the source-selection phase entirely when auto-picking
+      _sourceType = widget.initialSource;
       _phase = _DialogPhase.reviewFiles;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -99,7 +102,51 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
 
   // ── Source selection ──────────────────────────────────────────────
 
+  Future<void> _addMoreFiles() async {
+    if (_sourceType == null) return;
+    _isAppending = true;
+    final l10n = AppLocalizations.of(context)!;
+    final source = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text(l10n.batchUploadSelectSourceHint),
+        children: [
+          _SourceOptionCard(
+            icon: Icons.insert_drive_file,
+            title: l10n.batchUploadSelectSingleFile,
+            subtitle: l10n.batchUploadSingleFileDescription,
+            onTap: () => Navigator.of(ctx).pop('single'),
+          ),
+          const SizedBox(height: 8),
+          _SourceOptionCard(
+            icon: Icons.folder,
+            title: l10n.batchUploadSelectFolder,
+            subtitle: l10n.batchUploadFolderDescription,
+            onTap: () => Navigator.of(ctx).pop('folder'),
+          ),
+          const SizedBox(height: 8),
+          _SourceOptionCard(
+            icon: Icons.folder_zip_outlined,
+            title: l10n.batchUploadSelectZip,
+            subtitle: l10n.batchUploadZipDescription,
+            onTap: () => Navigator.of(ctx).pop('zip'),
+          ),
+        ],
+      ),
+    );
+    if (source == null || !mounted) return;
+    switch (source) {
+      case 'folder':
+        await _pickFolder();
+      case 'zip':
+        await _pickZip();
+      case 'single':
+        await _pickSingleFile();
+    }
+  }
+
   Future<void> _pickFolder() async {
+    _sourceType = 'folder';
     final l10n = AppLocalizations.of(context)!;
     if (kIsWeb) {
       // Web: use webkitdirectory to get files directly.
@@ -226,6 +273,7 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
   }
 
   Future<void> _pickZip() async {
+    _sourceType = 'zip';
     final l10n = AppLocalizations.of(context)!;
     final result = await FilePickerHelper.pickFiles(
       allowedExtensions: ['zip'],
@@ -246,6 +294,7 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
   }
 
   Future<void> _pickSingleFile() async {
+    _sourceType = 'single';
     final l10n = AppLocalizations.of(context)!;
     final result = await FilePickerHelper.pickFiles(
       dialogTitle: l10n.batchUploadSelectSingleFile,
@@ -419,36 +468,66 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
   }
 
   void _onFilesDiscovered(List<DiscoveredFile> files, [List<String> legacyNames = const []]) {
-    // Initialize batch-local settings from global providers.
-    final qs = ref.read(translationQuickSettingsProvider);
-    final aiSettings = ref.read(aiPlatformSettingsProvider);
-    final gs = ref.read(globalSettingsProvider);
+    final bool append = _isAppending;
+    _isAppending = false;
 
-    final withPath = files.where((f) => f.relativePath != null && f.relativePath!.isNotEmpty).length;
-    debugPrint('[BatchUpload] Discovered ${files.length} files, $withPath with relative paths');
-    for (final f in files) {
-      if (f.relativePath != null && f.relativePath!.isNotEmpty) {
-        debugPrint('[BatchUpload]   ${f.relativePath}/${f.fileName}');
-      }
+    // Dedup when appending: skip files already in the list.
+    final List<DiscoveredFile> toAdd;
+    if (append) {
+      final existingNames = _files.map((f) => f.fileName).toSet();
+      toAdd = files.where((f) => !existingNames.contains(f.fileName)).toList();
+    } else {
+      toAdd = files;
     }
 
-    setState(() {
-      _files
-        ..clear()
-        ..addAll(files);
-      _legacyFileNames
-        ..clear()
-        ..addAll(legacyNames);
-      _batchToLang = qs.toLang;
-      _batchPlatformKey = aiSettings.defaultPlatform;
-      _batchTemperature = qs.temperature;
-      _batchPromptMode = qs.promptMode;
-      _batchPromptStyle = qs.promptStyle;
-      _batchTaskNote = qs.taskNote;
-      _batchSelectedGlossaries = List<String>.from(qs.selectedGlossaries);
-      _batchParsingEngine = gs.parsingEngine;
-      _phase = files.isEmpty ? _DialogPhase.chooseSource : _DialogPhase.reviewFiles;
-    });
+    // Initialize batch-local settings from global providers (only on first load).
+    if (!append) {
+      final qs = ref.read(translationQuickSettingsProvider);
+      final aiSettings = ref.read(aiPlatformSettingsProvider);
+      final gs = ref.read(globalSettingsProvider);
+
+      final withPath = files.where((f) => f.relativePath != null && f.relativePath!.isNotEmpty).length;
+      debugPrint('[BatchUpload] Discovered ${files.length} files, $withPath with relative paths');
+      for (final f in files) {
+        if (f.relativePath != null && f.relativePath!.isNotEmpty) {
+          debugPrint('[BatchUpload]   ${f.relativePath}/${f.fileName}');
+        }
+      }
+
+      setState(() {
+        _files
+          ..clear()
+          ..addAll(toAdd);
+        _legacyFileNames
+          ..clear()
+          ..addAll(legacyNames);
+        _batchToLang = qs.toLang;
+        _batchPlatformKey = aiSettings.defaultPlatform;
+        _batchTemperature = qs.temperature;
+        _batchPromptMode = qs.promptMode;
+        _batchPromptStyle = qs.promptStyle;
+        _batchTaskNote = qs.taskNote;
+        _batchSelectedGlossaries = List<String>.from(qs.selectedGlossaries);
+        _batchParsingEngine = gs.parsingEngine;
+        _phase = files.isEmpty ? _DialogPhase.chooseSource : _DialogPhase.reviewFiles;
+      });
+    } else {
+      final skipped = files.length - toAdd.length;
+      setState(() {
+        _files.addAll(toAdd);
+        if (legacyNames.isNotEmpty) {
+          _legacyFileNames.addAll(legacyNames);
+        }
+      });
+      if (skipped > 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Skipped $skipped duplicate file(s)'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
     if (files.isEmpty && legacyNames.isNotEmpty && mounted) {
       // Only legacy-format files found — show specific conversion message.
       ScaffoldMessenger.of(context).showSnackBar(
@@ -741,6 +820,20 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
       ),
       child: Row(
         children: <Widget>[
+          // Add more files to the current batch
+          TextButton.icon(
+            onPressed: _addMoreFiles,
+            icon: const Icon(Icons.add, size: 16),
+            label: Text(
+              l10n.batchUploadAddFiles,
+              style: const TextStyle(fontSize: 12),
+            ),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
           const Spacer(),
           // Convert + Translate grouped together as equal-level operations
           Tooltip(
@@ -862,6 +955,20 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
             ),
           ),
           const SizedBox(height: 24),
+          // Single file button
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: SizedBox(
+              width: double.infinity,
+              height: 80,
+              child: _SourceOptionCard(
+                icon: Icons.insert_drive_file,
+                title: l10n.batchUploadSelectSingleFile,
+                subtitle: l10n.batchUploadSingleFileDescription,
+                onTap: _pickSingleFile,
+              ),
+            ),
+          ),
           // Folder button
           Padding(
             padding: const EdgeInsets.only(bottom: 16),

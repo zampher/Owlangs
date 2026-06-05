@@ -307,6 +307,8 @@
   "batchUploadSelectZip": "ZIPアーカイブを選択",
   "batchUploadZipDescription": "翻訳するファイルが入ったZIPアーカイブを選択",
   "batchUploadSelectSingleFile": "ファイルを選択",
+  "batchUploadSingleFileDescription": "翻訳するファイルを1つ選択",
+  "batchUploadAddFiles": "ファイルを追加",
   "batchUploadFilesFound": "{count} 個のサポートされているファイルが見つかりました",
   "@batchUploadFilesFound": {
     "placeholders": {
@@ -419,6 +421,7 @@
   "translationQueueCancelDialogConfirm": "キャンセルする",
   "translationQueueEmpty": "翻訳タスクはありません。",
   "translationQueueNewQueuedTask": "キュー式タスク",
+  "translationQueueImport": "インポート",
   "translationQueueBackToQueueTooltip": "タスクキューに戻る",
   "translationQueuedStarted": "キューに追加しました。ここで進捗を確認できます。",
   "translationQueueRefresh": "更新",

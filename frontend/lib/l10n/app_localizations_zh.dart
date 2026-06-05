@@ -1042,6 +1042,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batchUploadSelectSingleFile => '选择文件';
 
   @override
+  String get batchUploadSingleFileDescription => '选择单个待翻译文件';
+
+  @override
+  String get batchUploadAddFiles => '添加文件';
+
+  @override
   String batchUploadFilesFound(Object count) {
     return '找到 $count 个支持的文件';
   }
@@ -1191,6 +1197,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get translationQueueNewQueuedTask => '队列式任务';
+
+  @override
+  String get translationQueueImport => '导入';
 
   @override
   String get translationQueueBackToQueueTooltip => '返回任务队列';

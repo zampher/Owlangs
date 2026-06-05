@@ -1097,6 +1097,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get batchUploadSelectSingleFile => 'Select file';
 
   @override
+  String get batchUploadSingleFileDescription =>
+      'Pick a single file to translate';
+
+  @override
+  String get batchUploadAddFiles => 'Add files';
+
+  @override
   String batchUploadFilesFound(Object count) {
     return '$count supported files found';
   }
@@ -1251,6 +1258,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get translationQueueNewQueuedTask => 'Queued task';
+
+  @override
+  String get translationQueueImport => 'Import';
 
   @override
   String get translationQueueBackToQueueTooltip => 'Back to task queue';

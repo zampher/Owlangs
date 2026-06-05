@@ -1053,6 +1053,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get batchUploadSelectSingleFile => '파일 선택';
 
   @override
+  String get batchUploadSingleFileDescription => '번역할 파일 하나 선택';
+
+  @override
+  String get batchUploadAddFiles => '파일 추가';
+
+  @override
   String batchUploadFilesFound(Object count) {
     return '지원되는 파일 $count개 발견';
   }
@@ -1202,6 +1208,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get translationQueueNewQueuedTask => '큐 방식 작업';
+
+  @override
+  String get translationQueueImport => '가져오기';
 
   @override
   String get translationQueueBackToQueueTooltip => '작업 대기열로 돌아가기';

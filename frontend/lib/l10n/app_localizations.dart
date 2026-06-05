@@ -2009,6 +2009,18 @@ abstract class AppLocalizations {
   /// **'Select file'**
   String get batchUploadSelectSingleFile;
 
+  /// No description provided for @batchUploadSingleFileDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a single file to translate'**
+  String get batchUploadSingleFileDescription;
+
+  /// No description provided for @batchUploadAddFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Add files'**
+  String get batchUploadAddFiles;
+
   /// No description provided for @batchUploadFilesFound.
   ///
   /// In en, this message translates to:
@@ -2254,6 +2266,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Queued task'**
   String get translationQueueNewQueuedTask;
+
+  /// No description provided for @translationQueueImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get translationQueueImport;
 
   /// No description provided for @translationQueueBackToQueueTooltip.
   ///
