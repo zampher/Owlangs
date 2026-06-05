@@ -19,13 +19,17 @@ async def _test_one_platform(
     model_name: str,
     api_key: str,
     requires_api_key: bool = True,
+    test_connect_timeout: int = 30,
+    test_request_timeout: int = 10,
 ) -> None:
     """Run connectivity test for one platform and persist result."""
     from .ai_platform_service import test_ai_platform_connectivity
     from backend.config.ai_platform_status import update_platform_status
 
     result = await test_ai_platform_connectivity(
-        platform_type, base_url, model_name or "", api_key, detect_max_tokens=False, requires_api_key=requires_api_key
+        platform_type, base_url, model_name or "", api_key, detect_max_tokens=False, requires_api_key=requires_api_key,
+        test_connect_timeout=test_connect_timeout,
+        test_request_timeout=test_request_timeout,
     )
     update_platform_status(
         platform_type,
@@ -75,10 +79,17 @@ async def run_one_round_ai_platform_tests() -> None:
         
         base_url = getattr(platform_obj, "url", "") or ""
         model_name = getattr(platform_obj, "model", "") or ""
+        test_connect_timeout = getattr(platform_obj, "test_connect_timeout", 30) or 30
+        test_request_timeout = getattr(platform_obj, "test_request_timeout", 10) or 10
         if not base_url or (not model_name and platform_key not in ("volcengine_ark", "doubao", "ark")):
             continue
         try:
-            await _test_one_platform(platform_key, base_url, model_name or "", api_key, requires_api_key=requires_api_key)
+            await _test_one_platform(
+                platform_key, base_url, model_name or "", api_key,
+                requires_api_key=requires_api_key,
+                test_connect_timeout=test_connect_timeout,
+                test_request_timeout=test_request_timeout,
+            )
         except asyncio.CancelledError:
             raise
         except Exception as e:

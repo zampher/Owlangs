@@ -4207,6 +4207,8 @@ async def test_ai_platform(
                     logger.info(LogModule.AUTH, f"[TEST_AI_PLATFORM DEBUG] requires_api_key value={getattr(platform_config, 'requires_api_key')}")
                     print(f"[TEST_AI_PLATFORM DEBUG] requires_api_key value={getattr(platform_config, 'requires_api_key')}")
         
+        _cfg_test_connect = None
+        _cfg_test_request = None
         if platform_config:
             # platform_config may be an object or a dict; handle both
             if not base_url:
@@ -4224,7 +4226,16 @@ async def test_ai_platform(
                 requires_api_key = getattr(platform_config, 'requires_api_key') if hasattr(platform_config, 'requires_api_key') else platform_config.get('requires_api_key', True)
             except Exception:
                 requires_api_key = True
-        
+            # Read per-platform connectivity test timeout overrides
+            try:
+                _cfg_test_connect = getattr(platform_config, 'test_connect_timeout', None) if hasattr(platform_config, 'test_connect_timeout') else platform_config.get('test_connect_timeout')
+            except Exception:
+                _cfg_test_connect = None
+            try:
+                _cfg_test_request = getattr(platform_config, 'test_request_timeout', None) if hasattr(platform_config, 'test_request_timeout') else platform_config.get('test_request_timeout')
+            except Exception:
+                _cfg_test_request = None
+
         logger.info(LogModule.AUTH, f"[TEST_AI_PLATFORM DEBUG] final requires_api_key={requires_api_key}, base_url={base_url}, model_name={model_name}")
         print(f"[TEST_AI_PLATFORM DEBUG] final requires_api_key={requires_api_key}, base_url={base_url}, model_name={model_name}")
         
@@ -4262,8 +4273,16 @@ async def test_ai_platform(
         
         # Detect max_tokens if requested (default: True)
         detect_max_tokens = data.get('detect_max_tokens', True)
-        test_connect_timeout = data.get('test_connect_timeout', 30)
-        test_request_timeout = data.get('test_request_timeout', 10)
+        # Per-platform timeout overrides: use request body values, falling back to
+        # platform config, then to hardcoded defaults (30 / 10).
+        test_connect_timeout = data.get(
+            'test_connect_timeout',
+            _cfg_test_connect if _cfg_test_connect is not None else 30,
+        )
+        test_request_timeout = data.get(
+            'test_request_timeout',
+            _cfg_test_request if _cfg_test_request is not None else 10,
+        )
         result = await test_ai_platform_connectivity(
             platform_type, base_url, safe_model, api_key,
             detect_max_tokens=detect_max_tokens,
