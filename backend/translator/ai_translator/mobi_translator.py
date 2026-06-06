@@ -49,6 +49,7 @@ class MobiTranslator(AiTranslator):
                 concurrent=config.concurrent,
                 connect_timeout=getattr(config, 'connect_timeout', 15),
                 timeout=config.timeout,
+                write_timeout=getattr(config, 'write_timeout', None),
                 logger=self.logger,
                 glossary_dict=config.glossary_dict,
                 retry=config.retry,

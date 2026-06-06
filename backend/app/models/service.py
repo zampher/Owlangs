@@ -193,7 +193,7 @@ class BaseWorkflowParams(BaseModel):
     to_lang: str = Field(default="Chinese", description="Target translation language.", 
                          examples=["Chinese", "English"])
     chunk_size: int = Field(default=0, description="Chunk size for text splitting (characters). 0 means unset, will be loaded from user settings.")
-    concurrent: int = Field(default=default_params["concurrent"], description="Number of concurrent requests.")
+    concurrent: int = Field(default=0, description="Number of concurrent requests. 0 means unset, will be loaded from platform config or app config.")
     temperature: float = Field(default=0.3, description="LLM temperature parameter.")
     timeout: int = Field(default=default_params["timeout"], description="Time to wait for API response (seconds).")
     thinking: ThinkingMode = Field(default=default_params["thinking"], description="Thinking mode for the Agent.",

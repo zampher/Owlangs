@@ -44,8 +44,19 @@ class OllamaProtocol(LLMProtocol):
         return "ollama"
     
     def get_chat_endpoint(self, base_url: str) -> str:
-        """Get Ollama chat endpoint."""
+        """Get Ollama chat endpoint.
+
+        Ollama's native API serves /api/chat at the server root.
+        If the user configured a base_url with an OpenAI-style /v1 prefix
+        (e.g. http://host:11434/v1), strip it so the URL becomes
+        http://host:11434/api/chat instead of the invalid /v1/api/chat.
+        """
         base = base_url.rstrip('/')
+        # Strip common OpenAI-style path prefixes that don't apply to Ollama native API
+        for suffix in ('/v1', '/api/v1', '/api'):
+            if base.endswith(suffix):
+                base = base[:-len(suffix)]
+                break
         return f"{base}/api/chat"
     
     def prepare_request(

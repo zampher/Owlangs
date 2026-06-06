@@ -722,12 +722,9 @@ class AIPlatformInfo {
   }) {
     // Check if API key is required from platform config (default to true for backward compatibility)
     // For backward compatibility: check both new 'requires_api_key' and old 'api_key_optional' fields
-    final bool requiresApiKey = json['requires_api_key'] ?? 
+    final bool requiresApiKey = json['requires_api_key'] ??
         (json['api_key_optional'] == true ? false : true);
-    
-    // Get API protocol (default to 'openai' for backward compatibility)
-    final apiProtocol = (json['api_protocol'] as String?) ?? 'openai';
-    
+
     // Check if API key is valid (non-empty)
     // Empty string means not configured
     final hasValidApiKey = apiKey != null && apiKey.isNotEmpty;
@@ -769,7 +766,7 @@ class AIPlatformInfo {
             )
           : null,
       requiresApiKey: requiresApiKey,
-      apiProtocol: apiProtocol,
+      apiProtocol: (json['api_protocol'] as String?) ?? 'openai',
       chunkSize: _toInt(json['chunk_size'], 3000),
       concurrent: _toInt(json['concurrent'], 5),
       timeout: _toInt(json['timeout'], null),

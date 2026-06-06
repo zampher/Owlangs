@@ -4479,6 +4479,7 @@ async def retranslate_segment(
         temperature = getattr(payload, 'temperature', 0.3)
         thinking = getattr(payload, 'thinking', False)
         timeout = getattr(payload, 'timeout', 1200)
+        write_timeout = getattr(payload, 'write_timeout', None)
         retry = getattr(payload, 'retry', 5)
         
         # Get chunk_size from payload or use default (for send_chunks_async parameter)
@@ -4509,6 +4510,7 @@ async def retranslate_segment(
                 concurrent=1,  # Single segment translation
                 connect_timeout=15,
                 timeout=timeout,
+                write_timeout=write_timeout,
                 logger=logger,
                 glossary_dict=None,  # TODO: Load glossary if available
                 retry=retry
@@ -4530,6 +4532,7 @@ async def retranslate_segment(
                 concurrent=1,  # Single segment translation
                 connect_timeout=15,
                 timeout=timeout,
+                write_timeout=write_timeout,
                 logger=logger,
                 glossary_dict=None,  # TODO: Load glossary if available
                 retry=retry
@@ -4905,6 +4908,7 @@ async def retranslate_segments_batch(
     temperature = getattr(payload, 'temperature', 0.3)
     thinking = getattr(payload, 'thinking', False)
     timeout = getattr(payload, 'timeout', 1200)
+    write_timeout = getattr(payload, 'write_timeout', None)
     retry = getattr(payload, 'retry', 5)
     chunk_size = getattr(payload, 'chunk_size', None) or 2000  # CRITICAL: Get chunk_size for merging
     
@@ -4935,11 +4939,12 @@ async def retranslate_segments_batch(
             concurrent=1,  # Batch translation
             connect_timeout=15,
             timeout=timeout,
+            write_timeout=write_timeout,
             logger=logger,
             glossary_dict=None,  # TODO: Load glossary if available
             retry=retry
         )
-        
+
         agent = SegmentsTranslateAgent(agent_config)
     else:
         from agents import MDTranslateAgent
@@ -4956,11 +4961,12 @@ async def retranslate_segments_batch(
             concurrent=1,  # Batch translation
             connect_timeout=15,
             timeout=timeout,
+            write_timeout=write_timeout,
             logger=logger,
             glossary_dict=None,  # TODO: Load glossary if available
             retry=retry
         )
-        
+
         agent = MDTranslateAgent(agent_config)
     
     # CRITICAL: Set task_state on agent so it can save API logs

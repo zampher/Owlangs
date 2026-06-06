@@ -337,8 +337,15 @@ async def test_ai_platform_connectivity(
 
             elif platform == 'ollama':
                 # Ollama: use /api/tags to list local models (no token consumption)
+                # Strip OpenAI-style path prefixes (/v1, /api/v1) from base_url.
+                # Ollama native API serves /api/tags and /api/chat at the server root.
+                _ollama_base = base_url.rstrip('/')
+                for _suffix in ('/v1', '/api/v1', '/api'):
+                    if _ollama_base.endswith(_suffix):
+                        _ollama_base = _ollama_base[:-len(_suffix)]
+                        break
                 try:
-                    tags_resp = await client.get(f"{base_url}/api/tags", timeout=float(test_request_timeout))
+                    tags_resp = await client.get(f"{_ollama_base}/api/tags", timeout=float(test_request_timeout))
                     if tags_resp.status_code == 200:
                         result["success"] = True
                         result["message"] = "Ollama connection successful (tags endpoint)"
@@ -353,7 +360,7 @@ async def test_ai_platform_connectivity(
                     "options": {"num_predict": 1},
                 }
                 headers = {"Content-Type": "application/json"}
-                resp = await client.post(f"{base_url}/api/chat", json=payload, headers=headers)
+                resp = await client.post(f"{_ollama_base}/api/chat", json=payload, headers=headers)
 
             elif platform == 'local':
                 # Local (OpenAI-compatible): use /v1/models endpoint

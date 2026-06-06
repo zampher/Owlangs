@@ -195,9 +195,6 @@ class PlatformsConfig:
                         if pdata_filtered.get('timeout') is None:
                             pdata_filtered['timeout'] = 300
                             needs_migration = True
-                        if pdata_filtered.get('write_timeout') is None:
-                            pdata_filtered['write_timeout'] = 300
-                            needs_migration = True
                         if pdata_filtered.get('test_connect_timeout') is None:
                             pdata_filtered['test_connect_timeout'] = 30
                             needs_migration = True

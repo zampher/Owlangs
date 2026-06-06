@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
-from typing import Literal, Callable, Any
+from typing import Literal, Callable, Any, Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -52,7 +52,7 @@ class AgentConfig:
     concurrent: int = 30
     connect_timeout: int = 15  # HTTP connect timeout (seconds), configurable via app_config.translator_connect_timeout
     timeout: int = 120  # Unit (seconds), this value is the read value in httpx.TimeOut, not the total timeout time
-    write_timeout: int = 300  # HTTP write timeout (seconds), configurable per platform
+    write_timeout: Optional[int] = None  # HTTP write timeout (seconds), configurable per platform; 0 or None → 300 fallback
     thinking: ThinkingMode = "default"
     retry: int = 5
     max_tokens: int | None = None  # Max tokens for API response (None means use platform default)
@@ -294,7 +294,9 @@ class Agent:
         
         # Detect API type from config or infer from base_url patterns
         # Support both 'api_protocol' (new) and 'api_type' (legacy) field names
-        api_type_value = getattr(config, "api_protocol", None) or getattr(config, "api_type", None) or "openai"
+        _explicit_api_protocol = getattr(config, "api_protocol", None)
+        _explicit_api_type = getattr(config, "api_type", None)
+        api_type_value = _explicit_api_protocol or _explicit_api_type or "openai"
         self.api_type = api_type_value.lower()
         
         # Initialize protocol adapter using factory
@@ -304,15 +306,18 @@ class Agent:
             if protocol_name in ("claude", "anthropic"):
                 protocol_name = "anthropic"
             elif protocol_name == "openai":
-                # Auto-detect Ollama for backward compatibility
-                baseurl_lower = self.baseurl.lower()
-                if ":11434" in baseurl_lower or "ollama" in baseurl_lower or "/api/chat" in baseurl_lower:
-                    protocol_name = "ollama"
-                    self.api_type = "ollama"
-                    unified_logger.info(
-                        LogModule.TRANS,
-                        f"[API_TYPE] Auto-detected Ollama from URL pattern: {self.baseurl}"
-                    )
+                # Auto-detect Ollama only when the user did NOT explicitly set api_protocol/api_type.
+                # If the user explicitly chose "openai" (e.g. Ollama with OpenAI-compatible API),
+                # respect that choice instead of overriding to native Ollama protocol.
+                if not _explicit_api_protocol and not _explicit_api_type:
+                    baseurl_lower = self.baseurl.lower()
+                    if ":11434" in baseurl_lower or "ollama" in baseurl_lower or "/api/chat" in baseurl_lower:
+                        protocol_name = "ollama"
+                        self.api_type = "ollama"
+                        unified_logger.info(
+                            LogModule.TRANS,
+                            f"[API_TYPE] Auto-detected Ollama from URL pattern: {self.baseurl}"
+                        )
             
             # Use protocol factory
             if ProtocolFactory.is_supported(protocol_name):
@@ -386,7 +391,8 @@ class Agent:
         self.temperature = config.temperature
         self.max_concurrent = config.concurrent
         connect_timeout = getattr(config, 'connect_timeout', 15)
-        write_timeout = getattr(config, 'write_timeout', 300)
+        write_timeout_val = getattr(config, 'write_timeout', None)
+        write_timeout = 300 if (write_timeout_val is None or write_timeout_val == 0) else write_timeout_val
         self.timeout = httpx.Timeout(connect=connect_timeout, read=config.timeout, write=write_timeout, pool=10)
         self.thinking = config.thinking
         self.logger = config.logger
