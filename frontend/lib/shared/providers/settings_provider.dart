@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../services/settings_service.dart';
 import '../services/config_service.dart';
+import '../utils/language_mapper.dart';
 
 // 全局设置状态管理
 final StateNotifierProvider<GlobalSettingsNotifier, GlobalSettings>
@@ -71,6 +72,7 @@ class GlobalSettings {
     this.skipTranslation = false,
     this.useGlossary = false,
     this.usePrompt = false,
+    this.targetLanguage = 'en',
 
     // Detailed Translation Parameters
     this.temperature = 0.3,
@@ -141,6 +143,7 @@ class GlobalSettings {
         skipTranslation: json['skipTranslation'] ?? false,
         useGlossary: json['useGlossary'] ?? false,
         usePrompt: json['usePrompt'] ?? false,
+        targetLanguage: json['targetLanguage'] ?? 'en',
         temperature: (json['temperature'] ?? 0.3).toDouble(),
         retry: json['retry'] ?? 3,
         segmentAutoRetryRounds: json['segment_auto_retry_rounds'] ?? 3,
@@ -209,6 +212,7 @@ class GlobalSettings {
   final bool skipTranslation;
   final bool useGlossary;
   final bool usePrompt;
+  final String targetLanguage;
 
   // Detailed Translation Parameters (新任务生效)
   final double temperature;
@@ -278,6 +282,7 @@ class GlobalSettings {
     bool? usePrompt,
 
     // Detailed Translation Parameters
+    String? targetLanguage,
     double? temperature,
     int? retry,
     int? segmentAutoRetryRounds,
@@ -340,6 +345,7 @@ class GlobalSettings {
         skipTranslation: skipTranslation ?? this.skipTranslation,
         useGlossary: useGlossary ?? this.useGlossary,
         usePrompt: usePrompt ?? this.usePrompt,
+        targetLanguage: targetLanguage ?? this.targetLanguage,
 
         // Detailed Translation Parameters
         temperature: temperature ?? this.temperature,
@@ -390,6 +396,7 @@ class GlobalSettings {
         'skipTranslation': skipTranslation,
         'useGlossary': useGlossary,
         'usePrompt': usePrompt,
+        'targetLanguage': targetLanguage,
         'temperature': temperature,
         'retry': retry,
         'segment_auto_retry_rounds': segmentAutoRetryRounds,
@@ -499,6 +506,15 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
           }
           if (appConfig.containsKey('translator_request_retry_count')) {
             backendSettings['requestRetryCount'] = appConfig['translator_request_retry_count'];
+          }
+
+          // Map translator_target_language from backend (stored as name) to targetLanguage (code)
+          if (appConfig.containsKey('translator_target_language')) {
+            final targetLangName = appConfig['translator_target_language'] as String?;
+            if (targetLangName != null && targetLangName.isNotEmpty) {
+              final code = nameToCode(targetLangName) ?? 'en';
+              backendSettings['targetLanguage'] = code;
+            }
           }
 
           // Restore UI language from backend or system locale on first run
@@ -748,6 +764,7 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     int? retry,
     int? segmentAutoRetryRounds,
     String? customPrompt,
+    String? targetLanguage,
   }) async {
     // 1. Immediately update local state (for fast UI response)
     state = state.copyWith(
@@ -760,6 +777,7 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
       retry: retry,
       segmentAutoRetryRounds: segmentAutoRetryRounds,
       customPrompt: customPrompt,
+      targetLanguage: targetLanguage,
     );
 
     // 2. Save entire state to local cache (for app restart recovery)
@@ -809,6 +827,10 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     }
     if (customPrompt != null) {
       await _settingsService.saveSetting('', 'customPrompt', customPrompt);
+    }
+    if (targetLanguage != null) {
+      final name = codeToName(targetLanguage) ?? targetLanguage;
+      await _settingsService.saveSetting('', 'targetLanguage', name);
     }
   }
 

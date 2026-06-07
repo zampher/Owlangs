@@ -2817,6 +2817,13 @@ class AppLocalizationsKo extends AppLocalizations {
       '번역 후 자동으로 용어집 생성 (새 작업에 적용)';
 
   @override
+  String get settingsTargetLanguageTitle => 'Default Target Language';
+
+  @override
+  String get settingsTargetLanguageNotice =>
+      'Sets the default target language for new translation tasks. You can still change it per task in Quick Settings.';
+
+  @override
   String get settingsTranslationParamsTitle => '번역 매개변수';
 
   @override

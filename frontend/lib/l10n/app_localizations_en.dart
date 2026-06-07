@@ -2908,6 +2908,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Automatically generate glossary after translation (applies to new tasks)';
 
   @override
+  String get settingsTargetLanguageTitle => 'Default Target Language';
+
+  @override
+  String get settingsTargetLanguageNotice =>
+      'Sets the default target language for new translation tasks. You can still change it per task in Quick Settings.';
+
+  @override
   String get settingsTranslationParamsTitle => 'Translation Parameters';
 
   @override

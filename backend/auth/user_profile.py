@@ -167,6 +167,7 @@ class UserProfile:
                 'previewFontSize': 'preview_font_size',
                 'editFontSize': 'edit_font_size',
                 'ocrLanguage': 'translator_ocr_language',
+                'targetLanguage': 'translator_target_language',
             }
             
             # Map frontend key to backend key if needed

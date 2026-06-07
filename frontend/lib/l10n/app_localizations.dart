@@ -5150,6 +5150,18 @@ abstract class AppLocalizations {
   /// **'Automatically generate glossary after translation (applies to new tasks)'**
   String get settingsTranslationAutoGlossarySubtitle;
 
+  /// No description provided for @settingsTargetLanguageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Default Target Language'**
+  String get settingsTargetLanguageTitle;
+
+  /// No description provided for @settingsTargetLanguageNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Sets the default target language for new translation tasks. You can still change it per task in Quick Settings.'**
+  String get settingsTargetLanguageNotice;
+
   /// No description provided for @settingsTranslationParamsTitle.
   ///
   /// In en, this message translates to:

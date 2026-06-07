@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../app/app_router.dart';
 import '../../../shared/services/config_service.dart';
 import '../../../shared/services/translation_service.dart';
+import '../../../shared/utils/language_mapper.dart';
 import '../../../shared/providers/settings_provider.dart';
 import '../../../shared/providers/admin_permissions_provider.dart';
 import '../../../shared/providers/auth_provider.dart';
@@ -65,7 +66,7 @@ class TranslationQuickSettings {
   factory TranslationQuickSettings.fromJson(Map<String, dynamic> json) =>
       TranslationQuickSettings(
         sourceLang: json['sourceLang'] ?? 'auto',
-        toLang: json['toLang'] ?? 'zh',
+        toLang: json['toLang'] ?? 'en',
         workflowType: json['workflowType'] ?? 'markdown_based',
         selectedGlossaries:
             List<String>.from(json['selectedGlossaries'] ?? <dynamic>[]),
@@ -179,25 +180,37 @@ class TranslationQuickSettingsNotifier
   Future<void> _loadSettings() async {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
-      final keysToCheck = <String>[
-        if (flowId != null) 'translation_quick_settings_$flowId',
-        'translation_quick_settings',
-      ];
 
-      for (final String key in keysToCheck) {
-        final String? settingsJson = prefs.getString(key);
-        if (settingsJson != null) {
+      // 1. Flow-specific settings take full priority (per-task overrides).
+      if (flowId != null) {
+        final String? flowSettingsJson =
+            prefs.getString('translation_quick_settings_$flowId');
+        if (flowSettingsJson != null) {
           final Map<String, dynamic> settingsMap =
-              jsonDecode(settingsJson) as Map<String, dynamic>;
-          final loadedSettings = TranslationQuickSettings.fromJson(settingsMap);
-          // Force autoSelectWorkflow to true to ensure automatic workflow selection
+              jsonDecode(flowSettingsJson) as Map<String, dynamic>;
+          final loadedSettings =
+              TranslationQuickSettings.fromJson(settingsMap);
           state = loadedSettings.copyWith(autoSelectWorkflow: true);
           return;
         }
       }
 
-      // First use: sync sourceLang from global_settings (Parsing Engine OCR Language)
-      // so new users get the default they set in Settings.
+      // 2. Load sticky global quick settings as baseline.
+      final String? globalQuickJson =
+          prefs.getString('translation_quick_settings');
+      if (globalQuickJson != null) {
+        final Map<String, dynamic> settingsMap =
+            jsonDecode(globalQuickJson) as Map<String, dynamic>;
+        final loadedSettings =
+            TranslationQuickSettings.fromJson(settingsMap);
+        state = loadedSettings.copyWith(autoSelectWorkflow: true);
+      }
+
+      // 3. Apply global defaults for sourceLang and toLang from Settings.
+      //    - Desktop users: Settings defaults always apply (no sticky session across installs).
+      //    - Web first-time users: Settings defaults apply.
+      //    - Web returning users: keep the last-used toLang from the sticky cache (step 2),
+      //      so they pick up where they left off.
       final String? globalJson = prefs.getString('global_settings');
       if (globalJson != null) {
         final Map<String, dynamic> globalMap =
@@ -206,6 +219,17 @@ class TranslationQuickSettingsNotifier
             (globalMap['ocrLanguage'] as String?) ?? 'auto';
         if (ocrLanguage.isNotEmpty) {
           state = state.copyWith(sourceLang: ocrLanguage);
+        }
+        final String? targetLangCode =
+            globalMap['targetLanguage'] as String?;
+        if (targetLangCode != null && targetLangCode.isNotEmpty) {
+          // Desktop or first-time web: override with Settings default.
+          // Returning web users: keep the sticky toLang from step 2.
+          final bool isDesktop = !kIsWeb;
+          final bool isFirstTimeWeb = kIsWeb && globalQuickJson == null;
+          if (isDesktop || isFirstTimeWeb) {
+            state = state.copyWith(toLang: targetLangCode);
+          }
         }
       }
     } catch (e) {
@@ -719,11 +743,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                   (Map<String, String> lang) => DropdownMenuItem<String>(
                     value: lang['code'],
                     child: Text(
-                      _languageDisplayName(
-                        l10n,
-                        lang['code']!,
-                        lang['native']!,
-                      ),
+                      languageDisplayName(l10n, lang['code']!),
                       style: const TextStyle(fontSize: 12),
                     ),
                   ),
@@ -896,55 +916,6 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
       return mapped;
     }
     return 'auto';
-  }
-
-  /// Returns localized language label + " (native)" for dropdown display.
-  static String _languageDisplayName(
-    AppLocalizations l10n,
-    String code,
-    String native,
-  ) {
-    final String label = switch (code) {
-      'ar' => l10n.translationLangArabic,
-      'bn' => l10n.translationLangBengali,
-      'ca' => l10n.translationLangCatalan,
-      'zh' => l10n.translationLangChinese,
-      'zh-TW' => l10n.translationLangChineseTraditional,
-      'cs' => l10n.translationLangCzech,
-      'hr' => l10n.translationLangCroatian,
-      'da' => l10n.translationLangDanish,
-      'nl' => l10n.translationLangDutch,
-      'en' => l10n.translationLangEnglish,
-      'fil' => l10n.translationLangFilipino,
-      'fi' => l10n.translationLangFinnish,
-      'fr' => l10n.translationLangFrench,
-      'de' => l10n.translationLangGerman,
-      'el' => l10n.translationLangGreek,
-      'he' => l10n.translationLangHebrew,
-      'hi' => l10n.translationLangHindi,
-      'it' => l10n.translationLangItalian,
-      'ja' => l10n.translationLangJapanese,
-      'ko' => l10n.translationLangKorean,
-      'km' => l10n.translationLangKhmer,
-      'lt' => l10n.translationLangLithuanian,
-      'mk' => l10n.translationLangMacedonian,
-      'ms' => l10n.translationLangMalay,
-      'nb' => l10n.translationLangNorwegian,
-      'pl' => l10n.translationLangPolish,
-      'pt' => l10n.translationLangPortuguese,
-      'ro' => l10n.translationLangRomanian,
-      'ru' => l10n.translationLangRussian,
-      'sl' => l10n.translationLangSlovenian,
-      'es' => l10n.translationLangSpanish,
-      'sv' => l10n.translationLangSwedish,
-      'th' => l10n.translationLangThai,
-      'tr' => l10n.translationLangTurkish,
-      'uk' => l10n.translationLangUkrainian,
-      'ur' => l10n.translationLangUrdu,
-      'vi' => l10n.translationLangVietnamese,
-      _ => code,
-    };
-    return '$label ($native)';
   }
 
   /// Combined MinerU OCR section: Source Language + Parsing Platform in one box.

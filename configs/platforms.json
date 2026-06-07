@@ -1,6 +1,6 @@
 {
   "_schema_version": 1,
-  "default_platform": "local",
+  "default_platform": "deepseek",
   "platforms": {
     "local": {
       "name": "Local (OpenAI API)",

@@ -53,7 +53,7 @@ class AppConfig:
     translator_platform_last_platform: str = "https://api.openai.com/v1"
     translator_platform_custom_base_url: str = ""
     translator_thinking_mode: str = "disable"
-    translator_target_language: str = "Chinese"
+    translator_target_language: str = "English"
     translator_custom_language: str = ""
     translator_custom_prompt: str = ""
     translator_temperature: float = 0.3

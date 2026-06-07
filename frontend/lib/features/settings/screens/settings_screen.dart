@@ -6,6 +6,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../shared/providers/settings_provider.dart';
 import '../../../shared/services/config_service.dart';
 import '../../../shared/services/translation_stats_service.dart';
+import '../../../shared/utils/language_mapper.dart';
 import '../../home/widgets/translation_stats_widget.dart';
 import 'ai_platform_settings.dart';
 import 'parsing_engine_settings.dart';
@@ -684,6 +685,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   Widget _buildTranslationSettings() {
     final globalSettings = ref.watch(globalSettingsProvider);
     final globalNotifier = ref.read(globalSettingsProvider.notifier);
+    final l10n = AppLocalizations.of(context)!;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -761,6 +763,94 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                       );
                     },
                     secondary: const Icon(Icons.book),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Default Target Language
+          Card(
+            elevation: 4,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Icon(Icons.language, color: Colors.teal.shade700),
+                      const SizedBox(width: 8),
+                      Text(
+                        AppLocalizations.of(context)!
+                            .settingsTargetLanguageTitle,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.teal.shade200),
+                    ),
+                    child: Row(
+                      children: <Widget>[
+                        Icon(
+                          Icons.info_outline,
+                          color: Colors.teal.shade700,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            AppLocalizations.of(context)!
+                                .settingsTargetLanguageNotice,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.teal.shade700,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: globalSettings.targetLanguage,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                    ),
+                    items: languageDropdownEntries.map((
+                      Map<String, String> lang,
+                    ) {
+                      return DropdownMenuItem<String>(
+                        value: lang['code'],
+                        child: Text(
+                          languageDisplayName(l10n, lang['code']!),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (String? value) {
+                      if (value != null) {
+                        globalNotifier.updateTranslationSettings(
+                          targetLanguage: value,
+                        );
+                      }
+                    },
                   ),
                 ],
               ),

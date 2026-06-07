@@ -751,6 +751,7 @@ async def get_app_config_api(
             "translator_last_workflow",
             "translator_auto_workflow_enabled",
             "translator_convert_engine",
+            "translator_target_language",
         }
         for key in app_config_user_level_keys:
             if key in app_config_dict and key in config_dict:
@@ -3476,7 +3477,7 @@ async def batch_update_settings(
                 
                 # Sync certain settings to app_config.json for backend consistency
                 # These settings are user preferences but need to be in global config for backend to read
-                if backend_key in ['timeout', 'retry', 'segment_auto_retry_rounds']:
+                if backend_key in ['timeout', 'retry', 'segment_auto_retry_rounds', 'targetLanguage']:
                     try:
                         from config import get_app_config, save_app_config
                         app_config = get_app_config()
@@ -3494,6 +3495,9 @@ async def batch_update_settings(
                         elif backend_key == 'segment_auto_retry_rounds':
                             app_config.translator_segment_auto_retry_rounds = int(value) if value else 3
                             logger.info(LogModule.AUTH, f"[SETTINGS] Synced segment_auto_retry_rounds={value} to app_config.translator_segment_auto_retry_rounds")
+                        elif backend_key == 'targetLanguage':
+                            app_config.translator_target_language = str(value) if value else "English"
+                            logger.info(LogModule.AUTH, f"[SETTINGS] Synced targetLanguage={value} to app_config.translator_target_language")
 
                         app_config_needs_save = True
                     except Exception as e:
