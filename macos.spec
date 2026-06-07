@@ -291,7 +291,7 @@ hiddenimports = [
     'sse_starlette',
     'sse_starlette.sse',
     'httpx_sse',
-    'pyjwt',
+    'jwt',
     'pydantic_settings',
     'anyio',
     'anyio.streams',
