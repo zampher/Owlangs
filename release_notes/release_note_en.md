@@ -13,6 +13,7 @@
 7. **PBX glossary import/export**: Support importing and exporting glossaries in PBX format.
 8. **MinerU local model versions**: Support configuring 5 model versions for locally deployed MinerU.
 9. **Configurable segment count per LLM API call**: Support configuring the maximum number of translation segments processed per LLM API call, adjustable based on the model's processing capability.
+10. **Auto-retry failed segments after translation**: After translation completes, automatically detect failed segments (source text unchanged) and trigger retranslation; defaults to 2 retry rounds, configurable by the user.
 
 ### Optimizations
 
