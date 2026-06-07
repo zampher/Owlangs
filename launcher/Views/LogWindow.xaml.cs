@@ -537,72 +537,6 @@ namespace OwlangsLauncher.Views
             FrontendStartButton.IsEnabled = !frontendRunning;
             FrontendStopButton.IsEnabled = frontendRunning;
             
-            // Primary action button (main Start App button)
-            if (PrimaryActionButton != null)
-            {
-                if (frontendRunning)
-                {
-                    PrimaryActionButton.Content = "Stop APP";
-                    // Use DangerButtonStyle when stopping
-                    var dangerStyle = Application.Current.TryFindResource("DangerButtonStyle") as Style;
-                    if (dangerStyle != null)
-                    {
-                        // Create a new style based on DangerButtonStyle with disabled state trigger
-                        var customStyle = new Style(typeof(Button), dangerStyle);
-                        customStyle.Triggers.Add(new Trigger
-                        {
-                            Property = UIElement.IsEnabledProperty,
-                            Value = false,
-                            Setters =
-                            {
-                                new Setter(Control.BackgroundProperty, Application.Current.TryFindResource("ButtonSecondaryBrush")),
-                                new Setter(Control.ForegroundProperty, Application.Current.TryFindResource("TextTertiaryBrush"))
-                            }
-                        });
-                        PrimaryActionButton.Style = customStyle;
-                    }
-                    else
-                    {
-                        var dangerBrush = (SolidColorBrush)Application.Current.TryFindResource("ButtonDangerBrush");
-                        var buttonTextBrush = (SolidColorBrush)Application.Current.TryFindResource("ButtonTextBrush");
-                        PrimaryActionButton.Background = dangerBrush ?? new SolidColorBrush(Color.FromRgb(207, 102, 121));
-                        PrimaryActionButton.Foreground = buttonTextBrush ?? new SolidColorBrush(Colors.White);
-                    }
-                    PrimaryActionButton.IsEnabled = true;
-                }
-                else
-                {
-                    PrimaryActionButton.Content = "Start APP";
-                    // Ensure PrimaryButtonStyle is applied with disabled state trigger
-                    var primaryStyle = Application.Current.TryFindResource("PrimaryButtonStyle") as Style;
-                    if (primaryStyle != null)
-                    {
-                        // Create a custom style based on PrimaryButtonStyle with disabled state trigger
-                        var customStyle = new Style(typeof(Button), primaryStyle);
-                        customStyle.Triggers.Add(new Trigger
-                        {
-                            Property = UIElement.IsEnabledProperty,
-                            Value = false,
-                            Setters =
-                            {
-                                new Setter(Control.BackgroundProperty, Application.Current.TryFindResource("ButtonSecondaryBrush")),
-                                new Setter(Control.ForegroundProperty, Application.Current.TryFindResource("TextTertiaryBrush"))
-                            }
-                        });
-                        PrimaryActionButton.Style = customStyle;
-                    }
-                    else
-                    {
-                        // Fallback: ensure blue color (#1976D2) is used
-                        var primaryBrush = (SolidColorBrush)Application.Current.TryFindResource("ButtonPrimaryBrush");
-                        var buttonTextBrush = (SolidColorBrush)Application.Current.TryFindResource("ButtonTextBrush");
-                        PrimaryActionButton.Background = primaryBrush ?? new SolidColorBrush(Color.FromRgb(25, 118, 210)); // #1976D2
-                        PrimaryActionButton.Foreground = buttonTextBrush ?? new SolidColorBrush(Colors.White);
-                    }
-                    PrimaryActionButton.IsEnabled = backendRunning; // Only enable if backend is running
-                }
-            }
-            
             // Update main status
             UpdateMainStatus(backendRunning, frontendRunning);
         }
@@ -661,29 +595,6 @@ namespace OwlangsLauncher.Views
             }
         }
         
-        private void PrimaryActionButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (_frontendService == null)
-            {
-                MessageBox.Show("Frontend service is not available.", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            
-            var isRunning = _frontendService.IsRunning;
-            
-            if (isRunning)
-            {
-                // Stop frontend
-                FrontendStopButton_Click(sender, e);
-            }
-            else
-            {
-                // Start frontend
-                FrontendStartButton_Click(sender, e);
-            }
-        }
-
         private string GetStatusText(BackendStatus status)
         {
             return status switch
