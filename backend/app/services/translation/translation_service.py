@@ -98,17 +98,18 @@ class TranslationService:
                     continue
         return out
 
-    async def _queue_auto_retry_failed_segments(
+    async def _auto_retry_failed_segments(
         self,
         task_id: str,
         task_state: Dict[str, Any],
         payload: Any,
     ) -> None:
         """
-        Queued tasks have no immersive UI: batch-retry failed segments automatically,
-        same API as frontend ``retranslateSegmentsBatch``.
+        After main translation completes, batch-retry failed segments automatically.
+        Same API as frontend ``retranslateSegmentsBatch``.
 
         Rounds are controlled by ``segment_auto_retry_rounds`` (not chunk ``retry``).
+        Works for both immediate (immersive) and queued execution modes.
         """
         from utils.translation_segments import retranslate_segments_batch
         from utils.translation_validator import refresh_task_state_segment_failure_flags
@@ -122,7 +123,7 @@ class TranslationService:
             max_rounds = 3
         max_rounds = max(1, min(max_rounds, 10))
 
-        log_segment_translation_stats(task_id, task_state, "before_queue_auto_retry")
+        log_segment_translation_stats(task_id, task_state, "before_auto_retry")
 
         platform_key = getattr(payload, "ai_platform", None) or getattr(payload, "platform_type", None)
         if isinstance(payload, dict):
@@ -140,7 +141,7 @@ class TranslationService:
             if refreshed_failed:
                 logger.info(
                     LogModule.TRANS,
-                    f"[QUEUE-AUTO-RETRY] task={task_id} revalidated segments: "
+                    f"[AUTO-RETRY] task={task_id} revalidated segments: "
                     f"{refreshed_failed} marked failed by should_treat_as_failure "
                     f"(before round {attempt + 1})",
                 )
@@ -153,12 +154,12 @@ class TranslationService:
             if not indices:
                 logger.info(
                     LogModule.TRANS,
-                    f"[QUEUE-AUTO-RETRY] task={task_id} no failed segments left before round {attempt + 1}",
+                    f"[AUTO-RETRY] task={task_id} no failed segments left before round {attempt + 1}",
                 )
                 break
             logger.info(
                 LogModule.TRANS,
-                f"[QUEUE-AUTO-RETRY] task={task_id} round {attempt + 1}/{max_rounds} "
+                f"[AUTO-RETRY] task={task_id} round {attempt + 1}/{max_rounds} "
                 f"batch-retry count={len(indices)}",
             )
             task_state["message"] = f"Auto-retry failed segments ({attempt + 1}/{max_rounds})..."
@@ -193,7 +194,7 @@ class TranslationService:
                             n_seg = len(seg_list)
                     logger.info(
                         LogModule.TRANS,
-                        f"[QUEUE-AUTO-RETRY] task={task_id} persisted translation_segments "
+                        f"[AUTO-RETRY] task={task_id} persisted translation_segments "
                         f"after round {attempt + 1} (segment count={n_seg})",
                     )
                     log_segment_translation_stats(
@@ -204,17 +205,17 @@ class TranslationService:
                 except Exception as sync_exc:
                     logger.warning(
                         LogModule.TRANS,
-                        f"[QUEUE-AUTO-RETRY] task={task_id} translation_segments persist failed: {sync_exc}",
+                        f"[AUTO-RETRY] task={task_id} translation_segments persist failed: {sync_exc}",
                     )
             except Exception as exc:
                 logger.error(
                     LogModule.TRANS,
-                    f"[QUEUE-AUTO-RETRY] task={task_id} round {attempt + 1} error: {exc}",
+                    f"[AUTO-RETRY] task={task_id} round {attempt + 1} error: {exc}",
                     exc_info=True,
                 )
                 break
 
-        log_segment_translation_stats(task_id, task_state, "queue_auto_retry_finished")
+        log_segment_translation_stats(task_id, task_state, "auto_retry_finished")
     
     async def _test_llm_connectivity(self, payload: Any, task_id: str, task_state: Dict[str, Any]) -> bool:
         """
@@ -1571,16 +1572,15 @@ class TranslationService:
                     task_state,
                     "after_main_translation",
                 )
-                # Queue mode: auto batch-retry failed segments (no immersive Retry UI)
-                if task_state.get("execution_mode") == "queued":
-                    try:
-                        await self._queue_auto_retry_failed_segments(task_id, task_state, payload)
-                    except Exception as auto_retry_err:
-                        logger.error(
-                            LogModule.TRANS,
-                            f"[QUEUE-AUTO-RETRY] task={task_id} fatal: {auto_retry_err}",
-                            exc_info=True,
-                        )
+                # Auto batch-retry failed segments (post-translation, for both modes)
+                try:
+                    await self._auto_retry_failed_segments(task_id, task_state, payload)
+                except Exception as auto_retry_err:
+                    logger.error(
+                        LogModule.TRANS,
+                        f"[AUTO-RETRY] task={task_id} fatal: {auto_retry_err}",
+                        exc_info=True,
+                    )
 
                 # Mark translation as completed after post-processing steps.
                 task_state["status"] = "completed"

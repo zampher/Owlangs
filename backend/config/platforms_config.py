@@ -47,6 +47,10 @@ class AIPlatformConfig:
     write_timeout: Optional[int] = None  # Per-platform write timeout (seconds). Overrides global default.
     test_connect_timeout: Optional[int] = None  # Per-platform connect-test client timeout (seconds). Default 30.
     test_request_timeout: Optional[int] = None  # Per-platform connect-test sub-request timeout (seconds). Default 10.
+    # Maximum number of segments per translation batch (0 = unlimited).
+    # Default: 100 for cloud LLMs, 10 for local LLMs (e.g., Ollama).
+    # Available options: 1, 3, 5, 10, 20, 50, 100, 200, 500, 1000, 0 (unlimited)
+    segment_limit: int = 100
 
 
 @dataclass
@@ -182,6 +186,7 @@ class PlatformsConfig:
                         pdata.pop("write_timeout", None)
                         pdata.pop("test_connect_timeout", None)
                         pdata.pop("test_request_timeout", None)
+                        pdata.pop("segment_limit", None)
                     allowed = {f.name for f in fields(AIPlatformConfig)}
                     unknown = sorted(k for k in pdata if k not in allowed)
                     if unknown:
@@ -201,29 +206,113 @@ class PlatformsConfig:
                         if pdata_filtered.get('test_request_timeout') is None:
                             pdata_filtered['test_request_timeout'] = 10
                             needs_migration = True
+                        # Migrate: convert old single_segment_retry_mode to new segment_limit
+                        old_ssr = pdata_filtered.pop('single_segment_retry_mode', None)
+                        if 'segment_limit' not in pdata_filtered and old_ssr is not None:
+                            if isinstance(old_ssr, bool):
+                                pdata_filtered['segment_limit'] = 1 if old_ssr else 100
+                            elif old_ssr == 'single':
+                                pdata_filtered['segment_limit'] = 1
+                            elif old_ssr == 'fixed_5':
+                                pdata_filtered['segment_limit'] = 5
+                            elif old_ssr == 'fixed_10':
+                                pdata_filtered['segment_limit'] = 10
+                            # 'chunk_size' (default) → use default 100, no need to set
+                            needs_migration = True
+                            logger.info(
+                                LogModule.CONFIG,
+                                f"Migrated '{platform_key}': single_segment_retry_mode='{old_ssr}' → segment_limit={pdata_filtered.get('segment_limit', 100)}"
+                            )
                     self.platforms[platform_key] = AIPlatformConfig(**pdata_filtered)
             if needs_migration:
                 self._needs_migration = True
                 logger.info(LogModule.CONFIG, "Migrated old platforms.json: added default timeout/write_timeout for LLM platforms")
     
+    # Field order for consistent JSON serialization (matches platforms.json structure)
+    # Fields exclusive to LLM platforms (not used by parser/converter platforms)
+    _LLM_ONLY_FIELDS = {
+        "model",
+        "max_tokens",
+        "temperature",
+        "temperature_min",
+        "temperature_max",
+        "thinking_mode_supported",
+        "thinking_mode",
+        "recommended_tokens",
+        "api_protocol",
+        "chunk_size",
+        "concurrent",
+        "timeout",
+        "write_timeout",
+        "test_connect_timeout",
+        "test_request_timeout",
+        "segment_limit",
+    }
+
+    # Field order for consistent JSON serialization (matches platforms.json structure)
+    # Fields are grouped by platform type:
+    # - Common fields: name, url, platform_type, parser_subtype, requires_api_key, description, token_link, api_endpoints, performance_note
+    # - LLM-only fields: model, max_tokens, temperature, thinking_mode, chunk_size, concurrent, timeout, etc.
+    _PLATFORM_FIELD_ORDER = [
+        # Common fields (all platform types)
+        "name",
+        "url",
+        "platform_type",
+        "parser_subtype",
+        "requires_api_key",
+        "description",
+        "token_link",
+        "api_endpoints",
+        "performance_note",
+        # LLM-only fields
+        "model",
+        "max_tokens",
+        "temperature",
+        "temperature_min",
+        "temperature_max",
+        "thinking_mode_supported",
+        "thinking_mode",
+        "recommended_tokens",
+        "api_protocol",
+        "chunk_size",
+        "concurrent",
+        "timeout",
+        "write_timeout",
+        "test_connect_timeout",
+        "test_request_timeout",
+        "segment_limit",
+    ]
+
     def get_config_dict(self) -> Dict[str, Any]:
-        """Get configuration dictionary"""
-        config_dict = {
-            '_schema_version': self._schema_version,
-            'default_platform': self.default_platform,
-            'platforms': {}
-        }
-        
-        # Convert platforms to dictionary format (omit LLM-only keys for parser/converter platforms)
+        """Get configuration dictionary with consistent field ordering.
+
+        For non-LLM platforms (parser/converter), LLM-only fields are omitted
+        to keep the configuration clean and avoid confusion.
+        """
+        from collections import OrderedDict
+
+        config_dict: OrderedDict[str, Any] = OrderedDict()
+        config_dict['_schema_version'] = self._schema_version
+        config_dict['default_platform'] = self.default_platform
+        config_dict['platforms'] = OrderedDict()
+
+        # Convert platforms to dictionary format
         for platform_key, platform_config in self.platforms.items():
-            plat_dict = asdict(platform_config)
-            if not platform_type_uses_llm_chunk_concurrent(platform_config.platform_type):
-                plat_dict.pop("chunk_size", None)
-                plat_dict.pop("concurrent", None)
-                plat_dict.pop("timeout", None)
-                plat_dict.pop("write_timeout", None)
-                plat_dict.pop("test_connect_timeout", None)
-                plat_dict.pop("test_request_timeout", None)
+            # Build ordered dict with consistent field order
+            plat_dict: OrderedDict[str, Any] = OrderedDict()
+            plat_raw = asdict(platform_config)
+
+            # Determine if this is an LLM platform
+            is_llm_platform = platform_type_uses_llm_chunk_concurrent(platform_config.platform_type)
+
+            # Add fields in defined order
+            for field_name in self._PLATFORM_FIELD_ORDER:
+                if field_name in plat_raw:
+                    # Skip LLM-only fields for non-LLM platforms (parser/converter)
+                    if not is_llm_platform and field_name in self._LLM_ONLY_FIELDS:
+                        continue
+                    plat_dict[field_name] = plat_raw[field_name]
+
             config_dict["platforms"][platform_key] = plat_dict
 
         return config_dict

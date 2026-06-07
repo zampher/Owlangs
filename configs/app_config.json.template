@@ -33,8 +33,6 @@
     "translator_top_p": 1.0,
     "translator_frequency_penalty": 0.0,
     "translator_presence_penalty": 0.0,
-    "translator_chunk_token_size": 8000,
-    "translator_concurrent": 15,
     "translator_connect_timeout": 15,
     "translator_timeout": 120,
     "translator_retry": 2,

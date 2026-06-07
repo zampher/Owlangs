@@ -9,6 +9,7 @@ from pathlib import Path
 import tempfile
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from agents.seg_prompt_utils import parse_seg_output
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from utils.llm_client import LLMConfig, LLMMessage, llm_chat
@@ -218,14 +219,16 @@ def _build_prompt(items: List[FormulaRepairItem]) -> str:
 Normalize and repair LaTeX math formatting inside each segment for PDF export (Pandoc + XeLaTeX).
 
 # Segment Format (CRITICAL)
-Input and output are plain text with explicit segment markers:
-- Start marker: [SEG n]
-- End marker:   [/SEG n]
+Input and output use bracket markers for each segment:
+- Segment marker: [SEG n]:
+
+The content for a segment is ALL the text between its [SEG n]: header and the next [SEG n] header (or end of output). There is NO closing tag — the next header is the boundary.
 
 Rules:
 - Keep marker lines EXACTLY as-is. Do NOT translate or modify markers.
-- Do NOT add, remove, or reorder segments. Output must contain the same [SEG n] blocks in the same order.
+- Do NOT add, remove, or reorder segments. Output must contain the same [SEG n]: headers in the same order.
 - Operate ONLY within the content of each segment.
+- Do NOT add closing tags, end markers, or [/SEG] lines.
 
 # Repair Requirements
 - Keep meaning and non-math words exactly; do not drop tokens.
@@ -261,50 +264,23 @@ Whole-document compile may fail with `You can't use \\eqno' in math mode` at a c
 - Replace corrupted placeholders like `\\textbackslash theta` with valid math, e.g. `$\\theta_0^{*}$`.
 
 # Output
-Return ONLY the repaired segments with the SAME [SEG n] / [/SEG n] markers.
+Return ONLY the repaired segments with the SAME [SEG n]: headers.
 """
     lines: list[str] = [header]
     for it in items:
         # Use target_text as primary input; if missing, use source_text.
         body = it.target_text if (it.target_text or "").strip() else it.source_text
-        lines.append(f"[SEG {it.segment_index}]")
+        lines.append(f"[SEG {it.segment_index}]:")
         lines.append(body or "")
-        lines.append(f"[/SEG {it.segment_index}]")
     return "\n".join(lines).strip() + "\n"
 
 
 def _parse_seg_tag_output(text: str) -> Dict[int, str]:
     """
-    Parse [SEG n] ... [/SEG n] blocks into {n: content}.
+    Parse [SEG n]: header blocks into {n: content}.
     This mirrors the translation SEG-tag parser.
     """
-    out: Dict[int, str] = {}
-    seg_start_re = re.compile(r"^\[SEG\s+(\d+)\]\s*$")
-    seg_end_re = re.compile(r"^\[/SEG\s+(\d+)\]\s*$")
-    current_idx: int | None = None
-    buffer_lines: list[str] = []
-    for line in (text or "").splitlines():
-        m_start = seg_start_re.match(line)
-        if m_start:
-            # Flush previous block defensively
-            if current_idx is not None:
-                out[current_idx] = "\n".join(buffer_lines)
-                buffer_lines = []
-            current_idx = int(m_start.group(1))
-            continue
-        m_end = seg_end_re.match(line)
-        if m_end and current_idx is not None:
-            end_idx = int(m_end.group(1))
-            if end_idx == current_idx:
-                out[current_idx] = "\n".join(buffer_lines)
-            current_idx = None
-            buffer_lines = []
-            continue
-        if current_idx is not None:
-            buffer_lines.append(line)
-    if current_idx is not None:
-        out[current_idx] = "\n".join(buffer_lines)
-    return out
+    return parse_seg_output(text or "")
 
 
 def batch_repair_formulas_with_llm(

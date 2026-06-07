@@ -1,4 +1,4 @@
-﻿# SPDX-FileCopyrightText: 2026 Zampher
+# SPDX-FileCopyrightText: 2026 Zampher
 # SPDX-License-Identifier: MPL-2.0
 
 """
@@ -61,11 +61,12 @@ def save_api_logs_to_temp_dir(
     llm_api_input: Optional[List[str]] = None,
     llm_api_output: Optional[List[Any]] = None,
     llm_api_system_prompt: Optional[str] = None,
+    llm_api_params: Optional[dict] = None,  # LLM API call parameters (thinking, temperature, model, etc.)
     segment_index: Optional[int] = None,  # For retry: create separate file per segment
 ) -> Optional[str]:
     """
     Save API logs (input/output) to temp directory for debugging.
-    
+
     Args:
         task_state: Task state dictionary containing temp_dir
         task_id: Task identifier for logging
@@ -73,7 +74,8 @@ def save_api_logs_to_temp_dir(
         llm_api_input: List of API input prompts (if None, will try to get from task_state)
         llm_api_output: List of API output responses (if None, will try to get from task_state)
         llm_api_system_prompt: System prompt used (if None, will try to get from task_state)
-    
+        llm_api_params: LLM API call parameters for diagnosis (thinking, temperature, model_id, etc.)
+
     Returns:
         Path to debug directory if successful, None otherwise
     """
@@ -151,6 +153,15 @@ def save_api_logs_to_temp_dir(
                 f.write(f"[SUMMARY] Total API requests (chunks): {len(llm_api_input)}. ")
                 f.write(f"Segment keys per chunk: {key_counts_per_chunk}. Total segment keys: {total_keys}\n\n")
                 
+                # Write API parameters for diagnosis
+                if llm_api_params:
+                    f.write(f"{'='*80}\n")
+                    f.write("LLM API PARAMETERS:\n")
+                    f.write(f"{'='*80}\n")
+                    for key, value in llm_api_params.items():
+                        f.write(f"  {key}: {value}\n")
+                    f.write(f"{'='*80}\n\n")
+
                 # Write system prompt at the beginning if available (only for new file or first chunk)
                 if llm_api_system_prompt and not file_exists:
                     f.write(f"{'='*80}\n")
@@ -317,10 +328,12 @@ def translate_segments_with_agent(
                         use_precomputed_map = True
                         chunk_tokens_info = task_state.get("chunk_tokens_info", [])
                         total_estimated_tokens = task_state.get("total_estimated_input_tokens", 0)
+                        segment_limit_log = task_state.get('segment_limit', 'N/A')
                         logger.info(
                             LogModule.TRANS,
                             f"[CHUNK_TRANSLATION] Using precomputed chunk_to_segment_map from import phase: "
                             f"{len(chunk_to_segment_map)} chunks, chunk_size={chunk_size} (matches cached={cached_chunk_size}), "
+                            f"segment_limit={segment_limit_log}, "
                             f"total_estimated_tokens={total_estimated_tokens}, "
                             f"segments={len(segments)} (non-excluded from {len(cached_segments)} total)"
                         )
@@ -702,10 +715,12 @@ async def translate_segments_with_agent_async(
                         use_precomputed_map = True
                         chunk_tokens_info = task_state.get("chunk_tokens_info", [])
                         total_estimated_tokens = task_state.get("total_estimated_input_tokens", 0)
+                        segment_limit_log = task_state.get('segment_limit', 'N/A')
                         logger.info(
                             LogModule.TRANS,
                             f"[CHUNK_TRANSLATION] Using precomputed chunk_to_segment_map from import phase: "
                             f"{len(chunk_to_segment_map)} chunks, chunk_size={chunk_size} (matches cached={cached_chunk_size}), "
+                            f"segment_limit={segment_limit_log}, "
                             f"total_estimated_tokens={total_estimated_tokens}, "
                             f"segments={len(segments)} (non-excluded from {len(cached_segments)} total)"
                         )
@@ -824,10 +839,11 @@ async def translate_segments_with_agent_async(
             translate_agent.task_id = task_id
             translate_agent.task_state = task_state
         
+        segment_limit_log = task_state.get('segment_limit', 'N/A') if task_state else 'N/A'
         logger.info(
             LogModule.TRANS,
             f"[CHUNK_TRANSLATION] Calling send_segments_async with {len(segments)} segments, chunk_size={chunk_size}, "
-            f"expected {len(chunk_to_segment_map)} chunks"
+            f"segment_limit={segment_limit_log}, expected {len(chunk_to_segment_map)} chunks"
         )
         try:
             logger.info(LogModule.TRANS, f"[CHUNK_TRANSLATION] translate_segments_with_agent_async: Starting translation with {len(segments)} segments")

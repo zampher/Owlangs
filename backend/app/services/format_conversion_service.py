@@ -44,9 +44,8 @@ class FormatConversionService:
         """
         Resolve chunk_size with priority:
         1. obj.chunk_size (explicit override)
-        2. Platform config (via obj.platform_key)
-        3. Global app_config.json translator_chunk_token_size (backward compat)
-        4. fallback
+        2. Platform config (via obj.platform_key from platforms.json)
+        3. fallback
         """
         # Priority 1: Explicit override from obj
         chunk_size = None
@@ -83,22 +82,8 @@ class FormatConversionService:
             except Exception as e:
                 logger.debug(LogModule.WORKFLOW, f"{log_prefix} Failed to get chunk_size from platform config: {e}")
         
-        # Priority 3: Global app_config.json (backward compatibility)
-        try:
-            from backend.config.app_config import AppConfig
-            cfg_path = AppConfig._resolve_app_config_path("app_config.json")
-            if cfg_path.exists():
-                with open(cfg_path, 'r', encoding='utf-8-sig') as f:
-                    data = json.load(f)
-                    chunk_size = data.get('translator_chunk_token_size')
-            if chunk_size and chunk_size != 0:
-                logger.info(LogModule.WORKFLOW, f"{log_prefix} Using chunk_size={chunk_size} from app_config.json (backward compat)")
-                return int(chunk_size)
-        except Exception as e:
-            logger.debug(LogModule.WORKFLOW, f"{log_prefix} Failed to get chunk_size from app_config.json: {e}")
-        
-        # Priority 4: fallback
-        logger.warning(LogModule.WORKFLOW, f"{log_prefix} No chunk_size found, using fallback={fallback}")
+        # Priority 3: fallback
+        logger.warning(LogModule.WORKFLOW, f"{log_prefix} No chunk_size found in payload or platform config, using fallback={fallback}")
         return fallback
     
     def _get_workflow_type_from_extension(self, file_name: str) -> str:
@@ -286,6 +271,7 @@ class FormatConversionService:
                 'ocr_language': ocr_language,
                 'deep_split': final_deep_split,
                 'skip_cache': skip_cache,
+                'platform_key': getattr(request, 'platform_key', None),
             }
             logger.info(
                 LogModule.WORKFLOW,
@@ -372,6 +358,7 @@ class FormatConversionService:
                 **base_params,
                 'workflow_type': workflow_type,
                 'deep_split': final_deep_split,
+                'platform_key': getattr(request, 'platform_key', None),
             }
             # Add chunk_size if we got it and it's not 0, otherwise use fallback 3000
             if chunk_size is not None and chunk_size != 0:
@@ -415,6 +402,7 @@ class FormatConversionService:
             'workflow_type': 'markdown_based',
             'deep_split': final_deep_split,
             'chunk_size': chunk_size,
+            'platform_key': getattr(request, 'platform_key', None),
         }
         return MarkdownWorkflowParams(**fallback_params)
     
@@ -713,21 +701,7 @@ class FormatConversionService:
                     except Exception as e:
                         logger.debug(LogModule.WORKFLOW, f"[RESPLIT] Task {task_id}: Failed to get chunk_size from platform config: {e}")
         
-        if chunk_size is None or chunk_size == 0:
-            # Priority 2: Global app_config.json (backward compat)
-            try:
-                from backend.config.app_config import AppConfig
-                cfg_path = AppConfig._resolve_app_config_path("app_config.json")
-                if cfg_path.exists():
-                    with open(cfg_path, 'r', encoding='utf-8-sig') as f:
-                        data = json.load(f)
-                        chunk_size = data.get('translator_chunk_token_size')
-                if chunk_size and chunk_size != 0:
-                    logger.debug(LogModule.WORKFLOW, f"[RESPLIT] Task {task_id}: Using chunk_size={chunk_size} from app_config.json (backward compat)")
-            except Exception as e:
-                logger.debug(LogModule.WORKFLOW, f"[RESPLIT] Task {task_id}: Failed to get chunk_size from app_config.json: {e}")
-        
-        # Priority 3: Get from payload
+        # Priority 2: Get from payload
         if chunk_size is None or chunk_size == 0:
             if payload:
                 if isinstance(payload, dict):

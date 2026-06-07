@@ -1,10 +1,11 @@
-﻿# SPDX-FileCopyrightText: 2026 Zamphersss
+# SPDX-FileCopyrightText: 2026 Zamphersss
 # SPDX-License-Identifier: MPL-2.0
 
 """
 Utility functions for recording and managing translation segments.
 """
 
+import asyncio
 import codecs
 import json
 import logging
@@ -15,6 +16,7 @@ from pathlib import Path
 
 # Delayed import to avoid circular import issues in PyInstaller frozen builds
 # from app.models.translation_segment import TranslationSegment, TranslationSegmentsMetadata
+from agents.seg_prompt_utils import parse_seg_output
 from logger import unified_logger as logger
 from logger.logger import LogModule
 
@@ -4513,9 +4515,10 @@ async def retranslate_segment(
                 write_timeout=write_timeout,
                 logger=logger,
                 glossary_dict=None,  # TODO: Load glossary if available
-                retry=retry
+                retry=retry,
+                segment_limit=1,  # Single segment — always limit to 1
             )
-            
+
             agent = SegmentsTranslateAgent(agent_config)
         else:
             from agents import MDTranslateAgent
@@ -4559,9 +4562,8 @@ async def retranslate_segment(
         else:
             # MDTranslateAgent: use SEG-tag format even for single-segment retry so behavior
             # is consistent with the main markdown/PDF pipeline and never leaks marker lines.
-            import re
 
-            prompt = f"[SEG {segment_index}]\n{source_text}\n[/SEG {segment_index}]"
+            prompt = f"[SEG {segment_index}]:\n{source_text}"
             results = await agent.send_prompts_async(
                 prompts=[prompt],
                 pre_send_handler=agent._pre_send_handler,  # type: ignore[attr-defined]
@@ -4574,23 +4576,14 @@ async def retranslate_segment(
             if not isinstance(raw_output, str):
                 translated_text = str(raw_output)
             else:
-                llm_str = raw_output
-                start_re = re.compile(rf"^\[SEG\s+{segment_index}\]\s*$")
-                end_re = re.compile(rf"^\[/SEG\s+{segment_index}\]\s*$")
-                current = False
-                buf: list[str] = []
-                for line in llm_str.splitlines():
-                    if start_re.match(line):
-                        current = True
-                        buf = []
-                        continue
-                    if end_re.match(line):
-                        if current:
-                            break
-                        continue
-                    if current:
-                        buf.append(line)
-                translated_text = "\n".join(buf) if buf else llm_str
+                parsed = parse_seg_output(raw_output)
+                translated_text = parsed.get(segment_index, "")
+                if not translated_text and parsed:
+                    # Found segments but not our idx — take first available
+                    translated_text = next(iter(parsed.values()))
+                if not translated_text:
+                    # Last resort: use raw output as-is
+                    translated_text = raw_output.strip()
         
         if not translated_text or not isinstance(translated_text, str):
             raise ValueError(f"Translation failed: invalid response from AI platform")
@@ -4696,6 +4689,19 @@ async def retranslate_segment(
         retry_folder = f"Retry{segment['retry_count']}"
         try:
             from utils.chunk_translation_helper import save_api_logs_to_temp_dir
+
+            # Collect LLM API parameters for diagnosis
+            llm_api_params = {
+                'model_id': model_id,
+                'temperature': temperature,
+                'thinking': thinking,
+                'chunk_size': chunk_size,
+                'platform_key': selected_platform_key,
+                'to_lang': to_lang,
+                'agent_type': 'SegmentsTranslateAgent' if use_segments_agent else 'MDTranslateAgent',
+                'segment_index': segment_index,
+            }
+
             save_api_logs_to_temp_dir(
                 task_state=task_state,
                 task_id=task_id,
@@ -4703,6 +4709,7 @@ async def retranslate_segment(
                 llm_api_input=task_state.get('llm_api_input'),
                 llm_api_output=task_state.get('llm_api_output'),
                 llm_api_system_prompt=task_state.get('llm_api_system_prompt'),
+                llm_api_params=llm_api_params,  # API parameters for diagnosis
                 segment_index=segment_index,  # CRITICAL: Pass segment_index to create separate file per segment
             )
         except Exception as log_e:
@@ -4837,6 +4844,21 @@ async def retranslate_segments_batch(
     # Check if platform requires API key (Ollama, local deployments don't)
     requires_api_key = getattr(platform_config_obj, 'requires_api_key', True)
 
+    # Get segment_limit from platform config (max segments per batch, 0 = unlimited)
+    segment_limit = getattr(platform_config_obj, 'segment_limit', 100)
+    if segment_limit is None:
+        segment_limit = 100
+    if not isinstance(segment_limit, int) or segment_limit < 0:
+        logger.warning(
+            LogModule.TRANS,
+            f"[BATCH_RETRY] Task {task_id}: Invalid segment_limit '{segment_limit}', falling back to 100"
+        )
+        segment_limit = 100
+    logger.info(
+        LogModule.TRANS,
+        f"[BATCH_RETRY] Task {task_id}: Platform '{selected_platform_key}' segment_limit={segment_limit} (0=unlimited)"
+    )
+
     api_key = secrets_manager.get_api_keys().get(selected_platform_key, '')
 
     # Validate platform configuration
@@ -4942,7 +4964,8 @@ async def retranslate_segments_batch(
             write_timeout=write_timeout,
             logger=logger,
             glossary_dict=None,  # TODO: Load glossary if available
-            retry=retry
+            retry=retry,
+            segment_limit=segment_limit,  # Pass platform's segment_limit
         )
 
         agent = SegmentsTranslateAgent(agent_config)
@@ -4981,7 +5004,7 @@ async def retranslate_segments_batch(
     # Start at 10%, then update based on chunk progress (10%-90%)
     last_logged_progress = {'completed': -1, 'mapped_percent': -1}
     
-    def retry_progress_callback(completed: int, total: int, percent: int):
+    def retry_progress_callback(completed: int, total: int, percent: int) -> bool:
         # Map retry progress (0%-100%) to overall progress (10%-90%)
         mapped_percent = 10 + int(percent * 0.8)  # Map 0-100 to 10-90
         task_state["progress"] = mapped_percent
@@ -4993,11 +5016,24 @@ async def retranslate_segments_batch(
             logger.debug(LogModule.TRANS, f"[BATCH_RETRY] Progress: {completed}/{total} chunks ({mapped_percent}%)")
             last_logged_progress['completed'] = completed
             last_logged_progress['mapped_percent'] = mapped_percent
+        
+        # CRITICAL: Check if batch retry should be cancelled
+        # Return True to continue, False to cancel
+        if task_state.get("cancel_batch_retry", False):
+            logger.info(LogModule.TRANS, f"[BATCH_RETRY] Task {task_id}: Cancel signal detected, stopping batch retry")
+            return False
+        return True
     
     # Set initial progress to 10% (same as translation phase)
     task_state["progress"] = 10
     task_state["message"] = "Preparing retranslation..."
-    logger.info(LogModule.TRANS, f"[BATCH_RETRY] Task {task_id}: Starting batch retry for {len(segments_to_retry)} segments (progress: 10%)")
+    # CRITICAL: Set status to "processing" so frontend polling continues
+    task_state["status"] = "processing"
+    logger.info(LogModule.TRANS, f"[BATCH_RETRY] Task {task_id}: Starting batch retry for {len(segments_to_retry)} segments (progress: 10%, status=processing)")
+    
+    # CRITICAL: Clear any previous cancel flag and set batch retry in progress flag
+    task_state["cancel_batch_retry"] = False
+    task_state["batch_retry_in_progress"] = True
     
     # CRITICAL: Initialize accumulated API logs for batch retry
     # This ensures all chunks are saved to the same file, not overwritten
@@ -5017,6 +5053,12 @@ async def retranslate_segments_batch(
                 f"(chunk_size={chunk_size} tokens) using SegmentsTranslateAgent"
             )
             
+            # CRITICAL: Check if batch retry was cancelled before sending requests
+            if task_state.get("cancel_batch_retry", False):
+                logger.info(LogModule.TRANS, f"[BATCH_RETRY] Task {task_id}: Cancelled before sending segment requests")
+                results = [None] * len(segments_to_retry)
+                raise asyncio.CancelledError("Batch retry cancelled by user")
+            
             results = await agent.send_segments_async(
                 source_texts,
                 chunk_size=chunk_size,  # Pass chunk_size in tokens (SegmentsTranslateAgent handles conversion)
@@ -5031,28 +5073,63 @@ async def retranslate_segments_batch(
                 )
         else:
             # MDTranslateAgent: for markdown/PDF/HTML workflows, use SEG-tag format for batch retry
-            # to keep behavior consistent with the main pipeline and avoid JSON-based chunk merging.
-            import re
+            # Build prompts with segment_limit-based chunking:
+            # segment_limit caps max segments per batch; chunk_size caps max tokens per batch.
+            # The actual batch size = min(segment_limit, what fits in chunk_size tokens).
+            logger.info(
+                LogModule.TRANS,
+                f"[BATCH_RETRY] Task {task_id}: Translating {len(source_texts)} segments using MDTranslateAgent "
+                f"(segment_limit={segment_limit})"
+            )
+
+            from utils.json_utils import segments2json_chunks
+            from utils.chunk_size_converter import get_text_content_token_limit
+
+            text_token_limit = get_text_content_token_limit(chunk_size)
+            retry_segments_list = [seg_info["source_text"] for seg_info in segments_to_retry]
+            retry_segment_indices = [seg_info["segment_index"] for seg_info in segments_to_retry]
+
+            # 0 = unlimited, pass None to segments2json_chunks
+            max_segs = segment_limit if segment_limit > 0 else None
+
+            indexed_originals, chunks, merged_indices_list = await asyncio.to_thread(
+                segments2json_chunks,
+                retry_segments_list,
+                text_token_limit,
+                False,  # merge_small
+                retry_segment_indices,
+                max_segs,  # max_segments_per_chunk (segment_limit cap)
+            )
+
+            # Build SEG-tag prompts for each chunk
+            prompts: list[str] = []
+            chunk_seg_indices: list[list[int]] = []
+            for chunk_dict in chunks:
+                lines: list[str] = []
+                seg_indices: list[int] = []
+                for seg_idx_str, text in chunk_dict.items():
+                    seg_index = int(seg_idx_str)
+                    lines.append(f"[SEG {seg_index}]:")
+                    lines.append(text or "")
+                    seg_indices.append(seg_index)
+                prompts.append("\n".join(lines))
+                chunk_seg_indices.append(seg_indices)
 
             logger.info(
                 LogModule.TRANS,
-                f"[BATCH_RETRY] Task {task_id}: Translating {len(source_texts)} segments together "
-                f"using MDTranslateAgent with SEG-tag prompts"
+                f"[BATCH_RETRY] Task {task_id}: Grouped {len(segments_to_retry)} segments into {len(chunks)} chunks "
+                f"(segment_limit={segment_limit}, chunk_size={chunk_size}, token_limit={text_token_limit})"
             )
 
-            # Build a single SEG-tagged prompt that contains all segments to retry
-            lines: list[str] = []
-            for idx, seg_indices in enumerate(segment_indices_list):
-                # segment_indices_list elements are plain ints in current implementation
-                seg_index = seg_indices if isinstance(seg_indices, int) else seg_indices[0]
-                text = source_texts[idx]
-                lines.append(f"[SEG {seg_index}]")
-                lines.append(text or "")
-                lines.append(f"[/SEG {seg_index}]")
-            prompt_text = "\n".join(lines)
+            # CRITICAL: Check if batch retry was cancelled before sending requests
+            if task_state.get("cancel_batch_retry", False):
+                logger.info(LogModule.TRANS, f"[BATCH_RETRY] Task {task_id}: Cancelled before sending requests")
+                results = [None] * len(segments_to_retry)
+                raise asyncio.CancelledError("Batch retry cancelled by user")
 
+            # Send all prompts/chunks (send_prompts_async handles concurrency)
             raw_results = await agent.send_prompts_async(
-                prompts=[prompt_text],
+                prompts=prompts,
                 pre_send_handler=agent._pre_send_handler,  # type: ignore[attr-defined]
                 progress_callback=retry_progress_callback,
             )
@@ -5060,63 +5137,61 @@ async def retranslate_segments_batch(
             if not raw_results or len(raw_results) == 0:
                 raise ValueError(f"Translation failed: empty response from AI platform")
 
-            llm_output = raw_results[0]
-            if not isinstance(llm_output, str):
-                llm_output = str(llm_output)
-
-            # Parse [SEG n] ... [/SEG n] blocks back to index -> text
-            seg_start_re = re.compile(r"^\[SEG\s+(\d+)\]\s*$")
-            seg_end_re = re.compile(r"^\[/SEG\s+(\d+)\]\s*$")
+            # Parse each response and collect translations
             index_to_translation: dict[int, str] = {}
-            current_idx: int | None = None
-            buffer_lines: list[str] = []
 
-            for line in llm_output.splitlines():
-                m_start = seg_start_re.match(line)
-                if m_start:
-                    # Flush previous block if any
-                    if current_idx is not None:
-                        text_block = "\n".join(buffer_lines)
-                        index_to_translation[current_idx] = text_block
-                        buffer_lines = []
-                    current_idx = int(m_start.group(1))
-                    continue
-                m_end = seg_end_re.match(line)
-                if m_end and current_idx is not None:
-                    end_idx = int(m_end.group(1))
-                    if end_idx == current_idx:
-                        text_block = "\n".join(buffer_lines)
-                        index_to_translation[current_idx] = text_block
-                    else:
-                        logger.warning(
-                            LogModule.TRANS,
-                            f"[BATCH_RETRY] Task {task_id}: Mismatched SEG end tag [/SEG {end_idx}] "
-                            f"while current_idx={current_idx} in batch retry output",
-                        )
-                    current_idx = None
-                    buffer_lines = []
-                    continue
-                if current_idx is not None:
-                    buffer_lines.append(line)
+            for idx, (llm_output, seg_indices_in_chunk) in enumerate(zip(raw_results, chunk_seg_indices)):
+                if not isinstance(llm_output, str):
+                    llm_output = str(llm_output)
 
-            # Flush trailing block if any
-            if current_idx is not None:
-                text_block = "\n".join(buffer_lines)
-                index_to_translation[current_idx] = text_block
+                # Parse [SEG n]: headers back to index -> text
+                chunk_parsed: dict[int, str] = parse_seg_output(llm_output)
 
-            if not index_to_translation:
-                logger.warning(
-                    LogModule.TRANS,
-                    f"[BATCH_RETRY] Task {task_id}: SEG-tag parser found no segments in batch retry output; "
-                    "all segments will be treated as failed.",
-                )
-                results = [None for _ in segments_to_retry]
-            else:
-                # Build results list in the same order as segments_to_retry
-                results = []
-                for seg_info in segments_to_retry:
-                    seg_index = seg_info["segment_index"]
-                    results.append(index_to_translation.get(seg_index))
+                if not chunk_parsed:
+                    logger.warning(
+                        LogModule.TRANS,
+                        f"[BATCH_RETRY] Task {task_id}: Request {idx} (segments {seg_indices_in_chunk}): "
+                        f"SEG-tag parser found no segments in response",
+                    )
+                else:
+                    # Merge results
+                    for seg_index, translated_text in chunk_parsed.items():
+                        index_to_translation[seg_index] = translated_text
+
+                    logger.debug(
+                        LogModule.TRANS,
+                        f"[BATCH_RETRY] Task {task_id}: Request {idx}/{len(prompts)} parsed "
+                        f"{len(chunk_parsed)}/{len(seg_indices_in_chunk)} segments"
+                    )
+
+            # Build results list in the same order as segments_to_retry
+            results = []
+            parsed_count = 0
+            missing_count = 0
+            for seg_info in segments_to_retry:
+                seg_index = seg_info["segment_index"]
+                translation = index_to_translation.get(seg_index)
+                results.append(translation)
+                if translation:
+                    parsed_count += 1
+                else:
+                    missing_count += 1
+
+            logger.info(
+                LogModule.TRANS,
+                f"[BATCH_RETRY] Task {task_id}: Total parsed {parsed_count}/{len(segments_to_retry)} segments, "
+                f"{missing_count} missing (segment_limit={segment_limit})"
+            )
+    except asyncio.CancelledError as e:
+        # Handle user cancellation gracefully
+        logger.info(LogModule.TRANS, f"[BATCH_RETRY] Task {task_id}: Batch retry cancelled by user")
+        task_state["cancel_batch_retry"] = True
+        # Return partial results if any, otherwise all None
+        if not results:
+            results = [None for _ in segments_to_retry]
+        elif len(results) != len(segments_to_retry):
+            # Pad results with None for missing segments
+            results = results + [None] * (len(segments_to_retry) - len(results))
     except Exception as e:
         error_msg = str(e)
         logger.error(
@@ -5129,6 +5204,10 @@ async def retranslate_segments_batch(
             task_state["llm_error"] = error_msg
         # Treat all segments as failed so caller sees per-segment errors
         results = [None for _ in segments_to_retry]
+        # Set error status so frontend knows retry failed
+        task_state["status"] = "completed"
+        task_state["progress"] = 100
+        task_state["message"] = f"Retranslation failed: {error_msg}"
     
     # CRITICAL: Accumulate API logs from agent (may contain merged chunks)
     # send_chunks_async saves logs to task_state, but we need to accumulate them
@@ -5253,7 +5332,18 @@ async def retranslate_segments_batch(
         api_input_to_save = accumulated_api_input if accumulated_api_input else task_state.get('llm_api_input')
         api_output_to_save = accumulated_api_output if accumulated_api_output else task_state.get('llm_api_output')
         system_prompt_to_save = accumulated_system_prompt if accumulated_system_prompt else task_state.get('llm_api_system_prompt')
-        
+
+        # Collect LLM API parameters for diagnosis
+        llm_api_params = {
+            'model_id': model_id,
+            'temperature': temperature,
+            'thinking': thinking,
+            'chunk_size': chunk_size,
+            'platform_key': selected_platform_key,
+            'to_lang': to_lang,
+            'agent_type': 'SegmentsTranslateAgent' if use_segments_agent else 'MDTranslateAgent',
+        }
+
         save_api_logs_to_temp_dir(
             task_state=task_state,
             task_id=task_id,
@@ -5261,6 +5351,7 @@ async def retranslate_segments_batch(
             llm_api_input=api_input_to_save,
             llm_api_output=api_output_to_save,
             llm_api_system_prompt=system_prompt_to_save,
+            llm_api_params=llm_api_params,  # API parameters for diagnosis
             segment_index=None,  # Batch retry - save to single file (append mode)
         )
     except Exception as log_e:
@@ -5269,9 +5360,30 @@ async def retranslate_segments_batch(
             exc_info=True
         )
     
-    logger.info(LogModule.TRANS,
-        f"[BATCH_RETRY] Task {task_id}: Successfully retranslated {len(result_map)} segments "
-        f"using platform '{selected_platform_key}' (chunks were merged to reduce API calls)"
-    )
+    # CRITICAL: Clear batch retry in progress flag
+    task_state["batch_retry_in_progress"] = False
+    
+    # Check if batch retry was cancelled
+    was_cancelled = task_state.get("cancel_batch_retry", False)
+    if was_cancelled:
+        logger.info(LogModule.TRANS,
+            f"[BATCH_RETRY] Task {task_id}: Batch retry was cancelled by user, "
+            f"returning partial results ({len(result_map)} segments processed)"
+        )
+        task_state["message"] = f"Batch retry cancelled ({len(result_map)} segments processed)"
+        task_state["progress"] = 100
+        task_state["status"] = "completed"
+    else:
+        logger.info(LogModule.TRANS,
+            f"[BATCH_RETRY] Task {task_id}: Successfully retranslated {len(result_map)} segments "
+            f"using platform '{selected_platform_key}' (chunks were merged to reduce API calls)"
+        )
+        # CRITICAL: Set final progress and status so frontend knows retry is complete
+        task_state["progress"] = 100
+        task_state["message"] = f"Retranslation completed: {len(result_map)} segments processed"
+        task_state["status"] = "completed"
+    
+    # Clear cancel flag after completion
+    task_state["cancel_batch_retry"] = False
     
     return result_map

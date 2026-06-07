@@ -125,6 +125,10 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
   bool get _isReeditMode => widget.reeditTaskId != null &&
       widget.reeditTaskId!.isNotEmpty &&
       widget.flowId == null;
+  
+  // Batch retry cancellation
+  Future<void> Function()? _currentBatchRetryCancel;
+  bool _isBatchRetryCancelling = false;
   String?
       _previousTargetLang; // Track previous target language to detect changes
   // Remember user's choice for each target language: null=not chosen, true=exclude, false=don't exclude
@@ -1078,6 +1082,11 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
 
   /// True if [filename] has an image extension (e.g. PNG, JPG).
   /// Used to skip Language Match Warning for image translation (OCR result language often matches target).
+  /// Returns [value] if non-null and non-empty, otherwise [fallback].
+  static String _nonEmpty(String? value, String fallback) {
+    return (value != null && value.isNotEmpty) ? value : fallback;
+  }
+
   static bool _isImageFileName(String? filename) {
     if (filename == null || filename.isEmpty) return false;
     const Set<String> imageExtensions = <String>{
@@ -1197,11 +1206,16 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         _clearQueuePersistDirty();
       }
     } catch (e, st) {
+      // Ignore 400 Bad Request errors during auto-persist (e.g., task not completed yet
+      // or segments not ready). This is a non-critical background operation.
+      final String errStr = e.toString();
+      final bool isBadRequest = errStr.contains('400') || errStr.contains('bad response');
       _translationScreenLog(
-        'Auto persist queue snapshot failed: $e\n$st',
-        level: LogLevel.warn,
+        'Auto persist queue snapshot failed: $e${isBadRequest ? " (ignored, will retry later)" : ""}',
+        level: isBadRequest ? LogLevel.info : LogLevel.warn,
       );
-      if (mounted) {
+      // Only mark dirty for non-400 errors; 400 errors will auto-retry on next poll
+      if (mounted && !isBadRequest) {
         _markQueuePersistDirty();
       }
     }
@@ -1459,6 +1473,30 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       }
 
       // Proceed immediately without confirmation dialog
+      // Store cancel function for this retry operation
+      Future<void> cancelBatchRetry() async {
+        if (_isBatchRetryCancelling) return;
+        _isBatchRetryCancelling = true;
+        
+        // Call backend cancel API
+        try {
+          await svc.cancelBatchRetry(state.taskId!);
+          _translationScreenLog('Batch retry cancel requested');
+        } catch (e) {
+          _translationScreenLog('Failed to send cancel request: $e');
+        }
+        
+        if (mounted) {
+          _showSnackBar(
+            'Cancelling batch retry...',
+            Colors.orange,
+          );
+        }
+      }
+      
+      // Expose cancel function to UI
+      _currentBatchRetryCancel = cancelBatchRetry;
+      
       if (mounted) {
         _showSnackBar(
           'Retrying ${failedIndices.length} segment(s)...',
@@ -1521,6 +1559,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       // We need to poll to get these updates, similar to translation phase
       final TranslationService pollSvc = TranslationService();
       bool pollingActive = true;
+      bool cancelRequested = false;
 
       // Start polling in background (don't await, let it run concurrently)
       // Use unawaited to avoid blocking
@@ -1528,6 +1567,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         state.taskId!,
         onUpdate: (Map<String, dynamic> status) {
           if (!pollingActive) return; // Stop updating if polling is cancelled
+          if (_isBatchRetryCancelling) return; // Stop updating if user cancelled
 
           // Update progress from backend (10%-90% during retry)
           // Safely extract progress, handling null and invalid types
@@ -1540,12 +1580,29 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           final String statusText = (status['status'] ?? '').toString();
           final String message = (status['message'] ?? '').toString();
 
-          // Only update if status is 'retranslating' or 'processing' (during retry)
-          if (statusText == 'retranslating' || statusText == 'processing') {
+          // CRITICAL: Update progress during retry (status is 'processing' during batch retry)
+          // Check both status and message to detect retry state reliably
+          final bool isRetryInProgress = statusText == 'processing' && 
+              (message.toLowerCase().contains('retranslat') || 
+               message.toLowerCase().contains('preparing retranslation') ||
+               message.toLowerCase().contains('batch retry'));
+          final bool isTranslationPhase = statusText == 'processing' && 
+              (message.startsWith('Translating') || 
+               message.startsWith('Sending translation') ||
+               message.startsWith('Generating output'));
+          
+          // Update progress during retry (but not during main translation to avoid conflicts)
+          if (isRetryInProgress || (statusText == 'processing' && !isTranslationPhase)) {
             translationNotifier.setProgress(progress);
             if (message.isNotEmpty) {
               translationNotifier.setStatusText(message);
             }
+          }
+          
+          // Check for cancellation in message
+          if (message.toLowerCase().contains('cancelled')) {
+            _isBatchRetryCancelling = true;
+            pollingActive = false;
           }
         },
         intervalSec: 1, // Poll every 1 second for faster updates
@@ -1671,15 +1728,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       // Collect all results
       allResults.addAll(results);
 
-      // Don't set progress to 100% here - wait until all processing is done
-      // Progress will be updated from backend polling or set to 100% at the end
-      translationNotifier.setTranslationStats(
-        successCount: 0, // Will be updated below
-        failCount: 0, // Will be updated below
-        totalSegments: totalToRetranslate,
-      );
-
-      // Count results
+      // Count retry results for logging
       for (final Map<String, dynamic> result in results) {
         if (result['success'] == true) {
           successCount++;
@@ -1695,22 +1744,59 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         }
       }
 
-      // Update final stats
-      translationNotifier.setTranslationStats(
-        successCount: successCount,
-        failCount: failCount,
-        totalSegments: totalToRetranslate,
-      );
+      // Fetch overall statistics from backend (all segments, not just retried)
+      // and set combined translation time (initial + retry)
+      try {
+        final Map<String, dynamic> allSegmentsData =
+            await svc.getTranslationSegments(state.taskId!, forceRefresh: true);
+        final List<dynamic> allSegments =
+            allSegmentsData['segments'] as List<dynamic>? ?? <dynamic>[];
+
+        var overallSuccess = 0;
+        var overallFail = 0;
+        for (final segment in allSegments) {
+          final isFailed = segment['is_failed'] as bool? ?? false;
+          final isExcluded = segment['is_excluded'] as bool? ?? false;
+          final segmentStatus = segment['status'] as String?;
+          if (isFailed && !isExcluded && segmentStatus != 'cleared') {
+            overallFail++;
+          } else if (!isExcluded && segmentStatus != 'cleared') {
+            overallSuccess++;
+          }
+        }
+
+        translationNotifier.setTranslationStats(
+          successCount: overallSuccess,
+          failCount: overallFail,
+          totalSegments: allSegments.length,
+        );
+      } catch (e) {
+        // Fallback: use retry-only counts if overall fetch fails
+        _translationScreenLog(
+          'Failed to fetch overall stats after retry: $e',
+        );
+        translationNotifier.setTranslationStats(
+          successCount: successCount,
+          failCount: failCount,
+          totalSegments: totalToRetranslate,
+        );
+      }
+
+      // Update translation time to include initial translation + retry time
+      final DateTime retryEndTime = DateTime.now();
+      translationNotifier.setEndTime(retryEndTime);
+      final currentStateForTime = _getCurrentTranslationState();
+      final DateTime? translationStartTime = currentStateForTime.startTime;
+      if (translationStartTime != null) {
+        translationNotifier.setTotalDuration(
+          retryEndTime.difference(translationStartTime),
+        );
+      }
 
       // Update final status
       translationNotifier.setTranslating(false);
       translationNotifier.setProgress(100);
       translationNotifier.setStatusText('completed');
-      translationNotifier.setTranslationStats(
-        successCount: successCount,
-        failCount: failCount,
-        totalSegments: totalToRetranslate,
-      );
 
       // Show final result only if there are errors (progress is already shown in status bar)
       if (mounted) {
@@ -1761,6 +1847,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       }
     } finally {
       notifier.setCurrentOperation(TranslationOperation.none);
+      // Clear batch retry cancel function
+      _currentBatchRetryCancel = null;
+      _isBatchRetryCancelling = false;
     }
   }
 
@@ -4852,15 +4941,12 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       final Map<String, dynamic>? secretsConfig =
           await appConfigService.getSecretsConfig();
 
-      // Get default platform info
-      final String defaultPlatform =
-          appConfig?['default_platform'] as String? ?? 'openai';
-      final Map<String, dynamic> aiPlatforms =
-          appConfig?['ai_platforms'] as Map<String, dynamic>? ??
-              <String, dynamic>{};
-      final Map<String, dynamic> platformInfo =
-          aiPlatforms[defaultPlatform] as Map<String, dynamic>? ??
-              <String, dynamic>{};
+      // Get default platform info from runtime settings (reflects Quick Settings changes)
+      final AIPlatformSettings aiPlatformSettings =
+          ref.read(aiPlatformSettingsProvider);
+      final String defaultPlatform = aiPlatformSettings.defaultPlatform;
+      final AIPlatformInfo? platformInfo =
+          aiPlatformSettings.platforms[defaultPlatform];
       final Map<String, dynamic> platformApiKeys =
           secretsConfig?['platform_api_keys'] as Map<String, dynamic>? ??
               <String, dynamic>{};
@@ -5008,21 +5094,21 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         'from_lang': 'auto',
         'to_lang': qs.toLang,
         // Required LLM fields at top-level per backend schema
-        'base_url': platformInfo['url'] as String? ??
+        'base_url': platformInfo?.url ??
             translationParams['base_url'] ??
             'https://api.openai.com/v1',
         'api_key': apiKey.isNotEmpty
             ? apiKey
             : (translationParams['api_key'] as String? ?? ''),
-        'model_id': platformInfo['model'] as String? ??
+        'model_id': platformInfo?.model ??
             translationParams['model_id'] ??
             'gpt-4o',
         // Core controls expected at top-level
         // chunk_size and concurrent are now per-platform settings, read by backend from platforms.json
+        // thinking is now per-platform setting (thinking_mode/thinking_mode_supported in platforms.json)
         'temperature': translationParams['temperature'],
-        'thinking': translationParams['thinking'],
-        'timeout': (platformInfo['timeout'] as int?) ?? 120,
-        'write_timeout': (platformInfo['write_timeout'] as int?) ?? 300,
+        'timeout': platformInfo?.timeout ?? 120,
+        'write_timeout': platformInfo?.writeTimeout ?? 300,
         'retry': translationParams['retry'],
         'segment_auto_retry_rounds':
             translationParams['segment_auto_retry_rounds'],
@@ -5036,13 +5122,13 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         // Keep nested params for forward compatibility (backend ignores unknown)
         'translation_params': <String, dynamic>{
           ...translationParams,
-          'base_url': platformInfo['url'] as String? ??
+          'base_url': platformInfo?.url ??
               translationParams['base_url'] ??
               'https://api.openai.com/v1',
           'api_key': apiKey.isNotEmpty
               ? apiKey
               : (translationParams['api_key'] as String? ?? ''),
-          'model_id': platformInfo['model'] as String? ??
+          'model_id': platformInfo?.model ??
               translationParams['model_id'] ??
               'gpt-4o',
         },
@@ -5051,9 +5137,10 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           'convert_engine': globalSettings.parsingEngine,
           'formula_ocr': globalSettings.formulaOcr,
           'table_ocr': globalSettings.tableOcr,
-          'model_version': (aiPlatforms[globalSettings.parsingEngine]
-                  as Map<String, dynamic>?)?['model'] as String? ??
-              'hybrid-auto-engine',
+          'model_version': _nonEmpty(
+                aiPlatformSettings.platforms[globalSettings.parsingEngine]?.model,
+                'hybrid-auto-engine',
+              ),
           if (globalSettings.parsingEngine == 'mineru' &&
               mineruToken.isNotEmpty) ...<String, dynamic>{
             'mineru_token': mineruToken,

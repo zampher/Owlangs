@@ -147,6 +147,9 @@ class UnifiedConfig:
                 platforms_dict[key]['test_request_timeout'] = (
                     int(platform.test_request_timeout) if platform.test_request_timeout is not None else 10
                 )
+                platforms_dict[key]['segment_limit'] = (
+                    int(platform.segment_limit) if platform.segment_limit is not None else 100
+                )
         platforms_dict['default_platform'] = self.platforms.default_platform
         return platforms_dict
     
@@ -185,6 +188,9 @@ class UnifiedConfig:
                 )
                 base['concurrent'] = (
                     int(platform_obj.concurrent) if platform_obj.concurrent is not None else 5
+                )
+                base['segment_limit'] = (
+                    int(platform_obj.segment_limit) if platform_obj.segment_limit is not None else 100
                 )
             return base
         return None

@@ -43,12 +43,17 @@ _detection_progress_queues: Dict[str, Dict[str, Any]] = {}
 _detection_progress_queues_lock = threading.Lock()
 
 # Message prefixes that indicate translation phase; do not overwrite with language-detection progress/message
+# CRITICAL: Includes "Retranslating" for batch retry progress during failed segment retranslation
 _TRANSLATION_PHASE_PREFIXES = (
     "Translating",
+    "Retranslating",
     "Sending translation",
     "Generating output",
     "Translation completed",
+    "Retranslation completed",
     "Translation initialized",
+    "Preparing retranslation",
+    "Batch retry",
 )
 
 # Minimal lang code normalization for frozen fallback (no anonymize/spacy/torch)
@@ -2446,74 +2451,14 @@ class StatusService:
             segments_metadata = st.get("segments_metadata", {})
         if 'workflow_type' not in locals() or workflow_type is None:
             workflow_type = segments_metadata.get("workflow_type") or st.get("payload", {}).get("workflow_type") if isinstance(st.get("payload"), dict) else getattr(st.get("payload"), 'workflow_type', None) if st.get("payload") else None
-        # Get chunk_size: priority: app_config.json > segments_metadata/cache_info > payload > default 3000
-        # Always prioritize app_config.json to match frontend global settings (user may have changed it)
+        # Get chunk_size from centralized service (priority: payload → platform config → fallback)
         chunk_size = None
-        # Priority 1: app_config.json (translator_chunk_token_size) - matches frontend global settings
-        app_config_chunk_size = None
-        try:
-            from backend.config.app_config import get_app_config, AppConfig
-            import json
-            from pathlib import Path
-            # Try method 1: Use get_app_config() to get the loaded config object
-            try:
-                app_config = get_app_config()
-                if hasattr(app_config, 'translator_chunk_token_size'):
-                    app_config_chunk_size = app_config.translator_chunk_token_size
-            except Exception as e1:
-                pass  # Silently fall back to method 2
-            
-            # Try method 2: Directly read from app_config.json file using unified path resolution
-            if not app_config_chunk_size or app_config_chunk_size == 0:
-                try:
-                    cfg_path = AppConfig._resolve_app_config_path("app_config.json")
-                    if cfg_path.exists():
-                        with open(cfg_path, 'r', encoding='utf-8-sig') as f:
-                            data = json.load(f)
-                            app_config_chunk_size = data.get('translator_chunk_token_size')
-                except Exception as e2:
-                    pass  # Silently continue to next priority
-            
-            if app_config_chunk_size and app_config_chunk_size != 0:
-                chunk_size = app_config_chunk_size
-                logger.info(LogModule.WORKFLOW, f"[PREVIEW-API] Task {task_id}: Using chunk_size={chunk_size} from app_config.json (translator_chunk_token_size, priority)")
-            elif app_config_chunk_size == 0:
-                app_config_chunk_size = None  # Reset to None so we know it was 0, not failed
-        except Exception as e:
-            logger.warning(LogModule.WORKFLOW, f"[PREVIEW-API] Task {task_id}: Failed to get chunk_size from app_config.json: {e}", exc_info=True)
-            app_config_chunk_size = None  # Ensure it's None on exception
-        # Priority 2: segments_metadata (set during import/resplit)
-        if chunk_size is None or chunk_size == 0:
-            if isinstance(segments_metadata, dict):
-                chunk_size = segments_metadata.get("chunk_size")
-        # Priority 3: cache_info (source_chunks_cache)
-        if chunk_size is None or chunk_size == 0:
-            chunk_size = cache_info.get("chunk_size") if cache_info else None
-        # Priority 4: app_config.json fallback (if not already tried)
-        if chunk_size is None or chunk_size == 0:
-            try:
-                from backend.config.app_config import AppConfig
-                import json
-                from pathlib import Path
-                cfg_path = AppConfig._resolve_app_config_path("app_config.json")
-                if cfg_path.exists():
-                    with open(cfg_path, 'r', encoding='utf-8-sig') as f:
-                        data = json.load(f)
-                        chunk_size = data.get('translator_chunk_token_size')
-            except Exception as e:
-                pass  # Silently continue to next priority
-        # Priority 5: payload (legacy)
-        if chunk_size is None or chunk_size == 0:
-            payload = st.get("payload")
-            if payload:
-                if isinstance(payload, dict):
-                    chunk_size = payload.get("chunk_size")
-                else:
-                    chunk_size = getattr(payload, 'chunk_size', None)
-        # Priority 5: fallback
-        if chunk_size is None or chunk_size == 0:
+        payload = st.get("payload")
+        if payload:
+            from app.services.translation.chunk_size_service import chunk_size_service
+            chunk_size = chunk_size_service.get_chunk_size(payload, task_id)
+        if not chunk_size or chunk_size == 0:
             chunk_size = 3000  # Default fallback
-            logger.warning(LogModule.WORKFLOW, f"[PREVIEW-API] Task {task_id}: chunk_size is None or 0, using fallback value 3000")
         
         # Generate chunks from segments if chunk_to_segment_map is available
         # This allows frontend to display chunks for DOCX/Excel files (not just PDF)
@@ -2530,27 +2475,11 @@ class StatusService:
         if not cached_chunk_size and cache_info:
             cached_chunk_size = cache_info.get("chunk_size")
         
-        # IMPORTANT: If we're using app_config.json chunk_size but segments_metadata has a different value,
-        # we should rebuild the chunk map to use the new chunk_size
-        # This handles the case where user changed chunk_size in settings but file was imported with old chunk_size
-        # Check if current chunk_size matches app_config_chunk_size (meaning we're using app_config.json value)
-        app_config_chunk_size_used = (app_config_chunk_size is not None and app_config_chunk_size != 0 and app_config_chunk_size == chunk_size)
-        
         # If chunk_size changed or existing chunk tokens exceed limit, force rebuild chunk map
         chunk_tokens_info_cached = st.get("chunk_tokens_info") or []
         need_rebuild_chunk_map = False
         if chunk_to_segment_map and chunk_size:
-            # Case 1: Using app_config.json chunk_size but segments_metadata has different value
-            # This handles the case where user changed chunk_size in settings but file was imported with old chunk_size
-            if app_config_chunk_size_used and segments_metadata_chunk_size and segments_metadata_chunk_size != chunk_size:
-                need_rebuild_chunk_map = True
-                logger.info(
-                    LogModule.EXTRACT,
-                    f"[PREVIEW-API] Task {task_id}: Using app_config.json chunk_size={chunk_size} "
-                    f"but segments_metadata has {segments_metadata_chunk_size}, will rebuild chunk_to_segment_map"
-                )
-            # Case 2: chunk_size changed (compare with cached_chunk_size or segments_metadata)
-            elif cached_chunk_size and cached_chunk_size != chunk_size:
+            if cached_chunk_size and cached_chunk_size != chunk_size:
                 need_rebuild_chunk_map = True
                 logger.info(
                     LogModule.EXTRACT,
@@ -3638,46 +3567,16 @@ class StatusService:
             if not is_header_chunk and not is_footer_chunk and chunk_text.strip():
                 original_text_parts.append(chunk_text)
         
-        # Get chunk_size: priority: query parameter > app_config.json > payload > segments_metadata > cache_info > default 3000
-        # Always prioritize app_config.json (translator_chunk_token_size) after query parameter to match frontend global settings
-        # Priority 1: Query parameter (if provided, use it)
-        # Priority 2: Get from app_config.json (translator_chunk_token_size)
-        if chunk_size is None or chunk_size == 0:
-            try:
-                from backend.config.app_config import AppConfig
-                # Directly read from app_config.json file
-                cfg_path = AppConfig._resolve_app_config_path("app_config.json")
-                if cfg_path.exists():
-                    with open(cfg_path, 'r', encoding='utf-8-sig') as f:
-                        data = json.load(f)
-                        chunk_size = data.get('translator_chunk_token_size')
-                if chunk_size and chunk_size != 0:
-                    logger.debug(LogModule.EXTRACT, f"[LAYOUT-EXTRACT] Task {task_id}: Using chunk_size={chunk_size} from app_config.json (translator_chunk_token_size, priority)")
-            except Exception as e:
-                logger.debug(LogModule.EXTRACT, f"[LAYOUT-EXTRACT] Task {task_id}: Failed to get chunk_size from app_config.json: {e}")
-        # Priority 3: Get from payload
+        # Get chunk_size from centralized service (priority: payload → platform config → fallback)
+        # Priority 0: Query parameter (if provided, use it directly)
         if chunk_size is None or chunk_size == 0:
             payload = st.get("payload")
             if payload:
-                if isinstance(payload, dict):
-                    chunk_size = payload.get("chunk_size")
-                else:
-                    chunk_size = getattr(payload, 'chunk_size', None)
-        # Priority 4: Get from segments_metadata
-        if chunk_size is None or chunk_size == 0:
-            segments_metadata = st.get("segments_metadata", {})
-            chunk_size = segments_metadata.get("chunk_size")
-        # Priority 5: Get from cache_info
-        if chunk_size is None or chunk_size == 0:
-            cache_info = st.get("source_chunks_cache", {})
-            chunk_size = cache_info.get("chunk_size") if cache_info else None
-        # Priority 6: Use fallback
-        if chunk_size is None or chunk_size == 0:
-            chunk_size = 3000  # Default fallback
-            logger.warning(LogModule.EXTRACT, f"[LAYOUT-EXTRACT] Task {task_id}: chunk_size is None or 0, using fallback value 3000")
-        else:
-            source_desc = "query" if chunk_size_query else ("payload" if st.get("payload") and (isinstance(st.get("payload"), dict) and st.get("payload").get('chunk_size') or getattr(st.get("payload"), 'chunk_size', None)) else ("metadata" if st.get("segments_metadata", {}).get('chunk_size') else ("cache" if st.get("source_chunks_cache", {}).get('chunk_size') else "user_settings")))
-            logger.debug(LogModule.EXTRACT, f"[LAYOUT-EXTRACT] Task {task_id}: Using chunk_size={chunk_size} (from {source_desc})")
+                from app.services.translation.chunk_size_service import chunk_size_service
+                chunk_size = chunk_size_service.get_chunk_size(payload, task_id)
+            if not chunk_size or chunk_size == 0:
+                chunk_size = 3000  # Default fallback
+                logger.warning(LogModule.EXTRACT, f"[LAYOUT-EXTRACT] Task {task_id}: chunk_size is None or 0, using fallback value 3000")
         
         # Build chunks from segments (merge segments according to chunk_size)
         # Chunks are used for translation, segments are for proofreading

@@ -808,7 +808,9 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
   late TextEditingController _writeTimeoutController;
   late TextEditingController _testConnectTimeoutController;
   late TextEditingController _testRequestTimeoutController;
+  late bool _thinkingModeSupported; // Whether this platform supports thinking mode
   late String _thinkingMode; // "enable", "disable", "default"
+  late int _segmentLimit; // Max segments per translation batch (0 = unlimited)
   late String _apiProtocol; // "openai", "ollama", "anthropic"
   late bool _hasApiKey; // Whether platform has API key (if false, API key is optional)
   late final FocusNode _temperatureFocusNode;
@@ -844,7 +846,9 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
         TextEditingController(text: widget.platformInfo.testConnectTimeout.toString());
     _testRequestTimeoutController =
         TextEditingController(text: widget.platformInfo.testRequestTimeout.toString());
+    _thinkingModeSupported = widget.platformInfo.thinkingModeSupported;
     _thinkingMode = widget.platformInfo.thinkingMode;
+    _segmentLimit = widget.platformInfo.segmentLimit;
     _apiProtocol = widget.platformInfo.apiProtocol;
     _hasApiKey = widget.platformInfo.requiresApiKey;
     _temperatureFocusNode = FocusNode();
@@ -932,6 +936,8 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
                           _buildHasApiKeySwitch(),
                           const SizedBox(height: 8),
                           _buildApiKeyField(),
+                          const SizedBox(height: 8),
+                          _buildThinkingModeSupportedField(),
                         ],
                       ),
                     ),
@@ -1033,12 +1039,14 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(child: _buildTemperatureField()),
-                              ],
-                            ),
-                            if (widget.platformInfo.thinkingModeSupported) ...<Widget>[
-                              const SizedBox(height: 8),
-                              _buildThinkingModeField(),
                             ],
+                          ),
+                          if (_thinkingModeSupported) ...<Widget>[
+                            const SizedBox(height: 8),
+                            _buildThinkingModeField(),
+                          ],
+                          const SizedBox(height: 8),
+                          _buildSegmentLimitField(),
                           ],
                         ],
                       ),
@@ -1477,6 +1485,47 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
     );
   }
 
+  Widget _buildThinkingModeSupportedField() {
+    final l10n = AppLocalizations.of(context)!;
+    return SwitchListTile(
+      title: Text(l10n.aiPlatformThinkingModeSupported),
+      subtitle: Text(l10n.aiPlatformThinkingModeSupportedHint),
+      value: _thinkingModeSupported,
+      onChanged: (bool value) {
+        setState(() {
+          _thinkingModeSupported = value;
+        });
+      },
+    );
+  }
+
+  Widget _buildSegmentLimitField() {
+    final l10n = AppLocalizations.of(context)!;
+    const List<int> segmentLimitOptions = <int>[1, 3, 5, 10, 20, 50, 100, 200, 500, 1000, 0];
+    String _labelForValue(int v) => v == 0 ? l10n.aiPlatformSegmentLimitUnlimited : v.toString();
+
+    return DropdownButtonFormField<int>(
+      value: segmentLimitOptions.contains(_segmentLimit) ? _segmentLimit : 100,
+      decoration: InputDecoration(
+        labelText: l10n.aiPlatformSegmentLimitLabel,
+        border: const OutlineInputBorder(),
+      ),
+      items: segmentLimitOptions.map((v) {
+        return DropdownMenuItem<int>(
+          value: v,
+          child: Text(_labelForValue(v)),
+        );
+      }).toList(),
+      onChanged: (int? value) {
+        if (value != null) {
+          setState(() {
+            _segmentLimit = value;
+          });
+        }
+      },
+    );
+  }
+
   Widget _buildThinkingModeField() {
     final l10n = AppLocalizations.of(context)!;
     final List<Map<String, String>> thinkingOptions = <Map<String, String>>[
@@ -1716,7 +1765,9 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
       baseUpdates['write_timeout'] = int.tryParse(_writeTimeoutController.text) ?? current.writeTimeout;
       baseUpdates['testConnectTimeout'] = int.tryParse(_testConnectTimeoutController.text) ?? current.testConnectTimeout;
       baseUpdates['testRequestTimeout'] = int.tryParse(_testRequestTimeoutController.text) ?? current.testRequestTimeout;
-      baseUpdates['thinkingMode'] = current.thinkingModeSupported ? _thinkingMode : current.thinkingMode;
+      baseUpdates['thinkingModeSupported'] = _thinkingModeSupported;
+      baseUpdates['thinkingMode'] = _thinkingModeSupported ? _thinkingMode : current.thinkingMode;
+      baseUpdates['segmentLimit'] = _segmentLimit;
     }
     
     // Always save API protocol
@@ -1743,7 +1794,9 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
       writeTimeout: baseUpdates['write_timeout'] as int? ?? current.writeTimeout,
       testConnectTimeout: baseUpdates['testConnectTimeout'] as int? ?? current.testConnectTimeout,
       testRequestTimeout: baseUpdates['testRequestTimeout'] as int? ?? current.testRequestTimeout,
+      thinkingModeSupported: baseUpdates['thinkingModeSupported'] as bool? ?? current.thinkingModeSupported,
       thinkingMode: baseUpdates['thinkingMode'] as String? ?? current.thinkingMode,
+      segmentLimit: baseUpdates['segmentLimit'] as int? ?? current.segmentLimit,
       apiProtocol: baseUpdates['apiProtocol'] as String,
       requiresApiKey: baseUpdates['requiresApiKey'] as bool,
       parserSubtype: baseUpdates['parserSubtype'] as String? ?? current.parserSubtype,

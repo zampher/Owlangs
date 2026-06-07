@@ -689,6 +689,7 @@ class AIPlatformInfo {
     required this.temperatureMax,
     required this.thinkingModeSupported,
     required this.thinkingMode,
+    this.segmentLimit = 100,
     this.recommendedTokens,
     this.performanceNote,
     this.description,
@@ -751,6 +752,8 @@ class AIPlatformInfo {
       temperatureMax: _toDouble(json['temperature_max'], 2),
       thinkingModeSupported: json['thinking_mode_supported'] == true,
       thinkingMode: json['thinking_mode'] ?? 'disable',
+      // Read segment_limit, with migration from old single_segment_retry_mode
+      segmentLimit: _parseSegmentLimit(json),
       recommendedTokens: json['recommended_tokens'] != null ? _toInt(json['recommended_tokens'], null) : null,
       performanceNote: json['performance_note'],
       description: json['description'],
@@ -824,6 +827,24 @@ class AIPlatformInfo {
     if (value == 'pdf_parser') return 'parser'; // migrate legacy value
     return value;
   }
+
+  /// Parse segment_limit from JSON, with migration from old single_segment_retry_mode.
+  static int _parseSegmentLimit(Map<String, dynamic> json) {
+    // New field takes priority
+    if (json['segment_limit'] != null) {
+      final sl = _toInt(json['segment_limit'], 100);
+      const validLimits = {0, 1, 3, 5, 10, 20, 50, 100, 200, 500, 1000};
+      if (validLimits.contains(sl)) return sl;
+      return 100; // fallback default
+    }
+    // Migrate from old single_segment_retry_mode
+    final old = json['single_segment_retry_mode'];
+    if (old == true || old == 'single') return 1;
+    if (old == 'fixed_5') return 5;
+    if (old == 'fixed_10') return 10;
+    // old == false or 'chunk_size' or anything else → default 100
+    return 100;
+  }
   final String key;
   final String name;
   final String url;
@@ -834,6 +855,8 @@ class AIPlatformInfo {
   final double temperatureMax;
   final bool thinkingModeSupported;
   final String thinkingMode; // "enable", "disable", "default"
+  // Max segments per translation batch (0 = unlimited). Options: 1,3,5,10,20,50,100,200,500,1000
+  final int segmentLimit;
   final int? recommendedTokens;
   final String? performanceNote;
   final String? description;
@@ -864,6 +887,7 @@ class AIPlatformInfo {
         'temperature_max': temperatureMax,
         'thinking_mode_supported': thinkingModeSupported,
         'thinking_mode': thinkingMode,
+        'segment_limit': segmentLimit,
         'recommended_tokens': recommendedTokens,
         'performance_note': performanceNote,
         'description': description,
@@ -892,6 +916,7 @@ class AIPlatformInfo {
     double? temperatureMax,
     bool? thinkingModeSupported,
     String? thinkingMode,
+    int? segmentLimit,
     int? recommendedTokens,
     String? performanceNote,
     String? description,
@@ -924,6 +949,7 @@ class AIPlatformInfo {
         thinkingModeSupported:
             thinkingModeSupported ?? this.thinkingModeSupported,
         thinkingMode: thinkingMode ?? this.thinkingMode,
+        segmentLimit: segmentLimit ?? this.segmentLimit,
         recommendedTokens: recommendedTokens ?? this.recommendedTokens,
         performanceNote: performanceNote ?? this.performanceNote,
         description: description ?? this.description,

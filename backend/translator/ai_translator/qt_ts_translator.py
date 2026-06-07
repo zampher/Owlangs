@@ -64,10 +64,11 @@ class QtTsTranslator(AiTranslator):
                 logger=self.logger,
                 glossary_dict=config.glossary_dict,
                 retry=config.retry,
-                max_tokens=getattr(config, 'max_tokens', None)  # Get max_tokens from platform config
+                max_tokens=getattr(config, 'max_tokens', None),  # Get max_tokens from platform config
+                segment_limit=getattr(config, 'segment_limit', 100),
             )
             self.translate_agent = SegmentsTranslateAgent(agent_config)
-        
+
         self.skip_existing = config.skip_existing_translations
         self.translate_unfinished = config.translate_unfinished
         self.translate_vanished = config.translate_vanished

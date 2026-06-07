@@ -9,6 +9,7 @@ from typing import Self
 
 from agents import MDTranslateAgent
 from agents.markdown_agent import MDTranslateAgentConfig
+from agents.seg_prompt_utils import parse_seg_output
 from context.md_mask_context import MDMaskUrisContext
 from ir.markdown_document import MarkdownDocument
 from translator.ai_translator.base import AiTranslatorConfig, AiTranslator
@@ -200,7 +201,7 @@ class MDTranslator(AiTranslator):
         - Use source_chunks_cache.segments as the single source of truth for segment order.
         - Skip excluded segments based on ExclusionManager (no per-chunk exclusion).
         - Chunk by max size (self.chunk_size) over raw segment text, keep order, no duplication.
-        - Build plain-text payloads using lightweight segment tags: [SEG i]\\n<text>\\n[/SEG i].
+        - Build plain-text payloads using lightweight segment tags: [SEG i]:\n<text>.
         - Send each tagged payload as one prompt via MDTranslateAgent.
         - Parse tagged responses back into an index -> translated_text map.
         - Record final per-segment translations with record_translation_segments at segment granularity.
@@ -311,12 +312,11 @@ class MDTranslator(AiTranslator):
 
                 # If adding this segment would exceed max_size, flush current chunk first
                 if current_indices and (current_len + text_len) > max_size:
-                    # Build one plain-text prompt with [SEG i] tags for all indices in this chunk
+                    # Build one plain-text prompt with [SEG i]: headers for all indices in this chunk
                     lines: list[str] = []
                     for i in current_indices:
-                        lines.append(f"[SEG {i}]")
+                        lines.append(f"[SEG {i}]:")
                         lines.append(segments[i] or "")
-                        lines.append(f"[/SEG {i}]")
                     prompt_text = "\n".join(lines)
                     seg_prompts.append(prompt_text)
                     chunk_index_groups.append(list(current_indices))
@@ -331,9 +331,8 @@ class MDTranslator(AiTranslator):
             if current_indices:
                 lines: list[str] = []
                 for i in current_indices:
-                    lines.append(f"[SEG {i}]")
+                    lines.append(f"[SEG {i}]:")
                     lines.append(segments[i] or "")
-                    lines.append(f"[/SEG {i}]")
                 prompt_text = "\n".join(lines)
                 seg_prompts.append(prompt_text)
                 chunk_index_groups.append(list(current_indices))
@@ -400,7 +399,7 @@ class MDTranslator(AiTranslator):
                         f"Chunk index: {_chunk_idx}",
                         f"Parse state: {_parse_state or 'direct'}",
                         f"Prompt indices: {list(_prompt_indices)}",
-                        "Input format: tagged markdown text with [SEG n] ... [/SEG n] segments.",
+                        "Input format: tagged text with [SEG n]: headers.",
                         "--- Translation input (prompt, full) ---",
                         inp_full,
                         "--- Translation output (raw LLM, full) ---",
@@ -427,10 +426,7 @@ class MDTranslator(AiTranslator):
                         f"[MD_TRANSLATOR] Task {_task_id}: Failed to write debug for chunk {_chunk_idx}: {file_err}",
                     )
 
-            # Helper: parse [SEG n] ... [/SEG n] tagged output into index -> text mapping
-            seg_start_re = re.compile(r"^\[SEG\s+(\d+)\]\s*$")
-            seg_end_re = re.compile(r"^\[/SEG\s+(\d+)\]\s*$")
-
+            # Helper: parse [SEG n]: tagged output into index -> text mapping
             for prompt_idx, (prompt_indices, llm_output) in enumerate(
                 zip(chunk_index_groups, translated_chunks)
             ):
@@ -445,44 +441,10 @@ class MDTranslator(AiTranslator):
                 step_results: list[str] = []
 
                 try:
-                    current_idx: int | None = None
-                    buffer_lines: list[str] = []
-                    for line in llm_str.splitlines():
-                        m_start = seg_start_re.match(line)
-                        if m_start:
-                            # Flush previous block if any (defensive)
-                            if current_idx is not None:
-                                text_block = "\n".join(buffer_lines)
-                                index_to_translation[current_idx] = text_block
-                                parsed_indices.append(current_idx)
-                                buffer_lines = []
-                            current_idx = int(m_start.group(1))
-                            continue
-                        m_end = seg_end_re.match(line)
-                        if m_end and current_idx is not None:
-                            end_idx = int(m_end.group(1))
-                            if end_idx == current_idx:
-                                text_block = "\n".join(buffer_lines)
-                                index_to_translation[current_idx] = text_block
-                                parsed_indices.append(current_idx)
-                                current_idx = None
-                                buffer_lines = []
-                            else:
-                                # Mismatched end tag, record and reset
-                                step_results.append(
-                                    f"Mismatched end tag [/SEG {end_idx}] while current_idx={current_idx}"
-                                )
-                                current_idx = None
-                                buffer_lines = []
-                            continue
-                        if current_idx is not None:
-                            buffer_lines.append(line)
-
-                    # Flush trailing block if any
-                    if current_idx is not None:
-                        text_block = "\n".join(buffer_lines)
-                        index_to_translation[current_idx] = text_block
-                        parsed_indices.append(current_idx)
+                    parsed = parse_seg_output(llm_str)
+                    for seg_id, text_block in parsed.items():
+                        index_to_translation[seg_id] = text_block
+                        parsed_indices.append(seg_id)
 
                     if parsed_indices:
                         parse_ok = True
@@ -492,7 +454,7 @@ class MDTranslator(AiTranslator):
                         )
                     else:
                         llm_structure_note = (
-                            "seg_tags parser ran but found no [SEG n] ... [/SEG n] blocks with content."
+                            "seg_tags parser ran but found no [SEG n]: headers with content."
                         )
                         step_results.append("Step 1 (seg_tags parser): no segments parsed")
                 except Exception as e:  # noqa: BLE001

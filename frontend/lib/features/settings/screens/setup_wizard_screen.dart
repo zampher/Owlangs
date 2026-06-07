@@ -79,7 +79,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   late TextEditingController _llmWriteTimeoutController;
   late TextEditingController _llmTestConnectTimeoutController;
   late TextEditingController _llmTestRequestTimeoutController;
+  bool _llmThinkingModeSupported = false;  // Whether this platform supports thinking mode
   String _llmThinkingMode = 'disable';
+  int _llmSegmentLimit = 100;  // Max segments per translation batch (0 = unlimited)
   String _llmApiProtocol = 'openai';  // API protocol: openai, ollama, anthropic
   bool _llmHasApiKey = true;  // Whether platform has API key (if false, API key is optional)
   late final FocusNode _llmTemperatureFocusNode;
@@ -492,7 +494,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _llmWriteTimeoutController.text = p.writeTimeout.toString();
     _llmTestConnectTimeoutController.text = p.testConnectTimeout.toString();
     _llmTestRequestTimeoutController.text = p.testRequestTimeout.toString();
+    _llmThinkingModeSupported = p.thinkingModeSupported;
     _llmThinkingMode = p.thinkingMode;
+    _llmSegmentLimit = p.segmentLimit;
     _llmApiProtocol = p.apiProtocol;
     _llmHasApiKey = p.requiresApiKey;
   }
@@ -1316,16 +1320,24 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             style: const TextStyle(fontSize: 13),
           )
         else ...<Widget>[
-          DropdownButtonFormField<String>(
-            initialValue: _selectedPlatformKey,
-            decoration: InputDecoration(
-              labelText: l10n.setupWizardSelectLlmPlatform,
-              border: const OutlineInputBorder(),
-              labelStyle: const TextStyle(fontSize: 12),
-              hintStyle: const TextStyle(fontSize: 11),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            ),
-            items: llmPlatforms.map(
+          if (_selectedPlatformKey != null) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedPlatformKey,
+                        decoration: InputDecoration(
+                          labelText: l10n.setupWizardSelectLlmPlatform,
+                          border: const OutlineInputBorder(),
+                          labelStyle: const TextStyle(fontSize: 12),
+                          hintStyle: const TextStyle(fontSize: 11),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        ),
+                        items: llmPlatforms.map(
               (AIPlatformInfo p) {
                 final Color statusColor = _platformStatusColor(p);
                 final String tooltip = _platformStatusText(p, l10n);
@@ -1357,301 +1369,310 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                 _llmFormPlatformKey = null; // force sync on next build
               });
             },
-          ),
-          if (_selectedPlatformKey != null) ...<Widget>[
-            const SizedBox(height: 16),
-            _buildEmbeddedLlmForm(settings, notifier, l10n),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _llmNameController,
+                        decoration: InputDecoration(
+                          labelText: l10n.aiPlatformPlatformName,
+                          hintText: l10n.aiPlatformPlatformNameHint,
+                          border: const OutlineInputBorder(),
+                          labelStyle: const TextStyle(fontSize: 12),
+                          hintStyle: const TextStyle(fontSize: 11),
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _llmUrlController,
+                        decoration: InputDecoration(
+                          labelText: l10n.aiPlatformApiUrl,
+                          hintText: l10n.aiPlatformApiUrlHint,
+                          border: const OutlineInputBorder(),
+                          labelStyle: const TextStyle(fontSize: 12),
+                          hintStyle: const TextStyle(fontSize: 11),
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: TextFormField(
+                              controller: _llmModelController,
+                              decoration: InputDecoration(
+                                labelText: l10n.aiPlatformModel,
+                                hintText: l10n.aiPlatformModelHint,
+                                border: const OutlineInputBorder(),
+                                labelStyle: const TextStyle(fontSize: 12),
+                                hintStyle: const TextStyle(fontSize: 11),
+                                contentPadding:
+                                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            onPressed: _llmIsLoadingModels ? null : _loadLlmModels,
+                            icon: _llmIsLoadingModels
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.search, size: 18),
+                            label: Text(l10n.aiPlatformList),
+                            style: OutlinedButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              minimumSize: const Size(0, 48),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      _buildLlmApiProtocolField(l10n),
+                      const SizedBox(height: 6),
+                      _buildLlmHasApiKeySwitch(l10n, tokenLink: settings.platforms[_selectedPlatformKey]!.tokenLink),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _llmApiKeyController,
+                        obscureText: _llmObscureText,
+                        decoration: InputDecoration(
+                          labelText: !_llmHasApiKey
+                              ? '${l10n.aiPlatformApiKey} (${l10n.optional})'
+                              : l10n.aiPlatformApiKey,
+                          hintText: !_llmHasApiKey
+                              ? l10n.aiPlatformApiKeyOptionalHint
+                              : null,
+                          border: const OutlineInputBorder(),
+                          labelStyle: const TextStyle(fontSize: 12),
+                          hintStyle: const TextStyle(fontSize: 11),
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _llmObscureText ? Icons.visibility : Icons.visibility_off,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _llmObscureText = !_llmObscureText;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildLlmParametersFields(l10n, settings.platforms[_selectedPlatformKey]!),
+                ),
+              ],
+            ),
+          ] else ...[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: null,
+                    decoration: InputDecoration(
+                      labelText: l10n.setupWizardSelectLlmPlatform,
+                      border: const OutlineInputBorder(),
+                      labelStyle: const TextStyle(fontSize: 12),
+                      hintStyle: const TextStyle(fontSize: 11),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    ),
+                    items: llmPlatforms.map(
+              (AIPlatformInfo p) {
+                final Color statusColor = _platformStatusColor(p);
+                final String tooltip = _platformStatusText(p, l10n);
+                return DropdownMenuItem<String>(
+                  value: p.key,
+                  child: Tooltip(
+                    message: tooltip,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Icon(Icons.circle, size: 10, color: statusColor),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            p.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ).toList(),
+                    onChanged: (String? value) {
+                      if (value == null) return;
+                      setState(() {
+                        _selectedPlatformKey = value;
+                        _llmFormPlatformKey = null;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
           ],
         ],
       ],
     );
   }
 
-  Widget _buildEmbeddedLlmForm(
-    AIPlatformSettings settings,
-    AIPlatformSettingsNotifier notifier,
-    AppLocalizations l10n,
-  ) {
-    final AIPlatformInfo? platform = _selectedPlatformKey == null
-        ? null
-        : settings.platforms[_selectedPlatformKey];
-    if (platform == null) return const SizedBox.shrink();
-
-    // Hide unavailable hint if connection test was successful
-    final bool showUnavailableHint = _platformConnectionUnavailable(platform) && 
-        (_llmLastTestSuccess != true);
-
+  Widget _buildLlmParametersFields(AppLocalizations l10n, AIPlatformInfo platform) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            // Left column: Basic Information
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    l10n.aiPlatformBasicInformation,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _llmNameController,
-                    decoration: InputDecoration(
-                      labelText: l10n.aiPlatformPlatformName,
-                      hintText: l10n.aiPlatformPlatformNameHint,
-                      border: const OutlineInputBorder(),
-                      labelStyle: const TextStyle(fontSize: 12),
-                      hintStyle: const TextStyle(fontSize: 11),
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _llmUrlController,
-                    decoration: InputDecoration(
-                      labelText: l10n.aiPlatformApiUrl,
-                      hintText: l10n.aiPlatformApiUrlHint,
-                      border: const OutlineInputBorder(),
-                      labelStyle: const TextStyle(fontSize: 12),
-                      hintStyle: const TextStyle(fontSize: 11),
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: TextFormField(
-                          controller: _llmModelController,
-                          decoration: InputDecoration(
-                            labelText: l10n.aiPlatformModel,
-                            hintText: l10n.aiPlatformModelHint,
-                            border: const OutlineInputBorder(),
-                            labelStyle: const TextStyle(fontSize: 12),
-                            hintStyle: const TextStyle(fontSize: 11),
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      OutlinedButton.icon(
-                        onPressed: _llmIsLoadingModels ? null : _loadLlmModels,
-                        icon: _llmIsLoadingModels
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.search, size: 18),
-                        label: Text(l10n.aiPlatformList),
-                        style: OutlinedButton.styleFrom(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          minimumSize: const Size(0, 48),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  _buildLlmApiProtocolField(l10n),
-                  const SizedBox(height: 16),
-                  _buildLlmHasApiKeySwitch(l10n, tokenLink: platform.tokenLink),
-                ],
+              child: TextFormField(
+                controller: _llmTimeoutController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformTimeout,
+                  hintText: l10n.aiPlatformTimeoutHint,
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
               ),
             ),
-            const SizedBox(width: 16),
-            // Right column: Parameters
+            const SizedBox(width: 8),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    'Parameters',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Expanded(
-                        child: TextFormField(
-                          controller: _llmTimeoutController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: l10n.aiPlatformTimeout,
-                            hintText: l10n.aiPlatformTimeoutHint,
-                            border: const OutlineInputBorder(),
-                            labelStyle: const TextStyle(fontSize: 12),
-                            hintStyle: const TextStyle(fontSize: 11),
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _llmWriteTimeoutController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: l10n.aiPlatformWriteTimeout,
-                            hintText: l10n.aiPlatformWriteTimeoutHint,
-                            border: const OutlineInputBorder(),
-                            labelStyle: const TextStyle(fontSize: 12),
-                            hintStyle: const TextStyle(fontSize: 11),
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Expanded(
-                        child: TextFormField(
-                          controller: _llmTestConnectTimeoutController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: l10n.aiPlatformTestConnectTimeout,
-                            hintText: l10n.aiPlatformTestConnectTimeoutHint,
-                            border: const OutlineInputBorder(),
-                            labelStyle: const TextStyle(fontSize: 12),
-                            hintStyle: const TextStyle(fontSize: 11),
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _llmTestRequestTimeoutController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: l10n.aiPlatformTestRequestTimeout,
-                            hintText: l10n.aiPlatformTestRequestTimeoutHint,
-                            border: const OutlineInputBorder(),
-                            labelStyle: const TextStyle(fontSize: 12),
-                            hintStyle: const TextStyle(fontSize: 11),
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Expanded(
-                        child: TextFormField(
-                          controller: _llmMaxTokensController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: l10n.aiPlatformMaxTokens,
-                            hintText: l10n.aiPlatformMaxTokensHint,
-                            border: const OutlineInputBorder(),
-                            labelStyle: const TextStyle(fontSize: 12),
-                            hintStyle: const TextStyle(fontSize: 11),
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _llmChunkSizeController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: l10n.aiPlatformChunkSize,
-                            hintText: l10n.aiPlatformChunkSizeHint,
-                            border: const OutlineInputBorder(),
-                            labelStyle: const TextStyle(fontSize: 12),
-                            hintStyle: const TextStyle(fontSize: 11),
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Expanded(
-                        child: TextFormField(
-                          controller: _llmConcurrentController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: l10n.aiPlatformConcurrent,
-                            hintText: l10n.aiPlatformConcurrentHint,
-                            border: const OutlineInputBorder(),
-                            labelStyle: const TextStyle(fontSize: 12),
-                            hintStyle: const TextStyle(fontSize: 11),
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(child: _buildLlmTemperatureField(platform)),
-                    ],
-                  ),
-                  if (platform.thinkingModeSupported) ...<Widget>[
-                    const SizedBox(height: 6),
-                    _buildLlmThinkingModeField(l10n),
-                  ],
-                  const SizedBox(height: 6),
-                  TextFormField(
-                    controller: _llmApiKeyController,
-                    obscureText: _llmObscureText,
-                    decoration: InputDecoration(
-                      labelText: !_llmHasApiKey
-                          ? '${l10n.aiPlatformApiKey} (${l10n.optional})'
-                          : l10n.aiPlatformApiKey,
-                      hintText: !_llmHasApiKey
-                          ? l10n.aiPlatformApiKeyOptionalHint
-                          : null,
-                      border: const OutlineInputBorder(),
-                      labelStyle: const TextStyle(fontSize: 12),
-                      hintStyle: const TextStyle(fontSize: 11),
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _llmObscureText ? Icons.visibility : Icons.visibility_off,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _llmObscureText = !_llmObscureText;
-                          });
-                        },
-                      ),
-                    ),
-                  ),
-                ],
+              child: TextFormField(
+                controller: _llmWriteTimeoutController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformWriteTimeout,
+                  hintText: l10n.aiPlatformWriteTimeoutHint,
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
               ),
             ),
           ],
         ),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: TextFormField(
+                controller: _llmTestConnectTimeoutController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformTestConnectTimeout,
+                  hintText: l10n.aiPlatformTestConnectTimeoutHint,
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextFormField(
+                controller: _llmTestRequestTimeoutController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformTestRequestTimeout,
+                  hintText: l10n.aiPlatformTestRequestTimeoutHint,
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: TextFormField(
+                controller: _llmMaxTokensController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformMaxTokens,
+                  hintText: l10n.aiPlatformMaxTokensHint,
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextFormField(
+                controller: _llmChunkSizeController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformChunkSize,
+                  hintText: l10n.aiPlatformChunkSizeHint,
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: TextFormField(
+                controller: _llmConcurrentController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformConcurrent,
+                  hintText: l10n.aiPlatformConcurrentHint,
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: _buildLlmTemperatureField(platform)),
+          ],
+        ),
+        const SizedBox(height: 2),
+        _buildLlmThinkingModeSupportedField(l10n),
+        if (_llmThinkingModeSupported) ...<Widget>[
+          const SizedBox(height: 6),
+          _buildLlmThinkingModeField(l10n),
+        ],
+        const SizedBox(height: 6),
+        _buildLlmSegmentLimitField(l10n),
       ],
     );
   }
@@ -1780,6 +1801,83 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           },
         );
 
+  Widget _buildLlmThinkingModeSupportedField(AppLocalizations l10n) {
+    return SizedBox(
+      height: 60,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    l10n.aiPlatformThinkingModeSupported,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    l10n.aiPlatformThinkingModeSupportedHint,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: _llmThinkingModeSupported,
+              onChanged: (bool value) {
+                setState(() {
+                  _llmThinkingModeSupported = value;
+                });
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLlmSegmentLimitField(AppLocalizations l10n) {
+    const List<int> segmentLimitOptions = <int>[1, 3, 5, 10, 20, 50, 100, 200, 500, 1000, 0];
+    String _labelForValue(int v) => v == 0 ? l10n.aiPlatformSegmentLimitUnlimited : v.toString();
+
+    return DropdownButtonFormField<int>(
+      value: segmentLimitOptions.contains(_llmSegmentLimit) ? _llmSegmentLimit : 100,
+      decoration: InputDecoration(
+        labelText: l10n.aiPlatformSegmentLimitLabel,
+        border: const OutlineInputBorder(),
+      ),
+      items: segmentLimitOptions.map((v) {
+        return DropdownMenuItem<int>(
+          value: v,
+          child: Text(_labelForValue(v)),
+        );
+      }).toList(),
+      onChanged: (int? value) {
+        if (value != null) {
+          setState(() {
+            _llmSegmentLimit = value;
+          });
+        }
+      },
+    );
+  }
 
   Widget _buildLlmThinkingModeField(AppLocalizations l10n) {
     final List<Map<String, String>> options = <Map<String, String>>[
@@ -2249,9 +2347,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       writeTimeout: int.tryParse(_llmWriteTimeoutController.text) ?? current.writeTimeout,
       testConnectTimeout: int.tryParse(_llmTestConnectTimeoutController.text) ?? current.testConnectTimeout,
       testRequestTimeout: int.tryParse(_llmTestRequestTimeoutController.text) ?? current.testRequestTimeout,
-      thinkingMode: current.thinkingModeSupported
-          ? _llmThinkingMode
-          : current.thinkingMode,
+      thinkingModeSupported: _llmThinkingModeSupported,
+      thinkingMode: _llmThinkingModeSupported ? _llmThinkingMode : current.thinkingMode,
+      segmentLimit: _llmSegmentLimit,
       apiProtocol: _llmApiProtocol,
       requiresApiKey: _llmHasApiKey,
     );

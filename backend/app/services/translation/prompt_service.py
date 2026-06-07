@@ -1,4 +1,4 @@
-﻿# SPDX-FileCopyrightText: 2026 Zampher
+# SPDX-FileCopyrightText: 2026 Zampher
 # SPDX-FileCopyrightText: 2026 Zampher
 # SPDX-License-Identifier: MPL-2.0
 
@@ -46,14 +46,13 @@ class PromptService:
             # Convert language code to full language name for better AI recognition
             to_lang_name = get_language_name_from_code(to_lang_code)
             
-            # System skeleton
+            # System skeleton — avoid "chat assistant" phrasing that triggers conversational replies on small models
             parts = [
-                "You are a professional translation assistant.",
-                "Requirements:",
-                "- Be faithful to the source meaning; avoid hallucination.",
-                "- Preserve structure, numbering, inline code, formulas and punctuation.",
+                "Additional translation rules (follow together with system SEG format rules):",
+                "- Translate faithfully; do not omit, merge, invent, or skip any segment.",
+                "- Preserve structure, numbering, spacing, inline code, formulas, and punctuation.",
                 f"- Output language: {to_lang_name}.",
-                "- When a glossary is provided, strictly apply term replacements." 
+                "- When a glossary is provided, strictly apply term replacements.",
             ]
             
             # Language-pair light constraints (placeholder)

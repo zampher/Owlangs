@@ -25,6 +25,7 @@ class AiTranslatorConfig(TranslatorConfig, AgentConfig):
     glossary_agent_config: GlossaryAgentConfig | None = None
     skip_translate: bool = False  # When skip_translate is False, base_url and model_id are required
     deep_split: bool = True
+    segment_limit: int = field(default=100, metadata={"description": "Max segments per chunk/batch, 0=unlimited"})
 
 
 T = TypeVar('T', bound=Document)

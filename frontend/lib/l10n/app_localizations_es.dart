@@ -2800,6 +2800,23 @@ class AppLocalizationsEs extends AppLocalizations {
       'Habilita el proceso de razonamiento de IA para una mejor calidad de traducción';
 
   @override
+  String get aiPlatformThinkingModeSupported => 'Soportar Modo de Pensamiento';
+
+  @override
+  String get aiPlatformThinkingModeSupportedHint =>
+      'Habilite esto si la plataforma soporta modo de pensamiento (ej., Ollama con Qwen3)';
+
+  @override
+  String get aiPlatformSegmentLimitLabel => 'Límite de Segmentos';
+
+  @override
+  String get aiPlatformSegmentLimitHint =>
+      'Máximo de segmentos por lote de traducción. Se aplica junto con chunk_size. 0 = ilimitado (nube), 10 = recomendado para LLMs locales';
+
+  @override
+  String get aiPlatformSegmentLimitUnlimited => 'Ilimitado';
+
+  @override
   String get aiPlatformPleaseEnterApiKeyFirst =>
       'Por favor, ingresa primero una clave API';
 

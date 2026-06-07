@@ -74,7 +74,6 @@ class GlobalSettings {
 
     // Detailed Translation Parameters
     this.temperature = 0.3,
-    this.thinking = 'disable',
     this.retry = 3,
     this.segmentAutoRetryRounds = 3,
     this.customPrompt,
@@ -143,7 +142,6 @@ class GlobalSettings {
         useGlossary: json['useGlossary'] ?? false,
         usePrompt: json['usePrompt'] ?? false,
         temperature: (json['temperature'] ?? 0.3).toDouble(),
-        thinking: json['thinking'] ?? 'disable',
         retry: json['retry'] ?? 3,
         segmentAutoRetryRounds: json['segment_auto_retry_rounds'] ?? 3,
         customPrompt: json['customPrompt'],
@@ -214,7 +212,6 @@ class GlobalSettings {
 
   // Detailed Translation Parameters (新任务生效)
   final double temperature;
-  final String thinking;
   final int retry;
   /// Queued mode: post-translation failed-segment auto batch rounds (not chunk retry).
   final int segmentAutoRetryRounds;
@@ -282,7 +279,6 @@ class GlobalSettings {
 
     // Detailed Translation Parameters
     double? temperature,
-    String? thinking,
     int? retry,
     int? segmentAutoRetryRounds,
     String? customPrompt,
@@ -347,7 +343,6 @@ class GlobalSettings {
 
         // Detailed Translation Parameters
         temperature: temperature ?? this.temperature,
-        thinking: thinking ?? this.thinking,
         retry: retry ?? this.retry,
         segmentAutoRetryRounds:
             segmentAutoRetryRounds ?? this.segmentAutoRetryRounds,
@@ -396,7 +391,6 @@ class GlobalSettings {
         'useGlossary': useGlossary,
         'usePrompt': usePrompt,
         'temperature': temperature,
-        'thinking': thinking,
         'retry': retry,
         'segment_auto_retry_rounds': segmentAutoRetryRounds,
         'customPrompt': customPrompt,
@@ -460,9 +454,6 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
           if (appConfig.containsKey('translator_temperature')) {
             backendSettings['temperature'] =
                 appConfig['translator_temperature'];
-          }
-          if (appConfig.containsKey('translator_thinking_mode')) {
-            backendSettings['thinking'] = appConfig['translator_thinking_mode'];
           }
           if (appConfig.containsKey('retry')) {
             backendSettings['retry'] = appConfig['retry'];
@@ -754,7 +745,6 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     bool? useGlossary,
     bool? usePrompt,
     double? temperature,
-    String? thinking,
     int? retry,
     int? segmentAutoRetryRounds,
     String? customPrompt,
@@ -767,7 +757,6 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
       useGlossary: useGlossary,
       usePrompt: usePrompt,
       temperature: temperature,
-      thinking: thinking,
       retry: retry,
       segmentAutoRetryRounds: segmentAutoRetryRounds,
       customPrompt: customPrompt,
@@ -807,9 +796,6 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     }
     if (temperature != null) {
       await _settingsService.saveSetting('', 'temperature', temperature);
-    }
-    if (thinking != null) {
-      await _settingsService.saveSetting('', 'thinking', thinking);
     }
     if (retry != null) {
       await _settingsService.saveSetting('', 'retry', retry);

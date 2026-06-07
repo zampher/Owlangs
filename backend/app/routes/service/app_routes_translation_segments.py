@@ -559,6 +559,33 @@ async def clear_all_exclusions_except_image_api(task_id: str):
 
 
 @router.post(
+    "/translation-segments/{task_id}/cancel-batch-retry",
+    summary="Cancel ongoing batch retry operation",
+    description="Cancel the currently running batch retry operation for the task.",
+    responses={
+        200: {"description": "Cancel signal sent successfully."},
+        404: {"description": "Task not found."},
+    }
+)
+async def cancel_batch_retry_api(task_id: str):
+    """Cancel the ongoing batch retry operation."""
+    task_state = task_manager.get_task(task_id)
+    if task_state is None:
+        logger.warning(LogModule.ROUTE, f"[CANCEL-BATCH-RETRY-API] Task ID '{task_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
+    
+    # Set cancel flag in task state
+    task_state["cancel_batch_retry"] = True
+    logger.info(LogModule.ROUTE, f"[CANCEL-BATCH-RETRY-API] Cancel signal set for task {task_id}")
+    
+    return JSONResponse(content={
+        "success": True,
+        "message": "Batch retry cancel signal sent",
+        "task_id": task_id,
+    })
+
+
+@router.post(
     "/translation-segments/{task_id}/{segment_index}/exclusion_reason",
     summary="Update exclusion reason for a segment",
     description="Update or remove exclusion reason for a translation segment.",

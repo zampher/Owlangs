@@ -51,7 +51,6 @@ class TranslationConfigService {
         'api_key': apiKey,
         'model_id': platformInfo['model'] ?? 'gpt-4o',
         'temperature': 0.3, // Will be overridden by global settings
-        'thinking': 'disable', // Will be overridden by global settings
         'timeout': 30, // Will be overridden by global settings
         'retry': 3, // Will be overridden by global settings
         'custom_prompt': null, // Will be overridden by global settings
@@ -70,7 +69,6 @@ class TranslationConfigService {
   ) =>
       <String, dynamic>{
         'temperature': settings.temperature,
-        'thinking': settings.thinking,
         'retry': settings.retry,
         'segment_auto_retry_rounds': settings.segmentAutoRetryRounds,
         'custom_prompt': settings.customPrompt,
@@ -82,7 +80,6 @@ class TranslationConfigService {
         'api_key': '',
         'model_id': 'gpt-4o',
         'temperature': 0.3,
-        'thinking': 'disable',
         'retry': 3,
         'custom_prompt': null,
       };

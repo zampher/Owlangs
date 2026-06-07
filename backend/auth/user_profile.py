@@ -54,6 +54,7 @@ class UserProfile:
     concurrent: int = 10
     timeout: int = 120
     retry: int = 5
+    segment_auto_retry_rounds: int = 3  # Post-translation auto retry rounds for failed segments
     
     # Glossary settings (user personalization part)
     glossary_generate_enable: bool = False

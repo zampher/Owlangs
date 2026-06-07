@@ -2656,6 +2656,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiPlatformThinkingHint => '启用AI推理过程以获得更好的翻译质量';
 
   @override
+  String get aiPlatformThinkingModeSupported => '支持思考模式';
+
+  @override
+  String get aiPlatformThinkingModeSupportedHint =>
+      '如果平台支持思考模式则启用（如 Ollama 搭配 Qwen3）';
+
+  @override
+  String get aiPlatformSegmentLimitLabel => '片段数上限';
+
+  @override
+  String get aiPlatformSegmentLimitHint =>
+      '每个翻译批次的最大段落数。限制与块大小同时生效。0 = 无限（云端），10 = 本地LLM建议';
+
+  @override
+  String get aiPlatformSegmentLimitUnlimited => '无限';
+
+  @override
   String get aiPlatformPleaseEnterApiKeyFirst => '请先输入API密钥';
 
   @override

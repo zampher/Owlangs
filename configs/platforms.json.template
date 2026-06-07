@@ -26,7 +26,8 @@
       "timeout": 600,
       "write_timeout": 600,
       "test_connect_timeout": 60,
-      "test_request_timeout": 20
+      "test_request_timeout": 20,
+      "segment_limit": 10
     },
     "ollama": {
       "name": "Local (Ollama)",
@@ -36,7 +37,7 @@
       "temperature": 0.3,
       "temperature_min": 0.0,
       "temperature_max": 2.0,
-      "thinking_mode_supported": false,
+      "thinking_mode_supported": true,
       "thinking_mode": "disable",
       "recommended_tokens": null,
       "performance_note": "Local LLM runner with full offline capability; supports any open-source model (e.g. qwen, llama3, mistral) pulled via Ollama.",
@@ -52,7 +53,8 @@
       "timeout": 600,
       "write_timeout": 600,
       "test_connect_timeout": 60,
-      "test_request_timeout": 20
+      "test_request_timeout": 20,
+      "segment_limit": 10
     },
     "anthropic_local": {
       "name": "Local (Anthropic)",
@@ -77,7 +79,8 @@
       "timeout": 600,
       "write_timeout": 600,
       "test_connect_timeout": 60,
-      "test_request_timeout": 20
+      "test_request_timeout": 20,
+      "segment_limit": 100
     },
     "openai": {
       "name": "OpenAI",
@@ -103,7 +106,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "azure": {
       "name": "Azure OpenAI",
@@ -129,7 +133,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "anthropic": {
       "name": "Anthropic Claude",
@@ -155,7 +160,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "google": {
       "name": "Google Gemini",
@@ -165,7 +171,7 @@
       "temperature": 0.3,
       "temperature_min": 0.0,
       "temperature_max": 2.0,
-      "thinking_mode_supported": false,
+      "thinking_mode_supported": true,
       "thinking_mode": "disable",
       "recommended_tokens": 16000,
       "performance_note": "Multimodal model with excellent multilingual support and cost-effectiveness",
@@ -181,7 +187,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "deepseek": {
       "name": "DeepSeek",
@@ -207,7 +214,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "dashscope": {
       "name": "Alibaba DashScope",
@@ -217,7 +225,7 @@
       "temperature": 0.3,
       "temperature_min": 0.0,
       "temperature_max": 2.0,
-      "thinking_mode_supported": false,
+      "thinking_mode_supported": true,
       "thinking_mode": "disable",
       "recommended_tokens": 4000,
       "performance_note": "Alibaba's Qwen series with strong Chinese processing and fast response times",
@@ -233,7 +241,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "volcengine_ark": {
       "name": "VolcEngine ARK (鏂硅垷)",
@@ -243,7 +252,7 @@
       "temperature": 0.3,
       "temperature_min": 0.0,
       "temperature_max": 2.0,
-      "thinking_mode_supported": false,
+      "thinking_mode_supported": true,
       "thinking_mode": "disable",
       "recommended_tokens": null,
       "performance_note": "ByteDance's multimodal AI with excellent Chinese language capabilities",
@@ -259,7 +268,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "zhipu": {
       "name": "Zhipu AI",
@@ -269,7 +279,7 @@
       "temperature": 0.3,
       "temperature_min": 0.0,
       "temperature_max": 2.0,
-      "thinking_mode_supported": false,
+      "thinking_mode_supported": true,
       "thinking_mode": "disable",
       "recommended_tokens": null,
       "performance_note": "Tsinghua-backed GLM series with strong academic foundation and high translation quality",
@@ -285,7 +295,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "groq": {
       "name": "Groq",
@@ -311,7 +322,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "together": {
       "name": "Together AI",
@@ -337,7 +349,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "mistral": {
       "name": "Mistral AI",
@@ -363,7 +376,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "cohere": {
       "name": "Cohere",
@@ -389,7 +403,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "xai": {
       "name": "xAI",
@@ -415,7 +430,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "siliconflow": {
       "name": "SiliconFlow",
@@ -425,7 +441,7 @@
       "temperature": 0.3,
       "temperature_min": 0.0,
       "temperature_max": 2.0,
-      "thinking_mode_supported": false,
+      "thinking_mode_supported": true,
       "thinking_mode": "disable",
       "recommended_tokens": null,
       "performance_note": "Chinese AI service provider with competitive pricing",
@@ -441,7 +457,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "dmxapi": {
       "name": "DMX API",
@@ -467,7 +484,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "openrouter": {
       "name": "OpenRouter",
@@ -493,7 +511,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "hunyuan": {
       "name": "Hunyuan",
@@ -519,7 +538,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "baidu": {
       "name": "Baidu ERNIE",
@@ -545,7 +565,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "moonshot": {
       "name": "Moonshot AI",
@@ -571,7 +592,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "aleph_alpha": {
       "name": "Aleph Alpha (Germany)",
@@ -597,7 +619,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "rinna": {
       "name": "Rinna (Japan)",
@@ -623,7 +646,8 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "naver": {
       "name": "Naver HyperClova (Korea)",
@@ -649,19 +673,12 @@
       "timeout": 200,
       "write_timeout": 300,
       "test_connect_timeout": 30,
-      "test_request_timeout": 10
+      "test_request_timeout": 10,
+      "segment_limit": 100
     },
     "mineru": {
       "name": "MinerU (Cloud)",
       "url": "https://mineru.net/api/v4",
-      "model": "vlm-auto-engine",
-      "max_tokens": 4096,
-      "temperature": 0.3,
-      "temperature_min": 0.0,
-      "temperature_max": 2.0,
-      "thinking_mode_supported": false,
-      "thinking_mode": "disable",
-      "recommended_tokens": null,
       "performance_note": "Advanced document parsing and conversion service with OCR capabilities",
       "platform_type": "parser",
       "parser_subtype": "cloud",
@@ -677,14 +694,6 @@
     "mineru_local": {
       "name": "MinerU (Local)",
       "url": "http://localhost:8080",
-      "model": "hybrid-auto-engine",
-      "max_tokens": 4096,
-      "temperature": 0.3,
-      "temperature_min": 0.0,
-      "temperature_max": 2.0,
-      "thinking_mode_supported": false,
-      "thinking_mode": "disable",
-      "recommended_tokens": null,
       "performance_note": "Self-hosted MinerU; API key optional.",
       "platform_type": "parser",
       "parser_subtype": "local",

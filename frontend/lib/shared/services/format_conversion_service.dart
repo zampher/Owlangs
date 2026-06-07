@@ -66,6 +66,10 @@ class FormatConversionService {
             sourceLang.isNotEmpty &&
             sourceLang != 'auto')
           'ocr_language': sourceLang,
+        // Pass default platform key so backend can look up chunk_size from platforms.json
+        if (appConfig?['default_platform'] != null &&
+            (appConfig!['default_platform'] as String).isNotEmpty)
+          'platform_key': appConfig!['default_platform'] as String,
       };
 
       // Debug: Log skip_cache parameter

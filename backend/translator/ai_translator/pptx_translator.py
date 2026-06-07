@@ -155,6 +155,7 @@ class PptxTranslator(AiTranslator):
                 glossary_dict=config.glossary_dict,
                 retry=config.retry,
                 max_tokens=getattr(config, 'max_tokens', None),
+                segment_limit=getattr(config, 'segment_limit', 100),
                 use_seg_tags=True,  # Use SEG-tag format for PPTX segments
             )
             self.translate_agent = SegmentsTranslateAgent(agent_config)

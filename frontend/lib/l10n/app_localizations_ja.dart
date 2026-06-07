@@ -2673,6 +2673,23 @@ class AppLocalizationsJa extends AppLocalizations {
   String get aiPlatformThinkingHint => 'より良い翻訳品質のためにAI推論プロセスを有効にします';
 
   @override
+  String get aiPlatformThinkingModeSupported => '思考モードをサポート';
+
+  @override
+  String get aiPlatformThinkingModeSupportedHint =>
+      'プラットフォームが思考モードをサポートしている場合は有効にしてください（例：Qwen3を使用したOllama）';
+
+  @override
+  String get aiPlatformSegmentLimitLabel => 'セグメント制限';
+
+  @override
+  String get aiPlatformSegmentLimitHint =>
+      '翻訳バッチあたりの最大セグメント数。チャンクサイズと併用。0 = 無制限（クラウド）、10 = ローカルLLM推奨';
+
+  @override
+  String get aiPlatformSegmentLimitUnlimited => '無制限';
+
+  @override
   String get aiPlatformPleaseEnterApiKeyFirst => 'まずAPIキーを入力してください';
 
   @override

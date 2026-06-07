@@ -757,6 +757,15 @@ class TranslationService {
     return (resp.data as Map).cast<String, dynamic>();
   }
 
+  /// Cancel ongoing batch retry operation
+  Future<Map<String, dynamic>> cancelBatchRetry(String taskId) async {
+    final dio = _buildAuthedDio();
+    final resp = await dio.post(
+      '/service/translation-segments/$taskId/cancel-batch-retry',
+    );
+    return (resp.data as Map).cast<String, dynamic>();
+  }
+
   /// Mark a segment for retry
   Future<Map<String, dynamic>> markSegmentForRetry(
     String taskId,

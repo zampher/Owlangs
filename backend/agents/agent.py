@@ -1,4 +1,4 @@
-﻿# SPDX-FileCopyrightText: 2025 QinHan
+# SPDX-FileCopyrightText: 2025 QinHan
 # SPDX-FileCopyrightText: 2026 Zampher
 # SPDX-License-Identifier: MPL-2.0
 
@@ -487,6 +487,13 @@ class Agent:
         elif self.thinking == "disable":
             data[field_thinking] = val_disable
 
+    def _apply_ollama_thinking(self, data: dict[str, Any]) -> None:
+        """Map Agent thinking mode to Ollama native `think` parameter (Qwen3, DeepSeek-R1, etc.)."""
+        if self.thinking == "enable":
+            data["think"] = True
+        elif self.thinking == "disable":
+            data["think"] = False
+
     def _prepare_request_data(
             self, prompt: str, system_prompt: str, temperature=None, top_p=0.9
     ):
@@ -508,12 +515,16 @@ class Agent:
                 max_tokens=self.max_tokens,
                 api_key=api_key,
                 system_prompt=system_prompt,
+                **({"thinking": self.thinking} if self.api_type == "ollama" else {}),
             )
             
             # Add top_p for OpenAI-compatible protocols
             if self.api_type not in ("ollama", "anthropic") and top_p is not None:
                 data["top_p"] = top_p
-            
+
+            if self.api_type != "ollama" and self.thinking != "default":
+                self._add_thinking_mode(data)
+
             return headers, data
         
         # Legacy fallback logic
@@ -545,6 +556,7 @@ class Agent:
                 options["num_predict"] = self.max_tokens
             if options:
                 data["options"] = options
+            self._apply_ollama_thinking(data)
         else:
             # OpenAI-compatible chat completions format
             data = {

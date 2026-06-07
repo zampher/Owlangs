@@ -1,11 +1,11 @@
-﻿# SPDX-FileCopyrightText: 2025 QinHan
+# SPDX-FileCopyrightText: 2025 QinHan
 # SPDX-FileCopyrightText: 2026 Zampher
 # SPDX-License-Identifier: MPL-2.0
 
 from dataclasses import dataclass
 
 from .agent import Agent, AgentConfig
-from .seg_prompt_utils import build_seg_system_prompt
+from .seg_prompt_utils import build_seg_system_prompt, parse_seg_output
 from glossary.glossary import Glossary
 from logger import unified_logger
 from logger.logger import LogModule
@@ -25,7 +25,7 @@ class MDTranslateAgent(Agent):
         self.system_prompt = build_seg_system_prompt(config.to_lang, mention_markdown=True)
         self.custom_prompt = config.custom_prompt
         if config.custom_prompt:
-            self.system_prompt += "\n# Important rules or background\n" + config.custom_prompt + "\nEND"
+            self.system_prompt += "\n# Domain rules\n" + config.custom_prompt + "\nEND"
         self.glossary_dict = config.glossary_dict
         self._task_id = None  # Will be set by translator if available for dynamic glossary loading
 
@@ -98,7 +98,7 @@ class MDTranslateAgent(Agent):
         """
         Send markdown chunks for translation asynchronously.
 
-        NOTE: This method now uses SEG-tag format ([SEG n] ... [/SEG n]) for each chunk
+        NOTE: This method now uses SEG-tag format ([SEG n]) for each chunk
         to be consistent with the main markdown/PDF pipeline. It does NOT use JSON any more.
 
         Args:
@@ -112,7 +112,7 @@ class MDTranslateAgent(Agent):
         # Build one SEG-tagged prompt per chunk; each chunk uses a local id starting from 0
         seg_prompts: list[str] = []
         for idx, text in enumerate(prompts):
-            seg_prompts.append(f"[SEG {idx}]\n{text or ''}\n[/SEG {idx}]")
+            seg_prompts.append(f"[SEG {idx}]:\n{text or ''}")
 
         translated = await super().send_prompts_async(
             prompts=seg_prompts,
@@ -133,26 +133,16 @@ class MDTranslateAgent(Agent):
                 result.append(str(raw))
                 continue
             llm_str = raw
-            start_re = re.compile(rf"^\[SEG\s+{idx}\]\s*$")
-            end_re = re.compile(rf"^\[/SEG\s+{idx}\]\s*$")
-            current = False
-            buf: list[str] = []
-            for line in llm_str.splitlines():
-                if start_re.match(line):
-                    current = True
-                    buf = []
-                    continue
-                if end_re.match(line):
-                    if current:
-                        break
-                    continue
-                if current:
-                    buf.append(line)
-            if buf:
-                result.append("\n".join(buf))
+            parsed = parse_seg_output(llm_str)
+            if idx in parsed:
+                result.append(parsed[idx])
+            elif parsed:
+                # Found segments but not our idx — take first available
+                result.append(next(iter(parsed.values())))
             else:
-                # Fallback: if SEG block not found, use entire response
-                result.append(llm_str)
+                # Fallback: strip the header line and return the rest
+                cleaned = re.sub(r'^\[SEG\s+\d+\]:?\s*\n?', '', llm_str, flags=re.MULTILINE)
+                result.append(cleaned.strip() if cleaned.strip() else llm_str)
 
         return result
 

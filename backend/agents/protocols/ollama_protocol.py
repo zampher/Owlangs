@@ -68,6 +68,7 @@ class OllamaProtocol(LLMProtocol):
         max_tokens: Optional[int],
         api_key: Optional[str],
         system_prompt: Optional[str] = None,
+        thinking: Optional[str] = None,
     ) -> Tuple[Dict[str, str], Dict[str, Any]]:
         """
         Prepare Ollama-compatible request.
@@ -132,6 +133,11 @@ class OllamaProtocol(LLMProtocol):
         # Users with limited VRAM can override via their Ollama Modelfile.
         DEFAULT_NUM_CTX = 16384
         data["options"]["num_ctx"] = DEFAULT_NUM_CTX
+
+        if thinking == "enable":
+            data["think"] = True
+        elif thinking == "disable":
+            data["think"] = False
         
         return headers, data
     

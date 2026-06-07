@@ -138,6 +138,11 @@ class ConvertFormatRequest(BaseModel):
         description="When enabled, skip using cached conversion results and force re-conversion. "
                    "Useful when frontend is refreshed or new session starts."
     )
+    platform_key: Optional[str] = Field(
+        default=None,
+        description="AI platform key for chunk_size lookup from platforms.json. "
+                   "If not provided, falls back to hardcoded default of 3000."
+    )
 
 
 class ConvertFormatResponse(BaseModel):
@@ -249,6 +254,11 @@ class BaseWorkflowParams(BaseModel):
         default=False,
         description="When enabled (True), skip using cached conversion results and force re-conversion (Extract phase). "
                    "When disabled (False), use cached results if available (Convert phase)."
+    )
+    platform_key: Optional[str] = Field(
+        default=None,
+        description="AI platform key for chunk_size/concurrent lookup from platforms.json. "
+                   "If not provided, falls back to hardcoded default of 3000."
     )
 
     @model_validator(mode='before')

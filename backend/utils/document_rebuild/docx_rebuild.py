@@ -919,8 +919,8 @@ def rebuild_docx_document_from_segments(
                 element = para_index_map.get(para_key)
             
             if element is None:
-                logger.error(LogModule.RESTOR,
-                    f"[DOCX-REBUILD] ❌ Could not locate element for segment {segment_index}: "
+                logger.warning(LogModule.RESTOR,
+                    f"[DOCX-REBUILD] Could not locate element for segment {segment_index}: "
                     f"para_index={para_index}, is_table_cell={is_table_cell}, "
                     f"table_idx={table_idx}, row_idx={row_idx}, cell_idx={cell_idx}, "
                     f"source_text='{source_text[:100] if source_text else '(empty)'}...', "
@@ -1010,8 +1010,8 @@ def rebuild_docx_document_from_segments(
                                                     break
                         
                         if element is None:
-                            logger.error(LogModule.RESTOR,
-                                f"[DOCX-REBUILD] ❌ Could not locate element for segment {segment_index} after all attempts. "
+                            logger.warning(LogModule.RESTOR,
+                                f"[DOCX-REBUILD] Could not locate element for segment {segment_index} after all attempts. "
                                 f"This segment will be skipped. "
                                 f"is_table_cell={is_table_cell}, table_idx={table_idx}, row_idx={row_idx}, cell_idx={cell_idx}, "
                                 f"source_text='{source_text[:50] if source_text else '(empty)'}...', "

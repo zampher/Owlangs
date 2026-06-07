@@ -136,7 +136,81 @@ class PlatformService:
         except Exception as e:
             logger.warning(LogModule.SYSTEM, f"[MAX_TOKENS] Failed to get max_tokens from platform config: {e}")
             return None
-    
+
+    def get_segment_limit(
+        self,
+        base_url: str,
+        model_id: str,
+        platform_key: Optional[str] = None
+    ) -> int:
+        """
+        Get segment_limit from platform configuration based on base_url and model_id.
+
+        Args:
+            base_url: Base URL of the AI platform
+            model_id: Model ID
+            platform_key: Optional platform key (if already determined)
+
+        Returns:
+            segment_limit value from platform config (default 100)
+        """
+        try:
+            from backend.config.config_loader import get_unified_config
+            unified_config = get_unified_config()
+
+            # If platform_key is provided, use it directly
+            if platform_key:
+                platform_config = unified_config.platforms.get_platform_config(platform_key)
+                if platform_config:
+                    return getattr(platform_config, 'segment_limit', 100)
+
+            # Otherwise, try to determine platform key
+            platform_key = self.determine_platform_key(base_url, model_id)
+            if platform_key:
+                platform_config = unified_config.platforms.get_platform_config(platform_key)
+                if platform_config:
+                    return getattr(platform_config, 'segment_limit', 100)
+
+            return 100
+        except Exception as e:
+            logger.warning(LogModule.SYSTEM, f"[SEGMENT_LIMIT] Failed to get segment_limit from platform config: {e}")
+            return 100
+
+    def get_temperature(
+        self,
+        base_url: str,
+        model_id: str,
+        platform_key: Optional[str] = None,
+    ) -> Optional[float]:
+        """
+        Get temperature from platform configuration based on base_url and model_id.
+
+        Returns:
+            temperature from platform config, or None if not found
+        """
+        try:
+            from backend.config.config_loader import get_unified_config
+
+            unified_config = get_unified_config()
+
+            if platform_key:
+                platform_config = unified_config.platforms.get_platform_config(platform_key)
+                if platform_config and platform_config.temperature is not None:
+                    return float(platform_config.temperature)
+
+            if not platform_key:
+                platform_key = self.determine_platform_key(base_url, model_id)
+
+            if platform_key:
+                platform_config = unified_config.platforms.get_platform_config(platform_key)
+                if platform_config and platform_config.temperature is not None:
+                    return float(platform_config.temperature)
+
+            return None
+        except Exception as e:
+            logger.warning(LogModule.CONFIG, f"Failed to get temperature: {e}")
+            return None
+
     def get_thinking_mode(
         self,
         base_url: str,
@@ -161,16 +235,22 @@ class PlatformService:
             # If platform_key is provided, use it directly
             if platform_key:
                 platform_config = unified_config.platforms.get_platform_config(platform_key)
-                if platform_config and platform_config.thinking_mode_supported:
+                if (
+                    platform_config
+                    and platform_config.thinking_mode_supported
+                ):
                     return platform_config.thinking_mode
-            
+
             # Otherwise, try to determine platform key first
             if not platform_key:
                 platform_key = self.determine_platform_key(base_url, model_id)
-            
+
             if platform_key:
                 platform_config = unified_config.platforms.get_platform_config(platform_key)
-                if platform_config and platform_config.thinking_mode_supported:
+                if (
+                    platform_config
+                    and platform_config.thinking_mode_supported
+                ):
                     return platform_config.thinking_mode
             
             return None

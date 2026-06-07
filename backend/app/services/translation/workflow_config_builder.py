@@ -82,9 +82,8 @@ class WorkflowConfigBuilder:
         """
         Get concurrent value with priority:
         1. Payload explicit concurrent (user override per task)
-        2. Selected platform's config concurrent
-        3. Global app_config.json translator_concurrent (backward compat)
-        4. default_params
+        2. Selected platform's config concurrent (from platforms.json)
+        3. default_params
         """
         # Priority 1: Payload explicit override
         payload_val = payload.get('concurrent', None) if isinstance(payload, dict) else getattr(payload, 'concurrent', None)
@@ -111,35 +110,99 @@ class WorkflowConfigBuilder:
             except Exception as e:
                 logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Failed to get concurrent from platform config: {e}")
         
-        # Priority 3: Global app_config.json (backward compatibility)
-        concurrent = None
-        try:
-            from backend.config.app_config import get_app_config, AppConfig
-            try:
-                app_config = get_app_config()
-                if hasattr(app_config, 'translator_concurrent'):
-                    concurrent = app_config.translator_concurrent
-            except Exception:
-                pass
-            if concurrent is None or concurrent <= 0:
-                try:
-                    cfg_path = AppConfig._resolve_app_config_path("app_config.json")
-                    if cfg_path.exists():
-                        with open(cfg_path, 'r', encoding='utf-8-sig') as f:
-                            data = json.load(f)
-                            concurrent = data.get('translator_concurrent')
-                except Exception:
-                    pass
-            if concurrent is not None and concurrent > 0:
-                logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={concurrent} from app_config.json (backward compat)")
-                return int(concurrent)
-        except Exception as e:
-            logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Failed to get concurrent from app_config: {e}")
-        
-        # Priority 4: default_params
+        # Priority 3: default_params
         default_concurrent = int(default_params.get("concurrent", 10))
         logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={default_concurrent} from default_params")
         return default_concurrent
+
+    @staticmethod
+    def _get_payload_attr(payload: Any, key: str, default=None):
+        if isinstance(payload, dict):
+            return payload.get(key, default)
+        return getattr(payload, key, default)
+
+    def _resolve_temperature(
+        self,
+        payload: Any,
+        base_url: str,
+        model_id: str,
+        platform_key: Optional[str],
+    ) -> float:
+        """Resolve temperature: payload override -> platform config -> default_params."""
+        explicit = self._get_payload_attr(payload, "temperature")
+        if explicit is not None:
+            try:
+                return float(explicit)
+            except (TypeError, ValueError):
+                logger.debug(
+                    LogModule.CONFIG,
+                    f"[CONFIG-BUILDER] Task {self.task_id}: Invalid payload temperature={explicit!r}, falling back",
+                )
+
+        platform_temp = platform_service.get_temperature(base_url, model_id, platform_key)
+        if platform_temp is not None:
+            logger.debug(
+                LogModule.CONFIG,
+                f"[CONFIG-BUILDER] Task {self.task_id}: Using temperature={platform_temp} from platform config",
+            )
+            return platform_temp
+
+        fallback = float(default_params.get("temperature", 0.3))
+        logger.debug(
+            LogModule.CONFIG,
+            f"[CONFIG-BUILDER] Task {self.task_id}: Using temperature={fallback} from default_params",
+        )
+        return fallback
+
+    def _resolve_thinking(
+        self,
+        payload: Any,
+        base_url: str,
+        model_id: str,
+        platform_key: Optional[str],
+    ) -> str:
+        """Resolve thinking mode: explicit enable/disable -> platform config -> payload default -> default_params.
+
+        Priority:
+        1. Payload explicit enable/disable (user per-task override)
+        2. Platform config thinking_mode (if platform supports it)
+        3. Payload default value (if not empty/default)
+        4. default_params fallback
+        """
+        explicit = self._get_payload_attr(payload, "thinking")
+
+        # Priority 1: User explicit per-task override (enable/disable)
+        if explicit in ("enable", "disable"):
+            logger.debug(
+                LogModule.CONFIG,
+                f"[CONFIG-BUILDER] Task {self.task_id}: Using thinking={explicit} from payload (explicit override)",
+            )
+            return explicit
+
+        # Priority 2: Platform config (if platform supports thinking_mode)
+        platform_thinking = platform_service.get_thinking_mode(base_url, model_id, platform_key)
+        if platform_thinking:
+            logger.debug(
+                LogModule.CONFIG,
+                f"[CONFIG-BUILDER] Task {self.task_id}: Using thinking={platform_thinking} from platform config",
+            )
+            return platform_thinking
+
+        # Priority 3: Payload default value (if meaningful)
+        if explicit and explicit not in ("default", None, ""):
+            logger.debug(
+                LogModule.CONFIG,
+                f"[CONFIG-BUILDER] Task {self.task_id}: Using thinking={explicit} from payload (default)",
+            )
+            return str(explicit)
+
+        # Priority 4: Global default_params fallback
+        fallback = default_params.get("thinking", "disable")
+        logger.debug(
+            LogModule.CONFIG,
+            f"[CONFIG-BUILDER] Task {self.task_id}: Using thinking={fallback} from default_params",
+        )
+        return fallback
 
     def _get_connect_timeout_from_config_or_payload(self, payload: Any) -> int:
         """Get connect_timeout from app_config.translator_connect_timeout (priority), then payload, then default 15."""
@@ -199,9 +262,9 @@ class WorkflowConfigBuilder:
         # Log timeout value for diagnostics (especially for EPUB/MOBI workflows)
         logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Extracted timeout={timeout}s from payload (type={type(payload).__name__})")
 
-        # Concurrent: prefer app_config.translator_concurrent (same priority as chunk_size), then payload, then default
+        # Concurrent: payload → platform config → default
         concurrent = self._get_concurrent_from_config_or_payload(payload)
-        logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={concurrent} for translator (translator_concurrent threshold)")
+        logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using concurrent={concurrent} for translator")
         connect_timeout = self._get_connect_timeout_from_config_or_payload(payload)
         logger.debug(LogModule.CONFIG, f"[CONFIG-BUILDER] Task {self.task_id}: Using connect_timeout={connect_timeout}s from app_config (translator_connect_timeout)")
 
@@ -213,16 +276,25 @@ class WorkflowConfigBuilder:
         if write_timeout is None or write_timeout == 0:
             write_timeout = 300
 
+        base_url = getattr(payload, 'base_url', '') or ''
+        model_id = getattr(payload, 'model_id', '') or ''
+        platform_key = self._get_payload_attr(payload, 'platform_key')
+        if not platform_key:
+            platform_key = platform_service.determine_platform_key(base_url, model_id, self.task_state)
+
+        resolved_temperature = self._resolve_temperature(payload, base_url, model_id, platform_key)
+        resolved_thinking = self._resolve_thinking(payload, base_url, model_id, platform_key)
+
         translator_args = {
             'task_id': self.task_id,  # CRITICAL: Pass task_id so apply_smart_glossary_matching can access task_state
             'skip_translate': getattr(payload, 'skip_translate', False),
-            'base_url': getattr(payload, 'base_url', '') or '',
+            'base_url': base_url,
             'api_key': getattr(payload, 'api_key', '') or '',
-            'model_id': getattr(payload, 'model_id', '') or '',
+            'model_id': model_id,
             'to_lang': getattr(payload, 'to_lang', 'en'),
             'custom_prompt': synthesized_prompt,
-            'temperature': getattr(payload, 'temperature', 0.3),
-            'thinking': getattr(payload, 'thinking', 'disable'),  # Default to 'disable' if not provided
+            'temperature': resolved_temperature,
+            'thinking': resolved_thinking,
             'chunk_size': chunk_size_service.get_chunk_size(payload, self.task_id),
             'deep_split': getattr(payload, 'deep_split', False),
             'concurrent': concurrent,
@@ -237,9 +309,6 @@ class WorkflowConfigBuilder:
             translator_args = self._apply_smart_glossary_matching(translator_args, payload)
         
         # Store platform key in task_state for segment recording
-        base_url = translator_args.get('base_url', '')
-        model_id = translator_args.get('model_id', '')
-        platform_key = platform_service.determine_platform_key(base_url, model_id, self.task_state)
         if platform_key:
             self.task_state["platform_key"] = platform_key
         
@@ -248,16 +317,13 @@ class WorkflowConfigBuilder:
         if max_tokens:
             translator_args['max_tokens'] = max_tokens
             logger.debug(LogModule.CONFIG, f"[TRANSLATOR_CONFIG] Task {self.task_id}: Added max_tokens={max_tokens} to translator_args from platform config")
-        
-        # Get thinking mode from platform configuration if not provided in payload or is default
-        payload_thinking = getattr(payload, 'thinking', None)
-        if payload_thinking is None or payload_thinking == 'disable' or payload_thinking == default_params.get("thinking", "disable"):
-            thinking_mode = platform_service.get_thinking_mode(base_url, model_id, platform_key)
-            if thinking_mode:
-                # Use platform's thinking mode configuration
-                translator_args['thinking'] = thinking_mode
-                logger.debug(LogModule.CONFIG, f"[TRANSLATOR_CONFIG] Task {self.task_id}: Using thinking={thinking_mode} from platform config")
-        
+
+        # Get segment_limit from platform configuration (default 100 for cloud, 10 for local LLMs)
+        segment_limit = platform_service.get_segment_limit(base_url, model_id, platform_key)
+        translator_args['segment_limit'] = segment_limit
+        self.task_state['segment_limit'] = segment_limit
+        logger.info(LogModule.CONFIG, f"[TRANSLATOR_CONFIG] Task {self.task_id}: Using segment_limit={segment_limit} from platform config (0=unlimited)")
+
         # Get API protocol from platform configuration
         api_protocol = platform_service.get_api_protocol(base_url, model_id, platform_key)
         if api_protocol:
@@ -510,12 +576,9 @@ class WorkflowConfigBuilder:
         # Extract json_paths from payload
         if isinstance(payload, dict):
             json_paths = payload.get('json_paths', None) or []
-            segment_per_request = payload.get('segment_per_request', False)
         else:
             json_paths = getattr(payload, 'json_paths', None) or []
-            segment_per_request = getattr(payload, 'segment_per_request', False)
         config_args['json_paths'] = json_paths
-        config_args['segment_per_request'] = segment_per_request
 
         translator_config = JsonTranslatorConfig(**config_args)
         html_exporter_config = Json2HTMLExporterConfig(cdn=True)

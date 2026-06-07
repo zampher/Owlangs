@@ -322,6 +322,18 @@ Deep vein thrombosis (DVT) is a medical condition. The patient was diagnosed at 
                 if llm_api_input and llm_api_output:
                     llm_api_comparison_file = os.path.join(debug_dir, "llm_api_comparison.txt")
                     with open(llm_api_comparison_file, 'w', encoding='utf-8') as f:
+                        # Write API parameters for diagnosis
+                        f.write(f"{'='*80}\n")
+                        f.write("LLM API PARAMETERS:\n")
+                        f.write(f"{'='*80}\n")
+                        config = getattr(self, 'config', None)
+                        if config:
+                            f.write(f"  model_id: {getattr(config, 'model_id', 'N/A')}\n")
+                            f.write(f"  temperature: {getattr(config, 'temperature', 'N/A')}\n")
+                            f.write(f"  thinking: {getattr(config, 'thinking', 'N/A')}\n")
+                            f.write(f"  to_lang: {self.to_lang}\n")
+                        f.write(f"{'='*80}\n\n")
+
                         # Write system prompt at the beginning if available
                         if llm_api_system_prompt:
                             f.write(f"{'='*80}\n")

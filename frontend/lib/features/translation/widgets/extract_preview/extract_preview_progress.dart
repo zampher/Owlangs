@@ -654,9 +654,21 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
       });
     }
 
-    // Start polling timer
-    translationTimer = Timer.periodic(const Duration(seconds: 1), (t) async {
+    // Start polling timer (use 500ms interval for more frequent updates during batch retry)
+    translationTimer = Timer.periodic(const Duration(milliseconds: 500), (t) async {
+      // CRITICAL: Log every timer tick to track execution
+      AppLogger.log(
+        'ExtractPreview',
+        '_startTranslationPolling: TIMER TICK started (tick=${t.tick}, mounted=$mounted, inFlight=$translationInFlight)',
+        level: LogLevel.info,
+      );
+
       if (!mounted) {
+        AppLogger.log(
+          'ExtractPreview',
+          '_startTranslationPolling: TIMER STOP - widget not mounted',
+          level: LogLevel.warn,
+        );
         translationTimer?.cancel();
         translationTimer = null;
         translationInFlight = false;
@@ -695,10 +707,27 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
         final pollStartTime = DateTime.now().millisecondsSinceEpoch;
         final svc = TranslationService();
 
+        AppLogger.log(
+          'ExtractPreview',
+          '_startTranslationPolling: Fetching status for taskId=$taskId',
+          level: LogLevel.info,
+        );
+
         // Use the translation taskId (which is the workflowId)
         final status = await svc.getStatus(taskId);
 
+        AppLogger.log(
+          'ExtractPreview',
+          '_startTranslationPolling: Status received, processing...',
+          level: LogLevel.info,
+        );
+
         if (!mounted) {
+          AppLogger.log(
+            'ExtractPreview',
+            '_startTranslationPolling: Widget unmounted after status fetch, aborting',
+            level: LogLevel.warn,
+          );
           translationInFlight = false;
           translationInFlightStartTime = null;
           return;
@@ -888,6 +917,12 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
               isTranslating = false;
             });
           }
+
+          AppLogger.log(
+            'ExtractPreview',
+            '_startTranslationPolling: TIMER CANCELLED - status=$statusLower (completed=$isCompletedState, failed=$isFailedState, cancelled=$isCancelledState)',
+            level: LogLevel.info,
+          );
 
           translationTimer?.cancel();
           translationTimer = null;

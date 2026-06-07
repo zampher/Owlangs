@@ -2678,6 +2678,23 @@ class AppLocalizationsKo extends AppLocalizations {
   String get aiPlatformThinkingHint => '더 나은 번역 품질을 위한 AI 추론 과정 활성화';
 
   @override
+  String get aiPlatformThinkingModeSupported => '사고 모드 지원';
+
+  @override
+  String get aiPlatformThinkingModeSupportedHint =>
+      '플랫폼이 사고 모드를 지원하는 경우 활성화하세요 (예: Qwen3와 함께 Ollama 사용)';
+
+  @override
+  String get aiPlatformSegmentLimitLabel => '세그먼트 제한';
+
+  @override
+  String get aiPlatformSegmentLimitHint =>
+      '번역 배치당 최대 세그먼트 수. 청크 크기와 함께 적용됨. 0 = 무제한 (클라우드), 10 = 로컬 LLM 권장';
+
+  @override
+  String get aiPlatformSegmentLimitUnlimited => '무제한';
+
+  @override
   String get aiPlatformPleaseEnterApiKeyFirst => '먼저 API 키를 입력하세요';
 
   @override

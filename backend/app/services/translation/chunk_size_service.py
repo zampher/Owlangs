@@ -26,9 +26,8 @@ class ChunkSizeService:
         """
         Get chunk_size with priority:
         1. Payload explicit chunk_size (user override per task)
-        2. Selected platform's config chunk_size
-        3. Global app_config.json translator_chunk_token_size (backward compat)
-        4. Fallback value
+        2. Selected platform's config chunk_size (from platforms.json)
+        3. Fallback value
         
         Args:
             payload: Payload object (dict or object)
@@ -73,42 +72,9 @@ class ChunkSizeService:
                 if task_id:
                     logger.debug(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Failed to get chunk_size from platform config: {e}")
         
-        # Priority 3: Global app_config.json (backward compatibility)
-        try:
-            from backend.config.app_config import get_app_config, AppConfig
-            import json
-            
-            try:
-                app_config = get_app_config()
-                if hasattr(app_config, 'translator_chunk_token_size'):
-                    chunk_size = app_config.translator_chunk_token_size
-                    if chunk_size and chunk_size != 0:
-                        if task_id:
-                            logger.debug(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={chunk_size} from app_config.json (backward compat)")
-                        return int(chunk_size)
-            except Exception:
-                pass
-            
-            # Try direct file read as fallback
-            try:
-                cfg_path = AppConfig._resolve_app_config_path("app_config.json")
-                if cfg_path.exists():
-                    with open(cfg_path, 'r', encoding='utf-8-sig') as f:
-                        data = json.load(f)
-                        chunk_size = data.get('translator_chunk_token_size')
-                        if chunk_size and chunk_size != 0:
-                            if task_id:
-                                logger.debug(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Using chunk_size={chunk_size} from app_config.json file (backward compat)")
-                            return int(chunk_size)
-            except Exception:
-                pass
-        except Exception as e:
-            if task_id:
-                logger.debug(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: Failed to get chunk_size from app_config: {e}")
-        
-        # Priority 4: Fallback
+        # Priority 2: Fallback
         if task_id:
-            logger.warning(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: No chunk_size found in payload, platform config, or app_config. Using fallback={fallback}")
+            logger.warning(LogModule.CONFIG, f"[CHUNK_SIZE] Task {task_id}: No chunk_size found in payload or platform config. Using fallback={fallback}")
         return fallback
 
 

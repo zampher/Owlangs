@@ -4892,6 +4892,36 @@ abstract class AppLocalizations {
   /// **'Enable AI reasoning process for better translation quality'**
   String get aiPlatformThinkingHint;
 
+  /// No description provided for @aiPlatformThinkingModeSupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Support Thinking Mode'**
+  String get aiPlatformThinkingModeSupported;
+
+  /// No description provided for @aiPlatformThinkingModeSupportedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable this if the platform supports thinking mode (e.g., Ollama with Qwen3)'**
+  String get aiPlatformThinkingModeSupportedHint;
+
+  /// No description provided for @aiPlatformSegmentLimitLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Segment Limit'**
+  String get aiPlatformSegmentLimitLabel;
+
+  /// No description provided for @aiPlatformSegmentLimitHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Max segments per translation batch. Limits are applied together with chunk size. 0 = unlimited (cloud), 10 = recommended for local LLMs'**
+  String get aiPlatformSegmentLimitHint;
+
+  /// No description provided for @aiPlatformSegmentLimitUnlimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited'**
+  String get aiPlatformSegmentLimitUnlimited;
+
   /// No description provided for @aiPlatformPleaseEnterApiKeyFirst.
   ///
   /// In en, this message translates to:
