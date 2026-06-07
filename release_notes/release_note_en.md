@@ -12,6 +12,7 @@
 6. **CLI interface**: Implemented CLI interface allowing users to perform format conversion and translation locally via command line.
 7. **PBX glossary import/export**: Support importing and exporting glossaries in PBX format.
 8. **MinerU local model versions**: Support configuring 5 model versions for locally deployed MinerU.
+9. **Configurable segment count per LLM API call**: Support configuring the maximum number of translation segments processed per LLM API call, adjustable based on the model's processing capability.
 
 ### Optimizations
 
@@ -21,12 +22,16 @@
 4. **MinerU source language descriptions**: In MinerU's source language options, provide detailed descriptions of languages supported by the selected model.
 5. **Home and toolbar button styling**: Optimized the appearance of home page buttons and toolbar buttons.
 6. **Translation timeout in LLM settings**: Moved translation timeout configuration into LLM settings so different models can have different timeout values.
+7. **Startup config loading optimization**: Shared an inflight future among multiple config file callers at startup to avoid redundant loading and reduce startup time.
+8. **Startup stats rendering optimization**: Reused ConfigService's Dio instance for fetching info at startup, preventing translation statistics from stalling for the 30-second timeout before rendering.
 
 ### Bug Fixes
 
 1. **Reading mode undo/redo refresh**: In reading mode, undo/redo changes were applied but the frontend did not refresh.
 2. **Retry button in labeled review mode**: In the task queue, when entering labeled review mode, the Retry button was unclickable, preventing LLM re-translation of failed segments.
 3. **PDF export image option for tables and formulas**: In PDF translation, when selecting image export, tables and formulas were still exported as text.
+4. **OpenAI Local communication failure**: Fixed communication failure with OpenAI Local endpoints.
+5. **Local user management create user failure**: Fixed create user failure in local user management.
 
 ---
 
