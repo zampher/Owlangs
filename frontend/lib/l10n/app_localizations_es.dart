@@ -3045,6 +3045,20 @@ class AppLocalizationsEs extends AppLocalizations {
       'El idioma de origen coincide con el idioma de destino';
 
   @override
+  String get settingsTranslateOutputSuffixTitle => 'Translation Output Suffix';
+
+  @override
+  String get settingsTranslateOutputSuffixHint =>
+      'Appended to translated filenames (leave empty for no suffix)';
+
+  @override
+  String get settingsConvertOutputSuffixTitle => 'Conversion Output Suffix';
+
+  @override
+  String get settingsConvertOutputSuffixHint =>
+      'Appended to converted filenames (leave empty for no suffix)';
+
+  @override
   String get settingsLanguageDialogTitle => 'Seleccionar Idioma';
 
   @override

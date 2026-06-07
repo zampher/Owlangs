@@ -356,7 +356,7 @@ async def cmd_translate(args: argparse.Namespace) -> int:
         )
 
     # Download results
-    out_dir = _resolve_output_dir(args.output, file_path, "_translated", source_stem=source_stem)
+    out_dir = _resolve_output_dir(args.output, file_path, args.output_suffix or _config_value("translator_output_suffix", "_translated"), source_stem=source_stem)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     downloaded = []
@@ -435,7 +435,7 @@ async def cmd_convert(args: argparse.Namespace) -> int:
             EXIT_TASK_FAILED,
         )
 
-    out_dir = _resolve_output_dir(args.output, file_path, "_converted")
+    out_dir = _resolve_output_dir(args.output, file_path, args.output_suffix or _config_value("converter_output_suffix", "_converted"))
     out_dir.mkdir(parents=True, exist_ok=True)
 
     downloaded = []
@@ -772,6 +772,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_translate.add_argument("--to", help="Target language (e.g. Chinese, Japanese). Default from config.")
     p_translate.add_argument("--output", "-o", help="Output directory (default: <file>_translated/)")
     p_translate.add_argument(
+        "--output-suffix",
+        default=None,
+        help="Filename suffix for output directory (default from config: _translated)",
+    )
+    p_translate.add_argument(
         "--formats",
         nargs="+",
         default=None,
@@ -807,6 +812,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_convert = subparsers.add_parser("convert", help="Convert file format without translation", parents=[common_parser])
     p_convert.add_argument("file", help="Path to the file to convert")
     p_convert.add_argument("--output", "-o", help="Output directory (default: <file>_converted/)")
+    p_convert.add_argument(
+        "--output-suffix",
+        default=None,
+        help="Filename suffix for output directory (default from config: _converted)",
+    )
     p_convert.add_argument("--engine", help="Conversion engine")
     p_convert.add_argument("--no-wait", action="store_true", help="Submit and exit without polling")
     p_convert.set_defaults(func=cmd_convert)

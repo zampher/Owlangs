@@ -2897,6 +2897,20 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsExclusionLanguageMatchSubtitle => 'ソース言語がターゲット言語と一致';
 
   @override
+  String get settingsTranslateOutputSuffixTitle => 'Translation Output Suffix';
+
+  @override
+  String get settingsTranslateOutputSuffixHint =>
+      'Appended to translated filenames (leave empty for no suffix)';
+
+  @override
+  String get settingsConvertOutputSuffixTitle => 'Conversion Output Suffix';
+
+  @override
+  String get settingsConvertOutputSuffixHint =>
+      'Appended to converted filenames (leave empty for no suffix)';
+
+  @override
   String get settingsLanguageDialogTitle => '言語を選択';
 
   @override

@@ -73,6 +73,8 @@ class GlobalSettings {
     this.useGlossary = false,
     this.usePrompt = false,
     this.targetLanguage = 'en',
+    this.translateOutputSuffix = '_translated',
+    this.convertOutputSuffix = '_converted',
 
     // Detailed Translation Parameters
     this.temperature = 0.3,
@@ -144,6 +146,10 @@ class GlobalSettings {
         useGlossary: json['useGlossary'] ?? false,
         usePrompt: json['usePrompt'] ?? false,
         targetLanguage: json['targetLanguage'] ?? 'en',
+        translateOutputSuffix:
+            json['translateOutputSuffix'] ?? '_translated',
+        convertOutputSuffix:
+            json['convertOutputSuffix'] ?? '_converted',
         temperature: (json['temperature'] ?? 0.3).toDouble(),
         retry: json['retry'] ?? 3,
         segmentAutoRetryRounds: json['segment_auto_retry_rounds'] ?? 3,
@@ -213,6 +219,8 @@ class GlobalSettings {
   final bool useGlossary;
   final bool usePrompt;
   final String targetLanguage;
+  final String translateOutputSuffix;
+  final String convertOutputSuffix;
 
   // Detailed Translation Parameters (新任务生效)
   final double temperature;
@@ -283,6 +291,8 @@ class GlobalSettings {
 
     // Detailed Translation Parameters
     String? targetLanguage,
+    String? translateOutputSuffix,
+    String? convertOutputSuffix,
     double? temperature,
     int? retry,
     int? segmentAutoRetryRounds,
@@ -346,6 +356,10 @@ class GlobalSettings {
         useGlossary: useGlossary ?? this.useGlossary,
         usePrompt: usePrompt ?? this.usePrompt,
         targetLanguage: targetLanguage ?? this.targetLanguage,
+        translateOutputSuffix:
+            translateOutputSuffix ?? this.translateOutputSuffix,
+        convertOutputSuffix:
+            convertOutputSuffix ?? this.convertOutputSuffix,
 
         // Detailed Translation Parameters
         temperature: temperature ?? this.temperature,
@@ -397,6 +411,8 @@ class GlobalSettings {
         'useGlossary': useGlossary,
         'usePrompt': usePrompt,
         'targetLanguage': targetLanguage,
+        'translateOutputSuffix': translateOutputSuffix,
+        'convertOutputSuffix': convertOutputSuffix,
         'temperature': temperature,
         'retry': retry,
         'segment_auto_retry_rounds': segmentAutoRetryRounds,
@@ -765,6 +781,8 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     int? segmentAutoRetryRounds,
     String? customPrompt,
     String? targetLanguage,
+    String? translateOutputSuffix,
+    String? convertOutputSuffix,
   }) async {
     // 1. Immediately update local state (for fast UI response)
     state = state.copyWith(
@@ -778,6 +796,8 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
       segmentAutoRetryRounds: segmentAutoRetryRounds,
       customPrompt: customPrompt,
       targetLanguage: targetLanguage,
+      translateOutputSuffix: translateOutputSuffix,
+      convertOutputSuffix: convertOutputSuffix,
     );
 
     // 2. Save entire state to local cache (for app restart recovery)
@@ -831,6 +851,20 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     if (targetLanguage != null) {
       final name = codeToName(targetLanguage) ?? targetLanguage;
       await _settingsService.saveSetting('', 'targetLanguage', name);
+    }
+    if (translateOutputSuffix != null) {
+      await _settingsService.saveSetting(
+        '',
+        'translateOutputSuffix',
+        translateOutputSuffix,
+      );
+    }
+    if (convertOutputSuffix != null) {
+      await _settingsService.saveSetting(
+        '',
+        'convertOutputSuffix',
+        convertOutputSuffix,
+      );
     }
   }
 

@@ -24,6 +24,7 @@ import '../../../shared/services/glossary_api_service.dart';
 import '../../../shared/services/file_format_service.dart';
 import 'dart:typed_data';
 import '../../../shared/providers/settings_provider.dart';
+import '../../../shared/utils/download_filename_builder.dart';
 import '../../../shared/utils/app_logger.dart';
 import '../../../shared/utils/message_service.dart';
 import '../../../shared/utils/dialog_helper.dart';
@@ -5866,17 +5867,22 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           embedImagesParam != null &&
           embedImagesParam.toLowerCase() == 'false';
 
-      // Generate filename
+      // Generate filename with configurable suffix
       final originalName = state.pickedFile?.name ??
           widget.reeditFileName ??
           'translated';
-      final String nameWithoutExt = _removeFileExtension(originalName);
-      final String suffix = isConvertDownload ? 'converted' : 'translated';
-      final String baseName = '${nameWithoutExt}_$suffix';
-
-      // Use .zip extension for MD with images folder, otherwise use fileType
+      final String suffix = isConvertDownload
+          ? ref.read(globalSettingsProvider).convertOutputSuffix
+          : ref.read(globalSettingsProvider).translateOutputSuffix;
       final String actualFileType = isMdWithImagesFolder ? 'zip' : fileType;
-      final String filename = '$baseName.$actualFileType';
+      final String filename = buildDownloadFilename(
+        originalName: originalName,
+        extension: actualFileType,
+        suffix: suffix,
+      );
+      final String baseName = filename.endsWith('.$actualFileType')
+          ? filename.substring(0, filename.length - actualFileType.length - 1)
+          : filename;
 
       // Save file
       if (kIsWeb) {

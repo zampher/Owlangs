@@ -54,6 +54,8 @@ class AppConfig:
     translator_platform_custom_base_url: str = ""
     translator_thinking_mode: str = "disable"
     translator_target_language: str = "English"
+    translator_output_suffix: str = "_translated"
+    converter_output_suffix: str = "_converted"
     translator_custom_language: str = ""
     translator_custom_prompt: str = ""
     translator_temperature: float = 0.3

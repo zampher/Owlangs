@@ -896,6 +896,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                   const SizedBox(height: 16),
                   _buildSegmentAutoRetryField(globalSettings, globalNotifier),
                   const SizedBox(height: 16),
+                  _buildTranslateOutputSuffixField(globalSettings, globalNotifier),
+                  const SizedBox(height: 16),
+                  _buildConvertOutputSuffixField(globalSettings, globalNotifier),
+                  const SizedBox(height: 16),
 
                   // Custom Prompt removed: Prompt is now controlled per task in Quick Settings
                 ],
@@ -1158,6 +1162,62 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                   segmentAutoRetryRounds: intValue,
                 );
               }
+            },
+          ),
+        ],
+      );
+
+  Widget _buildTranslateOutputSuffixField(
+    GlobalSettings settings,
+    GlobalSettingsNotifier notifier,
+  ) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            AppLocalizations.of(context)!.settingsTranslateOutputSuffixTitle,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            initialValue: settings.translateOutputSuffix,
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              hintText:
+                  AppLocalizations.of(context)!.settingsTranslateOutputSuffixHint,
+            ),
+            onChanged: (String value) {
+              notifier.updateTranslationSettings(translateOutputSuffix: value);
+            },
+          ),
+        ],
+      );
+
+  Widget _buildConvertOutputSuffixField(
+    GlobalSettings settings,
+    GlobalSettingsNotifier notifier,
+  ) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            AppLocalizations.of(context)!.settingsConvertOutputSuffixTitle,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            initialValue: settings.convertOutputSuffix,
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              hintText:
+                  AppLocalizations.of(context)!.settingsConvertOutputSuffixHint,
+            ),
+            onChanged: (String value) {
+              notifier.updateTranslationSettings(convertOutputSuffix: value);
             },
           ),
         ],

@@ -30,6 +30,7 @@ from backend.app.services.translation.translation_segment_service import Transla
 from backend.app.services.translation.chunk_size_service import chunk_size_service
 from backend.app.services.download.output_generator import OutputGenerator
 from backend.app.config.pagination_config import SOURCE_PREVIEW_SEGMENTS_LIMIT
+from backend.config.app_config import get_app_config
 
 # PDF page limit for MinerU; files exceeding this are rejected with a clear message
 PDF_MAX_PAGES = 500
@@ -616,6 +617,7 @@ class TranslationService:
             },
             "execution_mode": execution_mode,
             "owner_username": owner_username,
+            "output_suffix": get_app_config().converter_output_suffix if getattr(payload, 'skip_translate', False) else get_app_config().translator_output_suffix,
         })
         
         # Store page_count early so the frontend can show large-file warnings

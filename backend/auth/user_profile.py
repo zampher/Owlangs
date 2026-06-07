@@ -55,7 +55,11 @@ class UserProfile:
     timeout: int = 120
     retry: int = 5
     segment_auto_retry_rounds: int = 3  # Post-translation auto retry rounds for failed segments
-    
+
+    # Output filename suffix settings
+    translator_output_suffix: str = "_translated"
+    converter_output_suffix: str = "_converted"
+
     # Glossary settings (user personalization part)
     glossary_generate_enable: bool = False
     glossary_agent_config_choice: str = "same"
@@ -168,6 +172,8 @@ class UserProfile:
                 'editFontSize': 'edit_font_size',
                 'ocrLanguage': 'translator_ocr_language',
                 'targetLanguage': 'translator_target_language',
+                'translateOutputSuffix': 'translator_output_suffix',
+                'convertOutputSuffix': 'converter_output_suffix',
             }
             
             # Map frontend key to backend key if needed

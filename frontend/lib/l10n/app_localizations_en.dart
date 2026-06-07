@@ -3002,6 +3002,20 @@ class AppLocalizationsEn extends AppLocalizations {
       'Source language matches target language';
 
   @override
+  String get settingsTranslateOutputSuffixTitle => 'Translation Output Suffix';
+
+  @override
+  String get settingsTranslateOutputSuffixHint =>
+      'Appended to translated filenames (leave empty for no suffix)';
+
+  @override
+  String get settingsConvertOutputSuffixTitle => 'Conversion Output Suffix';
+
+  @override
+  String get settingsConvertOutputSuffixHint =>
+      'Appended to converted filenames (leave empty for no suffix)';
+
+  @override
   String get settingsLanguageDialogTitle => 'Select Language';
 
   @override

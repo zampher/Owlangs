@@ -801,7 +801,7 @@ async def download_batch_results(
                 # Determine extension from file_type
                 ext = file_type if file_type != "target" else Path(file_name).suffix.lstrip(".")
 
-                # Build clean filename: {original_name}_translated.{ext}
+                # Build clean filename with configurable suffix from task_state
                 ts = task_manager.get_task(task_id)
                 original_filename = ""
                 if ts:
@@ -810,27 +810,30 @@ async def download_batch_results(
                     base_name = Path(original_filename).stem
                 else:
                     base_name = Path(file_name).stem
+                # Use task_state output_suffix, fall back to hardcoded defaults
                 is_conv = False
                 if ts:
                     is_conv = bool(ts.get("is_format_conversion") or ts.get("convert_only"))
-                suffix = "converted" if is_conv else "translated"
-
+                suffix = ts.get("output_suffix") if ts else None
+                if not suffix:
+                    suffix = "_converted" if is_conv else "_translated"
+                # Suffix now includes leading underscore from config (e.g. "_translated")
                 if file_type == "md_zip":
                     # Flatten: extract inner ZIP and place contents under a folder
-                    folder_name = f"{base_name}_{suffix}"
+                    folder_name = f"{base_name}{suffix}"
                     try:
                         with zipfile.ZipFile(io.BytesIO(raw_bytes), "r") as inner_zf:
                             for inner_name in inner_zf.namelist():
                                 inner_bytes = inner_zf.read(inner_name)
                                 # Rename _translated → actual suffix inside the folder
-                                renamed = inner_name.replace("_translated", f"_{suffix}")
+                                renamed = inner_name.replace("_translated", suffix)
                                 zf.writestr(f"{folder_name}/{renamed}", inner_bytes)
                         safe_name = f"{folder_name}/"
                     except Exception:
-                        safe_name = f"{base_name}_{suffix}.zip"
+                        safe_name = f"{base_name}{suffix}.zip"
                         zf.writestr(safe_name, raw_bytes)
                 else:
-                    safe_name = f"{base_name}_{suffix}.{ext}" if ext else f"{base_name}_{suffix}"
+                    safe_name = f"{base_name}{suffix}.{ext}" if ext else f"{base_name}{suffix}"
                     zf.writestr(safe_name, raw_bytes)
                 manifest[task_id] = {"status": "success", "file": safe_name}
             except Exception as e:

@@ -2904,6 +2904,20 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsExclusionLanguageMatchSubtitle => '원본 언어가 대상 언어와 일치함';
 
   @override
+  String get settingsTranslateOutputSuffixTitle => 'Translation Output Suffix';
+
+  @override
+  String get settingsTranslateOutputSuffixHint =>
+      'Appended to translated filenames (leave empty for no suffix)';
+
+  @override
+  String get settingsConvertOutputSuffixTitle => 'Conversion Output Suffix';
+
+  @override
+  String get settingsConvertOutputSuffixHint =>
+      'Appended to converted filenames (leave empty for no suffix)';
+
+  @override
   String get settingsLanguageDialogTitle => '언어 선택';
 
   @override

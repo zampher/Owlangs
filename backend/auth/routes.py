@@ -752,6 +752,8 @@ async def get_app_config_api(
             "translator_auto_workflow_enabled",
             "translator_convert_engine",
             "translator_target_language",
+            "translator_output_suffix",
+            "converter_output_suffix",
         }
         for key in app_config_user_level_keys:
             if key in app_config_dict and key in config_dict:
@@ -834,7 +836,8 @@ async def get_app_config_api(
             'translator_srt_insert_mode', 'translator_srt_separator',
             'translator_epub_insert_mode', 'translator_epub_separator',
             'translator_html_insert_mode', 'translator_html_separator',
-            'translator_json_paths', 'translator_target_language', 'translator_custom_language',
+            'translator_json_paths', 'translator_target_language', 'translator_output_suffix', 'converter_output_suffix',
+            'translator_custom_language',
             'translator_custom_prompt', 'translator_thinking_mode', 'theme',
             'translator_platform_type', 'translator_temperature', 'translator_top_p',
             'translator_frequency_penalty', 'translator_presence_penalty',
@@ -3470,6 +3473,10 @@ async def batch_update_settings(
                     backend_key = 'concurrent'
                 elif key == 'translationTimeout':
                     backend_key = 'timeout'
+                elif key == 'translateOutputSuffix':
+                    backend_key = 'translator_output_suffix'
+                elif key == 'convertOutputSuffix':
+                    backend_key = 'converter_output_suffix'
                 
                 # Update user profile
                 if not profile_manager.update_user_setting(user.username, key, value):
@@ -3477,7 +3484,7 @@ async def batch_update_settings(
                 
                 # Sync certain settings to app_config.json for backend consistency
                 # These settings are user preferences but need to be in global config for backend to read
-                if backend_key in ['timeout', 'retry', 'segment_auto_retry_rounds', 'targetLanguage']:
+                if backend_key in ['timeout', 'retry', 'segment_auto_retry_rounds', 'targetLanguage', 'translator_output_suffix', 'converter_output_suffix']:
                     try:
                         from config import get_app_config, save_app_config
                         app_config = get_app_config()
@@ -3498,6 +3505,12 @@ async def batch_update_settings(
                         elif backend_key == 'targetLanguage':
                             app_config.translator_target_language = str(value) if value else "English"
                             logger.info(LogModule.AUTH, f"[SETTINGS] Synced targetLanguage={value} to app_config.translator_target_language")
+                        elif backend_key == 'translator_output_suffix':
+                            app_config.translator_output_suffix = str(value) if value else "_translated"
+                            logger.info(LogModule.AUTH, f"[SETTINGS] Synced translator_output_suffix={value} to app_config")
+                        elif backend_key == 'converter_output_suffix':
+                            app_config.converter_output_suffix = str(value) if value else "_converted"
+                            logger.info(LogModule.AUTH, f"[SETTINGS] Synced converter_output_suffix={value} to app_config")
 
                         app_config_needs_save = True
                     except Exception as e:
@@ -3666,7 +3679,8 @@ async def update_single_setting(
             'translator_srt_insert_mode', 'translator_srt_separator',
             'translator_epub_insert_mode', 'translator_epub_separator',
             'translator_html_insert_mode', 'translator_html_separator',
-            'translator_json_paths', 'translator_target_language', 'translator_custom_language',
+            'translator_json_paths', 'translator_target_language', 'translator_output_suffix', 'converter_output_suffix',
+            'translator_custom_language',
             'translator_custom_prompt', 'translator_thinking_mode', 'theme',
             'translator_platform_type', 'translator_temperature', 'temperature', 'translator_top_p',
             'translator_frequency_penalty', 'translator_presence_penalty',

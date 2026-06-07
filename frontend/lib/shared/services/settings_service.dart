@@ -67,6 +67,8 @@ class SettingsService {
     'useGlossary': 'user',
     'usePrompt': 'user',
     'customPrompt': 'user',
+    'translateOutputSuffix': 'user',
+    'convertOutputSuffix': 'user',
     'previewFontSize': 'user',
     'editFontSize': 'user',
     'ui_language': 'user',

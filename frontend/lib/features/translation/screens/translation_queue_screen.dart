@@ -18,8 +18,10 @@ import 'package:intl/intl.dart';
 import '../../../app/app_router.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/providers/admin_permissions_provider.dart';
+import '../../../shared/providers/settings_provider.dart';
 import '../../../shared/services/translation_service.dart';
 import '../../../shared/utils/message_service.dart';
+import '../../../shared/utils/download_filename_builder.dart';
 
 /// Lists backend translation tasks (immediate + queued + stashed) with polling.
 class TranslationQueueScreen extends ConsumerStatefulWidget {
@@ -352,9 +354,15 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
               originalFilename.trim().isNotEmpty)
           ? _stripExtension(originalFilename.trim())
           : 'download';
-      final String suffix = isFormatConversion ? 'converted' : 'translated';
+      final String suffix = isFormatConversion
+          ? ref.read(globalSettingsProvider).convertOutputSuffix
+          : ref.read(globalSettingsProvider).translateOutputSuffix;
       final String ext = _fileExtensionForDownloadFormat(fileType);
-      final String filename = '${baseName}_$suffix.$ext';
+      final String filename = buildDownloadFilename(
+        originalName: baseName,
+        extension: ext,
+        suffix: suffix,
+      );
       await _saveDownloadedBytes(
         bytes: bytes,
         filename: filename,
@@ -1384,7 +1392,12 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
 
           String entryName;
           if (relativePath.isNotEmpty) {
-            String name = '${dl.baseName}_translated.$ext';
+            final suffix = ref.read(globalSettingsProvider).translateOutputSuffix;
+            String name = buildDownloadFilename(
+              originalName: dl.baseName,
+              extension: ext,
+              suffix: suffix,
+            );
             // Windows-style conflict resolution
             final String key = '$relativePath/$name';
             final int count = (dirCounters[key] ?? 0) + 1;

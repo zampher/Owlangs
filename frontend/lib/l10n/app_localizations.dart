@@ -5312,6 +5312,30 @@ abstract class AppLocalizations {
   /// **'Source language matches target language'**
   String get settingsExclusionLanguageMatchSubtitle;
 
+  /// No description provided for @settingsTranslateOutputSuffixTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation Output Suffix'**
+  String get settingsTranslateOutputSuffixTitle;
+
+  /// No description provided for @settingsTranslateOutputSuffixHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Appended to translated filenames (leave empty for no suffix)'**
+  String get settingsTranslateOutputSuffixHint;
+
+  /// No description provided for @settingsConvertOutputSuffixTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversion Output Suffix'**
+  String get settingsConvertOutputSuffixTitle;
+
+  /// No description provided for @settingsConvertOutputSuffixHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Appended to converted filenames (leave empty for no suffix)'**
+  String get settingsConvertOutputSuffixHint;
+
   /// No description provided for @settingsLanguageDialogTitle.
   ///
   /// In en, this message translates to:

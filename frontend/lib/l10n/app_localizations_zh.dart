@@ -2873,6 +2873,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsExclusionLanguageMatchSubtitle => '源语言与目标语言匹配';
 
   @override
+  String get settingsTranslateOutputSuffixTitle => '翻译输出后缀';
+
+  @override
+  String get settingsTranslateOutputSuffixHint => '追加到翻译文件名后（留空则不添加后缀）';
+
+  @override
+  String get settingsConvertOutputSuffixTitle => '格式转换输出后缀';
+
+  @override
+  String get settingsConvertOutputSuffixHint => '追加到格式转换文件名后（留空则不添加后缀）';
+
+  @override
   String get settingsLanguageDialogTitle => '选择语言';
 
   @override
