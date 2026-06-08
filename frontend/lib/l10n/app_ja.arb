@@ -944,8 +944,6 @@
   "settingsFontEditSizeSubtitle": "翻訳セグメント編集時のフォントサイズ",
   "settingsTranslationTitle": "翻訳設定",
   "settingsTranslationNotice": "これらの設定は新しい翻訳タスクにのみ適用されます。",
-  "settingsTranslationAutoGlossaryTitle": "用語集を自動生成",
-  "settingsTranslationAutoGlossarySubtitle": "翻訳後に用語集を自動生成します（新しいタスクに適用）",
   "settingsTargetLanguageTitle": "Default Target Language",
   "settingsTargetLanguageNotice": "Sets the default target language for new translation tasks. You can still change it per task in Quick Settings.",
   "settingsTranslationParamsTitle": "翻訳パラメータ",

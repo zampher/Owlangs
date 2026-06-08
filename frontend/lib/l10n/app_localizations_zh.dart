@@ -2785,12 +2785,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTranslationNotice => '这些设置仅适用于新的翻译任务。';
 
   @override
-  String get settingsTranslationAutoGlossaryTitle => '自动生成术语表';
-
-  @override
-  String get settingsTranslationAutoGlossarySubtitle => '翻译后自动生成术语表（适用于新任务）';
-
-  @override
   String get settingsTargetLanguageTitle => '默认目标语言';
 
   @override

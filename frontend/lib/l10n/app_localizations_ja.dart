@@ -2804,13 +2804,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsTranslationNotice => 'これらの設定は新しい翻訳タスクにのみ適用されます。';
 
   @override
-  String get settingsTranslationAutoGlossaryTitle => '用語集を自動生成';
-
-  @override
-  String get settingsTranslationAutoGlossarySubtitle =>
-      '翻訳後に用語集を自動生成します（新しいタスクに適用）';
-
-  @override
   String get settingsTargetLanguageTitle => 'Default Target Language';
 
   @override

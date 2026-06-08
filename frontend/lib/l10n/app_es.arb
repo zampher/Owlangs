@@ -1022,8 +1022,6 @@
   "settingsFontEditSizeSubtitle": "Tamaño de fuente al editar segmentos traducidos",
   "settingsTranslationTitle": "Configuración de Traducción",
   "settingsTranslationNotice": "Estos ajustes se aplicarán solo a nuevas tareas de traducción.",
-  "settingsTranslationAutoGlossaryTitle": "Generar Glosario Automáticamente",
-  "settingsTranslationAutoGlossarySubtitle": "Generar glosario automáticamente después de la traducción (se aplica a nuevas tareas)",
   "settingsTargetLanguageTitle": "Default Target Language",
   "settingsTargetLanguageNotice": "Sets the default target language for new translation tasks. You can still change it per task in Quick Settings.",
   "settingsTranslationParamsTitle": "Parámetros de Traducción",

@@ -746,24 +746,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                   const SizedBox(height: 16),
                   // Removed default AI platform selector (migrated to Translation Quick Settings)
                   const Divider(),
-                  // Auto Generate Glossary Switch
-                  SwitchListTile(
-                    title: Text(
-                      AppLocalizations.of(context)!
-                          .settingsTranslationAutoGlossaryTitle,
-                    ),
-                    subtitle: Text(
-                      AppLocalizations.of(context)!
-                          .settingsTranslationAutoGlossarySubtitle,
-                    ),
-                    value: globalSettings.glossaryGenerateEnable,
-                    onChanged: (bool value) {
-                      globalNotifier.updateGlossarySettings(
-                        glossaryGenerateEnable: value,
-                      );
-                    },
-                    secondary: const Icon(Icons.book),
-                  ),
                 ],
               ),
             ),

@@ -966,8 +966,6 @@
   "settingsFontEditSizeSubtitle": "编辑翻译片段时的字体大小",
   "settingsTranslationTitle": "翻译设置",
   "settingsTranslationNotice": "这些设置仅适用于新的翻译任务。",
-  "settingsTranslationAutoGlossaryTitle": "自动生成术语表",
-  "settingsTranslationAutoGlossarySubtitle": "翻译后自动生成术语表（适用于新任务）",
   "settingsTargetLanguageTitle": "默认目标语言",
   "settingsTargetLanguageNotice": "设置新翻译任务的默认目标语言。您仍可以在快速设置中按任务更改。",
   "settingsTranslationParamsTitle": "翻译参数",

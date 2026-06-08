@@ -2901,13 +2901,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'These settings will apply to new translation tasks only.';
 
   @override
-  String get settingsTranslationAutoGlossaryTitle => 'Auto Generate Glossary';
-
-  @override
-  String get settingsTranslationAutoGlossarySubtitle =>
-      'Automatically generate glossary after translation (applies to new tasks)';
-
-  @override
   String get settingsTargetLanguageTitle => 'Default Target Language';
 
   @override

@@ -2810,13 +2810,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsTranslationNotice => '이 설정은 새로운 번역 작업에만 적용됩니다.';
 
   @override
-  String get settingsTranslationAutoGlossaryTitle => '용어집 자동 생성';
-
-  @override
-  String get settingsTranslationAutoGlossarySubtitle =>
-      '번역 후 자동으로 용어집 생성 (새 작업에 적용)';
-
-  @override
   String get settingsTargetLanguageTitle => 'Default Target Language';
 
   @override

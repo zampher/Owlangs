@@ -5138,18 +5138,6 @@ abstract class AppLocalizations {
   /// **'These settings will apply to new translation tasks only.'**
   String get settingsTranslationNotice;
 
-  /// No description provided for @settingsTranslationAutoGlossaryTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Auto Generate Glossary'**
-  String get settingsTranslationAutoGlossaryTitle;
-
-  /// No description provided for @settingsTranslationAutoGlossarySubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Automatically generate glossary after translation (applies to new tasks)'**
-  String get settingsTranslationAutoGlossarySubtitle;
-
   /// No description provided for @settingsTargetLanguageTitle.
   ///
   /// In en, this message translates to:
