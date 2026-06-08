@@ -6,87 +6,114 @@ using Microsoft.Win32;
 namespace OwlangsLauncher.Services
 {
     /// <summary>
-    /// Service for reading application configuration from configs/app_config.json
+    /// Service for reading Launcher and Backend configuration.
+    /// Launcher settings → launcher_config.json
+    /// Backend settings (theme, frontend_type) → app_config.json
+    /// Both stored in %ProgramData%\Owlangs\configs\.
     /// </summary>
     public class ConfigService
     {
-        private static string? _configPath;
-        private static JsonDocument? _configCache;
+        private static string? _configDir;
+        private static string? _launcherConfigPath;
+        private static JsonDocument? _launcherConfigCache;
+
+        private const string LauncherConfigFile = "launcher_config.json";
+        private const string AppConfigFile = "app_config.json";
 
         /// <summary>
-        /// Get the path to app_config.json
+        /// Get the configs directory.
+        /// Priority: OWLANGS_CONFIG_PATH env var → %ProgramData%\Owlangs\configs\
         /// </summary>
-        private static string GetConfigPath()
+        private static string GetConfigDir()
         {
-            if (_configPath != null)
-                return _configPath;
+            if (_configDir != null)
+                return _configDir;
 
-            // Get installation directory (same logic as BackendService)
-            var appDir = AppDomain.CurrentDomain.BaseDirectory;
-            var installDir = GetInstallDirectory(appDir);
-            _configPath = Path.Combine(installDir, "configs", "app_config.json");
-            return _configPath;
-        }
-
-        private static string GetInstallDirectory(string appDir)
-        {
-            // BaseDirectory for the launcher points to "<installDir>\launcher\".
-            // We need to go up one level to get the install root.
-            var dir = new DirectoryInfo(appDir);
-            var parent = dir.Parent;
-            if (parent != null)
+            var envDir = Environment.GetEnvironmentVariable("OWLANGS_CONFIG_PATH");
+            if (!string.IsNullOrEmpty(envDir))
             {
-                var dirName = dir.Name;
-                // Standard layout: install root has both "bin" and "launcher"; backend exe lives in bin.
-                if (parent.GetDirectories("bin").Length > 0)
-                {
-                    // Prefer returning parent when we look like we're inside "launcher" (typical install)
-                    if (string.Equals(dirName, "launcher", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return parent.FullName;
-                    }
-                }
+                _configDir = Path.Combine(envDir, "configs");
+                return _configDir;
             }
-            return appDir;
+
+            var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+            _configDir = Path.Combine(programData, "Owlangs", "configs");
+            return _configDir;
         }
 
-        /// <summary>
-        /// Load configuration from app_config.json
-        /// </summary>
-        private static JsonDocument? LoadConfig()
+        // ── Launcher config (launcher_config.json) ──
+
+        private static string GetLauncherConfigPath()
         {
-            if (_configCache != null)
-                return _configCache;
+            if (_launcherConfigPath != null)
+                return _launcherConfigPath;
+            _launcherConfigPath = Path.Combine(GetConfigDir(), LauncherConfigFile);
+            return _launcherConfigPath;
+        }
+
+        private static JsonDocument? LoadLauncherConfig()
+        {
+            if (_launcherConfigCache != null)
+                return _launcherConfigCache;
 
             try
             {
-                var configPath = GetConfigPath();
-                if (!File.Exists(configPath))
+                var path = GetLauncherConfigPath();
+                if (!File.Exists(path))
                 {
-                    LauncherLogger.Warn($"ConfigService: app_config.json not found at {configPath}, using defaults");
+                    LauncherLogger.Info($"ConfigService: {LauncherConfigFile} not found at {path}, using defaults");
                     return null;
                 }
 
-                var jsonText = File.ReadAllText(configPath);
-                _configCache = JsonDocument.Parse(jsonText);
-                return _configCache;
+                var jsonText = File.ReadAllText(path);
+                _launcherConfigCache = JsonDocument.Parse(jsonText);
+                LauncherLogger.Info($"ConfigService: Loaded launcher config from {path}");
+                return _launcherConfigCache;
             }
             catch (Exception ex)
             {
-                LauncherLogger.Error($"ConfigService: Failed to load app_config.json: {ex.Message}");
+                LauncherLogger.Error($"ConfigService: Failed to load {LauncherConfigFile}: {ex.Message}");
+                return null;
+            }
+        }
+
+        // ── App config (app_config.json, read-only from launcher) ──
+
+        private static string GetAppConfigPath()
+        {
+            return Path.Combine(GetConfigDir(), AppConfigFile);
+        }
+
+        private static JsonDocument? LoadAppConfig()
+        {
+            try
+            {
+                var path = GetAppConfigPath();
+                if (!File.Exists(path))
+                {
+                    LauncherLogger.Info($"ConfigService: {AppConfigFile} not found at {path}, using defaults");
+                    return null;
+                }
+
+                var jsonText = File.ReadAllText(path);
+                return JsonDocument.Parse(jsonText);
+            }
+            catch (Exception ex)
+            {
+                LauncherLogger.Error($"ConfigService: Failed to load {AppConfigFile}: {ex.Message}");
                 return null;
             }
         }
 
         /// <summary>
-        /// Get theme setting from config ("light", "dark", or "auto")
-        /// Returns "auto" if not found or on error
+        /// Get theme setting from backend's app_config.json ("light", "dark", or "auto")
+        /// Returns "auto" if not found or on error.
         /// </summary>
         public static string GetTheme()
         {
             try
             {
-                var config = LoadConfig();
+                var config = LoadAppConfig();
                 if (config == null)
                     return "auto";
 
@@ -108,8 +135,8 @@ namespace OwlangsLauncher.Services
         }
 
         /// <summary>
-        /// Determine if dark theme should be used based on theme setting
-        /// "dark" -> true, "light" -> false, "auto" -> use system preference
+        /// Determine if dark theme should be used based on theme setting.
+        /// "dark" -> true, "light" -> false, "auto" -> use system preference.
         /// </summary>
         public static bool ShouldUseDarkTheme()
         {
@@ -123,7 +150,6 @@ namespace OwlangsLauncher.Services
             // "auto" - detect system preference
             try
             {
-                // Check Windows theme via registry
                 using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
                     @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
                 {
@@ -132,8 +158,7 @@ namespace OwlangsLauncher.Services
                         var appsUseLightTheme = key.GetValue("AppsUseLightTheme");
                         if (appsUseLightTheme is int value)
                         {
-                            // 0 = dark theme, 1 = light theme
-                            return value == 0;
+                            return value == 0; // 0 = dark, 1 = light
                         }
                     }
                 }
@@ -143,42 +168,34 @@ namespace OwlangsLauncher.Services
                 LauncherLogger.Warn($"ConfigService: Could not detect system theme: {ex.Message}, defaulting to light");
             }
 
-            // Default to light theme if detection fails
             return false;
         }
 
-        /// <summary>
-        /// Get launcher auto-start backend setting (default: true)
-        /// </summary>
+        // ── Launcher auto-start settings (launcher_config.json) ──
+
         public static bool GetAutoStartBackend()
         {
             return GetBooleanConfig("launcher_auto_start_backend", defaultValue: true);
         }
 
-        /// <summary>
-        /// Get launcher auto-start frontend setting (default: true)
-        /// </summary>
         public static bool GetAutoStartFrontend()
         {
             return GetBooleanConfig("launcher_auto_start_frontend", defaultValue: true);
         }
 
-        /// <summary>
-        /// Get launcher auto-open browser setting (default: true)
-        /// </summary>
         public static bool GetAutoOpenBrowser()
         {
             return GetBooleanConfig("launcher_auto_open_browser", defaultValue: true);
         }
 
         /// <summary>
-        /// Set a launcher boolean config value and persist to file
+        /// Set a launcher boolean config value and persist to launcher_config.json.
         /// </summary>
         public static void SetBooleanConfig(string key, bool value)
         {
             try
             {
-                var configPath = GetConfigPath();
+                var configPath = GetLauncherConfigPath();
                 var jsonText = "{}";
                 if (File.Exists(configPath))
                 {
@@ -188,7 +205,6 @@ namespace OwlangsLauncher.Services
                 using var doc = JsonDocument.Parse(jsonText);
                 var root = doc.RootElement;
 
-                // Rebuild JSON with the updated value
                 using var stream = new MemoryStream();
                 using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true });
                 writer.WriteStartObject();
@@ -223,7 +239,6 @@ namespace OwlangsLauncher.Services
                 File.WriteAllText(configPath, System.Text.Encoding.UTF8.GetString(stream.ToArray()));
                 LauncherLogger.Info($"ConfigService: Set {key}={value} in {configPath}");
 
-                // Clear cache so next read picks up the change
                 ClearCache();
             }
             catch (Exception ex)
@@ -236,7 +251,7 @@ namespace OwlangsLauncher.Services
         {
             try
             {
-                var config = LoadConfig();
+                var config = LoadLauncherConfig();
                 if (config == null)
                     return defaultValue;
 
@@ -254,25 +269,39 @@ namespace OwlangsLauncher.Services
             return defaultValue;
         }
 
-        /// <summary>
-        /// Clear config cache (useful for testing or when config changes)
-        /// </summary>
         public static void ClearCache()
         {
-            _configCache?.Dispose();
-            _configCache = null;
+            _launcherConfigCache?.Dispose();
+            _launcherConfigCache = null;
         }
 
+        // ── Frontend type (from backend's app_config.json) ──
+
         /// <summary>
-        /// Get frontend type from config ("desktop", "web", or "both")
-        /// If not configured, auto-detects: returns "desktop" when owlangs.exe exists
-        /// in the frontend/ directory, otherwise "web".
+        /// Get frontend type. Auto-detects based on available frontend files:
+        /// - Desktop exe exists → "both" (web is always available via backend)
+        /// - Desktop exe absent → "web"
+        /// The app_config.json value overrides auto-detection when no desktop exe is found.
         /// </summary>
         public static string GetFrontendType()
         {
+            var appDir = AppDomain.CurrentDomain.BaseDirectory;
+            var installDir = GetInstallDirectory(appDir);
+            var frontendExePath = Path.Combine(installDir, "frontend", "owlangs.exe");
+            bool hasDesktopExe = File.Exists(frontendExePath);
+
+            if (hasDesktopExe)
+            {
+                // Desktop exe exists → this package has both desktop and web frontends.
+                // Return "both" so the three auto-start checkboxes work independently.
+                LauncherLogger.Info($"ConfigService: frontend_type auto-detected 'both' (found {frontendExePath})");
+                return "both";
+            }
+
+            // No desktop exe: web-only package, or check app_config.json for override
             try
             {
-                var config = LoadConfig();
+                var config = LoadAppConfig();
                 if (config != null)
                 {
                     if (config.RootElement.TryGetProperty("frontend_type", out var frontendTypeProperty))
@@ -280,7 +309,7 @@ namespace OwlangsLauncher.Services
                         var frontendType = frontendTypeProperty.GetString();
                         if (!string.IsNullOrEmpty(frontendType))
                         {
-                            LauncherLogger.Info($"ConfigService: frontend_type={frontendType} (from config)");
+                            LauncherLogger.Info($"ConfigService: frontend_type={frontendType} (from app_config.json)");
                             return frontendType.ToLower();
                         }
                     }
@@ -291,18 +320,30 @@ namespace OwlangsLauncher.Services
                 LauncherLogger.Error($"ConfigService: Error reading frontend_type: {ex.Message}");
             }
 
-            // Auto-detect: if owlangs.exe exists in <installDir>\frontend\, use "desktop"
-            var appDir = AppDomain.CurrentDomain.BaseDirectory;
-            var installDir = GetInstallDirectory(appDir);
-            var frontendExePath = Path.Combine(installDir, "frontend", "owlangs.exe");
-            if (File.Exists(frontendExePath))
-            {
-                LauncherLogger.Info($"ConfigService: frontend_type not configured, auto-detected 'desktop' (found {frontendExePath})");
-                return "desktop";
-            }
-
-            LauncherLogger.Info($"ConfigService: frontend_type not configured, defaulting to 'web' ({frontendExePath} not found)");
+            LauncherLogger.Info($"ConfigService: frontend_type defaulting to 'web' ({frontendExePath} not found)");
             return "web";
+        }
+
+        /// <summary>
+        /// Get the package install directory (used for frontend-type auto-detection).
+        /// BaseDirectory for launcher → "<installDir>\launcher\", go up one level.
+        /// </summary>
+        private static string GetInstallDirectory(string appDir)
+        {
+            var dir = new DirectoryInfo(appDir);
+            var parent = dir.Parent;
+            if (parent != null)
+            {
+                var dirName = dir.Name;
+                if (parent.GetDirectories("bin").Length > 0)
+                {
+                    if (string.Equals(dirName, "launcher", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return parent.FullName;
+                    }
+                }
+            }
+            return appDir;
         }
     }
 }

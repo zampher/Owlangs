@@ -31,6 +31,7 @@ namespace OwlangsLauncher.Views
         private DispatcherTimer? _statusUpdateTimer;
         private DispatcherTimer? _logRenderThrottleTimer;
         private bool _logRenderPending;
+        private bool _suppressCheckBoxEvents;
 
         // Cap memory and avoid UI freeze: keep last N lines only
         private const int MaxLogLines = 50000;
@@ -53,6 +54,9 @@ namespace OwlangsLauncher.Views
 
         public LogWindow(BackendService backendService, FrontendService? frontendService = null, RedisService? redisService = null, Action? onRequestExit = null)
         {
+            // Suppress before InitializeComponent: XAML IsChecked="True" fires Checked
+            // events which would overwrite saved config with defaults.
+            _suppressCheckBoxEvents = true;
             InitializeComponent();
             _backendService = backendService;
             _frontendService = frontendService;
@@ -81,6 +85,7 @@ namespace OwlangsLauncher.Views
             UpdateControlButtons();
 
             // Initialize auto-start checkboxes from config
+            // (suppression was set before InitializeComponent, now read actual config)
             BackendAutoStartCheckBox.IsChecked = ConfigService.GetAutoStartBackend();
             if (_frontendService != null)
             {
@@ -88,6 +93,7 @@ namespace OwlangsLauncher.Views
                 _frontendService.AutoStartEnabled = FrontendAutoStartCheckBox.IsChecked == true;
             }
             BrowserAutoOpenCheckBox.IsChecked = ConfigService.GetAutoOpenBrowser();
+            _suppressCheckBoxEvents = false;
             
             // Start status update timer (update every second)
             _statusUpdateTimer = new DispatcherTimer
@@ -748,12 +754,14 @@ namespace OwlangsLauncher.Views
 
         private void BackendAutoStartCheckBox_Changed(object sender, RoutedEventArgs e)
         {
+            if (_suppressCheckBoxEvents) return;
             var isChecked = BackendAutoStartCheckBox.IsChecked == true;
             ConfigService.SetBooleanConfig("launcher_auto_start_backend", isChecked);
         }
 
         private void FrontendAutoStartCheckBox_Changed(object sender, RoutedEventArgs e)
         {
+            if (_suppressCheckBoxEvents) return;
             var isChecked = FrontendAutoStartCheckBox.IsChecked == true;
             ConfigService.SetBooleanConfig("launcher_auto_start_frontend", isChecked);
             if (_frontendService != null)
@@ -762,6 +770,7 @@ namespace OwlangsLauncher.Views
 
         private void BrowserAutoOpenCheckBox_Changed(object sender, RoutedEventArgs e)
         {
+            if (_suppressCheckBoxEvents) return;
             var isChecked = BrowserAutoOpenCheckBox.IsChecked == true;
             ConfigService.SetBooleanConfig("launcher_auto_open_browser", isChecked);
         }
