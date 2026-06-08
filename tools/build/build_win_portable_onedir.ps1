@@ -410,8 +410,8 @@ launcher\OwlangsLauncher.exe to automatically:
 3. Also accessible via browser at http://localhost:8800
 
 For CLI usage, open a terminal in this folder and run:
-  bin\Owlangs-$Version.exe translate report.pdf --to Chinese
-  bin\Owlangs-$Version.exe platform list --json
+  bin\Owlangs-win.exe translate report.pdf --to Chinese
+  bin\Owlangs-win.exe platform list --json
 
 Config File Location
 --------------------
@@ -449,14 +449,14 @@ Owlangs Portable Edition (Onedir - CLI Only) v$Version
 
 Quick Start
 -----------
-Double-click bin\Owlangs-$Version.exe to automatically:
+Double-click bin\Owlangs-win.exe to automatically:
 1. Initialize config files (first run only)
 2. Start the backend service
 3. Open http://localhost:8800 in your browser
 
 For CLI usage, run from terminal:
-  bin\Owlangs-$Version.exe translate report.pdf --to Chinese
-  bin\Owlangs-$Version.exe platform list --json
+  bin\Owlangs-win.exe translate report.pdf --to Chinese
+  bin\Owlangs-win.exe platform list --json
 
 Config File Location
 --------------------
