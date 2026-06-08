@@ -215,6 +215,8 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
     prepareTimer = null;
     progressTimer?.cancel();
     progressTimer = null;
+    translationTimer?.cancel();
+    translationTimer = null;
 
     // Unregister from background service
     if (widget.flowId != null && currentPollingWorkflowId != null) {
@@ -2856,12 +2858,12 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
       ),
       padding: const EdgeInsets.symmetric(
         horizontal: 12,
-        vertical: 4,
-      ), // Adjusted padding to achieve 36px total height
+        vertical: 2,
+      ), // Adjusted padding to achieve 30px total height
       constraints: const BoxConstraints(
-        minHeight: 36,
-        maxHeight: 36,
-      ), // Fixed height at 36px
+        minHeight: 30,
+        maxHeight: 30,
+      ), // Fixed height at 30px
       child: Row(
         children: <Widget>[
           Icon(
@@ -2871,7 +2873,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
           ),
           const SizedBox(width: 4), // Further reduced spacing
           Text(
-            'Extract',
+            AppLocalizations.of(context)!.homePhaseExtract,
             style: TextStyle(
               fontSize: 13, // Further reduced from 15 to 13
               fontWeight: FontWeight.bold,
@@ -3111,46 +3113,47 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
           // Translation progress bar (shown when translating) — MOVED before Spacer for consistent visibility
           if (isTranslating) ...<Widget>[
             const SizedBox(width: 12),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                SizedBox(
-                  width: 200,
-                  height: 4,
-                  child: LinearProgressIndicator(
-                    value: translationProgress == 0.0 ? null : translationProgress,
-                    backgroundColor: Colors.grey.shade300,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      Colors.blue.shade700,
-                    ),
-                    minHeight: 4,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  translationProgress > 0
-                      ? '${(translationProgress * 100).toInt()}%'
-                      : '',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.blue.shade700,
-                  ),
-                ),
-                if (translationStatus.isNotEmpty) ...<Widget>[
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      translationStatus,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+            Flexible(
+              child: Row(
+                children: <Widget>[
+                  SizedBox(
+                    width: 200,
+                    height: 4,
+                    child: LinearProgressIndicator(
+                      value: translationProgress == 0.0 ? null : translationProgress,
+                      backgroundColor: Colors.grey.shade300,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Colors.blue.shade700,
                       ),
-                      overflow: TextOverflow.ellipsis,
+                      minHeight: 4,
                     ),
                   ),
+                  const SizedBox(width: 4),
+                  Text(
+                    translationProgress > 0
+                        ? '${(translationProgress * 100).toInt()}%'
+                        : '',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                  if (translationStatus.isNotEmpty) ...<Widget>[
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        translationStatus,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ],
           const Spacer(),
@@ -3236,6 +3239,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
         child: ActionChip(
           label: Row(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
               if (isSelected)
                 Icon(
@@ -3256,16 +3260,19 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
             ],
           ),
           onPressed: onTap,
+          labelPadding: EdgeInsets.zero,
           backgroundColor: isSelected ? color.shade100 : Colors.grey.shade200,
-          // Explicit stadium shape: compact chips + small icons otherwise look almost square.
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(6),
           ),
           padding: const EdgeInsets.symmetric(
-            horizontal: 6,
-            vertical: 2,
+            horizontal: 2,
+            vertical: 0,
           ),
-          visualDensity: VisualDensity.compact,
+          visualDensity: const VisualDensity(
+            horizontal: -4,
+            vertical: -4,
+          ),
           side: BorderSide(
             color: isSelected ? color.shade300 : Colors.grey.shade400,
           ),
@@ -3856,9 +3863,30 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
               // Translation uses /service/status/{taskId} but with its own timer
               // currentWorkflowId is guaranteed to be non-null here due to the if condition above
               _log(
-                '[ExtractPreview] Translation started (workflowId=$currentWorkflowId). Starting independent translation polling.',
+                '[ExtractPreview] build() STARTING polling: workflowId=$currentWorkflowId, currentTaskId=$currentTranslationTaskId, timerActive=${translationTimer != null}',
                 level: LogLevel.info,
               );
+              startTranslationPolling(currentWorkflowId!);
+            }
+          });
+        }
+
+        // SAFETY NET: If the translation timer has stopped unexpectedly but translation
+        // is still in progress (backend reports active task with same workflowId),
+        // restart the polling timer. This handles edge cases where the timer is
+        // cancelled or garbage-collected due to widget lifecycle interactions during
+        // auto-retry or other post-processing phases.
+        if (currentWorkflowId != null &&
+            currentWorkflowId.isNotEmpty &&
+            currentTranslationTaskId == currentWorkflowId &&
+            translationTimer == null &&
+            isTranslating) {
+          _log(
+            '[ExtractPreview] build() SAFETY NET: translation timer stopped unexpectedly (workflowId=$currentWorkflowId, isTranslating=$isTranslating). Restarting polling.',
+            level: LogLevel.warn,
+          );
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
               startTranslationPolling(currentWorkflowId!);
             }
           });
@@ -3871,6 +3899,87 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
           );
         }
       }
+    }
+
+    // CRITICAL: Watch translationStateProvider to detect batch retry progress
+    // This syncs Riverpod state (updated by _retranslateFailedSegments) with ExtractPreview local state
+    final dynamic translationState = widget.flowId != null
+        ? ref.watch(translationStateProviderFamily(widget.flowId!))
+        : ref.watch(translationStateProvider);
+
+    // Check if batch retry is in progress (progress between 10-90 with retry-related status)
+    // ignore: avoid_dynamic_calls
+    if (translationState != null &&
+        // ignore: avoid_dynamic_calls
+        translationState.isTranslating == true &&
+        // ignore: avoid_dynamic_calls
+        translationState.progress > 0 &&
+        // ignore: avoid_dynamic_calls
+        translationState.progress < 100) {
+      // ignore: avoid_dynamic_calls
+      final String statusLower = translationState.statusText.toString().toLowerCase();
+      final bool isRetryInProgress = statusLower.contains('retranslat') ||
+          statusLower.contains('batch retry') ||
+          statusLower.contains('preparing retranslation');
+
+      // ignore: avoid_dynamic_calls
+      final int progress = translationState.progress as int;
+      // ignore: avoid_dynamic_calls
+      final String statusText = translationState.statusText.toString();
+
+      if (isRetryInProgress && !isTranslating) {
+        // Batch retry started - sync local state with Riverpod state
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              isTranslating = true;
+              translationProgress = progress / 100.0;
+              translationStatus = statusText;
+            });
+            _log(
+              '[ExtractPreview] Batch retry detected: syncing local state progress=$progress%, status="$statusText"',
+              level: LogLevel.info,
+            );
+          }
+        });
+      } else if (isRetryInProgress && isTranslating) {
+        // Batch retry in progress - update progress
+        final double newProgress = progress / 100.0;
+        if ((translationProgress * 100).round() !=
+            (newProgress * 100).round()) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                translationProgress = newProgress;
+                translationStatus = statusText;
+              });
+            }
+          });
+        }
+      }
+    }
+
+    // Check if retry completed (progress = 100 or not translating anymore)
+    // ignore: avoid_dynamic_calls
+    if (translationState != null &&
+        // ignore: avoid_dynamic_calls
+        translationState.isTranslating != true &&
+        isTranslating &&
+        // ignore: avoid_dynamic_calls
+        translationState.progress >= 100) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            isTranslating = false;
+            translationProgress = 1.0;
+            translationStatus = 'Retranslation completed';
+          });
+          _log(
+            '[ExtractPreview] Batch retry completed: resetting local state',
+            level: LogLevel.info,
+          );
+        }
+      });
     }
 
     return Stack(
@@ -4011,6 +4120,9 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                                                         _calculateFilteredSegmentCount();
                                                     return PaginatedSliverList<
                                                         String>(
+                                                      key: ValueKey(
+                                                        'extract_sliver_${widget.taskId}_$totalItems',
+                                                      ),
                                                       paginationController:
                                                           paginationController,
                                                       heightCache:

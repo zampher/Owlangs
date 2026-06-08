@@ -7,8 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from logger.logger import LogModule
-
-logger = logging.getLogger(__name__)
+from backend.logger import unified_logger as logger
 
 # Default password after recovery (documented in PASSWORD_RECOVERY_PROCESS.md)
 RECOVERY_PASSWORD = "Changeme"

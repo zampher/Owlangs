@@ -208,7 +208,6 @@ make_deb() {
   local config_templates=(
     "system.json.template"
     "platforms.json.template"
-    "ui.json.template"
     "secrets.json.template"
     "local.json.template"
     "local_users.json.template"
@@ -327,7 +326,7 @@ chown root:owlangs "$CFG_SUBDIR" || true
 chmod 2775 "$CFG_SUBDIR" || true
 
 # Initialize config files from templates in configs subdirectory (if missing)
-for tmpl in system.json.template platforms.json.template ui.json.template secrets.json.template local.json.template local_users.json.template static.json.template translation_config.json.template; do
+for tmpl in system.json.template platforms.json.template secrets.json.template local.json.template local_users.json.template static.json.template translation_config.json.template; do
   cfg_name="${tmpl%.template}"
   if [[ ! -f "$CFG_SUBDIR/$cfg_name" && -f "$CFG_SUBDIR/$tmpl" ]]; then
     cp -f "$CFG_SUBDIR/$tmpl" "$CFG_SUBDIR/$cfg_name"
@@ -338,7 +337,7 @@ for tmpl in system.json.template platforms.json.template ui.json.template secret
 done
 
 # Set permissions on config files in configs subdirectory
-for cfg in system.json platforms.json ui.json secrets.json local.json local_users.json static.json translation_config.json; do
+for cfg in system.json platforms.json secrets.json local.json local_users.json static.json translation_config.json; do
   if [[ -f "$CFG_SUBDIR/$cfg" ]]; then
     chown root:owlangs "$CFG_SUBDIR/$cfg" || true
     chmod 660 "$CFG_SUBDIR/$cfg" || true

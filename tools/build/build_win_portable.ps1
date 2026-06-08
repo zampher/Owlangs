@@ -187,39 +187,58 @@ $readmeContent = @"
 Owlangs Portable Edition v$Version
 ===================================
 
-快速开始
---------
-双击运行 Owlangs-$Version.exe，自动完成以下操作：
-1. 初始化配置文件（首次运行）
-2. 启动后端服务
-3. 打开浏览器访问 http://localhost:8800
+Quick Start
+-----------
+Double-click `Owlangs-$Version.exe` to automatically:
+1. Initialize config files (first run only)
+2. Start the backend service
+3. Open http://localhost:8800 in your browser
 
-配置文件位置
-------------
+Config File Location
+--------------------
 C:\ProgramData\Owlangs\configs\
-  - secrets.json    : API 密钥（首次运行需要配置）
-  - system.json     : 系统设置
-  - platforms.json  : 翻译平台配置
-  - ui.json         : 界面配置
+  - secrets.json    : API keys (required on first run)
+  - system.json     : System settings
+  - platforms.json  : Translation platform settings
 
-命令行选项
-----------
-Owlangs-$Version.exe [选项]
+Command-Line Options
+--------------------
+Owlangs-$Version.exe [options]
 
-  --init-config       初始化配置文件并退出
-  --edit-config NAME  编辑配置文件（如: --edit-config secrets）
-  --port PORT         指定端口（默认: 8800）
-  --silent            静默模式（无控制台输出）
+  (no arguments)      Start server and open browser (double-click friendly)
+  --init-config       Initialize config files and exit
+  --edit-config NAME  Edit a config file (e.g. `--edit-config secrets`)
+  --port PORT         Specify port (default: 8800)
+  --silent            Silent mode (no console output)
 
-注意事项
---------
-- 首次运行需要配置 API 密钥，请先配置后再使用
-- 关闭窗口即可停止服务
-- 配置文件保存在 C:\ProgramData\Owlangs，重装系统不会丢失
+CLI Translation Commands
+------------------------
+Owlangs-$Version.exe <subcommand> [options]
 
-技术支持
---------
-如有问题，请查看日志文件：
+  translate <file> --to <lang>       Translate one file
+  convert <file>                     Convert document format (no translation)
+  batch <ZIP> --to <lang>            Batch translate files in a ZIP
+  platform list                      List available LLM platforms
+  formats                            List supported file formats
+  glossary list                      List glossaries
+  config show                        Show config file path
+  status <task_id>                   Query task status
+  download <task_id> --type <fmt>    Download task result
+
+Examples:
+  Owlangs-$Version.exe translate report.pdf --to Chinese
+  Owlangs-$Version.exe platform list --json
+  Owlangs-$Version.exe config init
+
+Notes
+-----
+- Configure API keys before first use
+- Close the window to stop the service
+- Config files are stored in C:\ProgramData\Owlangs and persist across reinstalls
+
+Support
+-------
+If you run into issues, check logs at:
 C:\ProgramData\Owlangs\logs\
 "@
 

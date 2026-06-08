@@ -216,32 +216,16 @@ class _FileUploadAreaState extends State<FileUploadArea> {
                     : null,
               ),
               child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    Icon(
-                      _isDragging && !widget.isDisabled
-                          ? Icons.file_download
-                          : Icons.cloud_upload_outlined,
-                      size: 64,
-                      color: widget.isDisabled
-                          ? Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant
-                              .withOpacity(0.4)
-                          : _isDragging
-                              ? Theme.of(context).colorScheme.primary
-                              : Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      widget.isDisabled
-                          ? disabledMessage
-                          : _isDragging
-                              ? l10n.fileUploadDropHere
-                              : l10n.fileUploadHint,
-                      style: TextStyle(
-                        fontSize: 16,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                      Icon(
+                        _isDragging && !widget.isDisabled
+                            ? Icons.file_download
+                            : Icons.cloud_upload_outlined,
+                        size: 64,
                         color: widget.isDisabled
                             ? Theme.of(context)
                                 .colorScheme
@@ -250,22 +234,40 @@ class _FileUploadAreaState extends State<FileUploadArea> {
                             : _isDragging
                                 ? Theme.of(context).colorScheme.primary
                                 : Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w500,
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      supportedFormats,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: widget.isDisabled
-                            ? Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant
-                                .withOpacity(0.4)
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      const SizedBox(height: 12),
+                      Text(
+                        widget.isDisabled
+                            ? disabledMessage
+                            : _isDragging
+                                ? l10n.fileUploadDropHere
+                                : l10n.fileUploadHint,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: widget.isDisabled
+                              ? Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant
+                                  .withOpacity(0.4)
+                              : _isDragging
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 6),
+                      Text(
+                        supportedFormats,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: widget.isDisabled
+                              ? Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant
+                                  .withOpacity(0.4)
+                              : Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     if (widget.isDisabled && widget.onCancel != null)
                       ...<Widget>[
                         const SizedBox(height: 12),
@@ -286,6 +288,7 @@ class _FileUploadAreaState extends State<FileUploadArea> {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

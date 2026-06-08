@@ -7,7 +7,7 @@ import 'dart:io' if (dart.library.html) '../../../shared/utils/io_stub.dart' as 
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:go_router/go_router.dart';
@@ -52,6 +52,8 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
   _DialogPhase _phase = _DialogPhase.chooseSource;
   final List<DiscoveredFile> _files = [];
   final List<String> _legacyFileNames = [];
+  String? _sourceType; // 'single', 'folder', or 'zip'
+  bool _isAppending = false; // true when adding more files to existing list
 
   // ── Batch-local quick settings (initialized from global providers) ──
   String _batchToLang = 'en';
@@ -77,6 +79,7 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
     super.initState();
     if (widget.initialSource != null) {
       // Skip the source-selection phase entirely when auto-picking
+      _sourceType = widget.initialSource;
       _phase = _DialogPhase.reviewFiles;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -84,6 +87,8 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
           _pickFolder();
         } else if (widget.initialSource == 'zip') {
           _pickZip();
+        } else if (widget.initialSource == 'single') {
+          _pickSingleFile();
         }
       });
     }
@@ -97,7 +102,51 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
 
   // ── Source selection ──────────────────────────────────────────────
 
+  Future<void> _addMoreFiles() async {
+    if (_sourceType == null) return;
+    _isAppending = true;
+    final l10n = AppLocalizations.of(context)!;
+    final source = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text(l10n.batchUploadSelectSourceHint),
+        children: [
+          _SourceOptionCard(
+            icon: Icons.insert_drive_file,
+            title: l10n.batchUploadSelectSingleFile,
+            subtitle: l10n.batchUploadSingleFileDescription,
+            onTap: () => Navigator.of(ctx).pop('single'),
+          ),
+          const SizedBox(height: 8),
+          _SourceOptionCard(
+            icon: Icons.folder,
+            title: l10n.batchUploadSelectFolder,
+            subtitle: l10n.batchUploadFolderDescription,
+            onTap: () => Navigator.of(ctx).pop('folder'),
+          ),
+          const SizedBox(height: 8),
+          _SourceOptionCard(
+            icon: Icons.folder_zip_outlined,
+            title: l10n.batchUploadSelectZip,
+            subtitle: l10n.batchUploadZipDescription,
+            onTap: () => Navigator.of(ctx).pop('zip'),
+          ),
+        ],
+      ),
+    );
+    if (source == null || !mounted) return;
+    switch (source) {
+      case 'folder':
+        await _pickFolder();
+      case 'zip':
+        await _pickZip();
+      case 'single':
+        await _pickSingleFile();
+    }
+  }
+
   Future<void> _pickFolder() async {
+    _sourceType = 'folder';
     final l10n = AppLocalizations.of(context)!;
     if (kIsWeb) {
       // Web: use webkitdirectory to get files directly.
@@ -121,19 +170,39 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
     final files = <DiscoveredFile>[];
     final legacyNames = <String>[];
 
+    debugPrint('[BatchUpload] _processWebDirectoryFiles: ${platformFiles.length} platform files');
+
     for (final pf in platformFiles) {
-      final name = pf.name; // webkitRelativePath, e.g. "subdir/file.docx"
+      final name = pf.name; // should be webkitRelativePath, e.g. "subdir/file.docx"
+      debugPrint('[BatchUpload]   pf.name=$name, size=${pf.size}, hasBytes=${pf.bytes != null}');
       if (name.endsWith('/')) continue;
       final ext = name.split('.').last.toLowerCase();
+
+      // Nested ZIP: extract and add contents, using ZIP name as path prefix
+      if (ext == 'zip' && pf.bytes != null && pf.bytes!.isNotEmpty) {
+        final lastSlash = name.lastIndexOf('/');
+        final zipRelativeDir = lastSlash > 0 ? name.substring(0, lastSlash) : null;
+        try {
+          _scanNestedZip(pf.bytes!, name.split('/').last, zipRelativeDir, files, legacyNames, formats);
+        } catch (_) {
+          // skip corrupted/invalid nested zips silently
+        }
+        continue;
+      }
+
       if (FileFormatService().isLegacyFormat(ext)) {
         legacyNames.add(name.split('/').last);
         continue;
       }
       if (!formats.contains(ext)) continue;
+      final lastSlash = name.lastIndexOf('/');
+      final fileName = lastSlash >= 0 ? name.substring(lastSlash + 1) : name;
+      final relativeDir = lastSlash > 0 ? name.substring(0, lastSlash) : null;
       files.add(DiscoveredFile(
-        fileName: name,
+        fileName: fileName,
         fileSizeBytes: pf.size,
         fileBytes: pf.bytes,
+        relativePath: relativeDir,
         isSelected: true,
       ));
     }
@@ -149,20 +218,48 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
       final files = <DiscoveredFile>[];
       final legacyNames = <String>[];
 
+      // Normalize and extract folder name to match web's webkitRelativePath
+      // behavior which includes the selected folder in the relative path.
+      final rootPath = path.replaceAll('\\', '/');
+      final folderName = rootPath.split('/').last;
+
       for (final entity in entities) {
         if (entity is! io.File) continue;
-        final ext = entity.path.split('.').last.toLowerCase();
+        final entityPath = entity.path.replaceAll('\\', '/');
+        final rawRelPath = entityPath.startsWith('$rootPath/')
+            ? entityPath.substring(rootPath.length + 1)
+            : entityPath;
+        // Prepend folder name so relative paths include the selected directory
+        // root, matching web's webkitRelativePath format.
+        final relPath = '$folderName/$rawRelPath';
+        final lastSlash = relPath.lastIndexOf('/');
+        final fileName = lastSlash >= 0 ? relPath.substring(lastSlash + 1) : relPath;
+        final ext = fileName.split('.').last.toLowerCase();
+
+        // Nested ZIP: extract and add contents, using ZIP name as path prefix
+        if (ext == 'zip') {
+          final zipRelativeDir = lastSlash > 0 ? relPath.substring(0, lastSlash) : null;
+          try {
+            final zipBytes = entity.readAsBytesSync();
+            _scanNestedZip(zipBytes, fileName, zipRelativeDir, files, legacyNames, formats);
+          } catch (_) {
+            // skip corrupted/invalid nested zips silently
+          }
+          continue;
+        }
+
         if (FileFormatService().isLegacyFormat(ext)) {
-          legacyNames.add(entity.path.replaceAll('\\', '/').split('/').last);
+          legacyNames.add(fileName);
           continue;
         }
         if (!formats.contains(ext)) continue;
         final stat = entity.statSync();
-        final fileName = entity.path.replaceAll('\\', '/').split('/').last;
+        final relativeDir = lastSlash > 0 ? relPath.substring(0, lastSlash) : null;
         files.add(DiscoveredFile(
           fileName: fileName,
           fileSizeBytes: stat.size,
           filePath: entity.path,
+          relativePath: relativeDir,
           isSelected: true,
         ));
       }
@@ -176,6 +273,7 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
   }
 
   Future<void> _pickZip() async {
+    _sourceType = 'zip';
     final l10n = AppLocalizations.of(context)!;
     final result = await FilePickerHelper.pickFiles(
       allowedExtensions: ['zip'],
@@ -183,7 +281,53 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
       dialogTitle: l10n.batchUploadZipPickerTitle,
     );
     if (result == null || result.files.isEmpty || !mounted) return;
-    _scanZip(result.files.first.bytes!);
+    final pf = result.files.first;
+    List<int> zipBytes;
+    if (pf.bytes != null && pf.bytes!.isNotEmpty) {
+      zipBytes = pf.bytes!;
+    } else if (pf.path != null && pf.path!.isNotEmpty) {
+      zipBytes = await io.File(pf.path!).readAsBytes();
+    } else {
+      return;
+    }
+    _scanZip(zipBytes);
+  }
+
+  Future<void> _pickSingleFile() async {
+    _sourceType = 'single';
+    final l10n = AppLocalizations.of(context)!;
+    final result = await FilePickerHelper.pickFiles(
+      dialogTitle: l10n.batchUploadSelectSingleFile,
+    );
+    if (result == null || result.files.isEmpty || !mounted) return;
+
+    final pf = result.files.first;
+    final ext = pf.name.split('.').last.toLowerCase();
+    final formats = FileFormatService().getAllFormats();
+    final legacyNames = <String>[];
+
+    if (FileFormatService().isLegacyFormat(ext)) {
+      legacyNames.add(pf.name);
+      _onFilesDiscovered([], legacyNames);
+      return;
+    }
+    if (!formats.contains(ext)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${pf.name}: ${l10n.batchUploadNoSupportedFiles}')),
+      );
+      return;
+    }
+
+    final files = <DiscoveredFile>[
+      DiscoveredFile(
+        fileName: pf.name,
+        fileSizeBytes: pf.size,
+        fileBytes: pf.bytes,
+        isSelected: true,
+      ),
+    ];
+    _onFilesDiscovered(files, legacyNames);
   }
 
   void _scanZip(List<int> zipBytes) {
@@ -212,16 +356,39 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
           // Skip directories and macOS metadata files.
           if (name.endsWith('/')) continue;
           if (name.startsWith('__MACOSX/')) continue;
-          final ext = name.split('.').last.toLowerCase();
+
+          final lastSlash = name.lastIndexOf('/');
+          final fileName = lastSlash >= 0 ? name.substring(lastSlash + 1) : name;
+          final ext = fileName.split('.').last.toLowerCase();
+          final relativeDir = lastSlash > 0 ? name.substring(0, lastSlash) : null;
+
+          // Nested ZIP: extract and add contents, using ZIP name as path prefix
+          if (ext == 'zip') {
+            try {
+              _scanNestedZip(
+                entry.content as List<int>,
+                fileName,
+                relativeDir,
+                files,
+                legacyNames,
+                formats,
+              );
+            } catch (_) {
+              // skip corrupted/invalid nested zips silently
+            }
+            continue;
+          }
+
           if (FileFormatService().isLegacyFormat(ext)) {
-            legacyNames.add(name.split('/').last);
+            legacyNames.add(fileName);
             continue;
           }
           if (!formats.contains(ext)) continue;
           files.add(DiscoveredFile(
-            fileName: name.split('/').last,
+            fileName: fileName,
             fileSizeBytes: entry.size,
             fileBytes: entry.content,
+            relativePath: relativeDir,
             isSelected: true,
           ));
         }
@@ -235,29 +402,132 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
     }
   }
 
-  void _onFilesDiscovered(List<DiscoveredFile> files, [List<String> legacyNames = const []]) {
-    // Initialize batch-local settings from global providers.
-    final qs = ref.read(translationQuickSettingsProvider);
-    final aiSettings = ref.read(aiPlatformSettingsProvider);
-    final gs = ref.read(globalSettingsProvider);
+  /// Extract files from a nested ZIP (found inside a folder or parent ZIP).
+  ///
+  /// [zipFileName] is used as the starting path segment for relative paths.
+  /// [parentRelativePath] is prepended to all extracted file paths.
+  void _scanNestedZip(
+    List<int> zipBytes,
+    String zipFileName,
+    String? parentRelativePath,
+    List<DiscoveredFile> files,
+    List<String> legacyNames,
+    List<String> formats,
+  ) {
+    final archive = ZipDecoder().decodeBytes(zipBytes);
+    final zipBaseName = zipFileName.endsWith('.zip')
+        ? zipFileName.substring(0, zipFileName.length - 4)
+        : zipFileName;
 
-    setState(() {
-      _files
-        ..clear()
-        ..addAll(files);
-      _legacyFileNames
-        ..clear()
-        ..addAll(legacyNames);
-      _batchToLang = qs.toLang;
-      _batchPlatformKey = aiSettings.defaultPlatform;
-      _batchTemperature = qs.temperature;
-      _batchPromptMode = qs.promptMode;
-      _batchPromptStyle = qs.promptStyle;
-      _batchTaskNote = qs.taskNote;
-      _batchSelectedGlossaries = List<String>.from(qs.selectedGlossaries);
-      _batchParsingEngine = gs.parsingEngine;
-      _phase = files.isEmpty ? _DialogPhase.chooseSource : _DialogPhase.reviewFiles;
-    });
+    // Apply same Shift-JIS filename fix on nested ZIPs
+    final garbledNames = archive.map((e) => e.name).toList();
+    final correctNames = correctZipFilenames(garbledNames, zipBytes);
+    if (correctNames.length == archive.length) {
+      for (int i = 0; i < archive.length; i++) {
+        archive[i].name = correctNames[i];
+      }
+    }
+
+    for (final entry in archive) {
+      if (!entry.isFile) continue;
+      final name = entry.name;
+      if (name.endsWith('/')) continue;
+      if (name.startsWith('__MACOSX/')) continue;
+
+      final ext = name.split('.').last.toLowerCase();
+      if (FileFormatService().isLegacyFormat(ext)) {
+        legacyNames.add(name.split('/').last);
+        continue;
+      }
+      if (!formats.contains(ext)) continue;
+
+      final lastSlash = name.lastIndexOf('/');
+      final fileName = lastSlash >= 0 ? name.substring(lastSlash + 1) : name;
+      final entryDir = lastSlash > 0 ? name.substring(0, lastSlash) : null;
+
+      // Build full relative path: [parent]/[zip base name]/[entry dir]
+      String? fullRelativePath;
+      if (parentRelativePath != null && parentRelativePath.isNotEmpty) {
+        fullRelativePath = entryDir != null
+            ? '$parentRelativePath/$zipBaseName/$entryDir'
+            : '$parentRelativePath/$zipBaseName';
+      } else {
+        fullRelativePath = entryDir != null
+            ? '$zipBaseName/$entryDir'
+            : zipBaseName;
+      }
+
+      files.add(DiscoveredFile(
+        fileName: fileName,
+        fileSizeBytes: entry.size,
+        fileBytes: entry.content,
+        relativePath: fullRelativePath,
+        isSelected: true,
+      ));
+    }
+  }
+
+  void _onFilesDiscovered(List<DiscoveredFile> files, [List<String> legacyNames = const []]) {
+    final bool append = _isAppending;
+    _isAppending = false;
+
+    // Dedup when appending: skip files already in the list.
+    final List<DiscoveredFile> toAdd;
+    if (append) {
+      final existingNames = _files.map((f) => f.fileName).toSet();
+      toAdd = files.where((f) => !existingNames.contains(f.fileName)).toList();
+    } else {
+      toAdd = files;
+    }
+
+    // Initialize batch-local settings from global providers (only on first load).
+    if (!append) {
+      final qs = ref.read(translationQuickSettingsProvider);
+      final aiSettings = ref.read(aiPlatformSettingsProvider);
+      final gs = ref.read(globalSettingsProvider);
+
+      final withPath = files.where((f) => f.relativePath != null && f.relativePath!.isNotEmpty).length;
+      debugPrint('[BatchUpload] Discovered ${files.length} files, $withPath with relative paths');
+      for (final f in files) {
+        if (f.relativePath != null && f.relativePath!.isNotEmpty) {
+          debugPrint('[BatchUpload]   ${f.relativePath}/${f.fileName}');
+        }
+      }
+
+      setState(() {
+        _files
+          ..clear()
+          ..addAll(toAdd);
+        _legacyFileNames
+          ..clear()
+          ..addAll(legacyNames);
+        _batchToLang = qs.toLang;
+        _batchPlatformKey = aiSettings.defaultPlatform;
+        _batchTemperature = qs.temperature;
+        _batchPromptMode = qs.promptMode;
+        _batchPromptStyle = qs.promptStyle;
+        _batchTaskNote = qs.taskNote;
+        _batchSelectedGlossaries = List<String>.from(qs.selectedGlossaries);
+        _batchParsingEngine = gs.parsingEngine;
+        _phase = files.isEmpty ? _DialogPhase.chooseSource : _DialogPhase.reviewFiles;
+      });
+    } else {
+      final skipped = files.length - toAdd.length;
+      setState(() {
+        _files.addAll(toAdd);
+        if (legacyNames.isNotEmpty) {
+          _legacyFileNames.addAll(legacyNames);
+        }
+      });
+      if (skipped > 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Skipped $skipped duplicate file(s)'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
     if (files.isEmpty && legacyNames.isNotEmpty && mounted) {
       // Only legacy-format files found — show specific conversion message.
       ScaffoldMessenger.of(context).showSnackBar(
@@ -550,6 +820,20 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
       ),
       child: Row(
         children: <Widget>[
+          // Add more files to the current batch
+          TextButton.icon(
+            onPressed: _addMoreFiles,
+            icon: const Icon(Icons.add, size: 16),
+            label: Text(
+              l10n.batchUploadAddFiles,
+              style: const TextStyle(fontSize: 12),
+            ),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
           const Spacer(),
           // Convert + Translate grouped together as equal-level operations
           Tooltip(
@@ -671,6 +955,20 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
             ),
           ),
           const SizedBox(height: 24),
+          // Single file button
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: SizedBox(
+              width: double.infinity,
+              height: 80,
+              child: _SourceOptionCard(
+                icon: Icons.insert_drive_file,
+                title: l10n.batchUploadSelectSingleFile,
+                subtitle: l10n.batchUploadSingleFileDescription,
+                onTap: _pickSingleFile,
+              ),
+            ),
+          ),
           // Folder button
           Padding(
             padding: const EdgeInsets.only(bottom: 16),
@@ -817,6 +1115,7 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
                         itemCount: _files.length,
                         itemBuilder: (context, index) {
                           final file = _files[index];
+                          final hasRelativePath = file.relativePath != null && file.relativePath!.isNotEmpty;
                           return CheckboxListTile(
                             value: file.isSelected,
                             onChanged: (v) => setState(() => file.isSelected = v ?? false),
@@ -826,11 +1125,27 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
                               size: 22,
                               color: theme.colorScheme.primary,
                             ),
-                            title: Text(
-                              file.fileName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 14),
+                            title: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (hasRelativePath)
+                                  Text(
+                                    file.relativePath!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                Text(
+                                  file.fileName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                              ],
                             ),
                             subtitle: Text(
                               '${file.formattedSize}  ·  ${formats.getFormatDisplayName(file.extension)}',

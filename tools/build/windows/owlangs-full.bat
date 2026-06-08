@@ -29,12 +29,6 @@ if not exist "%OWLANGS_CONFIG_DIR%\platforms.json" (
     )
 )
 
-if not exist "%OWLANGS_CONFIG_DIR%\ui.json" (
-    if exist "%~dp0config\ui.json.template" (
-        copy "%~dp0config\ui.json.template" "%OWLANGS_CONFIG_DIR%\ui.json"
-        echo Created ui.json from template
-    )
-)
 
 if not exist "%OWLANGS_CONFIG_DIR%\secrets.json" (
     if exist "%~dp0config\secrets.json.template" (

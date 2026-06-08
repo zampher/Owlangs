@@ -2,18 +2,15 @@
 # SPDX-License-Identifier: MPL-2.0
 
 import ssl
-import logging
 from typing import Optional, Dict, Any
 from ldap3 import Server, Connection, ALL, SUBTREE, Tls
 from ldap3.core.exceptions import LDAPException, LDAPBindError, LDAPInvalidCredentialsResult
 
 from logger.logger import LogModule
+from backend.logger import unified_logger as logger
 
 from .config import AuthConfig
 from .models import User, UserRole
-
-# Create LDAP-specific logger
-logger = logging.getLogger(__name__)
 
 
 def _mask_username(name: str) -> str:

@@ -111,7 +111,7 @@ async def _fetch_latest_release_from_github() -> Optional[Dict[str, str]]:
         )
         return None
     except httpx.HTTPError as e:
-        logger.error(
+        logger.warning(
             LogModule.SYSTEM,
             f"[UPDATE-CHECK] HTTP error when fetching latest version from GitHub: {e}",
         )

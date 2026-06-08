@@ -43,35 +43,8 @@
                     </StackPanel>
                 </StackPanel>
                 
-                <!-- Primary Action Buttons -->
+                <!-- Primary Action Buttons (moved to left panel) -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
-                    <Button x:Name="PrimaryActionButton" 
-                            Content="Start APP" 
-                            Click="PrimaryActionButton_Click" 
-                            Padding="30,15"
-                            FontSize="16"
-                            FontWeight="Bold"
-                            MinWidth="200"
-                            Height="60">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
-                                <Style.Triggers>
-                                    <Trigger Property="IsEnabled" Value="False">
-                                        <Setter Property="Background" Value="{DynamicResource ButtonSecondaryBrush}"/>
-                                        <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                    <Button x:Name="TopOpenBrowserButton"
-                            Content="Open in Browser"
-                            Click="OpenBrowserButton_Click"
-                            Margin="0,8,0,0"
-                            Padding="12,6"
-                            FontSize="12"
-                            MinWidth="200"
-                            Style="{StaticResource SecondaryButtonStyle}"/>
                 </StackPanel>
             </Grid>
         </Border>

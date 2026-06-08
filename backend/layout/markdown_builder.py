@@ -612,7 +612,7 @@ def _build_layout_markdown(
                             merged_caption = "\n".join(line_texts).strip()
                             if merged_caption:
                                 caption_text = merged_caption
-                                logger.info(LogModule.LAYOUT, "[LAYOUT] Image caption extracted from nested block "
+                                logger.debug(LogModule.LAYOUT, "[LAYOUT] Image caption extracted from nested block "
                                     f"page={block.page_index}, block_index={block_index}, "
                                     f"text_preview={caption_text[:120]!r}"
                                 )
@@ -641,7 +641,7 @@ def _build_layout_markdown(
             )
 
             if caption_text:
-                logger.info(LogModule.LAYOUT, "[LAYOUT] Image caption will be added as separate text segment: "
+                logger.debug(LogModule.LAYOUT, "[LAYOUT] Image caption will be added as separate text segment: "
                     f"block_index={block_index}, page={block.page_index}, "
                     f"text_preview={caption_text[:120]!r}"
                 )
@@ -701,7 +701,7 @@ def _build_layout_markdown(
                     merged_caption = "\n".join(line_texts).strip()
                     if merged_caption:
                         caption_text = merged_caption
-                        logger.info(LogModule.LAYOUT, "[LAYOUT] Table caption extracted from nested block "
+                        logger.debug(LogModule.LAYOUT, "[LAYOUT] Table caption extracted from nested block "
                             f"page={block.page_index}, block_index={block_index}, "
                             f"text_preview={caption_text[:120]!r}"
                         )
@@ -829,7 +829,7 @@ def _build_layout_markdown(
 
                 # Log basic preview for debugging
                 first_line_preview = lines[0][:120] if lines else ""
-                logger.info(
+                logger.debug(
                     LogModule.LAYOUT,
                     "[LAYOUT] Table body converted to markdown-like text: "
                     f"page={block.page_index}, block_index={block_index}, "
@@ -961,15 +961,26 @@ def _build_layout_markdown(
             continue
 
         # Convert title blocks to markdown heading format
-        # Use # for title blocks (can be adjusted based on title level if available)
+        # Use heading level inferred from MinerU font size data.
+        # heading_level=0 means false-positive title (body text) — no heading prefix.
+        # Only self-hosted MinerU (middle.json) provides font size in layout.json;
+        # Cloud API titles all default to H1.
         is_title = block.type == "title"
         if is_title:
-            # Convert to markdown heading: remove existing # if present, then add one #
+            # Convert to markdown heading: remove existing # if present, then add correct level
             text_stripped = text.strip()
             # Remove any existing markdown heading markers
             text_stripped = re.sub(r'^#+\s*', '', text_stripped)
-            # Add markdown heading format
-            formatted_text = f"# {text_stripped}"
+            # Safety net: reject blocks that are clearly body text
+            level = getattr(block, "heading_level", None)
+            if level == 0:
+                formatted_text = text_stripped
+            elif level is None or not isinstance(level, int) or level < 1 or level > 6:
+                level = 1
+                formatted_text = f"{'#' * level} {text_stripped}"
+            else:
+                # Add markdown heading format with correct level
+                formatted_text = f"{'#' * level} {text_stripped}"
         else:
             formatted_text = text.strip()
 

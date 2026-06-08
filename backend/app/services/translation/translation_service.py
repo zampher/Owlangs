@@ -20,7 +20,7 @@ from pathlib import Path
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from utils.translation_validator import log_segment_translation_stats
-from backend.app.services.task import TaskManager
+from backend.app.services.task import TaskManager, MSG_LEVEL_ERROR
 from backend.app.services.translation.workflow_factory import WorkflowFactory
 from backend.app.services.translation.workflow_config_builder import WorkflowConfigBuilder
 from backend.app.services.translation.workflow_executor import WorkflowExecutor
@@ -30,6 +30,7 @@ from backend.app.services.translation.translation_segment_service import Transla
 from backend.app.services.translation.chunk_size_service import chunk_size_service
 from backend.app.services.download.output_generator import OutputGenerator
 from backend.app.config.pagination_config import SOURCE_PREVIEW_SEGMENTS_LIMIT
+from backend.config.app_config import get_app_config
 
 # PDF page limit for MinerU; files exceeding this are rejected with a clear message
 PDF_MAX_PAGES = 500
@@ -98,17 +99,18 @@ class TranslationService:
                     continue
         return out
 
-    async def _queue_auto_retry_failed_segments(
+    async def _auto_retry_failed_segments(
         self,
         task_id: str,
         task_state: Dict[str, Any],
         payload: Any,
     ) -> None:
         """
-        Queued tasks have no immersive UI: batch-retry failed segments automatically,
-        same API as frontend ``retranslateSegmentsBatch``.
+        After main translation completes, batch-retry failed segments automatically.
+        Same API as frontend ``retranslateSegmentsBatch``.
 
         Rounds are controlled by ``segment_auto_retry_rounds`` (not chunk ``retry``).
+        Works for both immediate (immersive) and queued execution modes.
         """
         from utils.translation_segments import retranslate_segments_batch
         from utils.translation_validator import refresh_task_state_segment_failure_flags
@@ -122,7 +124,7 @@ class TranslationService:
             max_rounds = 3
         max_rounds = max(1, min(max_rounds, 10))
 
-        log_segment_translation_stats(task_id, task_state, "before_queue_auto_retry")
+        log_segment_translation_stats(task_id, task_state, "before_auto_retry")
 
         platform_key = getattr(payload, "ai_platform", None) or getattr(payload, "platform_type", None)
         if isinstance(payload, dict):
@@ -140,7 +142,7 @@ class TranslationService:
             if refreshed_failed:
                 logger.info(
                     LogModule.TRANS,
-                    f"[QUEUE-AUTO-RETRY] task={task_id} revalidated segments: "
+                    f"[AUTO-RETRY] task={task_id} revalidated segments: "
                     f"{refreshed_failed} marked failed by should_treat_as_failure "
                     f"(before round {attempt + 1})",
                 )
@@ -153,12 +155,12 @@ class TranslationService:
             if not indices:
                 logger.info(
                     LogModule.TRANS,
-                    f"[QUEUE-AUTO-RETRY] task={task_id} no failed segments left before round {attempt + 1}",
+                    f"[AUTO-RETRY] task={task_id} no failed segments left before round {attempt + 1}",
                 )
                 break
             logger.info(
                 LogModule.TRANS,
-                f"[QUEUE-AUTO-RETRY] task={task_id} round {attempt + 1}/{max_rounds} "
+                f"[AUTO-RETRY] task={task_id} round {attempt + 1}/{max_rounds} "
                 f"batch-retry count={len(indices)}",
             )
             task_state["message"] = f"Auto-retry failed segments ({attempt + 1}/{max_rounds})..."
@@ -193,7 +195,7 @@ class TranslationService:
                             n_seg = len(seg_list)
                     logger.info(
                         LogModule.TRANS,
-                        f"[QUEUE-AUTO-RETRY] task={task_id} persisted translation_segments "
+                        f"[AUTO-RETRY] task={task_id} persisted translation_segments "
                         f"after round {attempt + 1} (segment count={n_seg})",
                     )
                     log_segment_translation_stats(
@@ -204,17 +206,17 @@ class TranslationService:
                 except Exception as sync_exc:
                     logger.warning(
                         LogModule.TRANS,
-                        f"[QUEUE-AUTO-RETRY] task={task_id} translation_segments persist failed: {sync_exc}",
+                        f"[AUTO-RETRY] task={task_id} translation_segments persist failed: {sync_exc}",
                     )
             except Exception as exc:
                 logger.error(
                     LogModule.TRANS,
-                    f"[QUEUE-AUTO-RETRY] task={task_id} round {attempt + 1} error: {exc}",
+                    f"[AUTO-RETRY] task={task_id} round {attempt + 1} error: {exc}",
                     exc_info=True,
                 )
                 break
 
-        log_segment_translation_stats(task_id, task_state, "queue_auto_retry_finished")
+        log_segment_translation_stats(task_id, task_state, "auto_retry_finished")
     
     async def _test_llm_connectivity(self, payload: Any, task_id: str, task_state: Dict[str, Any]) -> bool:
         """
@@ -267,6 +269,34 @@ class TranslationService:
         if not platform_key_for_status:
             platform_key_for_status = platform_type  # fallback to api_protocol
         
+        # Look up requires_api_key from platform config
+        requires_api_key = True
+        try:
+            from backend.config.config_loader import get_unified_config
+            unified_config = get_unified_config()
+            pk = platform_key_for_status or platform_key
+            if pk:
+                platform_cfg = unified_config.platforms.get_platform_config(pk)
+                if platform_cfg:
+                    requires_api_key = getattr(platform_cfg, 'requires_api_key', True)
+        except Exception:
+            pass
+
+        # Read connectivity test timeout values from platform config
+        test_connect_timeout = 30
+        test_request_timeout = 10
+        try:
+            from backend.config.config_loader import get_unified_config
+            unified_config = get_unified_config()
+            pk = platform_key_for_status or platform_type
+            if pk:
+                platform_cfg = unified_config.platforms.get_platform_config(pk)
+                if platform_cfg:
+                    test_connect_timeout = getattr(platform_cfg, 'test_connect_timeout', 30) or 30
+                    test_request_timeout = getattr(platform_cfg, 'test_request_timeout', 10) or 10
+        except Exception:
+            pass
+
         try:
             from backend.auth.ai_platform_service import test_ai_platform_connectivity
             result = await test_ai_platform_connectivity(
@@ -275,6 +305,9 @@ class TranslationService:
                 model_name=model_id,
                 api_key=api_key or "",
                 detect_max_tokens=False,  # Keep test fast; max_tokens detection is optional
+                requires_api_key=requires_api_key,
+                test_connect_timeout=test_connect_timeout,
+                test_request_timeout=test_request_timeout,
             )
             
             # Update QuickSettings / Settings LLM status regardless of success/failure
@@ -314,14 +347,16 @@ class TranslationService:
                 task_state["status"] = "failed"
                 task_state["error"] = error_msg
                 task_state["message"] = f"LLM platform connection test failed: {user_message}"
+                task_state["message_level"] = MSG_LEVEL_ERROR
                 task_state["llm_error"] = error_msg
                 self.task_manager.update_task(task_id, {
                     "status": "failed",
                     "error": error_msg,
                     "message": f"LLM platform connection test failed: {user_message}",
+                    "message_level": MSG_LEVEL_ERROR,
                 })
                 return False
-                
+
         except Exception as e:
             logger.error(
                 LogModule.WORKFLOW,
@@ -339,11 +374,13 @@ class TranslationService:
             task_state["status"] = "failed"
             task_state["error"] = error_msg
             task_state["message"] = f"LLM platform connection test failed: {error_msg}"
+            task_state["message_level"] = MSG_LEVEL_ERROR
             task_state["llm_error"] = error_msg
             self.task_manager.update_task(task_id, {
                 "status": "failed",
                 "error": error_msg,
                 "message": f"LLM platform connection test failed: {error_msg}",
+                "message_level": MSG_LEVEL_ERROR,
             })
             return False
 
@@ -366,13 +403,13 @@ class TranslationService:
         try:
             from backend.app.services.platform.platform_service import platform_service
             api_protocol = platform_service.get_api_protocol(base_url, model_id)
-            logger.info(LogModule.CONFIG, f"[REPAIR-CONFIG] Platform lookup: base_url={base_url}, model_id={model_id}, api_protocol={api_protocol}")
+            logger.debug(LogModule.CONFIG, f"[REPAIR-CONFIG] Platform lookup: base_url={base_url}, model_id={model_id}, api_protocol={api_protocol}")
             if api_protocol:
                 api_type = api_protocol
         except Exception as e:
             logger.warning(LogModule.CONFIG, f"[REPAIR-CONFIG] Failed to get api_protocol: {e}")
         
-        logger.info(LogModule.CONFIG, f"[REPAIR-CONFIG] Final config: api_type={api_type}, base_url={base_url}, model_id={model_id}")
+        logger.debug(LogModule.CONFIG, f"[REPAIR-CONFIG] Final config: api_type={api_type}, base_url={base_url}, model_id={model_id}")
         
         return {
             "base_url": base_url,
@@ -438,6 +475,7 @@ class TranslationService:
                     error_with_hint = error_text
                 task_state["status"] = "failed"
                 task_state["error"] = error_text
+                task_state["message_level"] = MSG_LEVEL_ERROR
                 llm_error = task_state.get("llm_error")
                 if llm_error:
                     task_state["message"] = f"Translation failed: {llm_error}"
@@ -454,6 +492,7 @@ class TranslationService:
         *,
         execution_mode: str = "immediate",
         owner_username: Optional[str] = None,
+        relative_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Start a translation task in the background.
@@ -557,6 +596,7 @@ class TranslationService:
             "workflow_instance": None,
             "original_filename_stem": Path(original_filename).stem,
             "original_filename": original_filename,
+            "original_relative_path": relative_path or "",
             "task_start_time": time.time(),
             "task_end_time": 0,
             "current_task_ref": None,
@@ -577,6 +617,7 @@ class TranslationService:
             },
             "execution_mode": execution_mode,
             "owner_username": owner_username,
+            "output_suffix": get_app_config().converter_output_suffix if getattr(payload, 'skip_translate', False) else get_app_config().translator_output_suffix,
         })
         
         # Store page_count early so the frontend can show large-file warnings
@@ -892,6 +933,9 @@ class TranslationService:
                     if "layout_chunk_block_map" in convert_state:
                         task_state["layout_chunk_block_map"] = convert_state["layout_chunk_block_map"]
                         copied_keys.append("layout_chunk_block_map")
+                    if "segment_layout_block_map" in convert_state:
+                        task_state["segment_layout_block_map"] = convert_state["segment_layout_block_map"]
+                        copied_keys.append("segment_layout_block_map")
                     if "layout_chunk_block_texts" in convert_state:
                         task_state["layout_chunk_block_texts"] = convert_state["layout_chunk_block_texts"]
                         copied_keys.append("layout_chunk_block_texts")
@@ -977,7 +1021,7 @@ class TranslationService:
                         f"[TRANSLATION-SERVICE] Task {task_id}: convert_task_id={convert_task_id} provided but task not found in task_manager"
                     )
             else:
-                logger.info(
+                logger.debug(
                     LogModule.TRANS,
                     f"[TRANSLATION-SERVICE] Task {task_id}: No convert_task_id provided; running without inherited extract assets"
                 )
@@ -1259,8 +1303,19 @@ class TranslationService:
                         f"[TRANSLATION-SERVICE] Task {task_id}: Using inherited source_chunks_cache and chunk_to_segment_map from convert task; skipping markdown preview preparation (avoids decoding binary original file)"
                     )
                 else:
-                    logger.info(LogModule.EXTRACT, f"[TRANSLATION-SERVICE] Task {task_id}: Preparing markdown preview from document_original before translation to ensure all segments (including images) are available")
-                    self._prepare_markdown_based_preview(task_id, workflow, payload, task_state, original_filename, is_format_conversion=False)
+                    # Single-phase mode (no convert_task_id): PDF files are still raw binary
+                    # and haven't been converted by MinerU yet. Skip preview preparation —
+                    # the full pipeline (conversion + translation) runs inside execute_translate.
+                    import os
+                    _is_binary_format = os.path.splitext(original_filename)[1].lower() in ('.pdf',)
+                    if _is_binary_format:
+                        logger.info(
+                            LogModule.EXTRACT,
+                            f"[TRANSLATION-SERVICE] Task {task_id}: Skipping markdown preview preparation for {original_filename} in single-phase mode (document is still raw binary, conversion happens inside execute_translate)"
+                        )
+                    else:
+                        logger.info(LogModule.EXTRACT, f"[TRANSLATION-SERVICE] Task {task_id}: Preparing markdown preview from document_original before translation to ensure all segments (including images) are available")
+                        self._prepare_markdown_based_preview(task_id, workflow, payload, task_state, original_filename, is_format_conversion=False)
 
             # Convert toolbar: copy source to target on translate task only (no LLM, no convert-task exclude-all)
             copy_source_only = bool(getattr(payload, "copy_source_only", False))
@@ -1317,16 +1372,16 @@ class TranslationService:
                 logger.info(LogModule.TRANS, f"[TRANSLATION-SERVICE] Task {task_id}: execute_translate returned successfully (including _after_translate completion)")
 
                 # Sync workflow attachments after translation (already done in execute_translate, but keep for compatibility)
-                logger.info(LogModule.WORKFLOW, f"[TRANSLATION-SERVICE] Task {task_id}: About to sync workflow attachments (post_translate)")
+                logger.debug(LogModule.WORKFLOW, f"[TRANSLATION-SERVICE] Task {task_id}: About to sync workflow attachments (post_translate)")
                 self._sync_workflow_attachments(task_id, workflow, task_state, reason="post_translate")
-                logger.info(LogModule.WORKFLOW, f"[TRANSLATION-SERVICE] Task {task_id}: Workflow attachments synced")
+                logger.debug(LogModule.WORKFLOW, f"[TRANSLATION-SERVICE] Task {task_id}: Workflow attachments synced")
 
                 # For PDF/Markdown-based workflows, update preview from translated markdown (if needed)
                 if workflow_type == "markdown_based":
                     pass  # Preview update can be done later if needed
 
                 # Record translation segments for frontend preview (skip when already filled by complete_translation_with_source_only)
-                logger.info(LogModule.TRANS, f"[TRANSLATION-SERVICE] Task {task_id}: About to call ensure_translation_segments for workflow_type={workflow_type}")
+                logger.debug(LogModule.TRANS, f"[TRANSLATION-SERVICE] Task {task_id}: About to call ensure_translation_segments for workflow_type={workflow_type}")
                 try:
                     result = self.translation_segment_service.ensure_translation_segments(
                         task_id=task_id,
@@ -1519,16 +1574,15 @@ class TranslationService:
                     task_state,
                     "after_main_translation",
                 )
-                # Queue mode: auto batch-retry failed segments (no immersive Retry UI)
-                if task_state.get("execution_mode") == "queued":
-                    try:
-                        await self._queue_auto_retry_failed_segments(task_id, task_state, payload)
-                    except Exception as auto_retry_err:
-                        logger.error(
-                            LogModule.TRANS,
-                            f"[QUEUE-AUTO-RETRY] task={task_id} fatal: {auto_retry_err}",
-                            exc_info=True,
-                        )
+                # Auto batch-retry failed segments (post-translation, for both modes)
+                try:
+                    await self._auto_retry_failed_segments(task_id, task_state, payload)
+                except Exception as auto_retry_err:
+                    logger.error(
+                        LogModule.TRANS,
+                        f"[AUTO-RETRY] task={task_id} fatal: {auto_retry_err}",
+                        exc_info=True,
+                    )
 
                 # Mark translation as completed after post-processing steps.
                 task_state["status"] = "completed"
@@ -1564,7 +1618,7 @@ class TranslationService:
         # CRITICAL: Do NOT generate output files here - generate them on-demand when user clicks download/preview
         # This allows users to edit translation results before generating files
         # Files will be generated in DownloadService.download_file() when needed
-        logger.info(
+        logger.debug(
             LogModule.WORKFLOW,
             f"[TRANSLATION-SERVICE] Task {task_id}: Skipping file generation - files will be generated on-demand when user downloads/previews"
         )
@@ -1857,7 +1911,7 @@ class TranslationService:
                         )
                 
                 if not extract_task_state:
-                    logger.warning(
+                    logger.info(
                         LogModule.EXTRACT,
                         f"[MINERU-REUSE] No matching Extract phase task_state found for task {task_id}. "
                         f"Will proceed with normal MinerU conversion (may re-upload/re-download)."
@@ -1954,6 +2008,12 @@ class TranslationService:
                     logger.debug(
                         LogModule.EXTRACT,
                         f"[MINERU-REUSE] Copied layout_chunk_block_map from Extract phase to translation phase"
+                    )
+                if "segment_layout_block_map" in extract_task_state:
+                    task_state["segment_layout_block_map"] = extract_task_state["segment_layout_block_map"]
+                    logger.debug(
+                        LogModule.EXTRACT,
+                        f"[MINERU-REUSE] Copied segment_layout_block_map from Extract phase to translation phase"
                     )
                 if "layout_chunk_block_texts" in extract_task_state:
                     task_state["layout_chunk_block_texts"] = extract_task_state["layout_chunk_block_texts"]
@@ -2145,7 +2205,7 @@ class TranslationService:
             if is_pdf_file and disable_markdown_fallback:
                 logger.info(LogModule.EXTRACT, f"[PREVIEW] Task {task_id}: Using layout-based preview (markdown fallback disabled)")
                 self.task_manager.add_log(task_id, "info", "PDF markdown fallback is disabled. Using layout-based preview.")
-                
+
                 layout_doc = task_state.get("layout_document")
                 if layout_doc is None:
                     # Try to load from layout_source_zip
@@ -2159,12 +2219,16 @@ class TranslationService:
                                 logger.info(LogModule.EXTRACT, f"[PREVIEW] Task {task_id}: Loaded layout_document from layout_source_zip")
                         except Exception as load_error:
                             logger.warning(LogModule.EXTRACT, f"[PREVIEW] Task {task_id}: Failed to load layout_document: {load_error}")
-                
+
                 if layout_doc:
                     self.source_preview_service.prepare_layout_preview_from_layout(
                         task_id, layout_doc, payload, task_state, reason="markdown_fallback_disabled"
                     )
-                return
+                    return
+
+                # No layout available (e.g. single-phase immediate/queued mode without Extract phase).
+                # Fall through to markdown-based preview generation to populate source_chunks_cache.
+                logger.info(LogModule.EXTRACT, f"[PREVIEW] Task {task_id}: No layout document available, falling back to markdown-based preview")
             
             # Generate preview from markdown content
             try:
@@ -2714,7 +2778,7 @@ class TranslationService:
             
             task_state["layout_document"] = layout_doc
             total_blocks = sum(1 for _ in layout_doc.iter_blocks())
-            logger.info(
+            logger.debug(
                 LogModule.EXTRACT,
                 f"[LAYOUT] Stored layout_document in task_state for task {task_id}: "
                 f"{layout_doc.page_count} pages, {total_blocks} blocks, "

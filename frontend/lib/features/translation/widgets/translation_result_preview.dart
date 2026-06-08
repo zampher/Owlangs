@@ -103,8 +103,6 @@ class _TranslationResultPreviewState
       ValueNotifier<int?>(null);
   // Single scroll controller for the unified comparison panel
   final ScrollController _comparisonScrollController = ScrollController();
-  final Map<String, bool> _downloading =
-      <String, bool>{}; // Track download state for each file type
 
   // Scroll manager for maintaining scroll position during pagination
   PaginatedScrollManager? _scrollManager;
@@ -502,6 +500,24 @@ class _TranslationResultPreviewState
     _selectedExclusionFiltersNotifier.value = filters;
   }
 
+  /// Handle filter change from status bar filter chips
+  Future<void> _handleFiltersChanged(Set<String> filters) async {
+    if (_isRefreshingForFilter) return;
+
+    _setSelectedExclusionFilters(filters);
+    _clearFilteredIndicesCache();
+
+    _isRefreshingForFilter = true;
+    try {
+      await _segmentsPaginationController?.loadFirstPage();
+      if (mounted) setState(() {});
+    } finally {
+      if (mounted) {
+        _isRefreshingForFilter = false;
+      }
+    }
+  }
+
   /// Load task status to get attachments (e.g., glossary) and token usage
   /// Token usage is only loaded when translation is completed (called once when status changes to completed)
   Future<void> _loadTaskStatus() async {
@@ -532,8 +548,8 @@ class _TranslationResultPreviewState
         // Attachments are available but not used in this widget
       }
 
-      // Set default formats (image) for tables and equations if present
-      // No dialog popup - use defaults directly for review phase
+      // PDF layout: display defaults come from FormatSettings getters (table=image, equation=latex).
+      // Do not auto-persist legacy html/text values into task state.
       final bool isPdfFile =
           widget.fileName?.toLowerCase().endsWith('.pdf') ?? false;
       final bool hasTables = status['has_tables'] as bool? ?? false;
@@ -543,16 +559,15 @@ class _TranslationResultPreviewState
           (hasTables || hasInterlineEquations) &&
           !_formatDialogShown &&
           mounted) {
-        // Set default formats to backend defaults (html for table, text for equation)
-        // without showing dialog
         final formatNotifier = ref.read(
           formatSettingsProviderFamily(taskId).notifier,
         );
-        if (hasTables) {
-          formatNotifier.setTableFormat('html'); // Backend default
-        }
-        if (hasInterlineEquations) {
-          formatNotifier.setEquationFormat('text'); // Backend default
+        final FormatSettings current = ref.read(
+          formatSettingsProviderFamily(taskId),
+        );
+        // Clear legacy auto-persisted table default from older builds (html).
+        if (hasTables && current.tableFormat == 'html') {
+          formatNotifier.clearTableFormat();
         }
         setState(() {
           _formatDialogShown = true;
@@ -975,6 +990,52 @@ class _TranslationResultPreviewState
     // all_excluded 过滤：直接使用 _excludedSegments
     if (_selectedExclusionFilters.contains('all_excluded')) {
       final List<int> filteredIndices = _excludedSegments.keys.toList()..sort();
+      // Update cache
+      _cachedFilteredIndices = filteredIndices;
+      _cachedFilteredIndicesFilters =
+          Set<String>.from(_selectedExclusionFilters);
+      _cachedFilteredIndicesTotalCount = _totalSegmentsCount;
+      return filteredIndices;
+    }
+
+    // State-based filters (translated, pending, excluded, retry, cleared, images)
+    const Set<String> stateKeys = <String>{
+      'translated', 'pending', 'excluded', 'retry', 'cleared', 'images',
+    };
+    if (_selectedExclusionFilters.length == 1 &&
+        stateKeys.contains(_selectedExclusionFilters.first)) {
+      final String stateFilter = _selectedExclusionFilters.first;
+      final List<int> filteredIndices = <int>[];
+      for (int index = 0; index < _totalSegmentsCount; index++) {
+        final Map<String, dynamic> metadata =
+            _allSegmentsMetadata[index] ?? <String, dynamic>{};
+        final bool isImage = metadata['is_image'] as bool? ?? false;
+        final bool isFailed = metadata['is_failed'] as bool? ?? false;
+        final bool isExcluded = metadata['is_excluded'] as bool? ?? false;
+        final String? targetText = metadata['target_text'] as String?;
+        final String? status = metadata['status'] as String?;
+        final bool needsRetry = metadata['needs_retry'] as bool? ?? false;
+        final bool isCleared = status == 'cleared';
+
+        bool match = false;
+        switch (stateFilter) {
+          case 'translated':
+            match = !isImage && !isExcluded && !isFailed && !isCleared &&
+                targetText != null && targetText.isNotEmpty;
+          case 'pending':
+            match = !isImage && !isExcluded && !isFailed && !isCleared &&
+                (targetText == null || targetText.isEmpty);
+          case 'excluded':
+            match = isExcluded && !isFailed;
+          case 'retry':
+            match = needsRetry || isFailed;
+          case 'cleared':
+            match = isCleared;
+          case 'images':
+            match = isImage;
+        }
+        if (match) filteredIndices.add(index);
+      }
       // Update cache
       _cachedFilteredIndices = filteredIndices;
       _cachedFilteredIndicesFilters =
@@ -3866,7 +3927,6 @@ class _TranslationResultPreviewState
                 onNavigateToFailedSegment: (direction) =>
                     _navigateToFailedSegment(direction: direction),
                 onViewPreview: _viewTranslationPreview,
-                onShowSettings: _showPreviewSettingsDialog,
                 onShowDownload: _showDownloadDialog,
                 onViewPdfPreview: _viewPdfPreview,
                 onToggleFullscreen: _toggleFullscreen,
@@ -3885,40 +3945,6 @@ class _TranslationResultPreviewState
                 onRepairDocxMath: (widget.workflowType == 'markdown_based')
                     ? () => _repairDocxMathFragments(context)
                     : null,
-                // Filter buttons state (for toolbar filter buttons)
-                selectedFilters: selectedFilters,
-                onFiltersChanged: (Set<String> filters) async {
-                  // PERFORMANCE: Prevent duplicate refresh calls
-                  if (_isRefreshingForFilter) {
-                    return;
-                  }
-
-                  final start = DateTime.now();
-
-                  _setSelectedExclusionFilters(filters);
-                  _clearFilteredIndicesCache();
-
-                  _isRefreshingForFilter = true;
-                  try {
-                    // Load from first page so filter change shows correct dataset (All vs Excluded vs Included).
-                    await _segmentsPaginationController?.loadFirstPage();
-                    if (mounted) setState(() {});
-                  } catch (e) {
-                    if (kDebugMode) {
-                      final end = DateTime.now();
-                      _translationResultLog(
-                        '[FILTER_PERF] Refresh ERROR: filters=$filters, error=$e, duration=${end.difference(start).inMilliseconds}ms',
-                        level: LogLevel.error,
-                      );
-                    }
-                  } finally {
-                    if (mounted) {
-                      _isRefreshingForFilter = false;
-                    }
-                  }
-                },
-                totalSegments: _totalSegmentsCount,
-                failedCount: _calculateFailedCount(),
                 // Search functionality
                 isSearchBoxVisible: _isSearchBoxVisible,
                 searchQuery: _searchQuery,
@@ -4338,6 +4364,7 @@ class _TranslationResultPreviewState
       translationState: translationState,
       tokenUsage: tokenUsage,
       selectedExclusionFilters: _selectedExclusionFilters,
+      onFiltersChanged: _handleFiltersChanged,
       onFormulaFix: _handleFormulaFixForSegment,
     );
   }
@@ -4471,7 +4498,7 @@ class _TranslationResultPreviewState
       return;
     }
 
-    final String tableFormat = exportOptions['tableFormat'] ?? 'html';
+    final String tableFormat = exportOptions['tableFormat'] ?? 'image';
     final String pdfType = exportOptions['pdfType'] ?? 'translated';
 
     if (mounted) {
@@ -4821,8 +4848,12 @@ class _TranslationResultPreviewState
         formatSettingsProviderFamily(_apiTaskId()),
       );
       // Create state variables for dialog with current settings or defaults
-      var tableFormat = formatSettings.getTableFormat();
-      var equationFormat = formatSettings.getEquationFormat();
+      final bool isPdfFile = widget.fileName?.toLowerCase().endsWith('.pdf') ?? false;
+      final bool isPdfWorkflow = widget.workflowType == 'markdown_based' || isPdfFile;
+      var tableFormat =
+          formatSettings.getTableFormat(isPdfWorkflow: isPdfWorkflow);
+      var equationFormat =
+          formatSettings.getEquationFormat(isPdfWorkflow: isPdfWorkflow);
 
       await DialogHelper.showGeneralDialog(
         context: context,
@@ -5072,18 +5103,20 @@ class _TranslationResultPreviewState
       return;
     }
 
+    final l10n = AppLocalizations.of(context)!;
+
     // Build download options (for MD, always offer embedded and with-images variants)
     final List<Map<String, dynamic>> downloadOptions = <Map<String, dynamic>>[];
     for (final String format in availableFormats) {
       if (format == 'md') {
         downloadOptions.add(<String, dynamic>{
           'type': 'md',
-          'label': 'MD (Embedded Images)',
+          'label': l10n.translationExportMdEmbeddedImages,
           'embedImages': true,
         });
         downloadOptions.add(<String, dynamic>{
           'type': 'md',
-          'label': 'MD (With Images Folder)',
+          'label': l10n.translationExportMdWithImagesFolder,
           'embedImages': false,
         });
       } else if (format == 'epub' || format == 'mobi') {
@@ -5113,7 +5146,28 @@ class _TranslationResultPreviewState
     final bool showFormatOptions =
         isPdfWorkflow && (hasTables || hasInterlineEquations);
 
-    final l10n = AppLocalizations.of(context)!;
+    // Determine whether bilingual export option should be shown
+    final bool supportsBilingual = <String>{
+      'markdown_based',
+      'txt',
+      'html',
+      'srt',
+      'epub',
+      'mobi',
+      'docx',
+      'pptx',
+      'xlsx',
+    }.contains(resolvedWorkflowType);
+
+    final List<Map<String, dynamic>> _colorOptions = [
+      {'value': '', 'color': Colors.transparent, 'label': l10n.translationExportColorDefault},
+      {'value': 'gray', 'color': Colors.grey, 'label': l10n.translationExportColorGray},
+      {'value': 'blue', 'color': Colors.blue, 'label': l10n.translationExportColorBlue},
+      {'value': 'red', 'color': Colors.red, 'label': l10n.translationExportColorRed},
+      {'value': 'green', 'color': Colors.green, 'label': l10n.translationExportColorGreen},
+      {'value': 'orange', 'color': Colors.orange, 'label': l10n.translationExportColorOrange},
+      {'value': 'black', 'color': Colors.black, 'label': l10n.translationExportColorBlack},
+    ];
 
     DialogHelper.showGeneralDialog(
       context: context,
@@ -5131,19 +5185,41 @@ class _TranslationResultPreviewState
           final formatSettings = ref.watch(
             formatSettingsProviderFamily(_apiTaskId()),
           );
-          String tableFormat = formatSettings.getTableFormat();
-          String equationFormat = formatSettings.getEquationFormat();
+          String tableFormat =
+              formatSettings.getTableFormat(isPdfWorkflow: isPdfWorkflow);
+          String equationFormat =
+              formatSettings.getEquationFormat(isPdfWorkflow: isPdfWorkflow);
+          bool bilingualExport = formatSettings.bilingualExport ?? false;
+          String bilingualOrder =
+              formatSettings.bilingualOrder ?? 'target_after_source';
+          bool sourceTextItalic = formatSettings.sourceTextItalic ?? false;
+          String sourceTextColor =
+              formatSettings.sourceTextColor ?? ''; // empty means default color
+          bool targetTextItalic = formatSettings.targetTextItalic ?? true;
+          String targetTextColor =
+              formatSettings.targetTextColor ?? 'gray';
 
+          int selectedDownloadIndex = 0;
           return StatefulBuilder(
             builder: (BuildContext context, setDialogState) => Material(
               type: MaterialType.transparency,
               child: AlertDialog(
                 title: Text(l10n.translationExportDialogTitle),
-                content: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                content: SizedBox(
+                  width: 720,
+                  height: 380,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      // Format options for PDF workflow (moved to top)
+                      // LEFT: Parameter options
+                      Expanded(
+                        flex: 3,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              // Format options for PDF workflow
                       if (showFormatOptions) ...<Widget>[
                         Text(
                           l10n.translationExportFormatOptionsTitle,
@@ -5289,61 +5365,293 @@ class _TranslationResultPreviewState
                         ],
                         const Divider(height: 24),
                       ],
-
-                      // Download format options (moved to bottom)
-                      ...downloadOptions.map((option) {
-                        final fileType = option['type'] as String;
-                        final label = option['label'] as String;
-                        final embedImages = option['embedImages'] as bool?;
-                        final ebookEngine = option['ebookEngine'] as String?;
-                        final downloadKey = embedImages != null
-                            ? '${fileType}_${embedImages ? 'embedded' : 'with_images'}'
-                            : (ebookEngine != null ? '${fileType}_$ebookEngine' : fileType);
-                        final isFormatDownloading =
-                            _downloading[downloadKey] ?? false;
-                        return ListTile(
-                          enabled: !isFormatDownloading,
-                          leading: isFormatDownloading
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : Icon(
-                                  _getFormatIcon(fileType),
-                                  color: Theme.of(context).colorScheme.primary,
+                      // Bilingual export options
+                      if (supportsBilingual) ...<Widget>[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: <Widget>[
+                            Checkbox(
+                              value: bilingualExport,
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setDialogState(() {
+                                    bilingualExport = value;
+                                  });
+                                  ref
+                                      .read(
+                                        formatSettingsProviderFamily(
+                                                _apiTaskId(),)
+                                            .notifier,
+                                      )
+                                      .setBilingualExport(value);
+                                }
+                              },
+                            ),
+                            Expanded(
+                              child: Text(
+                                l10n.translationExportBilingualExport,
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                        // Always show options, but disable when bilingual is off
+                        Opacity(
+                          opacity: bilingualExport ? 1.0 : 0.4,
+                          child: AbsorbPointer(
+                            absorbing: !bilingualExport,
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 32.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                // Order: inline radios
+                                Row(
+                                  children: <Widget>[
+                                    Radio<String>(
+                                      value: 'target_after_source',
+                                      groupValue: bilingualOrder,
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          setDialogState(() {
+                                            bilingualOrder = value;
+                                          });
+                                          ref
+                                              .read(
+                                                formatSettingsProviderFamily(
+                                                        _apiTaskId(),)
+                                                    .notifier,
+                                              )
+                                              .setBilingualOrder(value);
+                                        }
+                                      },
+                                    ),
+                                    Text(l10n.translationExportBilingualOrderTargetAfter),
+                                    const SizedBox(width: 16),
+                                    Radio<String>(
+                                      value: 'target_before_source',
+                                      groupValue: bilingualOrder,
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          setDialogState(() {
+                                            bilingualOrder = value;
+                                          });
+                                          ref
+                                              .read(
+                                                formatSettingsProviderFamily(
+                                                        _apiTaskId(),)
+                                                    .notifier,
+                                              )
+                                              .setBilingualOrder(value);
+                                        }
+                                      },
+                                    ),
+                                    Text(l10n.translationExportBilingualOrderTargetBefore),
+                                  ],
                                 ),
-                          title: Text(
-                            label,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w500,
-                              color: Theme.of(context).colorScheme.primary,
+                                const Divider(height: 20),
+                                // Italic: source and target side by side
+                                Row(
+                                  children: <Widget>[
+                                    Checkbox(
+                                      value: sourceTextItalic,
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          setDialogState(() {
+                                            sourceTextItalic = value;
+                                          });
+                                          ref
+                                              .read(
+                                                formatSettingsProviderFamily(
+                                                        _apiTaskId(),)
+                                                    .notifier,
+                                              )
+                                              .setSourceTextItalic(value);
+                                        }
+                                      },
+                                    ),
+                                    Text(l10n.translationExportSourceTextItalic),
+                                    const SizedBox(width: 24),
+                                    Checkbox(
+                                      value: targetTextItalic,
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          setDialogState(() {
+                                            targetTextItalic = value;
+                                          });
+                                          ref
+                                              .read(
+                                                formatSettingsProviderFamily(
+                                                        _apiTaskId(),)
+                                                    .notifier,
+                                              )
+                                              .setTargetTextItalic(value);
+                                        }
+                                      },
+                                    ),
+                                    Text(l10n.translationExportTargetTextItalic),
+                                  ],
+                                ),
+                                const Divider(height: 20),
+                                // Colors: source color row
+                                Row(
+                                  children: <Widget>[
+                                    Text(l10n.translationExportSourceTextColor),
+                                    const SizedBox(width: 8),
+                                    ..._colorOptions.map((option) {
+                                      final value = option['value'] as String;
+                                      final color = option['color'] as Color;
+                                      final label = option['label'] as String?;
+                                      final isSelected =
+                                          sourceTextColor == value;
+                                      final Widget circle = GestureDetector(
+                                        onTap: () {
+                                          setDialogState(() {
+                                            sourceTextColor = value;
+                                          });
+                                          ref
+                                              .read(
+                                                formatSettingsProviderFamily(
+                                                        _apiTaskId(),)
+                                                    .notifier,
+                                              )
+                                              .setSourceTextColor(value);
+                                        },
+                                        child: Container(
+                                          margin: const EdgeInsets.symmetric(
+                                              horizontal: 4),
+                                          width: 24,
+                                          height: 24,
+                                          decoration: BoxDecoration(
+                                            color: color,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: isSelected
+                                                  ? Theme.of(context)
+                                                      .colorScheme
+                                                      .primary
+                                                  : (color == Colors.transparent
+                                                      ? Colors.grey.shade300
+                                                      : Colors.transparent),
+                                              width: 2,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                      return label != null
+                                          ? Tooltip(
+                                              message: label,
+                                              child: circle,
+                                            )
+                                          : circle;
+                                    }).toList(),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                // Target color row
+                                Row(
+                                  children: <Widget>[
+                                    Text(l10n.translationExportTargetTextColor),
+                                    const SizedBox(width: 8),
+                                    ..._colorOptions.map((option) {
+                                      final value = option['value'] as String;
+                                      final color = option['color'] as Color;
+                                      final label = option['label'] as String?;
+                                      final isSelected = targetTextColor == value;
+                                      final Widget circle = GestureDetector(
+                                        onTap: () {
+                                          setDialogState(() {
+                                            targetTextColor = value;
+                                          });
+                                          ref
+                                              .read(
+                                                formatSettingsProviderFamily(
+                                                        _apiTaskId(),)
+                                                    .notifier,
+                                              )
+                                              .setTargetTextColor(value);
+                                        },
+                                        child: Container(
+                                          margin: const EdgeInsets.symmetric(
+                                              horizontal: 4),
+                                          width: 24,
+                                          height: 24,
+                                          decoration: BoxDecoration(
+                                            color: color,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: isSelected
+                                                  ? Theme.of(context)
+                                                      .colorScheme
+                                                      .primary
+                                                  : (color == Colors.transparent
+                                                      ? Colors.grey.shade300
+                                                      : Colors.transparent),
+                                              width: 2,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                      return label != null
+                                          ? Tooltip(
+                                              message: label,
+                                              child: circle,
+                                            )
+                                          : circle;
+                                    }).toList(),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
-                          trailing: Icon(
-                            Icons.download,
-                            color: Theme.of(context).colorScheme.primary,
+                        ),
+                        ),
+                        const Divider(height: 24),
+                      ],
+                            ],
                           ),
-                          onTap: isFormatDownloading
-                              ? null
-                              : () {
-                                  // Capture current format values from dialog state before closing
-                                  final currentTableFormat = tableFormat;
-                                  final currentEquationFormat = equationFormat;
-                                  final ebookEngine = option['ebookEngine'] as String?;
-                                  Navigator.of(context, rootNavigator: true)
-                                      .pop();
-                                  _handlePreviewFormatDownload(
-                                    fileType,
-                                    embedImages: embedImages,
-                                    tableFormat: currentTableFormat,
-                                    equationFormat: currentEquationFormat,
-                                    ebookEngine: ebookEngine,
-                                  );
+                        ),
+                      ),
+                      const VerticalDivider(width: 1),
+                      // RIGHT: Download buttons
+                      Expanded(
+                        flex: 2,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Text(
+                                  l10n.translationExportDocumentType,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ...downloadOptions.asMap().entries.map((entry) {
+                              final int index = entry.key;
+                              final Map<String, dynamic> option = entry.value;
+                              final String label = option['label'] as String;
+                              return RadioListTile<int>(
+                                value: index,
+                                groupValue: selectedDownloadIndex,
+                                title: Text(label),
+                                dense: true,
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    selectedDownloadIndex = value;
+                                    setDialogState(() {});
+                                  }
                                 },
-                        );
-                      }),
+                              );
+                            }),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -5352,7 +5660,29 @@ class _TranslationResultPreviewState
                     onPressed: () {
                       Navigator.of(context, rootNavigator: true).pop();
                     },
-                    child: const Text('Cancel'),
+                    child: Text(l10n.translationToolbarCancelButton),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      final selectedOption =
+                          downloadOptions[selectedDownloadIndex];
+                      final fileType = selectedOption['type'] as String;
+                      final embedImages =
+                          selectedOption['embedImages'] as bool?;
+                      final ebookEngine =
+                          selectedOption['ebookEngine'] as String?;
+                      final currentTableFormat = tableFormat;
+                      final currentEquationFormat = equationFormat;
+                      Navigator.of(context, rootNavigator: true).pop();
+                      _handlePreviewFormatDownload(
+                        fileType,
+                        embedImages: embedImages,
+                        tableFormat: currentTableFormat,
+                        equationFormat: currentEquationFormat,
+                        ebookEngine: ebookEngine,
+                      );
+                    },
+                    child: Text(l10n.translationExportDownloadButton),
                   ),
                 ],
               ),
@@ -5394,6 +5724,8 @@ class _TranslationResultPreviewState
           Map<String, String>.from(uri.queryParameters);
 
       // Add format parameters for MD, HTML, DOCX, PDF
+      // Only send when user has explicitly set values (provider has non-null);
+      // otherwise let backend decide based on PDF/non-PDF flow.
       if (fileType == 'md' ||
           fileType == 'html' ||
           fileType == 'docx' ||
@@ -5401,10 +5733,14 @@ class _TranslationResultPreviewState
         final formatSettings = ref.read(
           formatSettingsProviderFamily(_apiTaskId()),
         );
-        queryParams['table_body_format'] =
-            tableFormat ?? formatSettings.getTableFormat();
-        queryParams['equation_format'] =
-            equationFormat ?? formatSettings.getEquationFormat();
+        final bool isPdfFile =
+            widget.fileName?.toLowerCase().endsWith('.pdf') ?? false;
+        final bool isPdfWorkflow =
+            widget.workflowType == 'markdown_based' || isPdfFile;
+        queryParams['table_body_format'] = tableFormat ??
+            formatSettings.getTableFormat(isPdfWorkflow: isPdfWorkflow);
+        queryParams['equation_format'] = equationFormat ??
+            formatSettings.getEquationFormat(isPdfWorkflow: isPdfWorkflow);
         if (fileType == 'md' && embedImages != null) {
           queryParams['embed_images'] = embedImages.toString();
         }
@@ -5413,6 +5749,31 @@ class _TranslationResultPreviewState
       // For EPUB/MOBI, add ebook_engine when user chose Pandoc or Calibre
       if ((fileType == 'epub' || fileType == 'mobi') && ebookEngine != null) {
         queryParams['ebook_engine'] = ebookEngine;
+      }
+
+      // Add bilingual parameters if enabled
+      final formatSettings = ref.read(
+        formatSettingsProviderFamily(_apiTaskId()),
+      );
+      if (formatSettings.bilingualExport == true) {
+        queryParams['bilingual_export'] = 'true';
+        queryParams['bilingual_order'] =
+            formatSettings.bilingualOrder ?? 'target_after_source';
+        if (formatSettings.sourceTextItalic != null) {
+          queryParams['source_text_italic'] =
+              formatSettings.sourceTextItalic.toString();
+        }
+        if (formatSettings.sourceTextColor != null) {
+          queryParams['source_text_color'] = formatSettings.sourceTextColor!;
+        }
+        if (formatSettings.targetTextItalic != null) {
+          queryParams['target_text_italic'] =
+              formatSettings.targetTextItalic.toString();
+        }
+        if (formatSettings.targetTextColor != null &&
+            formatSettings.targetTextColor!.isNotEmpty) {
+          queryParams['target_text_color'] = formatSettings.targetTextColor!;
+        }
       }
 
       downloadUrl = uri.replace(queryParameters: queryParams).toString();
@@ -5424,29 +5785,19 @@ class _TranslationResultPreviewState
     }
   }
 
-  /// Get icon for file format
-  IconData _getFormatIcon(String format) {
-    switch (format.toLowerCase()) {
-      case 'md':
-        return Icons.description;
-      case 'html':
-        return Icons.code;
-      case 'docx':
-        return Icons.description;
-      case 'pdf':
-        return Icons.picture_as_pdf;
-      default:
-        return Icons.file_download;
-    }
-  }
-
   /// Show PDF export dialog with table format and PDF type (translated/original) options
   /// Returns a Map with 'tableFormat' and 'pdfType' keys, or null if cancelled
-  Future<Map<String, String>?> _showPdfExportDialog() async =>
-      DialogHelper.showDialog<Map<String, String>>(
+  Future<Map<String, String>?> _showPdfExportDialog() async {
+    final FormatSettings formatSettings = ref.read(
+      formatSettingsProviderFamily(_apiTaskId()),
+    );
+    final String initialTableFormat =
+        formatSettings.getTableFormat(isPdfWorkflow: true);
+
+    return DialogHelper.showDialog<Map<String, String>>(
         context: context,
         builder: (BuildContext context) {
-          String selectedFormat = 'html'; // Default value
+          String selectedFormat = initialTableFormat;
           String selectedPdfType = 'translated'; // Default: translated PDF
 
           return AlertDialog(
@@ -5577,4 +5928,5 @@ class _TranslationResultPreviewState
           );
         },
       );
+  }
 }

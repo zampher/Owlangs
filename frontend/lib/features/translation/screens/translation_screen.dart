@@ -24,6 +24,7 @@ import '../../../shared/services/glossary_api_service.dart';
 import '../../../shared/services/file_format_service.dart';
 import 'dart:typed_data';
 import '../../../shared/providers/settings_provider.dart';
+import '../../../shared/utils/download_filename_builder.dart';
 import '../../../shared/utils/app_logger.dart';
 import '../../../shared/utils/message_service.dart';
 import '../../../shared/utils/dialog_helper.dart';
@@ -125,6 +126,10 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
   bool get _isReeditMode => widget.reeditTaskId != null &&
       widget.reeditTaskId!.isNotEmpty &&
       widget.flowId == null;
+  
+  // Batch retry cancellation
+  Future<void> Function()? _currentBatchRetryCancel;
+  bool _isBatchRetryCancelling = false;
   String?
       _previousTargetLang; // Track previous target language to detect changes
   // Remember user's choice for each target language: null=not chosen, true=exclude, false=don't exclude
@@ -800,8 +805,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                     ConstrainedBox(
                       constraints: const BoxConstraints(
                         minWidth:
-                            280, // Minimum width to accommodate 250px ad + padding
-                        maxWidth: 320, // Maximum width to keep panel compact
+                            200, // Minimum width
+                        maxWidth: 260, // Maximum width
                       ),
                       child: DecoratedBox(
                         decoration: BoxDecoration(
@@ -1078,6 +1083,11 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
 
   /// True if [filename] has an image extension (e.g. PNG, JPG).
   /// Used to skip Language Match Warning for image translation (OCR result language often matches target).
+  /// Returns [value] if non-null and non-empty, otherwise [fallback].
+  static String _nonEmpty(String? value, String fallback) {
+    return (value != null && value.isNotEmpty) ? value : fallback;
+  }
+
   static bool _isImageFileName(String? filename) {
     if (filename == null || filename.isEmpty) return false;
     const Set<String> imageExtensions = <String>{
@@ -1197,11 +1207,16 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         _clearQueuePersistDirty();
       }
     } catch (e, st) {
+      // Ignore 400 Bad Request errors during auto-persist (e.g., task not completed yet
+      // or segments not ready). This is a non-critical background operation.
+      final String errStr = e.toString();
+      final bool isBadRequest = errStr.contains('400') || errStr.contains('bad response');
       _translationScreenLog(
-        'Auto persist queue snapshot failed: $e\n$st',
-        level: LogLevel.warn,
+        'Auto persist queue snapshot failed: $e${isBadRequest ? " (ignored, will retry later)" : ""}',
+        level: isBadRequest ? LogLevel.info : LogLevel.warn,
       );
-      if (mounted) {
+      // Only mark dirty for non-400 errors; 400 errors will auto-retry on next poll
+      if (mounted && !isBadRequest) {
         _markQueuePersistDirty();
       }
     }
@@ -1459,6 +1474,30 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       }
 
       // Proceed immediately without confirmation dialog
+      // Store cancel function for this retry operation
+      Future<void> cancelBatchRetry() async {
+        if (_isBatchRetryCancelling) return;
+        _isBatchRetryCancelling = true;
+        
+        // Call backend cancel API
+        try {
+          await svc.cancelBatchRetry(state.taskId!);
+          _translationScreenLog('Batch retry cancel requested');
+        } catch (e) {
+          _translationScreenLog('Failed to send cancel request: $e');
+        }
+        
+        if (mounted) {
+          _showSnackBar(
+            'Cancelling batch retry...',
+            Colors.orange,
+          );
+        }
+      }
+      
+      // Expose cancel function to UI
+      _currentBatchRetryCancel = cancelBatchRetry;
+      
       if (mounted) {
         _showSnackBar(
           'Retrying ${failedIndices.length} segment(s)...',
@@ -1521,6 +1560,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       // We need to poll to get these updates, similar to translation phase
       final TranslationService pollSvc = TranslationService();
       bool pollingActive = true;
+      bool cancelRequested = false;
 
       // Start polling in background (don't await, let it run concurrently)
       // Use unawaited to avoid blocking
@@ -1528,6 +1568,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         state.taskId!,
         onUpdate: (Map<String, dynamic> status) {
           if (!pollingActive) return; // Stop updating if polling is cancelled
+          if (_isBatchRetryCancelling) return; // Stop updating if user cancelled
 
           // Update progress from backend (10%-90% during retry)
           // Safely extract progress, handling null and invalid types
@@ -1540,12 +1581,29 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           final String statusText = (status['status'] ?? '').toString();
           final String message = (status['message'] ?? '').toString();
 
-          // Only update if status is 'retranslating' or 'processing' (during retry)
-          if (statusText == 'retranslating' || statusText == 'processing') {
+          // CRITICAL: Update progress during retry (status is 'processing' during batch retry)
+          // Check both status and message to detect retry state reliably
+          final bool isRetryInProgress = statusText == 'processing' && 
+              (message.toLowerCase().contains('retranslat') || 
+               message.toLowerCase().contains('preparing retranslation') ||
+               message.toLowerCase().contains('batch retry'));
+          final bool isTranslationPhase = statusText == 'processing' && 
+              (message.startsWith('Translating') || 
+               message.startsWith('Sending translation') ||
+               message.startsWith('Generating output'));
+          
+          // Update progress during retry (but not during main translation to avoid conflicts)
+          if (isRetryInProgress || (statusText == 'processing' && !isTranslationPhase)) {
             translationNotifier.setProgress(progress);
             if (message.isNotEmpty) {
               translationNotifier.setStatusText(message);
             }
+          }
+          
+          // Check for cancellation in message
+          if (message.toLowerCase().contains('cancelled')) {
+            _isBatchRetryCancelling = true;
+            pollingActive = false;
           }
         },
         intervalSec: 1, // Poll every 1 second for faster updates
@@ -1671,15 +1729,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       // Collect all results
       allResults.addAll(results);
 
-      // Don't set progress to 100% here - wait until all processing is done
-      // Progress will be updated from backend polling or set to 100% at the end
-      translationNotifier.setTranslationStats(
-        successCount: 0, // Will be updated below
-        failCount: 0, // Will be updated below
-        totalSegments: totalToRetranslate,
-      );
-
-      // Count results
+      // Count retry results for logging
       for (final Map<String, dynamic> result in results) {
         if (result['success'] == true) {
           successCount++;
@@ -1695,22 +1745,59 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         }
       }
 
-      // Update final stats
-      translationNotifier.setTranslationStats(
-        successCount: successCount,
-        failCount: failCount,
-        totalSegments: totalToRetranslate,
-      );
+      // Fetch overall statistics from backend (all segments, not just retried)
+      // and set combined translation time (initial + retry)
+      try {
+        final Map<String, dynamic> allSegmentsData =
+            await svc.getTranslationSegments(state.taskId!, forceRefresh: true);
+        final List<dynamic> allSegments =
+            allSegmentsData['segments'] as List<dynamic>? ?? <dynamic>[];
+
+        var overallSuccess = 0;
+        var overallFail = 0;
+        for (final segment in allSegments) {
+          final isFailed = segment['is_failed'] as bool? ?? false;
+          final isExcluded = segment['is_excluded'] as bool? ?? false;
+          final segmentStatus = segment['status'] as String?;
+          if (isFailed && !isExcluded && segmentStatus != 'cleared') {
+            overallFail++;
+          } else if (!isExcluded && segmentStatus != 'cleared') {
+            overallSuccess++;
+          }
+        }
+
+        translationNotifier.setTranslationStats(
+          successCount: overallSuccess,
+          failCount: overallFail,
+          totalSegments: allSegments.length,
+        );
+      } catch (e) {
+        // Fallback: use retry-only counts if overall fetch fails
+        _translationScreenLog(
+          'Failed to fetch overall stats after retry: $e',
+        );
+        translationNotifier.setTranslationStats(
+          successCount: successCount,
+          failCount: failCount,
+          totalSegments: totalToRetranslate,
+        );
+      }
+
+      // Update translation time to include initial translation + retry time
+      final DateTime retryEndTime = DateTime.now();
+      translationNotifier.setEndTime(retryEndTime);
+      final currentStateForTime = _getCurrentTranslationState();
+      final DateTime? translationStartTime = currentStateForTime.startTime;
+      if (translationStartTime != null) {
+        translationNotifier.setTotalDuration(
+          retryEndTime.difference(translationStartTime),
+        );
+      }
 
       // Update final status
       translationNotifier.setTranslating(false);
       translationNotifier.setProgress(100);
       translationNotifier.setStatusText('completed');
-      translationNotifier.setTranslationStats(
-        successCount: successCount,
-        failCount: failCount,
-        totalSegments: totalToRetranslate,
-      );
 
       // Show final result only if there are errors (progress is already shown in status bar)
       if (mounted) {
@@ -1761,6 +1848,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       }
     } finally {
       notifier.setCurrentOperation(TranslationOperation.none);
+      // Clear batch retry cancel function
+      _currentBatchRetryCancel = null;
+      _isBatchRetryCancelling = false;
     }
   }
 
@@ -1811,10 +1901,11 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
             currentOperation == TranslationOperation.generatingGlossary ||
             currentOperation == TranslationOperation.converting;
     final hasImportedFile = !_isTextMode && state.pickedFile != null;
-    final shouldShowModeToggle = !hideDuringOperation && !hasImportedFile;
+    final shouldShowModeToggle = !_isReeditMode && !hideDuringOperation && !hasImportedFile;
     // Disable Upload button if file is already uploaded and task is not cancelled
     final bool isTaskCancelled = state.statusText.toLowerCase() == 'cancelled';
-    final bool shouldDisableUpload = hasImportedFile &&
+    final bool shouldDisableUpload = _isReeditMode ||
+        hasImportedFile &&
         state.taskId != null &&
         (state.taskId as String).isNotEmpty &&
         !isTaskCancelled;
@@ -2011,7 +2102,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           const SizedBox(width: 8), // Reduced spacing
           // Re-split Source Button (supports both file mode and text mode)
           OutlinedButton.icon(
-            onPressed: !isOperationInProgress &&
+            onPressed: !_isReeditMode &&
+                    !isOperationInProgress &&
                     (state.taskId != null ||
                         (_isTextMode &&
                             _textController.text.trim().isNotEmpty))
@@ -2117,7 +2209,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                   widget.flowId ?? (state.taskId ?? 'translation');
               final int exclusionInFlight = ref.watch(
                   exclusionUpdateInFlightProviderFamily(exclusionKey),);
-              final bool isConvertEnabled = hasFileOrText &&
+              final bool isConvertEnabled = !_isReeditMode &&
+                  hasFileOrText &&
                   !isOperationInProgress &&
                   !_isGlossaryEditing &&
                   !_isUpdatingExcluded &&
@@ -2161,7 +2254,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
               final bool hasFileOrText = state.pickedFile != null ||
                   (_isTextMode && _textController.text.trim().isNotEmpty);
               // Only enable if Extract is completed (or no Extract tab exists yet)
-              final bool isTranslateEnabled = hasFileOrText &&
+              final bool isTranslateEnabled = !_isReeditMode &&
+                  hasFileOrText &&
                   !isOperationInProgress &&
                   !_isGlossaryEditing &&
                   !_isUpdatingExcluded &&
@@ -2281,7 +2375,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                       : l10n.translationPersistQueueAlreadySyncedTooltip;
                   return Tooltip(
                     message: persistTooltip,
-                    child: OutlinedButton.icon(
+                    child: IconButton(
                       onPressed: _queuePersistInFlight
                           ? null
                           : queueDirty
@@ -2294,16 +2388,10 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.save_alt, size: 16),
-                      label: Text(
-                        l10n.translationPersistQueueButton,
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        minimumSize: const Size(0, 32),
+                      padding: const EdgeInsets.all(4),
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
                       ),
                     ),
                   );
@@ -2311,11 +2399,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
               ),
             ),
           const SizedBox(width: 16),
-          // File name display (docked to the right of buttons)
-          // Constrained max width so Row has bounded width inside scroll view
+          // File name display (adaptive width inside horizontal scroll)
           if (hasImportedFile)
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 280),
+            Flexible(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
@@ -2364,8 +2450,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
               ),
             ),
           ],
-          // Fetch URL Button - only in file mode before file is uploaded
-          if (!_isTextMode && !hasImportedFile) ...<Widget>[
+          // Fetch URL Button - only in file mode before file is uploaded, not in reedit mode
+          if (!_isReeditMode && !_isTextMode && !hasImportedFile) ...<Widget>[
             const SizedBox(width: 8), // Reduced spacing
             OutlinedButton.icon(
               onPressed: isOperationInProgress
@@ -2380,7 +2466,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                 size: 16,
               ),
               label: Text(
-                _showUrlInput ? 'Close' : 'Fetch URL',
+                _showUrlInput ? AppLocalizations.of(context)!.fetchUrlClose : AppLocalizations.of(context)!.fetchUrl,
                 style: const TextStyle(fontSize: 13),
               ),
               style: OutlinedButton.styleFrom(
@@ -2392,6 +2478,22 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
               ),
             ),
           ],
+          // Show filename on the right side in reedit mode
+          if (_isReeditMode && widget.reeditFileName != null)
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12, right: 4),
+                child: Text(
+                  widget.reeditFileName!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ),
         ],
         ),
       ),
@@ -2479,7 +2581,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                 : const Icon(Icons.download),
             label: Text(_isFetchingUrl
                 ? AppLocalizations.of(context)!.fetchUrlCancel
-                : 'Fetch URL'),
+                : AppLocalizations.of(context)!.fetchUrl),
           ),
         ],
       ),
@@ -4005,6 +4107,14 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       }
     }
 
+    // Reset operation state after file processing completes.
+    // MUST be done before the mounted check — the notifier persists across widget
+    // lifecycles via Riverpod. If we skip this when !mounted, the next widget
+    // instance for the same flow will see currentOperation stuck as "importing"
+    // and ALL toolbar buttons (Translate, Glossary, Re-extract, etc.) will be
+    // permanently disabled.
+    notifier.setCurrentOperation(TranslationOperation.none);
+
     // Widget may have been disposed during the async file processing above.
     if (!mounted) return;
 
@@ -4028,10 +4138,6 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         qsNotifier.updateWorkflowType(selectedWorkflow);
       }
     }
-
-    // Reset operation state after file processing completes
-    // This ensures toolbar buttons are enabled when segments/chunks are loaded
-    notifier.setCurrentOperation(TranslationOperation.none);
 
     // Log completion with current taskId from state
     final dynamic currentState = widget.flowId != null
@@ -4204,6 +4310,11 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     } finally {
       _fetchUrlCancelToken = null;
     }
+
+    // Reset operation state after URL fetch completes.
+    // MUST be done before the mounted check to prevent permanently-disabled
+    // toolbar buttons if the widget was disposed during async fetch.
+    translationNotifier.setCurrentOperation(TranslationOperation.none);
 
     if (!mounted) return;
 
@@ -4831,15 +4942,12 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       final Map<String, dynamic>? secretsConfig =
           await appConfigService.getSecretsConfig();
 
-      // Get default platform info
-      final String defaultPlatform =
-          appConfig?['default_platform'] as String? ?? 'openai';
-      final Map<String, dynamic> aiPlatforms =
-          appConfig?['ai_platforms'] as Map<String, dynamic>? ??
-              <String, dynamic>{};
-      final Map<String, dynamic> platformInfo =
-          aiPlatforms[defaultPlatform] as Map<String, dynamic>? ??
-              <String, dynamic>{};
+      // Get default platform info from runtime settings (reflects Quick Settings changes)
+      final AIPlatformSettings aiPlatformSettings =
+          ref.read(aiPlatformSettingsProvider);
+      final String defaultPlatform = aiPlatformSettings.defaultPlatform;
+      final AIPlatformInfo? platformInfo =
+          aiPlatformSettings.platforms[defaultPlatform];
       final Map<String, dynamic> platformApiKeys =
           secretsConfig?['platform_api_keys'] as Map<String, dynamic>? ??
               <String, dynamic>{};
@@ -4987,20 +5095,21 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         'from_lang': 'auto',
         'to_lang': qs.toLang,
         // Required LLM fields at top-level per backend schema
-        'base_url': platformInfo['url'] as String? ??
+        'base_url': platformInfo?.url ??
             translationParams['base_url'] ??
             'https://api.openai.com/v1',
         'api_key': apiKey.isNotEmpty
             ? apiKey
             : (translationParams['api_key'] as String? ?? ''),
-        'model_id': platformInfo['model'] as String? ??
+        'model_id': platformInfo?.model ??
             translationParams['model_id'] ??
             'gpt-4o',
         // Core controls expected at top-level
         // chunk_size and concurrent are now per-platform settings, read by backend from platforms.json
+        // thinking is now per-platform setting (thinking_mode/thinking_mode_supported in platforms.json)
         'temperature': translationParams['temperature'],
-        'thinking': translationParams['thinking'],
-        'timeout': translationParams['timeout'],
+        'timeout': platformInfo?.timeout ?? 120,
+        'write_timeout': platformInfo?.writeTimeout ?? 300,
         'retry': translationParams['retry'],
         'segment_auto_retry_rounds':
             translationParams['segment_auto_retry_rounds'],
@@ -5014,13 +5123,13 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         // Keep nested params for forward compatibility (backend ignores unknown)
         'translation_params': <String, dynamic>{
           ...translationParams,
-          'base_url': platformInfo['url'] as String? ??
+          'base_url': platformInfo?.url ??
               translationParams['base_url'] ??
               'https://api.openai.com/v1',
           'api_key': apiKey.isNotEmpty
               ? apiKey
               : (translationParams['api_key'] as String? ?? ''),
-          'model_id': platformInfo['model'] as String? ??
+          'model_id': platformInfo?.model ??
               translationParams['model_id'] ??
               'gpt-4o',
         },
@@ -5029,7 +5138,10 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           'convert_engine': globalSettings.parsingEngine,
           'formula_ocr': globalSettings.formulaOcr,
           'table_ocr': globalSettings.tableOcr,
-          'model_version': 'vlm',
+          'model_version': _nonEmpty(
+                aiPlatformSettings.platforms[globalSettings.parsingEngine]?.model,
+                'hybrid-auto-engine',
+              ),
           if (globalSettings.parsingEngine == 'mineru' &&
               mineruToken.isNotEmpty) ...<String, dynamic>{
             'mineru_token': mineruToken,
@@ -5755,17 +5867,22 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           embedImagesParam != null &&
           embedImagesParam.toLowerCase() == 'false';
 
-      // Generate filename
+      // Generate filename with configurable suffix
       final originalName = state.pickedFile?.name ??
           widget.reeditFileName ??
           'translated';
-      final String nameWithoutExt = _removeFileExtension(originalName);
-      final String suffix = isConvertDownload ? 'converted' : 'translated';
-      final String baseName = '${nameWithoutExt}_$suffix';
-
-      // Use .zip extension for MD with images folder, otherwise use fileType
+      final String suffix = isConvertDownload
+          ? ref.read(globalSettingsProvider).convertOutputSuffix
+          : ref.read(globalSettingsProvider).translateOutputSuffix;
       final String actualFileType = isMdWithImagesFolder ? 'zip' : fileType;
-      final String filename = '$baseName.$actualFileType';
+      final String filename = buildDownloadFilename(
+        originalName: originalName,
+        extension: actualFileType,
+        suffix: suffix,
+      );
+      final String baseName = filename.endsWith('.$actualFileType')
+          ? filename.substring(0, filename.length - actualFileType.length - 1)
+          : filename;
 
       // Save file
       if (kIsWeb) {
@@ -6207,9 +6324,26 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
 
   /// Opens a Translate tab for re-editing a completed task.
   /// Uses re-edit override params since there is no picked file.
+  /// Also updates the translation state so toolbar buttons (Retry, Translate All) become active.
+  /// Restores original task parameters from the backend payload so the re-edit form reflects
+  /// the user's original settings (target language, workflow type, prompt, etc.).
   void _addReeditTranslationResultTab() {
     final AppLocalizations l10n = AppLocalizations.of(context)!;
     final String taskId = widget.reeditTaskId!;
+
+    // Set taskId and completed status so toolbar buttons (Retry, Translate All)
+    // become visible and clickable in reedit/view mode.
+    final dynamic notifier = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!).notifier)
+        : ref.read(translationStateProvider.notifier);
+    notifier.setTaskId(taskId);
+    notifier.setProgress(100);
+    notifier.setStatusText('completed');
+
+    // Get quick settings notifier for restoring original task params
+    final dynamic qsNotifier = widget.flowId != null
+        ? ref.read(translationQuickSettingsProviderFamily(widget.flowId!).notifier)
+        : ref.read(translationQuickSettingsProvider.notifier);
 
     // Show a loading indicator while fetching task data
     final Map<String, String> downloads = <String, String>{};
@@ -6222,6 +6356,12 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       if (dv is Map && dv.isNotEmpty) {
         downloads.addAll(
             dv.map((k, v) => MapEntry(k.toString(), v.toString())));
+      }
+
+      // Restore original task parameters (target language, workflow type, prompt, etc.)
+      final dynamic taskParams = status['task_params'];
+      if (taskParams is Map<String, dynamic> && taskParams.isNotEmpty) {
+        qsNotifier.restoreFromTaskParams(taskParams);
       }
     }).catchError((Object e) {
       // Ignore; proceed with empty downloads

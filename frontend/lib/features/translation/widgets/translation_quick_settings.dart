@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../app/app_router.dart';
 import '../../../shared/services/config_service.dart';
 import '../../../shared/services/translation_service.dart';
+import '../../../shared/utils/language_mapper.dart';
 import '../../../shared/providers/settings_provider.dart';
 import '../../../shared/providers/admin_permissions_provider.dart';
 import '../../../shared/providers/auth_provider.dart';
@@ -17,6 +18,7 @@ import '../../settings/screens/ai_platform_settings.dart';
 import '../models/preview_tab.dart';
 import '../providers/translation_state_provider_family.dart';
 import '../providers/preview_tabs_provider.dart';
+import '../../../shared/utils/mineru_language_data.dart';
 
 // 翻译快速设置状态管理
 final StateNotifierProvider<TranslationQuickSettingsNotifier,
@@ -45,7 +47,7 @@ class TranslationQuickSettings {
   const TranslationQuickSettings({
     this.sourceLang = 'auto',
     this.toLang = 'en',
-    this.workflowType = 'docx',
+    this.workflowType = 'markdown_based',
     this.usePrompt = false,
     this.selectedGlossaries = const <String>[],
     this.glossarySelectorExpanded = true, // Default: expanded
@@ -64,8 +66,8 @@ class TranslationQuickSettings {
   factory TranslationQuickSettings.fromJson(Map<String, dynamic> json) =>
       TranslationQuickSettings(
         sourceLang: json['sourceLang'] ?? 'auto',
-        toLang: json['toLang'] ?? 'zh',
-        workflowType: json['workflowType'] ?? 'docx',
+        toLang: json['toLang'] ?? 'en',
+        workflowType: json['workflowType'] ?? 'markdown_based',
         selectedGlossaries:
             List<String>.from(json['selectedGlossaries'] ?? <dynamic>[]),
         glossarySelectorExpanded:
@@ -178,20 +180,56 @@ class TranslationQuickSettingsNotifier
   Future<void> _loadSettings() async {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
-      final keysToCheck = <String>[
-        if (flowId != null) 'translation_quick_settings_$flowId',
-        'translation_quick_settings',
-      ];
 
-      for (final String key in keysToCheck) {
-        final String? settingsJson = prefs.getString(key);
-        if (settingsJson != null) {
+      // 1. Flow-specific settings take full priority (per-task overrides).
+      if (flowId != null) {
+        final String? flowSettingsJson =
+            prefs.getString('translation_quick_settings_$flowId');
+        if (flowSettingsJson != null) {
           final Map<String, dynamic> settingsMap =
-              jsonDecode(settingsJson) as Map<String, dynamic>;
-          final loadedSettings = TranslationQuickSettings.fromJson(settingsMap);
-          // Force autoSelectWorkflow to true to ensure automatic workflow selection
+              jsonDecode(flowSettingsJson) as Map<String, dynamic>;
+          final loadedSettings =
+              TranslationQuickSettings.fromJson(settingsMap);
           state = loadedSettings.copyWith(autoSelectWorkflow: true);
           return;
+        }
+      }
+
+      // 2. Load sticky global quick settings as baseline.
+      final String? globalQuickJson =
+          prefs.getString('translation_quick_settings');
+      if (globalQuickJson != null) {
+        final Map<String, dynamic> settingsMap =
+            jsonDecode(globalQuickJson) as Map<String, dynamic>;
+        final loadedSettings =
+            TranslationQuickSettings.fromJson(settingsMap);
+        state = loadedSettings.copyWith(autoSelectWorkflow: true);
+      }
+
+      // 3. Apply global defaults for sourceLang and toLang from Settings.
+      //    - Desktop users: Settings defaults always apply (no sticky session across installs).
+      //    - Web first-time users: Settings defaults apply.
+      //    - Web returning users: keep the last-used toLang from the sticky cache (step 2),
+      //      so they pick up where they left off.
+      final String? globalJson = prefs.getString('global_settings');
+      if (globalJson != null) {
+        final Map<String, dynamic> globalMap =
+            jsonDecode(globalJson) as Map<String, dynamic>;
+        final String ocrLanguage =
+            (globalMap['ocrLanguage'] as String?) ?? 'auto';
+        if (ocrLanguage.isNotEmpty) {
+          state = state.copyWith(sourceLang: ocrLanguage);
+        }
+        final String? targetLangCode =
+            globalMap['targetLanguage'] as String?;
+        if (targetLangCode != null && targetLangCode.isNotEmpty) {
+          // Desktop or first-time web: override with Settings default.
+          // Returning web users: keep the sticky toLang from step 2.
+          final bool isDesktop = !kIsWeb;
+          final bool isFirstTimeWeb = kIsWeb && globalQuickJson == null;
+          if (isDesktop || isFirstTimeWeb) {
+            state = state.copyWith(toLang: targetLangCode);
+          }
         }
       }
     } catch (e) {
@@ -377,6 +415,32 @@ class TranslationQuickSettingsNotifier
     state = state.copyWith(selectedGlossaries: current);
   }
 
+  /// Restore settings from backend task_params (used when entering reedit mode).
+  /// Maps backend payload field names to frontend quick settings.
+  void restoreFromTaskParams(Map<String, dynamic> params) {
+    final String? toLang = params['to_lang'] as String?;
+    final String? workflowType = params['workflow_type'] as String?;
+    final String? promptMode = params['prompt_mode'] as String?;
+    final String? promptStyle = params['prompt_style'] as String?;
+    final String? taskNote = params['custom_note'] as String?;
+    final bool? deepSplit = params['deep_split'] as bool?;
+    final double? temperature = params['temperature'] != null
+        ? (params['temperature'] as num).toDouble()
+        : null;
+
+    state = state.copyWith(
+      toLang: toLang,
+      workflowType: workflowType,
+      promptMode: promptMode,
+      promptStyle: promptStyle,
+      taskNote: taskNote,
+      deepSplit: deepSplit,
+      temperature: temperature,
+      autoSelectWorkflow: false, // Preserve the original workflow, don't auto-detect
+    );
+    _saveSettings();
+  }
+
   void reset() {
     state = const TranslationQuickSettings();
   }
@@ -488,9 +552,10 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
             }
             final activeTab =
                 tabsState.tabs[tabsState.activeTabIndex];
+            final l10n = AppLocalizations.of(context)!;
             return _TabLanguageFlags(
               extract: activeTab.id == 'extract_tab' ||
-                  activeTab.title == 'Extract',
+                  activeTab.title == l10n.homePhaseExtract,
               glossary: activeTab.type == PreviewTabType.glossary,
             );
           }),
@@ -540,13 +605,11 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
             ),
             const SizedBox(height: 8), // Reduced from 16 to 8
 
-            // Group 1: Source Language + Parsing Platform (MinerU OCR)
+            // Group 1: MinerU OCR — Source Language + Parsing Platform
             // Shown only for markdown_based workflow (PDF, images, markdown)
             if (settings.workflowType == 'markdown_based') ...<Widget>[
-              _buildSourceLanguageSelector(
-                  context, settings, notifier, isTranslatePhase,),
-              const SizedBox(height: 8),
-              _buildParsingPlatformSection(context, ref),
+              _buildMineruOcrSection(
+                  context, settings, notifier, isTranslatePhase, ref),
               const SizedBox(height: 8), // Reduced from 16 to 8
             ],
 
@@ -680,11 +743,8 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                   (Map<String, String> lang) => DropdownMenuItem<String>(
                     value: lang['code'],
                     child: Text(
-                      _languageDisplayName(
-                        l10n,
-                        lang['code']!,
-                        lang['native']!,
-                      ),
+                      languageDisplayName(l10n, lang['code']!),
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ),
                 )
@@ -748,82 +808,83 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
   }
 
   /// Source language selector for MinerU OCR (markdown_based workflow only).
-  /// Default is "auto" which lets MinerU auto-detect the language.
+  /// Assumes the caller wraps it in a section container.
   Widget _buildSourceLanguageSelector(
     BuildContext context,
     TranslationQuickSettings settings,
     TranslationQuickSettingsNotifier notifier,
     bool isTranslatePhase,
   ) {
-    // MinerU OCR supports a limited set of language codes.
-    // Align source language options with MinerU's supported values.
-    // 显示规则：括号外是可做 l10n 的英文描述，括号内是该语言自己的名称。
-    final List<Map<String, String>> languageEntries = <Map<String, String>>[
-      <String, String>{'code': 'auto',        'native': 'Auto'},
-      <String, String>{'code': 'ch',          'native': 'Chinese (中文)'},
-      <String, String>{'code': 'ch_server',   'native': 'Chinese (Server) (中文)'},
-      <String, String>{'code': 'ch_lite',     'native': 'Chinese (Lite) (中文)'},
-      <String, String>{'code': 'chinese_cht', 'native': 'Chinese (Traditional) (繁體中文)'},
-      <String, String>{'code': 'en',          'native': 'English (English)'},
-      <String, String>{'code': 'korean',      'native': 'Korean (한국어)'},
-      <String, String>{'code': 'japan',       'native': 'Japanese (日本語)'},
-      <String, String>{'code': 'ta',          'native': 'Tamil (தமிழ்)'},
-      <String, String>{'code': 'te',          'native': 'Telugu (తెలుగు)'},
-      <String, String>{'code': 'ka',          'native': 'Kannada (ಕನ್ನಡ)'},
-      <String, String>{'code': 'th',          'native': 'Thai (ไทย)'},
-      <String, String>{'code': 'el',          'native': 'Greek (Ελληνικά)'},
-      <String, String>{'code': 'latin',       'native': 'Latin (Latin)'},
-      <String, String>{'code': 'arabic',      'native': 'Arabic (العربية)'},
-      <String, String>{'code': 'east_slavic', 'native': 'East Slavic (East Slavic)'},
-      <String, String>{'code': 'cyrillic',    'native': 'Cyrillic (Cyrillic)'},
-      <String, String>{'code': 'devanagari',  'native': 'Devanagari (देवनागरी)'},
-    ];
-
-    final Set<String> mineruCodes = languageEntries
-        .map((Map<String, String> e) => e['code']!)
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final Set<String> mineruCodes = mineruLanguageEntries
+        .map((MineruLanguageEntry e) => e.code)
         .toSet();
     final String effectiveSourceLang =
         _coerceMineruOcrSourceLang(settings.sourceLang, mineruCodes);
 
-    return _wrapQuickSettingSection(
-      context,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            AppLocalizations.of(context)!.quickSettingsSourceLanguage,
-            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          l10n.quickSettingsSourceLanguage,
+          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+        ),
+        const SizedBox(height: 4),
+        DropdownButtonFormField<String>(
+          key: ValueKey<String>(
+            'mineruOcr:${settings.sourceLang}|$effectiveSourceLang',
           ),
-          const SizedBox(height: 4),
-          DropdownButtonFormField<String>(
-            key: ValueKey<String>(
-              'mineruOcr:${settings.sourceLang}|$effectiveSourceLang',
-            ),
-            initialValue: effectiveSourceLang,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              isDense: true,
-            ),
-            items: languageEntries
-                .map(
-                  (Map<String, String> lang) => DropdownMenuItem<String>(
-                    value: lang['code'],
-                    child: Text('${lang['native']} (${lang['code']})'),
+          initialValue: effectiveSourceLang,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            isDense: true,
+          ),
+          selectedItemBuilder: (BuildContext context) {
+            return mineruLanguageEntries.map((MineruLanguageEntry lang) {
+              final String displayText =
+                  mineruLocalizedDisplayName(l10n, lang);
+              return Tooltip(
+                message: lang.description,
+                child: Text(displayText, style: const TextStyle(fontSize: 12)),
+              );
+            }).toList();
+          },
+          items: mineruLanguageEntries
+              .map(
+                (MineruLanguageEntry lang) => DropdownMenuItem<String>(
+                  value: lang.code,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(mineruLocalizedDisplayName(l10n, lang),
+                          style: const TextStyle(fontSize: 12)),
+                      if (lang.code != 'auto')
+                        Text(
+                          lang.description,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                    ],
                   ),
-                )
-                .toList(),
-            onChanged: isTranslatePhase
-                ? null
-                : (String? value) {
-                    if (value != null) {
-                      notifier.updateSourceLang(value);
-                    }
-                  },
-          ),
-        ],
-      ),
+                ),
+              )
+              .toList(),
+          onChanged: isTranslatePhase
+              ? null
+              : (String? value) {
+                  if (value != null) {
+                    notifier.updateSourceLang(value);
+                  }
+                },
+        ),
+      ],
     );
   }
 
@@ -857,57 +918,30 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
     return 'auto';
   }
 
-  /// Returns localized language label + " (native)" for dropdown display.
-  static String _languageDisplayName(
-    AppLocalizations l10n,
-    String code,
-    String native,
+  /// Combined MinerU OCR section: Source Language + Parsing Platform in one box.
+  /// Shown only for markdown_based workflow.
+  Widget _buildMineruOcrSection(
+    BuildContext context,
+    TranslationQuickSettings settings,
+    TranslationQuickSettingsNotifier notifier,
+    bool isTranslatePhase,
+    WidgetRef ref,
   ) {
-    final String label = switch (code) {
-      'ar' => l10n.translationLangArabic,
-      'bn' => l10n.translationLangBengali,
-      'ca' => l10n.translationLangCatalan,
-      'zh' => l10n.translationLangChinese,
-      'zh-TW' => l10n.translationLangChineseTraditional,
-      'cs' => l10n.translationLangCzech,
-      'hr' => l10n.translationLangCroatian,
-      'da' => l10n.translationLangDanish,
-      'nl' => l10n.translationLangDutch,
-      'en' => l10n.translationLangEnglish,
-      'fil' => l10n.translationLangFilipino,
-      'fi' => l10n.translationLangFinnish,
-      'fr' => l10n.translationLangFrench,
-      'de' => l10n.translationLangGerman,
-      'el' => l10n.translationLangGreek,
-      'he' => l10n.translationLangHebrew,
-      'hi' => l10n.translationLangHindi,
-      'it' => l10n.translationLangItalian,
-      'ja' => l10n.translationLangJapanese,
-      'ko' => l10n.translationLangKorean,
-      'km' => l10n.translationLangKhmer,
-      'lt' => l10n.translationLangLithuanian,
-      'mk' => l10n.translationLangMacedonian,
-      'ms' => l10n.translationLangMalay,
-      'nb' => l10n.translationLangNorwegian,
-      'pl' => l10n.translationLangPolish,
-      'pt' => l10n.translationLangPortuguese,
-      'ro' => l10n.translationLangRomanian,
-      'ru' => l10n.translationLangRussian,
-      'sl' => l10n.translationLangSlovenian,
-      'es' => l10n.translationLangSpanish,
-      'sv' => l10n.translationLangSwedish,
-      'th' => l10n.translationLangThai,
-      'tr' => l10n.translationLangTurkish,
-      'uk' => l10n.translationLangUkrainian,
-      'ur' => l10n.translationLangUrdu,
-      'vi' => l10n.translationLangVietnamese,
-      _ => code,
-    };
-    return '$label ($native)';
+    return _wrapQuickSettingSection(
+      context,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _buildSourceLanguageSelector(
+              context, settings, notifier, isTranslatePhase),
+          const SizedBox(height: 12),
+          _buildParsingPlatformSection(context, ref),
+        ],
+      ),
+    );
   }
 
-  /// Parsing Platform section: same style as LLM Platform, supports both MinerU Cloud and Local.
-  /// Shown only for markdown_based workflow.
+  /// Parsing Platform section: supports both MinerU Cloud and Local.
   Widget _buildParsingPlatformSection(BuildContext context, WidgetRef ref) {
     final AIPlatformSettings aiPlatformSettings =
         ref.watch(aiPlatformSettingsProvider);
@@ -948,9 +982,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
         ? 'MinerU Local'
         : 'MinerU';
 
-    return _wrapQuickSettingSection(
-      context,
-      child: Column(
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Row(
@@ -1082,6 +1114,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                         child: Text(
                           label,
                           overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12),
                         ),
                       ),
                     ],
@@ -1098,8 +1131,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
             },
           ),
         ],
-      ),
-    );
+      );
   }
 
   Widget _buildPrimaryAIPlatform(BuildContext context, WidgetRef ref) {
@@ -1268,6 +1300,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                       child: Text(
                         p.name,
                         overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
                       ),
                     ),
                   ],
@@ -1388,6 +1421,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                     child: Text(
                       type['name']!,
                       overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ))
               .toList(),
@@ -1660,7 +1694,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
               .map(
                 (Map<String, String> m) => DropdownMenuItem(
                   value: m['code'],
-                  child: Text(m['name']!),
+                  child: Text(m['name']!, style: const TextStyle(fontSize: 12)),
                 ),
               )
               .toList(),
@@ -1683,7 +1717,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                 .map(
                   (Map<String, String> s) => DropdownMenuItem(
                     value: s['code'],
-                    child: Text(s['name']!),
+                    child: Text(s['name']!, style: const TextStyle(fontSize: 12)),
                   ),
                 )
                 .toList(),

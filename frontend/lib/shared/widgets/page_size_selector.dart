@@ -93,7 +93,10 @@ class _PageSizeSelectorState extends State<PageSizeSelector> {
                 .map(
                   (size) => DropdownMenuItem<int>(
                     value: size,
-                    child: Text(size.toString()),
+                    child: Text(
+                      size.toString(),
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
                 )
                 .toList(),

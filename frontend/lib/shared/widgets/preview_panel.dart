@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../features/translation/providers/preview_tabs_provider.dart';
 import '../../../features/translation/models/preview_tab.dart';
+import '../../l10n/app_localizations.dart';
 
 /// Preview panel widget that displays tabs with content
 class PreviewPanel extends ConsumerStatefulWidget {
@@ -298,6 +299,14 @@ class _PreviewTab extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onClose;
 
+  String _resolveTitle(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    if (tab.id == 'extract_tab') return l10n.homePhaseExtract;
+    if (tab.id == 'translate_tab') return l10n.homePhaseTranslate;
+    if (tab.id == 'glossary_tab') return l10n.homePhaseGlossary;
+    return tab.title;
+  }
+
   @override
   Widget build(BuildContext context) => GestureDetector(
         onTap: onTap,
@@ -335,7 +344,7 @@ class _PreviewTab extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                tab.title,
+                _resolveTitle(context),
                 style: TextStyle(
                   fontSize: 12, // Reduced from 13 to 12
                   fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,

@@ -1,4 +1,4 @@
-﻿# SPDX-FileCopyrightText: 2026 Zampher
+# SPDX-FileCopyrightText: 2026 Zampher
 # SPDX-License-Identifier: MPL-2.0
 
 import asyncio
@@ -16,6 +16,21 @@ from logger.logger import LogModule
 from typing import Optional
 from utils.json_utils import segments2json_chunks, fix_json_string
 from utils.language_utils import get_language_name_from_code
+from agents.seg_prompt_utils import build_seg_user_prompt, parse_seg_output
+
+
+def _resolve_segment_limit(config) -> int:
+    """Resolve segment_limit from config with backward compat for old segment_per_request."""
+    segment_limit = getattr(config, 'segment_limit', None)
+    if segment_limit is None:
+        # Backward compat: segment_per_request=True → limit=1
+        if getattr(config, 'segment_per_request', False):
+            segment_limit = 1
+        else:
+            segment_limit = 100
+    if not isinstance(segment_limit, int) or segment_limit < 0:
+        segment_limit = 100
+    return segment_limit
 
 
 @dataclass
@@ -23,9 +38,13 @@ class SegmentsTranslateAgentConfig(AgentConfig):
     to_lang: str
     custom_prompt: str | None = None
     glossary_dict: dict[str, str] | None = None
+    # Max segments per chunk/batch. 0 = unlimited (send all segments that fit in chunk_size).
+    # Typical values: 10 for local LLMs, 100 for cloud. Overrides the old segment_per_request boolean.
+    segment_limit: int = 100
     # When True, max one segment per chunk (segment-per-request) to avoid one bad segment breaking a chunk
+    # DEPRECATED: Use segment_limit=1 instead. Kept for backward compat.
     segment_per_request: bool = False
-    # When True, use SEG-tag ([SEG n] ... [/SEG n]) prompts instead of JSON dicts.
+    # When True, use SEG-tag ([SEG n]) prompts instead of JSON dicts.
     # This is primarily for DOCX/PPTX/HTML/TXT/EPUB/MOBI style workflows where we want
     # a more LLM-friendly format than JSON while still preserving segment indices.
     use_seg_tags: bool = False
@@ -34,7 +53,7 @@ class SegmentsTranslateAgentConfig(AgentConfig):
 class SegmentsTranslateAgent(Agent):
     def __init__(self, config: SegmentsTranslateAgentConfig):
         super().__init__(config)
-        self.config = config  # Keep reference for segment_per_request and other subclass options
+        self.config = config  # Keep reference for segment_limit, segment_per_request and other subclass options
         # Store target language for use in result handler
         self.to_lang = config.to_lang
         # Convert language code to full language name for prompt
@@ -47,57 +66,9 @@ class SegmentsTranslateAgent(Agent):
         )
 
         if self.use_seg_tags:
-            # SEG-tag based prompt
-            self.system_prompt = f"""
-# Task
-Translate plain text segments from source language to {self.to_lang_name} ({config.to_lang}).
+            from agents.seg_prompt_utils import build_seg_system_prompt
 
-# Segment Format (CRITICAL)
-Input and output are plain text with explicit segment markers:
-
-- Start marker: [SEG n]
-- End marker:   [/SEG n]
-
-Where n is an integer segment id (e.g., 0, 1, 2, 10). Each id uniquely identifies one segment.
-
-Your job is:
-- Translate ONLY the content between [SEG n] and [/SEG n] into {self.to_lang_name}.
-- KEEP the marker lines themselves EXACTLY as they are. Do NOT translate or modify them.
-- Do NOT add, remove, or reorder any [SEG n] / [/SEG n] pairs.
-- For every input [SEG n] ... [/SEG n] block, output ONE corresponding [SEG n] ... [/SEG n] block with the same n.
-
-Example (input → output structure, only inner text is translated):
-- Input:
-  [SEG 0]
-  原文 0
-  [/SEG 0]
-  [SEG 3]
-  原文 3
-  [/SEG 3]
-
-- Output:
-  [SEG 0]
-  <translated 0>
-  [/SEG 0]
-  [SEG 3]
-  <translated 3>
-  [/SEG 3]
-
-Rules:
-- **MANDATORY**: Preserve EVERY segment id n exactly as in the input. If input has [SEG 0], [SEG 3], your output MUST use the same ids and order.
-- **MANDATORY**: Do NOT merge multiple segments into one. Never generate a single big block that combines several [SEG n] segments.
-- **MANDATORY**: Do NOT create new segment ids and do NOT drop any segment.
-- **CRITICAL**: The number of [SEG n] / [/SEG n] pairs and their ids MUST match the input exactly.
-
-# Translation Requirements
-- Natural, fluent translation. Preserve meaning and technical accuracy.
-- Preserve ALL formatting characters, line breaks, indentation, punctuation and inline markup inside segments.
-- Preserve proper nouns, codes, brand names, citations [1] Author. "Title". Journal, Year.
-- No explanations or meta-commentary.
-
-# Output
-Return ONLY the translated text with the SAME [SEG n] / [/SEG n] markers and segment ids as the input.
-"""
+            self.system_prompt = build_seg_system_prompt(config.to_lang)
         else:
             # Legacy JSON-based prompt
             self.system_prompt = f"""
@@ -129,7 +100,7 @@ Note: Translate Chinese→English, keep English as-is, preserve formatting. Esca
 """
         self.custom_prompt = config.custom_prompt
         if config.custom_prompt:
-            self.system_prompt += "\n# **Important rules or background** \n" + self.custom_prompt + '\nEND\n'
+            self.system_prompt += "\n# Domain rules\n" + self.custom_prompt + "\nEND\n"
         self.glossary_dict = config.glossary_dict
         self._task_id = None  # Will be set by translator if available for dynamic glossary loading
 
@@ -470,11 +441,12 @@ Note: Translate Chinese→English, keep English as-is, preserve formatting. Esca
             return {"error": f"{origin_prompt}"}
 
     def send_segments(self, segments: list[str], chunk_size: int, progress_callback=None, segment_indices: Optional[list[int]] = None) -> list[str]:
-        self.logger.debug(LogModule.TRANS, f"[SEGMENTS_AGENT] send_segments: {len(segments)} segments, chunk_size={chunk_size}, segment_indices={'provided' if segment_indices else 'None'}")
+        segment_limit = _resolve_segment_limit(self.config)
+        self.logger.debug(LogModule.TRANS, f"[SEGMENTS_AGENT] send_segments: {len(segments)} segments, chunk_size={chunk_size}, segment_limit={segment_limit}, segment_indices={'provided' if segment_indices else 'None'}")
         # Calculate text content token limit (excluding system prompt and overhead)
         from utils.chunk_size_converter import get_text_content_token_limit
         text_token_limit = get_text_content_token_limit(chunk_size)
-        max_segments_per_chunk = 1 if getattr(self.config, 'segment_per_request', False) else None
+        max_segments_per_chunk = segment_limit if segment_limit > 0 else None
         indexed_originals, chunks, merged_indices_list = segments2json_chunks(
             segments, text_token_limit, segment_indices=segment_indices, max_segments_per_chunk=max_segments_per_chunk
         )
@@ -577,11 +549,25 @@ Note: Translate Chinese→English, keep English as-is, preserve formatting. Esca
                         f.write(f"\n{'='*80}\n")
                         f.write(f"CHUNK {len(prompts)} (Appended from send_segments)\n")
                         f.write(f"{'='*80}\n\n")
-                    
+
                     # Write summary so user can verify all chunks are in the file (total requests, keys per chunk)
                     f.write(f"[SUMMARY] Total API requests (chunks): {len(prompts)}. ")
                     f.write(f"Segment keys per chunk: {key_counts}. Total segment keys: {total_keys}\n\n")
-                    
+
+                    # Write API parameters for diagnosis (only for first chunk)
+                    if file_size_before == 0:
+                        f.write(f"{'='*80}\n")
+                        f.write("LLM API PARAMETERS:\n")
+                        f.write(f"{'='*80}\n")
+                        config = getattr(self, 'config', None)
+                        if config:
+                            f.write(f"  model_id: {getattr(config, 'model_id', 'N/A')}\n")
+                            f.write(f"  temperature: {getattr(config, 'temperature', 'N/A')}\n")
+                            f.write(f"  thinking: {getattr(config, 'thinking', 'N/A')}\n")
+                            f.write(f"  to_lang: {getattr(config, 'to_lang', 'N/A')}\n")
+                            f.write(f"  base_url: {getattr(config, 'base_url', 'N/A')}\n")
+                        f.write(f"{'='*80}\n\n")
+
                     # Write system prompt if available (only for first chunk)
                     if file_size_before == 0:
                         llm_api_system_prompt = None
@@ -712,11 +698,12 @@ Note: Translate Chinese→English, keep English as-is, preserve formatting. Esca
         return result
 
     async def send_segments_async(self, segments: list[str], chunk_size: int, progress_callback=None, segment_indices: Optional[list[int]] = None) -> list[str]:
-        self.logger.debug(LogModule.TRANS, f"[SEGMENTS_AGENT] send_segments_async: {len(segments)} segments, chunk_size={chunk_size}, segment_indices={'provided' if segment_indices else 'None'}, use_seg_tags={self.use_seg_tags}")
+        segment_limit = _resolve_segment_limit(self.config)
+        self.logger.debug(LogModule.TRANS, f"[SEGMENTS_AGENT] send_segments_async: {len(segments)} segments, chunk_size={chunk_size}, segment_limit={segment_limit}, segment_indices={'provided' if segment_indices else 'None'}, use_seg_tags={self.use_seg_tags}")
         # Calculate text content token limit (excluding system prompt and overhead)
         from utils.chunk_size_converter import get_text_content_token_limit
         text_token_limit = get_text_content_token_limit(chunk_size)
-        max_segments_per_chunk = 1 if getattr(self.config, 'segment_per_request', False) else None
+        max_segments_per_chunk = segment_limit if segment_limit > 0 else None
         indexed_originals, chunks, merged_indices_list = await asyncio.to_thread(
             segments2json_chunks,
             segments,
@@ -729,18 +716,11 @@ Note: Translate Chinese→English, keep English as-is, preserve formatting. Esca
 
         # Branch: use SEG-tag format instead of JSON dicts (for DOCX/PPTX/HTML/TXT/EPUB/MOBI when enabled)
         if self.use_seg_tags:
-            import re
 
             prompts: list[str] = []
             for chunk_dict in chunks:
                 # chunk_dict: {"idx": "text", ...}
-                lines: list[str] = []
-                for key in sorted(chunk_dict.keys(), key=int):
-                    text = chunk_dict[key] or ""
-                    lines.append(f"[SEG {key}]")
-                    lines.append(text)
-                    lines.append(f"[/SEG {key}]")
-                prompts.append("\n".join(lines))
+                prompts.append(build_seg_user_prompt(chunk_dict))
 
             translated_raw = await super().send_prompts_async(
                 prompts=prompts,
@@ -758,40 +738,12 @@ Note: Translate Chinese→English, keep English as-is, preserve formatting. Esca
 
             # Parse SEG-tag responses back into dict chunks {id: text}
             translated_chunks: list[dict[str, str]] = []
-            seg_start_re = re.compile(r"^\[SEG\s+(\d+)\]\s*$")
-            seg_end_re = re.compile(r"^\[/SEG\s+(\d+)\]\s*$")
 
             for raw in translated_raw:
                 text = raw if isinstance(raw, str) else str(raw)
-                current_id: str | None = None
-                buf: list[str] = []
-                chunk_result: dict[str, str] = {}
-                for line in text.splitlines():
-                    m_start = seg_start_re.match(line)
-                    if m_start:
-                        # flush previous
-                        if current_id is not None:
-                            chunk_result[current_id] = "\n".join(buf)
-                            buf = []
-                        current_id = m_start.group(1)
-                        continue
-                    m_end = seg_end_re.match(line)
-                    if m_end and current_id is not None:
-                        end_id = m_end.group(1)
-                        if end_id == current_id:
-                            chunk_result[current_id] = "\n".join(buf)
-                        else:
-                            self.logger.warning(
-                                LogModule.TRANS,
-                                f"[SEGMENTS_AGENT] Mismatched SEG end tag [/SEG {end_id}] while current_id={current_id}",
-                            )
-                        current_id = None
-                        buf = []
-                        continue
-                    if current_id is not None:
-                        buf.append(line)
-                if current_id is not None:
-                    chunk_result[current_id] = "\n".join(buf)
+                parsed = parse_seg_output(text)
+                # Convert int keys to str for downstream JSON compatibility
+                chunk_result: dict[str, str] = {str(k): v for k, v in parsed.items()}
                 translated_chunks.append(chunk_result)
         else:
             # Original JSON-based path

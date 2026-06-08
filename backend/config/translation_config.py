@@ -108,7 +108,7 @@ class TranslationConfig:
             config_path = get_config_file_path(config_file)
             
             if config_path.exists():
-                logger.info(LogModule.CONFIG, f"[TRANSLATION_CONFIG] Loading translation configuration from: {config_path}")
+                logger.debug(LogModule.CONFIG, f"[TRANSLATION_CONFIG] Loading translation configuration from: {config_path}")
                 with open(config_path, 'r', encoding='utf-8-sig') as f:
                     data = json.load(f)
 
@@ -139,7 +139,7 @@ class TranslationConfig:
                 config.update_from_dict(data)
                 # Print loaded configuration
                 defaults = config.deep_split_defaults
-                logger.info(
+                logger.debug(
                     LogModule.CONFIG,
                     f"[TRANSLATION_CONFIG] Loaded deep_split defaults: "
                     f"pdf={defaults.pdf}, docx={defaults.docx}, txt={defaults.txt}, "
@@ -290,7 +290,7 @@ def get_default_deep_split(filename: str, workflow_type: Optional[str] = None) -
     # Log with detailed information for debugging
     config_source = 'file' if _translation_config is not None else 'code_defaults'
     # Use INFO level to ensure it's visible
-    logger.info(
+    logger.debug(
         LogModule.CONFIG,
         f"[TRANSLATION_CONFIG] get_default_deep_split called: filename={filename}, "
         f"workflow_type={workflow_type}, result={result}, config_source={config_source}"

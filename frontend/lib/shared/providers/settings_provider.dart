@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../services/settings_service.dart';
 import '../services/config_service.dart';
+import '../utils/language_mapper.dart';
 
 // 全局设置状态管理
 final StateNotifierProvider<GlobalSettingsNotifier, GlobalSettings>
@@ -42,7 +43,7 @@ class GlobalSettings {
 
     // Parsing Engine
     this.parsingEngine = 'mineru',
-    this.ocrLanguage = 'eng',
+    this.ocrLanguage = 'auto',
     this.formulaOcr = true,
     this.tableOcr = true,
     this.parsingChunkSize = 1000,
@@ -71,12 +72,12 @@ class GlobalSettings {
     this.skipTranslation = false,
     this.useGlossary = false,
     this.usePrompt = false,
+    this.targetLanguage = 'en',
+    this.translateOutputSuffix = '_translated',
+    this.convertOutputSuffix = '_converted',
 
     // Detailed Translation Parameters
     this.temperature = 0.3,
-    this.thinking = 'disable',
-    this.timeout =
-        120, // Changed from 30 to 120 seconds (2 minutes) for better reliability
     this.retry = 3,
     this.segmentAutoRetryRounds = 3,
     this.customPrompt,
@@ -117,7 +118,7 @@ class GlobalSettings {
         parsingEngine: (json['parsingEngine'] as String?)?.isNotEmpty ?? false
             ? json['parsingEngine']
             : 'mineru',
-        ocrLanguage: json['ocrLanguage'] ?? 'eng',
+        ocrLanguage: json['ocrLanguage'] ?? 'auto',
         formulaOcr: json['formulaOcr'] ?? true,
         tableOcr: json['tableOcr'] ?? true,
         parsingChunkSize: json['parsingChunkSize'] ?? 1000,
@@ -144,10 +145,12 @@ class GlobalSettings {
         skipTranslation: json['skipTranslation'] ?? false,
         useGlossary: json['useGlossary'] ?? false,
         usePrompt: json['usePrompt'] ?? false,
+        targetLanguage: json['targetLanguage'] ?? 'en',
+        translateOutputSuffix:
+            json['translateOutputSuffix'] ?? '_translated',
+        convertOutputSuffix:
+            json['convertOutputSuffix'] ?? '_converted',
         temperature: (json['temperature'] ?? 0.3).toDouble(),
-        thinking: json['thinking'] ?? 'disable',
-        timeout:
-            json['translationTimeout'] ?? 120, // Changed from 30 to 120 seconds
         retry: json['retry'] ?? 3,
         segmentAutoRetryRounds: json['segment_auto_retry_rounds'] ?? 3,
         customPrompt: json['customPrompt'],
@@ -215,11 +218,12 @@ class GlobalSettings {
   final bool skipTranslation;
   final bool useGlossary;
   final bool usePrompt;
+  final String targetLanguage;
+  final String translateOutputSuffix;
+  final String convertOutputSuffix;
 
   // Detailed Translation Parameters (新任务生效)
   final double temperature;
-  final String thinking;
-  final int timeout;
   final int retry;
   /// Queued mode: post-translation failed-segment auto batch rounds (not chunk retry).
   final int segmentAutoRetryRounds;
@@ -286,9 +290,10 @@ class GlobalSettings {
     bool? usePrompt,
 
     // Detailed Translation Parameters
+    String? targetLanguage,
+    String? translateOutputSuffix,
+    String? convertOutputSuffix,
     double? temperature,
-    String? thinking,
-    int? timeout,
     int? retry,
     int? segmentAutoRetryRounds,
     String? customPrompt,
@@ -350,11 +355,14 @@ class GlobalSettings {
         skipTranslation: skipTranslation ?? this.skipTranslation,
         useGlossary: useGlossary ?? this.useGlossary,
         usePrompt: usePrompt ?? this.usePrompt,
+        targetLanguage: targetLanguage ?? this.targetLanguage,
+        translateOutputSuffix:
+            translateOutputSuffix ?? this.translateOutputSuffix,
+        convertOutputSuffix:
+            convertOutputSuffix ?? this.convertOutputSuffix,
 
         // Detailed Translation Parameters
         temperature: temperature ?? this.temperature,
-        thinking: thinking ?? this.thinking,
-        timeout: timeout ?? this.timeout,
         retry: retry ?? this.retry,
         segmentAutoRetryRounds:
             segmentAutoRetryRounds ?? this.segmentAutoRetryRounds,
@@ -402,9 +410,10 @@ class GlobalSettings {
         'skipTranslation': skipTranslation,
         'useGlossary': useGlossary,
         'usePrompt': usePrompt,
+        'targetLanguage': targetLanguage,
+        'translateOutputSuffix': translateOutputSuffix,
+        'convertOutputSuffix': convertOutputSuffix,
         'temperature': temperature,
-        'thinking': thinking,
-        'translationTimeout': timeout,
         'retry': retry,
         'segment_auto_retry_rounds': segmentAutoRetryRounds,
         'customPrompt': customPrompt,
@@ -464,18 +473,10 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
           // Map backend fields to frontend fields
           final backendSettings = <String, dynamic>{};
 
-          // Map timeout from backend to translationTimeout for frontend
-          if (appConfig.containsKey('timeout')) {
-            backendSettings['translationTimeout'] = appConfig['timeout'];
-          }
-
           // Map other translation settings
           if (appConfig.containsKey('translator_temperature')) {
             backendSettings['temperature'] =
                 appConfig['translator_temperature'];
-          }
-          if (appConfig.containsKey('translator_thinking_mode')) {
-            backendSettings['thinking'] = appConfig['translator_thinking_mode'];
           }
           if (appConfig.containsKey('retry')) {
             backendSettings['retry'] = appConfig['retry'];
@@ -512,7 +513,6 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
           } else if (appConfig.containsKey('translator_table_ocr')) {
             backendSettings['tableOcr'] = appConfig['translator_table_ocr'];
           }
-
           // Map PDF split settings from backend
           if (appConfig.containsKey('translator_pdf_split_max_pages')) {
             backendSettings['pdfSplitMaxPages'] = appConfig['translator_pdf_split_max_pages'];
@@ -522,6 +522,15 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
           }
           if (appConfig.containsKey('translator_request_retry_count')) {
             backendSettings['requestRetryCount'] = appConfig['translator_request_retry_count'];
+          }
+
+          // Map translator_target_language from backend (stored as name) to targetLanguage (code)
+          if (appConfig.containsKey('translator_target_language')) {
+            final targetLangName = appConfig['translator_target_language'] as String?;
+            if (targetLangName != null && targetLangName.isNotEmpty) {
+              final code = nameToCode(targetLangName) ?? 'en';
+              backendSettings['targetLanguage'] = code;
+            }
           }
 
           // Restore UI language from backend or system locale on first run
@@ -768,11 +777,12 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     bool? useGlossary,
     bool? usePrompt,
     double? temperature,
-    String? thinking,
-    int? timeout,
     int? retry,
     int? segmentAutoRetryRounds,
     String? customPrompt,
+    String? targetLanguage,
+    String? translateOutputSuffix,
+    String? convertOutputSuffix,
   }) async {
     // 1. Immediately update local state (for fast UI response)
     state = state.copyWith(
@@ -782,11 +792,12 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
       useGlossary: useGlossary,
       usePrompt: usePrompt,
       temperature: temperature,
-      thinking: thinking,
-      timeout: timeout,
       retry: retry,
       segmentAutoRetryRounds: segmentAutoRetryRounds,
       customPrompt: customPrompt,
+      targetLanguage: targetLanguage,
+      translateOutputSuffix: translateOutputSuffix,
+      convertOutputSuffix: convertOutputSuffix,
     );
 
     // 2. Save entire state to local cache (for app restart recovery)
@@ -824,12 +835,6 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     if (temperature != null) {
       await _settingsService.saveSetting('', 'temperature', temperature);
     }
-    if (thinking != null) {
-      await _settingsService.saveSetting('', 'thinking', thinking);
-    }
-    if (timeout != null) {
-      await _settingsService.saveSetting('', 'timeout', timeout);
-    }
     if (retry != null) {
       await _settingsService.saveSetting('', 'retry', retry);
     }
@@ -842,6 +847,24 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     }
     if (customPrompt != null) {
       await _settingsService.saveSetting('', 'customPrompt', customPrompt);
+    }
+    if (targetLanguage != null) {
+      final name = codeToName(targetLanguage) ?? targetLanguage;
+      await _settingsService.saveSetting('', 'targetLanguage', name);
+    }
+    if (translateOutputSuffix != null) {
+      await _settingsService.saveSetting(
+        '',
+        'translateOutputSuffix',
+        translateOutputSuffix,
+      );
+    }
+    if (convertOutputSuffix != null) {
+      await _settingsService.saveSetting(
+        '',
+        'convertOutputSuffix',
+        convertOutputSuffix,
+      );
     }
   }
 

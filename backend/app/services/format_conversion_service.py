@@ -44,9 +44,8 @@ class FormatConversionService:
         """
         Resolve chunk_size with priority:
         1. obj.chunk_size (explicit override)
-        2. Platform config (via obj.platform_key)
-        3. Global app_config.json translator_chunk_token_size (backward compat)
-        4. fallback
+        2. Platform config (via obj.platform_key from platforms.json)
+        3. fallback
         """
         # Priority 1: Explicit override from obj
         chunk_size = None
@@ -83,22 +82,8 @@ class FormatConversionService:
             except Exception as e:
                 logger.debug(LogModule.WORKFLOW, f"{log_prefix} Failed to get chunk_size from platform config: {e}")
         
-        # Priority 3: Global app_config.json (backward compatibility)
-        try:
-            from backend.config.app_config import AppConfig
-            cfg_path = AppConfig._resolve_app_config_path("app_config.json")
-            if cfg_path.exists():
-                with open(cfg_path, 'r', encoding='utf-8-sig') as f:
-                    data = json.load(f)
-                    chunk_size = data.get('translator_chunk_token_size')
-            if chunk_size and chunk_size != 0:
-                logger.info(LogModule.WORKFLOW, f"{log_prefix} Using chunk_size={chunk_size} from app_config.json (backward compat)")
-                return int(chunk_size)
-        except Exception as e:
-            logger.debug(LogModule.WORKFLOW, f"{log_prefix} Failed to get chunk_size from app_config.json: {e}")
-        
-        # Priority 4: fallback
-        logger.warning(LogModule.WORKFLOW, f"{log_prefix} No chunk_size found, using fallback={fallback}")
+        # Priority 3: fallback
+        logger.warning(LogModule.WORKFLOW, f"{log_prefix} No chunk_size found in payload or platform config, using fallback={fallback}")
         return fallback
     
     def _get_workflow_type_from_extension(self, file_name: str) -> str:
@@ -225,16 +210,16 @@ class FormatConversionService:
             model_version = request.model_version
             if model_version is None:
                 if isinstance(parsing_engine, dict):
-                    model_version = parsing_engine.get('mineru_model_version', 'vlm')
+                    model_version = parsing_engine.get('mineru_model_version', 'hybrid-auto-engine')
                 elif parsing_engine:
-                    model_version = getattr(parsing_engine, 'mineru_model_version', 'vlm')
+                    model_version = getattr(parsing_engine, 'mineru_model_version', 'hybrid-auto-engine')
                 else:
-                    model_version = 'vlm'
+                    model_version = 'hybrid-auto-engine'
                 # Prefer hybrid for images (better OCR/layout); keep vlm/pipeline if explicitly set
                 if file_ext in (".jpg", ".jpeg", ".png"):
-                    model_version = "hybrid"
+                    model_version = "hybrid-auto-engine"
                     logger.info(LogModule.WORKFLOW, "[FORMAT_CONVERSION] Image file: using MinerU hybrid backend for OCR")
-            elif file_ext in (".jpg", ".jpeg", ".png") and model_version not in ("hybrid", "pipeline"):
+            elif file_ext in (".jpg", ".jpeg", ".png") and model_version not in ("hybrid-auto-engine", "hybrid-http-client", "hybrid", "pipeline"):
                 logger.info(LogModule.WORKFLOW, f"[FORMAT_CONVERSION] Image file with model_version={model_version}; consider 'hybrid' for better OCR")
             # OCR language: explicit request.ocr_language, else to_lang as hint (e.g. zh/en), else auto
             ocr_language = getattr(request, "ocr_language", None)
@@ -286,6 +271,7 @@ class FormatConversionService:
                 'ocr_language': ocr_language,
                 'deep_split': final_deep_split,
                 'skip_cache': skip_cache,
+                'platform_key': getattr(request, 'platform_key', None),
             }
             logger.info(
                 LogModule.WORKFLOW,
@@ -372,6 +358,7 @@ class FormatConversionService:
                 **base_params,
                 'workflow_type': workflow_type,
                 'deep_split': final_deep_split,
+                'platform_key': getattr(request, 'platform_key', None),
             }
             # Add chunk_size if we got it and it's not 0, otherwise use fallback 3000
             if chunk_size is not None and chunk_size != 0:
@@ -415,6 +402,7 @@ class FormatConversionService:
             'workflow_type': 'markdown_based',
             'deep_split': final_deep_split,
             'chunk_size': chunk_size,
+            'platform_key': getattr(request, 'platform_key', None),
         }
         return MarkdownWorkflowParams(**fallback_params)
     
@@ -713,21 +701,7 @@ class FormatConversionService:
                     except Exception as e:
                         logger.debug(LogModule.WORKFLOW, f"[RESPLIT] Task {task_id}: Failed to get chunk_size from platform config: {e}")
         
-        if chunk_size is None or chunk_size == 0:
-            # Priority 2: Global app_config.json (backward compat)
-            try:
-                from backend.config.app_config import AppConfig
-                cfg_path = AppConfig._resolve_app_config_path("app_config.json")
-                if cfg_path.exists():
-                    with open(cfg_path, 'r', encoding='utf-8-sig') as f:
-                        data = json.load(f)
-                        chunk_size = data.get('translator_chunk_token_size')
-                if chunk_size and chunk_size != 0:
-                    logger.debug(LogModule.WORKFLOW, f"[RESPLIT] Task {task_id}: Using chunk_size={chunk_size} from app_config.json (backward compat)")
-            except Exception as e:
-                logger.debug(LogModule.WORKFLOW, f"[RESPLIT] Task {task_id}: Failed to get chunk_size from app_config.json: {e}")
-        
-        # Priority 3: Get from payload
+        # Priority 2: Get from payload
         if chunk_size is None or chunk_size == 0:
             if payload:
                 if isinstance(payload, dict):
@@ -873,7 +847,7 @@ class FormatConversionService:
                                 # Also refresh related settings from global config
                                 payload['formula_ocr'] = parsing_engine_cfg.get('formula_ocr', payload.get('formula_ocr', True))
                                 payload['table_ocr'] = parsing_engine_cfg.get('table_ocr', payload.get('table_ocr', True))
-                                payload['model_version'] = parsing_engine_cfg.get('mineru_model_version', payload.get('model_version', 'vlm'))
+                                payload['model_version'] = parsing_engine_cfg.get('mineru_model_version', payload.get('model_version', 'hybrid-auto-engine'))
                                 # Clear cached workflow_config so it gets rebuilt with updated settings
                                 payload['workflow_config'] = None
                             else:
@@ -1224,6 +1198,9 @@ class FormatConversionService:
                         "text": chunk_text,
                         "block_type": block_type,
                         "block_index": block_index,
+                        "layout_block_indices": list(chunk_block_indices)
+                        if chunk_block_indices
+                        else ([block_index] if block_index is not None else []),
                         "chunk_index": chunk_idx,
                         "segment_index": chunk_idx,  # CRITICAL: Store original segment index for proper mapping
                         "is_image": is_image,
@@ -1389,6 +1366,8 @@ class FormatConversionService:
                     "total_segments": len(cache_segments),
                     "created_at": time.time(),
                 }
+                from utils.translation_segments import build_segment_layout_block_map
+                st["segment_layout_block_map"] = build_segment_layout_block_map(all_segments)
                 st["segments_metadata"] = {
                     "source": workflow_type,
                     "workflow_type": workflow_type,

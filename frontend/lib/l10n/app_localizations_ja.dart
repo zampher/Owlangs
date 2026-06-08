@@ -237,7 +237,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationToolbarSwitchToFile => 'ファイルに切り替え';
 
   @override
-  String get translationToolbarSwitchToText => 'テキストに切り替え';
+  String get translationToolbarSwitchToText => 'テキストを入力';
 
   @override
   String get translationStatusCompleted => '翻訳完了';
@@ -322,6 +322,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get translationStatsTranslatedLabel => '翻訳済み';
+
+  @override
+  String get translationStatsPendingLabel => '保留中';
+
+  @override
+  String get translationStatsClearedLabel => 'クリア済み';
+
+  @override
+  String get translationStatsImagesLabel => '画像';
 
   @override
   String get translationStatsLoadingContent => 'コンテンツを読み込み中...';
@@ -465,6 +474,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationExportDialogTitle => 'ドキュメントをエクスポート';
 
   @override
+  String get translationExportDocumentType => 'ドキュメントタイプ';
+
+  @override
   String get translationExportFormatOptionsTitle => 'フォーマットオプション（PDFのみ）';
 
   @override
@@ -484,6 +496,63 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get translationExportEquationFormatLatex => 'LaTeX';
+
+  @override
+  String get translationExportBilingualExport => 'バイリンガル書き出し';
+
+  @override
+  String get translationExportBilingualOrderTargetAfter => '原文を前に';
+
+  @override
+  String get translationExportBilingualOrderTargetAfterSub => '原文を前に、訳文を後ろに';
+
+  @override
+  String get translationExportBilingualOrderTargetBefore => '訳文を前に';
+
+  @override
+  String get translationExportBilingualOrderTargetBeforeSub => '訳文を前に、原文を後ろに';
+
+  @override
+  String get translationExportSourceTextItalic => '原文を斜体';
+
+  @override
+  String get translationExportSourceTextColor => '原文の色:';
+
+  @override
+  String get translationExportTargetTextItalic => '訳文を斜体';
+
+  @override
+  String get translationExportTargetTextColor => '訳文の色:';
+
+  @override
+  String get translationExportColorDefault => 'デフォルト';
+
+  @override
+  String get translationExportColorGray => 'グレー';
+
+  @override
+  String get translationExportColorBlue => '青';
+
+  @override
+  String get translationExportColorRed => '赤';
+
+  @override
+  String get translationExportColorGreen => '緑';
+
+  @override
+  String get translationExportColorOrange => 'オレンジ';
+
+  @override
+  String get translationExportColorBlack => '黒';
+
+  @override
+  String get translationExportDownloadButton => 'ダウンロード';
+
+  @override
+  String get translationExportMdEmbeddedImages => 'MD（画像埋め込み）';
+
+  @override
+  String get translationExportMdWithImagesFolder => 'MD（画像フォルダ）';
 
   @override
   String get translationLeftPanelExpandTooltip => '左パネルを展開';
@@ -699,7 +768,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationDialogCancelTaskYesCancel => 'はい、キャンセルします';
 
   @override
-  String get translationQuickSettingsTitle => '翻訳クイック設定';
+  String get translationQuickSettingsTitle => 'クイック設定';
 
   @override
   String get quickSettingsTargetLanguage => 'ターゲット言語';
@@ -898,10 +967,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeBackendRetry => '再試行';
 
   @override
-  String get homeNavTranslate => 'イマーシブ翻訳';
+  String get homeNewTask => '新規タスク';
 
   @override
-  String get homeNavTranslationQueue => 'タスクキュー';
+  String get homeNewTaskImmersiveTooltip => '原文と訳文をUIで並べて比較';
+
+  @override
+  String get homeNewTaskQueuedTooltip => 'ファイルを一括インポートし、順番に自動翻訳';
+
+  @override
+  String get homeNavTranslate => 'イマーシブタスク';
+
+  @override
+  String get homeNavTranslationQueue => 'タスク';
 
   @override
   String get homeNavAnonymize => '匿名化';
@@ -910,13 +988,43 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeNavSettings => '設定';
 
   @override
-  String get homeNavDonateHelp => '寄付＆ヘルプ';
+  String get homeNavDonateHelp => 'ヘルプ';
+
+  @override
+  String get homeNavDonate => '寄付';
 
   @override
   String get homeNavHome => 'ホーム';
 
   @override
   String get homeNavBatchUpload => '一括アップロード';
+
+  @override
+  String get homeNavTooltipNewTask => '新しい翻訳を開始——イマーシブな対比、またはキューによるバッチ処理';
+
+  @override
+  String get homeNavTooltipTasks => 'すべての翻訳タスクを表示・管理し、完了した翻訳をダウンロード';
+
+  @override
+  String get homeNavTooltipAnonymize => 'ドキュメント内容を匿名化し、機密情報を保護';
+
+  @override
+  String get homeNavTooltipSettings => '言語、テーマ、通知などを設定';
+
+  @override
+  String get homeNavTooltipSetupWizard => 'ガイド付きセットアップウィザードで翻訳環境を構成';
+
+  @override
+  String get homeNavTooltipHelp => 'ヘルプとテクニカルサポートを入手';
+
+  @override
+  String get homeNavTooltipDonate => 'オープンソースプロジェクトを支援';
+
+  @override
+  String get homeNavTooltipHome => 'ホームページに戻る';
+
+  @override
+  String get homeNavTooltipGitHub => 'GitHubでソースコードを閲覧——気に入ったらスターをお願いします！';
 
   @override
   String get batchUploadTitle => '一括ファイルアップロード';
@@ -942,6 +1050,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get batchUploadSelectSingleFile => 'ファイルを選択';
+
+  @override
+  String get batchUploadSingleFileDescription => '翻訳するファイルを1つ選択';
+
+  @override
+  String get batchUploadAddFiles => 'ファイルを追加';
 
   @override
   String batchUploadFilesFound(Object count) {
@@ -1092,7 +1206,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationQueueEmpty => '翻訳タスクはありません。';
 
   @override
-  String get translationQueueNewQueuedTask => 'キュー式翻訳';
+  String get translationQueueNewQueuedTask => 'キュー式タスク';
+
+  @override
+  String get translationQueueImport => 'インポート';
 
   @override
   String get translationQueueBackToQueueTooltip => 'タスクキューに戻る';
@@ -1217,7 +1334,41 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get translationQueueErrorMessageCopied => 'エラーメッセージをコピーしました';
+
+  @override
+  String get translationQueueSelected => 'selected';
+
+  @override
+  String get translationQueueSelectMode => 'Select';
+
+  @override
+  String get translationQueueClearSelection => 'Clear selection';
+
+  @override
+  String translationQueueBatchDownloadFailed(Object error) {
+    return 'Batch download failed: $error';
+  }
+
+  @override
+  String translationQueueBatchDownloadSuccess(Object fileType) {
+    return 'Batch download: $fileType ready';
+  }
+
+  @override
   String get translationQueueView => '閲覧編集';
+
+  @override
+  String get translationQueueViewSourcePath => '元のファイルパスを表示';
+
+  @override
+  String get translationQueueSourcePathTitle => 'ソースファイルパス';
+
+  @override
+  String get translationQueueFileNameLabel => 'ファイル名';
+
+  @override
+  String get translationQueueRelativePathLabel => '相対パス';
 
   @override
   String get homeFeatureUnderDevelopment => 'この機能は開発中です。';
@@ -1259,7 +1410,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homePhaseTranslate => '翻訳';
 
   @override
-  String get homePhaseViewer => 'ビューア';
+  String get homePhaseViewer => '修正';
 
   @override
   String get homePhaseAnonymize => '匿名化';
@@ -1269,6 +1420,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get homePhaseExport => 'エクスポート';
+
+  @override
+  String get taskDefaultTitleTranslate => 'タスク';
+
+  @override
+  String get taskDefaultTitleAnonymize => '匿名化';
 
   @override
   String get homeReleaseNotesTitle => 'リリースノート';
@@ -1465,6 +1622,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsTableOcrSubtitle => '表のOCRを有効にします';
 
   @override
+  String get settingsMineruModelVersion => 'モデルバージョン';
+
+  @override
+  String get settingsMineruModelVersionSubtitle =>
+      'MinerU解析モードを選択（pipelineは高速、vlmは高精度、hybridは両方）';
+
+  @override
   String get settingsAnonymizationNewTaskNotice => '変更は新規タスクにのみ適用されます';
 
   @override
@@ -1517,6 +1681,42 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsOcrLangArabic => 'アラビア語';
+
+  @override
+  String get settingsOcrLangAuto => '自動検出';
+
+  @override
+  String get mineruLangAuto => '自動検出';
+
+  @override
+  String get mineruLangChServer => '中国語（サーバー）';
+
+  @override
+  String get mineruLangChLite => '中国語（ライト）';
+
+  @override
+  String get mineruLangTamil => 'タミル語';
+
+  @override
+  String get mineruLangTelugu => 'テルグ語';
+
+  @override
+  String get mineruLangKannada => 'カンナダ語';
+
+  @override
+  String get mineruLangLatinScript => 'ラテン文字';
+
+  @override
+  String get mineruLangArabicScript => 'アラビア文字';
+
+  @override
+  String get mineruLangEastSlavic => '東スラブ語';
+
+  @override
+  String get mineruLangCyrillicScript => 'キリル文字';
+
+  @override
+  String get mineruLangDevanagariScript => 'デーヴァナーガリー文字';
 
   @override
   String get settingsTabsGlossary => '用語集';
@@ -2042,6 +2242,124 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get settingsLocalUsersTitle => 'ローカルユーザー';
+
+  @override
+  String get settingsLocalUsersAddUser => 'ユーザー追加';
+
+  @override
+  String get settingsLocalUsersNoUsers => 'ローカルユーザーが見つかりません。';
+
+  @override
+  String get settingsLocalUsersDialogAddTitle => 'ローカルユーザー追加';
+
+  @override
+  String get settingsLocalUsersDialogEditTitle => 'ローカルユーザー編集';
+
+  @override
+  String get settingsLocalUsersFieldUsername => 'ユーザー名';
+
+  @override
+  String get settingsLocalUsersFieldDisplayName => '表示名（任意）';
+
+  @override
+  String get settingsLocalUsersFieldEmail => 'メール（任意）';
+
+  @override
+  String get settingsLocalUsersFieldRole => '役割';
+
+  @override
+  String get settingsLocalUsersRoleUser => 'ユーザー';
+
+  @override
+  String get settingsLocalUsersRoleAdmin => '管理者';
+
+  @override
+  String get settingsLocalUsersFieldPassword => 'パスワード';
+
+  @override
+  String get settingsLocalUsersPasswordHelper => '8〜128文字、大文字・小文字・数字を含む';
+
+  @override
+  String get settingsLocalUsersValidationUsernameRequired => 'ユーザー名が必要です';
+
+  @override
+  String get settingsLocalUsersValidationPasswordRequired => 'パスワードが必要です';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooShort => 'パスワードは8文字以上必要です';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooLong =>
+      'パスワードは128文字以内で入力してください';
+
+  @override
+  String get settingsLocalUsersValidationPasswordComplexity =>
+      'パスワードには大文字、小文字、数字を含める必要があります';
+
+  @override
+  String get settingsLocalUsersOperationFailed => '操作に失敗しました';
+
+  @override
+  String get settingsLocalUsersResetPassword => 'パスワードをリセット';
+
+  @override
+  String settingsLocalUsersResetPasswordTitle(Object username) {
+    return 'パスワードリセット: $username';
+  }
+
+  @override
+  String get settingsLocalUsersFieldNewPassword => '新しいパスワード';
+
+  @override
+  String get settingsLocalUsersPasswordResetSuccess => 'パスワードがリセットされました';
+
+  @override
+  String get settingsLocalUsersPasswordResetFailed => 'パスワードのリセットに失敗しました';
+
+  @override
+  String get settingsLocalUsersDeleteUser => '削除';
+
+  @override
+  String settingsLocalUsersDeleteUserTitle(Object username) {
+    return 'ユーザー削除: $username';
+  }
+
+  @override
+  String get settingsLocalUsersDeleteConfirmation =>
+      'この操作により、ローカルユーザーストアからユーザーが完全に削除されます。この操作は元に戻せません。';
+
+  @override
+  String get settingsLocalUsersDeleteSuccess => 'ユーザーが削除されました';
+
+  @override
+  String get settingsLocalUsersDeleteFailed => 'ユーザーの削除に失敗しました';
+
+  @override
+  String get settingsLocalUsersEdit => '編集';
+
+  @override
+  String get settingsLocalUsersCancel => 'キャンセル';
+
+  @override
+  String get settingsLocalUsersSave => '保存';
+
+  @override
+  String get settingsLocalUsersConfirm => '確認';
+
+  @override
+  String get settingsLocalUsersTableUsername => 'ユーザー名';
+
+  @override
+  String get settingsLocalUsersTableDisplayName => '表示名';
+
+  @override
+  String get settingsLocalUsersTableEmail => 'メール';
+
+  @override
+  String get settingsLocalUsersTableRole => '役割';
+
+  @override
   String get settingsLdapEnabled => 'LDAP ログインを有効にする';
 
   @override
@@ -2299,21 +2617,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setupWizardUiLanguageLabel => 'UI言語';
 
   @override
-  String get setupWizardMineruQuestion => 'PDF・画像などのドキュメントを翻訳しますか？';
-
-  @override
-  String get setupWizardMineruYes => 'はい（推奨・MinerUドキュメント解析を有効化）';
-
-  @override
-  String get setupWizardMineruNo => 'いいえ（LLMのみでテキスト翻訳など）';
-
-  @override
   String get setupWizardMineruDescription =>
       'MinerUはPDF・画像のレイアウト解析とセグメント化を行います。\n下記にAPI KeyとURLを入力し、「接続テスト」で確認してください。';
-
-  @override
-  String get setupWizardMineruSkipped =>
-      'MinerUは設定しませんでした。設定からいつでもPDF翻訳を有効にできます。';
 
   @override
   String get setupWizardMineruConfigTitle => 'MinerU（解析エンジン）';
@@ -2366,6 +2671,23 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get aiPlatformThinkingHint => 'より良い翻訳品質のためにAI推論プロセスを有効にします';
+
+  @override
+  String get aiPlatformThinkingModeSupported => '思考モードをサポート';
+
+  @override
+  String get aiPlatformThinkingModeSupportedHint =>
+      'プラットフォームが思考モードをサポートしている場合は有効にしてください（例：Qwen3を使用したOllama）';
+
+  @override
+  String get aiPlatformSegmentLimitLabel => 'セグメント制限';
+
+  @override
+  String get aiPlatformSegmentLimitHint =>
+      '翻訳バッチあたりの最大セグメント数。チャンクサイズと併用。0 = 無制限（クラウド）、10 = ローカルLLM推奨';
+
+  @override
+  String get aiPlatformSegmentLimitUnlimited => '無制限';
 
   @override
   String get aiPlatformPleaseEnterApiKeyFirst => 'まずAPIキーを入力してください';
@@ -2423,7 +2745,33 @@ class AppLocalizationsJa extends AppLocalizations {
   String get aiPlatformModelVersion => 'モデルバージョン';
 
   @override
-  String get aiPlatformModelVersionHint => 'vlm';
+  String get aiPlatformModelVersionHint => 'hybrid-auto-engine';
+
+  @override
+  String get aiPlatformTimeout => '読み取りタイムアウト（秒）';
+
+  @override
+  String get aiPlatformTimeoutHint => '200（クラウド）または 300（ローカル）。LLM応答の最大待機時間。';
+
+  @override
+  String get aiPlatformWriteTimeout => '書き込みタイムアウト（秒）';
+
+  @override
+  String get aiPlatformWriteTimeoutHint => '300（デフォルト）。LLMへのデータ送信の最大待機時間。';
+
+  @override
+  String get aiPlatformTestConnectTimeout => '接続テストタイムアウト（秒）';
+
+  @override
+  String get aiPlatformTestConnectTimeoutHint =>
+      '30（デフォルト）。翻訳開始前の接続テストの最大待機時間。';
+
+  @override
+  String get aiPlatformTestRequestTimeout => 'テストリクエストタイムアウト（秒）';
+
+  @override
+  String get aiPlatformTestRequestTimeoutHint =>
+      '10（デフォルト）。接続テスト中の各プローブリクエストの最大待機時間。';
 
   @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';
@@ -2456,11 +2804,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsTranslationNotice => 'これらの設定は新しい翻訳タスクにのみ適用されます。';
 
   @override
-  String get settingsTranslationAutoGlossaryTitle => '用語集を自動生成';
+  String get settingsTargetLanguageTitle => 'Default Target Language';
 
   @override
-  String get settingsTranslationAutoGlossarySubtitle =>
-      '翻訳後に用語集を自動生成します（新しいタスクに適用）';
+  String get settingsTargetLanguageNotice =>
+      'Sets the default target language for new translation tasks. You can still change it per task in Quick Settings.';
 
   @override
   String get settingsTranslationParamsTitle => '翻訳パラメータ';
@@ -2470,12 +2818,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsTranslationConcurrentHint => '推奨：3（モデルとクォータに基づき1〜8に調整）';
-
-  @override
-  String get settingsTranslationTimeoutTitle => 'タイムアウト（秒）';
-
-  @override
-  String get settingsTranslationTimeoutHint => '120（推奨：120-300秒）';
 
   @override
   String get settingsTranslationChunkRetryTitle => 'チャンク/API リトライ';
@@ -2546,6 +2888,20 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsExclusionLanguageMatchSubtitle => 'ソース言語がターゲット言語と一致';
+
+  @override
+  String get settingsTranslateOutputSuffixTitle => 'Translation Output Suffix';
+
+  @override
+  String get settingsTranslateOutputSuffixHint =>
+      'Appended to translated filenames (leave empty for no suffix)';
+
+  @override
+  String get settingsConvertOutputSuffixTitle => 'Conversion Output Suffix';
+
+  @override
+  String get settingsConvertOutputSuffixHint =>
+      'Appended to converted filenames (leave empty for no suffix)';
 
   @override
   String get settingsLanguageDialogTitle => '言語を選択';
@@ -3052,6 +3408,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationQueueEdit => 'ラベル編集';
 
   @override
+  String get translationQueueSelectFormats => '選択';
+
+  @override
+  String get translationQueueSelectFormatsTitle => 'ダウンロード形式を選択';
+
+  @override
+  String get translationQueueSelectFormatsFormatLabel => '形式';
+
+  @override
+  String get translationQueueSelectFormatsDownload => 'ダウンロード';
+
+  @override
   String get reeditTitle => '翻訳を編集';
 
   @override
@@ -3083,6 +3451,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get fetchUrlCancel => 'キャンセル';
+
+  @override
+  String get fetchUrl => 'URL フェッチ';
+
+  @override
+  String get fetchUrlClose => '閉じる';
 
   @override
   String get loginSubtitleFeatures => 'ファイル翻訳\nフォーマット変換\nURL フェッチ';
@@ -3149,4 +3523,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get loginPasswordRecoveryAdminGuide => '管理者の方は、パスワード復旧手順に従ってください。';
+
+  @override
+  String get commonDarkMode => 'ダークモード';
+
+  @override
+  String get commonLightMode => 'ライトモード';
 }

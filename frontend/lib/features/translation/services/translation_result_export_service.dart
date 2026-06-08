@@ -10,6 +10,7 @@ import 'dart:io' if (dart.library.html) '../../../shared/utils/io_stub.dart'
     as io;
 import '../../../shared/services/translation_service.dart';
 import '../../../shared/utils/app_logger.dart';
+import '../../../shared/utils/download_filename_builder.dart';
 
 /// Service for handling translation result export and download
 class TranslationResultExportService {
@@ -24,18 +25,24 @@ class TranslationResultExportService {
     String? tableFormat,
     String? equationFormat,
     bool? embedImages,
+    bool? bilingualExport,
+    String? bilingualOrder,
+    bool? sourceTextItalic,
+    String? sourceTextColor,
+    bool? targetTextItalic,
+    String? targetTextColor,
   }) {
     final svc = TranslationService();
     String downloadUrl = svc.buildDownloadUrl(taskId, fileType);
+
+    final uri = Uri.parse(downloadUrl);
+    final queryParams = Map<String, String>.from(uri.queryParameters);
 
     // Add format parameters as query parameters for MD, HTML, DOCX, PDF
     if (fileType == 'md' ||
         fileType == 'html' ||
         fileType == 'docx' ||
         fileType == 'pdf') {
-      final uri = Uri.parse(downloadUrl);
-      final queryParams = Map<String, String>.from(uri.queryParameters);
-
       // Add table format parameter if selected
       if (tableFormat != null) {
         queryParams['table_body_format'] = tableFormat;
@@ -50,20 +57,48 @@ class TranslationResultExportService {
       if (fileType == 'md' && embedImages != null) {
         queryParams['embed_images'] = embedImages.toString();
       }
-
-      // Rebuild URI with query parameters
-      downloadUrl = uri.replace(queryParameters: queryParams).toString();
     }
+
+    // Bilingual parameters apply to all supported formats
+    if (bilingualExport != null) {
+      queryParams['bilingual_export'] = bilingualExport.toString();
+    }
+    if (bilingualOrder != null) {
+      queryParams['bilingual_order'] = bilingualOrder;
+    }
+    if (sourceTextItalic != null) {
+      queryParams['source_text_italic'] = sourceTextItalic.toString();
+    }
+    if (sourceTextColor != null) {
+      queryParams['source_text_color'] = sourceTextColor;
+    }
+    if (targetTextItalic != null) {
+      queryParams['target_text_italic'] = targetTextItalic.toString();
+    }
+    if (targetTextColor != null) {
+      queryParams['target_text_color'] = targetTextColor;
+    }
+
+    // Rebuild URI with query parameters
+    downloadUrl = uri.replace(queryParameters: queryParams).toString();
 
     return downloadUrl;
   }
 
   /// Download and save file
+  /// [suffix] configurable filename suffix (e.g. '_translated', '_converted')
   Future<void> downloadAndSave(
     String fileType, {
     String? tableFormat,
     String? equationFormat,
     bool? embedImages,
+    bool? bilingualExport,
+    String? bilingualOrder,
+    bool? sourceTextItalic,
+    String? sourceTextColor,
+    bool? targetTextItalic,
+    String? targetTextColor,
+    String suffix = '_translated',
   }) async {
     try {
       final svc = TranslationService();
@@ -72,6 +107,12 @@ class TranslationResultExportService {
         tableFormat: tableFormat,
         equationFormat: equationFormat,
         embedImages: embedImages,
+        bilingualExport: bilingualExport,
+        bilingualOrder: bilingualOrder,
+        sourceTextItalic: sourceTextItalic,
+        sourceTextColor: sourceTextColor,
+        targetTextItalic: targetTextItalic,
+        targetTextColor: targetTextColor,
       );
 
       AppLogger.log(
@@ -92,28 +133,14 @@ class TranslationResultExportService {
         throw Exception('Failed to download $fileType: Empty response');
       }
 
-      // Generate filename based on original file name or default
+      // Generate filename using shared utility with configurable suffix
       final originalName = fileName ?? 'translated';
-      // Remove all extensions from original filename (handle cases like document.md.md)
-      // Split by '.' and take all parts except the last one, then join them
-      final nameParts = originalName.split('.');
-      String nameWithoutExt;
-      if (nameParts.length > 1) {
-        // Remove the last part (extension) and join the rest
-        nameWithoutExt = nameParts.sublist(0, nameParts.length - 1).join('.');
-      } else {
-        // No extension found, use the whole name
-        nameWithoutExt = originalName;
-      }
-      // Remove '_translated' suffix if it already exists to avoid duplication
-      if (nameWithoutExt.endsWith('_translated')) {
-        nameWithoutExt = nameWithoutExt.substring(
-          0,
-          nameWithoutExt.length - '_translated'.length,
-        );
-      }
       final extension = fileType == 'md' ? 'md' : fileType;
-      final filename = '${nameWithoutExt}_translated.$extension';
+      final filename = buildDownloadFilename(
+        originalName: originalName,
+        extension: extension,
+        suffix: suffix,
+      );
 
       // Save file (Web or Desktop)
       if (kIsWeb) {

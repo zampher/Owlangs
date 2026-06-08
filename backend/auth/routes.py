@@ -729,17 +729,9 @@ async def get_app_config_api(
         app_config = get_app_config()
         app_config_dict = app_config.get_config_dict()
         logger.info(LogModule.AUTH, f"[CONFIG] AppConfig dict keys: {list(app_config_dict.keys())[:10]}...")
-        
-        # Map translator_chunk_token_size to chunk_size for frontend compatibility
-        if 'translator_chunk_token_size' in app_config_dict:
-            chunk_size_value = app_config_dict.get('translator_chunk_token_size')
-            if chunk_size_value and chunk_size_value != 0:
-                config_dict['chunk_size'] = chunk_size_value
-                logger.info(LogModule.AUTH, f"[CONFIG] Mapped translator_chunk_token_size={chunk_size_value} to chunk_size")
-        
+
         # Map other translator settings for frontend compatibility
         translator_mappings = {
-            'translator_concurrent': 'concurrent',
             'translator_connect_timeout': 'connect_timeout',
             'translator_timeout': 'timeout',
             'translator_retry': 'retry',
@@ -758,6 +750,10 @@ async def get_app_config_api(
             "ui_language",
             "translator_last_workflow",
             "translator_auto_workflow_enabled",
+            "translator_convert_engine",
+            "translator_target_language",
+            "translator_output_suffix",
+            "converter_output_suffix",
         }
         for key in app_config_user_level_keys:
             if key in app_config_dict and key in config_dict:
@@ -840,11 +836,12 @@ async def get_app_config_api(
             'translator_srt_insert_mode', 'translator_srt_separator',
             'translator_epub_insert_mode', 'translator_epub_separator',
             'translator_html_insert_mode', 'translator_html_separator',
-            'translator_json_paths', 'translator_target_language', 'translator_custom_language',
+            'translator_json_paths', 'translator_target_language', 'translator_output_suffix', 'converter_output_suffix',
+            'translator_custom_language',
             'translator_custom_prompt', 'translator_thinking_mode', 'theme',
             'translator_platform_type', 'translator_temperature', 'translator_top_p',
             'translator_frequency_penalty', 'translator_presence_penalty',
-            'translator_chunk_token_size', 'chunk_size', 'concurrent', 'timeout', 'retry',
+            'chunk_size', 'concurrent', 'timeout', 'retry',
             'translator_segment_auto_retry_rounds', 'segment_auto_retry_rounds',
             'temperature', 'thinking',
             'glossary_generate_enable', 'glossary_agent_config_choice', 'glossary_agent_thinking_mode',
@@ -3313,6 +3310,8 @@ async def batch_update_settings(
                     
                     if parsing_engine_updates:
                         # Update parsing engine via update_from_dict
+                        if 'convert_engine' in parsing_engine_updates:
+                            logger.info(LogModule.AUTH, f"[BATCH] Setting convert_engine to '{parsing_engine_updates['convert_engine']}' (key={key})")
                         global_config.update_from_dict({'parsing_engine': parsing_engine_updates})
                 
                 elif key == 'ai_platforms':
@@ -3334,6 +3333,15 @@ async def batch_update_settings(
                             )
                             try:
                                 _pt = p_val.get('platform_type', 'llm')
+                                # Normalize legacy platform_type values (e.g. 'pdf_parser' → 'parser')
+                                if _pt == 'pdf_parser':
+                                    _pt = 'parser'
+                                # Normalize cloud MinerU model: 'vlm' → 'vlm-auto-engine'
+                                _model = p_val.get('model', '')
+                                _subtype = p_val.get('parser_subtype')
+                                if p_key == 'mineru' and _model == 'vlm':
+                                    _model = 'vlm-auto-engine'
+                                    logger.info(LogModule.AUTH, f"[AI_PLATFORMS] Normalized mineru model: 'vlm' → 'vlm-auto-engine'")
                                 if platform_type_uses_llm_chunk_concurrent(_pt):
                                     _cs = (
                                         int(p_val['chunk_size'])
@@ -3347,16 +3355,38 @@ async def batch_update_settings(
                                     )
                                 else:
                                     _cs, _cc = 3000, 5
+                                # Parse segment_limit (max segments per batch, 0 = unlimited)
+                                _sl_raw = p_val.get('segment_limit')
+                                if _sl_raw is None:
+                                    # Migrate from old single_segment_retry_mode if present
+                                    _old_ssr = p_val.get('single_segment_retry_mode')
+                                    if isinstance(_old_ssr, bool):
+                                        _sl = 1 if _old_ssr else 100
+                                    elif _old_ssr == 'single':
+                                        _sl = 1
+                                    elif _old_ssr == 'fixed_5':
+                                        _sl = 5
+                                    elif _old_ssr == 'fixed_10':
+                                        _sl = 10
+                                    else:
+                                        _sl = 100  # default
+                                else:
+                                    _sl = int(_sl_raw)
+                                    # Validate: must be 0 (unlimited) or one of the allowed values
+                                    _valid_limits = {0, 1, 3, 5, 10, 20, 50, 100, 200, 500, 1000}
+                                    if _sl not in _valid_limits:
+                                        _sl = 100  # fallback to default
                                 cfg = AIPlatformConfig(
                                     name=p_val.get('name', ''),
                                     url=p_val.get('url', ''),
-                                    model=p_val.get('model', ''),
+                                    model=_model,
                                     max_tokens=p_val.get('max_tokens', 4096),
                                     temperature=float(p_val.get('temperature', 0.3)),
                                     temperature_min=float(p_val.get('temperature_min', 0.0)),
                                     temperature_max=float(p_val.get('temperature_max', 2.0)),
                                     thinking_mode_supported=p_val.get('thinking_mode_supported', False),
                                     thinking_mode=p_val.get('thinking_mode', 'disable'),
+                                    segment_limit=_sl,
                                     recommended_tokens=p_val.get('recommended_tokens'),
                                     performance_note=p_val.get('performance_note'),
                                     platform_type=_pt,
@@ -3368,6 +3398,10 @@ async def batch_update_settings(
                                     api_endpoints=p_val.get('api_endpoints') if p_val.get('api_endpoints') is not None else {},
                                     chunk_size=_cs,
                                     concurrent=_cc,
+                                    timeout=int(p_val['timeout']) if p_val.get('timeout') is not None else None,
+                                    write_timeout=int(p_val['write_timeout']) if p_val.get('write_timeout') is not None else None,
+                                    test_connect_timeout=int(p_val['test_connect_timeout']) if p_val.get('test_connect_timeout') is not None else 30,
+                                    test_request_timeout=int(p_val['test_request_timeout']) if p_val.get('test_request_timeout') is not None else 10,
                                 )
                                 platforms_config.update_platform_config(p_key, cfg)
                                 logger.info(LogModule.AUTH, f"[AI_PLATFORMS] Updated platform '{p_key}': url={cfg.url}, model={cfg.model}")
@@ -3439,6 +3473,10 @@ async def batch_update_settings(
                     backend_key = 'concurrent'
                 elif key == 'translationTimeout':
                     backend_key = 'timeout'
+                elif key == 'translateOutputSuffix':
+                    backend_key = 'translator_output_suffix'
+                elif key == 'convertOutputSuffix':
+                    backend_key = 'converter_output_suffix'
                 
                 # Update user profile
                 if not profile_manager.update_user_setting(user.username, key, value):
@@ -3446,19 +3484,13 @@ async def batch_update_settings(
                 
                 # Sync certain settings to app_config.json for backend consistency
                 # These settings are user preferences but need to be in global config for backend to read
-                if backend_key in ['chunk_size', 'concurrent', 'timeout', 'retry', 'segment_auto_retry_rounds']:
+                if backend_key in ['timeout', 'retry', 'segment_auto_retry_rounds', 'targetLanguage', 'translator_output_suffix', 'converter_output_suffix']:
                     try:
                         from config import get_app_config, save_app_config
                         app_config = get_app_config()
-                        
+
                         # Map to app_config field names
-                        if backend_key == 'chunk_size':
-                            app_config.translator_chunk_token_size = int(value) if value else 8000
-                            logger.info(LogModule.AUTH, f"[SETTINGS] Synced chunk_size={value} to app_config.translator_chunk_token_size")
-                        elif backend_key == 'concurrent':
-                            app_config.translator_concurrent = int(value) if value else 10
-                            logger.info(LogModule.AUTH, f"[SETTINGS] Synced concurrent={value} to app_config.translator_concurrent")
-                        elif backend_key == 'connect_timeout':
+                        if backend_key == 'connect_timeout':
                             app_config.translator_connect_timeout = int(value) if value else 15
                             logger.info(LogModule.AUTH, f"[SETTINGS] Synced connect_timeout={value} to app_config.translator_connect_timeout")
                         elif backend_key == 'timeout':
@@ -3470,34 +3502,43 @@ async def batch_update_settings(
                         elif backend_key == 'segment_auto_retry_rounds':
                             app_config.translator_segment_auto_retry_rounds = int(value) if value else 3
                             logger.info(LogModule.AUTH, f"[SETTINGS] Synced segment_auto_retry_rounds={value} to app_config.translator_segment_auto_retry_rounds")
-                        
+                        elif backend_key == 'targetLanguage':
+                            app_config.translator_target_language = str(value) if value else "English"
+                            logger.info(LogModule.AUTH, f"[SETTINGS] Synced targetLanguage={value} to app_config.translator_target_language")
+                        elif backend_key == 'translator_output_suffix':
+                            app_config.translator_output_suffix = str(value) if value else "_translated"
+                            logger.info(LogModule.AUTH, f"[SETTINGS] Synced translator_output_suffix={value} to app_config")
+                        elif backend_key == 'converter_output_suffix':
+                            app_config.converter_output_suffix = str(value) if value else "_converted"
+                            logger.info(LogModule.AUTH, f"[SETTINGS] Synced converter_output_suffix={value} to app_config")
+
                         app_config_needs_save = True
                     except Exception as e:
                         logger.warning(LogModule.AUTH, f"[SETTINGS] Failed to sync {backend_key} to app_config.json: {e}")
                         # Continue even if sync fails (user profile is still saved)
-                    
-                    # Also sync chunk_size and concurrent to the default LLM platform (per-platform settings)
-                    if backend_key in ['chunk_size', 'concurrent']:
-                        try:
-                            from backend.config.platforms_config import platform_type_uses_llm_chunk_concurrent
 
-                            platforms_config = get_platforms_config()
-                            default_platform = platforms_config.default_platform
-                            if default_platform:
-                                platform_cfg = platforms_config.get_platform_config(default_platform)
-                                if platform_cfg and platform_type_uses_llm_chunk_concurrent(
-                                    platform_cfg.platform_type
-                                ):
-                                    if backend_key == 'chunk_size':
-                                        platform_cfg.chunk_size = int(value) if value else 3000
-                                        logger.info(LogModule.AUTH, f"[SETTINGS] Synced chunk_size={value} to platform '{default_platform}' config")
-                                    elif backend_key == 'concurrent':
-                                        platform_cfg.concurrent = int(value) if value else 5
-                                        logger.info(LogModule.AUTH, f"[SETTINGS] Synced concurrent={value} to platform '{default_platform}' config")
-                                    if save_platforms_config():
-                                        logger.info(LogModule.AUTH, f"[SETTINGS] Saved platforms.json after syncing {backend_key}")
-                        except Exception as e:
-                            logger.warning(LogModule.AUTH, f"[SETTINGS] Failed to sync {backend_key} to platforms.json: {e}")
+                # Sync chunk_size and concurrent to the default LLM platform (per-platform settings only)
+                if backend_key in ['chunk_size', 'concurrent']:
+                    try:
+                        from backend.config.platforms_config import platform_type_uses_llm_chunk_concurrent
+
+                        platforms_config = get_platforms_config()
+                        default_platform = platforms_config.default_platform
+                        if default_platform:
+                            platform_cfg = platforms_config.get_platform_config(default_platform)
+                            if platform_cfg and platform_type_uses_llm_chunk_concurrent(
+                                platform_cfg.platform_type
+                            ):
+                                if backend_key == 'chunk_size':
+                                    platform_cfg.chunk_size = int(value) if value else 3000
+                                    logger.info(LogModule.AUTH, f"[SETTINGS] Synced chunk_size={value} to platform '{default_platform}' config")
+                                elif backend_key == 'concurrent':
+                                    platform_cfg.concurrent = int(value) if value else 5
+                                    logger.info(LogModule.AUTH, f"[SETTINGS] Synced concurrent={value} to platform '{default_platform}' config")
+                                if save_platforms_config():
+                                    logger.info(LogModule.AUTH, f"[SETTINGS] Saved platforms.json after syncing {backend_key}")
+                    except Exception as e:
+                        logger.warning(LogModule.AUTH, f"[SETTINGS] Failed to sync {backend_key} to platforms.json: {e}")
             
             # Save app_config.json if any settings were synced
             if app_config_needs_save:
@@ -3638,7 +3679,8 @@ async def update_single_setting(
             'translator_srt_insert_mode', 'translator_srt_separator',
             'translator_epub_insert_mode', 'translator_epub_separator',
             'translator_html_insert_mode', 'translator_html_separator',
-            'translator_json_paths', 'translator_target_language', 'translator_custom_language',
+            'translator_json_paths', 'translator_target_language', 'translator_output_suffix', 'converter_output_suffix',
+            'translator_custom_language',
             'translator_custom_prompt', 'translator_thinking_mode', 'theme',
             'translator_platform_type', 'translator_temperature', 'temperature', 'translator_top_p',
             'translator_frequency_penalty', 'translator_presence_penalty',
@@ -3803,16 +3845,20 @@ async def update_single_setting(
                         raise HTTPException(status_code=400, detail=f"Invalid value for ai_platforms_default_platform: {str(e)}")
                 elif key in ['parsingEngine', 'translator_convert_engine', 'translator_mineru_model_version', 'translator_formula_ocr', 'translator_table_ocr', 'translator_skip_translate']:
                     # Handle fields in parsing_engine (accept both camelCase from frontend and snake_case)
+                    # Must use update_from_dict rather than direct attribute access because
+                    # UnifiedConfig.parsing_engine is a @property returning a plain dict.
                     if key in ('parsingEngine', 'translator_convert_engine'):
-                        global_config.parsing_engine.convert_engine = value
+                        global_config.update_from_dict({'parsing_engine': {'convert_engine': value}})
                     elif key == 'translator_mineru_model_version':
-                        global_config.parsing_engine.mineru_model_version = value
+                        # Update model version in platforms.json (source of truth) and system.json (backward compat)
+                        normalized = 'vlm-auto-engine' if value == 'vlm' else value
+                        global_config.update_from_dict({'parsing_engine': {'mineru_model_version': normalized}})
                     elif key == 'translator_formula_ocr':
-                        global_config.parsing_engine.formula_ocr = value
+                        global_config.update_from_dict({'parsing_engine': {'formula_ocr': value}})
                     elif key == 'translator_table_ocr':
-                        global_config.parsing_engine.table_ocr = value
+                        global_config.update_from_dict({'parsing_engine': {'table_ocr': value}})
                     elif key == 'translator_skip_translate':
-                        global_config.parsing_engine.skip_translate = value
+                        global_config.update_from_dict({'parsing_engine': {'skip_translate': value}})
                 else:
                     raise HTTPException(status_code=400, detail=f"Unknown global setting key: {key}")
             
@@ -4187,6 +4233,8 @@ async def test_ai_platform(
                     logger.info(LogModule.AUTH, f"[TEST_AI_PLATFORM DEBUG] requires_api_key value={getattr(platform_config, 'requires_api_key')}")
                     print(f"[TEST_AI_PLATFORM DEBUG] requires_api_key value={getattr(platform_config, 'requires_api_key')}")
         
+        _cfg_test_connect = None
+        _cfg_test_request = None
         if platform_config:
             # platform_config may be an object or a dict; handle both
             if not base_url:
@@ -4204,7 +4252,16 @@ async def test_ai_platform(
                 requires_api_key = getattr(platform_config, 'requires_api_key') if hasattr(platform_config, 'requires_api_key') else platform_config.get('requires_api_key', True)
             except Exception:
                 requires_api_key = True
-        
+            # Read per-platform connectivity test timeout overrides
+            try:
+                _cfg_test_connect = getattr(platform_config, 'test_connect_timeout', None) if hasattr(platform_config, 'test_connect_timeout') else platform_config.get('test_connect_timeout')
+            except Exception:
+                _cfg_test_connect = None
+            try:
+                _cfg_test_request = getattr(platform_config, 'test_request_timeout', None) if hasattr(platform_config, 'test_request_timeout') else platform_config.get('test_request_timeout')
+            except Exception:
+                _cfg_test_request = None
+
         logger.info(LogModule.AUTH, f"[TEST_AI_PLATFORM DEBUG] final requires_api_key={requires_api_key}, base_url={base_url}, model_name={model_name}")
         print(f"[TEST_AI_PLATFORM DEBUG] final requires_api_key={requires_api_key}, base_url={base_url}, model_name={model_name}")
         
@@ -4242,7 +4299,23 @@ async def test_ai_platform(
         
         # Detect max_tokens if requested (default: True)
         detect_max_tokens = data.get('detect_max_tokens', True)
-        result = await test_ai_platform_connectivity(platform_type, base_url, safe_model, api_key, detect_max_tokens=detect_max_tokens)
+        # Per-platform timeout overrides: use request body values, falling back to
+        # platform config, then to hardcoded defaults (30 / 10).
+        test_connect_timeout = data.get(
+            'test_connect_timeout',
+            _cfg_test_connect if _cfg_test_connect is not None else 30,
+        )
+        test_request_timeout = data.get(
+            'test_request_timeout',
+            _cfg_test_request if _cfg_test_request is not None else 10,
+        )
+        result = await test_ai_platform_connectivity(
+            platform_type, base_url, safe_model, api_key,
+            detect_max_tokens=detect_max_tokens,
+            requires_api_key=requires_api_key,
+            test_connect_timeout=test_connect_timeout,
+            test_request_timeout=test_request_timeout,
+        )
         
         # If max_tokens was detected and test was successful, update platform configuration
         if result.get('success') and 'max_tokens' in result:
@@ -4365,7 +4438,7 @@ async def list_ai_platform_models(
         
         # Delegate to service
         from .ai_platform_service import list_platform_models
-        models = await list_platform_models(platform_type, base_url, api_key, api_protocol=api_protocol)
+        models = await list_platform_models(platform_type, base_url, api_key, api_protocol=api_protocol, requires_api_key=requires_api_key)
         return {"success": True, "models": models}
     
     except HTTPException:

@@ -8,6 +8,7 @@ import shutil
 import time
 import signal
 import atexit
+import threading
 from pathlib import Path
 from typing import Optional
 import redis
@@ -117,18 +118,24 @@ class LocalRedisManager:
             if hasattr(sys, '_MEIPASS'):
                 # Running from PyInstaller - try to find Redis relative to executable
                 exe_path = Path(sys.executable)
-                # Try parent directory (if EXE is in bin/, Redis is in ../3rdParty/...)
+                # Onedir: EXE and 3rdParty are in the same folder
+                redis_dir = exe_path.parent / "3rdParty" / "windows" / "Redis-x64-3.0.504"
+                redis_server = redis_dir / "redis-server.exe"
+                if redis_server.exists():
+                    unified_logger.info(LogModule.SYSTEM, f"Found Redis in onedir directory: {redis_server}")
+                    return redis_server
+                # Onedir / onefile fallback: _MEIPASS contains bundled 3rdParty
+                meipass_redis = Path(sys._MEIPASS) / "3rdParty" / "windows" / "Redis-x64-3.0.504" / "redis-server.exe"
+                if meipass_redis.exists():
+                    unified_logger.info(LogModule.SYSTEM, f"Found Redis in PyInstaller bundle directory: {meipass_redis}")
+                    return meipass_redis
+                # Legacy: EXE is in a subdir (e.g. bin/), Redis is in parent
                 install_base = exe_path.parent.parent
                 redis_dir = install_base / "3rdParty" / "windows" / "Redis-x64-3.0.504"
                 redis_server = redis_dir / "redis-server.exe"
                 if redis_server.exists():
                     unified_logger.info(LogModule.SYSTEM, f"Found Redis in installation directory: {redis_server}")
                     return redis_server
-                # Also check in _MEIPASS (PyInstaller temp directory)
-                meipass_redis = Path(sys._MEIPASS) / "3rdParty" / "windows" / "Redis-x64-3.0.504" / "redis-server.exe"
-                if meipass_redis.exists():
-                    unified_logger.info(LogModule.SYSTEM, f"Found Redis in PyInstaller temp directory: {meipass_redis}")
-                    return meipass_redis
 
             # 2. Check installation directory (production)
             # Search common install locations; install dir first so user can override,
@@ -181,13 +188,29 @@ class LocalRedisManager:
         return None
     
     def _is_redis_running(self) -> bool:
-        """Check if Redis is already running (optimized with shorter timeout)"""
-        try:
-            client = redis.Redis(host=self.redis_host, port=self.redis_port, socket_connect_timeout=0.5)
-            client.ping()
-            return True
-        except:
-            return False
+        """Check if Redis is already running.
+
+        Uses a thread-level timeout so that a stalled TCP connect (e.g. Windows
+        firewall silently dropping SYN to 6379) does not block startup for 20+ seconds.
+        """
+        result = [False]
+
+        def _try():
+            try:
+                client = redis.Redis(
+                    host=self.redis_host,
+                    port=self.redis_port,
+                    socket_connect_timeout=1.0,
+                )
+                client.ping()
+                result[0] = True
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_try, daemon=True)
+        t.start()
+        t.join(timeout=2.0)  # Hard timeout: never block startup longer than 2 seconds
+        return result[0]
     
     def start_redis(self) -> bool:
         """Start Redis service"""

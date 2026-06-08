@@ -140,6 +140,7 @@ class GlossaryGenerationService:
                 concurrent=request.concurrent,
                 connect_timeout=getattr(request, 'connect_timeout', 15),
                 timeout=request.timeout,
+                write_timeout=getattr(request, 'write_timeout', None),
                 retry=request.retry,
                 custom_prompt=request.custom_prompt,  # Pass user-defined custom prompt
                 detection_mode=request.detection_mode,  # Pass detection mode: "uncertain" or "deep"

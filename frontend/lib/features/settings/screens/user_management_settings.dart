@@ -184,6 +184,7 @@ class _UserManagementSettingsScreenState
 
         return StatefulBuilder(
           builder: (BuildContext context, void Function(void Function()) setDialogState) {
+            final l10n = AppLocalizations.of(context)!;
             final Color errorBorderColor = Colors.orange.shade700;
 
             Future<void> onSave() async {
@@ -199,17 +200,37 @@ class _UserManagementSettingsScreenState
 
               if (username.isEmpty) {
                 setDialogState(() {
-                  usernameError = 'Username is required';
-                  errorMessage = usernameError;
+                  usernameError = l10n.settingsLocalUsersValidationUsernameRequired;
                 });
                 return;
               }
 
               if (!isEdit) {
-                if (passwordController.text.isEmpty) {
+                final pwd = passwordController.text;
+                if (pwd.isEmpty) {
                   setDialogState(() {
-                    passwordError = 'Password is required';
-                    errorMessage = passwordError;
+                    passwordError = l10n.settingsLocalUsersValidationPasswordRequired;
+                  });
+                  return;
+                }
+                if (pwd.length < 8) {
+                  setDialogState(() {
+                    passwordError = l10n.settingsLocalUsersValidationPasswordTooShort;
+                  });
+                  return;
+                }
+                if (pwd.length > 128) {
+                  setDialogState(() {
+                    passwordError = l10n.settingsLocalUsersValidationPasswordTooLong;
+                  });
+                  return;
+                }
+                final hasUpper = pwd.contains(RegExp(r'[A-Z]'));
+                final hasLower = pwd.contains(RegExp(r'[a-z]'));
+                final hasDigit = pwd.contains(RegExp(r'[0-9]'));
+                if (!(hasUpper && hasLower && hasDigit)) {
+                  setDialogState(() {
+                    passwordError = l10n.settingsLocalUsersValidationPasswordComplexity;
                   });
                   return;
                 }
@@ -242,46 +263,61 @@ class _UserManagementSettingsScreenState
                   return;
                 }
                 setDialogState(() {
-                  errorMessage = 'Operation failed (unknown error)';
+                  errorMessage = l10n.settingsLocalUsersOperationFailed;
                   saving = false;
                 });
               } catch (e) {
                 final String msg = e.toString();
                 if (!dialogContext.mounted) return;
-                final bool isPasswordError = msg.toLowerCase().contains('password') ||
-                    msg.contains('8 character') ||
-                    msg.contains('at least');
+                final String lower = msg.toLowerCase();
                 setDialogState(() {
-                  errorMessage = msg;
-                  if (isPasswordError) passwordError = msg;
+                  if (lower.contains('username') || (lower.contains('user') && lower.contains('exist'))) {
+                    usernameError = msg;
+                  } else if (lower.contains('password') || lower.contains('8 character') || lower.contains('at least')) {
+                    passwordError = msg;
+                  } else {
+                    errorMessage = msg;
+                  }
                   saving = false;
                 });
               }
             }
 
             return AlertDialog(
-              title: Text(isEdit ? 'Edit local user' : 'Add local user'),
-              content: SingleChildScrollView(
+              title: Text(isEdit ? l10n.settingsLocalUsersDialogEditTitle : l10n.settingsLocalUsersDialogAddTitle),
+              content: SizedBox(
+                width: 420,
+                child: SingleChildScrollView(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    if (errorMessage != null && errorMessage!.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          errorMessage!,
-                          style: TextStyle(
-                            color: errorBorderColor,
-                            fontSize: 13,
-                          ),
-                        ),
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      // Reserve fixed space for error message to prevent layout jumps
+                      SizedBox(
+                        height: errorMessage != null && errorMessage!.isNotEmpty ? null : 24,
+                        child: errorMessage != null && errorMessage!.isNotEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Text(
+                                  errorMessage!,
+                                  style: TextStyle(
+                                    color: errorBorderColor,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              )
+                            : null,
                       ),
                     TextField(
                       controller: usernameController,
                       enabled: !isEdit,
+                      onChanged: (_) {
+                        if (usernameError != null) {
+                          setDialogState(() => usernameError = null);
+                        }
+                      },
                       decoration: InputDecoration(
-                        labelText: 'Username',
+                        labelText: l10n.settingsLocalUsersFieldUsername,
                         errorText: usernameError,
                         errorBorder: usernameError != null
                             ? OutlineInputBorder(
@@ -298,28 +334,28 @@ class _UserManagementSettingsScreenState
                     const SizedBox(height: 12),
                     TextField(
                       controller: displayNameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Display name (optional)',
+                      decoration: InputDecoration(
+                        labelText: l10n.settingsLocalUsersFieldDisplayName,
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: emailController,
-                      decoration: const InputDecoration(
-                        labelText: 'Email (optional)',
+                      decoration: InputDecoration(
+                        labelText: l10n.settingsLocalUsersFieldEmail,
                       ),
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       initialValue: role,
-                      items: const <DropdownMenuItem<String>>[
+                      items: <DropdownMenuItem<String>>[
                         DropdownMenuItem<String>(
                           value: 'user',
-                          child: Text('User'),
+                          child: Text(l10n.settingsLocalUsersRoleUser),
                         ),
                         DropdownMenuItem<String>(
                           value: 'admin',
-                          child: Text('Admin'),
+                          child: Text(l10n.settingsLocalUsersRoleAdmin),
                         ),
                       ],
                       onChanged: (String? v) {
@@ -327,8 +363,8 @@ class _UserManagementSettingsScreenState
                           setDialogState(() => role = v);
                         }
                       },
-                      decoration: const InputDecoration(
-                        labelText: 'Role',
+                      decoration: InputDecoration(
+                        labelText: l10n.settingsLocalUsersFieldRole,
                       ),
                     ),
                     if (!isEdit) ...<Widget>[
@@ -336,9 +372,17 @@ class _UserManagementSettingsScreenState
                       TextField(
                         controller: passwordController,
                         obscureText: true,
+                        onChanged: (_) {
+                          if (passwordError != null) {
+                            setDialogState(() => passwordError = null);
+                          }
+                        },
                         decoration: InputDecoration(
-                          labelText: 'Password',
+                          labelText: l10n.settingsLocalUsersFieldPassword,
+                          helperText: l10n.settingsLocalUsersPasswordHelper,
+                          helperMaxLines: 2,
                           errorText: passwordError,
+                          errorMaxLines: 2,
                           errorBorder: passwordError != null
                               ? OutlineInputBorder(
                                   borderSide: BorderSide(color: errorBorderColor),
@@ -352,15 +396,16 @@ class _UserManagementSettingsScreenState
                         ),
                       ),
                     ],
-                  ],
+                    ],
                 ),
               ),
+            ),
               actions: <Widget>[
                 TextButton(
                   onPressed: saving
                       ? null
                       : () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('Cancel'),
+                  child: Text(l10n.settingsLocalUsersCancel),
                 ),
                 FilledButton(
                   onPressed: saving ? null : onSave,
@@ -370,7 +415,7 @@ class _UserManagementSettingsScreenState
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Save'),
+                      : Text(l10n.settingsLocalUsersSave),
                 ),
               ],
             );
@@ -390,25 +435,26 @@ class _UserManagementSettingsScreenState
 
   Future<void> _resetLocalUserPassword(String username) async {
     final TextEditingController passwordController = TextEditingController();
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
-          title: Text('Reset password: $username'),
+          title: Text(l10n.settingsLocalUsersResetPasswordTitle(username)),
           content: TextField(
             controller: passwordController,
             obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'New password',
+            decoration: InputDecoration(
+              labelText: l10n.settingsLocalUsersFieldNewPassword,
             ),
           ),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
+              child: Text(l10n.settingsLocalUsersCancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Confirm'),
+              child: Text(l10n.settingsLocalUsersConfirm),
             ),
           ],
         ),
@@ -423,31 +469,30 @@ class _UserManagementSettingsScreenState
     if (!mounted) return;
     if (ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password reset successfully')),
+        SnackBar(content: Text(l10n.settingsLocalUsersPasswordResetSuccess)),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to reset password')),
+        SnackBar(content: Text(l10n.settingsLocalUsersPasswordResetFailed)),
       );
     }
   }
 
   Future<void> _deleteLocalUser(String username) async {
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
-          title: Text('Delete user: $username'),
-          content: const Text(
-            'This action will permanently delete the user from local user store. This cannot be undone.',
-          ),
+          title: Text(l10n.settingsLocalUsersDeleteUserTitle(username)),
+          content: Text(l10n.settingsLocalUsersDeleteConfirmation),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
+              child: Text(l10n.settingsLocalUsersCancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Delete'),
+              child: Text(l10n.settingsLocalUsersDeleteUser),
             ),
           ],
         ),
@@ -459,12 +504,12 @@ class _UserManagementSettingsScreenState
     if (!mounted) return;
     if (ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User deleted')),
+        SnackBar(content: Text(l10n.settingsLocalUsersDeleteSuccess)),
       );
       await _loadLocalUsers();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to delete user')),
+        SnackBar(content: Text(l10n.settingsLocalUsersDeleteFailed)),
       );
     }
   }
@@ -648,7 +693,7 @@ class _UserManagementSettingsScreenState
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: <Widget>[
                         Text(
-                          'Local users',
+                          l10n.settingsLocalUsersTitle,
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         FilledButton.icon(
@@ -656,7 +701,7 @@ class _UserManagementSettingsScreenState
                               ? null
                               : _showCreateOrEditLocalUserDialog,
                           icon: const Icon(Icons.person_add),
-                          label: const Text('Add user'),
+                          label: Text(l10n.settingsLocalUsersAddUser),
                         ),
                       ],
                     ),
@@ -672,27 +717,27 @@ class _UserManagementSettingsScreenState
                       )
                     else if (_localUsers.isEmpty)
                       Text(
-                        'No local users found.',
+                        l10n.settingsLocalUsersNoUsers,
                         style: Theme.of(context).textTheme.bodyMedium,
                       )
                     else
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: DataTable(
-                          columns: const <DataColumn>[
+                          columns: <DataColumn>[
                             DataColumn(
-                              label: Text('Username'),
+                              label: Text(l10n.settingsLocalUsersTableUsername),
                             ),
                             DataColumn(
-                              label: Text('Display name'),
+                              label: Text(l10n.settingsLocalUsersTableDisplayName),
                             ),
                             DataColumn(
-                              label: Text('Email'),
+                              label: Text(l10n.settingsLocalUsersTableEmail),
                             ),
                             DataColumn(
-                              label: Text('Role'),
+                              label: Text(l10n.settingsLocalUsersTableRole),
                             ),
-                            DataColumn(
+                            const DataColumn(
                               label: Text(''),
                             ),
                           ],
@@ -715,7 +760,7 @@ class _UserManagementSettingsScreenState
                                     children: <Widget>[
                                       if (!isSuperAdmin)
                                         IconButton(
-                                          tooltip: 'Edit',
+                                          tooltip: l10n.settingsLocalUsersEdit,
                                           icon: const Icon(Icons.edit),
                                           onPressed: () =>
                                               _showCreateOrEditLocalUserDialog(
@@ -724,14 +769,14 @@ class _UserManagementSettingsScreenState
                                         ),
                                       if (!isSuperAdmin)
                                         IconButton(
-                                          tooltip: 'Reset password',
+                                          tooltip: l10n.settingsLocalUsersResetPassword,
                                           icon: const Icon(Icons.lock_reset),
                                           onPressed: () =>
                                               _resetLocalUserPassword(username),
                                         ),
                                       if (!isSuperAdmin)
                                         IconButton(
-                                          tooltip: 'Delete',
+                                          tooltip: l10n.settingsLocalUsersDeleteUser,
                                           icon: const Icon(Icons.delete),
                                           onPressed: () =>
                                               _deleteLocalUser(username),

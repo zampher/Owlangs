@@ -29,7 +29,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-from backend.app.services.task import task_manager
+from backend.app.services.task import task_manager, MSG_LEVEL_WARNING
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from utils.pagination import parse_pagination_params, PaginatedResponse
@@ -43,12 +43,17 @@ _detection_progress_queues: Dict[str, Dict[str, Any]] = {}
 _detection_progress_queues_lock = threading.Lock()
 
 # Message prefixes that indicate translation phase; do not overwrite with language-detection progress/message
+# CRITICAL: Includes "Retranslating" for batch retry progress during failed segment retranslation
 _TRANSLATION_PHASE_PREFIXES = (
     "Translating",
+    "Retranslating",
     "Sending translation",
     "Generating output",
     "Translation completed",
+    "Retranslation completed",
     "Translation initialized",
+    "Preparing retranslation",
+    "Batch retry",
 )
 
 # Minimal lang code normalization for frozen fallback (no anonymize/spacy/torch)
@@ -106,6 +111,7 @@ def _language_detection_fallback_langdetect_only(
                 "message": f"Detect Language: {idx}/{total_segments} segments ({int(100 * idx / total_segments)}%)",
                 "progress": min(100, int(100 * idx / total_segments)),
                 "status": "processing",
+                "message_level": MSG_LEVEL_WARNING,
             })
         s = (segment or "").strip()
         if len(s) < min_length:
@@ -132,6 +138,7 @@ def _language_detection_fallback_langdetect_only(
         "progress": 100,
         "message": f"Detect Language: {total_segments}/{total_segments} segments (100%)",
         "status": "processing",
+        "message_level": MSG_LEVEL_WARNING,
     }
 
 
@@ -165,6 +172,7 @@ def _language_detection_worker(
                 "message": f"Detect Language: short segments {completed}/{total} ({pct}%)",
                 "progress": min(99, 90 + pct // 10),
                 "status": "processing",
+                "message_level": MSG_LEVEL_WARNING,
             })
         else:
             pct = int((completed / total) * 100)
@@ -172,6 +180,7 @@ def _language_detection_worker(
                 "message": f"Detect Language: {completed}/{total} segments ({pct}%)",
                 "progress": min(100, pct),
                 "status": "processing",
+                "message_level": MSG_LEVEL_WARNING,
             })
 
     try:
@@ -193,6 +202,7 @@ def _language_detection_worker(
             "progress": 100,
             "message": f"Detect Language: {total_segments}/{total_segments} segments (100%)",
             "status": "processing",
+            "message_level": MSG_LEVEL_WARNING,
         })
     except Exception as e:
         err_str = str(e).lower()
@@ -656,10 +666,40 @@ class StatusService:
                 except Exception:
                     task_state["current_task_ref"] = "unknown"
         
-        # Remove payload if it exists (it's a non-serializable object, kept only for retranslation)
-        # We don't need to send it in the status response
+        # Extract serializable task params from payload before removing it,
+        # so the frontend can restore original task settings in reedit mode.
+        task_params: Dict[str, Any] = {}
         if "payload" in task_state:
+            raw_payload = task_state["payload"]
+            if isinstance(raw_payload, dict):
+                payload_dict = raw_payload
+            else:
+                # Pydantic model or SimpleNamespace
+                try:
+                    payload_dict = dict(raw_payload)
+                except Exception:
+                    try:
+                        payload_dict = raw_payload.model_dump() if hasattr(raw_payload, "model_dump") else {}
+                    except Exception:
+                        payload_dict = {}
+            # Extract fields relevant to frontend quick settings
+            _relevant_keys = [
+                "to_lang", "workflow_type", "deep_split", "temperature",
+                "prompt_mode", "prompt_style", "custom_note", "skip_translate",
+                "convert_engine", "formula_ocr", "table_ocr", "model_version",
+                "ocr_language", "insert_mode", "separator", "chunk_size",
+                "base_url", "model_id", "concurrent", "timeout", "retry",
+                "segment_auto_retry_rounds", "thinking", "copy_source_only",
+                "glossary_dict", "glossary_generate_enable",
+            ]
+            for k in _relevant_keys:
+                if k in payload_dict and payload_dict[k] is not None:
+                    val = payload_dict[k]
+                    # Skip complex non-serializable types
+                    if isinstance(val, (str, int, float, bool, list, dict)) or val is None:
+                        task_params[k] = val
             del task_state["payload"]
+        task_state["task_params"] = task_params
         
         # Check if layout_document is available BEFORE removing it (for PDF files)
         original_filename = task_state.get("original_filename", "")
@@ -928,6 +968,7 @@ class StatusService:
                             _language_detection_tasks.add(task_id)
                         self.task_manager.update_task(task_id, {
                             "message": f"Detect Language: 0/{total_segments} segments (0%)",
+                            "message_level": MSG_LEVEL_WARNING,
                             "progress": 0,
                             "status": task_state.get("status", "processing")
                         })
@@ -1007,6 +1048,8 @@ class StatusService:
                                         task_manager_ref.update_task(task_id, {
                                             "status": "failed",
                                             "error": result.get("error", "Language detection failed"),
+                                            "message": f"Language detection error: {result.get('error', 'Language detection failed')}",
+                                            "message_level": MSG_LEVEL_WARNING,
                                         })
                                 else:
                                     # Do not overwrite progress/message if task already in translation phase
@@ -1062,6 +1105,7 @@ class StatusService:
                         # Return immediately with progress 0 so frontend shows Extract tab and can poll for progress
                         language_distribution = None
                         task_state["message"] = f"Detect Language: 0/{total_segments} segments (0%)"
+                        task_state["message_level"] = MSG_LEVEL_WARNING
                         task_state["progress"] = 0
             except Exception as e:
                 # If detection fails, log but don't fail the request
@@ -2313,7 +2357,41 @@ class StatusService:
                     f"({positioned_count} positioned based on HTML structure, {len(mobi_image_segments) - positioned_count} appended to end). "
                     f"Total segments: {total} (original: {len(all_segments)}, images: {len(mobi_image_segments)})"
                     )
-        
+
+        # CRITICAL: For DOCX files with textbox/SDT content, append these segments
+        # from translation_segments_data so the frontend can display them
+        if translation_segments_data and isinstance(translation_segments_data, dict):
+            _tb_segments_list = translation_segments_data.get("segments", [])
+            _textbox_sdt_segments = []
+            for _seg in _tb_segments_list:
+                if isinstance(_seg, dict):
+                    _seg_type = _seg.get("segment_type", "")
+                    if "textbox" in _seg_type:
+                        _textbox_sdt_segments.append(_seg)
+
+            if _textbox_sdt_segments:
+                _added_count = 0
+                for _tb_seg in _textbox_sdt_segments:
+                    _tb_obj = {
+                        "segment_index": len(segments_with_metadata),
+                        "source_text": _tb_seg.get("source_text", ""),
+                        "target_text": _tb_seg.get("target_text", ""),
+                        "is_excluded": _tb_seg.get("is_excluded", False),
+                        "is_image": _tb_seg.get("is_image", False),
+                        "is_failed": _tb_seg.get("is_failed", False),
+                        "segment_type": _tb_seg.get("segment_type", "textbox_sdt"),
+                        "textbox_key": _tb_seg.get("textbox_key", ""),
+                    }
+                    segments_with_metadata.append(_tb_obj)
+                    _added_count += 1
+
+                total += _added_count
+                logger.info(
+                    LogModule.WORKFLOW,
+                    f"[PREVIEW-API] Task {task_id}: Appended {_added_count} textbox/SDT segments "
+                    f"to segments_with_metadata. New total: {total}"
+                )
+
         # CRITICAL: Handle case where available segments < total_segments
         # This can happen if source_chunks_cache.segments was truncated during storage
         available_segments_count = len(segments_with_metadata)
@@ -2373,74 +2451,14 @@ class StatusService:
             segments_metadata = st.get("segments_metadata", {})
         if 'workflow_type' not in locals() or workflow_type is None:
             workflow_type = segments_metadata.get("workflow_type") or st.get("payload", {}).get("workflow_type") if isinstance(st.get("payload"), dict) else getattr(st.get("payload"), 'workflow_type', None) if st.get("payload") else None
-        # Get chunk_size: priority: app_config.json > segments_metadata/cache_info > payload > default 3000
-        # Always prioritize app_config.json to match frontend global settings (user may have changed it)
+        # Get chunk_size from centralized service (priority: payload → platform config → fallback)
         chunk_size = None
-        # Priority 1: app_config.json (translator_chunk_token_size) - matches frontend global settings
-        app_config_chunk_size = None
-        try:
-            from backend.config.app_config import get_app_config, AppConfig
-            import json
-            from pathlib import Path
-            # Try method 1: Use get_app_config() to get the loaded config object
-            try:
-                app_config = get_app_config()
-                if hasattr(app_config, 'translator_chunk_token_size'):
-                    app_config_chunk_size = app_config.translator_chunk_token_size
-            except Exception as e1:
-                pass  # Silently fall back to method 2
-            
-            # Try method 2: Directly read from app_config.json file using unified path resolution
-            if not app_config_chunk_size or app_config_chunk_size == 0:
-                try:
-                    cfg_path = AppConfig._resolve_app_config_path("app_config.json")
-                    if cfg_path.exists():
-                        with open(cfg_path, 'r', encoding='utf-8-sig') as f:
-                            data = json.load(f)
-                            app_config_chunk_size = data.get('translator_chunk_token_size')
-                except Exception as e2:
-                    pass  # Silently continue to next priority
-            
-            if app_config_chunk_size and app_config_chunk_size != 0:
-                chunk_size = app_config_chunk_size
-                logger.info(LogModule.WORKFLOW, f"[PREVIEW-API] Task {task_id}: Using chunk_size={chunk_size} from app_config.json (translator_chunk_token_size, priority)")
-            elif app_config_chunk_size == 0:
-                app_config_chunk_size = None  # Reset to None so we know it was 0, not failed
-        except Exception as e:
-            logger.warning(LogModule.WORKFLOW, f"[PREVIEW-API] Task {task_id}: Failed to get chunk_size from app_config.json: {e}", exc_info=True)
-            app_config_chunk_size = None  # Ensure it's None on exception
-        # Priority 2: segments_metadata (set during import/resplit)
-        if chunk_size is None or chunk_size == 0:
-            if isinstance(segments_metadata, dict):
-                chunk_size = segments_metadata.get("chunk_size")
-        # Priority 3: cache_info (source_chunks_cache)
-        if chunk_size is None or chunk_size == 0:
-            chunk_size = cache_info.get("chunk_size") if cache_info else None
-        # Priority 4: app_config.json fallback (if not already tried)
-        if chunk_size is None or chunk_size == 0:
-            try:
-                from backend.config.app_config import AppConfig
-                import json
-                from pathlib import Path
-                cfg_path = AppConfig._resolve_app_config_path("app_config.json")
-                if cfg_path.exists():
-                    with open(cfg_path, 'r', encoding='utf-8-sig') as f:
-                        data = json.load(f)
-                        chunk_size = data.get('translator_chunk_token_size')
-            except Exception as e:
-                pass  # Silently continue to next priority
-        # Priority 5: payload (legacy)
-        if chunk_size is None or chunk_size == 0:
-            payload = st.get("payload")
-            if payload:
-                if isinstance(payload, dict):
-                    chunk_size = payload.get("chunk_size")
-                else:
-                    chunk_size = getattr(payload, 'chunk_size', None)
-        # Priority 5: fallback
-        if chunk_size is None or chunk_size == 0:
+        payload = st.get("payload")
+        if payload:
+            from app.services.translation.chunk_size_service import chunk_size_service
+            chunk_size = chunk_size_service.get_chunk_size(payload, task_id)
+        if not chunk_size or chunk_size == 0:
             chunk_size = 3000  # Default fallback
-            logger.warning(LogModule.WORKFLOW, f"[PREVIEW-API] Task {task_id}: chunk_size is None or 0, using fallback value 3000")
         
         # Generate chunks from segments if chunk_to_segment_map is available
         # This allows frontend to display chunks for DOCX/Excel files (not just PDF)
@@ -2457,27 +2475,11 @@ class StatusService:
         if not cached_chunk_size and cache_info:
             cached_chunk_size = cache_info.get("chunk_size")
         
-        # IMPORTANT: If we're using app_config.json chunk_size but segments_metadata has a different value,
-        # we should rebuild the chunk map to use the new chunk_size
-        # This handles the case where user changed chunk_size in settings but file was imported with old chunk_size
-        # Check if current chunk_size matches app_config_chunk_size (meaning we're using app_config.json value)
-        app_config_chunk_size_used = (app_config_chunk_size is not None and app_config_chunk_size != 0 and app_config_chunk_size == chunk_size)
-        
         # If chunk_size changed or existing chunk tokens exceed limit, force rebuild chunk map
         chunk_tokens_info_cached = st.get("chunk_tokens_info") or []
         need_rebuild_chunk_map = False
         if chunk_to_segment_map and chunk_size:
-            # Case 1: Using app_config.json chunk_size but segments_metadata has different value
-            # This handles the case where user changed chunk_size in settings but file was imported with old chunk_size
-            if app_config_chunk_size_used and segments_metadata_chunk_size and segments_metadata_chunk_size != chunk_size:
-                need_rebuild_chunk_map = True
-                logger.info(
-                    LogModule.EXTRACT,
-                    f"[PREVIEW-API] Task {task_id}: Using app_config.json chunk_size={chunk_size} "
-                    f"but segments_metadata has {segments_metadata_chunk_size}, will rebuild chunk_to_segment_map"
-                )
-            # Case 2: chunk_size changed (compare with cached_chunk_size or segments_metadata)
-            elif cached_chunk_size and cached_chunk_size != chunk_size:
+            if cached_chunk_size and cached_chunk_size != chunk_size:
                 need_rebuild_chunk_map = True
                 logger.info(
                     LogModule.EXTRACT,
@@ -3406,7 +3408,8 @@ class StatusService:
             # CRITICAL: If segment has actual text content (e.g., image caption), do NOT exclude it as image
             # even if block_type is "image" (because image captions share block_indices with image blocks)
             elif has_actual_text and is_image:
-                # This is likely an image caption segment - it has actual text content, so don't exclude it
+                # Image caption: real text shares layout block index with image block — not an image segment
+                is_image = False
                 is_excluded = False
                 logger.debug(
                     LogModule.EXCLUSION,
@@ -3480,6 +3483,9 @@ class StatusService:
                 "text": chunk_text,
                 "block_type": block_type,  # For table_body, this will be "table_body"
                 "block_index": block_index,
+                "layout_block_indices": list(chunk_block_indices)
+                if chunk_block_indices
+                else ([block_index] if block_index is not None else []),
                 "chunk_index": chunk_idx,
                 "segment_index": chunk_idx,  # CRITICAL: Store original segment index for proper mapping
                 "is_image": is_image,
@@ -3561,46 +3567,16 @@ class StatusService:
             if not is_header_chunk and not is_footer_chunk and chunk_text.strip():
                 original_text_parts.append(chunk_text)
         
-        # Get chunk_size: priority: query parameter > app_config.json > payload > segments_metadata > cache_info > default 3000
-        # Always prioritize app_config.json (translator_chunk_token_size) after query parameter to match frontend global settings
-        # Priority 1: Query parameter (if provided, use it)
-        # Priority 2: Get from app_config.json (translator_chunk_token_size)
-        if chunk_size is None or chunk_size == 0:
-            try:
-                from backend.config.app_config import AppConfig
-                # Directly read from app_config.json file
-                cfg_path = AppConfig._resolve_app_config_path("app_config.json")
-                if cfg_path.exists():
-                    with open(cfg_path, 'r', encoding='utf-8-sig') as f:
-                        data = json.load(f)
-                        chunk_size = data.get('translator_chunk_token_size')
-                if chunk_size and chunk_size != 0:
-                    logger.debug(LogModule.EXTRACT, f"[LAYOUT-EXTRACT] Task {task_id}: Using chunk_size={chunk_size} from app_config.json (translator_chunk_token_size, priority)")
-            except Exception as e:
-                logger.debug(LogModule.EXTRACT, f"[LAYOUT-EXTRACT] Task {task_id}: Failed to get chunk_size from app_config.json: {e}")
-        # Priority 3: Get from payload
+        # Get chunk_size from centralized service (priority: payload → platform config → fallback)
+        # Priority 0: Query parameter (if provided, use it directly)
         if chunk_size is None or chunk_size == 0:
             payload = st.get("payload")
             if payload:
-                if isinstance(payload, dict):
-                    chunk_size = payload.get("chunk_size")
-                else:
-                    chunk_size = getattr(payload, 'chunk_size', None)
-        # Priority 4: Get from segments_metadata
-        if chunk_size is None or chunk_size == 0:
-            segments_metadata = st.get("segments_metadata", {})
-            chunk_size = segments_metadata.get("chunk_size")
-        # Priority 5: Get from cache_info
-        if chunk_size is None or chunk_size == 0:
-            cache_info = st.get("source_chunks_cache", {})
-            chunk_size = cache_info.get("chunk_size") if cache_info else None
-        # Priority 6: Use fallback
-        if chunk_size is None or chunk_size == 0:
-            chunk_size = 3000  # Default fallback
-            logger.warning(LogModule.EXTRACT, f"[LAYOUT-EXTRACT] Task {task_id}: chunk_size is None or 0, using fallback value 3000")
-        else:
-            source_desc = "query" if chunk_size_query else ("payload" if st.get("payload") and (isinstance(st.get("payload"), dict) and st.get("payload").get('chunk_size') or getattr(st.get("payload"), 'chunk_size', None)) else ("metadata" if st.get("segments_metadata", {}).get('chunk_size') else ("cache" if st.get("source_chunks_cache", {}).get('chunk_size') else "user_settings")))
-            logger.debug(LogModule.EXTRACT, f"[LAYOUT-EXTRACT] Task {task_id}: Using chunk_size={chunk_size} (from {source_desc})")
+                from app.services.translation.chunk_size_service import chunk_size_service
+                chunk_size = chunk_size_service.get_chunk_size(payload, task_id)
+            if not chunk_size or chunk_size == 0:
+                chunk_size = 3000  # Default fallback
+                logger.warning(LogModule.EXTRACT, f"[LAYOUT-EXTRACT] Task {task_id}: chunk_size is None or 0, using fallback value 3000")
         
         # Build chunks from segments (merge segments according to chunk_size)
         # Chunks are used for translation, segments are for proofreading
@@ -4050,9 +4026,15 @@ class StatusService:
             for seg_idx in chunk_segment_indices:
                 if seg_idx < len(all_segments):
                     seg = all_segments[seg_idx]
-                    seg_block_indices = seg.get("layout_block_indices", [])
-                    if seg_block_indices:
-                        block_indices.extend(seg_block_indices)
+                    seg_block_indices = list(seg.get("layout_block_indices") or [])
+                    if not seg_block_indices and seg.get("block_index") is not None:
+                        try:
+                            seg_block_indices = [int(seg["block_index"])]
+                        except (TypeError, ValueError):
+                            pass
+                    for bidx in seg_block_indices:
+                        if bidx not in block_indices:
+                            block_indices.append(bidx)
                     seg_text = seg.get("text", "")
                     if seg_text:
                         block_texts.append(seg_text)
@@ -4115,6 +4097,8 @@ class StatusService:
         st["layout_prepared_chunks"] = serialized_chunks
         st["layout_chunk_block_map"] = chunk_block_map
         st["layout_chunk_block_texts"] = chunk_block_texts_map
+        from utils.translation_segments import build_segment_layout_block_map
+        st["segment_layout_block_map"] = build_segment_layout_block_map(all_segments)
         logger.info(LogModule.EXTRACT, f"[LAYOUT-EXTRACT] Task {task_id}: Updated layout_prepared_chunks with {len(serialized_chunks)} chunks (excluding {excluded_count} excluded segments)")
         
         # Build chunks text (merged segments, excluding headers and footers)
@@ -5508,7 +5492,18 @@ class StatusService:
             "equation_format": equation_format,
         }
     
-    def update_format_settings(self, task_id: str, table_body_format: Optional[str] = None, equation_format: Optional[str] = None) -> Dict[str, Any]:
+    def update_format_settings(
+        self,
+        task_id: str,
+        table_body_format: Optional[str] = None,
+        equation_format: Optional[str] = None,
+        bilingual_export: Optional[bool] = None,
+        bilingual_order: Optional[str] = None,
+        source_text_italic: Optional[bool] = None,
+        source_text_color: Optional[str] = None,
+        target_text_italic: Optional[bool] = None,
+        target_text_color: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Update format settings in task state.
         
@@ -5516,6 +5511,12 @@ class StatusService:
             task_id: Unique task identifier
             table_body_format: Table format ('html' or 'image')
             equation_format: Equation format ('text' or 'image')
+            bilingual_export: Enable bilingual export (True/False)
+            bilingual_order: Bilingual order ('target_after_source' or 'target_before_source')
+            source_text_italic: Source text italic (True/False)
+            source_text_color: Source text color ('gray', 'blue', 'red', 'green', 'orange', 'black')
+            target_text_italic: Target text italic (True/False)
+            target_text_color: Target text color ('gray', 'blue', 'red', 'green', 'orange', 'black')
             
         Returns:
             Dictionary with updated format settings
@@ -5532,6 +5533,12 @@ class StatusService:
             raise HTTPException(status_code=400, detail=f"Invalid table_body_format: {table_body_format}. Must be 'html' or 'image'.")
         if equation_format is not None and equation_format not in ("text", "latex", "image"):
             raise HTTPException(status_code=400, detail=f"Invalid equation_format: {equation_format}. Must be 'text', 'latex', or 'image'.")
+        if bilingual_order is not None and bilingual_order not in ("target_after_source", "target_before_source"):
+            raise HTTPException(status_code=400, detail=f"Invalid bilingual_order: {bilingual_order}. Must be 'target_after_source' or 'target_before_source'.")
+        if source_text_color is not None and source_text_color not in ("gray", "blue", "red", "green", "orange", "black"):
+            raise HTTPException(status_code=400, detail=f"Invalid source_text_color: {source_text_color}. Must be 'gray', 'blue', 'red', 'green', 'orange', or 'black'.")
+        if target_text_color is not None and target_text_color not in ("gray", "blue", "red", "green", "orange", "black"):
+            raise HTTPException(status_code=400, detail=f"Invalid target_text_color: {target_text_color}. Must be 'gray', 'blue', 'red', 'green', 'orange', or 'black'.")
         
         # Update task_state directly
         updates = {}
@@ -5539,6 +5546,18 @@ class StatusService:
             updates["table_body_format"] = table_body_format
         if equation_format is not None:
             updates["equation_format"] = equation_format
+        if bilingual_export is not None:
+            updates["bilingual_export"] = bilingual_export
+        if bilingual_order is not None:
+            updates["bilingual_order"] = bilingual_order
+        if source_text_italic is not None:
+            updates["source_text_italic"] = source_text_italic
+        if source_text_color is not None:
+            updates["source_text_color"] = source_text_color
+        if target_text_italic is not None:
+            updates["target_text_italic"] = target_text_italic
+        if target_text_color is not None:
+            updates["target_text_color"] = target_text_color
         
         if updates:
             self.task_manager.update_task(task_id, updates)
@@ -5552,6 +5571,18 @@ class StatusService:
                     payload["table_body_format"] = table_body_format
                 if equation_format is not None:
                     payload["equation_format"] = equation_format
+                if bilingual_export is not None:
+                    payload["bilingual_export"] = bilingual_export
+                if bilingual_order is not None:
+                    payload["bilingual_order"] = bilingual_order
+                if source_text_italic is not None:
+                    payload["source_text_italic"] = source_text_italic
+                if source_text_color is not None:
+                    payload["source_text_color"] = source_text_color
+                if target_text_italic is not None:
+                    payload["target_text_italic"] = target_text_italic
+                if target_text_color is not None:
+                    payload["target_text_color"] = target_text_color
             elif hasattr(payload, 'table_body_format') or hasattr(payload, 'equation_format'):
                 # For object payload, update attributes if possible
                 try:
@@ -5559,6 +5590,18 @@ class StatusService:
                         setattr(payload, 'table_body_format', table_body_format)
                     if equation_format is not None:
                         setattr(payload, 'equation_format', equation_format)
+                    if bilingual_export is not None:
+                        setattr(payload, 'bilingual_export', bilingual_export)
+                    if bilingual_order is not None:
+                        setattr(payload, 'bilingual_order', bilingual_order)
+                    if source_text_italic is not None:
+                        setattr(payload, 'source_text_italic', source_text_italic)
+                    if source_text_color is not None:
+                        setattr(payload, 'source_text_color', source_text_color)
+                    if target_text_italic is not None:
+                        setattr(payload, 'target_text_italic', target_text_italic)
+                    if target_text_color is not None:
+                        setattr(payload, 'target_text_color', target_text_color)
                 except Exception as e:
                     logger.debug(LogModule.WORKFLOW, f"[STATUS] Failed to update payload format settings: {e}")
         
@@ -5566,6 +5609,12 @@ class StatusService:
             "task_id": task_id,
             "table_body_format": table_body_format or task_state.get("table_body_format"),
             "equation_format": equation_format or task_state.get("equation_format"),
+            "bilingual_export": bilingual_export if bilingual_export is not None else task_state.get("bilingual_export"),
+            "bilingual_order": bilingual_order or task_state.get("bilingual_order"),
+            "source_text_italic": source_text_italic if source_text_italic is not None else task_state.get("source_text_italic"),
+            "source_text_color": source_text_color or task_state.get("source_text_color"),
+            "target_text_italic": target_text_italic if target_text_italic is not None else task_state.get("target_text_italic"),
+            "target_text_color": target_text_color or task_state.get("target_text_color"),
             "message": "Format settings updated successfully"
         }
 

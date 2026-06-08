@@ -196,21 +196,37 @@ async def get_translation_segments_api(
         f"[TRANSLATION-SEGMENTS-API] Get segments request: task_id={task_id}, offset={offset}, limit={limit}"
     )
     
-    if task_manager.get_task(task_id) is None:
+    task_state = task_manager.get_task(task_id)
+    if task_state is None:
         logger.warning(LogModule.ROUTE, f"[TRANSLATION-SEGMENTS-API] Task ID '{task_id}' not found")
         raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
-    
+
     segments_data = _ts_module().get_translation_segments(task_id)
     if segments_data is None:
-        logger.debug(
-            LogModule.ROUTE,
-            f"[TRANSLATION-SEGMENTS-API] No translation segments available for task '{task_id}'"
-        )
-        raise HTTPException(
-            status_code=404, 
-            detail=f"No translation segments available for task '{task_id}'. "
-                  "This may be an older task or a format conversion task without translation."
-        )
+        # Distinguish "still processing" (segments not ready yet) from
+        # "terminal with no segments" (e.g. format-conversion-only task).
+        task_status = (task_state.get("status") or "").lower()
+        terminal = task_status in ("completed", "failed", "cancelled")
+
+        if terminal:
+            logger.debug(
+                LogModule.ROUTE,
+                f"[TRANSLATION-SEGMENTS-API] Task '{task_id}' terminal ({task_status}) with no segments"
+            )
+            raise HTTPException(
+                status_code=404,
+                detail=f"No translation segments available for task '{task_id}'. "
+                       "This may be an older task or a format conversion task without translation."
+            )
+        else:
+            logger.debug(
+                LogModule.ROUTE,
+                f"[TRANSLATION-SEGMENTS-API] Task '{task_id}' processing ({task_status}), segments not ready yet"
+            )
+            raise HTTPException(
+                status_code=202,
+                detail=f"Translation segments not ready yet. Task status: {task_status}"
+            )
 
     # Build response data with shallow copy instead of deep copy for performance.
     # Deep copying 10k+ segments on every poll is extremely expensive.
@@ -540,6 +556,33 @@ async def clear_all_exclusions_except_image_api(task_id: str):
         raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
     result = _ts_module().clear_all_exclusions_except_image(task_id)
     return JSONResponse(content=result)
+
+
+@router.post(
+    "/translation-segments/{task_id}/cancel-batch-retry",
+    summary="Cancel ongoing batch retry operation",
+    description="Cancel the currently running batch retry operation for the task.",
+    responses={
+        200: {"description": "Cancel signal sent successfully."},
+        404: {"description": "Task not found."},
+    }
+)
+async def cancel_batch_retry_api(task_id: str):
+    """Cancel the ongoing batch retry operation."""
+    task_state = task_manager.get_task(task_id)
+    if task_state is None:
+        logger.warning(LogModule.ROUTE, f"[CANCEL-BATCH-RETRY-API] Task ID '{task_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
+    
+    # Set cancel flag in task state
+    task_state["cancel_batch_retry"] = True
+    logger.info(LogModule.ROUTE, f"[CANCEL-BATCH-RETRY-API] Cancel signal set for task {task_id}")
+    
+    return JSONResponse(content={
+        "success": True,
+        "message": "Batch retry cancel signal sent",
+        "task_id": task_id,
+    })
 
 
 @router.post(

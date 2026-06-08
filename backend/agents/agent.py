@@ -1,4 +1,4 @@
-﻿# SPDX-FileCopyrightText: 2025 QinHan
+# SPDX-FileCopyrightText: 2025 QinHan
 # SPDX-FileCopyrightText: 2026 Zampher
 # SPDX-License-Identifier: MPL-2.0
 
@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
-from typing import Literal, Callable, Any
+from typing import Literal, Callable, Any, Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -52,6 +52,7 @@ class AgentConfig:
     concurrent: int = 30
     connect_timeout: int = 15  # HTTP connect timeout (seconds), configurable via app_config.translator_connect_timeout
     timeout: int = 120  # Unit (seconds), this value is the read value in httpx.TimeOut, not the total timeout time
+    write_timeout: Optional[int] = None  # HTTP write timeout (seconds), configurable per platform; 0 or None → 300 fallback
     thinking: ThinkingMode = "default"
     retry: int = 5
     max_tokens: int | None = None  # Max tokens for API response (None means use platform default)
@@ -293,7 +294,9 @@ class Agent:
         
         # Detect API type from config or infer from base_url patterns
         # Support both 'api_protocol' (new) and 'api_type' (legacy) field names
-        api_type_value = getattr(config, "api_protocol", None) or getattr(config, "api_type", None) or "openai"
+        _explicit_api_protocol = getattr(config, "api_protocol", None)
+        _explicit_api_type = getattr(config, "api_type", None)
+        api_type_value = _explicit_api_protocol or _explicit_api_type or "openai"
         self.api_type = api_type_value.lower()
         
         # Initialize protocol adapter using factory
@@ -303,15 +306,27 @@ class Agent:
             if protocol_name in ("claude", "anthropic"):
                 protocol_name = "anthropic"
             elif protocol_name == "openai":
-                # Auto-detect Ollama for backward compatibility
-                baseurl_lower = self.baseurl.lower()
-                if ":11434" in baseurl_lower or "ollama" in baseurl_lower or "/api/chat" in baseurl_lower:
-                    protocol_name = "ollama"
-                    self.api_type = "ollama"
-                    unified_logger.info(
-                        LogModule.TRANS,
-                        f"[API_TYPE] Auto-detected Ollama from URL pattern: {self.baseurl}"
-                    )
+                # Auto-detect Ollama only when the user did NOT explicitly set api_protocol/api_type.
+                # If the user explicitly chose "openai" (e.g. Ollama with OpenAI-compatible API),
+                # respect that choice instead of overriding to native Ollama protocol.
+                if not _explicit_api_protocol and not _explicit_api_type:
+                    baseurl_lower = self.baseurl.lower()
+                    if ":11434" in baseurl_lower or "ollama" in baseurl_lower or "/api/chat" in baseurl_lower:
+                        protocol_name = "ollama"
+                        self.api_type = "ollama"
+                        # Determine which pattern matched for logging
+                        matched_patterns = []
+                        if ":11434" in baseurl_lower:
+                            matched_patterns.append("port:11434")
+                        if "ollama" in baseurl_lower:
+                            matched_patterns.append("hostname:ollama")
+                        if "/api/chat" in baseurl_lower:
+                            matched_patterns.append("path:/api/chat")
+                        unified_logger.info(
+                            LogModule.TRANS,
+                            f"[OLLAMA DETECT] Auto-detected Ollama from base_url='{self.baseurl}', "
+                            f"matched patterns: {', '.join(matched_patterns)}"
+                        )
             
             # Use protocol factory
             if ProtocolFactory.is_supported(protocol_name):
@@ -385,13 +400,15 @@ class Agent:
         self.temperature = config.temperature
         self.max_concurrent = config.concurrent
         connect_timeout = getattr(config, 'connect_timeout', 15)
-        self.timeout = httpx.Timeout(connect=connect_timeout, read=config.timeout, write=300, pool=10)
+        write_timeout_val = getattr(config, 'write_timeout', None)
+        write_timeout = 300 if (write_timeout_val is None or write_timeout_val == 0) else write_timeout_val
+        self.timeout = httpx.Timeout(connect=connect_timeout, read=config.timeout, write=write_timeout, pool=10)
         self.thinking = config.thinking
         self.logger = config.logger
         # Log timeout configuration (DEBUG level to reduce verbosity for retranslation)
         unified_logger.debug(
             LogModule.TRANS,
-            f"[TIMEOUT_CONFIG] Timeout settings: connect={connect_timeout}s, read={config.timeout}s, write=300s, pool=10s, concurrent={config.concurrent}"
+            f"[TIMEOUT_CONFIG] Timeout settings: connect={connect_timeout}s, read={config.timeout}s, write={write_timeout}s, pool=10s, concurrent={config.concurrent}"
         )
         self.total_error_counter = TotalErrorCounter(logger=self.logger)
         # New: for counting final unresolved errors
@@ -479,6 +496,13 @@ class Agent:
         elif self.thinking == "disable":
             data[field_thinking] = val_disable
 
+    def _apply_ollama_thinking(self, data: dict[str, Any]) -> None:
+        """Map Agent thinking mode to Ollama native `think` parameter (Qwen3, DeepSeek-R1, etc.)."""
+        if self.thinking == "enable":
+            data["think"] = True
+        elif self.thinking == "disable":
+            data["think"] = False
+
     def _prepare_request_data(
             self, prompt: str, system_prompt: str, temperature=None, top_p=0.9
     ):
@@ -500,12 +524,16 @@ class Agent:
                 max_tokens=self.max_tokens,
                 api_key=api_key,
                 system_prompt=system_prompt,
+                **({"thinking": self.thinking} if self.api_type == "ollama" else {}),
             )
             
             # Add top_p for OpenAI-compatible protocols
             if self.api_type not in ("ollama", "anthropic") and top_p is not None:
                 data["top_p"] = top_p
-            
+
+            if self.api_type != "ollama" and self.thinking != "default":
+                self._add_thinking_mode(data)
+
             return headers, data
         
         # Legacy fallback logic
@@ -537,6 +565,7 @@ class Agent:
                 options["num_predict"] = self.max_tokens
             if options:
                 data["options"] = options
+            self._apply_ollama_thinking(data)
         else:
             # OpenAI-compatible chat completions format
             data = {

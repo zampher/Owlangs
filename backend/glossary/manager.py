@@ -1,15 +1,13 @@
 # SPDX-FileCopyrightText: 2026 Zampher
 # SPDX-License-Identifier: MPL-2.0
 
-import logging
+from backend.logger import unified_logger as logger
+from logger.logger import LogModule
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
 from .models import GlossaryFile, GlossaryItem, UserGlossarySelection
 from .storage import get_glossary_storage
-
-logger = logging.getLogger(__name__)
-
 
 class GlossaryManager:
     """Glossary manager"""

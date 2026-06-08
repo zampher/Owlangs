@@ -52,6 +52,7 @@ class TranslationService {
     required String fileName,
     required Map<String, dynamic> payload,
     String executionMode = 'immediate',
+    String? relativePath,
   }) async {
     // Use long timeout for file upload and translation task submission
     final dio = _buildAuthedDio(useLongTimeout: true);
@@ -60,6 +61,8 @@ class TranslationService {
       'file_name': fileName,
       'payload': payload,
       'execution_mode': executionMode,
+      if (relativePath != null && relativePath.isNotEmpty)
+        'relative_path': relativePath,
     };
     final resp = await dio.post(
       '/service/translate',
@@ -161,6 +164,12 @@ class TranslationService {
     String taskId, {
     String? tableBodyFormat,
     String? equationFormat,
+    bool? bilingualExport,
+    String? bilingualOrder,
+    bool? sourceTextItalic,
+    String? sourceTextColor,
+    bool? targetTextItalic,
+    String? targetTextColor,
   }) async {
     final dio = _buildAuthedDio();
     final queryParams = <String, dynamic>{};
@@ -169,6 +178,24 @@ class TranslationService {
     }
     if (equationFormat != null) {
       queryParams['equation_format'] = equationFormat;
+    }
+    if (bilingualExport != null) {
+      queryParams['bilingual_export'] = bilingualExport;
+    }
+    if (bilingualOrder != null) {
+      queryParams['bilingual_order'] = bilingualOrder;
+    }
+    if (sourceTextItalic != null) {
+      queryParams['source_text_italic'] = sourceTextItalic;
+    }
+    if (sourceTextColor != null) {
+      queryParams['source_text_color'] = sourceTextColor;
+    }
+    if (targetTextItalic != null) {
+      queryParams['target_text_italic'] = targetTextItalic;
+    }
+    if (targetTextColor != null) {
+      queryParams['target_text_color'] = targetTextColor;
     }
     final resp = await dio.put(
       '/service/format-settings/$taskId',
@@ -282,6 +309,26 @@ class TranslationService {
     }
   }
 
+  /// 批量下载：提交多个 task_id，返回 ZIP 文件字节
+  Future<List<int>> batchDownload(
+    List<String> taskIds,
+    String fileType,
+  ) async {
+    final Dio dio = _buildAuthedDio(useLongTimeout: true);
+    final Response<List<int>> resp = await dio.post<List<int>>(
+      '/service/batch-download',
+      data: <String, dynamic>{
+        'task_ids': taskIds,
+        'file_type': fileType,
+      },
+      options: Options(
+        responseType: ResponseType.bytes,
+        receiveTimeout: AppConfig.longRequestTimeout,
+      ),
+    );
+    return resp.data ?? <int>[];
+  }
+
   /// 轮询任务状态，直到完成或失败或超时
   /// onUpdate: 每次拉取到状态时回调；intervalSec: 轮询间隔；timeoutSec: 超时时间
   Future<Map<String, dynamic>> pollUntilDone(
@@ -365,40 +412,73 @@ class TranslationService {
       } on DioException catch (e, stackTrace) {
         final int? statusCode = e.response?.statusCode;
         final bool is404 = statusCode == 404;
+        final bool is202 = statusCode == 202;
         final bool retryableStatus =
-            is404 || statusCode == 500 || statusCode == 503;
+            is404 || is202 || statusCode == 500 || statusCode == 503;
 
-        // Special handling for 404: this is often "segments not ready yet" while task is still processing.
-        // In that case we keep retrying without treating it as a hard error, even if attempt >= maxRetries.
+        // 202: backend confirmed task is still processing, segments not ready yet.
+        // No need for a separate status check – just retry.
+        if (is202 && attempt < maxRetries) {
+          AppLogger.log(
+            'TranslationService',
+            '[SEGMENTS] getTranslationSegments 202 (segments not ready) for '
+            'taskId=$taskId, attempt=$attempt',
+            level: LogLevel.warn,
+          );
+          await Future.delayed(retryDelay);
+          continue;
+        }
+        if (is202 && attempt >= maxRetries) {
+          AppLogger.log(
+            'TranslationService',
+            '[SEGMENTS] getTranslationSegments 202 exhausted after $attempt attempts '
+            'for taskId=$taskId',
+            level: LogLevel.error,
+          );
+          throw Exception(
+            'Translation segments not ready after $attempt attempts for task $taskId',
+          );
+        }
+
+        // 404: task not found or terminal with no segments.
+        // Check status to distinguish "still processing" (retry) from terminal (stop).
         if (is404) {
+          String taskStatus = '';
           try {
             final Map<String, dynamic> status = await getStatus(taskId);
-            final String s =
-                (status['status'] ?? '').toString().toLowerCase();
-            final bool done =
-                s == 'completed' || s == 'failed' || s == 'cancelled';
-            if (!done) {
-              AppLogger.log(
-                'TranslationService',
-                '[SEGMENTS] getTranslationSegments 404 (segments not ready yet) for '
-                'taskId=$taskId, attempt=$attempt, taskStatus=$s',
-                level: LogLevel.warn,
-              );
-              await Future.delayed(retryDelay);
-              continue;
-            }
+            taskStatus = (status['status'] ?? '').toString().toLowerCase();
+          } catch (_) {
+            // Status check failed, fall through to generic handling below.
+          }
+
+          final bool done =
+              taskStatus == 'completed' || taskStatus == 'failed' || taskStatus == 'cancelled';
+
+          if (!done && taskStatus.isNotEmpty) {
+            // Task is still processing, keep retrying.
+            AppLogger.log(
+              'TranslationService',
+              '[SEGMENTS] getTranslationSegments 404 (segments not ready yet) for '
+              'taskId=$taskId, attempt=$attempt, taskStatus=$taskStatus',
+              level: LogLevel.warn,
+            );
+            await Future.delayed(retryDelay);
+            continue;
+          }
+
+          if (done) {
             // Task is in a terminal state but segments still 404: this means
             // the task either has no segments (e.g. convert-phase task) or the
             // segments have been released. Stop retrying immediately.
             AppLogger.log(
               'TranslationService',
               '[SEGMENTS] getTranslationSegments 404 (task terminal, no segments) for '
-              'taskId=$taskId, attempt=$attempt, taskStatus=$s',
+              'taskId=$taskId, attempt=$attempt, taskStatus=$taskStatus',
               level: LogLevel.error,
             );
-            rethrow;
-          } catch (_) {
-            // If status check fails, fall through to generic retry/exit handling below.
+            throw Exception(
+              'Task $taskId is in terminal state ($taskStatus) and has no segments',
+            );
           }
         }
 
@@ -674,6 +754,15 @@ class TranslationService {
     // Batch retranslations also change translation_segments; invalidate cache.
     _segmentsCache.remove(taskId);
     _segmentsRequests.remove(taskId);
+    return (resp.data as Map).cast<String, dynamic>();
+  }
+
+  /// Cancel ongoing batch retry operation
+  Future<Map<String, dynamic>> cancelBatchRetry(String taskId) async {
+    final dio = _buildAuthedDio();
+    final resp = await dio.post(
+      '/service/translation-segments/$taskId/cancel-batch-retry',
+    );
     return (resp.data as Map).cast<String, dynamic>();
   }
 

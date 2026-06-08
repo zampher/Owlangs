@@ -12,7 +12,7 @@ import sys
 
 
 class ConfigTemplateMergeTest(unittest.TestCase):
-    def test_system_ui_local_merge_adds_missing_keys_without_overwrite(self):
+    def test_system_local_merge_adds_missing_keys_without_overwrite(self):
         # NOTE: backend logger may keep file handles on Windows; avoid auto-deleting temp dir.
         td = tempfile.mkdtemp()
         try:
@@ -57,24 +57,6 @@ class ConfigTemplateMergeTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            # ui.json: user has i18n partial; template adds a new key
-            (cfg_dir / "ui.json").write_text(
-                json.dumps(
-                    {"_schema_version": 2, "i18n": {"hello": "world"}},
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
-            (cfg_dir / "ui.json.template").write_text(
-                json.dumps(
-                    {"_schema_version": 2, "i18n": {"hello": "world", "new_key": "v"}},
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
-
             # local.json: user has ldap; template adds messages section
             (cfg_dir / "local.json").write_text(
                 json.dumps({"ldap": {"enabled": False}}, ensure_ascii=False, indent=2),
@@ -90,7 +72,6 @@ class ConfigTemplateMergeTest(unittest.TestCase):
             )
 
             from backend.config.system_config import SystemConfig
-            from backend.config.ui_config import UIConfig
             from backend.config.local_config import LocalConfig
 
             sys_cfg = SystemConfig.load_from_file("system.json")
@@ -99,9 +80,6 @@ class ConfigTemplateMergeTest(unittest.TestCase):
             merged_sys = json.loads((cfg_dir / "system.json").read_text(encoding="utf-8"))
             self.assertEqual(merged_sys["auth"]["required"], False)
             self.assertIn("show_ads", merged_sys.get("features", {}))
-
-            ui_cfg = UIConfig.load_from_file("ui.json")
-            self.assertIn("new_key", ui_cfg.i18n)
 
             loc_cfg = LocalConfig.load_from_file("local.json")
             self.assertFalse(loc_cfg.ldap.enabled)

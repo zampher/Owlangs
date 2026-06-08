@@ -15,7 +15,6 @@ from backend.logger.logger import LogModule
 # Import all config modules
 from .system_config import get_system_config, SystemConfig, ExclusionDefaultsConfig
 from .platforms_config import get_platforms_config, PlatformsConfig, platform_type_uses_llm_chunk_concurrent
-from .ui_config import get_ui_config, UIConfig
 from .secrets_manager import get_secrets_manager
 from .local_config import LocalConfig
 def load_all_configs() -> dict:
@@ -25,7 +24,6 @@ def load_all_configs() -> dict:
     configs = {
         'system': get_system_config(),
         'platforms': get_platforms_config(),
-        'ui': get_ui_config(),
         'secrets': get_secrets_manager(),
         'local': LocalConfig.load_from_file(),
     }
@@ -40,7 +38,6 @@ class UnifiedConfig:
     def __init__(self):
         self.system = get_system_config()
         self.platforms = get_platforms_config()
-        self.ui = get_ui_config()
         self.secrets = get_secrets_manager()
         self.local = LocalConfig.get_config()  # Use get_config() to leverage caching
     
@@ -65,22 +62,39 @@ class UnifiedConfig:
         """Get exclusion default settings from system config"""
         return self.system.exclusion_defaults
 
+    # Cloud MinerU only supports vlm-auto-engine; legacy 'vlm' is equivalent.
+    _MINERU_CLOUD_MODEL_NORMALIZE = {'vlm': 'vlm-auto-engine'}
+
     @property
     def parsing_engine(self) -> dict:
-        """Get parsing engine configuration (for backward compatibility)"""
-        mineru_engine = self.system.parsing_engine.engines.get('mineru', {})
+        """Get parsing engine configuration (for backward compatibility).
+
+        model_version is read from platforms.json (source of truth for MinerU config).
+        """
+        default_engine = self.system.parsing_engine.default_engine
+        mineru_model_version = self._get_model_version_from_platforms(default_engine)
         return {
-            'convert_engine': self.system.parsing_engine.default_engine,
-            'mineru_model_version': mineru_engine.get('model_version', 'vlm'),
+            'convert_engine': default_engine,
+            'mineru_model_version': mineru_model_version,
             'formula_ocr': self.system.parsing_engine.default_engine_settings.get('formula_ocr', False),
             'table_ocr': self.system.parsing_engine.default_engine_settings.get('table_ocr', True),
             'skip_translate': self.system.parsing_engine.default_engine_settings.get('skip_translate', False),
-            'engines': self.system.parsing_engine.engines,
             'pdf_split_enabled': self.system.pdf.pdf_split_enabled,
             'pdf_split_max_pages': self.system.pdf.pdf_split_max_pages,
             'pdf_split_max_workers': self.system.pdf.pdf_split_max_workers,
             'request_retry_count': self.system.pdf.request_retry_count,
         }
+
+    def _get_model_version_from_platforms(self, engine_key: str) -> str:
+        """Read model version from platforms.json for the given engine key."""
+        platform = self.platforms.platforms.get(engine_key)
+        if platform and platform.model:
+            model = platform.model
+            # Normalize: cloud MinerU only supports vlm-auto-engine
+            if engine_key == 'mineru':
+                model = self._MINERU_CLOUD_MODEL_NORMALIZE.get(model, model)
+            return model
+        return 'hybrid-auto-engine'
     
     @property
     def ai_platforms(self) -> dict:
@@ -121,13 +135,23 @@ class UnifiedConfig:
                 platforms_dict[key]['concurrent'] = (
                     int(platform.concurrent) if platform.concurrent is not None else 5
                 )
+                platforms_dict[key]['timeout'] = (
+                    int(platform.timeout) if platform.timeout is not None else None
+                )
+                platforms_dict[key]['write_timeout'] = (
+                    int(platform.write_timeout) if platform.write_timeout is not None else None
+                )
+                platforms_dict[key]['test_connect_timeout'] = (
+                    int(platform.test_connect_timeout) if platform.test_connect_timeout is not None else 30
+                )
+                platforms_dict[key]['test_request_timeout'] = (
+                    int(platform.test_request_timeout) if platform.test_request_timeout is not None else 10
+                )
+                platforms_dict[key]['segment_limit'] = (
+                    int(platform.segment_limit) if platform.segment_limit is not None else 100
+                )
         platforms_dict['default_platform'] = self.platforms.default_platform
         return platforms_dict
-    
-    @property
-    def ui_texts(self) -> dict:
-        """Get UI texts (for backward compatibility)"""
-        return self.ui.i18n
     
     def get_platform_api_key(self, platform: str) -> str:
         """Get platform API key. Backward compat: 'custom' -> 'local'; also try 'custom' when key is 'local'."""
@@ -165,6 +189,9 @@ class UnifiedConfig:
                 base['concurrent'] = (
                     int(platform_obj.concurrent) if platform_obj.concurrent is not None else 5
                 )
+                base['segment_limit'] = (
+                    int(platform_obj.segment_limit) if platform_obj.segment_limit is not None else 100
+                )
             return base
         return None
     
@@ -190,9 +217,6 @@ class UnifiedConfig:
         # AI platforms
         config_dict['ai_platforms'] = self.ai_platforms
         config_dict['ai_platforms_default_platform'] = self.ai_platforms_default_platform
-        
-        # UI texts
-        config_dict['ui_texts'] = self.ui_texts
         
         # Flatten parsing_engine for backward compatibility
         if flatten:
@@ -221,16 +245,21 @@ class UnifiedConfig:
             if 'convert_engine' in parsing_data:
                 self.system.parsing_engine.default_engine = parsing_data['convert_engine']
             if 'mineru_model_version' in parsing_data:
-                if 'mineru' in self.system.parsing_engine.engines:
-                    self.system.parsing_engine.engines['mineru']['model_version'] = parsing_data['mineru_model_version']
+                new_version = parsing_data['mineru_model_version']
+                # Normalize: cloud MinerU only supports vlm-auto-engine
+                if new_version == 'vlm':
+                    new_version = 'vlm-auto-engine'
+                # Update platforms.json (source of truth for MinerU model)
+                default_engine = self.system.parsing_engine.default_engine
+                if default_engine in self.platforms.platforms:
+                    self.platforms.platforms[default_engine].model = new_version
+                    save_platforms_config()
             if 'formula_ocr' in parsing_data:
                 self.system.parsing_engine.default_engine_settings['formula_ocr'] = parsing_data['formula_ocr']
             if 'table_ocr' in parsing_data:
                 self.system.parsing_engine.default_engine_settings['table_ocr'] = parsing_data['table_ocr']
             if 'skip_translate' in parsing_data:
                 self.system.parsing_engine.default_engine_settings['skip_translate'] = parsing_data['skip_translate']
-            if 'engines' in parsing_data:
-                self.system.parsing_engine.engines.update(parsing_data['engines'])
             if 'pdf_split_enabled' in parsing_data:
                 self.system.pdf.pdf_split_enabled = bool(parsing_data['pdf_split_enabled'])
             if 'pdf_split_max_pages' in parsing_data:
@@ -295,24 +324,25 @@ class UnifiedConfig:
         Args:
             config_file: Ignored parameter (kept for backward compatibility).
                         This method always saves to the new config structure
-                        (system.json, platforms.json, ui.json).
+                        (system.json, platforms.json).
         
         Returns:
             True if all config files were saved successfully, False otherwise.
         """
         from .system_config import save_system_config
         from .platforms_config import save_platforms_config
-        from .ui_config import save_ui_config
-        
-        success = True
-        success &= save_system_config()
-        success &= save_platforms_config()
-        success &= save_ui_config()
-        
+
+        ok1 = save_system_config()
+        ok2 = save_platforms_config()
+        success = ok1 and ok2
+
         if success:
-            logger.info(LogModule.CONFIG, "Unified configuration saved to new config structure (system.json, platforms.json, ui.json)")
+            logger.info(LogModule.CONFIG, "Unified configuration saved to new config structure (system.json, platforms.json)")
         else:
-            logger.warning(LogModule.CONFIG, "Some configuration files failed to save")
+            failed = []
+            if not ok1: failed.append("system.json")
+            if not ok2: failed.append("platforms.json")
+            logger.warning(LogModule.CONFIG, f"Some configuration files failed to save: {', '.join(failed)}")
         
         return success
     

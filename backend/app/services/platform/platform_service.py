@@ -36,10 +36,15 @@ class PlatformService:
         try:
             # Check if base_url is None or empty
             if not base_url:
+                logger.info(LogModule.SYSTEM, "[PLATFORM DETECT] base_url is empty, returning None")
                 return None
-            
+
             base_url_lower = base_url.lower()
-            
+            logger.info(
+                LogModule.SYSTEM,
+                f"[PLATFORM DETECT] Determining platform for base_url='{base_url}', model_id='{model_id}'"
+            )
+
             # First, try to match against configured platforms (exact match priority)
             try:
                 from backend.config.config_loader import get_unified_config
@@ -52,33 +57,63 @@ class PlatformService:
                         if base_url_lower in config_url_lower or config_url_lower in base_url_lower:
                             # If model_id is provided, try to match; otherwise accept URL match
                             if not model_id or platform_config.model == model_id:
+                                logger.info(
+                                    LogModule.SYSTEM,
+                                    f"[PLATFORM DETECT] Matched configured platform '{platform_key}' "
+                                    f"by URL+model: config_url='{platform_config.url}', model='{platform_config.model}'"
+                                )
                                 return platform_key
                             # If model doesn't match but URL is exact, still use this platform
                             # (user may have changed model but kept same endpoint)
                             if base_url_lower == config_url_lower:
+                                logger.info(
+                                    LogModule.SYSTEM,
+                                    f"[PLATFORM DETECT] Matched configured platform '{platform_key}' "
+                                    f"by exact URL (model mismatch, using platform anyway)"
+                                )
                                 return platform_key
             except Exception:
                 pass
-            
+
             # If no exact match, try common platform mappings based on URL patterns
+            detected = None
+            matched_pattern = None
             if 'api.openai.com' in base_url_lower:
-                return 'openai'
+                detected = 'openai'
+                matched_pattern = 'api.openai.com'
             elif 'api.deepseek.com' in base_url_lower:
-                return 'deepseek'
+                detected = 'deepseek'
+                matched_pattern = 'api.deepseek.com'
             elif 'doubao' in base_url_lower:
-                return 'doubao'
+                detected = 'doubao'
+                matched_pattern = 'doubao'
             elif 'qianwen' in base_url_lower or 'dashscope' in base_url_lower:
-                return 'qianwen'
+                detected = 'qianwen'
+                matched_pattern = 'qianwen/dashscope'
             elif 'api.anthropic.com' in base_url_lower:
-                return 'anthropic'
+                detected = 'anthropic'
+                matched_pattern = 'api.anthropic.com'
             elif 'gemini' in base_url_lower or 'google' in base_url_lower:
-                return 'gemini'
+                detected = 'gemini'
+                matched_pattern = 'gemini/google'
             elif ':11434' in base_url_lower or 'ollama' in base_url_lower:
-                return 'ollama'
-            
-            return None
+                detected = 'ollama'
+                matched_pattern = ':11434/ollama'
+
+            if detected:
+                logger.info(
+                    LogModule.SYSTEM,
+                    f"[PLATFORM DETECT] URL pattern fallback: matched '{detected}' "
+                    f"via pattern '{matched_pattern}' from base_url='{base_url}'"
+                )
+            else:
+                logger.info(
+                    LogModule.SYSTEM,
+                    f"[PLATFORM DETECT] No platform matched for base_url='{base_url}', returning None"
+                )
+            return detected
         except Exception as e:
-            logger.warning(LogModule.SYSTEM, f"Failed to determine platform key: {e}")
+            logger.warning(LogModule.SYSTEM, f"[PLATFORM DETECT] Failed to determine platform key: {e}")
             return None
     
     def get_max_tokens(
@@ -136,7 +171,81 @@ class PlatformService:
         except Exception as e:
             logger.warning(LogModule.SYSTEM, f"[MAX_TOKENS] Failed to get max_tokens from platform config: {e}")
             return None
-    
+
+    def get_segment_limit(
+        self,
+        base_url: str,
+        model_id: str,
+        platform_key: Optional[str] = None
+    ) -> int:
+        """
+        Get segment_limit from platform configuration based on base_url and model_id.
+
+        Args:
+            base_url: Base URL of the AI platform
+            model_id: Model ID
+            platform_key: Optional platform key (if already determined)
+
+        Returns:
+            segment_limit value from platform config (default 100)
+        """
+        try:
+            from backend.config.config_loader import get_unified_config
+            unified_config = get_unified_config()
+
+            # If platform_key is provided, use it directly
+            if platform_key:
+                platform_config = unified_config.platforms.get_platform_config(platform_key)
+                if platform_config:
+                    return getattr(platform_config, 'segment_limit', 100)
+
+            # Otherwise, try to determine platform key
+            platform_key = self.determine_platform_key(base_url, model_id)
+            if platform_key:
+                platform_config = unified_config.platforms.get_platform_config(platform_key)
+                if platform_config:
+                    return getattr(platform_config, 'segment_limit', 100)
+
+            return 100
+        except Exception as e:
+            logger.warning(LogModule.SYSTEM, f"[SEGMENT_LIMIT] Failed to get segment_limit from platform config: {e}")
+            return 100
+
+    def get_temperature(
+        self,
+        base_url: str,
+        model_id: str,
+        platform_key: Optional[str] = None,
+    ) -> Optional[float]:
+        """
+        Get temperature from platform configuration based on base_url and model_id.
+
+        Returns:
+            temperature from platform config, or None if not found
+        """
+        try:
+            from backend.config.config_loader import get_unified_config
+
+            unified_config = get_unified_config()
+
+            if platform_key:
+                platform_config = unified_config.platforms.get_platform_config(platform_key)
+                if platform_config and platform_config.temperature is not None:
+                    return float(platform_config.temperature)
+
+            if not platform_key:
+                platform_key = self.determine_platform_key(base_url, model_id)
+
+            if platform_key:
+                platform_config = unified_config.platforms.get_platform_config(platform_key)
+                if platform_config and platform_config.temperature is not None:
+                    return float(platform_config.temperature)
+
+            return None
+        except Exception as e:
+            logger.warning(LogModule.CONFIG, f"Failed to get temperature: {e}")
+            return None
+
     def get_thinking_mode(
         self,
         base_url: str,
@@ -161,16 +270,22 @@ class PlatformService:
             # If platform_key is provided, use it directly
             if platform_key:
                 platform_config = unified_config.platforms.get_platform_config(platform_key)
-                if platform_config and platform_config.thinking_mode_supported:
+                if (
+                    platform_config
+                    and platform_config.thinking_mode_supported
+                ):
                     return platform_config.thinking_mode
-            
+
             # Otherwise, try to determine platform key first
             if not platform_key:
                 platform_key = self.determine_platform_key(base_url, model_id)
-            
+
             if platform_key:
                 platform_config = unified_config.platforms.get_platform_config(platform_key)
-                if platform_config and platform_config.thinking_mode_supported:
+                if (
+                    platform_config
+                    and platform_config.thinking_mode_supported
+                ):
                     return platform_config.thinking_mode
             
             return None

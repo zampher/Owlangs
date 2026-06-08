@@ -24,6 +24,7 @@ secrets.json
 .env.local
 # Donor registration code generator private key (never commit)
 configs/donor_license_private.pem
+.codebuddy/
 .cursor/
 .vscode/
 .trae/

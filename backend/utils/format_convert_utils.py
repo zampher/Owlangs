@@ -234,23 +234,31 @@ def _get_pandoc_path() -> Optional[Path]:
         if hasattr(sys, '_MEIPASS'):
             # Running from PyInstaller - try to find Pandoc relative to executable
             exe_path = Path(sys.executable)
-            # Try parent directory (if EXE is in bin/, Pandoc is in ../3rdParty/...)
-            install_base = exe_path.parent.parent
-            # Check for pandoc-* directories
-            pandoc_base = install_base / "3rdParty" / "windows"
+            # Onedir: EXE and 3rdParty are in the same folder
+            onedir_base = exe_path.parent
+            pandoc_base = onedir_base / "3rdParty" / "windows"
             if pandoc_base.exists():
                 for pandoc_dir in pandoc_base.glob("pandoc-*"):
                     pandoc_exe = pandoc_dir / "pandoc.exe"
                     if pandoc_exe.exists():
-                        logger.info(LogModule.TRANS, f"Found Pandoc in installation directory: {pandoc_exe}")
+                        logger.debug(LogModule.TRANS, f"Found Pandoc in onedir directory: {pandoc_exe}")
                         return pandoc_exe
-            # Also check in _MEIPASS (PyInstaller temp directory)
+            # Onedir / onefile fallback: _MEIPASS contains bundled 3rdParty
             meipass_pandoc_base = Path(sys._MEIPASS) / "3rdParty" / "windows"
             if meipass_pandoc_base.exists():
                 for pandoc_dir in meipass_pandoc_base.glob("pandoc-*"):
                     pandoc_exe = pandoc_dir / "pandoc.exe"
                     if pandoc_exe.exists():
-                        logger.info(LogModule.TRANS, f"Found Pandoc in PyInstaller temp directory: {pandoc_exe}")
+                        logger.info(LogModule.TRANS, f"Found Pandoc in PyInstaller bundle directory: {pandoc_exe}")
+                        return pandoc_exe
+            # Legacy: EXE is in a subdir (e.g. bin/), 3rdParty is in parent
+            install_base = exe_path.parent.parent
+            pandoc_base = install_base / "3rdParty" / "windows"
+            if pandoc_base.exists():
+                for pandoc_dir in pandoc_base.glob("pandoc-*"):
+                    pandoc_exe = pandoc_dir / "pandoc.exe"
+                    if pandoc_exe.exists():
+                        logger.debug(LogModule.TRANS, f"Found Pandoc in installation directory: {pandoc_exe}")
                         return pandoc_exe
         
         # 2. Check installation directory (production - detect via registry/env/common paths)
@@ -261,7 +269,7 @@ def _get_pandoc_path() -> Optional[Path]:
                 for pandoc_dir in pandoc_base.glob("pandoc-*"):
                     pandoc_exe = pandoc_dir / "pandoc.exe"
                     if pandoc_exe.exists():
-                        logger.info(LogModule.TRANS, f"Found Pandoc in installation directory: {pandoc_exe}")
+                        logger.debug(LogModule.TRANS, f"Found Pandoc in installation directory: {pandoc_exe}")
                         return pandoc_exe
         # Fallback to legacy hard-coded path for backwards compatibility
         legacy_dir = Path("C:/Program Files/Owlangs")
@@ -433,7 +441,10 @@ def _get_xelatex_path() -> Optional[Path]:
         candidates.append(program_data)
     # 1. PyInstaller environment (packaged executable)
     if hasattr(sys, "_MEIPASS"):
+        # Onedir: EXE and 3rdParty are in the same folder
+        candidates.append(Path(sys.executable).parent / "3rdParty" / "windows")
         candidates.append(Path(sys._MEIPASS) / "3rdParty" / "windows")
+        # Legacy: EXE is in a subdir, 3rdParty is in parent
         candidates.append(Path(sys.executable).parent.parent / "3rdParty" / "windows")
     # 2. Installation directory (production)
     install_dir = _get_owlangs_install_dir()
@@ -464,6 +475,153 @@ def _get_xelatex_path() -> Optional[Path]:
             return mirrored
     logger.info(LogModule.TRANS, f"Found XeLaTeX: {found_path}")
     return found_path
+
+
+_BILINGUAL_STYLED_SPAN_RE = re.compile(
+    r'<span\s+style="([^"]*)">\s*([\s\S]*?)\s*</span>',
+    re.IGNORECASE,
+)
+
+
+def parse_bilingual_styled_spans(source_content: str) -> List[Tuple[str, bool, Optional[str]]]:
+    """Parse styled bilingual spans from markdown/HTML; return (plain_text, italic, #RRGGBB) in order."""
+    import html as html_module
+
+    parts: List[Tuple[str, bool, Optional[str]]] = []
+    if not source_content or "<span" not in source_content.lower():
+        return parts
+    for match in _BILINGUAL_STYLED_SPAN_RE.finditer(source_content):
+        style = match.group(1).lower()
+        inner = html_module.unescape(match.group(2).strip())
+        inner = inner.replace("<br/>", "\n").replace("<br>", "\n")
+        if not inner:
+            continue
+        italic = "font-style:italic" in style
+        color_match = re.search(r"color:(#[0-9a-f]{6})", style, re.IGNORECASE)
+        color_hex = color_match.group(1).upper() if color_match else None
+        parts.append((inner, italic, color_hex))
+    return parts
+
+
+def _iter_all_docx_runs(doc: Document):
+    """Yield runs in document order (body, tables, headers, footers)."""
+    for para in doc.paragraphs:
+        for run in para.runs:
+            yield run
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    for run in para.runs:
+                        yield run
+    for section in doc.sections:
+        for para in section.header.paragraphs:
+            for run in para.runs:
+                yield run
+        for para in section.footer.paragraphs:
+            for run in para.runs:
+                yield run
+
+
+def _flatten_docx_run_text(doc: Document) -> Tuple[str, List[Tuple[Any, int, int]]]:
+    """Build flat text and (run, start, end) index map for styled-span matching."""
+    flat_parts: List[str] = []
+    index_map: List[Tuple[Any, int, int]] = []
+    pos = 0
+    for run in _iter_all_docx_runs(doc):
+        text = run.text or ""
+        if not text:
+            continue
+        start = pos
+        pos += len(text)
+        flat_parts.append(text)
+        index_map.append((run, start, pos))
+    return "".join(flat_parts), index_map
+
+
+def _runs_covering_range(
+    index_map: List[Tuple[Any, int, int]], start: int, end: int
+) -> List[Any]:
+    """Return runs whose text overlaps [start, end) in flattened document text."""
+    selected: List[Any] = []
+    seen: set[int] = set()
+    for run, run_start, run_end in index_map:
+        if run_end <= start or run_start >= end:
+            continue
+        run_id = id(run)
+        if run_id in seen:
+            continue
+        seen.add(run_id)
+        selected.append(run)
+    return selected
+
+
+def apply_bilingual_styled_spans_to_docx(docx_path: str, source_content: str) -> int:
+    """
+    Post-process a Pandoc-generated DOCX: re-apply italic/color from bilingual <span style="..."> tags.
+
+    Pandoc (MD/HTML -> DOCX) keeps text but drops inline CSS; this walks source spans and matches
+    plain text back onto DOCX runs.
+    """
+    styled_parts = parse_bilingual_styled_spans(source_content)
+    if not styled_parts:
+        return 0
+
+    try:
+        from docx.shared import RGBColor
+    except ImportError:
+        logger.warning(
+            LogModule.RESTOR,
+            "[DOCX-EXPORT] apply_bilingual_styled_spans_to_docx: python-docx unavailable, skip",
+        )
+        return 0
+
+    doc = Document(docx_path)
+    flat_text, index_map = _flatten_docx_run_text(doc)
+    if not flat_text:
+        logger.warning(
+            LogModule.RESTOR,
+            "[DOCX-EXPORT] apply_bilingual_styled_spans_to_docx: empty DOCX text, skip",
+        )
+        return 0
+
+    cursor = 0
+    applied = 0
+    for plain_text, italic, color_hex in styled_parts:
+        idx = flat_text.find(plain_text, cursor)
+        if idx < 0:
+            logger.warning(
+                LogModule.RESTOR,
+                "[DOCX-EXPORT] Bilingual span text not found in DOCX after Pandoc: "
+                f"{plain_text[:80]!r}",
+            )
+            continue
+        end = idx + len(plain_text)
+        for run in _runs_covering_range(index_map, idx, end):
+            if italic:
+                run.italic = True
+            if color_hex:
+                hex_digits = color_hex.lstrip("#")
+                run.font.color.rgb = RGBColor(
+                    int(hex_digits[0:2], 16),
+                    int(hex_digits[2:4], 16),
+                    int(hex_digits[4:6], 16),
+                )
+        applied += 1
+        cursor = end
+
+    if applied:
+        doc.save(docx_path)
+        logger.info(
+            LogModule.RESTOR,
+            f"[DOCX-EXPORT] Applied bilingual styled spans to Pandoc DOCX: {applied}/{len(styled_parts)}",
+        )
+    elif styled_parts:
+        logger.warning(
+            LogModule.RESTOR,
+            "[DOCX-EXPORT] Bilingual spans present in source but none matched in Pandoc DOCX",
+        )
+    return applied
 
 
 def _apply_font_to_run(run, font_name: str) -> None:
@@ -693,6 +851,13 @@ def convert_html_to_docx(
                         logger.info(LogModule.TRANS, f"[DOCX-EXPORT] Applied font '{font_name}' to all runs in DOCX (post-process)")
                 except Exception as font_err:
                     logger.warning(LogModule.RESTOR,f"[DOCX-EXPORT] Post-process font apply failed: {font_err}, DOCX keeps Pandoc default font")
+            try:
+                apply_bilingual_styled_spans_to_docx(output_path, html_content)
+            except Exception as style_err:
+                logger.warning(
+                    LogModule.RESTOR,
+                    f"[DOCX-EXPORT] convert_html_to_docx bilingual span post-process failed: {style_err}",
+                )
         finally:
             # Clean up temp HTML file
             try:
@@ -1022,6 +1187,13 @@ def convert_md_to_docx(
                     _apply_font_to_docx_runs(output_path, font_name)
             except Exception as font_err:
                 logger.warning(LogModule.RESTOR, f"[DOCX-EXPORT] convert_md_to_docx font post-process failed: {font_err}")
+        try:
+            apply_bilingual_styled_spans_to_docx(output_path, md_content)
+        except Exception as style_err:
+            logger.warning(
+                LogModule.RESTOR,
+                f"[DOCX-EXPORT] convert_md_to_docx bilingual span post-process failed: {style_err}",
+            )
         logger.info(LogModule.TRANS, f"[DOCX-EXPORT] convert_md_to_docx succeeded: {output_path}")
         return True
     except Exception as e:
@@ -1829,10 +2001,10 @@ def get_image_block_indices_from_layout(
     try:
         from layout.base import LayoutDocument as _LD
         if not isinstance(layout_document, _LD):
-            logger.info(LogModule.RESTOR, "[PDF-EXPORT] get_image_block_indices_from_layout: layout_document is not LayoutDocument")
+            logger.debug(LogModule.RESTOR, "[PDF-EXPORT] get_image_block_indices_from_layout: layout_document is not LayoutDocument")
             return ([], {})
     except Exception as e:
-        logger.info(LogModule.RESTOR, f"[PDF-EXPORT] get_image_block_indices_from_layout: {e}")
+        logger.debug(LogModule.RESTOR, f"[PDF-EXPORT] get_image_block_indices_from_layout: {e}")
         return ([], {})
     block_index_to_block: Dict[int, Any] = {}
     block_index_to_type: Dict[int, str] = {}
@@ -1846,7 +2018,13 @@ def get_image_block_indices_from_layout(
     segs_with_layout = 0
     eq_fmt = (equation_format or "text").strip().lower()
     tbl_fmt = (table_body_format or "html").strip().lower()
+    from utils.translation_segments import _is_image_segment
+
     for seg in segments:
+        source_text = seg.get("source_text") or seg.get("text") or ""
+        # Captions after images share layout block indices; only map true image segments
+        if not _is_image_segment(source_text):
+            continue
         bidxs = seg.get("layout_block_indices", [])
         if bidxs:
             segs_with_layout += 1
@@ -1901,12 +2079,12 @@ def get_image_block_indices_from_layout(
                     )
             break
     if not out and segments:
-        logger.info(
+        logger.debug(
             LogModule.RESTOR,
             f"[PDF-EXPORT] get_image_block_indices_from_layout: 0 image indices (segments={len(segments)}, "
             f"segments_with_layout_block_indices={segs_with_layout}, layout_image_blocks={len(image_blocks)})"
         )
-    logger.info(
+    logger.debug(
         LogModule.RESTOR,
         f"[PDF-EXPORT] get_image_block_indices_from_layout: {len(out)} image indices, {len(path_to_block_index)} path mappings"
     )
@@ -2029,7 +2207,7 @@ def group_consecutive_images_for_markdown(
             
             html_block = f'<div style="text-align: center; margin: 1em 0;">\n' + "\n".join(img_tags) + "\n</div>"
             parts.append(html_block)
-            logger.info(LogModule.RESTOR, f"[MD-EXPORT] Side-by-side images: {n} images grouped in HTML div (same row)")
+            logger.debug(LogModule.RESTOR, f"[MD-EXPORT] Side-by-side images: {n} images grouped in HTML div (same row)")
         else:
             for m in run:
                 parts.append(m.group(0))

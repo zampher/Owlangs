@@ -48,7 +48,7 @@ class ConvertRequest(BaseModel):
     mineru_token: Optional[str] = None
     formula_ocr: bool = True
     table_ocr: bool = True
-    model_version: Literal["pipeline", "vlm", "hybrid"] = "vlm"
+    model_version: Literal["pipeline", "vlm", "hybrid", "vlm-auto-engine", "hybrid-auto-engine", "vlm-http-client", "hybrid-http-client"] = "hybrid-auto-engine"
 
 
 class ConvertResponse(BaseModel):
@@ -125,7 +125,7 @@ class ConvertFormatRequest(BaseModel):
     convert_engine: Optional[ConvertEngineType] = Field(default=None, description="Convert engine for PDF/images.")
     formula_ocr: Optional[bool] = Field(default=None, description="Enable formula OCR.")
     table_ocr: Optional[bool] = Field(default=None, description="Enable table OCR.")
-    model_version: Optional[Literal["pipeline", "vlm", "hybrid"]] = Field(default=None, description="MinerU backend: pipeline, vlm, or hybrid (better for images).")
+    model_version: Optional[Literal["pipeline", "vlm", "hybrid", "vlm-auto-engine", "hybrid-auto-engine", "vlm-http-client", "hybrid-http-client"]] = Field(default=None, description="MinerU backend: pipeline, vlm-auto-engine, hybrid-auto-engine, vlm-http-client, hybrid-http-client.")
     ocr_language: Optional[str] = Field(default=None, description="OCR language code (e.g. 'auto', 'zh', 'en'). Used by MinerU for recognition.")
     mineru_token: Optional[str] = Field(default=None, description="MinerU API token.")
     deep_split: Optional[bool] = Field(
@@ -137,6 +137,11 @@ class ConvertFormatRequest(BaseModel):
         default=False,
         description="When enabled, skip using cached conversion results and force re-conversion. "
                    "Useful when frontend is refreshed or new session starts."
+    )
+    platform_key: Optional[str] = Field(
+        default=None,
+        description="AI platform key for chunk_size lookup from platforms.json. "
+                   "If not provided, falls back to hardcoded default of 3000."
     )
 
 
@@ -193,7 +198,7 @@ class BaseWorkflowParams(BaseModel):
     to_lang: str = Field(default="Chinese", description="Target translation language.", 
                          examples=["Chinese", "English"])
     chunk_size: int = Field(default=0, description="Chunk size for text splitting (characters). 0 means unset, will be loaded from user settings.")
-    concurrent: int = Field(default=default_params["concurrent"], description="Number of concurrent requests.")
+    concurrent: int = Field(default=0, description="Number of concurrent requests. 0 means unset, will be loaded from platform config or app config.")
     temperature: float = Field(default=0.3, description="LLM temperature parameter.")
     timeout: int = Field(default=default_params["timeout"], description="Time to wait for API response (seconds).")
     thinking: ThinkingMode = Field(default=default_params["thinking"], description="Thinking mode for the Agent.",
@@ -250,6 +255,11 @@ class BaseWorkflowParams(BaseModel):
         description="When enabled (True), skip using cached conversion results and force re-conversion (Extract phase). "
                    "When disabled (False), use cached results if available (Convert phase)."
     )
+    platform_key: Optional[str] = Field(
+        default=None,
+        description="AI platform key for chunk_size/concurrent lookup from platforms.json. "
+                   "If not provided, falls back to hardcoded default of 3000."
+    )
 
     @model_validator(mode='before')
     @classmethod
@@ -284,8 +294,8 @@ class MarkdownWorkflowParams(BaseWorkflowParams):
     mineru_token: Optional[str] = Field(None, description="Required API token when `convert_engine` is 'mineru'.")
     formula_ocr: bool = Field(True, description="Whether to perform OCR recognition on formulas. Effective for both `mineru` and `docling`.")
     code_ocr: bool = Field(True, description="Whether to perform OCR recognition on code blocks. Only effective for `docling` engine.")
-    model_version: Literal["pipeline", "vlm", "hybrid"] = Field("vlm",
-                                                               description="MinerU backend: pipeline, vlm, or hybrid (better for images). Only effective for `mineru` engine.")
+    model_version: Literal["pipeline", "vlm", "hybrid", "vlm-auto-engine", "hybrid-auto-engine", "vlm-http-client", "hybrid-http-client"] = Field("hybrid-auto-engine",
+                                                               description="MinerU backend: pipeline, vlm-auto-engine, hybrid-auto-engine, vlm-http-client, or hybrid-http-client.")
     ocr_language: Optional[str] = Field(None, description="OCR language (e.g. 'auto', 'zh', 'en'). Only effective for `mineru` engine.")
 
     @field_validator('mineru_token')
@@ -475,6 +485,12 @@ class TranslateServiceRequest(BaseModel):
         default="immediate",
         description="immediate: start processing now (legacy). queued: wait for in-process worker pool.",
     )
+    relative_path: Optional[str] = Field(
+        default=None,
+        description="File's relative directory path within the import root (folder or ZIP). "
+                    "E.g., 'subdir/chapter1'. Null/empty means root level.",
+        examples=[None, "subdir/chapter1"],
+    )
 
     class Config:
         json_schema_extra = {
@@ -499,7 +515,7 @@ class TranslateServiceRequest(BaseModel):
                         "convert_engine": "mineru",
                         "formula_ocr": True,
                         "table_ocr": True,
-                        "model_version": "vlm"
+                        "model_version": "hybrid-auto-engine"
                     }
                 }
             ]

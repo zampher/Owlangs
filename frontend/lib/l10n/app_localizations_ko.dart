@@ -238,7 +238,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationToolbarSwitchToFile => '파일로 전환';
 
   @override
-  String get translationToolbarSwitchToText => '텍스트로 전환';
+  String get translationToolbarSwitchToText => '텍스트 입력';
 
   @override
   String get translationStatusCompleted => '번역 완료';
@@ -323,6 +323,15 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get translationStatsTranslatedLabel => '번역됨';
+
+  @override
+  String get translationStatsPendingLabel => '보류 중';
+
+  @override
+  String get translationStatsClearedLabel => '삭제됨';
+
+  @override
+  String get translationStatsImagesLabel => '이미지';
 
   @override
   String get translationStatsLoadingContent => '콘텐츠 로딩 중...';
@@ -466,6 +475,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationExportDialogTitle => '문서 내보내기';
 
   @override
+  String get translationExportDocumentType => '문서 유형';
+
+  @override
   String get translationExportFormatOptionsTitle => '형식 옵션 (PDF만)';
 
   @override
@@ -485,6 +497,64 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get translationExportEquationFormatLatex => 'LaTeX';
+
+  @override
+  String get translationExportBilingualExport => '이중 언어 내보내기';
+
+  @override
+  String get translationExportBilingualOrderTargetAfter => '원문을 앞에';
+
+  @override
+  String get translationExportBilingualOrderTargetAfterSub => '원문을 앞에, 번역문을 뒤에';
+
+  @override
+  String get translationExportBilingualOrderTargetBefore => '번역문을 앞에';
+
+  @override
+  String get translationExportBilingualOrderTargetBeforeSub =>
+      '번역문을 앞에, 원문을 뒤에';
+
+  @override
+  String get translationExportSourceTextItalic => '원문 기울임';
+
+  @override
+  String get translationExportSourceTextColor => '원문 색상:';
+
+  @override
+  String get translationExportTargetTextItalic => '번역문 기울임';
+
+  @override
+  String get translationExportTargetTextColor => '번역문 색상:';
+
+  @override
+  String get translationExportColorDefault => '기본값';
+
+  @override
+  String get translationExportColorGray => '회색';
+
+  @override
+  String get translationExportColorBlue => '파란색';
+
+  @override
+  String get translationExportColorRed => '빨간색';
+
+  @override
+  String get translationExportColorGreen => '초록색';
+
+  @override
+  String get translationExportColorOrange => '주황색';
+
+  @override
+  String get translationExportColorBlack => '검은색';
+
+  @override
+  String get translationExportDownloadButton => '다운로드';
+
+  @override
+  String get translationExportMdEmbeddedImages => 'MD (이미지 포함)';
+
+  @override
+  String get translationExportMdWithImagesFolder => 'MD (이미지 폴더)';
 
   @override
   String get translationLeftPanelExpandTooltip => '왼쪽 패널 확장';
@@ -700,7 +770,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationDialogCancelTaskYesCancel => '예, 취소합니다';
 
   @override
-  String get translationQuickSettingsTitle => '번역 빠른 설정';
+  String get translationQuickSettingsTitle => '빠른 설정';
 
   @override
   String get quickSettingsTargetLanguage => '대상 언어';
@@ -898,10 +968,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homeBackendRetry => '재시도';
 
   @override
-  String get homeNavTranslate => '몰입형 번역';
+  String get homeNewTask => '새 작업';
 
   @override
-  String get homeNavTranslationQueue => '작업 대기열';
+  String get homeNewTaskImmersiveTooltip => 'UI에서 원문과 번역문을 나란히 비교';
+
+  @override
+  String get homeNewTaskQueuedTooltip => '여러 파일을 가져와 순서대로 자동 번역';
+
+  @override
+  String get homeNavTranslate => '몰입형 작업';
+
+  @override
+  String get homeNavTranslationQueue => '작업';
 
   @override
   String get homeNavAnonymize => '익명화';
@@ -910,13 +989,43 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homeNavSettings => '설정';
 
   @override
-  String get homeNavDonateHelp => '기부 및 도움말';
+  String get homeNavDonateHelp => '도움말';
+
+  @override
+  String get homeNavDonate => '기부';
 
   @override
   String get homeNavHome => '홈';
 
   @override
   String get homeNavBatchUpload => '일괄 업로드';
+
+  @override
+  String get homeNavTooltipNewTask => '새 번역 시작——몰입형 비교 또는 대기열 일괄 처리';
+
+  @override
+  String get homeNavTooltipTasks => '모든 번역 작업을 확인·관리하고 완료된 번역을 다운로드';
+
+  @override
+  String get homeNavTooltipAnonymize => '문서 내용을 익명화하여 민감한 정보를 보호';
+
+  @override
+  String get homeNavTooltipSettings => '언어, 테마, 알림 등 설정';
+
+  @override
+  String get homeNavTooltipSetupWizard => '안내형 설정 마법사로 번역 환경을 구성';
+
+  @override
+  String get homeNavTooltipHelp => '도움말 및 기술 지원 받기';
+
+  @override
+  String get homeNavTooltipDonate => '오픈소스 프로젝트를 지원';
+
+  @override
+  String get homeNavTooltipHome => '홈페이지로 돌아가기';
+
+  @override
+  String get homeNavTooltipGitHub => 'GitHub에서 소스 코드 보기 — 유용하시다면 Star를 부탁드립니다!';
 
   @override
   String get batchUploadTitle => '일괄 파일 업로드';
@@ -942,6 +1051,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get batchUploadSelectSingleFile => '파일 선택';
+
+  @override
+  String get batchUploadSingleFileDescription => '번역할 파일 하나 선택';
+
+  @override
+  String get batchUploadAddFiles => '파일 추가';
 
   @override
   String batchUploadFilesFound(Object count) {
@@ -1092,7 +1207,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationQueueEmpty => '번역 작업이 없습니다.';
 
   @override
-  String get translationQueueNewQueuedTask => '큐 방식 번역';
+  String get translationQueueNewQueuedTask => '큐 방식 작업';
+
+  @override
+  String get translationQueueImport => '가져오기';
 
   @override
   String get translationQueueBackToQueueTooltip => '작업 대기열로 돌아가기';
@@ -1217,7 +1335,41 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get translationQueueErrorMessageCopied => '오류 메시지가 복사되었습니다';
+
+  @override
+  String get translationQueueSelected => 'selected';
+
+  @override
+  String get translationQueueSelectMode => 'Select';
+
+  @override
+  String get translationQueueClearSelection => 'Clear selection';
+
+  @override
+  String translationQueueBatchDownloadFailed(Object error) {
+    return 'Batch download failed: $error';
+  }
+
+  @override
+  String translationQueueBatchDownloadSuccess(Object fileType) {
+    return 'Batch download: $fileType ready';
+  }
+
+  @override
   String get translationQueueView => '읽기 편집';
+
+  @override
+  String get translationQueueViewSourcePath => '원본 파일 경로 보기';
+
+  @override
+  String get translationQueueSourcePathTitle => '소스 파일 경로';
+
+  @override
+  String get translationQueueFileNameLabel => '파일 이름';
+
+  @override
+  String get translationQueueRelativePathLabel => '상대 경로';
 
   @override
   String get homeFeatureUnderDevelopment => '이 기능은 개발 중입니다.';
@@ -1258,7 +1410,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homePhaseTranslate => '번역';
 
   @override
-  String get homePhaseViewer => '뷰어';
+  String get homePhaseViewer => '교정';
 
   @override
   String get homePhaseAnonymize => '익명화';
@@ -1268,6 +1420,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get homePhaseExport => '내보내기';
+
+  @override
+  String get taskDefaultTitleTranslate => '작업';
+
+  @override
+  String get taskDefaultTitleAnonymize => '익명화';
 
   @override
   String get homeReleaseNotesTitle => '릴리스 노트';
@@ -1464,6 +1622,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsTableOcrSubtitle => '표에 대한 OCR 활성화';
 
   @override
+  String get settingsMineruModelVersion => '모델 버전';
+
+  @override
+  String get settingsMineruModelVersionSubtitle =>
+      'MinerU 구문 분석 모드 선택 (pipeline은 속도, vlm은 정확도, hybrid는 둘 다)';
+
+  @override
   String get settingsAnonymizationNewTaskNotice => '변경 사항은 새 작업에만 적용됩니다';
 
   @override
@@ -1517,6 +1682,42 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsOcrLangArabic => '아랍어';
+
+  @override
+  String get settingsOcrLangAuto => '자동 감지';
+
+  @override
+  String get mineruLangAuto => '자동 감지';
+
+  @override
+  String get mineruLangChServer => '중국어(서버)';
+
+  @override
+  String get mineruLangChLite => '중국어(라이트)';
+
+  @override
+  String get mineruLangTamil => '타밀어';
+
+  @override
+  String get mineruLangTelugu => '텔루구어';
+
+  @override
+  String get mineruLangKannada => '칸나다어';
+
+  @override
+  String get mineruLangLatinScript => '로마자';
+
+  @override
+  String get mineruLangArabicScript => '아랍 문자';
+
+  @override
+  String get mineruLangEastSlavic => '동슬라브어';
+
+  @override
+  String get mineruLangCyrillicScript => '키릴 문자';
+
+  @override
+  String get mineruLangDevanagariScript => '데바나가리 문자';
 
   @override
   String get settingsTabsGlossary => '용어집';
@@ -2045,6 +2246,125 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get settingsLocalUsersTitle => '로컬 사용자';
+
+  @override
+  String get settingsLocalUsersAddUser => '사용자 추가';
+
+  @override
+  String get settingsLocalUsersNoUsers => '로컬 사용자가 없습니다.';
+
+  @override
+  String get settingsLocalUsersDialogAddTitle => '로컬 사용자 추가';
+
+  @override
+  String get settingsLocalUsersDialogEditTitle => '로컬 사용자 편집';
+
+  @override
+  String get settingsLocalUsersFieldUsername => '사용자 이름';
+
+  @override
+  String get settingsLocalUsersFieldDisplayName => '표시 이름 (선택 사항)';
+
+  @override
+  String get settingsLocalUsersFieldEmail => '이메일 (선택 사항)';
+
+  @override
+  String get settingsLocalUsersFieldRole => '역할';
+
+  @override
+  String get settingsLocalUsersRoleUser => '사용자';
+
+  @override
+  String get settingsLocalUsersRoleAdmin => '관리자';
+
+  @override
+  String get settingsLocalUsersFieldPassword => '비밀번호';
+
+  @override
+  String get settingsLocalUsersPasswordHelper => '8-128자, 대문자, 소문자, 숫자 포함';
+
+  @override
+  String get settingsLocalUsersValidationUsernameRequired => '사용자 이름이 필요합니다';
+
+  @override
+  String get settingsLocalUsersValidationPasswordRequired => '비밀번호가 필요합니다';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooShort =>
+      '비밀번호는 8자 이상이어야 합니다';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooLong =>
+      '비밀번호는 128자를 초과할 수 없습니다';
+
+  @override
+  String get settingsLocalUsersValidationPasswordComplexity =>
+      '비밀번호에는 대문자, 소문자, 숫자가 포함되어야 합니다';
+
+  @override
+  String get settingsLocalUsersOperationFailed => '작업 실패';
+
+  @override
+  String get settingsLocalUsersResetPassword => '비밀번호 재설정';
+
+  @override
+  String settingsLocalUsersResetPasswordTitle(Object username) {
+    return '비밀번호 재설정: $username';
+  }
+
+  @override
+  String get settingsLocalUsersFieldNewPassword => '새 비밀번호';
+
+  @override
+  String get settingsLocalUsersPasswordResetSuccess => '비밀번호가 재설정되었습니다';
+
+  @override
+  String get settingsLocalUsersPasswordResetFailed => '비밀번호 재설정 실패';
+
+  @override
+  String get settingsLocalUsersDeleteUser => '삭제';
+
+  @override
+  String settingsLocalUsersDeleteUserTitle(Object username) {
+    return '사용자 삭제: $username';
+  }
+
+  @override
+  String get settingsLocalUsersDeleteConfirmation =>
+      '이 작업은 로컬 사용자 저장소에서 사용자를 영구적으로 삭제합니다. 이 작업은 취소할 수 없습니다.';
+
+  @override
+  String get settingsLocalUsersDeleteSuccess => '사용자가 삭제되었습니다';
+
+  @override
+  String get settingsLocalUsersDeleteFailed => '사용자 삭제 실패';
+
+  @override
+  String get settingsLocalUsersEdit => '편집';
+
+  @override
+  String get settingsLocalUsersCancel => '취소';
+
+  @override
+  String get settingsLocalUsersSave => '저장';
+
+  @override
+  String get settingsLocalUsersConfirm => '확인';
+
+  @override
+  String get settingsLocalUsersTableUsername => '사용자 이름';
+
+  @override
+  String get settingsLocalUsersTableDisplayName => '표시 이름';
+
+  @override
+  String get settingsLocalUsersTableEmail => '이메일';
+
+  @override
+  String get settingsLocalUsersTableRole => '역할';
+
+  @override
   String get settingsLdapEnabled => 'LDAP 로그인 사용';
 
   @override
@@ -2302,21 +2622,8 @@ class AppLocalizationsKo extends AppLocalizations {
   String get setupWizardUiLanguageLabel => 'UI 언어';
 
   @override
-  String get setupWizardMineruQuestion => 'PDF/이미지 등 문서를 이 기기에서 번역하시겠습니까?';
-
-  @override
-  String get setupWizardMineruYes => '예(권장, MinerU 문서 파싱 사용)';
-
-  @override
-  String get setupWizardMineruNo => '아니오(LLM만으로 텍스트 번역 등)';
-
-  @override
   String get setupWizardMineruDescription =>
       'MinerU는 PDF/이미지의 레이아웃 파싱과 분할을 담당합니다.\n아래에 API Key와 URL을 입력한 뒤 \"연결 테스트\"로 확인하세요.';
-
-  @override
-  String get setupWizardMineruSkipped =>
-      'MinerU를 설정하지 않았습니다. 설정에서 나중에 PDF 번역을 켤 수 있습니다.';
 
   @override
   String get setupWizardMineruConfigTitle => 'MinerU(파싱 엔진)';
@@ -2369,6 +2676,23 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get aiPlatformThinkingHint => '더 나은 번역 품질을 위한 AI 추론 과정 활성화';
+
+  @override
+  String get aiPlatformThinkingModeSupported => '사고 모드 지원';
+
+  @override
+  String get aiPlatformThinkingModeSupportedHint =>
+      '플랫폼이 사고 모드를 지원하는 경우 활성화하세요 (예: Qwen3와 함께 Ollama 사용)';
+
+  @override
+  String get aiPlatformSegmentLimitLabel => '세그먼트 제한';
+
+  @override
+  String get aiPlatformSegmentLimitHint =>
+      '번역 배치당 최대 세그먼트 수. 청크 크기와 함께 적용됨. 0 = 무제한 (클라우드), 10 = 로컬 LLM 권장';
+
+  @override
+  String get aiPlatformSegmentLimitUnlimited => '무제한';
 
   @override
   String get aiPlatformPleaseEnterApiKeyFirst => '먼저 API 키를 입력하세요';
@@ -2426,7 +2750,34 @@ class AppLocalizationsKo extends AppLocalizations {
   String get aiPlatformModelVersion => '모델 버전';
 
   @override
-  String get aiPlatformModelVersionHint => 'vlm';
+  String get aiPlatformModelVersionHint => 'hybrid-auto-engine';
+
+  @override
+  String get aiPlatformTimeout => '읽기 시간 초과 (초)';
+
+  @override
+  String get aiPlatformTimeoutHint =>
+      '200 (클라우드) 또는 300 (로컬). LLM 응답 최대 대기 시간.';
+
+  @override
+  String get aiPlatformWriteTimeout => '쓰기 시간 초과 (초)';
+
+  @override
+  String get aiPlatformWriteTimeoutHint => '300 (기본값). LLM으로 데이터 전송 최대 대기 시간.';
+
+  @override
+  String get aiPlatformTestConnectTimeout => '연결 테스트 타임아웃 (초)';
+
+  @override
+  String get aiPlatformTestConnectTimeoutHint =>
+      '30 (기본값). 번역 시작 전 연결 테스트 최대 대기 시간.';
+
+  @override
+  String get aiPlatformTestRequestTimeout => '테스트 요청 타임아웃 (초)';
+
+  @override
+  String get aiPlatformTestRequestTimeoutHint =>
+      '10 (기본값). 연결 테스트 중 각 프로브 요청의 최대 대기 시간.';
 
   @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';
@@ -2459,11 +2810,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsTranslationNotice => '이 설정은 새로운 번역 작업에만 적용됩니다.';
 
   @override
-  String get settingsTranslationAutoGlossaryTitle => '용어집 자동 생성';
+  String get settingsTargetLanguageTitle => 'Default Target Language';
 
   @override
-  String get settingsTranslationAutoGlossarySubtitle =>
-      '번역 후 자동으로 용어집 생성 (새 작업에 적용)';
+  String get settingsTargetLanguageNotice =>
+      'Sets the default target language for new translation tasks. You can still change it per task in Quick Settings.';
 
   @override
   String get settingsTranslationParamsTitle => '번역 매개변수';
@@ -2473,12 +2824,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsTranslationConcurrentHint => '권장: 3 (모델 및 할당량에 따라 1–8 조정)';
-
-  @override
-  String get settingsTranslationTimeoutTitle => '시간 초과 (초)';
-
-  @override
-  String get settingsTranslationTimeoutHint => '120 (권장: 120-300초)';
 
   @override
   String get settingsTranslationChunkRetryTitle => '청크/API 재시도';
@@ -2550,6 +2895,20 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsExclusionLanguageMatchSubtitle => '원본 언어가 대상 언어와 일치함';
+
+  @override
+  String get settingsTranslateOutputSuffixTitle => 'Translation Output Suffix';
+
+  @override
+  String get settingsTranslateOutputSuffixHint =>
+      'Appended to translated filenames (leave empty for no suffix)';
+
+  @override
+  String get settingsConvertOutputSuffixTitle => 'Conversion Output Suffix';
+
+  @override
+  String get settingsConvertOutputSuffixHint =>
+      'Appended to converted filenames (leave empty for no suffix)';
 
   @override
   String get settingsLanguageDialogTitle => '언어 선택';
@@ -3057,6 +3416,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationQueueEdit => '레이블 편집';
 
   @override
+  String get translationQueueSelectFormats => '선택';
+
+  @override
+  String get translationQueueSelectFormatsTitle => '다운로드 형식 선택';
+
+  @override
+  String get translationQueueSelectFormatsFormatLabel => '형식';
+
+  @override
+  String get translationQueueSelectFormatsDownload => '다운로드';
+
+  @override
   String get reeditTitle => '번역 편집';
 
   @override
@@ -3088,6 +3459,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get fetchUrlCancel => '취소';
+
+  @override
+  String get fetchUrl => 'URL 가져오기';
+
+  @override
+  String get fetchUrlClose => '닫기';
 
   @override
   String get loginSubtitleFeatures => '파일 번역\n형식 변환\nURL 가져오기';
@@ -3154,4 +3531,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get loginPasswordRecoveryAdminGuide => '관리자라면 비밀번호 복구 절차를 따라주세요.';
+
+  @override
+  String get commonDarkMode => '다크 모드';
+
+  @override
+  String get commonLightMode => '라이트 모드';
 }

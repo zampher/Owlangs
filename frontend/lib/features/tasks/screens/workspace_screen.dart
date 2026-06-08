@@ -46,8 +46,15 @@ class WorkspaceScreen extends ConsumerStatefulWidget {
   ConsumerState<WorkspaceScreen> createState() => _WorkspaceScreenState();
 }
 
-enum _UserMenuAction {
+enum _UnifiedMenuAction {
   changePassword,
+  langZh,
+  langEn,
+  langJa,
+  langKo,
+  langEs,
+  toggleDarkMode,
+  login,
   logout,
 }
 
@@ -70,8 +77,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   bool _canScrollLeft = false;
   bool _canScrollRight = false;
 
-  // GlobalKey for Donate & Help button to get its position
-  final GlobalKey _donateHelpButtonKey = GlobalKey();
+  // GlobalKey for Help button to get its position
+  final GlobalKey _helpButtonKey = GlobalKey();
 
   /// Defer building HomeScreen to next frame so route transition paints quickly.
   bool _homeContentReady = false;
@@ -441,9 +448,8 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               title: Text(l10n.batchUploadSelectSingleFile),
               onTap: () {
                 Navigator.of(ctx).pop();
-                final int ts = DateTime.now().millisecondsSinceEpoch;
                 context.push(
-                  '${AppRouter.translationRoute}?execution_mode=queued&auto_pick_file=true&t=$ts',
+                  '${AppRouter.batchUploadRoute}?source=single',
                 );
               },
             ),
@@ -504,7 +510,15 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     _isCreatingFlow = true;
     try {
       final notifier = ref.read(tasksProvider.notifier);
-      await notifier.createFlow(sourceType: TaskType.file, flowType: flowType);
+      final l10n = AppLocalizations.of(context)!;
+      final titlePrefix = flowType == TaskFlow.anonymize
+          ? l10n.taskDefaultTitleAnonymize
+          : l10n.taskDefaultTitleTranslate;
+      await notifier.createFlow(
+        sourceType: TaskType.file,
+        flowType: flowType,
+        titlePrefix: titlePrefix,
+      );
       if (mounted) {
         setState(() {
           _bannerOwlPoseSeed++;
@@ -540,6 +554,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       _buildActionButton(
         icon: Icons.settings_outlined,
         label: l10n.homeNavSettings,
+        tooltip: l10n.homeNavTooltipSettings,
         onPressed: () {
           if (kIsWeb && isUnauthenticated) {
             showAdminRequiredDialog(context);
@@ -552,6 +567,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
       _buildActionButton(
         icon: Icons.auto_fix_high,
         label: l10n.setupWizardTitle,
+        tooltip: l10n.homeNavTooltipSetupWizard,
         onPressed: () {
           if (kIsWeb && isUnauthenticated) {
             showAdminRequiredDialog(context);
@@ -559,7 +575,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
           }
           context.go(AppRouter.setupWizardRoute);
         },
-        width: 96,
+        width: 84,
         highlight: highlightSetupWizardButton,
       ),
       const SizedBox(width: 4),
@@ -567,58 +583,204 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   }
 
   /// Build language selector dropdown for desktop
-  Widget _buildLanguageSelector() {
+  Widget _buildUnifiedMenu() {
+    final authState = ref.watch(authProvider);
     final globalSettings = ref.watch(globalSettingsProvider);
     final globalNotifier = ref.read(globalSettingsProvider.notifier);
+    final l10n = AppLocalizations.of(context)!;
 
-    final supportedLanguages = <Map<String, String>>[
-      <String, String>{'code': 'en', 'name': 'EN'},
-      <String, String>{'code': 'zh', 'name': '中文'},
-      <String, String>{'code': 'ja', 'name': '日本語'},
-      <String, String>{'code': 'ko', 'name': '한국어'},
-      <String, String>{'code': 'es', 'name': 'ES'},
+    final isAuthenticated = authState.maybeWhen(
+      authenticated: (_) => true,
+      orElse: () => false,
+    );
+    final displayName = authState.maybeWhen(
+      authenticated: (user) => user.username,
+      orElse: () => 'guest',
+    );
+    final bool isGuestUser =
+        !isAuthenticated || displayName.toLowerCase() == 'guest';
+    final Color linkColor =
+        Theme.of(context).colorScheme.primary.withOpacity(0.85);
+
+    const List<Map<String, String>> languages = <Map<String, String>>[
+      <String, String>{'code': 'zh', 'label': '中文'},
+      <String, String>{'code': 'en', 'label': 'English'},
+      <String, String>{'code': 'ja', 'label': '日本語'},
+      <String, String>{'code': 'ko', 'label': '한국어'},
+      <String, String>{'code': 'es', 'label': 'Español'},
     ];
 
-    return Container(
-      height: 36,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.5),
-        ),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: supportedLanguages
-                  .any((e) => e['code'] == globalSettings.language)
-              ? globalSettings.language
-              : 'en',
-          icon: const Icon(Icons.arrow_drop_down, size: 18),
-          borderRadius: BorderRadius.circular(6),
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-          items: supportedLanguages
-              .map(
-                (lang) => DropdownMenuItem<String>(
-                  value: lang['code'],
-                  child: Text(
-                    lang['name']!,
-                    style: const TextStyle(fontSize: 12),
-                  ),
+    // Map codes to enum values for the switch handler
+    String codeFromAction(_UnifiedMenuAction a) {
+      switch (a) {
+        case _UnifiedMenuAction.langZh: return 'zh';
+        case _UnifiedMenuAction.langEn: return 'en';
+        case _UnifiedMenuAction.langJa: return 'ja';
+        case _UnifiedMenuAction.langKo: return 'ko';
+        case _UnifiedMenuAction.langEs: return 'es';
+        default: return 'en';
+      }
+    }
+
+    return PopupMenuButton<_UnifiedMenuAction>(
+      tooltip: displayName,
+      onSelected: (_UnifiedMenuAction action) async {
+        switch (action) {
+          case _UnifiedMenuAction.changePassword:
+            await _showChangePasswordDialog(context);
+            break;
+          case _UnifiedMenuAction.langZh:
+          case _UnifiedMenuAction.langEn:
+          case _UnifiedMenuAction.langJa:
+          case _UnifiedMenuAction.langKo:
+          case _UnifiedMenuAction.langEs:
+            globalNotifier.updateUiLanguageLocalOnly(codeFromAction(action));
+            break;
+          case _UnifiedMenuAction.toggleDarkMode:
+            globalNotifier.updateGeneralSettings(
+              darkMode: !globalSettings.darkMode,
+            );
+            break;
+          case _UnifiedMenuAction.login:
+            context.go(AppRouter.loginRoute);
+            break;
+          case _UnifiedMenuAction.logout:
+            await ref.read(authProvider.notifier).logout();
+            if (context.mounted) context.go(AppRouter.loginRoute);
+            break;
+        }
+      },
+      itemBuilder: (BuildContext context) {
+        final String currentLang = globalSettings.language;
+        final bool darkMode = globalSettings.darkMode;
+
+        final List<PopupMenuEntry<_UnifiedMenuAction>> items =
+            <PopupMenuEntry<_UnifiedMenuAction>>[];
+
+        // ── Header: user info ──
+        items.add(PopupMenuItem<_UnifiedMenuAction>(
+          enabled: false,
+          child: Row(
+            children: <Widget>[
+              Icon(Icons.person, size: 18, color: linkColor),
+              const SizedBox(width: 8),
+              Text(
+                displayName,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
-              )
-              .toList(),
-          onChanged: (String? value) async {
-            if (value != null && value != globalSettings.language) {
-              await globalNotifier.updateGeneralSettings(language: value);
-            }
-          },
-        ),
+              ),
+            ],
+          ),
+        ));
+
+        // ── Change Password (authenticated only) ──
+        if (!isGuestUser) {
+          items.add(const PopupMenuDivider());
+          items.add(PopupMenuItem<_UnifiedMenuAction>(
+            value: _UnifiedMenuAction.changePassword,
+            child: Row(
+              children: <Widget>[
+                const Icon(Icons.lock_outline, size: 18),
+                const SizedBox(width: 12),
+                Text(l10n.userMenuChangePassword),
+              ],
+            ),
+          ));
+        }
+
+        // ── Language ──
+        items.add(const PopupMenuDivider());
+        for (final Map<String, String> lang in languages) {
+          final String code = lang['code']!;
+          final String label = lang['label']!;
+          final bool isSelected = code == currentLang;
+          items.add(PopupMenuItem<_UnifiedMenuAction>(
+            value: code == 'zh'
+                ? _UnifiedMenuAction.langZh
+                : code == 'en'
+                    ? _UnifiedMenuAction.langEn
+                    : code == 'ja'
+                        ? _UnifiedMenuAction.langJa
+                        : code == 'ko'
+                            ? _UnifiedMenuAction.langKo
+                            : _UnifiedMenuAction.langEs,
+            child: Row(
+              children: <Widget>[
+                SizedBox(
+                  width: 18,
+                  child: isSelected
+                      ? Icon(Icons.check, size: 16, color: linkColor)
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Flexible(child: Text(label)),
+              ],
+            ),
+          ));
+        }
+
+        // ── Dark Mode ──
+        items.add(const PopupMenuDivider());
+        items.add(PopupMenuItem<_UnifiedMenuAction>(
+          value: _UnifiedMenuAction.toggleDarkMode,
+          child: Row(
+            children: <Widget>[
+              SizedBox(
+                width: 18,
+                child: Icon(
+                  darkMode ? Icons.dark_mode : Icons.light_mode,
+                  size: 16,
+                  color: linkColor,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(darkMode ? l10n.commonDarkMode : l10n.commonLightMode),
+            ],
+          ),
+        ));
+
+        // ── Login / Logout ──
+        items.add(const PopupMenuDivider());
+        items.add(PopupMenuItem<_UnifiedMenuAction>(
+          value: isGuestUser
+              ? _UnifiedMenuAction.login
+              : _UnifiedMenuAction.logout,
+          child: Row(
+            children: <Widget>[
+              Icon(
+                isGuestUser ? Icons.login : Icons.logout,
+                size: 18,
+                color: linkColor,
+              ),
+              const SizedBox(width: 12),
+              Text(isGuestUser ? l10n.commonLogin : l10n.commonLogout),
+            ],
+          ),
+        ));
+
+        return items;
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(Icons.person, size: 18, color: linkColor),
+          if (!isGuestUser) ...[
+            const SizedBox(width: 4),
+            Text(
+              displayName,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: linkColor,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          const SizedBox(width: 2),
+          Icon(Icons.arrow_drop_down, size: 18, color: linkColor),
+        ],
       ),
     );
   }
@@ -730,14 +892,14 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
 
     return Scaffold(
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(90),
+        preferredSize: const Size.fromHeight(72),
         child: AnimatedSize(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
           child: AppBar(
             elevation: 0,
             backgroundColor: Theme.of(context).colorScheme.surface,
-            toolbarHeight: 90,
+            toolbarHeight: 72,
             centerTitle: false,
             titleSpacing: 0,
             automaticallyImplyLeading: false,
@@ -749,259 +911,50 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 final bool spacious = constraints.maxWidth >= 300;
                 return Row(
               children: <Widget>[
-                // Leading: Logo
-                Padding(
-                  padding: const EdgeInsets.all(4), // Keep compact padding
-                  child: Image.asset(
-                    // Use the main app logo PNG; Flutter does not decode .ico natively, use same PNG
-                    'images/logo_96.png',
-                    width: spacious ? 56 : 40,
-                    height: spacious ? 56 : 40,
-                    errorBuilder: (
-                      BuildContext context,
-                      Object error,
-                      StackTrace? stackTrace,
-                    ) =>
-                        Icon(
-                      Icons.language,
-                      size: spacious ? 36 : 28,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
+                Flexible(
+                  child: Row(
+                    children: <Widget>[
+                      // Leading: Logo
+                      Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Image.asset(
+                          'images/logo_96.png',
+                          width: spacious ? 56 : 40,
+                          height: spacious ? 56 : 40,
+                          errorBuilder: (
+                            BuildContext context,
+                            Object error,
+                            StackTrace? stackTrace,
+                          ) =>
+                              Icon(
+                            Icons.language,
+                            size: spacious ? 36 : 28,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      // Title
+                      Flexible(
+                        child: Text(
+                          'Owlangs',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
+                        ),
+                      ),
+                      // Unified menu: user, language, dark mode, login
+                      if (spacious) ...<Widget>[
+                        const SizedBox(width: 12),
+                        _buildUnifiedMenu(),
+                      ],
+                    ],
                   ),
                 ),
-                // Title - flexible so Row does not overflow on narrow windows
-                Expanded(
-                  child: Text(
-                    'Owlangs',
-                    style: TextStyle(
-                      fontSize: 18, // Reduced from 28 to 18
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 2,
-                  ),
-                ),
-                // Desktop only: Language selector next to title
-                if (spacious && !kIsWeb) ...<Widget>[
-                  const SizedBox(width: 12),
-                  _buildLanguageSelector(),
-                ],
-                // Web only: show username, language switcher (client-only), and Login/Logout links next to app title
-                if (spacious && kIsWeb) ...<Widget>[
-                  const SizedBox(width: 12),
-                  Builder(
-                    builder: (BuildContext context) {
-                      final authState = ref.watch(authProvider);
-                      final isAuthenticated = authState.maybeWhen(
-                        authenticated: (_) => true,
-                        orElse: () => false,
-                      );
-                      final displayName = authState.maybeWhen(
-                        authenticated: (user) => user.username,
-                        orElse: () => 'guest',
-                      );
-                      final bool isGuestUser = !isAuthenticated ||
-                          displayName.toLowerCase() == 'guest';
-                      final Color linkColor = Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withOpacity(0.85);
-                      final globalSettings = ref.watch(globalSettingsProvider);
-                      final GlobalSettingsNotifier globalNotifier =
-                          ref.read(globalSettingsProvider.notifier);
-                      const List<Map<String, String>> languages =
-                          <Map<String, String>>[
-                        <String, String>{'code': 'zh', 'label': '中文'},
-                        <String, String>{'code': 'en', 'label': 'English'},
-                        <String, String>{'code': 'ja', 'label': '日本語'},
-                        <String, String>{'code': 'ko', 'label': '한국어'},
-                        <String, String>{'code': 'es', 'label': 'Español'},
-                      ];
-                      final String currentLang = globalSettings.language;
-                      final String currentLabel = languages.firstWhere(
-                            (Map<String, String> lang) =>
-                                lang['code'] == currentLang,
-                            orElse: () => const <String, String>{
-                              'code': 'en',
-                              'label': 'English',
-                            },
-                          )['label'] ??
-                          currentLang;
-
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          if (!isGuestUser)
-                            PopupMenuButton<_UserMenuAction>(
-                              tooltip: displayName,
-                              onSelected:
-                                  (_UserMenuAction selectedAction) async {
-                                switch (selectedAction) {
-                                  case _UserMenuAction.changePassword:
-                                    await _showChangePasswordDialog(context);
-                                    break;
-                                  case _UserMenuAction.logout:
-                                    await ref
-                                        .read(authProvider.notifier)
-                                        .logout();
-                                    if (context.mounted) {
-                                      context.go(AppRouter.loginRoute);
-                                    }
-                                    break;
-                                }
-                              },
-                              itemBuilder: (BuildContext context) =>
-                                  <PopupMenuEntry<_UserMenuAction>>[
-                                PopupMenuItem<_UserMenuAction>(
-                                  value: _UserMenuAction.changePassword,
-                                  child: Text(
-                                    l10n.userMenuChangePassword,
-                                  ),
-                                ),
-                                PopupMenuItem<_UserMenuAction>(
-                                  value: _UserMenuAction.logout,
-                                  child: Text(
-                                    l10n.commonLogout,
-                                  ),
-                                ),
-                              ],
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: <Widget>[
-                                  Icon(
-                                    Icons.person,
-                                    size: 18,
-                                    color: linkColor,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    displayName,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                      color: linkColor,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const Icon(
-                                    Icons.arrow_drop_down,
-                                    size: 18,
-                                  ),
-                                ],
-                              ),
-                            )
-                          else ...<Widget>[
-                            Icon(
-                              Icons.person,
-                              size: 18,
-                              color: linkColor,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              displayName,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: linkColor,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                          const SizedBox(width: 12),
-                          Text(
-                            '|',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: linkColor.withOpacity(0.5),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Client-only UI language switcher (does not change server global default)
-                          PopupMenuButton<String>(
-                            tooltip: 'Language',
-                            initialValue: currentLang,
-                            padding: EdgeInsets.zero,
-                            itemBuilder: (BuildContext context) =>
-                                languages.map((Map<String, String> lang) {
-                              final String code = lang['code']!;
-                              final String label = lang['label']!;
-                              return PopupMenuItem<String>(
-                                value: code,
-                                child: Text(label),
-                              );
-                            }).toList(),
-                            onSelected:
-                                globalNotifier.updateUiLanguageLocalOnly,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: <Widget>[
-                                Icon(
-                                  Icons.language,
-                                  size: 18,
-                                  color: linkColor,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  currentLabel,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: linkColor,
-                                  ),
-                                ),
-                                const Icon(
-                                  Icons.arrow_drop_down,
-                                  size: 18,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            '|',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: linkColor.withOpacity(0.5),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          if (!isAuthenticated)
-                            TextButton(
-                              onPressed: () {
-                                context.go(AppRouter.loginRoute);
-                              },
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: <Widget>[
-                                  Icon(
-                                    Icons.login,
-                                    size: 16,
-                                    color: linkColor,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    l10n.commonLogin,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: linkColor,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
+                const Spacer(),
                 const SizedBox(width: 8),
                 // Optional ad banner on the left of buttons
                 if (showAds && _isAdBannerVisible) ...<Widget>[
@@ -1018,33 +971,25 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
           },
         ),
         actions: <Widget>[
-              // Immersive translate (flow tab)
-              _buildActionButton(
-                icon: Icons.translate,
-                label: l10n.homeNavTranslate,
-                width: 92,
-                maxLabelLines: 2,
-                onPressed: _isCreatingFlow
-                    ? null
-                    : () => _createFlowWithProtection(
-                          TaskFlow.translate,
-                        ),
-              ),
-              const SizedBox(width: 4),
-              // Queued translation: standalone flow (same entry as task queue "new" button)
-              _buildActionButton(
-                icon: Icons.playlist_add,
-                label: l10n.translationQueueNewQueuedTask,
-                width: 92,
-                maxLabelLines: 2,
-                onPressed: () => _showSourceTypeDialog(context),
+              // New task dropdown (immersive + queued)
+              _NewTaskDropdown(
+                isCreatingFlow: _isCreatingFlow,
+                immersiveLabel: l10n.homeNavTranslate,
+                queuedLabel: l10n.translationQueueNewQueuedTask,
+                newTaskLabel: l10n.homeNewTask,
+                tooltip: l10n.homeNavTooltipNewTask,
+                immersiveTooltip: l10n.homeNewTaskImmersiveTooltip,
+                queuedTooltip: l10n.homeNewTaskQueuedTooltip,
+                onImmersiveTap: () => _createFlowWithProtection(TaskFlow.translate),
+                onQueuedTap: () => _showSourceTypeDialog(context),
               ),
               const SizedBox(width: 4),
               // Translation queue (list + poll + download)
               _buildActionButton(
-                icon: Icons.queue_play_next_outlined,
+                icon: Icons.list_alt,
                 label: l10n.homeNavTranslationQueue,
-                width: 92,
+                tooltip: l10n.homeNavTooltipTasks,
+                width: 84,
                 maxLabelLines: 2,
                 onPressed: () => context.push(AppRouter.translationQueueRoute),
               ),
@@ -1054,6 +999,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 _buildActionButton(
                   icon: Icons.visibility_off,
                   label: l10n.homeNavAnonymize,
+                  tooltip: l10n.homeNavTooltipAnonymize,
                   onPressed: _isCreatingFlow
                       ? null
                       : () {
@@ -1071,13 +1017,30 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
               ],
               // Settings and Setup wizard (Web: admin only)
               ..._adminOnlyActionButtons(l10n, highlightSetupWizardButton),
-              // Donate & Help button (icon = donate/support, label = both concepts)
+              const SizedBox(width: 4),
+              // Help button
               _buildActionButton(
-                key: _donateHelpButtonKey,
-                icon: Icons.volunteer_activism,
+                key: _helpButtonKey,
+                icon: Icons.help_outline,
                 label: l10n.homeNavDonateHelp,
-                onPressed: () => context.go(AppRouter.donateRoute),
-                width: 90,
+                tooltip: l10n.homeNavTooltipHelp,
+                onPressed: () => context.push(
+                  AppRouter.donateRoute,
+                  extra: <String, dynamic>{'mode': 'help'},
+                ),
+                width: 64,
+              ),
+              const SizedBox(width: 4),
+              // Donate button
+              _buildActionButton(
+                icon: Icons.volunteer_activism,
+                label: l10n.homeNavDonate,
+                tooltip: l10n.homeNavTooltipDonate,
+                onPressed: () => context.push(
+                  AppRouter.donateRoute,
+                  extra: <String, dynamic>{'mode': 'donate'},
+                ),
+                width: 64,
               ),
               const SizedBox(width: 4),
               const _GitHubStarButton(),
@@ -1100,6 +1063,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                       _buildActionButton(
                         icon: Icons.home_outlined,
                         label: l10n.homeNavHome,
+                        tooltip: l10n.homeNavTooltipHome,
                         onPressed: () => context.go(AppRouter.homeRoute),
                       ),
                     ],
@@ -1452,6 +1416,7 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   Widget _buildActionButton({
     required IconData icon,
     required String label,
+    String? tooltip,
     Key? key,
     VoidCallback? onPressed,
     double? width,
@@ -1460,50 +1425,290 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
     double? height,
   }) {
     // Use uniform height for all action buttons regardless of label line count
-    final double boxHeight = height ?? 76;
-    return Card(
-      elevation: highlight ? 4 : 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(4),
-        side: highlight
-            ? BorderSide(color: Colors.orange.shade400, width: 2)
-            : const BorderSide(color: Colors.transparent, width: 0),
-      ),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          key: key,
-          width: width ?? 70,
-          height: boxHeight,
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Icon(
-                icon,
-                color: Theme.of(context).colorScheme.primary,
-                size: 28,
-              ),
-              const SizedBox(height: 3),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  height: maxLabelLines > 1 ? 1.15 : null,
-                  color: Theme.of(context).colorScheme.onSurface,
+    final double boxHeight = height ?? 56;
+    return Tooltip(
+      message: tooltip ?? label,
+      child: Card(
+        elevation: highlight ? 4 : 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: highlight
+              ? BorderSide(color: Colors.orange.shade400, width: 2)
+              : const BorderSide(color: Colors.transparent, width: 0),
+        ),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            key: key,
+            width: width ?? 64,
+            height: boxHeight,
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(
+                  icon,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 24,
                 ),
-                textAlign: TextAlign.center,
-                softWrap: true,
-                maxLines: maxLabelLines,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    height: maxLabelLines > 1 ? 1.15 : null,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                  textAlign: TextAlign.center,
+                  softWrap: true,
+                  maxLines: maxLabelLines,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// New task dropdown button that shows immersive/queued options on hover.
+class _NewTaskDropdown extends StatefulWidget {
+  const _NewTaskDropdown({
+    required this.isCreatingFlow,
+    required this.immersiveLabel,
+    required this.queuedLabel,
+    required this.newTaskLabel,
+    required this.tooltip,
+    required this.immersiveTooltip,
+    required this.queuedTooltip,
+    required this.onImmersiveTap,
+    required this.onQueuedTap,
+  });
+
+  final bool isCreatingFlow;
+  final String immersiveLabel;
+  final String queuedLabel;
+  final String newTaskLabel;
+  final String tooltip;
+  final String immersiveTooltip;
+  final String queuedTooltip;
+  final VoidCallback onImmersiveTap;
+  final VoidCallback onQueuedTap;
+
+  @override
+  State<_NewTaskDropdown> createState() => _NewTaskDropdownState();
+}
+
+class _NewTaskDropdownState extends State<_NewTaskDropdown> {
+  bool _isMenuOpen = false;
+  OverlayEntry? _overlayEntry;
+  bool _mouseOnButton = false;
+  bool _mouseOnMenu = false;
+
+  void _openDropdown() {
+    if (_isMenuOpen) return;
+    _isMenuOpen = true;
+
+    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null) {
+      _isMenuOpen = false;
+      return;
+    }
+
+    final Offset offset = renderBox.localToGlobal(Offset.zero);
+    final Size size = renderBox.size;
+
+    _overlayEntry = OverlayEntry(
+      builder: (BuildContext overlayContext) {
+        return MouseRegion(
+          onEnter: (_) {
+            _mouseOnMenu = true;
+          },
+          onExit: (_) {
+            _mouseOnMenu = false;
+            _scheduleClose();
+          },
+          child: Stack(
+            children: <Widget>[
+              // Invisible barrier to catch clicks outside
+              GestureDetector(
+                onTap: _closeDropdown,
+                behavior: HitTestBehavior.translucent,
+                child: const SizedBox.expand(),
+              ),
+              Positioned(
+                left: offset.dx,
+                top: offset.dy + size.height,
+                width: 240,
+                child: Material(
+                  elevation: 8,
+                  borderRadius: BorderRadius.circular(8),
+                  color: Theme.of(context).colorScheme.surface,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      _buildMenuItem(
+                        icon: Icons.play_arrow,
+                        label: widget.immersiveLabel,
+                        tooltip: widget.immersiveTooltip,
+                        enabled: !widget.isCreatingFlow,
+                        onTap: () {
+                          _closeDropdown();
+                          widget.onImmersiveTap();
+                        },
+                      ),
+                      _buildMenuItem(
+                        icon: Icons.playlist_add_check,
+                        label: widget.queuedLabel,
+                        tooltip: widget.queuedTooltip,
+                        onTap: () {
+                          _closeDropdown();
+                          widget.onQueuedTap();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String label,
+    required String tooltip,
+    required VoidCallback onTap,
+    bool enabled = true,
+  }) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: <Widget>[
+            Icon(icon, size: 20, color: enabled ? null : Theme.of(context).disabledColor),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: enabled ? null : Theme.of(context).disabledColor,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    tooltip,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: enabled
+                          ? Theme.of(context).colorScheme.onSurfaceVariant
+                          : Theme.of(context).disabledColor,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _closeDropdown() {
+    if (!_isMenuOpen) return;
+    _isMenuOpen = false;
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  Timer? _closeTimer;
+  void _scheduleClose() {
+    if (_mouseOnButton || _mouseOnMenu) return;
+    _closeTimer?.cancel();
+    _closeTimer = Timer(const Duration(milliseconds: 200), () {
+      if (!_mouseOnButton && !_mouseOnMenu) {
+        _closeDropdown();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _closeTimer?.cancel();
+    _closeDropdown();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) {
+        _mouseOnButton = true;
+        _closeTimer?.cancel();
+        _openDropdown();
+      },
+      onExit: (_) {
+        _mouseOnButton = false;
+        _scheduleClose();
+      },
+      child: Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: InkWell(
+            onTap: _openDropdown,
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              width: 84,
+              height: 56,
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Icon(
+                    Icons.add_circle_outline,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 24,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    widget.newTaskLabel,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                    textAlign: TextAlign.center,
+                    softWrap: true,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
     );
   }
 }
@@ -1567,33 +1772,35 @@ class _GitHubStarButtonState extends State<_GitHubStarButton> {
     } else {
       label = 'GitHub';
     }
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: InkWell(
-        onTap: () async {
-          await launchUrl(
-            Uri.parse('https://github.com/zampher/Owlangs'),
-            mode: LaunchMode.externalApplication,
-          );
-        },
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          width: 80,
-          height: 70,
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Icon(
-                MdiIcons.github,
-                color: Theme.of(context).colorScheme.primary,
-                size: 32,
-              ),
-              const SizedBox(height: 4),
+    return Tooltip(
+      message: AppLocalizations.of(context)!.homeNavTooltipGitHub,
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: InkWell(
+          onTap: () async {
+            await launchUrl(
+              Uri.parse('https://github.com/zampher/Owlangs'),
+              mode: LaunchMode.externalApplication,
+            );
+          },
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            width: 80,
+            height: 56,
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(
+                  MdiIcons.github,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 24,
+                ),
+                const SizedBox(height: 2),
               Text(
                 label,
                 style: TextStyle(
@@ -1607,6 +1814,7 @@ class _GitHubStarButtonState extends State<_GitHubStarButton> {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

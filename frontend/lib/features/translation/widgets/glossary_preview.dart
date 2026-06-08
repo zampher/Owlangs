@@ -157,21 +157,9 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
 
       // Auto-enter edit mode when glossary generation completes (data changes from empty to non-empty)
       if (wasEmpty && !isEmpty && !isEditing) {
-        _log('Glossary generation completed, auto-entering edit mode');
-        // Defer setState and callback to after build completes to avoid "setState during build" error
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() {
-              isEditing = true;
-            });
-            // Notify parent about editing state change
-            if (widget.onEditingStateChanged != null) {
-              widget.onEditingStateChanged!(true);
-            }
-            // Initialize TextEditingControllers for edit mode
-            _initializeTextControllers();
-          }
-        });
+        _log('Glossary generation completed, entering view mode');
+        // Do not auto-enter edit mode. Display in view mode so the Translate All
+        // button remains enabled. Users can click "Edit" to modify terms if needed.
       } else if (isEditing && entries.isNotEmpty) {
         // If already in edit mode and entries changed, reinitialize controllers
         _disposeTextControllers();

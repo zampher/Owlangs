@@ -57,12 +57,13 @@ class TasksNotifier extends StateNotifier<TasksState> {
   Future<Task> createFlow({
     required TaskType sourceType,
     required TaskFlow flowType,
+    String? titlePrefix,
   }) async {
     // Generate flowId
     final flowId = _genId();
 
     // Get default title based on flow type
-    final defaultTitle = _getDefaultTitle(flowType);
+    final defaultTitle = _getDefaultTitle(flowType, titlePrefix);
 
     final now = DateTime.now();
 
@@ -116,7 +117,7 @@ class TasksNotifier extends StateNotifier<TasksState> {
 
   /// Get default title based on flow type
   /// Counters start from 1 on each app start (session-level, not persisted)
-  String _getDefaultTitle(TaskFlow flowType) {
+  String _getDefaultTitle(TaskFlow flowType, [String? prefix]) {
     // Increment counter for this flow type
     _flowCounters[flowType] = (_flowCounters[flowType] ?? 0) + 1;
     final counter = _flowCounters[flowType]!;
@@ -124,12 +125,11 @@ class TasksNotifier extends StateNotifier<TasksState> {
     // Generate title based on flow type
     switch (flowType) {
       case TaskFlow.translate:
-        return 'Translation-$counter';
+        return '${prefix ?? 'Task'}-$counter';
       case TaskFlow.anonymize:
-        return 'Anonymization-$counter';
+        return '${prefix ?? 'Anonymization'}-$counter';
       case TaskFlow.anonymizeAndTranslate:
-        // For anonymize+translate, use anonymization format
-        return 'Anonymization-$counter';
+        return '${prefix ?? 'Anonymization'}-$counter';
     }
   }
 

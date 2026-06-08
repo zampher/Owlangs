@@ -140,6 +140,30 @@ class SegmentHeightCache {
     return true;
   }
 
+  /// Record a measured height directly without needing a GlobalKey.
+  ///
+  /// This is useful when the caller already has access to the render box
+  /// or when using [ItemWithHeightMeasurement] without a key.
+  ///
+  /// [height] should be the raw render box height (margin is added internally).
+  /// [predictedHeight] - Optional predicted height for correction factor calculation.
+  void recordMeasuredHeight(
+    int index,
+    double height, {
+    double? predictedHeight,
+  }) {
+    final double actualHeight = height + itemMargin;
+    setHeight(index, actualHeight);
+
+    if (predictedHeight != null && predictedHeight > 0) {
+      final double correctionFactor = actualHeight / predictedHeight;
+      _correctionFactors[index] = correctionFactor;
+      _updateAverageCorrectionFactor();
+    }
+
+    _updateEstimatedHeight();
+  }
+
   // Correction factors: index -> correction factor (actual / predicted)
   final Map<int, double> _correctionFactors = <int, double>{};
 

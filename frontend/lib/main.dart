@@ -401,6 +401,17 @@ class OwlangsApp extends ConsumerWidget {
                     : Brightness.dark,
               ),
             );
+            // Debug: log viewport / physical size on every build
+            if (kDebugMode) {
+              final mq = MediaQuery.of(context);
+              final double physicalW = mq.size.width * mq.devicePixelRatio;
+              final double physicalH = mq.size.height * mq.devicePixelRatio;
+              debugPrint(
+                '[VIEWPORT] logical=${mq.size.width.toStringAsFixed(0)}x${mq.size.height.toStringAsFixed(0)}, '
+                'physical=${physicalW.toStringAsFixed(0)}x${physicalH.toStringAsFixed(0)}, '
+                'devicePixelRatio=${mq.devicePixelRatio.toStringAsFixed(2)}',
+              );
+            }
             return LayoutBuilder(
               builder: (context, constraints) {
                 final appChild = MediaQuery(

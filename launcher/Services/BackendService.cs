@@ -138,7 +138,7 @@ namespace OwlangsLauncher.Services
                 var startInfo = new ProcessStartInfo
                 {
                     FileName = _backendExePath,
-                    Arguments = "-i",
+                    Arguments = "-i --no-browser",
                     WorkingDirectory = _backendWorkingDir,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,

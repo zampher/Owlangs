@@ -4,15 +4,13 @@
 import json
 import csv
 import time
-import logging
+from backend.logger import unified_logger as logger
+from logger.logger import LogModule
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
 from .models import PromptFile, PromptItem, UserPromptSelection, PromptVersion
-
-logger = logging.getLogger(__name__)
-
 
 class PromptStorage:
     """Prompt storage manager"""

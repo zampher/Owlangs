@@ -27,7 +27,6 @@ _SUBMODULES = (
     "platforms_config",
     "translation_config",
     "system_config",
-    "ui_config",
     "temperature_config",
     "profile_manager",
 )

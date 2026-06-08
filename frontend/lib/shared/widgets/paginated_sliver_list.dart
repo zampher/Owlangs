@@ -152,11 +152,6 @@ class PaginatedSliverList<T> extends StatelessWidget {
             final GlobalKey<State<StatefulWidget>> itemKey =
                 itemKeys[globalIndex]!;
 
-            // Create a separate key for height measurement
-            // This avoids conflicts with itemKey used by child widgets (e.g., SegmentNumberedItem)
-            final GlobalKey<State<StatefulWidget>> measurementKey =
-                GlobalKey<State<StatefulWidget>>();
-
             // Build the item widget
             // Note: itemBuilder should return the complete item widget including separators if needed
             // The widget will be measured as a whole by ItemWithHeightMeasurement
@@ -164,17 +159,15 @@ class PaginatedSliverList<T> extends StatelessWidget {
             final Widget itemWidget = itemBuilder(context, i, item, itemKey);
 
             // Wrap with height measurement if enabled
-            // The measurementKey is used to measure the entire itemWidget (including separators)
-            // The itemKey is passed to itemBuilder for use by child widgets (e.g., SegmentNumberedItem)
+            // ItemWithHeightMeasurement now measures its own context when itemKey is null,
+            // avoiding the need for a separate GlobalKey that caused remounts on every rebuild.
             if (enableHeightMeasurement) {
               return ItemWithHeightMeasurement(
                 index: globalIndex,
-                itemKey: measurementKey, // Use separate key for measurement
+                itemKey: null, // Measure using own context
                 heightCache: heightCache,
                 minHeightDiff: minHeightDiff,
                 child: RepaintBoundary(
-                  key:
-                      measurementKey, // Set key on RepaintBoundary for measurement
                   child: itemWidget,
                 ),
               );

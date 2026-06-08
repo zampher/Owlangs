@@ -74,7 +74,8 @@ async def service_translate(
         LogModule.ROUTE,
         f"[IMPORT] Translation task started: task_id={task_id}, filename={request.file_name}, "
         f"file_content_length={len(request.file_content) if request.file_content else 0} chars (base64), "
-        f"workflow_type={workflow_type_from_payload}"
+        f"workflow_type={workflow_type_from_payload}, "
+        f"relative_path={request.relative_path!r}"
     )
     
     try:
@@ -122,6 +123,7 @@ async def service_translate(
             original_filename=request.file_name,
             execution_mode=request.execution_mode,
             owner_username=owner_username,
+            relative_path=request.relative_path,
         )
         
         logger.info(LogModule.ROUTE, f"[IMPORT] Translation task started successfully: task_id={task_id}, response={response_data}")
@@ -184,8 +186,11 @@ async def list_translation_tasks(
             "task_id": tid,
             "status": st.get("status"),
             "message": st.get("message"),
+            "message_level": st.get("message_level", 0),
             "progress": st.get("progress"),
+            "error": st.get("error"),
             "original_filename": st.get("original_filename"),
+            "original_relative_path": st.get("original_relative_path"),
             "execution_mode": st.get("execution_mode"),
             "is_processing": st.get("is_processing"),
             "download_ready": st.get("download_ready"),

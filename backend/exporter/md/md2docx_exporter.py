@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import List, Optional, Tuple, TYPE_CHECKING
+from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 from xml.etree import ElementTree as ET
 
 from docx import Document as DocxDocument
@@ -44,9 +44,13 @@ _TEX_SPLIT_PARTS_SINGLE_LINE_INLINE = (
     r"(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|"
     r"\*\*.*?\*\*|\*.*?\*|`.*?`|\[.*?\]\(.*?\))"
 )
-# Inline HTML from translators/rebuild: <sup>n</sup>, <sub>n</sub> inside prose (author affiliations, etc.)
-_HTML_SUP_SUB_TAGS = re.compile(
-    r"(<sup>\s*[\s\S]*?</sup>|<sub>\s*[\s\S]*?</sub>)",
+# Inline HTML from translators/rebuild: <sup>n</sup>, <sub>n</sub>, styled <span> for bilingual export
+_HTML_INLINE_TAGS = re.compile(
+    r"(<sup>\s*[\s\S]*?</sup>|<sub>\s*[\s\S]*?</sub>|<span\s+style=\"[^\"]*\">\s*[\s\S]*?</span>)",
+    re.IGNORECASE,
+)
+_HTML_SPAN_STYLE = re.compile(
+    r'<span\s+style="([^"]*)">\s*([\s\S]*?)\s*</span>',
     re.IGNORECASE,
 )
 
@@ -126,20 +130,37 @@ class MD2DOCXExporter(MDExporter):
         run.font.size = Pt(self.font_size)
         self._set_run_east_asia_font(run)
 
+    def _apply_span_style_to_run(self, run, style: str) -> None:
+        """Apply font-style/color from bilingual export HTML span."""
+        style_lower = style.replace(" ", "").lower()
+        if "font-style:italic" in style_lower:
+            run.italic = True
+        color_match = re.search(r"color:(#[0-9a-fA-F]{6})", style_lower)
+        if color_match:
+            hex_color = color_match.group(1)
+            try:
+                run.font.color.rgb = RGBColor(
+                    int(hex_color[1:3], 16),
+                    int(hex_color[3:5], 16),
+                    int(hex_color[5:7], 16),
+                )
+            except Exception:
+                pass
+
     def _add_runs_with_html_sup_sub(self, para, text: str) -> None:
-        """Add paragraph runs; interpret <sup>/<sub> as Word superscript/subscript."""
+        """Add paragraph runs; interpret inline HTML (sup/sub/styled span)."""
         if not text:
             return
         clean = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]", "", text)
         if not clean:
             return
         lower = clean.lower()
-        if "<sup" not in lower and "<sub" not in lower:
+        if "<sup" not in lower and "<sub" not in lower and "<span" not in lower:
             run = para.add_run(clean)
             self._apply_default_body_font(run)
             return
         pos = 0
-        for m in _HTML_SUP_SUB_TAGS.finditer(clean):
+        for m in _HTML_INLINE_TAGS.finditer(clean):
             if m.start() > pos:
                 run = para.add_run(clean[pos : m.start()])
                 self._apply_default_body_font(run)
@@ -160,8 +181,16 @@ class MD2DOCXExporter(MDExporter):
                         self._apply_default_body_font(run)
                         run.font.subscript = True
                 else:
-                    run = para.add_run(tag)
-                    self._apply_default_body_font(run)
+                    span_match = _HTML_SPAN_STYLE.search(tag)
+                    if span_match:
+                        inner = html.unescape(span_match.group(2).strip())
+                        if inner:
+                            run = para.add_run(inner)
+                            self._apply_default_body_font(run)
+                            self._apply_span_style_to_run(run, span_match.group(1))
+                    else:
+                        run = para.add_run(tag)
+                        self._apply_default_body_font(run)
             pos = m.end()
         if pos < len(clean):
             run = para.add_run(clean[pos:])
@@ -1217,35 +1246,16 @@ class MD2DOCXExporter(MDExporter):
         rather than markdown code patterns ($$...$$).
         """
         # Extract all interline_equation blocks from layout_document
-        equation_blocks = []
+        equation_blocks: List[Dict[str, Optional[str]]] = []
         if self.layout_document:
+            from utils.document_rebuild.table_layout_utils import _extract_equation_from_layout_block
             for block in self.layout_document.iter_blocks():
                 if block.type == "interline_equation":
-                    # Extract LaTeX content from block
-                    equation_content = None
-                    raw_block = block.raw or {}
-                    lines = raw_block.get("lines", [])
-                    for line in lines:
-                        if not isinstance(line, dict):
-                            continue
-                        spans = line.get("spans", [])
-                        for span in spans:
-                            if not isinstance(span, dict):
-                                continue
-                            if span.get("type") == "interline_equation":
-                                content = span.get("content")
-                                if isinstance(content, str) and content.strip():
-                                    equation_content = content.strip()
-                                    break
-                        if equation_content:
-                            break
-                    
-                    # Use block.text as fallback
-                    if not equation_content and block.text:
-                        equation_content = block.text.strip()
-                    
-                    if equation_content:
-                        equation_blocks.append(equation_content)
+                    equation_content, equation_image_path = _extract_equation_from_layout_block(block)
+                    if equation_content or equation_image_path:
+                        equation_blocks.append(
+                            {"content": equation_content, "image_path": equation_image_path}
+                        )
         
         # Process markdown content, replacing $$...$$ with formulas from layout
         # Split content into lines for processing
@@ -1253,7 +1263,11 @@ class MD2DOCXExporter(MDExporter):
 
         n_md_blocks = self._count_markdown_display_math_blocks(lines)
         n_layout_blocks = len(equation_blocks)
-        if n_layout_blocks > 0 and n_md_blocks != n_layout_blocks:
+        if (
+            n_layout_blocks > 0
+            and n_md_blocks != n_layout_blocks
+            and self.equation_format != "image"
+        ):
             logger.warning(
                 LogModule.EXPORT,
                 "[DOCX-EQUATION] Display math block count mismatch: "
@@ -1297,7 +1311,7 @@ class MD2DOCXExporter(MDExporter):
                 
                 # Use equation from layout_document if available
                 if equation_index < len(equation_blocks):
-                    formula_content = equation_blocks[equation_index]
+                    formula_content = equation_blocks[equation_index].get("content") or latex_content
                     equation_index += 1
                 else:
                     # Fallback to markdown content if layout doesn't have it
@@ -1306,9 +1320,29 @@ class MD2DOCXExporter(MDExporter):
                 # Render as LaTeX formula
                 self._add_math_formula(docx_doc, formula_content, display_mode=True)
             elif line.strip().startswith('$$') and self.equation_format == "image":
-                # Skip $$...$$ blocks when equation_format is "image" - formulas are already rendered as images
-                # Just skip to next line (formula images will be handled by image processing logic)
-                logger.debug(LogModule.EXPORT, f"[DOCX-EQUATION] Skipping $$...$$ block (equation_format=image, formula should be rendered as image)")
+                # Render equation as image from layout block (export setting: equation_format=image)
+                if equation_index < len(equation_blocks):
+                    eq_entry = equation_blocks[equation_index]
+                    equation_index += 1
+                    image_path = eq_entry.get("image_path")
+                    if image_path:
+                        filename = image_path.replace("\\", "/").split("/")[-1]
+                        inserted = self._add_image_from_markdown(docx_doc, f"![Equation]({filename})")
+                        if inserted:
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOCX-EQUATION] Inserted equation image from layout block: {filename}",
+                            )
+                        else:
+                            logger.warning(
+                                LogModule.EXPORT,
+                                f"[DOCX-EQUATION] Failed to insert equation image from layout block: {filename}",
+                            )
+                    else:
+                        logger.warning(
+                            LogModule.EXPORT,
+                            "[DOCX-EQUATION] equation_format=image but layout interline_equation has no image_path; skipping formula",
+                        )
                 # Skip the $$ line
                 i += 1
                 # Skip multi-line formula if needed
@@ -1738,7 +1772,7 @@ class MD2DOCXExporter(MDExporter):
         
         return table_rows if table_rows else []
     
-    def _add_image_from_markdown(self, docx_doc: DocxDocument, image_line: str, paragraph=None):
+    def _add_image_from_markdown(self, docx_doc: DocxDocument, image_line: str, paragraph=None) -> bool:
         """Add an image from markdown syntax or HTML img tag.
         
         Args:
@@ -1746,6 +1780,9 @@ class MD2DOCXExporter(MDExporter):
             image_line: Markdown image syntax ![alt](src) or HTML <img> tag
             paragraph: Optional existing paragraph to add the image run to (for side-by-side images).
                        If None, a new paragraph is created.
+
+        Returns:
+            True if an image was inserted, False otherwise.
         """
         import re
         import io
@@ -1782,14 +1819,14 @@ class MD2DOCXExporter(MDExporter):
 
         if not image_ref:
             logger.warning(LogModule.EXPORT, f"[DOCX-IMAGE] Could not extract image reference from: {image_line}")
-            return
+            return False
 
         # Shortcut: if the reference is already a data URI, decode directly and insert
         if isinstance(image_ref, str) and image_ref.startswith("data:image/"):
             try:
                 if "," not in image_ref:
                     logger.warning(LogModule.EXPORT, f"[DOCX-IMAGE] Invalid data URI (no comma): {image_ref[:50]}...")
-                    return
+                    return False
                 header, base64_data = image_ref.split(",", 1)
                 mime_type = header.split(";")[0].split(":")[1] if ":" in header else "image/png"
                 image_bytes = io.BytesIO(base64.b64decode(base64_data))
@@ -1806,7 +1843,7 @@ class MD2DOCXExporter(MDExporter):
                 
                 if original_width <= 0 or original_height <= 0:
                     logger.warning(LogModule.EXPORT, f"[DOCX-IMAGE] Invalid image size from data URI: {original_width}x{original_height}")
-                    return
+                    return False
                 
                 # Convert pixels to inches using actual DPI (or 96 DPI fallback)
                 width_inches = original_width / dpi
@@ -1818,10 +1855,10 @@ class MD2DOCXExporter(MDExporter):
                 run = para.add_run()
                 run.add_picture(image_bytes, width=Inches(width_inches), height=Inches(height_inches))
                 logger.info(LogModule.EXPORT, f"[DOCX-IMAGE] Successfully inserted image from data URI: alt_text={alt_text}, size={width_inches:.2f}\" x {height_inches:.2f}\"")
-                return
+                return True
             except Exception as e:
                 logger.warning(LogModule.EXPORT, f"[DOCX-IMAGE] Failed to decode data URI: {e}")
-                return
+                return False
         
         # Look up image data from image_data_map
         # Try direct match first
@@ -1903,13 +1940,13 @@ class MD2DOCXExporter(MDExporter):
                     logger.info(LogModule.EXPORT, f"[DOCX-IMAGE] Found image by direct filename match: {filename}")
             if not image_entry:
                 logger.warning(LogModule.EXPORT, f"[DOCX-IMAGE] Image data not found for reference (may be resolved by fallback): {image_ref}, alt_text: {alt_text}, filename: {filename}")
-                return
+                return False
         
         # Get image data
         data_uri = image_entry.get("data") if isinstance(image_entry, dict) else None
         if not data_uri or not data_uri.startswith("data:image/"):
             logger.warning(LogModule.EXPORT, f"[DOCX-IMAGE] Invalid image data URI for reference: {image_ref}")
-            return
+            return False
         
         try:
             # Decode base64 data
@@ -1935,7 +1972,7 @@ class MD2DOCXExporter(MDExporter):
             # This keeps formula and table images visually consistent with the source.
             if original_width <= 0 or original_height <= 0:
                 logger.warning(LogModule.EXPORT, f"[DOCX-IMAGE] Invalid image size for reference: {image_ref} ({original_width}x{original_height})")
-                return
+                return False
 
             # Convert pixels to inches using actual DPI (or 96 DPI fallback)
             width_inches = original_width / dpi
@@ -1952,9 +1989,11 @@ class MD2DOCXExporter(MDExporter):
             run.add_picture(image_bytes, width=Inches(width_inches))
             
             logger.info(LogModule.EXPORT, f"[DOCX-IMAGE] Successfully inserted image: reference={image_ref}, alt_text={alt_text}, width={width_inches:.2f} inches")
+            return True
         except Exception as e:
             logger.warning(LogModule.EXPORT, f"[DOCX-IMAGE] Failed to add image from {image_ref}: {e}")
-    
+            return False
+
     def _add_table(self, docx_doc: DocxDocument, table_data: List[List[str]]):
         """Add a table to the DOCX document.
         

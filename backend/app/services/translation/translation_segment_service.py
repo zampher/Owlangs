@@ -98,7 +98,7 @@ class TranslationSegmentService:
                         cache_segments = (task_state.get("source_chunks_cache") or {}).get("segments", [])
                         image_info = task_state.get("mobi_image_segments_info") or []
                         if cache_segments and image_info and segments_count == len(cache_segments):
-                            logger.info(
+                            logger.debug(
                                 LogModule.TRANS,
                                 f"[TRANSLATION-SEGMENT-SERVICE] Task {task_id}: MOBI segments exist ({segments_count}) but no image segments; injecting {len(image_info)} image segments"
                             )
@@ -138,18 +138,30 @@ class TranslationSegmentService:
                 # CRITICAL: DOCX workflow: record_translation_segments is called by DocxTranslator.translate_async()
                 # So we don't need to call it here (similar to XLSX workflow)
                 # The translator already records segments with correct excluded_segments and failure detection
-                logger.info(LogModule.TRANS, f"[TRANSLATION-SEGMENT-SERVICE] Task {task_id}: ensure_translation_segments COMPLETED - DOCX workflow - segments already recorded by DocxTranslator, skipping _record_docx_segments")
+                logger.debug(
+                    LogModule.TRANS,
+                    f"[TRANSLATION-SEGMENT-SERVICE] Task {task_id}: ensure_translation_segments COMPLETED - "
+                    f"DOCX workflow - segments already recorded by DocxTranslator, skipping _record_docx_segments"
+                )
                 return True
             elif workflow_type == "json" and hasattr(workflow, 'export_to_json'):
                 # CRITICAL: JSON workflow: record_translation_segments is called by JsonTranslator.translate_async()
                 # So we don't need to call it here (similar to DOCX/XLSX workflow)
                 # The translator already records segments with correct excluded_segments and failure detection
-                logger.info(LogModule.TRANS, f"[TRANSLATION-SEGMENT-SERVICE] Task {task_id}: ensure_translation_segments COMPLETED - JSON workflow - segments already recorded by JsonTranslator, skipping _record_json_segments")
+                logger.debug(
+                    LogModule.TRANS,
+                    f"[TRANSLATION-SEGMENT-SERVICE] Task {task_id}: ensure_translation_segments COMPLETED - "
+                    f"JSON workflow - segments already recorded by JsonTranslator, skipping _record_json_segments"
+                )
                 return True
             elif workflow_type == "xlsx" and hasattr(workflow, 'export_to_xlsx'):
                 # XLSX workflow: record_translation_segments is called by XlsxTranslator.translate()
                 # So we don't need to call it here
-                logger.info(LogModule.TRANS, f"[TRANSLATION-SEGMENT-SERVICE] Task {task_id}: ensure_translation_segments COMPLETED - XLSX workflow - segments already recorded by XlsxTranslator, skipping _record_xlsx_segments")
+                logger.debug(
+                    LogModule.TRANS,
+                    f"[TRANSLATION-SEGMENT-SERVICE] Task {task_id}: ensure_translation_segments COMPLETED - "
+                    f"XLSX workflow - segments already recorded by XlsxTranslator, skipping _record_xlsx_segments"
+                )
                 return True
             elif workflow_type == "pptx":
                 return self._record_pptx_segments(
@@ -184,7 +196,8 @@ class TranslationSegmentService:
                 return result
             else:
                 logger.debug(LogModule.TRANS, f"[TRANSLATION] Task {task_id}: No segment recording method for workflow_type={workflow_type}")
-                logger.info(LogModule.TRANS, f"[TRANSLATION-SEGMENT-SERVICE] Task {task_id}: ensure_translation_segments COMPLETED - No workflow-specific recording method found, returning False")
+                logger.debug(LogModule.TRANS, f"[TRANSLATION-SEGMENT-SERVICE] Task {task_id}: ensure_translation_segments COMPLETED - "
+                    f"No workflow-specific recording method found, returning False")
                 return False
         except Exception as e:
             logger.error(LogModule.TRANS, f"[TRANSLATION-SEGMENT-SERVICE] Task {task_id}: ensure_translation_segments FAILED - Recording translation segments failed: {e}", exc_info=True)

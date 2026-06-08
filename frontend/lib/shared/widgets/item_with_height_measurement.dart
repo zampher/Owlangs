@@ -60,9 +60,8 @@ class _ItemWithHeightMeasurementState extends State<ItemWithHeightMeasurement> {
   }
 
   void _measureHeight() {
-    if (widget.itemKey == null) return;
-
-    final BuildContext? context = widget.itemKey!.currentContext;
+    if (!mounted) return;
+    final BuildContext? context = widget.itemKey?.currentContext ?? this.context;
     if (context == null) return;
 
     final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
@@ -77,7 +76,7 @@ class _ItemWithHeightMeasurementState extends State<ItemWithHeightMeasurement> {
       final double heightChange = (measuredHeight - _lastMeasuredHeight!).abs();
       // If height changed significantly (e.g., edit mode switch), update cache
       if (heightChange >= widget.minHeightDiff) {
-        widget.heightCache.setHeight(widget.index, measuredHeight);
+        widget.heightCache.recordMeasuredHeight(widget.index, measuredHeight);
         _lastMeasuredHeight = measuredHeight;
       }
     } else {
@@ -89,9 +88,9 @@ class _ItemWithHeightMeasurementState extends State<ItemWithHeightMeasurement> {
       // Only update cache if difference is >= minHeightDiff (avoid small calculation errors)
       if (heightDiff >= widget.minHeightDiff) {
         // Pass predicted height to calculate correction factor
-        widget.heightCache.measureAndCacheHeight(
+        widget.heightCache.recordMeasuredHeight(
           widget.index,
-          widget.itemKey,
+          measuredHeight,
           predictedHeight: preCalculatedHeight,
         );
       }
@@ -106,9 +105,11 @@ class _ItemWithHeightMeasurementState extends State<ItemWithHeightMeasurement> {
     // The _measureHeight method will check if height actually changed before updating cache
     // Use multiple frames to ensure accurate measurement after layout changes
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _measureHeight();
       // Also measure in next frame to catch delayed layout changes (e.g., edit mode switch)
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         _measureHeight();
       });
     });

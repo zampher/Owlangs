@@ -6,24 +6,6 @@
   },
   "parsing_engine": {
     "default_engine": "mineru",
-    "engines": {
-      "mineru": {
-        "name": "MinerU",
-        "model": "vlm",
-        "api_url": "https://mineru.net/api/v4",
-        "model_version": "vlm"
-      },
-      "docling": {
-        "name": "Docling",
-        "model": "docling",
-        "type": "docling"
-      },
-      "identity": {
-        "name": "Identity",
-        "model": "identity",
-        "type": "identity"
-      }
-    },
     "default_engine_settings": {
       "formula_ocr": false,
       "skip_translate": false,

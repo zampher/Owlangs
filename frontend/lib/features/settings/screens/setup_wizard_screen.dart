@@ -29,17 +29,17 @@ class SetupWizardScreen extends ConsumerStatefulWidget {
 
 class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   int _currentStep = 0;
-  bool _needsPdfTranslation = true;
+
   String? _selectedPlatformKey;
 
   // MinerU platform selection
   String _selectedMineruPlatform = 'mineru'; // 'mineru' or 'mineru_local'
+  bool _mineruPlatformSelectionInitialized = false;
 
   // MinerU Cloud config state (embedded form)
   late TextEditingController _mineruNameController;
   late TextEditingController _mineruApiKeyController;
   late TextEditingController _mineruApiUrlController;
-  late TextEditingController _mineruModelVersionController;
   late TextEditingController _mineruParserSubtypeController;
   bool _mineruObscureText = true;
   bool _mineruHasApiKey = true;  // Whether MinerU Cloud requires API key
@@ -75,7 +75,13 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   late TextEditingController _llmTemperatureController;
   late TextEditingController _llmChunkSizeController;
   late TextEditingController _llmConcurrentController;
+  late TextEditingController _llmTimeoutController;
+  late TextEditingController _llmWriteTimeoutController;
+  late TextEditingController _llmTestConnectTimeoutController;
+  late TextEditingController _llmTestRequestTimeoutController;
+  bool _llmThinkingModeSupported = false;  // Whether this platform supports thinking mode
   String _llmThinkingMode = 'disable';
+  int _llmSegmentLimit = 100;  // Max segments per translation batch (0 = unlimited)
   String _llmApiProtocol = 'openai';  // API protocol: openai, ollama, anthropic
   bool _llmHasApiKey = true;  // Whether platform has API key (if false, API key is optional)
   late final FocusNode _llmTemperatureFocusNode;
@@ -157,13 +163,12 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _mineruNameController = TextEditingController();
     _mineruApiKeyController = TextEditingController();
     _mineruApiUrlController = TextEditingController();
-    _mineruModelVersionController = TextEditingController(text: 'vlm');
     _mineruParserSubtypeController = TextEditingController(text: 'cloud');
     // Local MinerU controllers
     _mineruLocalNameController = TextEditingController();
     _mineruLocalApiKeyController = TextEditingController();
     _mineruLocalApiUrlController = TextEditingController();
-    _mineruLocalModelVersionController = TextEditingController(text: 'vlm');
+    _mineruLocalModelVersionController = TextEditingController(text: 'hybrid-auto-engine');
     _mineruLocalParserSubtypeController = TextEditingController(text: 'local');
     // LLM controllers
     _llmNameController = TextEditingController();
@@ -174,6 +179,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _llmTemperatureController = TextEditingController(text: '0.3');
     _llmChunkSizeController = TextEditingController(text: '3000');
     _llmConcurrentController = TextEditingController(text: '5');
+    _llmTimeoutController = TextEditingController(text: '200');
+    _llmWriteTimeoutController = TextEditingController(text: '300');
+    _llmTestConnectTimeoutController = TextEditingController(text: '30');
+    _llmTestRequestTimeoutController = TextEditingController(text: '10');
     _llmTemperatureFocusNode = FocusNode();
     _llmTemperatureFocusNode.addListener(() {
       setState(() {
@@ -188,7 +197,6 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _mineruNameController.dispose();
     _mineruApiKeyController.dispose();
     _mineruApiUrlController.dispose();
-    _mineruModelVersionController.dispose();
     _mineruParserSubtypeController.dispose();
     // Local MinerU controllers
     _mineruLocalNameController.dispose();
@@ -205,9 +213,21 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _llmTemperatureController.dispose();
     _llmChunkSizeController.dispose();
     _llmConcurrentController.dispose();
+    _llmTimeoutController.dispose();
+    _llmWriteTimeoutController.dispose();
+    _llmTestConnectTimeoutController.dispose();
+    _llmTestRequestTimeoutController.dispose();
     _llmTemperatureFocusNode.dispose();
     super.dispose();
   }
+
+  /// Migrate old model version short names to official MinerU 3.2 names.
+  static const Map<String, String> _migrationMap = {
+    'vlm': 'vlm-auto-engine',
+    'hybrid': 'hybrid-auto-engine',
+  };
+  static String _normalizeModelVersion(String mv) =>
+      _migrationMap[mv] ?? mv;
 
   void _nextStep() {
     setState(() {
@@ -236,6 +256,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _ensureMineruLocalInitialValues(aiSettings);
     _ensureSelectedPlatformInitialized(aiSettings);
     final GlobalSettings globalSettings = ref.watch(globalSettingsProvider);
+    _ensureMineruPlatformSelectionInitialized(globalSettings);
     final GlobalSettingsNotifier globalNotifier =
         ref.read(globalSettingsProvider.notifier);
 
@@ -255,19 +276,20 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         ],
       ),
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 900),
-            child: Card(
-              elevation: 4,
-              margin: const EdgeInsets.all(16),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
+        child: Column(
+          children: <Widget>[
+            Expanded(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1100),
+                  child: Card(
+                    elevation: 4,
+                    margin: const EdgeInsets.all(16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    _buildStepHeader(),
-                    const SizedBox(height: 16),
                     Expanded(
                       child: SingleChildScrollView(
                         child: _buildStepContent(
@@ -279,38 +301,159 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    _buildStepActions(aiSettings, aiNotifier),
+                    const SizedBox(height: 12),
+                    _buildStepHeader(aiSettings, aiNotifier),
                   ],
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildStepHeader() {
+  Widget _buildStepHeader(
+    AIPlatformSettings aiSettings,
+    AIPlatformSettingsNotifier aiNotifier,
+  ) {
     final l10n = AppLocalizations.of(context)!;
     final titles = <String>[
       l10n.setupWizardStepWelcome,
       l10n.aiPlatformCategoryLanguageModels,
       l10n.setupWizardStepMineru,
     ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final bool isLast = _currentStep == 2;
+    final bool isLLMStep = _currentStep == 1;
+    final bool isMineruStep = _currentStep == 2;
+    final bool hasTest = isLLMStep || isMineruStep;
+    final bool isTesting = isLLMStep
+        ? _llmIsTestingConnection
+        : isMineruStep
+            ? (_selectedMineruPlatform == 'mineru'
+                ? _mineruIsTestingConnection
+                : _mineruLocalIsTestingConnection)
+            : false;
+
+    // Determine current step's test result
+    String? testResult;
+    bool? testSuccess;
+    if (isLLMStep) {
+      testResult = _llmTestResult;
+      testSuccess = _llmLastTestSuccess;
+    } else if (isMineruStep) {
+      if (_selectedMineruPlatform == 'mineru') {
+        testResult = _mineruTestResult;
+        testSuccess = _mineruLastTestSuccess;
+      } else {
+        testResult = _mineruLocalTestResult;
+        testSuccess = _mineruLocalLastTestSuccess;
+      }
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
-        Text(
-          titles[_currentStep],
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
+        // Previous button (hidden on first step)
+        if (_currentStep > 0)
+          TextButton(
+            onPressed: _prevStep,
+            child: Text(l10n.setupWizardPrevStep),
+          )
+        else
+          const SizedBox(width: 8),
+        const SizedBox(width: 12),
+        // Title + test result + progress bar
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Flexible(
+                    child: Text(
+                      titles[_currentStep],
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  if (hasTest && testResult != null) ...[
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (testSuccess ?? false)
+                              ? Colors.green.shade50
+                              : Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: (testSuccess ?? false)
+                                ? Colors.green.shade300
+                                : Colors.red.shade300,
+                          ),
+                        ),
+                        child: Text(
+                          testResult!,
+                          style: TextStyle(
+                            color: (testSuccess ?? false)
+                                ? Colors.green.shade700
+                                : Colors.red.shade700,
+                            fontSize: 11,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 4),
+              LinearProgressIndicator(
+                value: (_currentStep + 1) / 3,
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 8),
-        LinearProgressIndicator(
-          value: (_currentStep + 1) / 3,
+        const SizedBox(width: 12),
+        // Test Connection button
+        if (hasTest)
+          OutlinedButton(
+            onPressed: isTesting
+                ? null
+                : () {
+                    if (isLLMStep) {
+                      _testLlmConnection(aiNotifier);
+                    } else if (isMineruStep) {
+                      if (_selectedMineruPlatform == 'mineru') {
+                        _testMineruConnection(aiNotifier);
+                      } else {
+                        _testMineruLocalConnection(aiNotifier);
+                      }
+                    }
+                  },
+            child: isTesting
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(l10n.aiPlatformTestConnection),
+          ),
+        if (hasTest) const SizedBox(width: 8),
+        // Next / Save & Exit button
+        FilledButton(
+          onPressed:
+              isLast ? () => _saveAndExit(aiSettings, aiNotifier) : _nextStep,
+          child: Text(
+              isLast ? l10n.setupWizardSaveAndExit : l10n.setupWizardNextStep,),
         ),
       ],
     );
@@ -347,7 +490,13 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _llmTemperatureController.text = p.temperature.toString();
     _llmChunkSizeController.text = p.chunkSize.toString();
     _llmConcurrentController.text = p.concurrent.toString();
+    _llmTimeoutController.text = p.timeout.toString();
+    _llmWriteTimeoutController.text = p.writeTimeout.toString();
+    _llmTestConnectTimeoutController.text = p.testConnectTimeout.toString();
+    _llmTestRequestTimeoutController.text = p.testRequestTimeout.toString();
+    _llmThinkingModeSupported = p.thinkingModeSupported;
     _llmThinkingMode = p.thinkingMode;
+    _llmSegmentLimit = p.segmentLimit;
     _llmApiProtocol = p.apiProtocol;
     _llmHasApiKey = p.requiresApiKey;
   }
@@ -380,9 +529,6 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       _mineruNameController.text = mineru.name;
       _mineruApiKeyController.text = mineru.apiKey ?? '';
       _mineruApiUrlController.text = mineru.url;
-      // Model version: load from saved config or use default
-      _mineruModelVersionController.text =
-          mineru.model.isNotEmpty ? mineru.model : 'vlm';
       // Parser subtype: default to 'cloud' for cloud MinerU
       _mineruParserSubtypeController.text = mineru.parserSubtype ?? 'cloud';
       // Requires API key: load from saved config (default true for cloud)
@@ -400,13 +546,22 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       _mineruLocalApiUrlController.text = mineruLocal.url;
       // Model version: load from saved config or use default
       _mineruLocalModelVersionController.text =
-          mineruLocal.model.isNotEmpty ? mineruLocal.model : 'vlm';
+          _normalizeModelVersion(mineruLocal.model.isNotEmpty ? mineruLocal.model : 'hybrid-auto-engine');
       // Parser subtype: default to 'local' for local MinerU
       _mineruLocalParserSubtypeController.text = mineruLocal.parserSubtype ?? 'local';
       // Requires API key: load from saved config (default false for local)
       _mineruLocalHasApiKey = mineruLocal.requiresApiKey;
     }
     _mineruLocalInitializedFromSettings = true;
+  }
+
+  void _ensureMineruPlatformSelectionInitialized(GlobalSettings globalSettings) {
+    if (_mineruPlatformSelectionInitialized) return;
+    final engine = globalSettings.parsingEngine;
+    if (engine == 'mineru' || engine == 'mineru_local') {
+      _selectedMineruPlatform = engine;
+    }
+    _mineruPlatformSelectionInitialized = true;
   }
 
   void _ensureSelectedPlatformInitialized(AIPlatformSettings settings) {
@@ -431,37 +586,50 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   ) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
+        // MinerU Platform Selection
         Text(
-          l10n.setupWizardMineruQuestion,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          l10n.setupWizardSelectMineruPlatform,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
         ),
-        const SizedBox(height: 8),
-        RadioListTile<bool>(
-          title: Text(l10n.setupWizardMineruYes),
-          value: true,
-          groupValue: _needsPdfTranslation,
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          initialValue: _selectedMineruPlatform,
+          decoration: InputDecoration(
+            labelText: l10n.setupWizardSelectMineruPlatform,
+            border: const OutlineInputBorder(),
+            labelStyle: const TextStyle(fontSize: 12),
+            hintStyle: const TextStyle(fontSize: 11),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          ),
+          items: <DropdownMenuItem<String>>[
+            DropdownMenuItem<String>(
+              value: 'mineru',
+              child: Text(l10n.setupWizardMineruCloudOption),
+            ),
+            DropdownMenuItem<String>(
+              value: 'mineru_local',
+              child: Text(l10n.setupWizardMineruLocalOption),
+            ),
+          ],
           onChanged: (value) {
             if (value == null) return;
             setState(() {
-              _needsPdfTranslation = value;
-            });
-          },
-        ),
-        RadioListTile<bool>(
-          title: Text(l10n.setupWizardMineruNo),
-          value: false,
-          groupValue: _needsPdfTranslation,
-          onChanged: (value) {
-            if (value == null) return;
-            setState(() {
-              _needsPdfTranslation = value;
+              _selectedMineruPlatform = value;
             });
           },
         ),
         const SizedBox(height: 16),
-        if (_needsPdfTranslation) ...<Widget>[
-          Container(
-            padding: const EdgeInsets.all(12),
+        // Show config form based on selected platform
+        if (_selectedMineruPlatform == 'mineru')
+          _buildEmbeddedMineruCloudForm(settings, notifier)
+        else
+          _buildEmbeddedMineruLocalForm(settings, notifier),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.blue.shade50,
               borderRadius: BorderRadius.circular(8),
@@ -469,59 +637,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ),
             child: Text(
               l10n.setupWizardMineruDescription,
-              style: const TextStyle(fontSize: 13),
+              style: const TextStyle(fontSize: 12),
             ),
           ),
-          const SizedBox(height: 16),
-          // MinerU Platform Selection
-          Text(
-            l10n.setupWizardSelectMineruPlatform,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            initialValue: _selectedMineruPlatform,
-            decoration: InputDecoration(
-              labelText: l10n.setupWizardSelectMineruPlatform,
-              border: const OutlineInputBorder(),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            ),
-            items: <DropdownMenuItem<String>>[
-              DropdownMenuItem<String>(
-                value: 'mineru',
-                child: Text(l10n.setupWizardMineruCloudOption),
-              ),
-              DropdownMenuItem<String>(
-                value: 'mineru_local',
-                child: Text(l10n.setupWizardMineruLocalOption),
-              ),
-            ],
-            onChanged: (value) {
-              if (value == null) return;
-              setState(() {
-                _selectedMineruPlatform = value;
-              });
-            },
-          ),
-          const SizedBox(height: 16),
-          // Show config form based on selected platform
-          if (_selectedMineruPlatform == 'mineru')
-            _buildEmbeddedMineruCloudForm(settings, notifier)
-          else
-            _buildEmbeddedMineruLocalForm(settings, notifier),
-        ] else
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              l10n.setupWizardMineruSkipped,
-              style: const TextStyle(fontSize: 13),
-            ),
-          ),
+        ),
       ],
     );
 
@@ -545,7 +664,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           children: <Widget>[
             Text(
               l10n.setupWizardMineruConfigTitle,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
             ),
             const SizedBox(width: 12),
             Icon(Icons.circle, size: 10, color: statusColor),
@@ -561,119 +680,93 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (mineruTokenLink != null &&
-                mineruTokenLink.isNotEmpty) ...<Widget>[
-              const SizedBox(width: 8),
-              TextButton.icon(
-                onPressed: () => _openApiKeyUrl(mineruTokenLink),
-                icon: Icon(Icons.link, size: 16, color: Colors.blue.shade700),
-                label: Text(
-                  l10n.aiPlatformGetApiKey,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.blue.shade700,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
-                style: TextButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  minimumSize: const Size(0, 28),
-                ),
-              ),
-            ],
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            // Left column
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  TextFormField(
-                    controller: _mineruNameController,
-                    decoration: InputDecoration(
-                      labelText: l10n.aiPlatformDisplayName,
-                      hintText: 'MinerU (Cloud)',
-                      prefixIcon: const Icon(Icons.label_outline),
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _mineruApiUrlController,
-                    decoration: InputDecoration(
-                      labelText: l10n.aiPlatformApiUrl,
-                      hintText: l10n.aiPlatformMineruApiUrlHint,
-                      prefixIcon: const Icon(Icons.link),
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _mineruModelVersionController,
-                    decoration: InputDecoration(
-                      labelText: l10n.aiPlatformModelVersion,
-                      hintText: l10n.aiPlatformModelVersionHint,
-                      prefixIcon: const Icon(Icons.schema_outlined),
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: _mineruParserSubtypeController.text.isNotEmpty
-                        ? _mineruParserSubtypeController.text
-                        : 'cloud',
-                    decoration: InputDecoration(
-                      labelText: l10n.aiPlatformParserSubtype,
-                      prefixIcon: const Icon(Icons.category_outlined),
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                    items: <DropdownMenuItem<String>>[
-                      DropdownMenuItem<String>(
-                        value: 'cloud',
-                        child: Text(l10n.aiPlatformParserSubtypeCloud),
-                      ),
-                      DropdownMenuItem<String>(
-                        value: 'local',
-                        child: Text(l10n.aiPlatformParserSubtypeLocal),
-                      ),
-                    ],
-                    onChanged: (String? value) {
-                      if (value != null) {
-                        _mineruParserSubtypeController.text = value;
-                      }
-                    },
-                  ),
-                ],
+              child: TextFormField(
+                controller: _mineruNameController,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformDisplayName,
+                  hintText: 'MinerU (Cloud)',
+                  prefixIcon: const Icon(Icons.label_outline),
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
               ),
             ),
-            const SizedBox(width: 16),
-            // Right column
+            const SizedBox(width: 8),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  _buildMineruHasApiKeySwitch(l10n),
-                  const SizedBox(height: 8),
-                  _wrapIfUnavailable(
-                    showUnavailableHint && _mineruHasApiKey,
-                    child: TextFormField(
+              child: DropdownButtonFormField<String>(
+                initialValue: _mineruParserSubtypeController.text.isNotEmpty
+                    ? _mineruParserSubtypeController.text
+                    : 'cloud',
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformParserSubtype,
+                  prefixIcon: const Icon(Icons.category_outlined),
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+                items: <DropdownMenuItem<String>>[
+                  DropdownMenuItem<String>(
+                    value: 'cloud',
+                    child: Text(l10n.aiPlatformParserSubtypeCloud),
+                  ),
+                  DropdownMenuItem<String>(
+                    value: 'local',
+                    child: Text(l10n.aiPlatformParserSubtypeLocal),
+                  ),
+                ],
+                onChanged: (String? value) {
+                  if (value != null) {
+                    _mineruParserSubtypeController.text = value;
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        _wrapIfUnavailable(
+          showUnavailableHint && _mineruHasApiKey,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    TextFormField(
+                      controller: _mineruApiUrlController,
+                      decoration: InputDecoration(
+                        labelText: l10n.aiPlatformApiUrl,
+                        hintText: l10n.aiPlatformMineruApiUrlHint,
+                        prefixIcon: const Icon(Icons.link),
+                        border: const OutlineInputBorder(),
+                        labelStyle: const TextStyle(fontSize: 12),
+                        hintStyle: const TextStyle(fontSize: 11),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    _buildMineruHasApiKeySwitch(l10n, tokenLink: mineruTokenLink),
+                    const SizedBox(height: 6),
+                    TextFormField(
                       controller: _mineruApiKeyController,
                       obscureText: _mineruObscureText,
                       decoration: InputDecoration(
-                        labelText: _mineruHasApiKey 
-                            ? l10n.aiPlatformApiKey 
+                        labelText: _mineruHasApiKey
+                            ? l10n.aiPlatformApiKey
                             : '${l10n.aiPlatformApiKey} (${l10n.optional})',
-                        hintText: _mineruHasApiKey 
-                            ? l10n.aiPlatformEnterMineruApiKey 
+                        hintText: _mineruHasApiKey
+                            ? l10n.aiPlatformEnterMineruApiKey
                             : l10n.aiPlatformApiKeyOptionalHint,
                         prefixIcon: const Icon(Icons.key),
                         suffixIcon: IconButton(
@@ -687,131 +780,42 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                           },
                         ),
                         border: const OutlineInputBorder(),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                      ),
-                    ),
-                  ),
-                  SwitchListTile.adaptive(
-                    title: Text(l10n.aiPlatformFormulaOcr),
-                    subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle),
-                    value: _mineruFormulaOcr,
-                    onChanged: (bool value) {
-                      setState(() {
-                        _mineruFormulaOcr = value;
-                      });
-                    },
-                  ),
-                  SwitchListTile.adaptive(
-                    title: Text(l10n.aiPlatformTableOcr),
-                    subtitle: Text(l10n.aiPlatformTableOcrSubtitle),
-                    value: _mineruTableOcr,
-                    onChanged: (bool value) {
-                      setState(() {
-                        _mineruTableOcr = value;
-                      });
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (_mineruTestResult != null) ...<Widget>[
-          Builder(
-            builder: (BuildContext ctx) {
-              final bool isSuccess = _mineruLastTestSuccess ?? false;
-              final Color bgColor =
-                  isSuccess ? Colors.green.shade50 : Colors.red.shade50;
-              final Color borderColor =
-                  isSuccess ? Colors.green.shade300 : Colors.red.shade300;
-              final Color contentColor =
-                  isSuccess ? Colors.green.shade700 : Colors.red.shade700;
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: bgColor,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: borderColor),
-                ),
-                child: Row(
-                  children: <Widget>[
-                    Icon(
-                      isSuccess ? Icons.check_circle : Icons.error,
-                      color: contentColor,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: SelectableText(
-                        _mineruTestResult!,
-                        style: TextStyle(
-                          color: contentColor,
-                          fontSize: 12,
-                        ),
+                        labelStyle: const TextStyle(fontSize: 12),
+                        hintStyle: const TextStyle(fontSize: 11),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       ),
                     ),
                   ],
                 ),
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-        ],
-        _wrapIfUnavailable(
-          showUnavailableHint,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: <Widget>[
-              if (showUnavailableHint) ...<Widget>[
-                Expanded(
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.orange.shade300),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  children: <Widget>[
+                    SwitchListTile.adaptive(
+                      dense: true,
+                      title: Text(l10n.aiPlatformFormulaOcr, style: const TextStyle(fontSize: 13)),
+                      subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle, style: const TextStyle(fontSize: 11)),
+                      value: _mineruFormulaOcr,
+                      onChanged: (bool value) {
+                        setState(() {
+                          _mineruFormulaOcr = value;
+                        });
+                      },
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Icon(Icons.warning_amber_rounded,
-                            color: Colors.orange.shade700, size: 18,),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            l10n.localeName == 'zh'
-                                ? '当前连接不可用，请配置 API URL 并点击「测试连接」以确认平台可用。'
-                                : l10n.localeName == 'ja'
-                                    ? '接続不可。API URL を設定し「接続テスト」をクリックして確認してください。'
-                                    : l10n.localeName == 'ko'
-                                        ? '연결 불가. API URL을 설정하고 "연결 테스트"를 클릭하여 확인하세요.'
-                                        : 'Connection unavailable. Please configure API URL and click "Test Connection" to verify.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.orange.shade900,
-                            ),
-                          ),
-                        ),
-                      ],
+                    SwitchListTile.adaptive(
+                      dense: true,
+                      title: Text(l10n.aiPlatformTableOcr, style: const TextStyle(fontSize: 13)),
+                      subtitle: Text(l10n.aiPlatformTableOcrSubtitle, style: const TextStyle(fontSize: 11)),
+                      value: _mineruTableOcr,
+                      onChanged: (bool value) {
+                        setState(() {
+                          _mineruTableOcr = value;
+                        });
+                      },
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-              ],
-              OutlinedButton(
-                onPressed: _mineruIsTestingConnection
-                    ? null
-                    : () => _testMineruConnection(notifier),
-                child: _mineruIsTestingConnection
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(l10n.aiPlatformTestConnection),
               ),
             ],
           ),
@@ -829,7 +833,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     final Color statusColor = _platformStatusColor(mineruLocal);
     final String statusText = _platformStatusText(mineruLocal, l10n);
     // Hide unavailable hint if connection test was successful
-    final bool showUnavailableHint = _platformConnectionUnavailable(mineruLocal) && 
+    final bool showUnavailableHint = _platformConnectionUnavailable(mineruLocal) &&
         (_mineruLocalLastTestSuccess != true);
 
     return Column(
@@ -839,7 +843,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           children: <Widget>[
             Text(
               l10n.setupWizardMineruConfigTitle,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
             ),
             const SizedBox(width: 12),
             Icon(Icons.circle, size: 10, color: statusColor),
@@ -857,231 +861,163 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            // Left column
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  TextFormField(
-                    controller: _mineruLocalNameController,
-                    decoration: InputDecoration(
-                      labelText: l10n.aiPlatformDisplayName,
-                      hintText: 'MinerU (Local)',
-                      prefixIcon: const Icon(Icons.label_outline),
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _mineruLocalApiUrlController,
-                    decoration: InputDecoration(
-                      labelText: l10n.aiPlatformApiUrl,
-                      hintText: 'http://localhost:8920',
-                      prefixIcon: const Icon(Icons.link),
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _mineruLocalModelVersionController,
-                    decoration: InputDecoration(
-                      labelText: l10n.aiPlatformModelVersion,
-                      hintText: l10n.aiPlatformModelVersionHint,
-                      prefixIcon: const Icon(Icons.schema_outlined),
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: _mineruLocalParserSubtypeController.text.isNotEmpty
-                        ? _mineruLocalParserSubtypeController.text
-                        : 'local',
-                    decoration: InputDecoration(
-                      labelText: l10n.aiPlatformParserSubtype,
-                      prefixIcon: const Icon(Icons.category_outlined),
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                    items: <DropdownMenuItem<String>>[
-                      DropdownMenuItem<String>(
-                        value: 'cloud',
-                        child: Text(l10n.aiPlatformParserSubtypeCloud),
-                      ),
-                      DropdownMenuItem<String>(
-                        value: 'local',
-                        child: Text(l10n.aiPlatformParserSubtypeLocal),
-                      ),
-                    ],
-                    onChanged: (String? value) {
-                      if (value != null) {
-                        _mineruLocalParserSubtypeController.text = value;
-                      }
-                    },
-                  ),
-                ],
+              child: TextFormField(
+                controller: _mineruLocalNameController,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformDisplayName,
+                  hintText: 'MinerU (Local)',
+                  prefixIcon: const Icon(Icons.label_outline),
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
               ),
             ),
-            const SizedBox(width: 16),
-            // Right column
+            const SizedBox(width: 8),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  _buildMineruLocalHasApiKeySwitch(l10n),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _mineruLocalApiKeyController,
-                    obscureText: _mineruLocalObscureText,
-                    decoration: InputDecoration(
-                      labelText: _mineruLocalHasApiKey 
-                          ? l10n.aiPlatformApiKey 
-                          : '${l10n.aiPlatformApiKey} (${l10n.optional})',
-                      hintText: _mineruLocalHasApiKey 
-                          ? l10n.aiPlatformEnterMineruApiKey 
-                          : l10n.aiPlatformApiKeyOptionalHint,
-                      prefixIcon: const Icon(Icons.key),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _mineruLocalObscureText ? Icons.visibility : Icons.visibility_off,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _mineruLocalObscureText = !_mineruLocalObscureText;
-                          });
-                        },
-                      ),
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                  ),
-                  SwitchListTile.adaptive(
-                    title: Text(l10n.aiPlatformFormulaOcr),
-                    subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle),
-                    value: _mineruLocalFormulaOcr,
-                    onChanged: (bool value) {
-                      setState(() {
-                        _mineruLocalFormulaOcr = value;
-                      });
-                    },
-                  ),
-                  SwitchListTile.adaptive(
-                    title: Text(l10n.aiPlatformTableOcr),
-                    subtitle: Text(l10n.aiPlatformTableOcrSubtitle),
-                    value: _mineruLocalTableOcr,
-                    onChanged: (bool value) {
-                      setState(() {
-                        _mineruLocalTableOcr = value;
-                      });
-                    },
-                  ),
+              child: DropdownButtonFormField<String>(
+                value: _mineruLocalModelVersionController.text,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformModelVersion,
+                  prefixIcon: const Icon(Icons.schema_outlined),
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+                items: const <DropdownMenuItem<String>>[
+                  DropdownMenuItem(value: 'pipeline', child: Text('pipeline')),
+                  DropdownMenuItem(value: 'vlm-auto-engine', child: Text('vlm-auto-engine')),
+                  DropdownMenuItem(value: 'hybrid-auto-engine', child: Text('hybrid-auto-engine')),
+                  DropdownMenuItem(value: 'vlm-http-client', child: Text('vlm-http-client')),
+                  DropdownMenuItem(value: 'hybrid-http-client', child: Text('hybrid-http-client')),
                 ],
+                onChanged: (String? value) {
+                  if (value != null) {
+                    _mineruLocalModelVersionController.text = value;
+                  }
+                },
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        if (_mineruLocalTestResult != null) ...<Widget>[
-          Builder(
-            builder: (BuildContext ctx) {
-              final bool isSuccess = _mineruLocalLastTestSuccess ?? false;
-              final Color bgColor =
-                  isSuccess ? Colors.green.shade50 : Colors.red.shade50;
-              final Color borderColor =
-                  isSuccess ? Colors.green.shade300 : Colors.red.shade300;
-              final Color contentColor =
-                  isSuccess ? Colors.green.shade700 : Colors.red.shade700;
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: bgColor,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: borderColor),
-                ),
-                child: Row(
+        const SizedBox(height: 6),
+        _wrapIfUnavailable(
+          showUnavailableHint && _mineruLocalHasApiKey,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Icon(
-                      isSuccess ? Icons.check_circle : Icons.error,
-                      color: contentColor,
-                      size: 20,
+                    TextFormField(
+                      controller: _mineruLocalApiUrlController,
+                      decoration: InputDecoration(
+                        labelText: l10n.aiPlatformApiUrl,
+                        hintText: 'http://localhost:8920',
+                        prefixIcon: const Icon(Icons.link),
+                        border: const OutlineInputBorder(),
+                        labelStyle: const TextStyle(fontSize: 12),
+                        hintStyle: const TextStyle(fontSize: 11),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: SelectableText(
-                        _mineruLocalTestResult!,
-                        style: TextStyle(
-                          color: contentColor,
-                          fontSize: 12,
+                    const SizedBox(height: 6),
+                    _buildMineruLocalHasApiKeySwitch(l10n),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      controller: _mineruLocalApiKeyController,
+                      obscureText: _mineruLocalObscureText,
+                      decoration: InputDecoration(
+                        labelText: _mineruLocalHasApiKey
+                            ? l10n.aiPlatformApiKey
+                            : '${l10n.aiPlatformApiKey} (${l10n.optional})',
+                        hintText: _mineruLocalHasApiKey
+                            ? l10n.aiPlatformEnterMineruApiKey
+                            : l10n.aiPlatformApiKeyOptionalHint,
+                        prefixIcon: const Icon(Icons.key),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _mineruLocalObscureText ? Icons.visibility : Icons.visibility_off,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _mineruLocalObscureText = !_mineruLocalObscureText;
+                            });
+                          },
                         ),
+                        border: const OutlineInputBorder(),
+                        labelStyle: const TextStyle(fontSize: 12),
+                        hintStyle: const TextStyle(fontSize: 11),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       ),
                     ),
                   ],
                 ),
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-        ],
-        _wrapIfUnavailable(
-          showUnavailableHint,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: <Widget>[
-              if (showUnavailableHint) ...<Widget>[
-                Expanded(
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.orange.shade300),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Icon(Icons.warning_amber_rounded,
-                            color: Colors.orange.shade700, size: 18,),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            l10n.localeName == 'zh'
-                                ? '当前连接不可用，请配置 API URL 并点击「测试连接」以确认平台可用。'
-                                : l10n.localeName == 'ja'
-                                    ? '接続不可。API URL を設定し「接続テスト」をクリックして確認してください。'
-                                    : l10n.localeName == 'ko'
-                                        ? '연결 불가. API URL을 설정하고 "연결 테스트"를 클릭하여 확인하세요.'
-                                        : 'Connection unavailable. Please configure API URL and click "Test Connection" to verify.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.orange.shade900,
-                            ),
-                          ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  children: <Widget>[
+                    DropdownButtonFormField<String>(
+                      initialValue: _mineruLocalParserSubtypeController.text.isNotEmpty
+                          ? _mineruLocalParserSubtypeController.text
+                          : 'local',
+                      decoration: InputDecoration(
+                        labelText: l10n.aiPlatformParserSubtype,
+                        prefixIcon: const Icon(Icons.category_outlined),
+                        border: const OutlineInputBorder(),
+                        labelStyle: const TextStyle(fontSize: 12),
+                        hintStyle: const TextStyle(fontSize: 11),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      ),
+                      items: <DropdownMenuItem<String>>[
+                        DropdownMenuItem<String>(
+                          value: 'cloud',
+                          child: Text(l10n.aiPlatformParserSubtypeCloud),
+                        ),
+                        DropdownMenuItem<String>(
+                          value: 'local',
+                          child: Text(l10n.aiPlatformParserSubtypeLocal),
                         ),
                       ],
+                      onChanged: (String? value) {
+                        if (value != null) {
+                          _mineruLocalParserSubtypeController.text = value;
+                        }
+                      },
                     ),
-                  ),
+                    SwitchListTile.adaptive(
+                      dense: true,
+                      title: Text(l10n.aiPlatformFormulaOcr, style: const TextStyle(fontSize: 13)),
+                      subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle, style: const TextStyle(fontSize: 11)),
+                      value: _mineruLocalFormulaOcr,
+                      onChanged: (bool value) {
+                        setState(() {
+                          _mineruLocalFormulaOcr = value;
+                        });
+                      },
+                    ),
+                    SwitchListTile.adaptive(
+                      dense: true,
+                      title: Text(l10n.aiPlatformTableOcr, style: const TextStyle(fontSize: 13)),
+                      subtitle: Text(l10n.aiPlatformTableOcrSubtitle, style: const TextStyle(fontSize: 11)),
+                      value: _mineruLocalTableOcr,
+                      onChanged: (bool value) {
+                        setState(() {
+                          _mineruLocalTableOcr = value;
+                        });
+                      },
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-              ],
-              OutlinedButton(
-                onPressed: _mineruLocalIsTestingConnection
-                    ? null
-                    : () => _testMineruLocalConnection(notifier),
-                child: _mineruLocalIsTestingConnection
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(l10n.aiPlatformTestConnection),
               ),
             ],
           ),
@@ -1238,9 +1174,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ? _mineruNameController.text.trim()
             : 'MinerU (Cloud)',
         url: _mineruApiUrlController.text.trim(),
-        model: _mineruModelVersionController.text.trim().isNotEmpty
-            ? _mineruModelVersionController.text.trim()
-            : 'vlm',
+        model: 'vlm', // Cloud MinerU API v4 supports: pipeline, vlm, MinerU-HTML
         apiKey: _mineruApiKeyController.text.trim(),
         parserSubtype: _mineruParserSubtypeController.text.trim().isNotEmpty
             ? _mineruParserSubtypeController.text.trim()
@@ -1251,7 +1185,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         temperatureMax: 0,
         thinkingModeSupported: false,
         thinkingMode: 'disable',
-        platformType: 'pdf_parser',
+        platformType: 'parser',
         requiresApiKey: _mineruHasApiKey,
       );
     } else {
@@ -1261,9 +1195,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             : current.name,
         apiKey: _mineruApiKeyController.text.trim(),
         url: _mineruApiUrlController.text.trim(),
-        model: _mineruModelVersionController.text.trim().isNotEmpty
-            ? _mineruModelVersionController.text.trim()
-            : current.model,
+        model: 'vlm', // Cloud MinerU API v4 supports: pipeline, vlm, MinerU-HTML
         parserSubtype: _mineruParserSubtypeController.text.trim().isNotEmpty
             ? _mineruParserSubtypeController.text.trim()
             : current.parserSubtype,
@@ -1299,7 +1231,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         url: _mineruLocalApiUrlController.text.trim(),
         model: _mineruLocalModelVersionController.text.trim().isNotEmpty
             ? _mineruLocalModelVersionController.text.trim()
-            : 'vlm',
+            : 'hybrid-auto-engine',
         apiKey: _mineruLocalApiKeyController.text.trim(),
         parserSubtype: _mineruLocalParserSubtypeController.text.trim().isNotEmpty
             ? _mineruLocalParserSubtypeController.text.trim()
@@ -1310,7 +1242,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         temperatureMax: 0,
         thinkingModeSupported: false,
         thinkingMode: 'disable',
-        platformType: 'pdf_parser',
+        platformType: 'parser',
         requiresApiKey: _mineruLocalHasApiKey,
       );
     } else {
@@ -1377,7 +1309,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         Text(
           l10n.aiPlatformCategoryLanguageModels,
           style: const TextStyle(
-            fontSize: 14,
+            fontSize: 13,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1388,14 +1320,24 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             style: const TextStyle(fontSize: 13),
           )
         else ...<Widget>[
-          DropdownButtonFormField<String>(
-            initialValue: _selectedPlatformKey,
-            decoration: InputDecoration(
-              labelText: l10n.setupWizardSelectLlmPlatform,
-              border: const OutlineInputBorder(),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            ),
-            items: llmPlatforms.map(
+          if (_selectedPlatformKey != null) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedPlatformKey,
+                        decoration: InputDecoration(
+                          labelText: l10n.setupWizardSelectLlmPlatform,
+                          border: const OutlineInputBorder(),
+                          labelStyle: const TextStyle(fontSize: 12),
+                          hintStyle: const TextStyle(fontSize: 11),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        ),
+                        items: llmPlatforms.map(
               (AIPlatformInfo p) {
                 final Color statusColor = _platformStatusColor(p);
                 final String tooltip = _platformStatusText(p, l10n);
@@ -1427,334 +1369,310 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                 _llmFormPlatformKey = null; // force sync on next build
               });
             },
-          ),
-          if (_selectedPlatformKey != null) ...<Widget>[
-            const SizedBox(height: 16),
-            _buildEmbeddedLlmForm(settings, notifier, l10n),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _llmNameController,
+                        decoration: InputDecoration(
+                          labelText: l10n.aiPlatformPlatformName,
+                          hintText: l10n.aiPlatformPlatformNameHint,
+                          border: const OutlineInputBorder(),
+                          labelStyle: const TextStyle(fontSize: 12),
+                          hintStyle: const TextStyle(fontSize: 11),
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _llmUrlController,
+                        decoration: InputDecoration(
+                          labelText: l10n.aiPlatformApiUrl,
+                          hintText: l10n.aiPlatformApiUrlHint,
+                          border: const OutlineInputBorder(),
+                          labelStyle: const TextStyle(fontSize: 12),
+                          hintStyle: const TextStyle(fontSize: 11),
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: TextFormField(
+                              controller: _llmModelController,
+                              decoration: InputDecoration(
+                                labelText: l10n.aiPlatformModel,
+                                hintText: l10n.aiPlatformModelHint,
+                                border: const OutlineInputBorder(),
+                                labelStyle: const TextStyle(fontSize: 12),
+                                hintStyle: const TextStyle(fontSize: 11),
+                                contentPadding:
+                                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            onPressed: _llmIsLoadingModels ? null : _loadLlmModels,
+                            icon: _llmIsLoadingModels
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.search, size: 18),
+                            label: Text(l10n.aiPlatformList),
+                            style: OutlinedButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              minimumSize: const Size(0, 48),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      _buildLlmApiProtocolField(l10n),
+                      const SizedBox(height: 6),
+                      _buildLlmHasApiKeySwitch(l10n, tokenLink: settings.platforms[_selectedPlatformKey]!.tokenLink),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _llmApiKeyController,
+                        obscureText: _llmObscureText,
+                        decoration: InputDecoration(
+                          labelText: !_llmHasApiKey
+                              ? '${l10n.aiPlatformApiKey} (${l10n.optional})'
+                              : l10n.aiPlatformApiKey,
+                          hintText: !_llmHasApiKey
+                              ? l10n.aiPlatformApiKeyOptionalHint
+                              : null,
+                          border: const OutlineInputBorder(),
+                          labelStyle: const TextStyle(fontSize: 12),
+                          hintStyle: const TextStyle(fontSize: 11),
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _llmObscureText ? Icons.visibility : Icons.visibility_off,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _llmObscureText = !_llmObscureText;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildLlmParametersFields(l10n, settings.platforms[_selectedPlatformKey]!),
+                ),
+              ],
+            ),
+          ] else ...[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: null,
+                    decoration: InputDecoration(
+                      labelText: l10n.setupWizardSelectLlmPlatform,
+                      border: const OutlineInputBorder(),
+                      labelStyle: const TextStyle(fontSize: 12),
+                      hintStyle: const TextStyle(fontSize: 11),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    ),
+                    items: llmPlatforms.map(
+              (AIPlatformInfo p) {
+                final Color statusColor = _platformStatusColor(p);
+                final String tooltip = _platformStatusText(p, l10n);
+                return DropdownMenuItem<String>(
+                  value: p.key,
+                  child: Tooltip(
+                    message: tooltip,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Icon(Icons.circle, size: 10, color: statusColor),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            p.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ).toList(),
+                    onChanged: (String? value) {
+                      if (value == null) return;
+                      setState(() {
+                        _selectedPlatformKey = value;
+                        _llmFormPlatformKey = null;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
           ],
         ],
       ],
     );
   }
 
-  Widget _buildEmbeddedLlmForm(
-    AIPlatformSettings settings,
-    AIPlatformSettingsNotifier notifier,
-    AppLocalizations l10n,
-  ) {
-    final AIPlatformInfo? platform = _selectedPlatformKey == null
-        ? null
-        : settings.platforms[_selectedPlatformKey];
-    if (platform == null) return const SizedBox.shrink();
-
-    // Hide unavailable hint if connection test was successful
-    final bool showUnavailableHint = _platformConnectionUnavailable(platform) && 
-        (_llmLastTestSuccess != true);
-
+  Widget _buildLlmParametersFields(AppLocalizations l10n, AIPlatformInfo platform) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            // Left column: Basic Information
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    l10n.aiPlatformBasicInformation,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _llmNameController,
-                    decoration: InputDecoration(
-                      labelText: l10n.aiPlatformPlatformName,
-                      hintText: l10n.aiPlatformPlatformNameHint,
-                      border: const OutlineInputBorder(),
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _llmUrlController,
-                    decoration: InputDecoration(
-                      labelText: l10n.aiPlatformApiUrl,
-                      hintText: l10n.aiPlatformApiUrlHint,
-                      border: const OutlineInputBorder(),
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: TextFormField(
-                          controller: _llmModelController,
-                          decoration: InputDecoration(
-                            labelText: l10n.aiPlatformModel,
-                            hintText: l10n.aiPlatformModelHint,
-                            border: const OutlineInputBorder(),
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      OutlinedButton.icon(
-                        onPressed: _llmIsLoadingModels ? null : _loadLlmModels,
-                        icon: _llmIsLoadingModels
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.search, size: 18),
-                        label: Text(l10n.aiPlatformList),
-                        style: OutlinedButton.styleFrom(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          minimumSize: const Size(0, 48),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  _buildLlmApiProtocolField(l10n),
-                ],
+              child: TextFormField(
+                controller: _llmTimeoutController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformTimeout,
+                  hintText: l10n.aiPlatformTimeoutHint,
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
               ),
             ),
-            const SizedBox(width: 16),
-            // Right column: API Configuration & Advanced Parameters
+            const SizedBox(width: 8),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Text(
-                        l10n.aiPlatformApiConfiguration,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Spacer(),
-                      if (platform.tokenLink != null && platform.tokenLink!.isNotEmpty)
-                        TextButton.icon(
-                          onPressed: () => _openLlmApiKeyUrl(platform.tokenLink!),
-                          icon: Icon(Icons.link, size: 16, color: Colors.blue.shade700),
-                          label: Text(
-                            l10n.aiPlatformGetApiKey,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.blue.shade700,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                          style: TextButton.styleFrom(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            minimumSize: const Size(0, 28),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  _buildLlmHasApiKeySwitch(l10n),
-                  const SizedBox(height: 8),
-                  _wrapIfUnavailable(
-                    showUnavailableHint && _llmHasApiKey,
-                    child: TextFormField(
-                      controller: _llmApiKeyController,
-                      obscureText: _llmObscureText,
-                      decoration: InputDecoration(
-                        labelText: !_llmHasApiKey 
-                            ? '${l10n.aiPlatformApiKey} (${l10n.optional})'
-                            : l10n.aiPlatformApiKey,
-                        hintText: !_llmHasApiKey 
-                            ? l10n.aiPlatformApiKeyOptionalHint
-                            : null,
-                        border: const OutlineInputBorder(),
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _llmObscureText ? Icons.visibility : Icons.visibility_off,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _llmObscureText = !_llmObscureText;
-                            });
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Expanded(
-                        child: TextFormField(
-                          controller: _llmMaxTokensController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: l10n.aiPlatformMaxTokens,
-                            hintText: l10n.aiPlatformMaxTokensHint,
-                            border: const OutlineInputBorder(),
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _llmChunkSizeController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: l10n.aiPlatformChunkSize,
-                            hintText: l10n.aiPlatformChunkSizeHint,
-                            border: const OutlineInputBorder(),
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Expanded(
-                        child: TextFormField(
-                          controller: _llmConcurrentController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: l10n.aiPlatformConcurrent,
-                            hintText: l10n.aiPlatformConcurrentHint,
-                            border: const OutlineInputBorder(),
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(child: _buildLlmTemperatureField(platform)),
-                    ],
-                  ),
-                  if (platform.thinkingModeSupported) ...<Widget>[
-                    const SizedBox(height: 8),
-                    _buildLlmThinkingModeField(l10n),
-                  ],
-                ],
+              child: TextFormField(
+                controller: _llmWriteTimeoutController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformWriteTimeout,
+                  hintText: l10n.aiPlatformWriteTimeoutHint,
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        if (_llmTestResult != null) ...<Widget>[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: (_llmLastTestSuccess ?? false)
-                  ? Colors.green.shade50
-                  : Colors.red.shade50,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: (_llmLastTestSuccess ?? false)
-                    ? Colors.green.shade300
-                    : Colors.red.shade300,
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: TextFormField(
+                controller: _llmTestConnectTimeoutController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformTestConnectTimeout,
+                  hintText: l10n.aiPlatformTestConnectTimeoutHint,
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
               ),
             ),
-            child: Row(
-              children: <Widget>[
-                Icon(
-                  (_llmLastTestSuccess ?? false)
-                      ? Icons.check_circle
-                      : Icons.error,
-                  color: (_llmLastTestSuccess ?? false)
-                      ? Colors.green.shade700
-                      : Colors.red.shade700,
-                  size: 20,
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextFormField(
+                controller: _llmTestRequestTimeoutController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformTestRequestTimeout,
+                  hintText: l10n.aiPlatformTestRequestTimeoutHint,
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: SelectableText(
-                    _llmTestResult!,
-                    style: TextStyle(
-                      color: (_llmLastTestSuccess ?? false)
-                          ? Colors.green.shade700
-                          : Colors.red.shade700,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
-        _wrapIfUnavailable(
-          showUnavailableHint,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: <Widget>[
-              if (showUnavailableHint) ...<Widget>[
-                Expanded(
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.orange.shade300),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Icon(Icons.warning_amber_rounded,
-                            color: Colors.orange.shade700, size: 18,),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            l10n.setupWizardConfigureApiKeyAndTest,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.orange.shade900,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-              ],
-              OutlinedButton(
-                onPressed: _llmIsTestingConnection
-                    ? null
-                    : () => _testLlmConnection(notifier),
-                child: _llmIsTestingConnection
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(l10n.aiPlatformTestConnection),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: TextFormField(
+                controller: _llmMaxTokensController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformMaxTokens,
+                  hintText: l10n.aiPlatformMaxTokensHint,
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextFormField(
+                controller: _llmChunkSizeController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformChunkSize,
+                  hintText: l10n.aiPlatformChunkSizeHint,
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: TextFormField(
+                controller: _llmConcurrentController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformConcurrent,
+                  hintText: l10n.aiPlatformConcurrentHint,
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: _buildLlmTemperatureField(platform)),
+          ],
+        ),
+        const SizedBox(height: 2),
+        _buildLlmThinkingModeSupportedField(l10n),
+        if (_llmThinkingModeSupported) ...<Widget>[
+          const SizedBox(height: 6),
+          _buildLlmThinkingModeField(l10n),
+        ],
+        const SizedBox(height: 6),
+        _buildLlmSegmentLimitField(l10n),
       ],
     );
   }
@@ -1772,7 +1690,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           labelText: l10n.aiPlatformTemperature,
           floatingLabelBehavior: FloatingLabelBehavior.always,
           border: const OutlineInputBorder(),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
         ),
         isFocused: _llmTemperatureFocused,
         child: Row(
@@ -1840,7 +1758,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             prefixIcon: Icon(Icons.api),
             border: OutlineInputBorder(),
             contentPadding:
-                EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           ),
           items: const <DropdownMenuItem<String>>[
             DropdownMenuItem<String>(
@@ -1883,6 +1801,83 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           },
         );
 
+  Widget _buildLlmThinkingModeSupportedField(AppLocalizations l10n) {
+    return SizedBox(
+      height: 60,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    l10n.aiPlatformThinkingModeSupported,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    l10n.aiPlatformThinkingModeSupportedHint,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: _llmThinkingModeSupported,
+              onChanged: (bool value) {
+                setState(() {
+                  _llmThinkingModeSupported = value;
+                });
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLlmSegmentLimitField(AppLocalizations l10n) {
+    const List<int> segmentLimitOptions = <int>[1, 3, 5, 10, 20, 50, 100, 200, 500, 1000, 0];
+    String _labelForValue(int v) => v == 0 ? l10n.aiPlatformSegmentLimitUnlimited : v.toString();
+
+    return DropdownButtonFormField<int>(
+      value: segmentLimitOptions.contains(_llmSegmentLimit) ? _llmSegmentLimit : 100,
+      decoration: InputDecoration(
+        labelText: l10n.aiPlatformSegmentLimitLabel,
+        border: const OutlineInputBorder(),
+      ),
+      items: segmentLimitOptions.map((v) {
+        return DropdownMenuItem<int>(
+          value: v,
+          child: Text(_labelForValue(v)),
+        );
+      }).toList(),
+      onChanged: (int? value) {
+        if (value != null) {
+          setState(() {
+            _llmSegmentLimit = value;
+          });
+        }
+      },
+    );
+  }
 
   Widget _buildLlmThinkingModeField(AppLocalizations l10n) {
     final List<Map<String, String>> options = <Map<String, String>>[
@@ -1905,7 +1900,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       decoration: InputDecoration(
         labelText: l10n.aiPlatformThinkingMode,
         border: const OutlineInputBorder(),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       ),
       items: options
           .map(
@@ -1926,7 +1921,8 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   }
 
   /// "Has API Key" switch - for local deployments like Ollama that don't require API key
-  Widget _buildLlmHasApiKeySwitch(AppLocalizations l10n) => SizedBox(
+  Widget _buildLlmHasApiKeySwitch(AppLocalizations l10n, {String? tokenLink}) {
+    return SizedBox(
       height: 60,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
@@ -1953,7 +1949,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                 Text(
                   l10n.aiPlatformHasApiKey,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1968,6 +1964,22 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
               ],
             ),
           ),
+          if (tokenLink != null && tokenLink.isNotEmpty)
+            TextButton(
+              onPressed: () => _openLlmApiKeyUrl(tokenLink),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: const Size(0, 28),
+              ),
+              child: Text(
+                l10n.aiPlatformGetApiKey,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.blue.shade700,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
           Switch(
             value: _llmHasApiKey,
             onChanged: (value) {
@@ -1980,10 +1992,12 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       ),
     ),
   );
+  }
 
   /// MinerU Cloud "Requires API Key" switch
-  Widget _buildMineruHasApiKeySwitch(AppLocalizations l10n) => SizedBox(
-      height: 60,
+  Widget _buildMineruHasApiKeySwitch(AppLocalizations l10n, {String? tokenLink}) {
+    return SizedBox(
+      height: 36,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
         decoration: BoxDecoration(
@@ -1998,32 +2012,33 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           children: <Widget>[
           Icon(
             _mineruHasApiKey ? Icons.vpn_key : Icons.vpn_key_off_outlined,
-            size: 20,
+            size: 18,
             color: Theme.of(context).colorScheme.primary,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  l10n.aiPlatformHasApiKey,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  l10n.aiPlatformHasApiKeyHint,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+            child: Text(
+              l10n.aiPlatformHasApiKey,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
+          if (tokenLink != null && tokenLink.isNotEmpty)
+            TextButton(
+              onPressed: () => _openApiKeyUrl(tokenLink),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                minimumSize: const Size(0, 24),
+              ),
+              child: Text(
+                l10n.aiPlatformGetApiKey,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.blue.shade700,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
           Switch(
             value: _mineruHasApiKey,
             onChanged: (value) {
@@ -2036,10 +2051,12 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       ),
     ),
   );
+  }
 
   /// MinerU Local "Requires API Key" switch
-  Widget _buildMineruLocalHasApiKeySwitch(AppLocalizations l10n) => SizedBox(
-      height: 60,
+  Widget _buildMineruLocalHasApiKeySwitch(AppLocalizations l10n, {String? tokenLink}) {
+    return SizedBox(
+      height: 36,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
         decoration: BoxDecoration(
@@ -2054,32 +2071,33 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           children: <Widget>[
           Icon(
             _mineruLocalHasApiKey ? Icons.vpn_key : Icons.vpn_key_off_outlined,
-            size: 20,
+            size: 18,
             color: Theme.of(context).colorScheme.primary,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  l10n.aiPlatformHasApiKey,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  l10n.aiPlatformHasApiKeyHint,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+            child: Text(
+              l10n.aiPlatformHasApiKey,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
+          if (tokenLink != null && tokenLink.isNotEmpty)
+            TextButton(
+              onPressed: () => _openApiKeyUrl(tokenLink),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                minimumSize: const Size(0, 24),
+              ),
+              child: Text(
+                l10n.aiPlatformGetApiKey,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.blue.shade700,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
           Switch(
             value: _mineruLocalHasApiKey,
             onChanged: (value) {
@@ -2092,6 +2110,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       ),
     ),
   );
+  }
 
   Future<void> _openLlmApiKeyUrl(String url) async {
     try {
@@ -2324,9 +2343,13 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           current.temperature,
       chunkSize: int.tryParse(_llmChunkSizeController.text) ?? current.chunkSize,
       concurrent: int.tryParse(_llmConcurrentController.text) ?? current.concurrent,
-      thinkingMode: current.thinkingModeSupported
-          ? _llmThinkingMode
-          : current.thinkingMode,
+      timeout: int.tryParse(_llmTimeoutController.text) ?? current.timeout,
+      writeTimeout: int.tryParse(_llmWriteTimeoutController.text) ?? current.writeTimeout,
+      testConnectTimeout: int.tryParse(_llmTestConnectTimeoutController.text) ?? current.testConnectTimeout,
+      testRequestTimeout: int.tryParse(_llmTestRequestTimeoutController.text) ?? current.testRequestTimeout,
+      thinkingModeSupported: _llmThinkingModeSupported,
+      thinkingMode: _llmThinkingModeSupported ? _llmThinkingMode : current.thinkingMode,
+      segmentLimit: _llmSegmentLimit,
       apiProtocol: _llmApiProtocol,
       requiresApiKey: _llmHasApiKey,
     );
@@ -2348,6 +2371,14 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     AIPlatformSettingsNotifier notifier,
   ) {
     if (_selectedPlatformKey != null) {
+      // Ensure LLM form reflects the actual platform config before saving.
+      // The form is normally synced via addPostFrameCallback when the LLM step
+      // is first rendered; this guard handles edge cases where the sync hasn't
+      // fired yet (e.g. rapid navigation) to prevent hardcoded controller
+      // defaults from overwriting the platform's real configuration.
+      if (_llmFormPlatformKey != _selectedPlatformKey) {
+        _syncLlmFormFromPlatform(_selectedPlatformKey!, settings);
+      }
       final AIPlatformInfo? platform =
           settings.platforms[_selectedPlatformKey!];
       if (platform != null) {
@@ -2356,22 +2387,20 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       // Save the selected platform as default
       notifier.setDefaultPlatform(_selectedPlatformKey!);
     }
-    if (_needsPdfTranslation) {
-      // Save config for the selected MinerU platform (Cloud or Local)
-      if (_selectedMineruPlatform == 'mineru') {
-        final AIPlatformInfo? mineru = settings.platforms['mineru'];
-        _saveMineruConfig(settings, notifier, mineru, showSnackBar: false);
-      } else {
-        final AIPlatformInfo? mineruLocal = settings.platforms['mineru_local'];
-        _saveMineruLocalConfig(settings, notifier, mineruLocal, showSnackBar: false);
-      }
-      
-      // Update the parsing engine setting to match the selected platform
-      final globalNotifier = ref.read(globalSettingsProvider.notifier);
-      globalNotifier.updateParsingEngineSettings(
-        parsingEngine: _selectedMineruPlatform,
-      );
+    // Save config for the selected MinerU platform (Cloud or Local)
+    if (_selectedMineruPlatform == 'mineru') {
+      final AIPlatformInfo? mineru = settings.platforms['mineru'];
+      _saveMineruConfig(settings, notifier, mineru, showSnackBar: false);
+    } else {
+      final AIPlatformInfo? mineruLocal = settings.platforms['mineru_local'];
+      _saveMineruLocalConfig(settings, notifier, mineruLocal, showSnackBar: false);
     }
+
+    // Update the parsing engine setting to match the selected platform
+    final globalNotifier = ref.read(globalSettingsProvider.notifier);
+    globalNotifier.updateParsingEngineSettings(
+      parsingEngine: _selectedMineruPlatform,
+    );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -2383,30 +2412,4 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _goHome();
   }
 
-  Widget _buildStepActions(
-    AIPlatformSettings aiSettings,
-    AIPlatformSettingsNotifier aiNotifier,
-  ) {
-    final l10n = AppLocalizations.of(context)!;
-    final bool isLast = _currentStep == 2;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: <Widget>[
-        if (_currentStep > 0)
-          TextButton(
-            onPressed: _prevStep,
-            child: Text(l10n.setupWizardPrevStep),
-          )
-        else
-          const SizedBox.shrink(),
-        const Spacer(),
-        FilledButton(
-          onPressed:
-              isLast ? () => _saveAndExit(aiSettings, aiNotifier) : _nextStep,
-          child: Text(
-              isLast ? l10n.setupWizardSaveAndExit : l10n.setupWizardNextStep,),
-        ),
-      ],
-    );
-  }
 }

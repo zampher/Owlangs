@@ -18,6 +18,8 @@ import socket
 from pathlib import Path
 from typing import Optional, Dict, Any
 
+from backend import __version__
+
 
 class ConfigManager:
     """Manages application configuration for single-file executable mode."""
@@ -94,7 +96,6 @@ class ConfigManager:
             'system.json',
             'system.json.template',
             'platforms.json.template',
-            'ui.json.template',
             'secrets.json.template',
             'local.json.template',
             'logging.yaml',
@@ -232,6 +233,49 @@ class ConfigManager:
                 subprocess.run(['xdg-open', str(config_file)])
 
 
+def _setup_frozen_env(skip_app=False):
+    """Set up frozen environment for PyInstaller single-file mode.
+
+    Args:
+        skip_app: If True, skip importing backend.app (used in CLI mode
+                  to avoid the heavy FastAPI startup cost).
+    """
+    if not hasattr(sys, 'frozen'):
+        return
+
+    # Set up utils alias: code imports "from utils.xxx", bundled as backend.utils
+    import backend.utils
+    sys.modules['utils'] = backend.utils
+
+    # Pre-register key submodules so lazy imports in frozen build resolve
+    _submodules = [
+        'backend.utils.resource_utils',
+        'backend.utils.redis_manager',
+        'backend.utils.utils',
+        'backend.utils.language_utils',
+        'backend.utils.path_utils',
+        'backend.utils.font_utils',
+        'backend.utils.json_utils',
+        'backend.utils.translation_segments',
+        'backend.utils.markdown_splitter',
+        'backend.utils.markdown_utils',
+    ]
+    for mod_name in _submodules:
+        try:
+            __import__(mod_name)
+        except Exception:
+            pass
+
+    if skip_app:
+        return
+
+    # Pre-import backend.app so sys.modules["app"] is set for uvicorn's import_from_string
+    try:
+        import backend.app  # noqa: F401
+    except Exception:
+        pass
+
+
 class PortableLauncher:
     """Launcher for portable executable mode."""
     
@@ -280,38 +324,8 @@ class PortableLauncher:
         return False
     
     def _setup_frozen_env(self):
-        """Set up frozen environment for PyInstaller single-file mode."""
-        if not hasattr(sys, 'frozen'):
-            return
-
-        # Set up utils alias: code imports "from utils.xxx", bundled as backend.utils
-        import backend.utils
-        sys.modules['utils'] = backend.utils
-
-        # Pre-register key submodules so lazy imports in frozen build resolve
-        _submodules = [
-            'backend.utils.resource_utils',
-            'backend.utils.redis_manager',
-            'backend.utils.utils',
-            'backend.utils.language_utils',
-            'backend.utils.path_utils',
-            'backend.utils.font_utils',
-            'backend.utils.json_utils',
-            'backend.utils.translation_segments',
-            'backend.utils.markdown_splitter',
-            'backend.utils.markdown_utils',
-        ]
-        for mod_name in _submodules:
-            try:
-                __import__(mod_name)
-            except Exception:
-                pass
-
-        # Pre-import backend.app so sys.modules["app"] is set for uvicorn's import_from_string
-        try:
-            import backend.app  # noqa: F401
-        except Exception:
-            pass
+        """Delegate to module-level frozen environment setup."""
+        _setup_frozen_env(skip_app=False)
 
     def start_server(self) -> bool:
         """Start the backend server in-process using uvicorn in a daemon thread."""
@@ -354,8 +368,11 @@ class PortableLauncher:
         print(f"[Launcher] Opening browser: {url}", flush=True)
         webbrowser.open(url)
     
-    def run_interactive(self) -> int:
+    def run_interactive(self, no_browser: bool = False) -> int:
         """Run in interactive mode (with console output).
+
+        Args:
+            no_browser: If True, skip opening the browser.
 
         Returns:
             Exit code.
@@ -388,8 +405,9 @@ class PortableLauncher:
             self.stop_server()
             return 1
 
-        # Open browser
-        self.open_browser()
+        # Open browser (unless --no-browser)
+        if not no_browser:
+            self.open_browser()
 
         print()
         print("-" * 60, flush=True)
@@ -407,9 +425,12 @@ class PortableLauncher:
             self.stop_server()
 
         return 0
-    
-    def run_silent(self) -> int:
+
+    def run_silent(self, no_browser: bool = False) -> int:
         """Run in silent mode (no console output, for background service).
+
+        Args:
+            no_browser: If True, skip opening the browser.
 
         Returns:
             Exit code.
@@ -425,8 +446,8 @@ class PortableLauncher:
         if not self.start_server():
             return 1
 
-        # Wait and open browser
-        if self.wait_for_server():
+        # Wait and open browser (unless --no-browser)
+        if self.wait_for_server() and not no_browser:
             self.open_browser()
 
         # Wait for server to finish (daemon thread keeps running)
@@ -454,11 +475,43 @@ class PortableLauncher:
 
 
 def main():
-    """Main entry point for single-file launcher."""
+    """Main entry point for single-file launcher.
+
+    Supports both CLI mode (translate/convert/batch/etc.) and launcher mode
+    (start server + open browser). Double-clicking with no arguments runs
+    launcher mode; passing a CLI subcommand runs CLI mode.
+    """
+    # ── CLI mode: delegate to owlangs_cli for translate/convert/batch etc. ──
+    CLI_COMMANDS = {
+        "translate", "convert", "batch", "status", "download",
+        "cancel", "platform", "formats", "glossary", "config",
+    }
+    # Skip global flags (e.g. --json, -v) placed before the subcommand
+    _cli_idx = 1
+    while _cli_idx < len(sys.argv) and sys.argv[_cli_idx].startswith("-"):
+        _cli_idx += 1
+    if _cli_idx < len(sys.argv) and sys.argv[_cli_idx] in CLI_COMMANDS:
+        # Skip Redis startup in CLI mode to improve cold-start speed
+        # Must be set BEFORE _setup_frozen_env() imports backend.app
+        os.environ["REDIS_ENABLED"] = "false"
+        _setup_frozen_env(skip_app=True)
+        # Initialize user configs so CLI can find secrets.json and other configs
+        config_mgr = ConfigManager()
+        config_dir = config_mgr.init_user_configs()
+        os.environ['OWLANGS_CONFIG_PATH'] = str(config_dir.parent)
+        from backend.owlangs_cli import main as cli_main
+        sys.exit(cli_main())
+
+    # ── Launcher mode ──
     import argparse
-    
+
     parser = argparse.ArgumentParser(description='Owlangs Single-File Launcher')
-    parser.add_argument('--silent', action='store_true', 
+    parser.add_argument('-i', '--interactive', action='store_true',
+                        help='Start in interactive mode (launcher default)')
+    parser.add_argument('--version', action='version',
+                        version=f'%(prog)s {__version__}',
+                        help='Show version information and exit')
+    parser.add_argument('--silent', action='store_true',
                         help='Run in silent mode (no console output)')
     parser.add_argument('--port', type=int, default=8800,
                         help='Port to run server on (default: 8800)')
@@ -466,7 +519,9 @@ def main():
                         help='Initialize configuration files and exit')
     parser.add_argument('--edit-config', metavar='NAME', default=None,
                         help='Open configuration file in editor (e.g., secrets)')
-    
+    parser.add_argument('--no-browser', action='store_true',
+                        help='Do not open the web browser on startup')
+
     args = parser.parse_args()
     
     launcher = PortableLauncher()
@@ -484,9 +539,9 @@ def main():
     
     # Run launcher
     if args.silent:
-        return launcher.run_silent()
+        return launcher.run_silent(no_browser=args.no_browser)
     else:
-        return launcher.run_interactive()
+        return launcher.run_interactive(no_browser=args.no_browser)
 
 
 if __name__ == '__main__':

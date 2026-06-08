@@ -23,12 +23,87 @@ from .table_layout_utils import (
     _extract_equation_from_layout_block,
 )
 
-# Temporary feature flag: high-fidelity PDF layout rebuild.
-# When False, PDF rebuild will always use text-based segments instead of
-# layout_document-based block types. This keeps the PDF path simple and
-# focused on formula debugging while layout-based "high fidelity" export
-# is still under development.
-ENABLE_PDF_LAYOUT_REBUILD: bool = False
+def _recover_layout_block_indices_from_prepared_chunks(
+    segments: List[Dict[str, Any]],
+    task_state: Optional[Dict[str, Any]],
+) -> int:
+    """Map segment_index -> layout block indices via extract-phase metadata or prepared chunks."""
+    segment_layout_map = (task_state or {}).get("segment_layout_block_map")
+    if segment_layout_map:
+        recovered = 0
+        for segment in segments:
+            if segment.get("layout_block_indices"):
+                continue
+            seg_idx = segment.get("segment_index")
+            if seg_idx is None:
+                continue
+            try:
+                seg_idx = int(seg_idx)
+            except (TypeError, ValueError):
+                continue
+            if seg_idx < 0 or seg_idx >= len(segment_layout_map):
+                continue
+            blocks = segment_layout_map[seg_idx] or []
+            if blocks:
+                segment["layout_block_indices"] = list(blocks)
+                recovered += 1
+        if recovered:
+            logger.info(
+                LogModule.RESTOR,
+                f"[REBUILD] Recovered layout_block_indices for {recovered} segments "
+                f"from segment_layout_block_map",
+            )
+            return recovered
+
+    prepared = (task_state or {}).get("layout_prepared_chunks") or []
+    if not prepared:
+        return 0
+    seg_to_blocks: Dict[int, List[int]] = {}
+    for chunk in prepared:
+        if not isinstance(chunk, dict):
+            continue
+        block_indices = chunk.get("block_indices") or []
+        if not block_indices:
+            continue
+        segment_indices = chunk.get("segment_indices") or []
+        if len(segment_indices) != 1:
+            # Multiple segments share one translation chunk; aggregated block_indices must not
+            # be copied to every segment (would mark text segments as image blocks).
+            continue
+        try:
+            seg_idx = int(segment_indices[0])
+        except (TypeError, ValueError, IndexError):
+            continue
+        existing = seg_to_blocks.setdefault(seg_idx, [])
+        for raw_bidx in block_indices:
+            try:
+                bidx = int(raw_bidx)
+            except (TypeError, ValueError):
+                continue
+            if bidx not in existing:
+                existing.append(bidx)
+    recovered = 0
+    for segment in segments:
+        if segment.get("layout_block_indices"):
+            continue
+        seg_idx = segment.get("segment_index")
+        if seg_idx is None:
+            continue
+        blocks = seg_to_blocks.get(int(seg_idx))
+        if blocks:
+            segment["layout_block_indices"] = list(blocks)
+            recovered += 1
+    return recovered
+
+
+# Feature flag: high-fidelity PDF layout rebuild.
+# When True, PDF rebuild uses layout_document-based block types,
+# supporting equation_format/table_body_format switching (e.g. export
+# formulas/tables as images instead of LaTeX/HTML text).
+# When False, PDF rebuild falls back to text-based segment concatenation,
+# which ignores format parameters — this prevents image-format export
+# from working correctly.
+ENABLE_PDF_LAYOUT_REBUILD: bool = True
 
 
 def has_revised_segments(task_state: Dict[str, Any]) -> bool:
@@ -93,7 +168,7 @@ def has_revised_segments(task_state: Dict[str, Any]) -> bool:
             )
             return True
     
-    logger.info(
+    logger.debug(
         LogModule.RESTOR,
         f"[HAS_REVISED] No modified or retranslated segments found. "
         f"Summary: total={len(segments)}, modified={modified_count}, "
@@ -176,10 +251,10 @@ def _process_images_and_create_markdown_document(
         # Log updated keys for debugging
         if saved_image_paths:
             updated_keys = [f"./images/{path.name}" for path in saved_image_paths]
-            logger.info(LogModule.TRANS, f"[REBUILD] Updated image_data_map with {len(updated_keys)} file paths: {updated_keys[:5]}")
-            logger.info(LogModule.TRANS, f"[REBUILD] image_data_map keys count: {original_keys_count} -> {len(image_data_map)}")
+            logger.debug(LogModule.TRANS, f"[REBUILD] Updated image_data_map with {len(updated_keys)} file paths: {updated_keys[:5]}")
+            logger.debug(LogModule.TRANS, f"[REBUILD] image_data_map keys count: {original_keys_count} -> {len(image_data_map)}")
         if saved_image_paths:
-            logger.info(LogModule.TRANS, f"Saved {len(saved_image_paths)} images to {output_dir / 'images' if output_dir else 'images'}")
+            logger.debug(LogModule.TRANS, f"Saved {len(saved_image_paths)} images to {output_dir / 'images' if output_dir else 'images'}")
         
         # CRITICAL: Ensure updated image_data_map is saved back to task_state
         # This ensures MD2DOCXExporter can access the updated keys
@@ -202,7 +277,7 @@ def _process_images_and_create_markdown_document(
         stem=file_stem
     )
     
-    logger.info(LogModule.TRANS, f"Rebuilt MarkdownDocument from {len(segments)} segments")
+    logger.debug(LogModule.TRANS, f"Rebuilt MarkdownDocument from {len(segments)} segments")
     return markdown_doc
 
 
@@ -213,6 +288,12 @@ def _rebuild_markdown_from_layout_segments(
     block_index_to_type: Dict[int, str],
     equation_format: Optional[str] = None,
     table_body_format: Optional[str] = None,
+    bilingual_export: bool = False,
+    target_first: bool = False,
+    source_text_italic: bool = False,
+    source_text_color: Optional[str] = None,
+    target_text_italic: bool = False,
+    target_text_color: Optional[str] = None,
 ) -> str:
     """
     Rebuild markdown content from segments using layout information (PDF path).
@@ -280,12 +361,12 @@ def _rebuild_markdown_from_layout_segments(
                 separator = segment.get("separator_after")
                 separators.append(separator)
     
-    logger.info(LogModule.TRANS, f"Rebuilding Markdown: {len(segments)} segments, {modified_segments_count} modified, {len(target_texts)} with content")
-    
+    logger.debug(LogModule.TRANS, f"Rebuilding Markdown: {len(segments)} segments, {modified_segments_count} modified, {len(target_texts)} with content")
+
     if not target_texts:
         logger.warning(LogModule.RESTOR,"No target texts found in segments")
         return ""
-    
+
     # Build mapping from segment index to block types (for title formatting)
     # CRITICAL: Use segment_index (not array index) as key to handle filtered/cleared segments
     segment_to_block_types: Dict[int, List[str]] = {}
@@ -323,19 +404,33 @@ def _rebuild_markdown_from_layout_segments(
         equation_format is not None or table_body_format is not None
     )
     
-    # Build block index to block mapping for format processing
+    # Build block index to block mapping (used for format processing and title heading level)
     block_index_to_block: Dict[int, Any] = {}
-    if should_apply_format:
+    try:
+        from layout.base import LayoutDocument as _LD
+        if isinstance(layout_doc, _LD):
+            for block in layout_doc.iter_blocks():
+                if block.index is not None:
+                    block_index_to_block[block.index] = block
+    except Exception as e:
+        logger.debug(LogModule.RESTOR, f"Failed to build block index to block mapping: {e}")
+        should_apply_format = False
+
+    # P0b: Post-process title blocks to filter out false positives (body text that
+    # MinerU misclassifies as "title"). Only self-hosted MinerU (middle.json) provides
+    # font size data in its layout.json — the Cloud API does not, so heading hierarchy
+    # from font sizes is unavailable and all valid titles use H1 (default).
+    if layout_doc is not None:
         try:
-            from layout.base import LayoutDocument as _LD
-            if isinstance(layout_doc, _LD):
-                for block in layout_doc.iter_blocks():
-                    if block.index is not None:
-                        block_index_to_block[block.index] = block
+            from layout.pdf_font_extractor import _is_likely_heading
+            for page in layout_doc.pages:
+                for block in page.blocks:
+                    if block.type == "title" and not _is_likely_heading(block):
+                        block.heading_level = 0  # false positive → body text
         except Exception as e:
-            logger.debug(LogModule.RESTOR,f"Failed to build block index to block mapping: {e}")
-            should_apply_format = False
-    
+            logger.debug(LogModule.RESTOR,
+                f"Failed to filter false-positive titles: {e}")
+
     # Format target texts based on block types; record table block segment role for caption-before-body reorder
     formatted_texts = []
     target_idx_to_table_block: Dict[int, int] = {}
@@ -499,15 +594,34 @@ def _rebuild_markdown_from_layout_segments(
             
             # Handle title formatting (independent of format parameters)
             if "title" in block_types:
-                # Convert to markdown heading format
                 text_stripped = formatted.strip()
                 # Remove any existing markdown heading markers
                 text_stripped = re.sub(r'^#+\s*', '', text_stripped)
-                # Add markdown heading format if not already present
-                if not text_stripped.startswith("#"):
-                    formatted = f"# {text_stripped}"
-                else:
+                # Infer heading level from block metadata (font size in layout blocks)
+                level = 1  # default H1
+                block_indices: List[int] = []
+                for seg in segments:
+                    if seg.get("segment_index") == segment_index:
+                        block_indices = seg.get("layout_block_indices", [])
+                        break
+                is_body_text = False
+                for bidx in block_indices:
+                    if block_index_to_type.get(bidx) == "title":
+                        block = block_index_to_block.get(bidx)
+                        if block is not None:
+                            bl = getattr(block, "heading_level", 1)
+                            if isinstance(bl, int) and 0 <= bl <= 6:
+                                if bl == 0:
+                                    # heading_level=0 means false-positive title (body text)
+                                    is_body_text = True
+                                else:
+                                    level = bl
+                                break
+                if is_body_text:
                     formatted = text_stripped
+                else:
+                    # Add markdown heading format with correct level
+                    formatted = f"{'#' * level} {text_stripped}"
         formatted_texts.append(formatted)
     
     # Reorder table block segments so caption comes before table body (image) in exported DOCX/HTML/PDF
@@ -544,6 +658,69 @@ def _rebuild_markdown_from_layout_segments(
     formatted_texts = reordered_formatted_texts
     target_idx_to_segment_idx = reordered_target_idx_to_segment_idx
     separators = reordered_separators
+    
+    # Bilingual export: interleave source and target for text/title blocks, and for
+    # table/equation blocks when rendered in text format (HTML/LaTeX). Image-rendered
+    # tables (table_body_format=image) and equations (equation_format=image) skip
+    # bilingual since binary images cannot be interleaved.
+    if bilingual_export:
+        from utils.bilingual_export_utils import build_bilingual_segment_text
+        bilingual_formatted_texts = []
+        for i, formatted in enumerate(formatted_texts):
+            segment_index = target_idx_to_segment_idx.get(i, -1)
+            segment = None
+            for seg in segments:
+                if seg.get("segment_index") == segment_index:
+                    segment = seg
+                    break
+            if not segment:
+                bilingual_formatted_texts.append(formatted)
+                continue
+
+            source_text = segment.get("source_text", "")
+            is_excluded = bool(segment.get("is_excluded", False))
+            is_cleared = bool(
+                segment.get("status") == "cleared"
+                or (not formatted and segment.get("modified", False) and segment.get("target_length", -1) == 0)
+            )
+
+            # Skip bilingual only for segments rendered as images (cannot interleave binary images).
+            # Image/table captions share layout block indices with image/table blocks but contain
+            # real text — use segment content, not layout block type alone.
+            block_types = segment_to_block_types.get(segment_index, [])
+            from utils.bilingual_export_utils import should_skip_bilingual_for_image_render
+
+            if should_skip_bilingual_for_image_render(
+                segment,
+                block_types,
+                table_body_format=table_body_format,
+                equation_format=equation_format,
+                is_table_body=target_idx_to_is_table_body.get(i, False),
+            ):
+                bilingual_formatted_texts.append(formatted)
+                continue
+
+            # For text/title blocks, and table/equation blocks in text format, build bilingual
+            combined = build_bilingual_segment_text(
+                source_text=source_text,
+                target_text=formatted,
+                target_first=target_first,
+                is_excluded=is_excluded,
+                is_cleared=is_cleared,
+                inner_separator="\n\n",
+                source_text_italic=source_text_italic,
+                source_text_color=source_text_color,
+                target_text_italic=target_text_italic,
+                target_text_color=target_text_color,
+                use_html_styles=True,
+            )
+            bilingual_formatted_texts.append(combined)
+        
+        formatted_texts = bilingual_formatted_texts
+        logger.debug(
+            LogModule.TRANS,
+            f"Bilingual layout rebuild: {len(formatted_texts)} interleaved segments"
+        )
     
     # Use bbox from Layout extraction phase (task_state["layout_block_bbox"]); normalize int keys and float bbox (JSON round-trip safe)
     _raw_bbox = task_state.get("layout_block_bbox") or {}
@@ -647,6 +824,12 @@ def _rebuild_markdown_from_layout_segments(
 
 def _rebuild_markdown_from_text_segments(
     segments: List[Dict[str, Any]],
+    bilingual_export: bool = False,
+    target_first: bool = False,
+    source_text_italic: bool = False,
+    source_text_color: Optional[str] = None,
+    target_text_italic: bool = False,
+    target_text_color: Optional[str] = None,
 ) -> str:
     """
     Rebuild markdown content from segments using text-based logic (MD/TXT path).
@@ -655,10 +838,14 @@ def _rebuild_markdown_from_text_segments(
     
     Args:
         segments: List of translation segments (already sorted by segment_index)
+        bilingual_export: If True, interleave source and target text for each segment.
+        target_first: If True and bilingual_export is True, place target before source.
         
     Returns:
         Rebuilt markdown content string
     """
+    from utils.bilingual_export_utils import build_bilingual_segment_text
+
     # Collect all target texts and separators (use modified_text if available, otherwise use target_text)
     target_texts = []
     separators = []  # separators[i] is the separator between target_texts[i] and target_texts[i+1]
@@ -681,12 +868,44 @@ def _rebuild_markdown_from_text_segments(
                 separator = segment.get("separator_after")
                 separators.append(separator)
     
-    logger.info(LogModule.TRANS, f"Rebuilding Markdown: {len(segments)} segments, {modified_segments_count} modified, {len(target_texts)} with content")
-    
+    logger.debug(LogModule.TRANS, f"Rebuilding Markdown: {len(segments)} segments, {modified_segments_count} modified, {len(target_texts)} with content")
+
     if not target_texts:
         logger.warning(LogModule.RESTOR,"No target texts found in segments")
         return ""
-    
+
+    # Apply bilingual interleaving if requested
+    if bilingual_export:
+        bilingual_texts = []
+        text_idx = 0
+        for segment in segments:
+            target_text = segment.get("modified_text") or segment.get("target_text", "")
+            is_modified = segment.get("modified", False) or segment.get("retry_count", 0) > 0
+            is_cleared = segment.get("status") == "cleared" or (not target_text and is_modified and segment.get("target_length", -1) == 0)
+            if not target_text and not is_cleared:
+                continue
+            if text_idx >= len(target_texts):
+                break
+            source_text = segment.get("source_text", "")
+            is_excluded = bool(segment.get("is_excluded", False))
+            combined = build_bilingual_segment_text(
+                source_text=source_text,
+                target_text=target_text if not is_cleared else "",
+                target_first=target_first,
+                is_excluded=is_excluded,
+                is_cleared=is_cleared,
+                inner_separator="\n\n",
+                source_text_italic=source_text_italic,
+                source_text_color=source_text_color,
+                target_text_italic=target_text_italic,
+                target_text_color=target_text_color,
+                use_html_styles=True,
+            )
+            bilingual_texts.append(combined)
+            text_idx += 1
+        target_texts = bilingual_texts
+        logger.debug(LogModule.TRANS, f"Bilingual markdown rebuild: {len(target_texts)} interleaved segments")
+
     # Rebuild markdown using preserved separators or intelligent joining
     if len(separators) == len(target_texts) - 1 and all(s is not None for s in separators):
         # All separators preserved, use them; empty/whitespace-only -> paragraph break (double newline)
@@ -697,12 +916,12 @@ def _rebuild_markdown_from_text_segments(
             # Use paragraph break when separator is empty so EPUB/MOBI get proper line breaks
             separator = sep_str if sep_str.strip() else "\n\n"
             markdown_content += separator + target_texts[i]
-        logger.info(LogModule.TRANS, f"Rebuilt markdown using preserved separators, content length: {len(markdown_content)} characters")
+        logger.debug(LogModule.TRANS, f"Rebuilt markdown using preserved separators, content length: {len(markdown_content)} characters")
     else:
         # Use intelligent markdown joining to preserve format (handles single vs double newlines)
         # This preserves original formatting like lists, tables, quotes, etc.
         markdown_content = join_markdown_texts(target_texts)
-        logger.info(LogModule.TRANS, f"Rebuilt markdown using intelligent joining, content length: {len(markdown_content)} characters")
+        logger.debug(LogModule.TRANS, f"Rebuilt markdown using intelligent joining, content length: {len(markdown_content)} characters")
     
     return markdown_content
 
@@ -713,6 +932,8 @@ def rebuild_markdown_document_from_segments(
     output_dir: Optional[Path] = None,
     equation_format: Optional[str] = None,
     table_body_format: Optional[str] = None,
+    bilingual_export: bool = False,
+    target_first: bool = False,
 ) -> Optional[MarkdownDocument]:
     """
     Rebuild MarkdownDocument from revised translation segments.
@@ -726,10 +947,35 @@ def rebuild_markdown_document_from_segments(
         output_dir: Optional output directory for saving images
         equation_format: Optional format for equations ('text' or 'image')
         table_body_format: Optional format for tables ('html' or 'image')
+        bilingual_export: If True, interleave source and target text for each segment.
+        target_first: If True and bilingual_export is True, place target before source.
         
     Returns:
         Rebuilt MarkdownDocument, or None if segments are not available
     """
+    # Resolve bilingual settings from explicit args -> task_state
+    # Note: only use stored value if bilingual_export was not explicitly provided
+    # (None means "not specified", not "False")
+    if bilingual_export is None and task_state:
+        from utils.bilingual_export_utils import get_bilingual_config
+        _be, _tf = get_bilingual_config(task_state)
+        if _be:
+            bilingual_export = True
+            target_first = _tf
+
+    style_source_italic = False
+    style_source_color: Optional[str] = None
+    style_target_italic = False
+    style_target_color: Optional[str] = None
+    if bilingual_export and task_state:
+        from utils.bilingual_export_utils import get_bilingual_style_config
+        (
+            style_source_italic,
+            style_source_color,
+            style_target_italic,
+            style_target_color,
+        ) = get_bilingual_style_config(task_state)
+
     segments_data = get_translation_segments(None, task_state)
     if not segments_data:
         logger.warning(LogModule.RESTOR,"No translation segments found for rebuilding document")
@@ -748,9 +994,25 @@ def rebuild_markdown_document_from_segments(
     if source_input_type not in ("layout", "text"):
         source_input_type = "text"
     layout_doc = task_state.get("layout_document") if task_state else None
+
+    # P0a: Auto-promote to layout when layout_doc AND layout_chunk_block_map are both present.
+    # layout_chunk_block_map is the definitive indicator of a PDF layout workflow.
+    # Without this promotion, newly-created tasks (inherited from convert phase) may still have
+    # source_input_type="text", causing the layout-based format regeneration to be skipped
+    # (e.g. equation_format=image / table_body_format=image have no effect).
+    if layout_doc is not None and source_input_type != "layout":
+        _has_layout_map = bool(task_state.get("layout_chunk_block_map")) if task_state else False
+        if _has_layout_map:
+            source_input_type = "layout"
+            logger.info(
+                LogModule.RESTOR,
+                "[REBUILD] Auto-promoted source_input_type to 'layout' "
+                "(layout_document + layout_chunk_block_map present)",
+            )
+
     is_pdf_with_layout = layout_doc is not None and source_input_type == "layout"
     segments_with_layout_indices = sum(1 for s in segments if s.get("layout_block_indices"))
-    
+
     # P1: Log key branch and WARNING on mixed usage for quick diagnosis
     if layout_doc is not None and source_input_type != "layout":
         logger.info(LogModule.RESTOR, f"[REBUILD] MD path: using text-based segment type (source_input_type={source_input_type}, skipping layout)")
@@ -760,11 +1022,26 @@ def rebuild_markdown_document_from_segments(
             f"[REBUILD] {segments_with_layout_indices} segment(s) have layout_block_indices but no layout_document/source_input_type!=layout; using text-only rebuild",
         )
     if is_pdf_with_layout and segments_with_layout_indices == 0:
-        logger.warning(
+        logger.info(
             LogModule.RESTOR,
-            "[REBUILD] Layout branch taken but no segment has layout_block_indices; block types may not apply (check segment recording)",
+            "[REBUILD] Layout branch taken but no segment has layout_block_indices; attempting recovery",
         )
-    
+        recovered_count = _recover_layout_block_indices_from_prepared_chunks(segments, task_state)
+        segments_with_layout_indices = sum(
+            1 for s in segments if s.get("layout_block_indices")
+        )
+        if recovered_count:
+            logger.info(
+                LogModule.RESTOR,
+                f"[REBUILD] Recovered layout_block_indices for {recovered_count} segments "
+                f"from layout_prepared_chunks",
+            )
+        elif segments_with_layout_indices == 0:
+            logger.info(
+                LogModule.RESTOR,
+                "[REBUILD] layout_block_indices recovery failed; block types may not apply (check segment recording)",
+            )
+
     # Sort segments by segment_index so text path and layout path have a consistent baseline order.
     # For PDF layout path, _rebuild_markdown_from_layout_segments will re-sort by layout order (page + bbox y)
     # so that image/paragraph position matches the source PDF when segment_index does not follow layout.
@@ -798,21 +1075,47 @@ def rebuild_markdown_document_from_segments(
                 block_index_to_type=block_index_to_type,
                 equation_format=equation_format,
                 table_body_format=table_body_format,
+                bilingual_export=bilingual_export,
+                target_first=target_first,
+                source_text_italic=style_source_italic,
+                source_text_color=style_source_color,
+                target_text_italic=style_target_italic,
+                target_text_color=style_target_color,
             )
         else:
             # Fallback to text-based rebuild if layout loading failed
             logger.warning(LogModule.RESTOR, "[REBUILD] Layout loading failed, falling back to text-based rebuild")
-            markdown_content = _rebuild_markdown_from_text_segments(segments=segments)
+            markdown_content = _rebuild_markdown_from_text_segments(
+                segments=segments,
+                bilingual_export=bilingual_export,
+                target_first=target_first,
+                source_text_italic=style_source_italic,
+                source_text_color=style_source_color,
+                target_text_italic=style_target_italic,
+                target_text_color=style_target_color,
+            )
     else:
         # Use text-based rebuild for MD/TXT paths
         if not is_pdf_with_layout:
-            logger.info(LogModule.RESTOR, "[REBUILD] Text path: using text-based segment type for rebuild")
-        markdown_content = _rebuild_markdown_from_text_segments(segments=segments)
+            logger.debug(LogModule.RESTOR, "[REBUILD] Text path: using text-based segment type for rebuild")
+        markdown_content = _rebuild_markdown_from_text_segments(
+            segments=segments,
+            bilingual_export=bilingual_export,
+            target_first=target_first,
+            source_text_italic=style_source_italic,
+            source_text_color=style_source_color,
+            target_text_italic=style_target_italic,
+            target_text_color=style_target_color,
+        )
     
     if not markdown_content:
         logger.warning(LogModule.RESTOR,"No markdown content generated from segments")
         return None
-    
+
+    # P0c: Clean up metadata lines (authors, dates, funding, keywords) that MinerU
+    # may have incorrectly marked as headings. These are always body text.
+    markdown_content = _clean_metadata_headings(markdown_content)
+
     # Process images and create MarkdownDocument (shared logic)
     return _process_images_and_create_markdown_document(
         markdown_content=markdown_content,
@@ -822,3 +1125,47 @@ def rebuild_markdown_document_from_segments(
         metadata=metadata,
         output_dir=output_dir,
     )
+
+
+def _clean_metadata_headings(markdown_text: str) -> str:
+    """
+    Remove heading markers from metadata lines that MinerU may have incorrectly
+    marked as headings — authors with superscripts, dates, funding info, keywords.
+
+    These are always body text and should not appear as ``# Author Name`` in output.
+    """
+    _METADATA_HEADING_PATTERNS = (
+        r'^#\s+\S+\s+\\?\^?\{\d',          # Author: # Yun Li ^{1}
+        r'^#\s+\\?\^?\{\d+\}',              # Affiliation: # ^{1} Department...
+        r'^#\s+Correspondence:',             # English metadata
+        r'^#\s+Received:',
+        r'^#\s+Revised:',
+        r'^#\s+Accepted:',
+        r'^#\s+Handling Editor:',
+        r'^#\s+Funding:',
+        r'^#\s+Keywords:',
+        r'^#\s+通讯作者',                     # Chinese metadata
+        r'^#\s+收稿日期',
+        r'^#\s+修订日期',
+        r'^#\s+接收日期',
+        r'^#\s+责任编辑',
+        r'^#\s+基金项目',
+        r'^#\s+关键词',
+        # Author list with Unicode superscript characters (¹²³...)
+        r'^#\s+\S+[\s·,，][\u2070-\u209F\u00B2\u00B3¹²³]',
+        # Author list separated by | with superscripts
+        r'^#\s+\S+\s*\|\s*\S+[\u2070-\u209F\u00B2\u00B3¹²³]',
+        # Overlong heading lines (> 120 chars after #) — certainly body text
+        r'^#\s+.{120,}$',
+    )
+    compiled = [re.compile(p) for p in _METADATA_HEADING_PATTERNS]
+
+    lines = markdown_text.split("\n")
+    cleaned = []
+    for line in lines:
+        stripped = line.lstrip()
+        if any(p.match(stripped) for p in compiled):
+            cleaned.append(stripped.lstrip("#").strip())
+        else:
+            cleaned.append(line)
+    return "\n".join(cleaned)

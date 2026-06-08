@@ -108,13 +108,38 @@ namespace OwlangsLauncher.Services
             };
             contextMenu.Items.Add(restartBackendItem);
             
+            var browserItem = new MenuItem
+            {
+                Header = "Browser",
+                Items =
+                {
+                    new MenuItem
+                    {
+                        Header = "Open",
+                        Command = new RelayCommand(() =>
+                        {
+                            try
+                            {
+                                Process.Start(new ProcessStartInfo("http://localhost:8800") { UseShellExecute = true });
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Windows.MessageBox.Show($"Failed to open browser: {ex.Message}",
+                                    "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                            }
+                        })
+                    }
+                }
+            };
+            contextMenu.Items.Add(browserItem);
+
             // Frontend menu items
             if (_frontendService != null)
             {
-                var startFrontendItem = new MenuItem 
-                { 
+                var startFrontendItem = new MenuItem
+                {
                     Header = "Start App",
-                    Command = new RelayCommand(() => 
+                    Command = new RelayCommand(() =>
                     {
                         try
                         {
@@ -122,17 +147,17 @@ namespace OwlangsLauncher.Services
                         }
                         catch (Exception ex)
                         {
-                            System.Windows.MessageBox.Show($"Failed to start frontend: {ex.Message}", 
+                            System.Windows.MessageBox.Show($"Failed to start frontend: {ex.Message}",
                                 "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
                         }
                     })
                 };
                 contextMenu.Items.Add(startFrontendItem);
-                
-                var stopFrontendItem = new MenuItem 
-                { 
+
+                var stopFrontendItem = new MenuItem
+                {
                     Header = "Stop App",
-                    Command = new RelayCommand(() => 
+                    Command = new RelayCommand(() =>
                     {
                         try
                         {
@@ -143,12 +168,12 @@ namespace OwlangsLauncher.Services
                                 System.Windows.MessageBoxButton.YesNo,
                                 System.Windows.MessageBoxImage.Warning,
                                 System.Windows.MessageBoxResult.No);
-                            
+
                             if (result != System.Windows.MessageBoxResult.Yes)
                             {
                                 return; // User cancelled
                             }
-                            
+
                             _frontendService.StopFrontend();
                         }
                         catch (Exception ex)
@@ -159,24 +184,6 @@ namespace OwlangsLauncher.Services
                     })
                 };
                 contextMenu.Items.Add(stopFrontendItem);
-                
-                var openBrowserItem = new MenuItem 
-                { 
-                    Header = "Open in Browser",
-                    Command = new RelayCommand(() => 
-                    {
-                        try
-                        {
-                            Process.Start(new ProcessStartInfo("http://localhost:8800") { UseShellExecute = true });
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Windows.MessageBox.Show($"Failed to open browser: {ex.Message}", 
-                                "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
-                        }
-                    })
-                };
-                contextMenu.Items.Add(openBrowserItem);
             }
             
             contextMenu.Items.Add(new Separator());

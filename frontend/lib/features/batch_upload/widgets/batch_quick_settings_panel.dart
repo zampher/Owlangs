@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/app_localizations.dart';
+import '../../../shared/utils/language_mapper.dart';
 import '../../../shared/services/glossary_api_service.dart';
 import '../../../shared/services/config_service.dart' show AIPlatformInfo, ConfigService;
 import '../../../shared/providers/settings_provider.dart'
@@ -111,50 +112,6 @@ class _BatchQuickSettingsPanelState
     <String, String>{'code': 'vi', 'native': 'Tiếng Việt'},
   ];
 
-  String _languageDisplayName(AppLocalizations l10n, String code, String native) {
-    final String label = switch (code) {
-      'ar' => l10n.translationLangArabic,
-      'bn' => l10n.translationLangBengali,
-      'ca' => l10n.translationLangCatalan,
-      'zh' => l10n.translationLangChinese,
-      'zh-TW' => l10n.translationLangChineseTraditional,
-      'cs' => l10n.translationLangCzech,
-      'hr' => l10n.translationLangCroatian,
-      'da' => l10n.translationLangDanish,
-      'nl' => l10n.translationLangDutch,
-      'en' => l10n.translationLangEnglish,
-      'fil' => l10n.translationLangFilipino,
-      'fi' => l10n.translationLangFinnish,
-      'fr' => l10n.translationLangFrench,
-      'de' => l10n.translationLangGerman,
-      'el' => l10n.translationLangGreek,
-      'he' => l10n.translationLangHebrew,
-      'hi' => l10n.translationLangHindi,
-      'it' => l10n.translationLangItalian,
-      'ja' => l10n.translationLangJapanese,
-      'ko' => l10n.translationLangKorean,
-      'km' => l10n.translationLangKhmer,
-      'lt' => l10n.translationLangLithuanian,
-      'mk' => l10n.translationLangMacedonian,
-      'ms' => l10n.translationLangMalay,
-      'nb' => l10n.translationLangNorwegian,
-      'pl' => l10n.translationLangPolish,
-      'pt' => l10n.translationLangPortuguese,
-      'ro' => l10n.translationLangRomanian,
-      'ru' => l10n.translationLangRussian,
-      'sl' => l10n.translationLangSlovenian,
-      'es' => l10n.translationLangSpanish,
-      'sv' => l10n.translationLangSwedish,
-      'th' => l10n.translationLangThai,
-      'tr' => l10n.translationLangTurkish,
-      'uk' => l10n.translationLangUkrainian,
-      'ur' => l10n.translationLangUrdu,
-      'vi' => l10n.translationLangVietnamese,
-      _ => code,
-    };
-    return '$label ($native)';
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -238,7 +195,7 @@ class _BatchQuickSettingsPanelState
             (Map<String, String> lang) => DropdownMenuItem<String>(
               value: lang['code'],
               child: Text(
-                _languageDisplayName(l10n, lang['code']!, lang['native']!),
+                languageDisplayName(l10n, lang['code']!),
                 style: const TextStyle(fontSize: 13),
               ),
             ),

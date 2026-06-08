@@ -77,6 +77,7 @@ def llm_chat(messages: List[LLMMessage], config: LLMConfig) -> str:
         concurrent=max(config.concurrent, 1),
         connect_timeout=config.connect_timeout,
         timeout=config.timeout,
+        write_timeout=getattr(config, 'write_timeout', None),
         thinking=config.thinking,  # type: ignore[arg-type]
         retry=config.retry,
         max_tokens=config.max_tokens,

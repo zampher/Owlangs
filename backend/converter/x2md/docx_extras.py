@@ -30,10 +30,47 @@ def _set_paragraph_text(paragraph, text: str):
     # Clear existing runs
     for run in paragraph.runs:
         run.text = ""
-    
+
     # Add new text as a single run
     if text:
         paragraph.add_run(text)
+
+
+def _set_paragraph_text_direct(p_element, text: str):
+    """
+    Set text for a paragraph lxml element using direct XML manipulation.
+
+    Unlike _set_paragraph_text (which relies on python-docx Paragraph with a
+    parent document), this function operates on the raw lxml ``w:p`` element
+    directly.  It removes all ``w:r`` children and adds a single new ``w:r`` /
+    ``w:t`` pair.  This is necessary for paragraphs inside textboxes (txbxContent)
+    and SDT content controls, where python-docx Paragraph with ``parent=None``
+    may not properly clear existing runs.
+    """
+    from docx.oxml.ns import qn
+    from lxml import etree
+
+    # 1. Remove all existing w:r children via xpath (local-name avoids namespace issues)
+    for r in p_element.xpath('./*[local-name()="r"]'):
+        try:
+            p_element.remove(r)
+        except Exception:
+            pass
+
+    # 3. Add a single new w:r / w:t with the text
+    if text:
+        r_elem = etree.SubElement(p_element, qn('w:r'))
+        t_elem = etree.SubElement(r_elem, qn('w:t'))
+        t_elem.text = text
+        # Ensure xml:space="preserve" so leading/trailing whitespace is kept
+        t_elem.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+    else:
+        # Even when empty, ensure paragraph has at least a run placeholder
+        # (some renderers skip empty paragraphs entirely)
+        r_elem = etree.SubElement(p_element, qn('w:r'))
+        t_elem = etree.SubElement(r_elem, qn('w:t'))
+        t_elem.text = ''
+        t_elem.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
 
 
 def extract_headers_footers(docx_bytes: bytes) -> List[Tuple[Location, str]]:
@@ -587,7 +624,7 @@ def extract_text_in_textboxes_and_sdts(docx_bytes: bytes) -> List[Tuple[Location
         content = "\n".join(t for t in texts if t)
         if content.strip():
             items.append(((container_name, idx), content))
-            idx += 1
+        idx += 1
         return idx
 
     # Extract all elements with unified indexing
@@ -602,21 +639,25 @@ def extract_text_in_textboxes_and_sdts(docx_bytes: bytes) -> List[Tuple[Location
                 print(f"[DEBUG] Skipping nested SDT: {sdt_index}")
                 continue
             
-            # Process all sdtContent elements within this SDT
-            sdt_contents = sdt.xpath('.//*[local-name()="sdtContent"]')
+            # Process only direct sdtContent children (not nested within child SDTs)
+            sdt_contents = sdt.xpath('./*[local-name()="sdtContent"]')
             print(f"[DEBUG] Found {len(sdt_contents)} sdtContent elements in SDT {sdt_index}")
             
             for i, content in enumerate(sdt_contents):
                 texts: List[str] = []
-                # paragraphs within sdtContent
+                # paragraphs within sdtContent (skip those inside child SDTs)
                 for p in content.xpath('.//*[local-name()="p"]'):
+                    if p.xpath('./ancestor::*[local-name()="sdt"][parent::*[local-name()="sdtContent"]]'):
+                        continue
                     runs = p.xpath('.//*[local-name()="t"]')
                     if runs:
                         txt = ''.join([(t.text or '') for t in runs])
                         if txt:
                             texts.append(txt)
-                # tables within sdtContent
+                # tables within sdtContent (skip cells inside child SDTs)
                 for cell in content.xpath('.//*[local-name()="tc"]'):
+                    if cell.xpath('./ancestor::*[local-name()="sdt"][parent::*[local-name()="sdtContent"]]'):
+                        continue
                     for p in cell.xpath('.//*[local-name()="p"]'):
                         runs = p.xpath('.//*[local-name()="t"]')
                         if runs:
@@ -681,14 +722,27 @@ def extract_text_in_textboxes_and_sdts(docx_bytes: bytes) -> List[Tuple[Location
         
         # 2) Textboxes and drawing elements - search in entire document
         all_textbox_elements = []
-        
+
         # Search for w:txbxContent nodes
         try:
             txbx_nodes = doc._element.xpath('.//*[local-name()="txbxContent"]')
-            all_textbox_elements.extend(txbx_nodes)
+            # Filter: skip txbxContent in mc:Fallback when mc:Choice already has one
+            # (this is the same textbox rendered via two paths — DML and VML)
+            for txbx in txbx_nodes:
+                _alt_content = txbx.xpath('./ancestor::*[local-name()="AlternateContent"]')
+                if _alt_content:
+                    _in_fallback = txbx.xpath('./ancestor::*[local-name()="Fallback"]')
+                    if _in_fallback:
+                        _choice_txbx = _alt_content[0].xpath(
+                            './/*[local-name()="Choice"]//*[local-name()="txbxContent"]'
+                        )
+                        if _choice_txbx:
+                            print(f"[DEBUG] Skipping txbxContent in mc:Fallback (Choice path already covers it)")
+                            continue
+                all_textbox_elements.append(txbx)
         except Exception as e:
             print(f"[DEBUG] Error searching w:txbxContent: {e}")
-        
+
         # Search for legacy v:textbox nodes
         try:
             pict_nodes = doc._element.xpath('.//*[local-name()="pict"]//*[local-name()="textbox"]')
@@ -712,11 +766,16 @@ def extract_text_in_textboxes_and_sdts(docx_bytes: bytes) -> List[Tuple[Location
         tb_index = 0
         for element in all_textbox_elements:
             if element.tag.endswith('txbxContent') or element.tag.endswith('textbox'):
+                # Skip textboxes inside SDTs (already handled by SDT extraction)
+                if element.xpath('./ancestor::*[local-name()="sdt"]'):
+                    print(f"[DEBUG] Skipping textbox {tb_index} inside SDT")
+                    tb_index += 1
+                    continue
                 # Handle textbox elements
                 print(f"[DEBUG] Processing textbox element {tb_index}")
                 tb_index = _extract_text_from_container(element, 'textbox', tb_index)
             elif element.tag.endswith('drawing'):
-                # Handle drawing elements
+                # Handle drawing elements - always increment index to match apply phase
                 text_elements = element.xpath('.//*[local-name()="t"]')
                 if text_elements:
                     texts = []
@@ -727,7 +786,9 @@ def extract_text_in_textboxes_and_sdts(docx_bytes: bytes) -> List[Tuple[Location
                     if content.strip():
                         print(f"[DEBUG] Found text in drawing: {content[:100]}...")
                         items.append((('textbox', tb_index), content))
-                        tb_index += 1
+                tb_index += 1
+            else:
+                tb_index += 1
     except Exception as e:
         print(f"[DEBUG] Error extracting elements: {e}")
         pass
@@ -746,44 +807,29 @@ def apply_text_in_textboxes_and_sdts(docx_bytes: bytes, translations: Dict[Locat
 
     # Helper to set text for a node containing w:p descendants
     def _apply_to_container(container, kind: str, start_index: int) -> int:
-        idx = start_index
-        ns = doc._element.nsmap
-        if kind == 'legacy':
-            ns = dict(ns)
-            if 'v' not in ns:
-                ns['v'] = 'urn:schemas-microsoft-com:vml'
-            p_xpath = './/*[local-name()="p"]'
-            t_xpath = './/*[local-name()="t"]'
-        else:
-            p_xpath = './/*[local-name()="p"]'
-            t_xpath = './/*[local-name()="t"]'
+        """
+        Apply translations to textbox containers using direct XML manipulation.
 
+        Uses ``_set_paragraph_text_direct`` instead of python-docx ``Paragraph``
+        because the latter requires a valid parent document.  Textbox paragraphs
+        inside ``w:txbxContent`` are not part of the main document body, so
+        ``Paragraph(xml_element, None)`` does not reliably clear existing runs.
+        """
+        idx = start_index
+        p_xpath = './/*[local-name()="p"]'
         for node in container:
             key = ('textbox', idx)
             if key in translations:
                 new_text = translations[key]
                 print(f"[DEBUG] Applying translation to container {idx}: {new_text[:50]}...")
-                # replace first paragraph text; clear others
                 paragraphs = node.xpath(p_xpath)
                 if paragraphs:
                     print(f"[DEBUG] Found {len(paragraphs)} paragraphs in container {idx}")
-                    # set first paragraph to new_text
-                    from docx.text.paragraph import Paragraph  # type: ignore
-                    try:
-                        p0 = Paragraph(paragraphs[0], None)
-                        _set_paragraph_text(p0, new_text)
-                        print(f"[DEBUG] Successfully applied translation to paragraph in container {idx}")
-                    except Exception as e:
-                        print(f"[DEBUG] Failed to apply via Paragraph, using fallback: {e}")
-                        # fallback: set w:t texts
-                        ts = paragraphs[0].xpath(t_xpath)
-                        if ts:
-                            ts[0].text = new_text
-                            print(f"[DEBUG] Applied translation via fallback to {len(ts)} text elements")
-                    # clear remaining paragraphs
+                    # Set first paragraph text via direct XML (reliable inside textboxes)
+                    _set_paragraph_text_direct(paragraphs[0], new_text)
+                    # Clear remaining paragraphs
                     for p in paragraphs[1:]:
-                        for t in p.xpath(t_xpath):
-                            t.text = ''
+                        _set_paragraph_text_direct(p, "")
                 else:
                     print(f"[DEBUG] No paragraphs found in container {idx}")
             else:
@@ -803,45 +849,23 @@ def apply_text_in_textboxes_and_sdts(docx_bytes: bytes, translations: Dict[Locat
                 print(f"[DEBUG] Skipping nested SDT in apply: {sdt_index}")
                 continue
             
-            # Apply sdtContent translations
-            sdt_contents = sdt.xpath('.//*[local-name()="sdtContent"]')
+            # Apply sdtContent translations (direct children only, not nested in child SDTs)
+            sdt_contents = sdt.xpath('./*[local-name()="sdtContent"]')
             for i, content in enumerate(sdt_contents):
                 key = ('sdt_content', sdt_index, i)
                 if key in translations:
                     new_text = translations[key]
                     print(f"[DEBUG] Applying sdtContent translation {sdt_index}.{i}: {new_text[:50]}...")
-                    # Apply to sdtContent
-                    paragraphs = content.xpath('.//*[local-name()="p"]')
+                    # Only modify paragraphs outside child SDTs
+                    paragraphs = content.xpath('./*[local-name()="p"]')
+                    if not paragraphs:
+                        # Fallback: look deeper but skip child SDT paragraphs
+                        paragraphs = content.xpath('.//*[local-name()="p"][not(ancestor::*[local-name()="sdt"][parent::*[local-name()="sdtContent"]])]')
                     if paragraphs:
-                        from docx.text.paragraph import Paragraph  # type: ignore
-                        try:
-                            # 处理第一个段落：设置新文本
-                            p0 = Paragraph(paragraphs[0], None)
-                            _set_paragraph_text(p0, new_text)
-                            print(f"[DEBUG] Successfully applied sdtContent translation {sdt_index}.{i}")
-                            
-                            # 处理其他段落：完全清空内容
-                            for p in paragraphs[1:]:
-                                try:
-                                    p_para = Paragraph(p, None)
-                                    _set_paragraph_text(p_para, "")
-                                except Exception as e:
-                                    print(f"[DEBUG] Failed to clear paragraph via Paragraph, using fallback: {e}")
-                                    # 直接清空所有文本元素
-                                    for t in p.xpath('.//*[local-name()="t"]'):
-                                        t.text = ''
-                        except Exception as e:
-                            print(f"[DEBUG] Failed to apply sdtContent via Paragraph, using fallback: {e}")
-                            # 直接操作XML元素
-                            if paragraphs:
-                                ts = paragraphs[0].xpath('.//*[local-name()="t"]')
-                                if ts:
-                                    ts[0].text = new_text
-                                # 清空其他段落
-                                for p in paragraphs[1:]:
-                                    for t in p.xpath('.//*[local-name()="t"]'):
-                                        t.text = ''
-            
+                        _set_paragraph_text_direct(paragraphs[0], new_text)
+                        for p in paragraphs[1:]:
+                            _set_paragraph_text_direct(p, "")
+
             # Apply child SDT translations
             child_sdts = sdt.xpath('.//*[local-name()="sdt"]')
             for i, child_sdt in enumerate(child_sdts):
@@ -849,70 +873,48 @@ def apply_text_in_textboxes_and_sdts(docx_bytes: bytes, translations: Dict[Locat
                 if key in translations:
                     new_text = translations[key]
                     print(f"[DEBUG] Applying child SDT translation {sdt_index}.{i}: {new_text[:50]}...")
-                    # Apply to child SDT
                     paragraphs = child_sdt.xpath('.//*[local-name()="p"]')
                     if paragraphs:
-                        from docx.text.paragraph import Paragraph  # type: ignore
-                        try:
-                            # 处理第一个段落：设置新文本
-                            p0 = Paragraph(paragraphs[0], None)
-                            _set_paragraph_text(p0, new_text)
-                            print(f"[DEBUG] Successfully applied child SDT translation {sdt_index}.{i}")
-                            
-                            # 处理其他段落：完全清空内容
-                            for p in paragraphs[1:]:
-                                try:
-                                    p_para = Paragraph(p, None)
-                                    _set_paragraph_text(p_para, "")
-                                except Exception as e:
-                                    print(f"[DEBUG] Failed to clear child SDT paragraph via Paragraph, using fallback: {e}")
-                                    # 直接清空所有文本元素
-                                    for t in p.xpath('.//*[local-name()="t"]'):
-                                        t.text = ''
-                        except Exception as e:
-                            print(f"[DEBUG] Failed to apply child SDT via Paragraph, using fallback: {e}")
-                            # 直接操作XML元素
-                            if paragraphs:
-                                ts = paragraphs[0].xpath('.//*[local-name()="t"]')
-                                if ts:
-                                    ts[0].text = new_text
-                                # 清空其他段落
-                                for p in paragraphs[1:]:
-                                    for t in p.xpath('.//*[local-name()="t"]'):
-                                        t.text = ''
-            
+                        _set_paragraph_text_direct(paragraphs[0], new_text)
+                        for p in paragraphs[1:]:
+                            _set_paragraph_text_direct(p, "")
+
             # Apply direct SDT content (if no sdtContent or child SDTs)
             if not sdt_contents and not child_sdts:
                 key = ('sdt', sdt_index)
                 if key in translations:
                     new_text = translations[key]
                     print(f"[DEBUG] Applying SDT translation {sdt_index}: {new_text[:50]}...")
-                    # set all paragraphs: first gets text, others cleared
                     paragraphs = sdt.xpath('.//*[local-name()="p"]')
                     if paragraphs:
-                        from docx.text.paragraph import Paragraph  # type: ignore
-                        try:
-                            p0 = Paragraph(paragraphs[0], None)
-                            _set_paragraph_text(p0, new_text)
-                            print(f"[DEBUG] Successfully applied SDT translation {sdt_index}")
-                        except Exception as e:
-                            print(f"[DEBUG] Failed to apply SDT via Paragraph, using fallback: {e}")
-                            ts = paragraphs[0].xpath('.//*[local-name()="t"]')
-                            if ts:
-                                ts[0].text = new_text
+                        _set_paragraph_text_direct(paragraphs[0], new_text)
                         for p in paragraphs[1:]:
-                            for t in p.xpath('.//*[local-name()="t"]'):
-                                t.text = ''
+                            _set_paragraph_text_direct(p, "")
             
             sdt_index += 1
         
         # 2) Apply textboxes and drawing elements
         all_textbox_elements = []
-        
+        # Track mc:AlternateContent Fallback elements that need the Choice translation
+        _choice_to_fallback: dict = {}
+
         # Search for w:txbxContent nodes
         try:
             txbx_nodes = doc._element.xpath('.//*[local-name()="txbxContent"]')
-            all_textbox_elements.extend(txbx_nodes)
+            # Filter: skip txbxContent in mc:Fallback when mc:Choice already has one
+            for txbx in txbx_nodes:
+                _alt_content = txbx.xpath('./ancestor::*[local-name()="AlternateContent"]')
+                if _alt_content:
+                    _in_fallback = txbx.xpath('./ancestor::*[local-name()="Fallback"]')
+                    _choice_txbx = _alt_content[0].xpath(
+                        './/*[local-name()="Choice"]//*[local-name()="txbxContent"]'
+                    )
+                    if _in_fallback and _choice_txbx:
+                        # Map Fallback to its Choice counterpart for later application
+                        _choice_to_fallback[id(_choice_txbx[0])] = txbx
+                        print(f"[DEBUG] Skipping txbxContent in mc:Fallback in apply (Choice covers it)")
+                        continue
+                all_textbox_elements.append(txbx)
         except Exception as e:
             print(f"[DEBUG] Error searching w:txbxContent: {e}")
         
@@ -939,15 +941,31 @@ def apply_text_in_textboxes_and_sdts(docx_bytes: bytes, translations: Dict[Locat
         tb_index = 0
         for element in all_textbox_elements:
             key = ('textbox', tb_index)
+
+            # Skip textboxes inside SDTs (already handled by SDT apply)
+            if element.xpath('./ancestor::*[local-name()="sdt"]'):
+                print(f"[DEBUG] Skipping textbox {tb_index} inside SDT in apply")
+                tb_index += 1
+                continue
+
             if key in translations:
                 new_text = translations[key]
                 print(f"[DEBUG] Applying translation to element {tb_index}: {new_text[:50]}...")
                 
                 if element.tag.endswith('txbxContent') or element.tag.endswith('textbox'):
-                    # Handle textbox elements
+                    # Handle textbox elements (Choice path)
                     tb_index = _apply_to_container([element], kind='drawing', start_index=tb_index)
+                    # Also apply same translation to Fallback counterpart in mc:AlternateContent
+                    _fallback_elem = _choice_to_fallback.get(id(element))
+                    if _fallback_elem is not None:
+                        print(f"[DEBUG] Also applying translation to Fallback counterpart of Choice {tb_index - 1}")
+                        _fb_paragraphs = _fallback_elem.xpath('.//*[local-name()="p"]')
+                        if _fb_paragraphs:
+                            _set_paragraph_text_direct(_fb_paragraphs[0], new_text)
+                            for _fb_p in _fb_paragraphs[1:]:
+                                _set_paragraph_text_direct(_fb_p, "")
                 elif element.tag.endswith('drawing'):
-                    # Handle drawing elements
+                    # Handle drawing elements - always increment index to match extraction phase
                     text_elements = element.xpath('.//*[local-name()="t"]')
                     if text_elements:
                         print(f"[DEBUG] Found {len(text_elements)} text elements in drawing {tb_index}")
@@ -955,10 +973,7 @@ def apply_text_in_textboxes_and_sdts(docx_bytes: bytes, translations: Dict[Locat
                         text_elements[0].text = new_text
                         for t_elem in text_elements[1:]:
                             t_elem.text = ''
-                        tb_index += 1
-                    else:
-                        print(f"[DEBUG] No text elements found in drawing {tb_index}")
-                        tb_index += 1
+                    tb_index += 1
                 else:
                     tb_index += 1
             else:

@@ -91,13 +91,13 @@ def _get_image_layout_for_grouping(
     layout_doc = task_state.get("layout_document")
     eq_fmt = equation_format if equation_format is not None else (task_state.get("equation_format") if task_state else None)
     tbl_fmt = table_body_format if table_body_format is not None else (task_state.get("table_body_format") if task_state else None)
-    logger.info(
+    logger.debug(
         LogModule.EXPORT,
         f"[DOWNLOAD] Layout for image grouping: segs_data_type={type(segs_data).__name__ if segs_data else None}, "
         f"seg_list_len={len(seg_list) if seg_list else 0}, layout_doc={layout_doc is not None}"
     )
     if not layout_doc or not seg_list:
-        logger.info(LogModule.EXPORT, f"[DOWNLOAD] No layout/segments for image grouping, returning (None, None, None)")
+        logger.debug(LogModule.EXPORT, f"[DOWNLOAD] No layout/segments for image grouping, returning (None, None, None)")
         return (None, None, None)
     indices, path_to_block_index = get_image_block_indices_from_layout(
         seg_list, layout_doc,
@@ -131,6 +131,471 @@ def _merge_image_data_maps(
     merged = dict(base)
     merged.update(override)
     return merged
+
+
+def _populate_image_data_map_from_extracted(
+    image_data_map: Dict[str, Dict[str, str]],
+    images_bytes_map: Dict[str, bytes],
+) -> None:
+    """Register every layout ZIP image under filename and common path key variants."""
+    for img_path, img_bytes in (images_bytes_map or {}).items():
+        if not img_bytes:
+            continue
+        norm_path = str(img_path).replace("\\", "/")
+        mime = mimetypes.guess_type(norm_path)[0] or "image/png"
+        data_uri = f"data:{mime};base64,{base64.b64encode(img_bytes).decode('ascii')}"
+        filename = norm_path.split("/")[-1]
+        entry = {"data": data_uri, "alt": filename}
+        keys = {
+            filename,
+            norm_path,
+            norm_path.lstrip("./"),
+            f"./{norm_path.lstrip('./')}",
+            f"images/{filename}",
+            f"./images/{filename}",
+        }
+        for key in keys:
+            if key and key not in image_data_map:
+                image_data_map[key] = dict(entry)
+
+
+def _populate_layout_placeholder_image_map(
+    image_data_map: Dict[str, Dict[str, str]],
+    task_state: Dict[str, Any],
+    layout_doc: Any,
+    *,
+    layout_result: Any = None,
+    equation_format: str = "text",
+    table_body_format: str = "html",
+) -> int:
+    """
+    Register layoutimg{N} keys (and filename aliases) for PDF figure placeholders.
+
+    When layout_result is None (segment rebuild path), rebuild chunk metadata via
+    LayoutMarkdownBuilder so placeholder IDs match <ph-layoutimgN> in markdown.
+    """
+    zip_bytes = task_state.get("layout_source_zip")
+    if not zip_bytes or layout_doc is None:
+        return 0
+
+    if layout_result is None:
+        from layout.markdown_builder import LayoutMarkdownBuilder
+
+        chunk_size = task_state.get("chunk_size", 2000) or 2000
+        deep_split = bool(task_state.get("deep_split_enabled", False))
+        builder = LayoutMarkdownBuilder(
+            max_chunk_chars=chunk_size,
+            deep_split=deep_split,
+            equation_format=equation_format,
+            table_body_format=table_body_format,
+        )
+        layout_result = builder.build(layout_doc)
+
+    chunks = getattr(layout_result, "chunks", None) if layout_result else None
+    if not chunks:
+        return 0
+
+    zip_file = None
+    registered = 0
+    try:
+        zip_file = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        zip_entry_map = {
+            name.replace("\\", "/"): name for name in zip_file.namelist()
+        }
+
+        def _normalize_image_path(path: str | None) -> str | None:
+            if not path:
+                return None
+            return path.replace("\\", "/").lstrip("./")
+
+        placeholder_cache: dict[str, str] = {}
+
+        def _read_image_data_uri(image_path: str | None) -> str | None:
+            if not image_path or zip_file is None or not zip_entry_map:
+                return None
+            normalized = _normalize_image_path(image_path)
+            if not normalized:
+                return None
+            if normalized in placeholder_cache:
+                return placeholder_cache[normalized]
+
+            candidate = zip_entry_map.get(normalized)
+            if candidate is None:
+                filename_only = os.path.basename(normalized)
+                for name, original in zip_entry_map.items():
+                    if (
+                        name == filename_only
+                        or name.endswith("/" + filename_only)
+                        or name.endswith("\\" + filename_only)
+                    ):
+                        candidate = original
+                        break
+                    if name.endswith(normalized):
+                        candidate = original
+                        break
+                    if (
+                        name.endswith("/images/" + filename_only)
+                        or name.endswith("\\images\\" + filename_only)
+                    ):
+                        candidate = original
+                        break
+            if not candidate:
+                for name, original in zip_entry_map.items():
+                    fn = os.path.basename(normalized)
+                    if (
+                        name.endswith("/" + fn)
+                        or name.endswith("\\" + fn)
+                        or name == fn
+                    ):
+                        candidate = original
+                        break
+            if not candidate:
+                logger.warning(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] layoutimg ZIP lookup failed for '{image_path}' "
+                    f"(normalized: '{normalized}')",
+                )
+                return None
+            try:
+                raw_bytes = zip_file.read(candidate)
+            except KeyError as e:
+                logger.warning(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] Failed to read layout image '{candidate}' from ZIP: {e}",
+                )
+                return None
+            mime = mimetypes.guess_type(candidate)[0] or "image/png"
+            data_uri = f"data:{mime};base64,{base64.b64encode(raw_bytes).decode('ascii')}"
+            placeholder_cache[normalized] = data_uri
+            return data_uri
+
+        for idx, chunk in enumerate(chunks):
+            if chunk.chunk_type != "image":
+                continue
+            placeholder_id = chunk.image_placeholder or f"layoutimg{idx}"
+            alt_text = chunk.image_alt or (chunk.image_path or "Image")
+            data_uri = _read_image_data_uri(chunk.image_path)
+            if not data_uri:
+                continue
+            image_data_map[placeholder_id] = {
+                "data": data_uri,
+                "alt": alt_text or "Image",
+            }
+            registered += 1
+            if chunk.image_path:
+                filename_key = os.path.basename(
+                    chunk.image_path.replace("\\", "/")
+                )
+                if filename_key and filename_key not in image_data_map:
+                    image_data_map[filename_key] = {
+                        "data": data_uri,
+                        "alt": chunk.image_path,
+                    }
+    except Exception as e:
+        logger.warning(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Failed to populate layoutimg placeholder map: {e}",
+            exc_info=True,
+        )
+    finally:
+        if zip_file:
+            try:
+                zip_file.close()
+            except Exception:
+                pass
+
+    if registered:
+        logger.info(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Registered {registered} layoutimg placeholder(s) in image_data_map",
+        )
+    return registered
+
+
+def _resolve_export_format_settings(
+    task_state: Dict[str, Any],
+    payload: Any = None,
+    equation_format: Optional[str] = None,
+    table_body_format: Optional[str] = None,
+) -> tuple:
+    """Return normalized (equation_format, table_body_format) for export."""
+    payload_obj = payload if payload is not None else task_state.get("payload")
+    eq = equation_format if equation_format is not None else task_state.get("equation_format")
+    tbl = table_body_format if table_body_format is not None else task_state.get("table_body_format")
+    if payload_obj:
+        if isinstance(payload_obj, dict):
+            if eq is None:
+                eq = payload_obj.get("equation_format")
+            if tbl is None:
+                tbl = payload_obj.get("table_body_format")
+        else:
+            if eq is None:
+                eq = getattr(payload_obj, "equation_format", None)
+            if tbl is None:
+                tbl = getattr(payload_obj, "table_body_format", None)
+    # PDF flow: default to image for tables, latex for equations
+    orig_filename = (task_state.get("original_filename") or "").lower()
+    is_pdf_flow = orig_filename.endswith(".pdf")
+    default_eq = "latex" if is_pdf_flow else "text"
+    default_tbl = "image" if is_pdf_flow else "html"
+
+    eq = (eq or default_eq).lower().strip()
+    tbl = (tbl or default_tbl).lower().strip()
+    if eq not in ("text", "latex", "image"):
+        eq = default_eq
+    if tbl not in ("html", "image"):
+        tbl = default_tbl
+    return eq, tbl
+
+
+def _resolve_bilingual_settings(
+    task_state: Dict[str, Any],
+    payload: Any = None,
+    bilingual_export: Optional[bool] = None,
+    bilingual_order: Optional[str] = None,
+    source_text_italic: Optional[bool] = None,
+    source_text_color: Optional[str] = None,
+    target_text_italic: Optional[bool] = None,
+    target_text_color: Optional[str] = None,
+) -> Tuple[bool, bool, bool, Optional[str], bool, Optional[str]]:
+    """Return normalized bilingual export settings for export.
+
+    Returns:
+        (bilingual_enabled, target_first, source_text_italic, source_text_color,
+         target_text_italic, target_text_color)
+    """
+    from utils.bilingual_export_utils import get_bilingual_config
+
+    stored_enabled, stored_target_first = get_bilingual_config(task_state)
+
+    if bilingual_export is not None:
+        enabled = bool(bilingual_export)
+    else:
+        enabled = stored_enabled
+
+    if bilingual_order is not None:
+        target_first = str(bilingual_order).lower() == "target_before_source"
+    else:
+        target_first = stored_target_first if enabled else False
+
+    # Resolve source text style
+    italic = source_text_italic if source_text_italic is not None else task_state.get("source_text_italic", False)
+    color = source_text_color if source_text_color is not None else task_state.get("source_text_color")
+    if color and str(color).strip().lower() not in ("gray", "blue", "red", "green", "orange", "black"):
+        color = None
+
+    # Resolve target text style
+    target_italic = target_text_italic if target_text_italic is not None else task_state.get("target_text_italic", True)
+    target_color = target_text_color if target_text_color is not None else task_state.get("target_text_color", "gray")
+    if target_color and str(target_color).strip().lower() not in ("gray", "blue", "red", "green", "orange", "black"):
+        target_color = None
+
+    resolved_source_color = str(color).strip().lower() if color else None
+    resolved_target_color = str(target_color).strip().lower() if target_color else None
+
+    return (
+        enabled,
+        target_first,
+        bool(italic),
+        resolved_source_color,
+        bool(target_italic),
+        resolved_target_color,
+    )
+
+
+def _format_requires_md2docx(equation_format: str, table_body_format: str) -> bool:
+    return equation_format == "image" or table_body_format == "image"
+
+
+def _build_image_data_map_for_format_export(
+    task_state: Dict[str, Any],
+    md_content: str,
+    equation_format: str,
+    table_body_format: str,
+) -> Dict[str, Dict[str, str]]:
+    """Build image_data_map for equation/table image export from layout ZIP and task cache."""
+    image_data_map = _image_data_map_from_task_state(task_state)
+    layout_doc = task_state.get("layout_document")
+    orig_l = (task_state.get("original_filename") or "").lower()
+    if not orig_l.endswith(".pdf") or layout_doc is None:
+        return image_data_map
+    zip_bytes = task_state.get("layout_source_zip")
+    if not zip_bytes:
+        return image_data_map
+
+    # Always map layoutimg{N} for PDF figures (<ph-layoutimgN>), even when equation/table stay text/html.
+    _populate_layout_placeholder_image_map(
+        image_data_map,
+        task_state,
+        layout_doc,
+        layout_result=None,
+        equation_format=equation_format,
+        table_body_format=table_body_format,
+    )
+
+    if not _format_requires_md2docx(equation_format, table_body_format):
+        return image_data_map
+
+    zip_file = None
+    try:
+        from layout.pdf_renderer.shared.block_processor import BlockProcessor
+
+        zip_file = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        images_bytes_map = BlockProcessor.extract_all_images_from_layout(layout_doc, zip_file)
+        _populate_image_data_map_from_extracted(image_data_map, images_bytes_map)
+        logger.info(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Built image_data_map with {len(image_data_map)} entries from layout_source_zip "
+            f"(equation_format={equation_format}, table_body_format={table_body_format})",
+        )
+    except Exception as e:
+        logger.warning(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Failed to extract images from layout_source_zip for format export: {e}",
+            exc_info=True,
+        )
+    finally:
+        if zip_file:
+            try:
+                zip_file.close()
+            except Exception:
+                pass
+    return image_data_map
+
+
+def _export_md_content_to_docx_bytes(
+    task_state: Dict[str, Any],
+    md_content: str,
+    equation_format: str,
+    table_body_format: str,
+    payload: Any = None,
+    file_stem: Optional[str] = None,
+) -> bytes:
+    """
+    Export rebuilt markdown to DOCX via MD2DOCXExporter (supports equation/table as images).
+    Used by download_file and output_generator when format requires embedded images.
+    """
+    from workflow.md_based_workflow import MarkdownBasedWorkflow, MarkdownBasedWorkflowConfig
+    from exporter.md.md2html_exporter import MD2HTMLExporterConfig
+    from exporter.md.md2docx_exporter import MD2DOCXExporterConfig
+    from translator.ai_translator.md_translator import MDTranslatorConfig
+    from ir.markdown_document import MarkdownDocument
+    from utils.document_rebuild import _replace_placeholders_with_images
+
+    layout_doc = task_state.get("layout_document")
+    orig_l = (task_state.get("original_filename") or "").lower()
+    is_pdf_file = orig_l.endswith(".pdf")
+    file_stem = file_stem or task_state.get("original_filename_stem", "translated")
+
+    image_data_map = _build_image_data_map_for_format_export(
+        task_state, md_content, equation_format, table_body_format
+    )
+    if image_data_map:
+        task_state["image_data_map"] = image_data_map
+
+    to_lang, docx_font_name = _get_to_lang_and_docx_font(task_state, payload)
+    _img_bidx, _path_to_bidx, _layout = _get_image_layout_for_grouping(
+        task_state, equation_format=equation_format, table_body_format=table_body_format
+    )
+    html_config = MD2HTMLExporterConfig(
+        preserve_line_breaks=is_pdf_file,
+        layout_block_bbox=task_state.get("layout_block_bbox"),
+        image_block_indices=_img_bidx,
+        layout_document=_layout if _img_bidx else None,
+    )
+    _docx_debug_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output" / "debug"
+    docx_config = MD2DOCXExporterConfig(
+        table_body_format=table_body_format,
+        equation_format=equation_format,
+        image_data_map=image_data_map,
+        font_name=docx_font_name,
+        debug_output_dir=_docx_debug_dir,
+    )
+    if is_pdf_file and layout_doc is not None:
+        try:
+            from layout.base import LayoutDocument as _LD
+
+            if isinstance(layout_doc, _LD):
+                docx_config = MD2DOCXExporterConfig(
+                    layout_document=layout_doc,
+                    table_body_format=table_body_format,
+                    equation_format=equation_format,
+                    image_data_map=image_data_map,
+                    font_name=docx_font_name,
+                    debug_output_dir=_docx_debug_dir,
+                )
+        except Exception:
+            pass
+
+    translator_config = MDTranslatorConfig(skip_translate=True)
+    workflow_config = MarkdownBasedWorkflowConfig(
+        convert_engine="identity",
+        converter_config=None,
+        translator_config=translator_config,
+        html_exporter_config=html_config,
+        docx_exporter_config=docx_config,
+    )
+    workflow = MarkdownBasedWorkflow(workflow_config)
+
+    _docx_output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
+    _docx_output_dir.mkdir(parents=True, exist_ok=True)
+    md_for_docx, _ = _replace_placeholders_with_images(
+        md_content, image_data_map, output_dir=_docx_output_dir, update_image_data_map=True
+    )
+    import re as _re
+
+    _img_refs = _re.findall(r"!\[([^\]]*)\]\(([^)]+)\)", md_for_docx)
+    _filled = 0
+    for _alt, _ref in _img_refs:
+        if _ref in image_data_map or _ref.startswith("data:"):
+            continue
+        _norm = _ref.replace("\\", "/").lstrip("./")
+        _path = _docx_output_dir / _norm
+        if not _path.is_file():
+            _path = _docx_output_dir / "images" / (_norm.split("/")[-1])
+        if _path.is_file():
+            try:
+                _raw = _path.read_bytes()
+                _mime_type = mimetypes.guess_type(str(_path))[0] or "image/png"
+                _data_uri = f"data:{_mime_type};base64,{base64.b64encode(_raw).decode('ascii')}"
+                image_data_map[_ref] = {"data": _data_uri, "alt": _alt or _path.name}
+                _filled += 1
+            except Exception as _e:
+                logger.debug(LogModule.EXPORT, f"[DOWNLOAD] DOCX image fallback read failed: {_path}: {_e}")
+    if _filled:
+        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Filled {_filled} image refs from output dir for DOCX export")
+
+    workflow.document_translated = MarkdownDocument.from_bytes(
+        content=md_for_docx.encode("utf-8"),
+        suffix=".md",
+        stem=file_stem,
+    )
+    return workflow.export_to_docx(config=docx_config)
+
+
+def _docx_stash_download_kwargs(task_state: Dict[str, Any]) -> Dict[str, Any]:
+    """kwargs for download_file when persisting exports (format + bilingual settings)."""
+    wt = resolve_task_export_workflow_type(task_state)
+    orig_l = (task_state.get("original_filename") or "").lower()
+    kwargs: Dict[str, Any] = {}
+    if wt == "markdown_based" and orig_l.endswith(".pdf"):
+        eq, tbl = _resolve_export_format_settings(task_state)
+        if _format_requires_md2docx(eq, tbl):
+            kwargs["equation_format"] = eq
+            kwargs["table_body_format"] = tbl
+    enabled, target_first, src_italic, src_color, tgt_italic, tgt_color = _resolve_bilingual_settings(
+        task_state
+    )
+    if enabled:
+        kwargs["bilingual_export"] = True
+        kwargs["bilingual_order"] = "target_before_source" if target_first else "target_after_source"
+        kwargs["source_text_italic"] = src_italic
+        if src_color:
+            kwargs["source_text_color"] = src_color
+        kwargs["target_text_italic"] = tgt_italic
+        if tgt_color:
+            kwargs["target_text_color"] = tgt_color
+    return kwargs
 
 
 def _rebuild_html_from_task_state(task_state: Dict[str, Any]) -> Optional[str]:
@@ -187,6 +652,7 @@ def _file_response_for_md_download(
 
     Mirrors markdown_based branch so MOBI/TXT/EPUB/... segment rebuild paths do not return plain text as ZIP.
     """
+    sfx = _get_output_suffix(task_state)
     from utils.document_rebuild import _replace_placeholders_with_images
     from utils.format_convert_utils import group_consecutive_images_for_markdown
 
@@ -212,7 +678,7 @@ def _file_response_for_md_download(
         temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8")
         temp_file.write(md_out)
         temp_file.close()
-        filename = f"{file_stem}_translated.md"
+        filename = f"{file_stem}{sfx}.md"
         media_type = MEDIA_TYPES.get("md", "text/markdown; charset=utf-8")
         logger.info(
             LogModule.EXPORT,
@@ -247,12 +713,12 @@ def _file_response_for_md_download(
             layout_document=_layout if _img_bidx else None,
             layout_block_bbox=task_state.get("layout_block_bbox"),
         )
-        md_file_in_zip = zip_output_dir / f"{file_stem}_translated.md"
+        md_file_in_zip = zip_output_dir / f"{file_stem}{sfx}.md"
         md_file_in_zip.write_text(md_with_image_paths, encoding="utf-8")
 
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            zip_file.write(str(md_file_in_zip), arcname=f"{file_stem}_translated.md")
+            zip_file.write(str(md_file_in_zip), arcname=f"{file_stem}{sfx}.md")
             for img_path in saved_image_paths:
                 if img_path.exists():
                     arc = img_path.relative_to(zip_output_dir)
@@ -263,7 +729,7 @@ def _file_response_for_md_download(
         zip_temp_file.write(zip_buffer.getvalue())
         zip_temp_file.close()
 
-        filename = f"{file_stem}_translated_with_images.zip"
+        filename = f"{file_stem}{sfx}_with_images.zip"
         media_type = "application/zip"
         logger.info(
             LogModule.EXPORT,
@@ -416,10 +882,11 @@ def _build_stash_export_plan(task_state: Dict[str, Any]) -> List[Tuple[str, str,
     wt = resolve_task_export_workflow_type(task_state)
 
     plan: List[Tuple[str, str, Dict[str, Any]]] = []
+    docx_kwargs = _docx_stash_download_kwargs(task_state)
     if wt == "markdown_based":
         allow_pdf = is_pdf and has_layout and not is_fmt_conv
         for ft in ("docx", "html", "md"):
-            plan.append((ft, ft, {}))
+            plan.append((ft, ft, docx_kwargs if ft == "docx" else {}))
         if allow_pdf:
             plan.append(("pdf", "pdf", {}))
         plan.append(("md_zip", "md", {"embed_images": False}))
@@ -496,6 +963,7 @@ def _pandoc_pdf_file_response_from_md(
     Export Markdown to PDF via Pandoc + XeLaTeX (same pipeline as OutputGenerator).
     Shared by revision-download and stash-less rebuild paths.
     """
+    sfx = _get_output_suffix(task_state)
     if not md_content or not str(md_content).strip():
         raise HTTPException(
             status_code=500,
@@ -504,7 +972,7 @@ def _pandoc_pdf_file_response_from_md(
     output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
     output_dir.mkdir(exist_ok=True)
     file_stem = task_state.get("original_filename_stem", "translated")
-    pdf_file_path = output_dir / f"{file_stem}_translated.pdf"
+    pdf_file_path = output_dir / f"{file_stem}{sfx}.pdf"
     to_lang, _ = _get_to_lang_and_docx_font(task_state)
     if not to_lang:
         to_lang = "zh"
@@ -631,6 +1099,7 @@ def _markdown_based_html_file_response_from_segments(
     Build translated HTML via MarkdownBasedWorkflow + rebuilt segments (on-demand download).
     Used when no pre-generated HTML file exists (e.g. queue mode / DOCX-only cache).
     """
+    sfx = _get_output_suffix(task_state)
     from utils.document_rebuild import rebuild_markdown_document_from_segments
     from workflow.md_based_workflow import MarkdownBasedWorkflow, MarkdownBasedWorkflowConfig
     from exporter.md.md2html_exporter import MD2HTMLExporterConfig
@@ -670,6 +1139,8 @@ def _markdown_based_html_file_response_from_segments(
             pass
     if table_body_format:
         docx_config_kwargs["table_body_format"] = table_body_format
+    if equation_format:
+        docx_config_kwargs["equation_format"] = equation_format
     existing_img_map = task_state.get("image_data_map")
     if isinstance(existing_img_map, dict):
         docx_config_kwargs["image_data_map"] = existing_img_map
@@ -690,11 +1161,16 @@ def _markdown_based_html_file_response_from_segments(
     temp_file.write(html_content)
     temp_file.close()
     file_stem = task_state.get("original_filename_stem", "translated")
-    filename = f"{file_stem}_translated.html"
+    filename = f"{file_stem}{sfx}.html"
     media_type = MEDIA_TYPES.get("html", "text/html; charset=utf-8")
     logger.info(LogModule.EXPORT, f"[DOWNLOAD] HTML from segments on-demand task_id={task_id}")
     return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
 
+
+
+def _get_output_suffix(task_state: dict, default: str = "_translated") -> str:
+    """Read configurable filename suffix from task state."""
+    return task_state.get("output_suffix") or default
 
 class DownloadService:
     """Service for handling file downloads."""
@@ -717,6 +1193,12 @@ class DownloadService:
         equation_format: Optional[str] = None,
         embed_images: Optional[bool] = None,
         ebook_engine: Optional[str] = None,
+        bilingual_export: Optional[bool] = None,
+        bilingual_order: Optional[str] = None,
+        source_text_italic: Optional[bool] = None,
+        source_text_color: Optional[str] = None,
+        target_text_italic: Optional[bool] = None,
+        target_text_color: Optional[str] = None,
     ) -> FileResponse:
         """
         Download translation result file.
@@ -737,6 +1219,7 @@ class DownloadService:
         """
         # Get task state from task manager
         task_state = self.task_manager.get_task(task_id)
+        sfx = _get_output_suffix(task_state)
         if not task_state:
             from backend.app.services.translation.translation_result_stash import (
                 get_stashed_file_path,
@@ -748,7 +1231,7 @@ class DownloadService:
                 meta = load_meta(task_id)
                 stem = Path((meta or {}).get("original_filename") or "translated").stem
                 ext = Path(stashed).suffix or ""
-                filename = f"{stem}_translated{ext}"
+                filename = f"{stem}{sfx}{ext}"
                 media_type = MEDIA_TYPES.get(file_type, "application/octet-stream")
                 logger.info(
                     LogModule.EXPORT,
@@ -765,8 +1248,30 @@ class DownloadService:
                 status_code=400,
                 detail=f"Task '{task_id}' has failed and cannot download files. Error: {error_message}"
             )
-        
-        # CRITICAL: If requested file is missing, generate only that format on-demand (no PDF when only HTML requested)
+
+        payload = task_state.get("payload")
+
+        equation_format, table_body_format = _resolve_export_format_settings(
+            task_state, payload, equation_format, table_body_format
+        )
+
+        # Resolve bilingual settings from query params -> task_state -> payload
+        bilingual_enabled, target_first, source_italic, source_color, target_italic, target_color = _resolve_bilingual_settings(
+            task_state, payload, bilingual_export, bilingual_order, source_text_italic, source_text_color, target_text_italic, target_text_color
+        )
+        # Store resolved bilingual settings so markdown/DOCX rebuild applies styles consistently
+        task_state["bilingual_export"] = bilingual_enabled
+        task_state["bilingual_order"] = "target_before_source" if target_first else "target_after_source"
+        task_state["source_text_italic"] = source_italic
+        task_state["target_text_italic"] = target_italic
+        if source_color:
+            task_state["source_text_color"] = source_color
+        elif "source_text_color" in task_state and not task_state.get("source_text_color"):
+            task_state.pop("source_text_color", None)
+        if target_color:
+            task_state["target_text_color"] = target_color
+
+        # Generate missing file on-demand if not in downloadable_files
         downloadable_files = task_state.get("downloadable_files", {})
         need_generate = not downloadable_files or file_type not in downloadable_files
         if need_generate:
@@ -807,13 +1312,29 @@ class DownloadService:
         
         # Debug: Check translation_segments structure
         segments_data = task_state.get("translation_segments")
-        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Task {task_id}, file_type={file_type}, segments_data exists: {segments_data is not None}")
-        
+        logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Task {task_id}, file_type={file_type}, segments_data exists: {segments_data is not None}")
+
         if segments_data:
             segments = segments_data.get("segments", [])
             modified_count = sum(1 for seg in segments if seg.get("modified", False))
-            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Task {task_id}, total segments: {len(segments)}, modified segments: {modified_count}")
+            logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Task {task_id}, total segments: {len(segments)}, modified segments: {modified_count}")
         
+        # P0: Post-process title blocks to filter out false positives (body text that
+        # MinerU misclassified as "title"). Only self-hosted MinerU (middle.json) provides
+        # font size data in its layout.json — the Cloud API does not, so heading hierarchy
+        # from font sizes is unavailable and all valid titles use H1 (default).
+        _layout_doc = task_state.get("layout_document")
+        if _layout_doc is not None:
+            try:
+                from layout.pdf_font_extractor import _is_likely_heading
+                for page in _layout_doc.pages:
+                    for block in page.blocks:
+                        if block.type == "title" and not _is_likely_heading(block):
+                            block.heading_level = 0  # false positive → body text
+            except Exception as e:
+                logger.debug(LogModule.EXPORT,
+                    f"[DOWNLOAD] Task {task_id}: Failed to filter false-positive titles: {e}")
+
         # Store original has_revisions status before any fallback logic
         has_revisions_original = has_revised_segments(task_state)
         has_revisions = has_revisions_original
@@ -889,7 +1410,16 @@ class DownloadService:
         # When user requests equation_format or table_body_format (e.g. image), do not use cached DOCX; regenerate to respect format.
         if workflow_type == "markdown_based" and file_type == "docx":
             docx_info = task_state.get("downloadable_files", {}).get("docx")
-            if (equation_format or table_body_format) and docx_info:
+            stored_eq, stored_tbl = _resolve_export_format_settings(
+                task_state, payload, equation_format, table_body_format
+            )
+            needs_format_regen = bool(
+                equation_format
+                or table_body_format
+                or _format_requires_md2docx(stored_eq, stored_tbl)
+                or bilingual_enabled
+            )
+            if needs_format_regen and docx_info:
                 docx_info = None  # Force regeneration so format params are applied
             if docx_info:
                 docx_path = (
@@ -900,7 +1430,7 @@ class DownloadService:
                 if docx_path and os.path.exists(docx_path):
                     filename = os.path.basename(docx_path) or f"{task_state.get('original_filename_stem', 'translated')}.docx"
                     media_type = MEDIA_TYPES.get("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-                    logger.info(
+                    logger.debug(
                         LogModule.EXPORT,
                         f"[DOWNLOAD] Using Pandoc-generated DOCX for markdown_based workflow (task {task_id}): {docx_path}",
                     )
@@ -969,7 +1499,7 @@ class DownloadService:
                 source_input_type = "layout"
                 task_state["source_input_type"] = "layout"
         
-        if (equation_format or table_body_format) and is_pdf_file and layout_doc and source_input_type == "layout":
+        if is_pdf_file and layout_doc and source_input_type == "layout":
             should_regenerate_from_layout = True
             # Concise high-level log; detailed image handling logs are emitted later.
             logger.info(
@@ -1022,27 +1552,28 @@ class DownloadService:
                             else:
                                 deep_split_enabled = bool(getattr(payload, 'deep_split', True))
                     
-                        # Validate and use format parameters
-                        eq_format = (equation_format or "text").lower().strip()
-                        if eq_format not in ("text", "latex", "image"):
-                            eq_format = "text"
-                    
-                        table_format = (table_body_format or "html").lower().strip()
-                        if table_format not in ("html", "image"):
-                            table_format = "html"
+                        # Validate and use format parameters (already resolved for PDF defaults)
+                        eq_format = equation_format
+                        table_format = table_body_format
                     
                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Regenerating from translated segments with equation_format={eq_format}, table_body_format={table_format}")
                     
                         # Check if format parameters differ from translation time
                         _pl = task_state.get("payload")
-                        original_eq_format = (task_state.get("equation_format") or (_pl.get("equation_format") if isinstance(_pl, dict) else (getattr(_pl, "equation_format", None) if _pl else None)) or "text")
+                        original_eq_format = (task_state.get("equation_format") or (_pl.get("equation_format") if isinstance(_pl, dict) else (getattr(_pl, "equation_format", None) if _pl else None)) or ("latex" if is_pdf_file else "text"))
                         if isinstance(original_eq_format, str):
                             original_eq_format = original_eq_format.lower().strip()
                         if original_eq_format not in ("text", "latex", "image"):
-                            original_eq_format = "text"
+                            original_eq_format = "latex" if is_pdf_file else "text"
+
+                        original_tbl_format = (task_state.get("table_body_format") or (_pl.get("table_body_format") if isinstance(_pl, dict) else (getattr(_pl, "table_body_format", None) if _pl else None)) or ("image" if is_pdf_file else "html"))
+                        if isinstance(original_tbl_format, str):
+                            original_tbl_format = original_tbl_format.lower().strip()
+                        if original_tbl_format not in ("html", "image"):
+                            original_tbl_format = "image" if is_pdf_file else "html"
                         
                         # If format changed or we have layout_document, regenerate markdown with new format
-                        format_changed = (eq_format != original_eq_format) or (table_format != "html")
+                        format_changed = (eq_format != original_eq_format) or (table_format != original_tbl_format)
                         should_regenerate_from_layout = is_pdf_file and layout_doc is not None and format_changed
                         
                         if should_regenerate_from_layout:
@@ -1065,6 +1596,8 @@ class DownloadService:
                                     file_stem=task_state.get("original_filename_stem"),
                                     equation_format=eq_format,
                                     table_body_format=table_format,
+                                    bilingual_export=bilingual_enabled,
+                                    target_first=target_first,
                                 )
                                 
                                 if rebuilt_doc and hasattr(rebuilt_doc, 'content'):
@@ -1128,6 +1661,18 @@ class DownloadService:
                                         image_data_by_filename[filename] = data_uri
                                     
                                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Extracted {len(image_data_by_filename)} images from layout_source_zip")
+
+                                    # Register all extracted images (required for equation_format=image hash filenames)
+                                    _populate_image_data_map_from_extracted(image_data_map, images_bytes_map)
+
+                                    _populate_layout_placeholder_image_map(
+                                        image_data_map,
+                                        task_state,
+                                        layout_doc,
+                                        layout_result=layout_result,
+                                        equation_format=eq_format,
+                                        table_body_format=table_format,
+                                    )
                                     
                                     # Parse markdown to find image references and map them
                                     import re
@@ -1149,59 +1694,6 @@ class DownloadService:
                                             logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Mapped image: {filename} (alt: {alt_text})")
                                         else:
                                             logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Image data not found for filename: {filename} (alt: {alt_text})")
-                                    
-                                    # Pattern 2: ![alt](placeholder_id) - placeholder-based images (tables)
-                                    # Examples: ![Table](layoutimg3), ![Equation](layoutimg0)
-                                    placeholder_image_pattern = r'!\[([^\]]*)\]\(([a-zA-Z0-9]+)\)'
-                                    placeholder_matches = re.findall(placeholder_image_pattern, md_content)
-                                    
-                                    # Build mapping from placeholder ID to image_path using layout_result chunks
-                                    # Only if layout_result is available (not when using rebuilt_doc from segments)
-                                    placeholder_to_path: dict[str, str] = {}
-                                    if layout_result is not None and hasattr(layout_result, 'chunks') and layout_result.chunks:
-                                        for chunk in layout_result.chunks:
-                                            if hasattr(chunk, 'image_placeholder') and hasattr(chunk, 'image_path'):
-                                                if chunk.image_placeholder and chunk.image_path:
-                                                    placeholder_to_path[chunk.image_placeholder] = chunk.image_path
-                                    else:
-                                        # When using rebuilt_doc from segments, try to get placeholder mapping from existing image_data_map
-                                        # or from layout_document blocks directly
-                                        existing_image_map = task_state.get("image_data_map")
-                                        if isinstance(existing_image_map, dict):
-                                            # Extract placeholder IDs from existing image_data_map
-                                            for ph_id in existing_image_map.keys():
-                                                if isinstance(ph_id, str) and ph_id.startswith('layoutimg'):
-                                                    placeholder_to_path[ph_id] = ph_id  # Use placeholder ID as path hint
-                                    
-                                    for alt_text, placeholder_id in placeholder_matches:
-                                        # Check if this is a placeholder (not a filename with extension)
-                                        if '.' not in placeholder_id and placeholder_id.startswith('layoutimg'):
-                                            # Look up image_path from chunks
-                                            image_path = placeholder_to_path.get(placeholder_id)
-                                            if image_path:
-                                                # Extract filename from path
-                                                filename = image_path.split('/')[-1].split('\\')[-1]
-                                                
-                                                # Look up image data by filename
-                                                if filename in image_data_by_filename:
-                                                    image_data_map[placeholder_id] = {
-                                                        "data": image_data_by_filename[filename],
-                                                        "alt": alt_text or placeholder_id,
-                                                    }
-                                                    logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Mapped placeholder image: {placeholder_id} -> {filename} (alt: {alt_text})")
-                                                else:
-                                                    logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Image data not found for placeholder {placeholder_id} (path: {image_path}, alt: {alt_text})")
-                                            else:
-                                                logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Image path not found for placeholder {placeholder_id} (alt: {alt_text})")
-                                    
-                                    # Pattern 3: <ph-xxx> - XML-style placeholders
-                                    xml_placeholder_pattern = r'<ph-([a-zA-Z0-9]+)>'
-                                    xml_placeholder_matches = re.findall(xml_placeholder_pattern, md_content)
-                                    for ph_id in xml_placeholder_matches:
-                                        # Try to find image by placeholder ID in existing image_data_map
-                                        existing_image_map = task_state.get("image_data_map")
-                                        if isinstance(existing_image_map, dict) and ph_id in existing_image_map:
-                                            image_data_map[ph_id] = existing_image_map[ph_id]
                                 
                                 except Exception as e:
                                     logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to extract images from layout_source_zip: {e}", exc_info=True)
@@ -1235,6 +1727,8 @@ class DownloadService:
                                 file_stem=task_state.get("original_filename_stem"),
                                 equation_format=eq_format,
                                 table_body_format=table_format,
+                                bilingual_export=bilingual_enabled,
+                                target_first=target_first,
                             )
                         
                             if not rebuilt_doc:
@@ -1279,6 +1773,17 @@ class DownloadService:
                                                 image_data_by_filename[filename] = data_uri
                                             
                                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Extracted {len(image_data_by_filename)} images from layout_source_zip for format-switched content")
+
+                                            _populate_image_data_map_from_extracted(image_data_map, images_bytes_map)
+
+                                            _populate_layout_placeholder_image_map(
+                                                image_data_map,
+                                                task_state,
+                                                layout_doc,
+                                                layout_result=None,
+                                                equation_format=eq_format,
+                                                table_body_format=table_format,
+                                            )
                                             
                                             # Parse markdown to find image references (from format-switched tables/equations)
                                             import re
@@ -1370,6 +1875,7 @@ class DownloadService:
                             _docx_debug_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output" / "debug"
                             docx_config = MD2DOCXExporterConfig(
                                 table_body_format=table_format_for_docx,
+                                equation_format=eq_format,
                                 image_data_map=image_data_map,
                                 font_name=docx_font_name,
                                 debug_output_dir=_docx_debug_dir,
@@ -1381,6 +1887,7 @@ class DownloadService:
                                         docx_config = MD2DOCXExporterConfig(
                                             layout_document=layout_doc,
                                             table_body_format=table_format_for_docx,
+                                            equation_format=eq_format,
                                             image_data_map=image_data_map,
                                             font_name=docx_font_name,
                                             debug_output_dir=_docx_debug_dir,
@@ -1436,7 +1943,7 @@ class DownloadService:
                                     temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8')
                                     temp_file.write(html_content)
                                     temp_file.close()
-                                    filename = f"{file_stem}_translated.html"
+                                    filename = f"{file_stem}{sfx}.html"
                                     media_type = MEDIA_TYPES.get(file_type, "text/html; charset=utf-8")
                                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated HTML from translated segments with equation_format={eq_format}, table_body_format={table_format}, images embedded")
                                     return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
@@ -1465,7 +1972,7 @@ class DownloadService:
                                     temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8')
                                     temp_file.write(md_with_embedded_images)
                                     temp_file.close()
-                                    filename = f"{file_stem}_translated.md"
+                                    filename = f"{file_stem}{sfx}.md"
                                     media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
                                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD with embedded images from translated segments with equation_format={eq_format}, table_body_format={table_format}")
                                     return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
@@ -1501,7 +2008,7 @@ class DownloadService:
                                         )
                                     
                                         # Write MD file to zip directory
-                                        md_file_in_zip = zip_output_dir / f"{file_stem}_translated.md"
+                                        md_file_in_zip = zip_output_dir / f"{file_stem}{sfx}.md"
                                         with open(md_file_in_zip, 'w', encoding='utf-8') as f:
                                             f.write(md_with_image_paths)
                                     
@@ -1524,7 +2031,7 @@ class DownloadService:
                                         zip_temp_file.write(zip_bytes)
                                         zip_temp_file.close()
                                     
-                                        filename = f"{file_stem}_translated_with_images.zip"
+                                        filename = f"{file_stem}{sfx}_with_images.zip"
                                         media_type = "application/zip"
                                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD with images folder (ZIP) from translated segments with equation_format={eq_format}, table_body_format={table_format}, images_count={len(saved_image_paths)}")
                                         return FileResponse(path=zip_temp_file.name, media_type=media_type, filename=filename)
@@ -1580,7 +2087,7 @@ class DownloadService:
                                 temp_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.docx', delete=False)
                                 temp_file.write(docx_bytes)
                                 temp_file.close()
-                                filename = f"{file_stem}_translated.docx"
+                                filename = f"{file_stem}{sfx}.docx"
                                 media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated DOCX from translated segments with equation_format={eq_format}, table_body_format={table_format}")
                                 return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
@@ -1607,14 +2114,9 @@ class DownloadService:
                             else:
                                 deep_split_enabled = bool(getattr(payload, 'deep_split', True))
                     
-                        # Validate and use format parameters
-                        eq_format = equation_format.lower() if equation_format else "text"
-                        if eq_format not in ("text", "latex", "image"):
-                            eq_format = "text"
-                    
-                        table_format = (table_body_format or "html").lower().strip()
-                        if table_format not in ("html", "image"):
-                            table_format = "html"
+                        # Use resolved format parameters (PDF defaults: equation=latex, table=image)
+                        eq_format = equation_format
+                        table_format = table_body_format
                     
                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Regenerating from layout_document with equation_format={eq_format}, table_body_format={table_format}, chunk_size={chunk_size}, deep_split={deep_split_enabled}")
                     
@@ -1788,6 +2290,17 @@ class DownloadService:
                         # Update task_state with image_data_map for frontend preview
                         if image_data_map:
                             task_state["image_data_map"] = image_data_map
+                    elif layout_doc is not None:
+                        _populate_layout_placeholder_image_map(
+                            image_data_map,
+                            task_state,
+                            layout_doc,
+                            layout_result=None,
+                            equation_format=eq_format,
+                            table_body_format=table_format,
+                        )
+                        if image_data_map:
+                            task_state["image_data_map"] = image_data_map
                 
                     if zip_file:
                         try:
@@ -1820,6 +2333,7 @@ class DownloadService:
                     _docx_debug_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output" / "debug"
                     docx_config = MD2DOCXExporterConfig(
                         table_body_format=table_format_for_docx,
+                        equation_format=eq_format,
                         image_data_map=image_data_map,
                         font_name=docx_font_name,
                         debug_output_dir=_docx_debug_dir,
@@ -1831,6 +2345,7 @@ class DownloadService:
                                 docx_config = MD2DOCXExporterConfig(
                                     layout_document=layout_doc,
                                     table_body_format=table_format_for_docx,
+                                    equation_format=eq_format,
                                     image_data_map=image_data_map,
                                     font_name=docx_font_name,
                                     debug_output_dir=_docx_debug_dir,
@@ -1886,7 +2401,7 @@ class DownloadService:
                             temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8')
                             temp_file.write(html_content)
                             temp_file.close()
-                            filename = f"{file_stem}_translated.html"
+                            filename = f"{file_stem}{sfx}.html"
                             media_type = MEDIA_TYPES.get(file_type, "text/html; charset=utf-8")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated HTML from layout_document with equation_format={eq_format}, table_body_format={table_format}, images embedded")
                             return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
@@ -1915,7 +2430,7 @@ class DownloadService:
                             temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8')
                             temp_file.write(md_with_embedded_images)
                             temp_file.close()
-                            filename = f"{file_stem}_translated.md"
+                            filename = f"{file_stem}{sfx}.md"
                             media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD with embedded images from layout_document (equation_format={eq_format}, table_body_format={table_format})")
                             return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
@@ -1951,7 +2466,7 @@ class DownloadService:
                                 )
                             
                                 # Write MD file to zip directory
-                                md_file_in_zip = zip_output_dir / f"{file_stem}_translated.md"
+                                md_file_in_zip = zip_output_dir / f"{file_stem}{sfx}.md"
                                 with open(md_file_in_zip, 'w', encoding='utf-8') as f:
                                     f.write(md_with_image_paths)
                             
@@ -1974,7 +2489,7 @@ class DownloadService:
                                 zip_temp_file.write(zip_bytes)
                                 zip_temp_file.close()
                             
-                                filename = f"{file_stem}_translated_with_images.zip"
+                                filename = f"{file_stem}{sfx}_with_images.zip"
                                 media_type = "application/zip"
                                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD with images folder (ZIP) from layout_document with equation_format={eq_format}, table_body_format={table_format}, images_count={len(saved_image_paths)}")
                                 return FileResponse(path=zip_temp_file.name, media_type=media_type, filename=filename)
@@ -2029,7 +2544,7 @@ class DownloadService:
                         temp_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.docx', delete=False)
                         temp_file.write(docx_bytes)
                         temp_file.close()
-                        filename = f"{file_stem}_translated.docx"
+                        filename = f"{file_stem}{sfx}.docx"
                         media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated DOCX from layout_document (equation_format={eq_format}, table_body_format={table_format})")
                         return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
@@ -2037,13 +2552,22 @@ class DownloadService:
                 logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to regenerate from layout_document with format parameters: {e}, falling back to normal flow", exc_info=True)
                 should_regenerate_from_layout = False
     
-        # If requesting Markdown, DOCX, or HTML (markdown workflow) rebuild regardless of revision status.
+        # If requesting Markdown, DOCX, or HTML rebuild regardless of revision status.
         # HTML is included so that table_body_format / equation_format are applied to the rebuild.
+        # html/epub/mobi workflows also route through markdown rebuild for md/docx/html exports.
         if (
-            workflow_type == "markdown_based"
+            workflow_type in {"markdown_based", "html", "epub", "mobi"}
             and file_type in {"md", "docx", "html"}
             and task_state.get("translation_segments", {}).get("segments")
         ):
+            has_revisions = True
+
+        # Bilingual export for TXT/SRT/DOCX/HTML/EPUB/MOBI requires segment rebuild to interleave source/target text.
+        if bilingual_enabled and workflow_type in ("txt", "srt", "docx", "html", "epub", "mobi", "pptx", "xlsx") and task_state.get("translation_segments", {}).get("segments"):
+            logger.info(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Bilingual export enabled for {workflow_type} workflow, forcing segment rebuild",
+            )
             has_revisions = True
     
         # If there are revisions (or forced for md), rebuild the document and regenerate the file
@@ -2051,24 +2575,26 @@ class DownloadService:
             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Found revised segments for task {task_id}, rebuilding {file_type} file with revisions")
         
             try:
-                # Rebuild based on workflow type
-                if workflow_type == "markdown_based":
+                # Rebuild based on workflow type (markdown_based, html, epub, mobi all use markdown rebuild)
+                if workflow_type in ("markdown_based", "html", "epub", "mobi"):
                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Starting rebuild for markdown_based workflow")
                     rebuilt_doc = rebuild_markdown_document_from_segments(
                         task_state,
                         file_stem=task_state.get("original_filename_stem"),
                         equation_format=equation_format,
                         table_body_format=table_body_format,
+                        bilingual_export=bilingual_enabled,
+                        target_first=target_first,
                     )
                 
                     if rebuilt_doc:
-                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Rebuilt document successful, content length: {len(rebuilt_doc.content)} bytes")
+                        logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Rebuilt document successful, content length: {len(rebuilt_doc.content)} bytes")
                     else:
                         logger.error(LogModule.EXPORT, f"[DOWNLOAD] Failed to rebuild document from segments, falling back to original")
                         has_revisions = False
-                
+
                     if rebuilt_doc:
-                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully rebuilt MarkdownDocument, creating workflow for {file_type} export")
+                        logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Successfully rebuilt MarkdownDocument, creating workflow for {file_type} export")
                         # Create minimal workflow for export
                         from workflow.md_based_workflow import MarkdownBasedWorkflow, MarkdownBasedWorkflowConfig
                         from exporter.md.md2html_exporter import MD2HTMLExporterConfig
@@ -2100,6 +2626,8 @@ class DownloadService:
                                 pass
                         if table_body_format:
                             docx_config_kwargs["table_body_format"] = table_body_format
+                        if equation_format:
+                            docx_config_kwargs["equation_format"] = equation_format
                         # Get image_data_map for DOCX images
                         existing_img_map = task_state.get("image_data_map")
                         if isinstance(existing_img_map, dict):
@@ -2120,7 +2648,7 @@ class DownloadService:
                         # Create workflow and set rebuilt document
                         workflow = MarkdownBasedWorkflow(workflow_config)
                         workflow.document_translated = rebuilt_doc
-                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Workflow created, document_translated content length: {len(rebuilt_doc.content)} bytes")
+                        logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Workflow created, document_translated content length: {len(rebuilt_doc.content)} bytes")
                     
                         # Generate the requested file type
                         file_stem = task_state.get("original_filename_stem", "rebuilt")
@@ -2131,7 +2659,7 @@ class DownloadService:
                             temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8')
                             temp_file.write(html_content)
                             temp_file.close()
-                            filename = f"{file_stem}_translated.html"
+                            filename = f"{file_stem}{sfx}.html"
                             media_type = MEDIA_TYPES.get(file_type, "text/html; charset=utf-8")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated revised html file: {temp_file.name} (size: {os.path.getsize(temp_file.name)} bytes)")
                             return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
@@ -2171,9 +2699,9 @@ class DownloadService:
                                 temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8')
                                 temp_file.write(md_with_embedded_images)
                                 temp_file.close()
-                                filename = f"{file_stem}_translated.md"
+                                filename = f"{file_stem}{sfx}.md"
                                 media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
-                                logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated revised MD file with embedded images: {temp_file.name}")
+                                logger.debug(LogModule.EXPORT, f"[DOWNLOAD] Generated revised MD file with embedded images: {temp_file.name}")
                             else:
                                 # Save images to folder and create ZIP (MD file + images folder)
                                 # Use task_state temp_dir if available, otherwise create independent temp directory
@@ -2206,7 +2734,7 @@ class DownloadService:
                                     )
                                 
                                     # Write MD file to zip directory
-                                    md_file_in_zip = zip_output_dir / f"{file_stem}_translated.md"
+                                    md_file_in_zip = zip_output_dir / f"{file_stem}{sfx}.md"
                                     with open(md_file_in_zip, 'w', encoding='utf-8') as f:
                                         f.write(md_with_image_paths)
                                 
@@ -2229,7 +2757,7 @@ class DownloadService:
                                     temp_file.write(zip_bytes)
                                     temp_file.close()
                                 
-                                    filename = f"{file_stem}_translated_with_images.zip"
+                                    filename = f"{file_stem}{sfx}_with_images.zip"
                                     media_type = "application/zip"
                                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated revised MD with images folder (ZIP): {temp_file.name}, images_count={len(saved_image_paths)}")
                                 finally:
@@ -2275,7 +2803,7 @@ class DownloadService:
                                                     f"[DOWNLOAD] Task {task_id}: DOCX fragment math check failed: {frag_err}",
                                                     exc_info=False,
                                                 )
-                                            filename = f"{file_stem}_translated.docx"
+                                            filename = f"{file_stem}{sfx}.docx"
                                             media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Exported DOCX via Pandoc (formulas preserved, font by language)")
                                             return FileResponse(path=_tf.name, media_type=media_type, filename=filename)
@@ -2296,7 +2824,13 @@ class DownloadService:
                                             if isinstance(layout_doc, _LD):
                                                 from exporter.md.md2docx_exporter import MD2DOCXExporterConfig
                                                 _docx_debug_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output" / "debug"
-                                                docx_config = MD2DOCXExporterConfig(layout_document=layout_doc, font_name=docx_font_name, debug_output_dir=_docx_debug_dir)
+                                                docx_config = MD2DOCXExporterConfig(
+                                                    layout_document=layout_doc,
+                                                    equation_format=equation_format or "text",
+                                                    table_body_format=table_body_format,
+                                                    font_name=docx_font_name,
+                                                    debug_output_dir=_docx_debug_dir,
+                                                )
                                                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using MD-to-DOCX export with layout-based formula detection for PDF file")
                                         except Exception as e:
                                             logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to create layout-based config: {e}, using code-based detection")
@@ -2306,7 +2840,7 @@ class DownloadService:
                                     temp_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.docx', delete=False)
                                     temp_file.write(docx_bytes)
                                     temp_file.close()
-                                    filename = f"{file_stem}_translated.docx"
+                                    filename = f"{file_stem}{sfx}.docx"
                                     media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                                     if is_pdf_file:
                                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Exported DOCX using MD-to-DOCX with layout-based formula detection")
@@ -2320,7 +2854,7 @@ class DownloadService:
                                         temp_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.docx', delete=False)
                                         temp_file.close()
                                         convert_html_to_docx(html_content, temp_file.name, to_lang=to_lang)
-                                        filename = f"{file_stem}_translated.docx"
+                                        filename = f"{file_stem}{sfx}.docx"
                                         media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                                     except Exception as fallback_error:
                                         logger.error(LogModule.EXPORT, f"[DOWNLOAD] HTML-to-DOCX fallback also failed: {fallback_error}", exc_info=True)
@@ -2328,18 +2862,56 @@ class DownloadService:
                                             os.unlink(temp_file.name)
                                         raise
                             else:
-                                # Use HTML-based conversion for other file types (uses pandoc)
-                                logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using HTML-to-DOCX conversion (pandoc) for non-markdown workflow")
+                                # EPUB/MOBI/HTML workflows: Pandoc DOCX (bilingual uses MD+raw_html so spans survive as text)
                                 temp_file = None
                                 try:
-                                    html_content = workflow.export_to_html()
-                                    temp_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.docx', delete=False)
+                                    temp_file = tempfile.NamedTemporaryFile(
+                                        mode="wb", suffix=".docx", delete=False
+                                    )
                                     temp_file.close()
-                                    convert_html_to_docx(html_content, temp_file.name, to_lang=to_lang)
-                                    filename = f"{file_stem}_translated.docx"
-                                    media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                                    out_dir = Path(temp_file.name).parent
+                                    if bilingual_enabled:
+                                        from utils.format_convert_utils import convert_md_to_docx
+
+                                        logger.info(
+                                            LogModule.EXPORT,
+                                            f"[DOWNLOAD] Using Pandoc MD->DOCX for bilingual {workflow_type} workflow",
+                                        )
+                                        md_content = workflow.export_to_markdown()
+                                        if isinstance(md_content, bytes):
+                                            md_content = md_content.decode("utf-8", errors="replace")
+                                        if not md_content or not convert_md_to_docx(
+                                            md_content,
+                                            temp_file.name,
+                                            output_dir=out_dir,
+                                            to_lang=to_lang,
+                                        ):
+                                            raise RuntimeError(
+                                                "Pandoc MD->DOCX failed for bilingual export"
+                                            )
+                                    else:
+                                        logger.info(
+                                            LogModule.EXPORT,
+                                            f"[DOWNLOAD] Using HTML-to-DOCX conversion (pandoc) for {workflow_type}",
+                                        )
+                                        html_content = workflow.export_to_html()
+                                        convert_html_to_docx(
+                                            html_content,
+                                            temp_file.name,
+                                            output_dir=out_dir,
+                                            to_lang=to_lang,
+                                        )
+                                    filename = f"{file_stem}{sfx}.docx"
+                                    media_type = MEDIA_TYPES.get(
+                                        file_type,
+                                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                    )
                                 except Exception as html_error:
-                                    logger.error(LogModule.EXPORT, f"[DOWNLOAD] HTML-to-DOCX conversion failed: {html_error}", exc_info=True)
+                                    logger.error(
+                                        LogModule.EXPORT,
+                                        f"[DOWNLOAD] Pandoc DOCX conversion failed: {html_error}",
+                                        exc_info=True,
+                                    )
                                     if temp_file and os.path.exists(temp_file.name):
                                         os.unlink(temp_file.name)
                                     raise
@@ -2356,15 +2928,15 @@ class DownloadService:
                                 if existing_pdf:
                                     pdf_path = existing_pdf.get("path", "") if isinstance(existing_pdf, dict) else str(existing_pdf)
                                     if pdf_path and os.path.exists(pdf_path):
-                                        filename = os.path.basename(pdf_path) or f"{file_stem}_translated.pdf"
+                                        filename = os.path.basename(pdf_path) or f"{file_stem}{sfx}.pdf"
                                         media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using pre-generated PDF for MOBI/EPUB workflow: {pdf_path}")
                                         return FileResponse(path=pdf_path, media_type=media_type, filename=filename)
                                 # If PDF doesn't exist, check output_dir (may have been generated but not added to downloadable_files)
                                 output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
-                                pdf_file_path = output_dir / f"{file_stem}_translated.pdf"
+                                pdf_file_path = output_dir / f"{file_stem}{sfx}.pdf"
                                 if pdf_file_path.exists():
-                                    filename = f"{file_stem}_translated.pdf"
+                                    filename = f"{file_stem}{sfx}.pdf"
                                     media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Found PDF in output_dir for MOBI/EPUB: {pdf_file_path}")
                                     return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
@@ -2420,13 +2992,13 @@ class DownloadService:
                                     if gen_pdf:
                                         pdf_path = gen_pdf.get("path", "") if isinstance(gen_pdf, dict) else str(gen_pdf)
                                         if pdf_path and os.path.exists(pdf_path):
-                                            filename = os.path.basename(pdf_path) or f"{file_stem}_translated.pdf"
+                                            filename = os.path.basename(pdf_path) or f"{file_stem}{sfx}.pdf"
                                             media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                             return FileResponse(path=pdf_path, media_type=media_type, filename=filename)
 
-                                    pdf_file_path = output_dir / f"{file_stem}_translated.pdf"
+                                    pdf_file_path = output_dir / f"{file_stem}{sfx}.pdf"
                                     if pdf_file_path.exists():
-                                        filename = f"{file_stem}_translated.pdf"
+                                        filename = f"{file_stem}{sfx}.pdf"
                                         media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                         return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
                                 except NotImplementedError as not_impl_error:
@@ -2435,16 +3007,16 @@ class DownloadService:
                                         f"[DOWNLOAD] NotImplementedError during PDF generation (Windows asyncio limitation): {not_impl_error}",
                                     )
                                     output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
-                                    pdf_file_path = output_dir / f"{file_stem}_translated.pdf"
+                                    pdf_file_path = output_dir / f"{file_stem}{sfx}.pdf"
                                     gen_pdf = task_state.get("downloadable_files", {}).get("pdf")
 
                                     if gen_pdf and os.path.exists(gen_pdf.get("path", "")):
-                                        filename = os.path.basename(gen_pdf["path"]) or f"{file_stem}_translated.pdf"
+                                        filename = os.path.basename(gen_pdf["path"]) or f"{file_stem}{sfx}.pdf"
                                         media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] PDF generated successfully despite NotImplementedError")
                                         return FileResponse(path=gen_pdf["path"], media_type=media_type, filename=filename)
                                     if pdf_file_path.exists():
-                                        filename = f"{file_stem}_translated.pdf"
+                                        filename = f"{file_stem}{sfx}.pdf"
                                         media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] PDF generated successfully despite NotImplementedError (found in output_dir)")
                                         return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
@@ -2481,6 +3053,63 @@ class DownloadService:
                                 table_body_format,
                             )
                     
+                        elif file_type in ("epub", "mobi") and bilingual_enabled:
+                            # Export bilingual MD as EPUB/MOBI via Pandoc
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Exporting bilingual {file_type} from rebuilt markdown for task {task_id}",
+                            )
+                            md_content = workflow.export_to_markdown()
+                            if md_content:
+                                if isinstance(md_content, bytes):
+                                    md_content = md_content.decode("utf-8", errors="replace")
+                                try:
+                                    from utils.format_convert_utils import _get_pandoc_path
+                                    pandoc_path = _get_pandoc_path()
+                                    if pandoc_path:
+                                        md_temp = tempfile.NamedTemporaryFile(
+                                            mode="w", suffix=".md", delete=False, encoding="utf-8"
+                                        )
+                                        md_temp.write(md_content)
+                                        md_temp.close()
+                                        out_temp = tempfile.NamedTemporaryFile(
+                                            mode="wb", suffix=f".{file_type}", delete=False
+                                        )
+                                        out_temp.close()
+                                        import subprocess
+                                        result = subprocess.run(
+                                            [str(pandoc_path), md_temp.name, "-o", out_temp.name],
+                                            capture_output=True, text=True, timeout=300,
+                                        )
+                                        if result.returncode == 0 and os.path.getsize(out_temp.name) > 0:
+                                            filename = f"{file_stem}{sfx}.{file_type}"
+                                            media_type = MEDIA_TYPES.get(file_type, "application/octet-stream")
+                                            logger.info(
+                                                LogModule.EXPORT,
+                                                f"[DOWNLOAD] Generated bilingual {file_type} via Pandoc "
+                                                f"(size={os.path.getsize(out_temp.name)} bytes)",
+                                            )
+                                            return FileResponse(
+                                                path=out_temp.name, media_type=media_type, filename=filename
+                                            )
+                                        else:
+                                            logger.warning(
+                                                LogModule.EXPORT,
+                                                f"[DOWNLOAD] Pandoc {file_type} conversion failed: "
+                                                f"returncode={result.returncode}, stderr={result.stderr[:200]}",
+                                            )
+                                except Exception as e:
+                                    logger.warning(
+                                        LogModule.EXPORT,
+                                        f"[DOWNLOAD] Pandoc {file_type} conversion failed: {e}",
+                                        exc_info=True,
+                                    )
+                            logger.warning(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Bilingual {file_type} export failed for task {task_id}, falling back",
+                            )
+                            has_revisions = False
+
                         else:
                             # For unsupported file types with revisions, fall back to original
                             logger.warning(LogModule.EXPORT, f"File type {file_type} not supported for revision rebuild, using original file")
@@ -2504,7 +3133,7 @@ class DownloadService:
                                     temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8')
                                     temp_file.write(md_content)
                                     temp_file.close()
-                                    filename = f"{file_stem}_translated.md"
+                                    filename = f"{file_stem}{sfx}.md"
                                     media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
                                     if os.path.exists(temp_file.name):
                                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD from rebuilt document content")
@@ -2541,7 +3170,16 @@ class DownloadService:
                             # CRITICAL: Always rebuild DOCX document from segments to ensure latest user edits are included
                             # This ensures that any frontend modifications are applied, even if modified flag is not set
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Rebuilding DOCX document from segments for task {task_id} to ensure latest edits are included")
-                            rebuilt_doc = rebuild_docx_document_from_segments(task_state, translated_doc)
+                            rebuilt_doc = rebuild_docx_document_from_segments(
+                                task_state,
+                                translated_doc,
+                                bilingual_export=bilingual_enabled,
+                                target_first=target_first,
+                                source_text_italic=source_italic,
+                                source_text_color=source_color,
+                                target_text_italic=target_italic,
+                                target_text_color=target_color,
+                            )
                         except Exception as rebuild_error:
                             logger.error(LogModule.EXPORT, f"Failed to rebuild DOCX document from segments for task {task_id}: {rebuild_error}", exc_info=True)
                             has_revisions = False
@@ -2581,7 +3219,7 @@ class DownloadService:
                                         temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8')
                                         temp_file.write(html_content)
                                         temp_file.close()
-                                        filename = f"{file_stem}_translated.html"
+                                        filename = f"{file_stem}{sfx}.html"
                                         media_type = MEDIA_TYPES.get(file_type, "text/html; charset=utf-8")
                                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated revised HTML file from DOCX: {temp_file.name} (size: {os.path.getsize(temp_file.name)} bytes)")
                                         return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
@@ -2598,7 +3236,7 @@ class DownloadService:
                                         temp_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.docx', delete=False)
                                         temp_file.write(docx_content)
                                         temp_file.close()
-                                        filename = f"{file_stem}_translated.docx"
+                                        filename = f"{file_stem}{sfx}.docx"
                                         media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                                         
                                         # Export debug folder with segment source and target texts
@@ -2620,7 +3258,7 @@ class DownloadService:
                                         temp_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.pptx', delete=False)
                                         temp_file.write(pptx_content)
                                         temp_file.close()
-                                        filename = f"{file_stem}_translated.pptx"
+                                        filename = f"{file_stem}{sfx}.pptx"
                                         media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.presentationml.presentation")
                                     except Exception as pptx_error:
                                         logger.error(LogModule.EXPORT, f"Failed to export PPTX for task {task_id}: {pptx_error}", exc_info=True)
@@ -2638,7 +3276,7 @@ class DownloadService:
                                         if existing_pdf:
                                             pdf_path = existing_pdf.get("path", "") if isinstance(existing_pdf, dict) else str(existing_pdf)
                                             if pdf_path and os.path.exists(pdf_path):
-                                                filename = os.path.basename(pdf_path) or f"{file_stem}_translated.pdf"
+                                                filename = os.path.basename(pdf_path) or f"{file_stem}{sfx}.pdf"
                                                 media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using pre-generated PDF for MOBI/EPUB workflow (regenerate branch): {pdf_path}")
                                                 return FileResponse(path=pdf_path, media_type=media_type, filename=filename)
@@ -2679,30 +3317,30 @@ class DownloadService:
                                         await self.pdf_generator.generate(workflow, output_dir, file_stem, task_state, task_id, table_body_format=table_body_format, equation_format=equation_format)
                                         gen_pdf = task_state.get("downloadable_files", {}).get("pdf")
                                         if gen_pdf and os.path.exists(gen_pdf.get("path", "")):
-                                            filename = os.path.basename(gen_pdf["path"]) or f"{file_stem}_translated.pdf"
+                                            filename = os.path.basename(gen_pdf["path"]) or f"{file_stem}{sfx}.pdf"
                                             media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                             return FileResponse(path=gen_pdf["path"], media_type=media_type, filename=filename)
                                         
                                         # Also check if PDF file exists in output_dir
-                                        pdf_file_path = output_dir / f"{file_stem}_translated.pdf"
+                                        pdf_file_path = output_dir / f"{file_stem}{sfx}.pdf"
                                         if pdf_file_path.exists():
-                                            filename = f"{file_stem}_translated.pdf"
+                                            filename = f"{file_stem}{sfx}.pdf"
                                             media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                             return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
                                     except NotImplementedError as not_impl_error:
                                         # Windows asyncio limitation - check if PDF was still generated
                                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] NotImplementedError during PDF generation (Windows asyncio limitation): {not_impl_error}")
                                         output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
-                                        pdf_file_path = output_dir / f"{file_stem}_translated.pdf"
+                                        pdf_file_path = output_dir / f"{file_stem}{sfx}.pdf"
                                         gen_pdf = task_state.get("downloadable_files", {}).get("pdf")
                                         
                                         if gen_pdf and os.path.exists(gen_pdf.get("path", "")):
-                                            filename = os.path.basename(gen_pdf["path"]) or f"{file_stem}_translated.pdf"
+                                            filename = os.path.basename(gen_pdf["path"]) or f"{file_stem}{sfx}.pdf"
                                             media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] PDF generated successfully despite NotImplementedError")
                                             return FileResponse(path=gen_pdf["path"], media_type=media_type, filename=filename)
                                         elif pdf_file_path.exists():
-                                            filename = f"{file_stem}_translated.pdf"
+                                            filename = f"{file_stem}{sfx}.pdf"
                                             media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] PDF generated successfully despite NotImplementedError (found in output_dir)")
                                             return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
@@ -2741,6 +3379,192 @@ class DownloadService:
                     else:
                         logger.warning(LogModule.EXPORT, f"Original file not found for DOCX rebuild, using original file")
                         has_revisions = False
+                elif workflow_type == "txt" and bilingual_enabled:
+                    # Rebuild TXT from segments with bilingual interleaving
+                    from utils.bilingual_export_utils import rebuild_bilingual_plain_text_from_segments
+                    rebuilt_text = rebuild_bilingual_plain_text_from_segments(
+                        task_state, target_first=target_first
+                    )
+                    if rebuilt_text:
+                        temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8')
+                        temp_file.write(rebuilt_text)
+                        temp_file.close()
+                        file_stem = task_state.get("original_filename_stem", "rebuilt")
+                        filename = f"{file_stem}{sfx}.txt"
+                        media_type = MEDIA_TYPES.get(file_type, "text/plain; charset=utf-8")
+                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual TXT file: {temp_file.name}")
+                        return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                    else:
+                        logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Bilingual TXT rebuild produced empty content, falling back")
+                        has_revisions = False
+                
+                elif workflow_type == "srt" and bilingual_enabled:
+                    # Rebuild SRT from segments with bilingual interleaving
+                    from utils.bilingual_export_utils import rebuild_bilingual_srt_from_segments
+                    rebuilt_srt = rebuild_bilingual_srt_from_segments(
+                        task_state, target_first=target_first
+                    )
+                    if rebuilt_srt:
+                        temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.srt', delete=False, encoding='utf-8')
+                        temp_file.write(rebuilt_srt)
+                        temp_file.close()
+                        file_stem = task_state.get("original_filename_stem", "rebuilt")
+                        filename = f"{file_stem}{sfx}.srt"
+                        media_type = MEDIA_TYPES.get(file_type, "text/plain; charset=utf-8")
+                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual SRT file: {temp_file.name}")
+                        return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                    else:
+                        logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Bilingual SRT rebuild produced empty content, falling back")
+                        has_revisions = False
+
+                elif workflow_type == "pptx":
+                    logger.info(LogModule.EXPORT, f"[DOWNLOAD] Rebuilding bilingual PPTX from segments for {file_type}")
+                    file_stem = task_state.get("original_filename_stem", "rebuilt")
+                    if file_type in ("html", "md"):
+                        from utils.bilingual_export_utils import rebuild_bilingual_pptx_html_from_segments
+
+                        html_content = rebuild_bilingual_pptx_html_from_segments(
+                            task_state, target_first=target_first
+                        )
+                        if not html_content:
+                            logger.warning(
+                                LogModule.EXPORT,
+                                "[DOWNLOAD] Bilingual PPTX HTML rebuild produced empty content, falling back",
+                            )
+                            has_revisions = False
+                        elif file_type == "html":
+                            temp_file = tempfile.NamedTemporaryFile(
+                                mode='w', suffix='.html', delete=False, encoding='utf-8'
+                            )
+                            temp_file.write(html_content)
+                            temp_file.close()
+                            filename = f"{file_stem}{sfx}.html"
+                            media_type = MEDIA_TYPES.get(file_type, "text/html; charset=utf-8")
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Generated bilingual HTML from PPTX segments: {temp_file.name}",
+                            )
+                            return FileResponse(
+                                path=temp_file.name, media_type=media_type, filename=filename
+                            )
+                        else:
+                            from workflow.html_to_markdown_export import html_content_to_markdown
+
+                            md_content = html_content_to_markdown(html_content)
+                            temp_file = tempfile.NamedTemporaryFile(
+                                mode='w', suffix='.md', delete=False, encoding='utf-8'
+                            )
+                            temp_file.write(md_content)
+                            temp_file.close()
+                            filename = f"{file_stem}{sfx}.md"
+                            media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Generated bilingual MD from PPTX segments: {temp_file.name}",
+                            )
+                            return FileResponse(
+                                path=temp_file.name, media_type=media_type, filename=filename
+                            )
+                    elif file_type == "pptx":
+                        from utils.bilingual_export_utils import rebuild_bilingual_pptx_from_segments
+
+                        rebuilt_bytes = rebuild_bilingual_pptx_from_segments(
+                            task_state, target_first=target_first,
+                        )
+                        if rebuilt_bytes:
+                            temp_file = tempfile.NamedTemporaryFile(suffix='.pptx', delete=False)
+                            temp_file.write(rebuilt_bytes)
+                            temp_file.close()
+                            filename = f"{file_stem}{sfx}.pptx"
+                            media_type = MEDIA_TYPES.get(
+                                file_type,
+                                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                            )
+                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual PPTX file: {temp_file.name}")
+                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                        logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Bilingual PPTX rebuild produced empty content, falling back")
+                        has_revisions = False
+                    else:
+                        logger.warning(
+                            LogModule.EXPORT,
+                            f"[DOWNLOAD] Bilingual PPTX rebuild does not support file_type={file_type}, falling back",
+                        )
+                        has_revisions = False
+
+                elif workflow_type == "xlsx":
+                    logger.info(LogModule.EXPORT, f"[DOWNLOAD] Rebuilding bilingual XLSX from segments for {file_type}")
+                    file_stem = task_state.get("original_filename_stem", "rebuilt")
+                    if file_type in ("html", "md"):
+                        from utils.bilingual_export_utils import rebuild_bilingual_xlsx_html_from_segments
+
+                        html_content = rebuild_bilingual_xlsx_html_from_segments(
+                            task_state, target_first=target_first
+                        )
+                        if not html_content:
+                            logger.warning(
+                                LogModule.EXPORT,
+                                "[DOWNLOAD] Bilingual XLSX HTML rebuild produced empty content, falling back",
+                            )
+                            has_revisions = False
+                        elif file_type == "html":
+                            temp_file = tempfile.NamedTemporaryFile(
+                                mode='w', suffix='.html', delete=False, encoding='utf-8'
+                            )
+                            temp_file.write(html_content)
+                            temp_file.close()
+                            filename = f"{file_stem}{sfx}.html"
+                            media_type = MEDIA_TYPES.get(file_type, "text/html; charset=utf-8")
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Generated bilingual HTML from XLSX segments: {temp_file.name}",
+                            )
+                            return FileResponse(
+                                path=temp_file.name, media_type=media_type, filename=filename
+                            )
+                        else:
+                            from workflow.html_to_markdown_export import html_content_to_markdown
+
+                            md_content = html_content_to_markdown(html_content)
+                            temp_file = tempfile.NamedTemporaryFile(
+                                mode='w', suffix='.md', delete=False, encoding='utf-8'
+                            )
+                            temp_file.write(md_content)
+                            temp_file.close()
+                            filename = f"{file_stem}{sfx}.md"
+                            media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Generated bilingual MD from XLSX segments: {temp_file.name}",
+                            )
+                            return FileResponse(
+                                path=temp_file.name, media_type=media_type, filename=filename
+                            )
+                    elif file_type == "xlsx":
+                        from utils.bilingual_export_utils import rebuild_bilingual_xlsx_from_segments
+
+                        rebuilt_bytes = rebuild_bilingual_xlsx_from_segments(
+                            task_state, target_first=target_first,
+                        )
+                        if rebuilt_bytes:
+                            temp_file = tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False)
+                            temp_file.write(rebuilt_bytes)
+                            temp_file.close()
+                            filename = f"{file_stem}{sfx}.xlsx"
+                            media_type = MEDIA_TYPES.get(
+                                file_type,
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            )
+                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual XLSX file: {temp_file.name}")
+                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                        logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Bilingual XLSX rebuild produced empty content, falling back")
+                        has_revisions = False
+                    else:
+                        logger.warning(
+                            LogModule.EXPORT,
+                            f"[DOWNLOAD] Bilingual XLSX rebuild does not support file_type={file_type}, falling back",
+                        )
+                        has_revisions = False
+
                 else:
                     # Other workflow types - not yet implemented for revision rebuild
                     logger.info(LogModule.EXPORT, f"Revision rebuild not yet implemented for workflow type: {workflow_type}, using original file")
@@ -2798,6 +3622,8 @@ class DownloadService:
                             file_stem=task_state.get("original_filename_stem"),
                             equation_format=equation_format,
                             table_body_format=table_body_format,
+                            bilingual_export=bilingual_enabled,
+                            target_first=target_first,
                         )
                         if rebuilt_doc and getattr(rebuilt_doc, "content", None):
                             raw = rebuilt_doc.content
@@ -2830,7 +3656,7 @@ class DownloadService:
                             pdf_path = existing_pdf.get("path", "") if isinstance(existing_pdf, dict) else str(existing_pdf)
                             if pdf_path and os.path.exists(pdf_path):
                                 file_path = pdf_path
-                                filename = os.path.basename(file_path) or f"{file_stem}_translated.pdf"
+                                filename = os.path.basename(file_path) or f"{file_stem}{sfx}.pdf"
                                 media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Returning generated PDF for MOBI/EPUB original file: {file_path}")
                                 return FileResponse(path=file_path, media_type=media_type, filename=filename)
@@ -3038,16 +3864,14 @@ class DownloadService:
                                                     "alt": chunk.image_path,
                                                 }
                             else:
-                                # When using rebuilt_doc from segments, try to get image mapping from existing image_data_map
-                                existing_image_map = task_state.get("image_data_map")
-                                if isinstance(existing_image_map, dict):
-                                    # Merge existing image mappings
-                                    for ph_id, img_data in existing_image_map.items():
-                                        if ph_id not in image_data_map:
-                                            image_data_map[str(ph_id)] = {
-                                                "data": (img_data or {}).get("data", ""),
-                                                "alt": (img_data or {}).get("alt", str(ph_id)),
-                                            }
+                                _populate_layout_placeholder_image_map(
+                                    image_data_map,
+                                    task_state,
+                                    layout_doc,
+                                    layout_result=None,
+                                    equation_format=eq_format,
+                                    table_body_format=table_body_format,
+                                )
                             
                             file_stem = task_state.get("original_filename_stem", "translated")
                             if image_data_map:
@@ -3357,7 +4181,7 @@ class DownloadService:
                             return FileResponse(
                                 path=temp_file.name,
                                 media_type=MEDIA_TYPES.get("html", "text/html; charset=utf-8"),
-                                filename=f"{file_stem}_translated.html",
+                                filename=f"{file_stem}{sfx}.html",
                             )
                     except Exception as e:
                         logger.warning(
@@ -3418,7 +4242,7 @@ class DownloadService:
                             else:
                                 temp_file.write(translated_doc.content.encode('utf-8'))
                             temp_file.close()
-                            filename = f"{file_stem}_translated.docx"
+                            filename = f"{file_stem}{sfx}.docx"
                             media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated DOCX from workflow's translated document: {temp_file.name}")
                             return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
@@ -3438,7 +4262,7 @@ class DownloadService:
                             else:
                                 temp_file.write(docx_content.encode('utf-8'))
                             temp_file.close()
-                            filename = f"{file_stem}_translated.docx"
+                            filename = f"{file_stem}{sfx}.docx"
                             media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully exported DOCX from workflow: {temp_file.name}")
                             return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
@@ -3448,7 +4272,7 @@ class DownloadService:
                 # If workflow instance doesn't have translated document, try original file path
                 original_file_path = task_state.get("original_file_path")
                 if original_file_path and os.path.exists(original_file_path):
-                    filename = os.path.basename(original_file_path) or f"{task_state.get('original_filename_stem', 'translated')}_translated.docx"
+                    filename = os.path.basename(original_file_path) or f"{task_state.get('original_filename_stem', 'translated')}{sfx}.docx"
                     media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using original DOCX file as fallback: {original_file_path}")
                     return FileResponse(path=original_file_path, media_type=media_type, filename=filename)
@@ -3484,7 +4308,7 @@ class DownloadService:
                             else:
                                 temp_file.write(translated_doc.content.encode('utf-8'))
                             temp_file.close()
-                            filename = f"{file_stem}_translated.mobi"
+                            filename = f"{file_stem}{sfx}.mobi"
                             media_type = MEDIA_TYPES.get(file_type, "application/x-mobipocket-ebook")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated MOBI from workflow's translated document: {temp_file.name}")
                             return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
@@ -3504,7 +4328,7 @@ class DownloadService:
                             else:
                                 temp_file.write(mobi_content.encode('utf-8'))
                             temp_file.close()
-                            filename = f"{file_stem}_translated.mobi"
+                            filename = f"{file_stem}{sfx}.mobi"
                             media_type = MEDIA_TYPES.get(file_type, "application/x-mobipocket-ebook")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully exported MOBI from workflow: {temp_file.name}")
                             return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
@@ -3536,7 +4360,7 @@ class DownloadService:
                             else:
                                 temp_file.write(translated_doc.content.encode('utf-8'))
                             temp_file.close()
-                            filename = f"{file_stem}_translated.epub"
+                            filename = f"{file_stem}{sfx}.epub"
                             media_type = MEDIA_TYPES.get(file_type, "application/epub+zip")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated EPUB from workflow's translated document: {temp_file.name}")
                             return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
@@ -3556,7 +4380,7 @@ class DownloadService:
                             else:
                                 temp_file.write(epub_content.encode('utf-8'))
                             temp_file.close()
-                            filename = f"{file_stem}_translated.epub"
+                            filename = f"{file_stem}{sfx}.epub"
                             media_type = MEDIA_TYPES.get(file_type, "application/epub+zip")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully exported EPUB from workflow: {temp_file.name}")
                             return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
@@ -3582,7 +4406,7 @@ class DownloadService:
                             
                             if os.path.exists(temp_file.name):
                                 file_stem = task_state.get("original_filename_stem", "translated")
-                                filename = f"{file_stem}_translated.docx"
+                                filename = f"{file_stem}{sfx}.docx"
                                 media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully converted HTML to DOCX for TXT workflow: {temp_file.name}")
                                 return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
@@ -3610,7 +4434,7 @@ class DownloadService:
                         
                         if os.path.exists(temp_file.name):
                             file_stem = task_state.get("original_filename_stem", "translated")
-                            filename = f"{file_stem}_translated.docx"
+                            filename = f"{file_stem}{sfx}.docx"
                             media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully converted MD to DOCX for TXT workflow: {temp_file.name}")
                             return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)

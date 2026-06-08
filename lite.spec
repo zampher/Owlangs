@@ -61,7 +61,7 @@ datas = [
     # New config structure templates
     ('./configs/system.json.template', 'configs/'),  # System configuration template
     ('./configs/platforms.json.template', 'configs/'),  # Platforms configuration template
-    ('./configs/ui.json.template', 'configs/'),  # UI configuration template
+
     ('./configs/secrets.json.template', 'configs/'),  # Secrets configuration template
     ('./configs/local.json.template', 'configs/'),  # Local configuration template
     ('./configs/translation_config.json.template', 'configs/'),  # Translation configuration template
@@ -153,6 +153,7 @@ hiddenimports = [
     'backend.utils.docx_math_fragment_llm_repair',
     'backend.utils.llm_client',
     'backend.utils.extract_segments_debug',
+    'backend.utils.bilingual_export_utils',
     # Ensure app module is imported
     'app',
     'app.app_main',
@@ -262,7 +263,7 @@ hiddenimports = [
     # mobi dependencies (ensure loguru and imghdr are included in frozen build)
     'loguru',
     'imghdr',
-    # Exporter modules (imported by all workflows for output generation)
+# Exporter modules (imported by all workflows for output generation)
     'exporter',
     'exporter.base',
     # IR (intermediate representation) and glossary (imported by mobi/epub workflows)
@@ -292,10 +293,48 @@ hiddenimports = [
     'backend.app.services.status.status_service',
     'backend.app.services.format_conversion_service',
     'backend.app.services.glossary_generation_service',
+    # MCP server modules
+    'backend.mcp_server',
+    'backend.mcp_server.server',
+    'backend.mcp_server.service_layer',
+    'backend.owlangs_cli',
+    'backend.mcp_server.tools',
+    'backend.mcp_server.tools.config_tools',
+    'backend.mcp_server.tools.translate_tools',
+    'backend.mcp_server.tools.glossary_tools',
+    'backend.mcp_server.tools.convert_tools',
+    'backend.mcp_server.resources',
+    'backend.mcp_server.resources.providers',
+    'backend.mcp_server.prompts',
+    'backend.mcp_server.prompts.templates',
+    # MCP protocol package
+    'mcp',
+    'mcp.server',
+    'mcp.server.fastmcp',
+    'mcp.server.models',
+    'mcp.server.session',
+    'mcp.server.lowlevel',
+    'mcp.shared',
+    'mcp.shared.session',
+    'mcp.shared.request_id',
+    'mcp.shared.context',
+    'mcp.types',
+    'mcp.tool',
+    'mcp.resource',
+    'mcp.prompt',
+    # MCP transport dependencies
+    'sse_starlette',
+    'sse_starlette.sse',
+    'httpx_sse',
+    'jwt',
+    'pydantic_settings',
+    'anyio',
+    'anyio.streams',
+    'anyio.streams.stapled',
 ]
 
-# mobi/ebooklib: required for MOBI/EPUB extraction and conversion in frozen build
-for _pkg in ['mobi', 'ebooklib']:
+# mobi/ebooklib/mcp: required for MOBI/EPUB extraction, conversion, and MCP server in frozen build
+for _pkg in ['mobi', 'ebooklib', 'mcp']:
     try:
         _pkg_datas, _, _pkg_hiddenimports = collect_all(_pkg)
         datas += _pkg_datas

@@ -236,7 +236,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationToolbarSwitchToFile => '切换到文件';
 
   @override
-  String get translationToolbarSwitchToText => '切换到文本';
+  String get translationToolbarSwitchToText => '输入文本';
 
   @override
   String get translationStatusCompleted => '翻译完成';
@@ -321,6 +321,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get translationStatsTranslatedLabel => '已翻译';
+
+  @override
+  String get translationStatsPendingLabel => '待翻译';
+
+  @override
+  String get translationStatsClearedLabel => '已清除';
+
+  @override
+  String get translationStatsImagesLabel => '图片';
 
   @override
   String get translationStatsLoadingContent => '正在加载内容...';
@@ -464,6 +473,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationExportDialogTitle => '导出文档';
 
   @override
+  String get translationExportDocumentType => '文档类型';
+
+  @override
   String get translationExportFormatOptionsTitle => '格式选项（仅限 PDF）';
 
   @override
@@ -483,6 +495,63 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get translationExportEquationFormatLatex => 'LaTeX';
+
+  @override
+  String get translationExportBilingualExport => '双语导出';
+
+  @override
+  String get translationExportBilingualOrderTargetAfter => '原文在前';
+
+  @override
+  String get translationExportBilingualOrderTargetAfterSub => '原文在前，译文在后';
+
+  @override
+  String get translationExportBilingualOrderTargetBefore => '译文在前';
+
+  @override
+  String get translationExportBilingualOrderTargetBeforeSub => '译文在前，原文在后';
+
+  @override
+  String get translationExportSourceTextItalic => '原文斜体';
+
+  @override
+  String get translationExportSourceTextColor => '原文颜色：';
+
+  @override
+  String get translationExportTargetTextItalic => '译文斜体';
+
+  @override
+  String get translationExportTargetTextColor => '译文颜色：';
+
+  @override
+  String get translationExportColorDefault => '默认';
+
+  @override
+  String get translationExportColorGray => '灰色';
+
+  @override
+  String get translationExportColorBlue => '蓝色';
+
+  @override
+  String get translationExportColorRed => '红色';
+
+  @override
+  String get translationExportColorGreen => '绿色';
+
+  @override
+  String get translationExportColorOrange => '橙色';
+
+  @override
+  String get translationExportColorBlack => '黑色';
+
+  @override
+  String get translationExportDownloadButton => '下载';
+
+  @override
+  String get translationExportMdEmbeddedImages => 'MD（嵌入图片）';
+
+  @override
+  String get translationExportMdWithImagesFolder => 'MD（图片文件夹）';
 
   @override
   String get translationLeftPanelExpandTooltip => '展开左侧面板';
@@ -692,7 +761,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationDialogCancelTaskYesCancel => '是，取消';
 
   @override
-  String get translationQuickSettingsTitle => '翻译快速设置';
+  String get translationQuickSettingsTitle => '快速设置';
 
   @override
   String get quickSettingsTargetLanguage => '目标语言';
@@ -889,10 +958,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeBackendRetry => '重试';
 
   @override
-  String get homeNavTranslate => '沉浸式翻译';
+  String get homeNewTask => '新建任务';
 
   @override
-  String get homeNavTranslationQueue => '任务队列';
+  String get homeNewTaskImmersiveTooltip => '在界面内即时对照原文与译文';
+
+  @override
+  String get homeNewTaskQueuedTooltip => '批量导入文件，加入队列按序自动翻译';
+
+  @override
+  String get homeNavTranslate => '沉浸式任务';
+
+  @override
+  String get homeNavTranslationQueue => '任务';
 
   @override
   String get homeNavAnonymize => '匿名化';
@@ -901,13 +979,43 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeNavSettings => '设置';
 
   @override
-  String get homeNavDonateHelp => '捐赠与帮助';
+  String get homeNavDonateHelp => '帮助';
+
+  @override
+  String get homeNavDonate => '捐赠';
 
   @override
   String get homeNavHome => '主页';
 
   @override
   String get homeNavBatchUpload => '批量上传';
+
+  @override
+  String get homeNavTooltipNewTask => '开始新的翻译任务——沉浸式逐句对照，或队列式批量处理';
+
+  @override
+  String get homeNavTooltipTasks => '查看和管理所有翻译任务，下载已完成的译文';
+
+  @override
+  String get homeNavTooltipAnonymize => '对文档内容进行匿名化处理，保护敏感信息';
+
+  @override
+  String get homeNavTooltipSettings => '配置语言、主题、通知等应用选项';
+
+  @override
+  String get homeNavTooltipSetupWizard => '引导式设置向导，快速完成翻译环境配置';
+
+  @override
+  String get homeNavTooltipHelp => '获取使用帮助和技术支持';
+
+  @override
+  String get homeNavTooltipDonate => '支持我们的开源项目';
+
+  @override
+  String get homeNavTooltipHome => '返回应用首页';
+
+  @override
+  String get homeNavTooltipGitHub => '查看项目源码，欢迎给我们 Star！';
 
   @override
   String get batchUploadTitle => '批量文件上传';
@@ -932,6 +1040,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get batchUploadSelectSingleFile => '选择文件';
+
+  @override
+  String get batchUploadSingleFileDescription => '选择单个待翻译文件';
+
+  @override
+  String get batchUploadAddFiles => '添加文件';
 
   @override
   String batchUploadFilesFound(Object count) {
@@ -1082,7 +1196,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationQueueEmpty => '暂无翻译任务。';
 
   @override
-  String get translationQueueNewQueuedTask => '队列式翻译';
+  String get translationQueueNewQueuedTask => '队列式任务';
+
+  @override
+  String get translationQueueImport => '导入';
 
   @override
   String get translationQueueBackToQueueTooltip => '返回任务队列';
@@ -1207,7 +1324,41 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get translationQueueErrorMessageCopied => '错误信息已复制';
+
+  @override
+  String get translationQueueSelected => '已选';
+
+  @override
+  String get translationQueueSelectMode => '选择';
+
+  @override
+  String get translationQueueClearSelection => '清除选择';
+
+  @override
+  String translationQueueBatchDownloadFailed(Object error) {
+    return '批量下载失败：$error';
+  }
+
+  @override
+  String translationQueueBatchDownloadSuccess(Object fileType) {
+    return '批量下载：$fileType 已就绪';
+  }
+
+  @override
   String get translationQueueView => '阅读编辑模式';
+
+  @override
+  String get translationQueueViewSourcePath => '查看原始文件路径';
+
+  @override
+  String get translationQueueSourcePathTitle => '源文件路径';
+
+  @override
+  String get translationQueueFileNameLabel => '文件名';
+
+  @override
+  String get translationQueueRelativePathLabel => '相对路径';
 
   @override
   String get homeFeatureUnderDevelopment => '此功能正在开发中。';
@@ -1248,7 +1399,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homePhaseTranslate => '翻译';
 
   @override
-  String get homePhaseViewer => '查看器';
+  String get homePhaseViewer => '修订';
 
   @override
   String get homePhaseAnonymize => '匿名化';
@@ -1258,6 +1409,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get homePhaseExport => '导出';
+
+  @override
+  String get taskDefaultTitleTranslate => '任务';
+
+  @override
+  String get taskDefaultTitleAnonymize => '匿名化';
 
   @override
   String get homeReleaseNotesTitle => '更新说明';
@@ -1453,6 +1610,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTableOcrSubtitle => '为表格启用OCR';
 
   @override
+  String get settingsMineruModelVersion => '模型版本';
+
+  @override
+  String get settingsMineruModelVersionSubtitle =>
+      '选择 MinerU 解析模式（pipeline 速度快，vlm 精度高，hybrid 两者兼顾）';
+
+  @override
   String get settingsAnonymizationNewTaskNotice => '更改仅对新任务生效';
 
   @override
@@ -1505,6 +1669,42 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsOcrLangArabic => '阿拉伯语';
+
+  @override
+  String get settingsOcrLangAuto => '自动检测';
+
+  @override
+  String get mineruLangAuto => '自动检测';
+
+  @override
+  String get mineruLangChServer => '中文（服务器版）';
+
+  @override
+  String get mineruLangChLite => '中文（精简版）';
+
+  @override
+  String get mineruLangTamil => '泰米尔语';
+
+  @override
+  String get mineruLangTelugu => '泰卢固语';
+
+  @override
+  String get mineruLangKannada => '卡纳达语';
+
+  @override
+  String get mineruLangLatinScript => '拉丁字母';
+
+  @override
+  String get mineruLangArabicScript => '阿拉伯字母';
+
+  @override
+  String get mineruLangEastSlavic => '东斯拉夫语';
+
+  @override
+  String get mineruLangCyrillicScript => '西里尔字母';
+
+  @override
+  String get mineruLangDevanagariScript => '天城文';
 
   @override
   String get settingsTabsGlossary => '术语表';
@@ -2029,6 +2229,123 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get settingsLocalUsersTitle => '本地用户';
+
+  @override
+  String get settingsLocalUsersAddUser => '添加用户';
+
+  @override
+  String get settingsLocalUsersNoUsers => '未找到本地用户。';
+
+  @override
+  String get settingsLocalUsersDialogAddTitle => '添加本地用户';
+
+  @override
+  String get settingsLocalUsersDialogEditTitle => '编辑本地用户';
+
+  @override
+  String get settingsLocalUsersFieldUsername => '用户名';
+
+  @override
+  String get settingsLocalUsersFieldDisplayName => '显示名称（可选）';
+
+  @override
+  String get settingsLocalUsersFieldEmail => '邮箱（可选）';
+
+  @override
+  String get settingsLocalUsersFieldRole => '角色';
+
+  @override
+  String get settingsLocalUsersRoleUser => '用户';
+
+  @override
+  String get settingsLocalUsersRoleAdmin => '管理员';
+
+  @override
+  String get settingsLocalUsersFieldPassword => '密码';
+
+  @override
+  String get settingsLocalUsersPasswordHelper => '8-128位字符，需包含大写、小写和数字';
+
+  @override
+  String get settingsLocalUsersValidationUsernameRequired => '用户名为必填项';
+
+  @override
+  String get settingsLocalUsersValidationPasswordRequired => '密码为必填项';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooShort => '密码长度至少8位';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooLong => '密码长度不能超过128位';
+
+  @override
+  String get settingsLocalUsersValidationPasswordComplexity =>
+      '密码必须包含大写字母、小写字母和数字';
+
+  @override
+  String get settingsLocalUsersOperationFailed => '操作失败';
+
+  @override
+  String get settingsLocalUsersResetPassword => '重置密码';
+
+  @override
+  String settingsLocalUsersResetPasswordTitle(Object username) {
+    return '重置密码：$username';
+  }
+
+  @override
+  String get settingsLocalUsersFieldNewPassword => '新密码';
+
+  @override
+  String get settingsLocalUsersPasswordResetSuccess => '密码重置成功';
+
+  @override
+  String get settingsLocalUsersPasswordResetFailed => '密码重置失败';
+
+  @override
+  String get settingsLocalUsersDeleteUser => '删除';
+
+  @override
+  String settingsLocalUsersDeleteUserTitle(Object username) {
+    return '删除用户：$username';
+  }
+
+  @override
+  String get settingsLocalUsersDeleteConfirmation =>
+      '此操作将永久从本地用户存储中删除该用户。此操作不可撤销。';
+
+  @override
+  String get settingsLocalUsersDeleteSuccess => '用户已删除';
+
+  @override
+  String get settingsLocalUsersDeleteFailed => '删除用户失败';
+
+  @override
+  String get settingsLocalUsersEdit => '编辑';
+
+  @override
+  String get settingsLocalUsersCancel => '取消';
+
+  @override
+  String get settingsLocalUsersSave => '保存';
+
+  @override
+  String get settingsLocalUsersConfirm => '确认';
+
+  @override
+  String get settingsLocalUsersTableUsername => '用户名';
+
+  @override
+  String get settingsLocalUsersTableDisplayName => '显示名称';
+
+  @override
+  String get settingsLocalUsersTableEmail => '邮箱';
+
+  @override
+  String get settingsLocalUsersTableRole => '角色';
+
+  @override
   String get settingsLdapEnabled => '启用 LDAP 登录';
 
   @override
@@ -2283,21 +2600,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setupWizardUiLanguageLabel => '界面语言';
 
   @override
-  String get setupWizardMineruQuestion => '是否需要在本机翻译 PDF / 图片等文档？';
-
-  @override
-  String get setupWizardMineruYes => '需要（推荐，启用 MinerU 文档解析能力）';
-
-  @override
-  String get setupWizardMineruNo => '暂时不需要（仅使用大语言模型翻译纯文本等）';
-
-  @override
   String get setupWizardMineruDescription =>
       'MinerU 负责 PDF / 图片等文档的版面解析与切分。\n请在下方填写 MinerU 的 API Key 和接口地址，并点击「测试连接」确认可用。';
-
-  @override
-  String get setupWizardMineruSkipped =>
-      '你选择了暂时不配置 MinerU，后续仍可在设置中随时开启 PDF 翻译能力。';
 
   @override
   String get setupWizardMineruConfigTitle => 'MinerU 配置（解析引擎）';
@@ -2350,6 +2654,23 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiPlatformThinkingHint => '启用AI推理过程以获得更好的翻译质量';
+
+  @override
+  String get aiPlatformThinkingModeSupported => '支持思考模式';
+
+  @override
+  String get aiPlatformThinkingModeSupportedHint =>
+      '如果平台支持思考模式则启用（如 Ollama 搭配 Qwen3）';
+
+  @override
+  String get aiPlatformSegmentLimitLabel => '片段数上限';
+
+  @override
+  String get aiPlatformSegmentLimitHint =>
+      '每个翻译批次的最大段落数。限制与块大小同时生效。0 = 无限（云端），10 = 本地LLM建议';
+
+  @override
+  String get aiPlatformSegmentLimitUnlimited => '无限';
 
   @override
   String get aiPlatformPleaseEnterApiKeyFirst => '请先输入API密钥';
@@ -2407,7 +2728,31 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiPlatformModelVersion => '模型版本';
 
   @override
-  String get aiPlatformModelVersionHint => 'vlm';
+  String get aiPlatformModelVersionHint => 'hybrid-auto-engine';
+
+  @override
+  String get aiPlatformTimeout => '读取超时（秒）';
+
+  @override
+  String get aiPlatformTimeoutHint => '200（云端）或 300（本地）。等待LLM响应的最长时间。';
+
+  @override
+  String get aiPlatformWriteTimeout => '写入超时（秒）';
+
+  @override
+  String get aiPlatformWriteTimeoutHint => '300（默认）。发送数据到LLM的最长等待时间。';
+
+  @override
+  String get aiPlatformTestConnectTimeout => '连接测试超时（秒）';
+
+  @override
+  String get aiPlatformTestConnectTimeoutHint => '30（默认）。翻译开始前连接测试的最大等待时间。';
+
+  @override
+  String get aiPlatformTestRequestTimeout => '测试请求超时（秒）';
+
+  @override
+  String get aiPlatformTestRequestTimeoutHint => '10（默认）。连接测试期间每个探测请求的最大等待时间。';
 
   @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';
@@ -2440,10 +2785,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTranslationNotice => '这些设置仅适用于新的翻译任务。';
 
   @override
-  String get settingsTranslationAutoGlossaryTitle => '自动生成术语表';
+  String get settingsTargetLanguageTitle => '默认目标语言';
 
   @override
-  String get settingsTranslationAutoGlossarySubtitle => '翻译后自动生成术语表（适用于新任务）';
+  String get settingsTargetLanguageNotice => '设置新翻译任务的默认目标语言。您仍可以在快速设置中按任务更改。';
 
   @override
   String get settingsTranslationParamsTitle => '翻译参数';
@@ -2453,12 +2798,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsTranslationConcurrentHint => '推荐：3（根据模型和配额调整1–8）';
-
-  @override
-  String get settingsTranslationTimeoutTitle => '超时（秒）';
-
-  @override
-  String get settingsTranslationTimeoutHint => '120（推荐：120-300秒）';
 
   @override
   String get settingsTranslationChunkRetryTitle => '分块/API 重试次数';
@@ -2526,6 +2865,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsExclusionLanguageMatchSubtitle => '源语言与目标语言匹配';
+
+  @override
+  String get settingsTranslateOutputSuffixTitle => '翻译输出后缀';
+
+  @override
+  String get settingsTranslateOutputSuffixHint => '追加到翻译文件名后（留空则不添加后缀）';
+
+  @override
+  String get settingsConvertOutputSuffixTitle => '格式转换输出后缀';
+
+  @override
+  String get settingsConvertOutputSuffixHint => '追加到格式转换文件名后（留空则不添加后缀）';
 
   @override
   String get settingsLanguageDialogTitle => '选择语言';
@@ -3032,6 +3383,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationQueueEdit => '标签编辑模式';
 
   @override
+  String get translationQueueSelectFormats => '选择';
+
+  @override
+  String get translationQueueSelectFormatsTitle => '选择下载格式';
+
+  @override
+  String get translationQueueSelectFormatsFormatLabel => '格式';
+
+  @override
+  String get translationQueueSelectFormatsDownload => '下载';
+
+  @override
   String get reeditTitle => '编辑译文';
 
   @override
@@ -3063,6 +3426,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fetchUrlCancel => '取消';
+
+  @override
+  String get fetchUrl => '网址抓取';
+
+  @override
+  String get fetchUrlClose => '关闭';
 
   @override
   String get loginSubtitleFeatures => '文档翻译\n格式转换\n网址抓取';
@@ -3126,4 +3495,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get loginPasswordRecoveryAdminGuide => '如果您是管理员，请按照密码恢复流程进行处理。';
+
+  @override
+  String get commonDarkMode => '深色模式';
+
+  @override
+  String get commonLightMode => '浅色模式';
 }

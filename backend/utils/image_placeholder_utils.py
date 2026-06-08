@@ -48,7 +48,7 @@ def _replace_placeholders_with_images(
     if output_dir:
         images_dir = output_dir / image_folder_name
         images_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(LogModule.TRANS, f"Created images directory: {images_dir}")
+        logger.debug(LogModule.TRANS, f"Created images directory: {images_dir}")
 
     def _replacement(match: re.Match) -> str:
         # Use module-level logger (closure will capture it)
@@ -253,7 +253,7 @@ def _replace_placeholders_with_images(
                         import io
                         pil_image = Image.open(io.BytesIO(image_bytes))
                         original_width, original_height = pil_image.size
-                        logger.info(LogModule.RESTOR, f"[IMAGE-SIZE] Saved image {image_filename_saved}: original size={original_width}x{original_height} pixels, file_size={len(image_bytes)} bytes")
+                        logger.debug(LogModule.RESTOR, f"[IMAGE-SIZE] Saved image {image_filename_saved}: original size={original_width}x{original_height} pixels, file_size={len(image_bytes)} bytes")
                     except Exception as img_err:
                         logger.debug(LogModule.RESTOR, f"[IMAGE-SIZE] Failed to get image dimensions for {image_filename_saved}: {img_err}")
                     

@@ -1814,12 +1814,20 @@ class _AnonymizeScreenState extends ConsumerState<AnonymizeScreen> {
       final segments =
           segmentsData['segments'] as List<dynamic>? ?? <dynamic>[];
 
+      // Find all failed segments (excluding cleared and excluded segments)
       final failedIndices = <int>[];
       for (final segment in segments) {
-        final index = segment['segment_index'] as int?;
-        final isFailed = segment['is_failed'] as bool? ?? false;
-        final needsRetry = segment['needs_retry'] as bool? ?? false;
-        if (index != null && (isFailed || needsRetry)) {
+        final int? index = segment['segment_index'] as int?;
+        final bool isFailed = segment['is_failed'] as bool? ?? false;
+        final bool needsRetry = segment['needs_retry'] as bool? ?? false;
+        final bool isExcluded = segment['is_excluded'] as bool? ?? false;
+        final String? segStatus = segment['status'] as String?;
+        // CRITICAL: Skip cleared segments - they should not be retranslated
+        // Skip excluded segments - they should not be retranslated
+        if (index != null &&
+            (isFailed || needsRetry) &&
+            !isExcluded &&
+            segStatus != 'cleared') {
           failedIndices.add(index);
         }
       }
@@ -1848,75 +1856,87 @@ class _AnonymizeScreenState extends ConsumerState<AnonymizeScreen> {
         return;
       }
 
-      // Per-platform concurrent is now read by backend from platforms.json
-      const batchSize = 5;
-
       final dynamic translationNotifier = widget.flowId != null
           ? ref.read(translationStateProviderFamily(widget.flowId!).notifier)
           : ref.read(translationStateProvider.notifier);
 
-      int successCount = 0;
-      int failCount = 0;
-      final totalToRetranslate = failedIndices.length;
-
+      // Update status to show retranslation is in progress
       translationNotifier.setTranslating(true);
       translationNotifier.setStatusText('retranslating');
+      translationNotifier.setProgress(0);
 
-      for (int batchStart = 0;
-          batchStart < failedIndices.length;
-          batchStart += batchSize) {
-        final batchEnd = (batchStart + batchSize < failedIndices.length)
-            ? batchStart + batchSize
-            : failedIndices.length;
-        final batch = failedIndices.sublist(batchStart, batchEnd);
+      // CRITICAL: Start polling for progress updates while retry is in progress
+      final TranslationService pollSvc = TranslationService();
+      bool pollingActive = true;
 
-        final progress =
-            ((batchStart + batch.length) / totalToRetranslate * 100)
-                .round()
-                .clamp(0, 100);
-        translationNotifier.setProgress(progress);
-        translationNotifier.setTranslationStats(
-          successCount: successCount,
-          failCount: failCount,
-          totalSegments: totalToRetranslate,
-        );
+      // Start polling in background (don't await, let it run concurrently)
+      pollSvc.pollUntilDone(
+        state.taskId!,
+        onUpdate: (Map<String, dynamic> status) {
+          if (!pollingActive) return;
 
-        final results = await Future.wait(
-          batch.map((index) async {
-            try {
-              final response = await svc.retranslateSegment(
-                state.taskId!,
-                index,
-                platformKey: selectedPlatform,
-              );
+          // Safely extract progress
+          final dynamic progressValue = status['progress'];
+          final int progress = (progressValue is num)
+              ? progressValue.toInt().clamp(0, 100)
+              : ((progressValue is String && progressValue.isNotEmpty)
+                  ? (int.tryParse(progressValue) ?? 0).clamp(0, 100)
+                  : 0);
+          final String statusText = (status['status'] ?? '').toString();
+          final String message = (status['message'] ?? '').toString();
 
-              final apiSuccess = response['success'] == true;
-              if (!apiSuccess) {
-                final errorMsg = response['error'] ?? 'Translation failed';
-                return <String, dynamic>{
-                  'success': false,
-                  'index': index,
-                  'error': errorMsg,
-                };
-              }
-
-              return <String, Object>{'success': true, 'index': index};
-            } catch (e) {
-              return <String, Object>{
-                'success': false,
-                'index': index,
-                'error': e,
-              };
+          // Update progress during retry (status is 'processing' during batch retry)
+          final bool isRetryInProgress = statusText == 'processing' && 
+              (message.toLowerCase().contains('retranslat') || 
+               message.toLowerCase().contains('preparing retranslation') ||
+               message.toLowerCase().contains('batch retry'));
+          
+          if (isRetryInProgress) {
+            translationNotifier.setProgress(progress);
+            if (message.isNotEmpty) {
+              translationNotifier.setStatusText(message);
             }
-          }),
-        );
+          }
+        },
+        intervalSec: 1,
+      ).catchError((e) {
+        return <String, dynamic>{};
+      });
 
-        for (final result in results) {
-          if (result['success'] == true) {
+      // Call batch retry API (backend handles chunking and progress updates)
+      final Map<String, dynamic> batchResponse =
+          await svc.retranslateSegmentsBatch(
+        state.taskId!,
+        failedIndices,
+        platformKey: selectedPlatform,
+      );
+
+      // Stop polling
+      pollingActive = false;
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Parse results
+      final Map<String, dynamic>? segmentsMap =
+          batchResponse['segments'] as Map<String, dynamic>?;
+      final Map<String, dynamic>? errorsMap =
+          batchResponse['errors'] as Map<String, dynamic>?;
+
+      int successCount = 0;
+      int failCount = 0;
+
+      for (final int index in failedIndices) {
+        final String indexStr = index.toString();
+        if (errorsMap != null && errorsMap.containsKey(indexStr)) {
+          failCount++;
+        } else if (segmentsMap != null && segmentsMap.containsKey(indexStr)) {
+          final segmentData = segmentsMap[indexStr] as Map<String, dynamic>?;
+          if (segmentData != null && segmentData['is_failed'] != true) {
             successCount++;
           } else {
             failCount++;
           }
+        } else {
+          failCount++;
         }
       }
 
@@ -1926,7 +1946,7 @@ class _AnonymizeScreenState extends ConsumerState<AnonymizeScreen> {
       translationNotifier.setTranslationStats(
         successCount: successCount,
         failCount: failCount,
-        totalSegments: totalToRetranslate,
+        totalSegments: failedIndices.length,
       );
 
       if (mounted) {
@@ -1934,6 +1954,11 @@ class _AnonymizeScreenState extends ConsumerState<AnonymizeScreen> {
           MessageService.showWarning(
             context,
             'Retranslation complete: $successCount succeeded, $failCount failed',
+          );
+        } else {
+          MessageService.showSuccess(
+            context,
+            'Retranslation complete: all $successCount segments succeeded',
           );
         }
         triggerTranslationRefresh(ref);

@@ -203,20 +203,17 @@ def get_config_file_path(filename: str) -> Path:
 def get_template_file_path(filename: str) -> Path:
     """Get template file path
 
+    When frozen (production), prefers the bundled template from the current
+    build so that schema upgrades always use the latest template version.
+    In development mode, prefers the project configs directory.
+
     Args:
         filename: Template filename (e.g., 'local.json.template')
 
     Returns:
         Path: Template file path
     """
-    configs_dir = get_configs_dir()
-    template_file = configs_dir / filename
-
-    # If template exists in configs, return it
-    if template_file.exists():
-        return template_file
-
-    # When frozen, look in bundle (config/templates/ or config/) so first run can copy templates to config dir
+    # When frozen, bundled template is authoritative (always matches current version)
     if getattr(sys, "frozen", False):
         mei = getattr(sys, "_MEIPASS", None)
         if mei:
@@ -224,6 +221,12 @@ def get_template_file_path(filename: str) -> Path:
                 bundle_path = Path(mei) / sub / filename
                 if bundle_path.exists():
                     return bundle_path
+
+    # Config dir (development, or deployed templates as fallback)
+    configs_dir = get_configs_dir()
+    template_file = configs_dir / filename
+    if template_file.exists():
+        return template_file
 
     # Fallback to project root configs (development)
     proj_root = get_project_root()
@@ -257,7 +260,6 @@ def get_owlangs_paths() -> Dict[str, str]:
         # New config structure
         "system_config": str(get_config_file_path("system.json")),
         "platforms_config": str(get_config_file_path("platforms.json")),
-        "ui_config": str(get_config_file_path("ui.json")),
         "secrets_config": str(get_config_file_path("secrets.json")),
         "local_config": str(get_config_file_path("local.json")),
         "app_config": str(get_config_file_path("app_config.json")),

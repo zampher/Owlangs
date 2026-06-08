@@ -19,9 +19,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- System.IO.Pipes is part of .NET 8.0 framework, no need for NuGet package -->
-    <!-- System.Text.Json is part of .NET 8.0 framework, but we can use a newer version if needed -->
-    <PackageReference Include="System.Text.Json" Version="9.0.0" />
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
   </ItemGroup>
 

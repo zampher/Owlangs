@@ -256,7 +256,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationToolbarSwitchToFile => 'Cambiar a Archivo';
 
   @override
-  String get translationToolbarSwitchToText => 'Cambiar a Texto';
+  String get translationToolbarSwitchToText => 'Ingresar Texto';
 
   @override
   String get translationStatusCompleted => 'Traducción Completada';
@@ -342,6 +342,15 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get translationStatsTranslatedLabel => 'Traducido';
+
+  @override
+  String get translationStatsPendingLabel => 'Pendiente';
+
+  @override
+  String get translationStatsClearedLabel => 'Borrado';
+
+  @override
+  String get translationStatsImagesLabel => 'Imágenes';
 
   @override
   String get translationStatsLoadingContent => 'Cargando contenido...';
@@ -488,6 +497,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationExportDialogTitle => 'Exportar Documento';
 
   @override
+  String get translationExportDocumentType => 'Tipo de Documento';
+
+  @override
   String get translationExportFormatOptionsTitle =>
       'Opciones de Formato (solo PDF)';
 
@@ -508,6 +520,68 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get translationExportEquationFormatLatex => 'LaTeX';
+
+  @override
+  String get translationExportBilingualExport => 'Exportación Bilingüe';
+
+  @override
+  String get translationExportBilingualOrderTargetAfter => 'Origen Primero';
+
+  @override
+  String get translationExportBilingualOrderTargetAfterSub =>
+      'Origen primero, destino después';
+
+  @override
+  String get translationExportBilingualOrderTargetBefore =>
+      'Destino Antes de Origen';
+
+  @override
+  String get translationExportBilingualOrderTargetBeforeSub =>
+      'Destino primero, origen después';
+
+  @override
+  String get translationExportSourceTextItalic => 'Texto original en cursiva';
+
+  @override
+  String get translationExportSourceTextColor => 'Color del texto original:';
+
+  @override
+  String get translationExportTargetTextItalic => 'Texto traducido en cursiva';
+
+  @override
+  String get translationExportTargetTextColor => 'Color del texto traducido:';
+
+  @override
+  String get translationExportColorDefault => 'Predeterminado';
+
+  @override
+  String get translationExportColorGray => 'Gris';
+
+  @override
+  String get translationExportColorBlue => 'Azul';
+
+  @override
+  String get translationExportColorRed => 'Rojo';
+
+  @override
+  String get translationExportColorGreen => 'Verde';
+
+  @override
+  String get translationExportColorOrange => 'Naranja';
+
+  @override
+  String get translationExportColorBlack => 'Negro';
+
+  @override
+  String get translationExportDownloadButton => 'Descargar';
+
+  @override
+  String get translationExportMdEmbeddedImages =>
+      'MD (con imágenes incrustadas)';
+
+  @override
+  String get translationExportMdWithImagesFolder =>
+      'MD (con carpeta de imágenes)';
 
   @override
   String get translationLeftPanelExpandTooltip => 'Expandir panel izquierdo';
@@ -740,8 +814,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationDialogCancelTaskYesCancel => 'Sí, Cancelar';
 
   @override
-  String get translationQuickSettingsTitle =>
-      'Configuración Rápida de Traducción';
+  String get translationQuickSettingsTitle => 'Configuración Rápida';
 
   @override
   String get quickSettingsTargetLanguage => 'Idioma Objetivo';
@@ -951,10 +1024,21 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeBackendRetry => 'Reintentar';
 
   @override
-  String get homeNavTranslate => 'Traducción inmersiva';
+  String get homeNewTask => 'Nueva tarea';
 
   @override
-  String get homeNavTranslationQueue => 'Cola de tareas';
+  String get homeNewTaskImmersiveTooltip =>
+      'Comparar original y traducción lado a lado en la interfaz';
+
+  @override
+  String get homeNewTaskQueuedTooltip =>
+      'Importar archivos por lote y ejecutar en orden';
+
+  @override
+  String get homeNavTranslate => 'Tarea inmersiva';
+
+  @override
+  String get homeNavTranslationQueue => 'Tareas';
 
   @override
   String get homeNavAnonymize => 'Anonimizar';
@@ -963,13 +1047,50 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeNavSettings => 'Configuración';
 
   @override
-  String get homeNavDonateHelp => 'Donar & Ayuda';
+  String get homeNavDonateHelp => 'Ayuda';
+
+  @override
+  String get homeNavDonate => 'Donar';
 
   @override
   String get homeNavHome => 'Inicio';
 
   @override
   String get homeNavBatchUpload => 'Subida por lotes';
+
+  @override
+  String get homeNavTooltipNewTask =>
+      'Iniciar una nueva traducción — comparación lado a lado, o procesamiento por lotes';
+
+  @override
+  String get homeNavTooltipTasks =>
+      'Ver y gestionar todas las tareas, descargar traducciones completadas';
+
+  @override
+  String get homeNavTooltipAnonymize =>
+      'Anonimizar el contenido del documento para proteger información confidencial';
+
+  @override
+  String get homeNavTooltipSettings =>
+      'Configurar idioma, tema, notificaciones y más';
+
+  @override
+  String get homeNavTooltipSetupWizard =>
+      'Asistente de configuración guiada para tu entorno de traducción';
+
+  @override
+  String get homeNavTooltipHelp => 'Obtener ayuda y soporte técnico';
+
+  @override
+  String get homeNavTooltipDonate =>
+      'Apoyar nuestro proyecto de código abierto';
+
+  @override
+  String get homeNavTooltipHome => 'Volver a la página de inicio';
+
+  @override
+  String get homeNavTooltipGitHub =>
+      'Ver código fuente en GitHub — ¡danos una estrella si te resulta útil!';
 
   @override
   String get batchUploadTitle => 'Subida de archivos por lotes';
@@ -997,6 +1118,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get batchUploadSelectSingleFile => 'Seleccionar archivo';
+
+  @override
+  String get batchUploadSingleFileDescription =>
+      'Elija un solo archivo para traducir';
+
+  @override
+  String get batchUploadAddFiles => 'Agregar archivos';
 
   @override
   String batchUploadFilesFound(Object count) {
@@ -1152,7 +1280,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationQueueEmpty => 'Aún no hay tareas de traducción.';
 
   @override
-  String get translationQueueNewQueuedTask => 'Traducción en cola';
+  String get translationQueueNewQueuedTask => 'Tarea en cola';
+
+  @override
+  String get translationQueueImport => 'Importar';
 
   @override
   String get translationQueueBackToQueueTooltip => 'Volver a la cola de tareas';
@@ -1280,7 +1411,41 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get translationQueueErrorMessageCopied => 'Mensaje de error copiado';
+
+  @override
+  String get translationQueueSelected => 'selected';
+
+  @override
+  String get translationQueueSelectMode => 'Select';
+
+  @override
+  String get translationQueueClearSelection => 'Clear selection';
+
+  @override
+  String translationQueueBatchDownloadFailed(Object error) {
+    return 'Batch download failed: $error';
+  }
+
+  @override
+  String translationQueueBatchDownloadSuccess(Object fileType) {
+    return 'Batch download: $fileType ready';
+  }
+
+  @override
   String get translationQueueView => 'Edición lectura';
+
+  @override
+  String get translationQueueViewSourcePath => 'Ver ruta original del archivo';
+
+  @override
+  String get translationQueueSourcePathTitle => 'Ruta del archivo fuente';
+
+  @override
+  String get translationQueueFileNameLabel => 'Nombre del archivo';
+
+  @override
+  String get translationQueueRelativePathLabel => 'Ruta relativa';
 
   @override
   String get homeFeatureUnderDevelopment =>
@@ -1324,7 +1489,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homePhaseTranslate => 'Traducir';
 
   @override
-  String get homePhaseViewer => 'Visor';
+  String get homePhaseViewer => 'Revisar';
 
   @override
   String get homePhaseAnonymize => 'Anonimizar';
@@ -1334,6 +1499,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get homePhaseExport => 'Exportar';
+
+  @override
+  String get taskDefaultTitleTranslate => 'Tarea';
+
+  @override
+  String get taskDefaultTitleAnonymize => 'Anonimización';
 
   @override
   String get homeReleaseNotesTitle => 'Notas de la Versión';
@@ -1538,6 +1709,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get settingsTableOcrSubtitle => 'Habilitar OCR para tablas';
 
   @override
+  String get settingsMineruModelVersion => 'Versión del Modelo';
+
+  @override
+  String get settingsMineruModelVersionSubtitle =>
+      'Seleccionar el modo de análisis de MinerU (pipeline para velocidad, vlm para precisión, hybrid para ambos)';
+
+  @override
   String get settingsAnonymizationNewTaskNotice =>
       'Los cambios solo se aplican a tareas nuevas';
 
@@ -1594,6 +1772,42 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsOcrLangArabic => 'Árabe';
+
+  @override
+  String get settingsOcrLangAuto => 'Auto detectar';
+
+  @override
+  String get mineruLangAuto => 'Auto detectar';
+
+  @override
+  String get mineruLangChServer => 'Chino (Servidor)';
+
+  @override
+  String get mineruLangChLite => 'Chino (Ligero)';
+
+  @override
+  String get mineruLangTamil => 'Tamil';
+
+  @override
+  String get mineruLangTelugu => 'Telugu';
+
+  @override
+  String get mineruLangKannada => 'Canarés';
+
+  @override
+  String get mineruLangLatinScript => 'Escritura Latina';
+
+  @override
+  String get mineruLangArabicScript => 'Escritura Árabe';
+
+  @override
+  String get mineruLangEastSlavic => 'Eslavo Oriental';
+
+  @override
+  String get mineruLangCyrillicScript => 'Escritura Cirílica';
+
+  @override
+  String get mineruLangDevanagariScript => 'Escritura Devanagari';
 
   @override
   String get settingsTabsGlossary => 'Glosario';
@@ -2138,6 +2352,131 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get settingsLocalUsersTitle => 'Usuarios locales';
+
+  @override
+  String get settingsLocalUsersAddUser => 'Agregar usuario';
+
+  @override
+  String get settingsLocalUsersNoUsers => 'No se encontraron usuarios locales.';
+
+  @override
+  String get settingsLocalUsersDialogAddTitle => 'Agregar usuario local';
+
+  @override
+  String get settingsLocalUsersDialogEditTitle => 'Editar usuario local';
+
+  @override
+  String get settingsLocalUsersFieldUsername => 'Nombre de usuario';
+
+  @override
+  String get settingsLocalUsersFieldDisplayName =>
+      'Nombre para mostrar (opcional)';
+
+  @override
+  String get settingsLocalUsersFieldEmail => 'Correo electrónico (opcional)';
+
+  @override
+  String get settingsLocalUsersFieldRole => 'Rol';
+
+  @override
+  String get settingsLocalUsersRoleUser => 'Usuario';
+
+  @override
+  String get settingsLocalUsersRoleAdmin => 'Administrador';
+
+  @override
+  String get settingsLocalUsersFieldPassword => 'Contraseña';
+
+  @override
+  String get settingsLocalUsersPasswordHelper =>
+      '8-128 caracteres, mayúscula, minúscula, dígito';
+
+  @override
+  String get settingsLocalUsersValidationUsernameRequired =>
+      'Se requiere nombre de usuario';
+
+  @override
+  String get settingsLocalUsersValidationPasswordRequired =>
+      'Se requiere contraseña';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooShort =>
+      'La contraseña debe tener al menos 8 caracteres';
+
+  @override
+  String get settingsLocalUsersValidationPasswordTooLong =>
+      'La contraseña debe tener como máximo 128 caracteres';
+
+  @override
+  String get settingsLocalUsersValidationPasswordComplexity =>
+      'La contraseña debe contener mayúsculas, minúsculas y dígitos';
+
+  @override
+  String get settingsLocalUsersOperationFailed => 'Operación fallida';
+
+  @override
+  String get settingsLocalUsersResetPassword => 'Restablecer contraseña';
+
+  @override
+  String settingsLocalUsersResetPasswordTitle(Object username) {
+    return 'Restablecer contraseña: $username';
+  }
+
+  @override
+  String get settingsLocalUsersFieldNewPassword => 'Nueva contraseña';
+
+  @override
+  String get settingsLocalUsersPasswordResetSuccess =>
+      'Contraseña restablecida con éxito';
+
+  @override
+  String get settingsLocalUsersPasswordResetFailed =>
+      'Error al restablecer la contraseña';
+
+  @override
+  String get settingsLocalUsersDeleteUser => 'Eliminar';
+
+  @override
+  String settingsLocalUsersDeleteUserTitle(Object username) {
+    return 'Eliminar usuario: $username';
+  }
+
+  @override
+  String get settingsLocalUsersDeleteConfirmation =>
+      'Esta acción eliminará permanentemente al usuario del almacén local de usuarios. Esto no se puede deshacer.';
+
+  @override
+  String get settingsLocalUsersDeleteSuccess => 'Usuario eliminado';
+
+  @override
+  String get settingsLocalUsersDeleteFailed => 'Error al eliminar usuario';
+
+  @override
+  String get settingsLocalUsersEdit => 'Editar';
+
+  @override
+  String get settingsLocalUsersCancel => 'Cancelar';
+
+  @override
+  String get settingsLocalUsersSave => 'Guardar';
+
+  @override
+  String get settingsLocalUsersConfirm => 'Confirmar';
+
+  @override
+  String get settingsLocalUsersTableUsername => 'Nombre de usuario';
+
+  @override
+  String get settingsLocalUsersTableDisplayName => 'Nombre para mostrar';
+
+  @override
+  String get settingsLocalUsersTableEmail => 'Correo electrónico';
+
+  @override
+  String get settingsLocalUsersTableRole => 'Rol';
+
+  @override
   String get settingsLdapEnabled => 'Habilitar inicio de sesión LDAP';
 
   @override
@@ -2402,24 +2741,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get setupWizardUiLanguageLabel => 'Idioma de la Interfaz';
 
   @override
-  String get setupWizardMineruQuestion =>
-      '¿Necesita traducir PDF / imágenes en este dispositivo?';
-
-  @override
-  String get setupWizardMineruYes =>
-      'Sí (recomendado; habilita el análisis de documentos MinerU)';
-
-  @override
-  String get setupWizardMineruNo =>
-      'No por ahora (solo traducción LLM para texto plano, etc.)';
-
-  @override
   String get setupWizardMineruDescription =>
       'MinerU maneja el análisis de diseño y segmentación para PDF / imágenes.\nIngrese la Clave de la API y la URL de MinerU a continuación, luego haga clic en \"Probar Conexión\" para verificar.';
-
-  @override
-  String get setupWizardMineruSkipped =>
-      'Ha elegido no configurar MinerU. Puede habilitar la traducción de PDF más tarde en Configuración.';
 
   @override
   String get setupWizardMineruConfigTitle => 'MinerU (motor de análisis)';
@@ -2475,6 +2798,23 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get aiPlatformThinkingHint =>
       'Habilita el proceso de razonamiento de IA para una mejor calidad de traducción';
+
+  @override
+  String get aiPlatformThinkingModeSupported => 'Soportar Modo de Pensamiento';
+
+  @override
+  String get aiPlatformThinkingModeSupportedHint =>
+      'Habilite esto si la plataforma soporta modo de pensamiento (ej., Ollama con Qwen3)';
+
+  @override
+  String get aiPlatformSegmentLimitLabel => 'Límite de Segmentos';
+
+  @override
+  String get aiPlatformSegmentLimitHint =>
+      'Máximo de segmentos por lote de traducción. Se aplica junto con chunk_size. 0 = ilimitado (nube), 10 = recomendado para LLMs locales';
+
+  @override
+  String get aiPlatformSegmentLimitUnlimited => 'Ilimitado';
 
   @override
   String get aiPlatformPleaseEnterApiKeyFirst =>
@@ -2535,7 +2875,37 @@ class AppLocalizationsEs extends AppLocalizations {
   String get aiPlatformModelVersion => 'Versión del Modelo';
 
   @override
-  String get aiPlatformModelVersionHint => 'vlm';
+  String get aiPlatformModelVersionHint => 'hybrid-auto-engine';
+
+  @override
+  String get aiPlatformTimeout => 'Timeout de lectura (segundos)';
+
+  @override
+  String get aiPlatformTimeoutHint =>
+      '200 (nube) o 300 (local). Tiempo máximo de espera para respuesta LLM.';
+
+  @override
+  String get aiPlatformWriteTimeout => 'Timeout de escritura (segundos)';
+
+  @override
+  String get aiPlatformWriteTimeoutHint =>
+      '300 (predeterminado). Tiempo máximo de espera para enviar datos al LLM.';
+
+  @override
+  String get aiPlatformTestConnectTimeout =>
+      'Timeout de prueba de conexión (segundos)';
+
+  @override
+  String get aiPlatformTestConnectTimeoutHint =>
+      '30 (predeterminado). Tiempo máximo de espera para la prueba de conectividad antes de iniciar la traducción.';
+
+  @override
+  String get aiPlatformTestRequestTimeout =>
+      'Timeout de solicitud de prueba (segundos)';
+
+  @override
+  String get aiPlatformTestRequestTimeoutHint =>
+      '10 (predeterminado). Tiempo máximo de espera para cada solicitud de prueba durante la prueba de conectividad.';
 
   @override
   String get aiPlatformMineruApiUrlHint => 'https://mineru.net/api/v4';
@@ -2571,12 +2941,11 @@ class AppLocalizationsEs extends AppLocalizations {
       'Estos ajustes se aplicarán solo a nuevas tareas de traducción.';
 
   @override
-  String get settingsTranslationAutoGlossaryTitle =>
-      'Generar Glosario Automáticamente';
+  String get settingsTargetLanguageTitle => 'Default Target Language';
 
   @override
-  String get settingsTranslationAutoGlossarySubtitle =>
-      'Generar glosario automáticamente después de la traducción (se aplica a nuevas tareas)';
+  String get settingsTargetLanguageNotice =>
+      'Sets the default target language for new translation tasks. You can still change it per task in Quick Settings.';
 
   @override
   String get settingsTranslationParamsTitle => 'Parámetros de Traducción';
@@ -2587,13 +2956,6 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get settingsTranslationConcurrentHint =>
       'Recomendado: 3 (ajustar 1–8 según el modelo y la cuota)';
-
-  @override
-  String get settingsTranslationTimeoutTitle => 'Tiempo de espera (segundos)';
-
-  @override
-  String get settingsTranslationTimeoutHint =>
-      '120 (recomendado: 120-300 segundos)';
 
   @override
   String get settingsTranslationChunkRetryTitle =>
@@ -2673,6 +3035,20 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get settingsExclusionLanguageMatchSubtitle =>
       'El idioma de origen coincide con el idioma de destino';
+
+  @override
+  String get settingsTranslateOutputSuffixTitle => 'Translation Output Suffix';
+
+  @override
+  String get settingsTranslateOutputSuffixHint =>
+      'Appended to translated filenames (leave empty for no suffix)';
+
+  @override
+  String get settingsConvertOutputSuffixTitle => 'Conversion Output Suffix';
+
+  @override
+  String get settingsConvertOutputSuffixHint =>
+      'Appended to converted filenames (leave empty for no suffix)';
 
   @override
   String get settingsLanguageDialogTitle => 'Seleccionar Idioma';
@@ -3208,6 +3584,19 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationQueueEdit => 'Edición etiquetada';
 
   @override
+  String get translationQueueSelectFormats => 'Seleccionar';
+
+  @override
+  String get translationQueueSelectFormatsTitle =>
+      'Seleccionar formatos de descarga';
+
+  @override
+  String get translationQueueSelectFormatsFormatLabel => 'Formato';
+
+  @override
+  String get translationQueueSelectFormatsDownload => 'Descargar';
+
+  @override
   String get reeditTitle => 'Editar traducción';
 
   @override
@@ -3240,6 +3629,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get fetchUrlCancel => 'Cancelar';
+
+  @override
+  String get fetchUrl => 'Extraer URL';
+
+  @override
+  String get fetchUrlClose => 'Cerrar';
 
   @override
   String get loginSubtitleFeatures =>
@@ -3313,4 +3708,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get loginPasswordRecoveryAdminGuide =>
       'Si es administrador, siga el procedimiento de recuperación de contraseña.';
+
+  @override
+  String get commonDarkMode => 'Modo oscuro';
+
+  @override
+  String get commonLightMode => 'Modo claro';
 }

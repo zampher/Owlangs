@@ -104,11 +104,32 @@ LOCAL_MINERU_LANG_MAP = {
 }
 
 
+# Model version migration map (old short names -> official names)
+MIGRATION_MAP = {
+    "vlm": "vlm-auto-engine",
+    "hybrid": "hybrid-auto-engine",
+}
+
+# Cloud API v4 model version mapping (maps all variants to currently supported values)
+# Official cloud API v4 values: pipeline, vlm, MinerU-HTML
+CLOUD_MODEL_VERSION_MAP = {
+    "pipeline": "pipeline",
+    "vlm": "vlm",
+    "vlm-auto-engine": "vlm",
+    "hybrid-auto-engine": "vlm",
+    "vlm-http-client": "vlm",
+    "hybrid-http-client": "vlm",
+    "hybrid": "vlm",
+    "MinerU-HTML": "MinerU-HTML",
+}
+
 # Model version to backend mapping for local MinerU
 MODEL_TO_BACKEND = {
     "pipeline": "pipeline",
-    "vlm": "vlm-auto-engine",
-    "hybrid": "hybrid-auto-engine",
+    "vlm-auto-engine": "vlm-auto-engine",
+    "hybrid-auto-engine": "hybrid-auto-engine",
+    "vlm-http-client": "vlm-http-client",
+    "hybrid-http-client": "hybrid-http-client",
 }
 
 
@@ -134,7 +155,7 @@ class ConverterMineruConfig(X2MarkdownConverterConfig):
     mineru_token: str
     formula_ocr: bool = True
     table_ocr: bool = True
-    model_version: Literal["pipeline", "vlm", "hybrid"] = "vlm"
+    model_version: Literal["pipeline", "vlm", "hybrid", "vlm-auto-engine", "hybrid-auto-engine", "vlm-http-client", "hybrid-http-client"] = "hybrid-auto-engine"
     ocr_language: Optional[str] = "auto"
     base_url: Optional[str] = None
     # API endpoint configuration (from platforms.json)
@@ -161,7 +182,7 @@ class ConverterMineruConfig(X2MarkdownConverterConfig):
 # HTTP Client Configuration
 # Increased connect timeout for large-file SSL handshakes on slow networks.
 # Increased pool timeout to avoid exhaustion during frequent polling.
-timeout = httpx.Timeout(connect=60.0, read=300.0, write=300.0, pool=30.0)
+timeout = httpx.Timeout(connect=60.0, read=600.0, write=600.0, pool=30.0)
 
 import ssl
 ssl_context = ssl.create_default_context()
@@ -201,7 +222,7 @@ class MinerUBackend(ABC):
         mineru_token: str,
         formula_ocr: bool = True,
         table_ocr: bool = True,
-        model_version: str = "vlm",
+        model_version: str = "hybrid-auto-engine",
         ocr_language: str = "auto",
         api_endpoints: Optional[Dict[str, str]] = None,
         retry_count: int = 2,
@@ -272,12 +293,20 @@ class MinerUCloudBackend(MinerUBackend):
     def _build_upload_payload(self, document: Document) -> Dict:
         """Build upload request payload for cloud API."""
         model_version = self.model_version
-        if model_version == "hybrid":
+        # Map to cloud API v4 supported values: pipeline, vlm, MinerU-HTML
+        mapped = CLOUD_MODEL_VERSION_MAP.get(model_version)
+        if mapped is None:
             logger.warning(
                 LogModule.CONVERT,
-                "[MINERU] model_version 'hybrid' is not supported by MinerU cloud, falling back to 'vlm'."
+                f"[MINERU] Unknown model_version '{model_version}', falling back to 'vlm'"
             )
             model_version = "vlm"
+        elif mapped != model_version:
+            logger.info(
+                LogModule.CONVERT,
+                f"[MINERU] Auto-migrating model_version '{model_version}' -> '{mapped}'"
+            )
+            model_version = mapped
         
         # Map language codes
         lang = (self.ocr_language or "").strip().lower()
@@ -449,7 +478,7 @@ class MinerUCloudBackend(MinerUBackend):
                 # Download ZIP
                 zip_response = self._make_request_with_retry('GET', zip_url)
                 zip_bytes = zip_response.content
-                logger.info(LogModule.CONVERT, f"[MINERU Cloud] Downloaded ZIP: {len(zip_bytes)} bytes from {zip_url[:50]}...")
+                logger.debug(LogModule.CONVERT, f"[MINERU Cloud] Downloaded ZIP: {len(zip_bytes)} bytes from {zip_url[:50]}...")
                 # Extract markdown
                 markdown_content = self._extract_markdown_from_zip(zip_bytes)
                 return markdown_content, zip_bytes
@@ -498,7 +527,7 @@ class MinerUCloudBackend(MinerUBackend):
                 # Download ZIP
                 zip_response = await self._make_request_with_retry_async('GET', zip_url)
                 zip_bytes = zip_response.content
-                logger.info(LogModule.CONVERT, f"[MINERU Cloud] Async downloaded ZIP: {len(zip_bytes)} bytes from {zip_url[:50]}...")
+                logger.debug(LogModule.CONVERT, f"[MINERU Cloud] Async downloaded ZIP: {len(zip_bytes)} bytes from {zip_url[:50]}...")
                 # Extract markdown
                 markdown_content = self._extract_markdown_from_zip(zip_bytes)
                 return markdown_content, zip_bytes
@@ -531,12 +560,12 @@ class MinerUCloudBackend(MinerUBackend):
         zip_path = os.path.join(debug_dir, f"mineru_response_{int(time.time())}.zip")
         with open(zip_path, 'wb') as f:
             f.write(zip_bytes)
-        logger.info(LogModule.CONVERT, f"[MINERU] Saved ZIP to: {zip_path} ({len(zip_bytes)} bytes)")
+        logger.debug(LogModule.CONVERT, f"[MINERU] Saved ZIP to: {zip_path} ({len(zip_bytes)} bytes)")
         
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             # List all files in ZIP for debugging
             file_list = zf.namelist()
-            logger.info(LogModule.CONVERT, f"[MINERU] ZIP contents: {file_list}")
+            logger.debug(LogModule.CONVERT, f"[MINERU] ZIP contents: {file_list}")
             
             # Try to find markdown file - local MinerU may use different names
             md_files = [f for f in file_list if f.endswith('.md')]
@@ -545,7 +574,7 @@ class MinerUCloudBackend(MinerUBackend):
             
             # Prefer full.md, otherwise use first .md file
             md_file = 'full.md' if 'full.md' in md_files else md_files[0]
-            logger.info(LogModule.CONVERT, f"[MINERU] Using markdown file: {md_file}")
+            logger.debug(LogModule.CONVERT, f"[MINERU] Using markdown file: {md_file}")
             
             with zf.open(md_file) as f:
                 return f.read().decode("utf-8")
@@ -615,8 +644,15 @@ class MinerULocalBackend(MinerUBackend):
         return [mapped]
     
     def _convert_backend(self) -> str:
-        """Convert model version to local MinerU backend type."""
-        return MODEL_TO_BACKEND.get(self.model_version, "hybrid-auto-engine")
+        """Convert model version to local MinerU backend type, with migration for old names."""
+        mv = self.model_version
+        if mv in MIGRATION_MAP:
+            logger.info(
+                LogModule.CONVERT,
+                f"[MINERU] Auto-migrating model_version '{mv}' -> '{MIGRATION_MAP[mv]}'"
+            )
+            mv = MIGRATION_MAP[mv]
+        return MODEL_TO_BACKEND.get(mv, "hybrid-auto-engine")
     
     def _build_multipart_request(self, document: Document, return_zip: bool = True) -> Tuple[Dict, bytes, str]:
         """
@@ -841,7 +877,7 @@ class MinerULocalBackend(MinerUBackend):
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             # List all files in ZIP for debugging
             file_list = zf.namelist()
-            logger.info(LogModule.CONVERT, f"[MINERU Local] ZIP contents: {file_list}")
+            logger.debug(LogModule.CONVERT, f"[MINERU Local] ZIP contents: {file_list}")
             
             # Try to find markdown file - local MinerU may use different names
             md_files = [f for f in file_list if f.endswith('.md')]
@@ -850,7 +886,7 @@ class MinerULocalBackend(MinerUBackend):
             
             # Prefer full.md, otherwise use first .md file
             md_file = 'full.md' if 'full.md' in md_files else md_files[0]
-            logger.info(LogModule.CONVERT, f"[MINERU Local] Using markdown file: {md_file}")
+            logger.debug(LogModule.CONVERT, f"[MINERU Local] Using markdown file: {md_file}")
             
             with zf.open(md_file) as f:
                 return f.read().decode("utf-8")
@@ -989,7 +1025,7 @@ class ConverterMineru(X2MarkdownConverter):
     
     def convert(self, document: Document) -> MarkdownDocument:
         """Convert document to markdown."""
-        self.logger.info(LogModule.WORKFLOW, f"Converting document with MinerU, backend: {type(self.backend).__name__}")
+        self.logger.info(LogModule.WORKFLOW, f"Converting document with MinerU, backend: {type(self.backend).__name__}, model: {self.config.model_version}")
         time1 = time.time()
 
         # Check if PDF splitting is needed
@@ -1136,7 +1172,7 @@ class ConverterMineru(X2MarkdownConverter):
     
     async def convert_async(self, document: Document) -> MarkdownDocument:
         """Async convert document to markdown."""
-        self.logger.info(LogModule.WORKFLOW, f"Converting document with MinerU (async), backend: {type(self.backend).__name__}")
+        self.logger.info(LogModule.WORKFLOW, f"Converting document with MinerU (async), backend: {type(self.backend).__name__}, model: {self.config.model_version}")
         time1 = time.time()
 
         # Check if PDF splitting is needed

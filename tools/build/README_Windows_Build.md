@@ -252,7 +252,6 @@ $env:OWLANGS_SKIP_SPACY = "1"; .\tools\build\build_win.ps1 --full
 2. **复制模板文件**:
    - `system.json.template` → `system.json` (系统配置)
    - `platforms.json.template` → `platforms.json` (平台配置)
-   - `ui.json.template` → `ui.json` (UI配置)
    - `secrets.json.template` → `secrets.json` (API 密钥)
    - `local.json.template` → `local.json` (本地配置)
    - `app_config.json.template` → `app_config.json` (应用配置)

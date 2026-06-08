@@ -6,6 +6,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../shared/providers/settings_provider.dart';
 import '../../../shared/services/config_service.dart';
 import '../../../shared/services/translation_stats_service.dart';
+import '../../../shared/utils/language_mapper.dart';
 import '../../home/widgets/translation_stats_widget.dart';
 import 'ai_platform_settings.dart';
 import 'parsing_engine_settings.dart';
@@ -684,6 +685,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   Widget _buildTranslationSettings() {
     final globalSettings = ref.watch(globalSettingsProvider);
     final globalNotifier = ref.read(globalSettingsProvider.notifier);
+    final l10n = AppLocalizations.of(context)!;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -744,23 +746,93 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                   const SizedBox(height: 16),
                   // Removed default AI platform selector (migrated to Translation Quick Settings)
                   const Divider(),
-                  // Auto Generate Glossary Switch
-                  SwitchListTile(
-                    title: Text(
-                      AppLocalizations.of(context)!
-                          .settingsTranslationAutoGlossaryTitle,
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Default Target Language
+          Card(
+            elevation: 4,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Icon(Icons.language, color: Colors.teal.shade700),
+                      const SizedBox(width: 8),
+                      Text(
+                        AppLocalizations.of(context)!
+                            .settingsTargetLanguageTitle,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.teal.shade200),
                     ),
-                    subtitle: Text(
-                      AppLocalizations.of(context)!
-                          .settingsTranslationAutoGlossarySubtitle,
+                    child: Row(
+                      children: <Widget>[
+                        Icon(
+                          Icons.info_outline,
+                          color: Colors.teal.shade700,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            AppLocalizations.of(context)!
+                                .settingsTargetLanguageNotice,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.teal.shade700,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    value: globalSettings.glossaryGenerateEnable,
-                    onChanged: (bool value) {
-                      globalNotifier.updateGlossarySettings(
-                        glossaryGenerateEnable: value,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: globalSettings.targetLanguage,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                    ),
+                    items: languageDropdownEntries.map((
+                      Map<String, String> lang,
+                    ) {
+                      return DropdownMenuItem<String>(
+                        value: lang['code'],
+                        child: Text(
+                          languageDisplayName(l10n, lang['code']!),
+                        ),
                       );
+                    }).toList(),
+                    onChanged: (String? value) {
+                      if (value != null) {
+                        globalNotifier.updateTranslationSettings(
+                          targetLanguage: value,
+                        );
+                      }
                     },
-                    secondary: const Icon(Icons.book),
                   ),
                 ],
               ),
@@ -802,22 +874,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                   // const SizedBox(height: 16),
 
                   // Performance Parameters
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: _buildTimeoutField(
-                          globalSettings,
-                          globalNotifier,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _buildRetryField(globalSettings, globalNotifier),
-                      ),
-                    ],
-                  ),
+                  _buildRetryField(globalSettings, globalNotifier),
                   const SizedBox(height: 16),
                   _buildSegmentAutoRetryField(globalSettings, globalNotifier),
+                  const SizedBox(height: 16),
+                  _buildTranslateOutputSuffixField(globalSettings, globalNotifier),
+                  const SizedBox(height: 16),
+                  _buildConvertOutputSuffixField(globalSettings, globalNotifier),
                   const SizedBox(height: 16),
 
                   // Custom Prompt removed: Prompt is now controlled per task in Quick Settings
@@ -1017,37 +1080,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   // Removed: _buildTemperatureSlider (moved to Quick Settings)
   // Removed: _buildThinkingDropdown (moved to AI Platform Settings)
 
-  Widget _buildTimeoutField(
-    GlobalSettings settings,
-    GlobalSettingsNotifier notifier,
-  ) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            AppLocalizations.of(context)!.settingsTranslationTimeoutTitle,
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(height: 8),
-          TextFormField(
-            initialValue: settings.timeout.toString(),
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              border: const OutlineInputBorder(),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              hintText:
-                  AppLocalizations.of(context)!.settingsTranslationTimeoutHint,
-            ),
-            onChanged: (String value) {
-              final int? intValue = int.tryParse(value);
-              if (intValue != null && intValue > 0) {
-                notifier.updateTranslationSettings(timeout: intValue);
-              }
-            },
-          ),
-        ],
-      );
+
 
   Widget _buildRetryField(
     GlobalSettings settings,
@@ -1111,6 +1144,62 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                   segmentAutoRetryRounds: intValue,
                 );
               }
+            },
+          ),
+        ],
+      );
+
+  Widget _buildTranslateOutputSuffixField(
+    GlobalSettings settings,
+    GlobalSettingsNotifier notifier,
+  ) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            AppLocalizations.of(context)!.settingsTranslateOutputSuffixTitle,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            initialValue: settings.translateOutputSuffix,
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              hintText:
+                  AppLocalizations.of(context)!.settingsTranslateOutputSuffixHint,
+            ),
+            onChanged: (String value) {
+              notifier.updateTranslationSettings(translateOutputSuffix: value);
+            },
+          ),
+        ],
+      );
+
+  Widget _buildConvertOutputSuffixField(
+    GlobalSettings settings,
+    GlobalSettingsNotifier notifier,
+  ) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            AppLocalizations.of(context)!.settingsConvertOutputSuffixTitle,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            initialValue: settings.convertOutputSuffix,
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              hintText:
+                  AppLocalizations.of(context)!.settingsConvertOutputSuffixHint,
+            ),
+            onChanged: (String value) {
+              notifier.updateTranslationSettings(convertOutputSuffix: value);
             },
           ),
         ],

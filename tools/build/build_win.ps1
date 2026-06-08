@@ -1055,18 +1055,6 @@ if not exist "%CONFIG_DIR%\platforms.json" (
     )
 )
 
-REM Copy ui.json from template
-if not exist "%CONFIG_DIR%\ui.json" (
-    if exist "%INSTALL_DIR%\config\ui.json.template" (
-        copy "%INSTALL_DIR%\config\ui.json.template" "%CONFIG_DIR%\ui.json" >nul
-        if errorlevel 1 (
-            echo WARNING: Failed to copy ui.json template
-        ) else (
-            echo Created ui.json from template
-        )
-    )
-)
-
 REM Copy secrets.json from template
 if not exist "%CONFIG_DIR%\secrets.json" (
     if exist "%INSTALL_DIR%\config\secrets.json.template" (
@@ -1313,7 +1301,6 @@ CONFIGURATION:
 - Edit these files to customize the application:
   - system.json: System settings (authentication, parsing engine, logging)
   - platforms.json: AI platform configurations
-  - ui.json: UI text configurations
   - secrets.json: API keys and sensitive data
   - local.json: Local settings (LDAP, HTTPS, Redis)
   - app_config.json: Application configuration

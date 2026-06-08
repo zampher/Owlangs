@@ -5,10 +5,12 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -16,8 +18,10 @@ import 'package:intl/intl.dart';
 import '../../../app/app_router.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/providers/admin_permissions_provider.dart';
+import '../../../shared/providers/settings_provider.dart';
 import '../../../shared/services/translation_service.dart';
 import '../../../shared/utils/message_service.dart';
+import '../../../shared/utils/download_filename_builder.dart';
 
 /// Lists backend translation tasks (immediate + queued + stashed) with polling.
 class TranslationQueueScreen extends ConsumerStatefulWidget {
@@ -28,24 +32,43 @@ class TranslationQueueScreen extends ConsumerStatefulWidget {
       _TranslationQueueScreenState();
 }
 
-class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen> {
+class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
+    with WidgetsBindingObserver {
   final TranslationService _svc = TranslationService();
   Timer? _pollTimer;
   List<Map<String, dynamic>> _tasks = <Map<String, dynamic>>[];
   bool _loading = false;
   String? _loadError;
+  final Set<String> _selectedTaskIds = <String>{};
+  bool _appInForeground = true;
+  bool _wasActiveRoute = true;
 
   @override
   void initState() {
     super.initState();
-    _refresh();
+    WidgetsBinding.instance.addObserver(this);
+    // Defer initial refresh to avoid calling ModalRoute.of(context) before build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _refresh();
+    });
     _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refresh());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pollTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final bool nowForeground = state == AppLifecycleState.resumed;
+    if (nowForeground && !_appInForeground) {
+      // App came back to foreground — refresh immediately
+      _refresh();
+    }
+    _appInForeground = nowForeground;
   }
 
   /// When task was evicted from memory, list API still exposes [stashed_file_types].
@@ -79,6 +102,10 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
 
   Future<void> _refresh() async {
     if (!mounted) return;
+    // Skip refresh when app is in background or this screen is not the current route
+    if (!_appInForeground) return;
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
     setState(() {
       _loading = true;
       _loadError = null;
@@ -99,7 +126,24 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
           final Map<String, dynamic> st = await _svc.getStatus(id);
           row['status'] = st['status'] ?? row['status'];
           row['progress'] = st['progress'] ?? row['progress'];
+          // Ensure completed tasks always show 100% progress
+          if (row['status']?.toString().toLowerCase() == 'completed') {
+            row['progress'] = 100;
+          }
           row['message'] = st['message'] ?? row['message'];
+          row['message_level'] = st['message_level'] ?? row['message_level'];
+          row['error'] = st['error'] ?? row['error'];
+          // Merge translation stats and token usage for completed tasks
+          if (st['translation_stats'] is Map) {
+            row['translation_stats'] = Map<String, dynamic>.from(
+              st['translation_stats'] as Map<dynamic, dynamic>,
+            );
+          }
+          if (st['token_usage'] is Map) {
+            row['token_usage'] = Map<String, dynamic>.from(
+              st['token_usage'] as Map<dynamic, dynamic>,
+            );
+          }
           final dynamic sd = st['downloads'];
           if (sd is Map && sd.isNotEmpty) {
             row['downloads'] = Map<String, dynamic>.from(sd);
@@ -124,6 +168,57 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
         _loadError = e.toString();
       });
     }
+  }
+
+  /// Show "New queue task" dialog with three upload options (Single File / Folder / ZIP),
+  /// same as the workspace screen's queued translation entry.
+  void _showNewTaskDialog() {
+    final l10n = AppLocalizations.of(context)!;
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(l10n.translationQueueNewQueuedTask),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(Icons.upload_file),
+              title: Text(l10n.batchUploadSelectSingleFile),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                context.push(
+                  '${AppRouter.batchUploadRoute}?source=single',
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_open),
+              title: Text(l10n.batchUploadSelectFolder),
+              subtitle: Text(l10n.batchUploadFolderDescription),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                context.push('${AppRouter.batchUploadRoute}?source=folder');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_zip_outlined),
+              title: Text(l10n.batchUploadSelectZip),
+              subtitle: Text(l10n.batchUploadZipDescription),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                context.push('${AppRouter.batchUploadRoute}?source=zip');
+              },
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(l10n.commonCancel),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _cancel(String taskId) async {
@@ -251,6 +346,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     String fileType,
     String relativeUrl,
     String? originalFilename,
+    bool isFormatConversion,
   ) async {
     try {
       final List<int> bytes = await _svc.downloadFile(relativeUrl);
@@ -258,9 +354,15 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
               originalFilename.trim().isNotEmpty)
           ? _stripExtension(originalFilename.trim())
           : 'download';
-      final String safeTask = taskId.length > 6 ? taskId.substring(0, 8) : taskId;
+      final String suffix = isFormatConversion
+          ? ref.read(globalSettingsProvider).convertOutputSuffix
+          : ref.read(globalSettingsProvider).translateOutputSuffix;
       final String ext = _fileExtensionForDownloadFormat(fileType);
-      final String filename = '${baseName}_$safeTask.$ext';
+      final String filename = buildDownloadFilename(
+        originalName: baseName,
+        extension: ext,
+        suffix: suffix,
+      );
       await _saveDownloadedBytes(
         bytes: bytes,
         filename: filename,
@@ -461,6 +563,19 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Detect transition from inactive → active route (e.g. popped back from a task)
+    // and trigger an immediate refresh when the screen becomes visible again.
+    final ModalRoute<dynamic>? currentRoute = ModalRoute.of(context);
+    final bool isActive = currentRoute?.isCurrent ?? true;
+    if (isActive && !_wasActiveRoute && mounted) {
+      _wasActiveRoute = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refresh();
+      });
+    } else if (!isActive) {
+      _wasActiveRoute = false;
+    }
+
     final AppLocalizations l10n = AppLocalizations.of(context)!;
     final ThemeData theme = Theme.of(context);
     final ColorScheme cs = theme.colorScheme;
@@ -468,7 +583,9 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.translationQueueTitle),
+        title: _selectedTaskIds.isNotEmpty
+            ? Text('${l10n.translationQueueTitle} · ${_selectedTaskIds.length} ${l10n.translationQueueSelected}')
+            : Text(l10n.translationQueueTitle),
         leadingWidth: 220,
         leading: Row(
           children: <Widget>[
@@ -480,6 +597,19 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
           ],
         ),
         actions: <Widget>[
+          // Import button
+          TextButton.icon(
+            onPressed: _showNewTaskDialog,
+            icon: const Icon(Icons.add, size: 18),
+            label: Text(l10n.translationQueueImport,
+              style: const TextStyle(fontSize: 13),
+            ),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
           adminGate.maybeWhen(
             data: (bool isAdmin) => isAdmin
                 ? IconButton(
@@ -497,16 +627,6 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
             onPressed: _tasks.isEmpty || _loading
                 ? null
                 : () => _confirmClearMyQueue(context, l10n),
-          ),
-          TextButton.icon(
-            onPressed: () {
-              final ts = DateTime.now().millisecondsSinceEpoch;
-              context.push(
-                '${AppRouter.translationRoute}?execution_mode=queued&t=$ts',
-              );
-            },
-            icon: const Icon(Icons.add, size: 20),
-            label: Text(l10n.translationQueueNewQueuedTask),
           ),
           IconButton(
             tooltip: l10n.translationQueueRefresh,
@@ -541,11 +661,128 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
               ),
             ),
             if (_loadError != null)
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.errorContainer.withOpacity(0.35),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: theme.colorScheme.error.withOpacity(0.3),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.error_outline,
+                        color: theme.colorScheme.error, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        l10n.translationQueueLoadFailed(_loadError!),
+                        style: TextStyle(
+                          color: theme.colorScheme.error,
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => setState(() => _loadError = null),
+                      child: Icon(Icons.close,
+                          color: theme.colorScheme.error.withOpacity(0.6),
+                          size: 16),
+                    ),
+                  ],
+                ),
+              ),
+            // Multi-select toolbar
+            if (_selectedTaskIds.isNotEmpty)
+              _BatchDownloadBottomBar(
+                taskIds: _selectedTaskIds.toList(growable: false),
+                formatCounts: _computeFormatCounts(
+                  _selectedTaskIds,
+                  _tasks,
+                ),
+                onDownloadFormat: _batchDownload,
+                onDownloadAll: _batchDownloadAll,
+                onClear: () => _batchClear(_selectedTaskIds.toList(growable: false)),
+                onSelectFormats: () => _showSelectFormatsDialog(
+                  _selectedTaskIds.toList(growable: false),
+                ),
+              ),
+            // Select-all row
+            if (_tasks.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  l10n.translationQueueLoadFailed(_loadError!),
-                  style: TextStyle(color: theme.colorScheme.error),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                child: Row(
+                  children: <Widget>[
+                    Checkbox(
+                      value: _tasks.every((Map<String, dynamic> r) =>
+                        _selectedTaskIds.contains(r['task_id']?.toString()))
+                          ? true
+                          : _selectedTaskIds.any((String id) =>
+                              _tasks.any((Map<String, dynamic> r) =>
+                                r['task_id']?.toString() == id))
+                            ? null
+                            : false,
+                      tristate: true,
+                      onChanged: (_) {
+                        setState(() {
+                          final bool allSelected = _tasks.every(
+                            (Map<String, dynamic> r) =>
+                              _selectedTaskIds.contains(r['task_id']?.toString()),
+                          );
+                          if (allSelected) {
+                            _selectedTaskIds.clear();
+                          } else {
+                            _selectedTaskIds.addAll(
+                              _tasks
+                                .map((Map<String, dynamic> r) => r['task_id']?.toString() ?? '')
+                                .where((String id) => id.isNotEmpty),
+                            );
+                          }
+                        });
+                      },
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          final bool allSelected = _tasks.every(
+                            (Map<String, dynamic> r) =>
+                              _selectedTaskIds.contains(r['task_id']?.toString()),
+                          );
+                          if (allSelected) {
+                            _selectedTaskIds.clear();
+                          } else {
+                            _selectedTaskIds.addAll(
+                              _tasks
+                                .map((Map<String, dynamic> r) => r['task_id']?.toString() ?? '')
+                                .where((String id) => id.isNotEmpty),
+                            );
+                          }
+                        });
+                      },
+                      child: Text(
+                        _tasks.every((Map<String, dynamic> r) =>
+                          _selectedTaskIds.contains(r['task_id']?.toString()))
+                              ? l10n.translationQueueClearSelection
+                              : l10n.translationQueueSelectMode,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${_selectedTaskIds.length}/${_tasks.length}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             Expanded(
@@ -563,6 +800,8 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                         final String name =
                             row['original_filename']?.toString() ??
                                 taskId;
+                        final String relativePath =
+                            row['original_relative_path']?.toString() ?? '';
                         final String status =
                             row['status']?.toString() ?? '';
                         final dynamic progressRaw = row['progress'];
@@ -613,7 +852,18 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                             horizontal: 12,
                             vertical: 3,
                           ),
-                          child: Padding(
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                if (_selectedTaskIds.contains(taskId)) {
+                                  _selectedTaskIds.remove(taskId);
+                                } else {
+                                  _selectedTaskIds.add(taskId);
+                                }
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 10,
@@ -624,6 +874,20 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                 // ── Line 1: Filename + Status ──
                                 Row(
                                   children: <Widget>[
+                                    Checkbox(
+                                        value: _selectedTaskIds.contains(taskId),
+                                        onChanged: (_) {
+                                          setState(() {
+                                            if (_selectedTaskIds.contains(taskId)) {
+                                              _selectedTaskIds.remove(taskId);
+                                            } else {
+                                              _selectedTaskIds.add(taskId);
+                                            }
+                                          });
+                                        },
+                                        visualDensity: VisualDensity.compact,
+                                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
                                     Icon(
                                       _fileIcon(name),
                                       size: 18,
@@ -633,18 +897,36 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                     Expanded(
                                       child: Tooltip(
                                         message: row['message']?.toString() ?? name,
-                                        child: Text(
-                                          name,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style:
-                                              theme.textTheme.titleSmall?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                            height: 1.3,
-                                          ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (relativePath.isNotEmpty)
+                                              Text(
+                                                relativePath,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: cs.onSurfaceVariant,
+                                                  height: 1.2,
+                                                ),
+                                              ),
+                                            Text(
+                                              name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: theme.textTheme.titleSmall?.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                                height: 1.3,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
+                                    if (status == 'completed')
+                                      _buildInlineStats(row, cs),
                                     const SizedBox(width: 8),
                                     _StatusBadge(status, progress, cs),
                                     if (row['is_format_conversion'] == true)
@@ -682,6 +964,9 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                   ],
                                 ),
                                 const SizedBox(height: 6),
+                                // Show error message inline when task failed
+                                if (status.toLowerCase() == 'failed')
+                                  _buildFailedMessage(row, cs, theme),
                                 // ── Line 2: Meta + Actions ──
                                 Row(
                                   children: <Widget>[
@@ -704,6 +989,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                                           name: name,
                                           ft: e.key,
                                           url: e.value.toString(),
+                                          isFormatConversion: row['is_format_conversion'] == true,
                                           onDownload: _download,
                                         ),
                                       ),
@@ -810,7 +1096,8 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                               ],
                             ),
                           ),
-                        );
+                        ),
+                      );
                       },
                     ),
             ),
@@ -819,9 +1106,728 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
       ),
     );
   }
+
+  Future<void> _batchDownload(List<String> taskIds, String fileType) async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    try {
+      final List<int> bytes = await _svc.batchDownload(taskIds, fileType);
+      if (bytes.isEmpty) {
+        if (mounted) {
+          MessageService.showWarning(
+            context,
+            l10n.translationQueueBatchDownloadFailed('empty result'),
+          );
+        }
+        return;
+      }
+      final String timestamp =
+          DateTime.now().millisecondsSinceEpoch.toString();
+      const String ext = 'zip';
+      final String filename = 'batch_download_${fileType}_$timestamp.$ext';
+      await _saveDownloadedBytes(
+        bytes: bytes,
+        filename: filename,
+        ext: ext,
+      );
+      if (mounted) {
+        MessageService.showInfo(
+          context,
+          l10n.translationQueueBatchDownloadSuccess(fileType),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showWarning(
+          context,
+          l10n.translationQueueBatchDownloadFailed(e.toString()),
+        );
+      }
+    }
+  }
+
+  Future<void> _batchDownloadAll(List<String> taskIds) async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    try {
+      // Collect all download entries from selected tasks
+      final List<_TaskDownloadEntry> entries = <_TaskDownloadEntry>[];
+      for (final Map<String, dynamic> row in _tasks) {
+        final String? tid = row['task_id']?.toString();
+        if (tid == null || !taskIds.contains(tid)) continue;
+        final String name =
+            row['original_filename']?.toString() ?? tid;
+        final String baseName = name.contains('.')
+            ? name.substring(0, name.lastIndexOf('.'))
+            : name;
+        final dynamic d = row['downloads'];
+        if (d is! Map) continue;
+        for (final MapEntry<dynamic, dynamic> e in d.entries) {
+          final String ft = e.key.toString();
+          // Skip non-file entries
+          if (ft.isEmpty || e.value == null) continue;
+          entries.add(_TaskDownloadEntry(
+            taskId: tid,
+            baseName: baseName,
+            format: ft,
+            url: e.value.toString(),
+          ));
+        }
+      }
+
+      if (entries.isEmpty) {
+        if (mounted) {
+          MessageService.showWarning(context, 'No downloads available');
+        }
+        return;
+      }
+
+      // Download each file and pack into a single ZIP, preserving relative paths
+      final Archive archive = Archive();
+      // Track per-directory name conflicts
+      final Map<String, int> dirCounters = <String, int>{};
+
+      for (final _TaskDownloadEntry dl in entries) {
+        try {
+          final List<int> fileBytes = await _svc.downloadFile(dl.url);
+          final String ext = _extensionForFormat(dl.format);
+
+          // Look up relative path for this task
+          String relativePath = '';
+          for (final Map<String, dynamic> row in _tasks) {
+            if (row['task_id']?.toString() == dl.taskId) {
+              relativePath =
+                  row['original_relative_path']?.toString() ?? '';
+              break;
+            }
+          }
+
+          String entryName;
+          if (relativePath.isNotEmpty) {
+            String name = '${dl.baseName}_${dl.format}.$ext';
+            // Windows-style conflict resolution
+            final String key = '$relativePath/$name';
+            final int count = (dirCounters[key] ?? 0) + 1;
+            dirCounters[key] = count;
+            if (count > 1) {
+              final String baseNameNoExt =
+                  name.substring(0, name.lastIndexOf('.'));
+              name = '$baseNameNoExt ($count).$ext';
+            }
+            entryName = '$relativePath/$name';
+          } else {
+            entryName = '${dl.taskId}/${dl.baseName}_${dl.format}.$ext';
+          }
+
+          archive.addFile(ArchiveFile(entryName, fileBytes.length, fileBytes));
+        } catch (_) {
+          // Skip failed individual downloads
+        }
+      }
+
+      if (archive.files.isEmpty) {
+        if (mounted) {
+          MessageService.showWarning(context, 'No files could be downloaded');
+        }
+        return;
+      }
+
+      final List<int>? encoded = ZipEncoder().encode(archive);
+      if (encoded == null) {
+        if (mounted) {
+          MessageService.showWarning(context, 'Failed to create ZIP archive');
+        }
+        return;
+      }
+      final List<int> zipBytes = Uint8List.fromList(encoded);
+      final String timestamp =
+          DateTime.now().millisecondsSinceEpoch.toString();
+      await _saveDownloadedBytes(
+        bytes: zipBytes,
+        filename: 'batch_all_$timestamp.zip',
+        ext: 'zip',
+      );
+      if (mounted) {
+        MessageService.showInfo(
+          context,
+          '${entries.length} files from ${taskIds.length} tasks packaged into ZIP',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showWarning(
+          context,
+          l10n.translationQueueBatchDownloadFailed(e.toString()),
+        );
+      }
+    }
+  }
+
+  Future<void> _showSelectFormatsDialog(List<String> taskIds) async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+
+    // Group selected tasks by source file extension.
+    // Each group shares one target-format dropdown.
+    final Map<String, _SourceFormatGroup> groups = <String, _SourceFormatGroup>{};
+    for (final Map<String, dynamic> row in _tasks) {
+      final String? tid = row['task_id']?.toString();
+      if (tid == null || !taskIds.contains(tid)) continue;
+      final String name = row['original_filename']?.toString() ?? tid;
+      final String sourceExt = name.contains('.')
+          ? name.substring(name.lastIndexOf('.') + 1).toLowerCase()
+          : '';
+      if (sourceExt.isEmpty) continue;
+      final dynamic d = row['downloads'];
+      if (d is! Map || d.isEmpty) continue;
+
+      _SourceFormatGroup group = groups.putIfAbsent(
+        sourceExt,
+        () {
+          final List<String> fmts = d.keys.map((k) => k.toString()).toList()
+            ..sort(
+              (String a, String b) =>
+                  _downloadFormatSortOrder(a).compareTo(
+                    _downloadFormatSortOrder(b),
+                  ),
+            );
+          // Default: PDF → docx, others → same as source
+          final String defaultFormat = sourceExt == 'pdf'
+              ? 'docx'
+              : (fmts.contains(sourceExt) ? sourceExt : fmts.first);
+          return _SourceFormatGroup(
+            sourceFormat: sourceExt,
+            availableTargetFormats: fmts,
+            selectedTargetFormat: defaultFormat,
+          );
+        },
+      );
+      group.taskIds.add(tid);
+    }
+
+    if (groups.isEmpty) {
+      if (mounted) {
+        MessageService.showWarning(
+          context,
+          'No downloads available for selected tasks',
+        );
+      }
+      return;
+    }
+
+    // Sort groups for stable display
+    final List<_SourceFormatGroup> groupList = groups.values.toList()
+      ..sort((a, b) => a.sourceFormat.compareTo(b.sourceFormat));
+
+    final bool? result = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => _SelectFormatsDialog(
+        groups: groupList,
+        l10n: l10n,
+      ),
+    );
+
+    if (result != true) return;
+
+    // Map taskId → selected target format via its source-format group
+    final Map<String, String> selections = <String, String>{};
+    for (final _SourceFormatGroup group in groupList) {
+      for (final String tid in group.taskIds) {
+        selections[tid] = group.selectedTargetFormat;
+      }
+    }
+    await _batchDownloadSelectedFormats(selections);
+  }
+
+  Future<void> _batchDownloadSelectedFormats(
+    Map<String, String> selections,
+  ) async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    try {
+      // Collect download entries from user selections
+      final List<_TaskDownloadEntry> entries = <_TaskDownloadEntry>[];
+      for (final Map<String, dynamic> row in _tasks) {
+        final String? tid = row['task_id']?.toString();
+        if (tid == null || !selections.containsKey(tid)) continue;
+        final String name = row['original_filename']?.toString() ?? tid;
+        final String baseName = name.contains('.')
+            ? name.substring(0, name.lastIndexOf('.'))
+            : name;
+        final dynamic d = row['downloads'];
+        if (d is! Map) continue;
+        final String format = selections[tid]!;
+        final dynamic url = d[format];
+        if (url == null) continue;
+        entries.add(_TaskDownloadEntry(
+          taskId: tid,
+          baseName: baseName,
+          format: format,
+          url: url.toString(),
+        ));
+      }
+
+      if (entries.isEmpty) {
+        if (mounted) {
+          MessageService.showWarning(context, 'No downloads available');
+        }
+        return;
+      }
+
+      // Download each file and pack into a single ZIP, preserving relative paths
+      final Archive archive = Archive();
+      // Track per-directory name conflicts
+      final Map<String, int> dirCounters = <String, int>{};
+
+      for (final _TaskDownloadEntry dl in entries) {
+        try {
+          final List<int> fileBytes = await _svc.downloadFile(dl.url);
+          final String ext = _extensionForFormat(dl.format);
+
+          // Look up relative path for this task
+          String relativePath = '';
+          for (final Map<String, dynamic> row in _tasks) {
+            if (row['task_id']?.toString() == dl.taskId) {
+              relativePath =
+                  row['original_relative_path']?.toString() ?? '';
+              break;
+            }
+          }
+
+          String entryName;
+          if (relativePath.isNotEmpty) {
+            final suffix = ref.read(globalSettingsProvider).translateOutputSuffix;
+            String name = buildDownloadFilename(
+              originalName: dl.baseName,
+              extension: ext,
+              suffix: suffix,
+            );
+            // Windows-style conflict resolution
+            final String key = '$relativePath/$name';
+            final int count = (dirCounters[key] ?? 0) + 1;
+            dirCounters[key] = count;
+            if (count > 1) {
+              final String baseNameNoExt =
+                  name.substring(0, name.lastIndexOf('.'));
+              name = '$baseNameNoExt ($count).$ext';
+            }
+            entryName = '$relativePath/$name';
+          } else {
+            entryName = '${dl.taskId}/${dl.baseName}_${dl.format}.$ext';
+          }
+
+          archive.addFile(ArchiveFile(entryName, fileBytes.length, fileBytes));
+        } catch (_) {
+          // Skip failed individual downloads
+        }
+      }
+
+      if (archive.files.isEmpty) {
+        if (mounted) {
+          MessageService.showWarning(context, 'No files could be downloaded');
+        }
+        return;
+      }
+
+      final List<int>? encoded = ZipEncoder().encode(archive);
+      if (encoded == null) {
+        if (mounted) {
+          MessageService.showWarning(
+            context,
+            'Failed to create ZIP archive',
+          );
+        }
+        return;
+      }
+      final List<int> zipBytes = Uint8List.fromList(encoded);
+      final String timestamp =
+          DateTime.now().millisecondsSinceEpoch.toString();
+      await _saveDownloadedBytes(
+        bytes: zipBytes,
+        filename: 'batch_selected_$timestamp.zip',
+        ext: 'zip',
+      );
+      if (mounted) {
+        MessageService.showInfo(
+          context,
+          '${entries.length} files from ${selections.length} tasks packaged into ZIP',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showWarning(
+          context,
+          l10n.translationQueueBatchDownloadFailed(e.toString()),
+        );
+      }
+    }
+  }
+
+  /// Count how many of the selected tasks support each download format.
+  static Map<String, int> _computeFormatCounts(
+    Set<String> selectedTaskIds,
+    List<Map<String, dynamic>> tasks,
+  ) {
+    final Map<String, int> counts = <String, int>{};
+    for (final Map<String, dynamic> row in tasks) {
+      final String? tid = row['task_id']?.toString();
+      if (tid == null || !selectedTaskIds.contains(tid)) continue;
+      final dynamic d = row['downloads'];
+      if (d is Map) {
+        for (final String key in d.keys) {
+          counts[key] = (counts[key] ?? 0) + 1;
+        }
+      }
+    }
+    return counts;
+  }
+
+  Future<void> _batchClear(List<String> taskIds) async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(l10n.translationQueueClearAllTitle),
+        content: Text(
+          '${l10n.translationQueueClearAllMessage}\n\n'
+          '${taskIds.length} ${l10n.translationQueueSelected}',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.translationQueueClearAllCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.translationQueueClearAllConfirm),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    int success = 0;
+    for (final String taskId in taskIds) {
+      try {
+        await _svc.releaseTask(taskId);
+        success++;
+      } catch (_) {}
+    }
+    setState(() {
+      _selectedTaskIds.clear();
+    });
+    if (mounted) {
+      if (success == taskIds.length) {
+        MessageService.showInfo(
+          context,
+          l10n.translationQueueClearAllSuccess,
+        );
+      } else {
+        MessageService.showWarning(
+          context,
+          '$success/${taskIds.length} ${l10n.translationQueueClearAllFailed('')}',
+        );
+      }
+    }
+    await _refresh();
+  }
+
+
+  /// Build inline error message for failed tasks, shown between Line 1 and Line 2.
+  Widget _buildFailedMessage(
+    Map<String, dynamic> row,
+    ColorScheme cs,
+    ThemeData theme,
+  ) {
+    // For failed tasks, prefer 'error' (root cause) over 'message' (step progress).
+    // message_level: 0=info, 1=warning, 2=error.
+    final int level = (row['message_level'] ?? 0) as int;
+    final String msg = (level >= 2
+            ? ((row['error'] ?? row['message']) ?? '')
+            : (row['message'] ?? row['error'] ?? ''))
+        .toString();
+    if (msg.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: cs.errorContainer.withOpacity(0.3),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: cs.error.withOpacity(0.2)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.error_outline, color: cs.error, size: 15),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                msg,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: cs.error,
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            InkWell(
+              borderRadius: BorderRadius.circular(4),
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: msg));
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(AppLocalizations.of(context)!.translationQueueErrorMessageCopied),
+                      duration: const Duration(seconds: 1),
+                    ),
+                  );
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: Icon(Icons.copy, color: cs.error.withOpacity(0.6), size: 14),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build inline stats widget for Line 1 (filename row).
+  Widget _buildInlineStats(
+    Map<String, dynamic> row,
+    ColorScheme cs,
+  ) {
+    final Map<String, dynamic>? stats =
+        row['translation_stats'] as Map<String, dynamic>?;
+    final Map<String, dynamic>? tokens =
+        row['token_usage'] as Map<String, dynamic>?;
+
+    final List<InlineSpan> spans = <InlineSpan>[];
+
+    // Segments: success / failed / total with colors
+    if (stats != null) {
+      final int total = (stats['total_segments'] as num?)?.toInt() ?? 0;
+      final int success = (stats['success_count'] as num?)?.toInt() ?? 0;
+      final int failed = (stats['fail_count'] as num?)?.toInt() ?? 0;
+      if (total > 0) {
+        spans.add(const TextSpan(text: '  '));
+        spans.add(WidgetSpan(
+          child: Icon(Icons.segment, size: 12, color: cs.primary),
+        ));
+        spans.add(TextSpan(text: '$success', style: TextStyle(
+          fontSize: 11, fontWeight: FontWeight.w600, color: cs.primary,
+        )));
+        if (failed > 0) {
+          spans.add(TextSpan(text: '·$failed', style: TextStyle(
+            fontSize: 11, fontWeight: FontWeight.w600, color: cs.error,
+          )));
+        }
+        spans.add(TextSpan(text: '/$total', style: TextStyle(
+          fontSize: 10, color: cs.onSurfaceVariant,
+        )));
+      }
+    }
+
+    // Token usage
+    if (tokens != null) {
+      final int input = (tokens['input_tokens'] as num?)?.toInt() ?? 0;
+      final int output = (tokens['output_tokens'] as num?)?.toInt() ?? 0;
+      if (input > 0 || output > 0) {
+        spans.add(const TextSpan(text: '  '));
+        spans.add(WidgetSpan(
+          child: Icon(Icons.token, size: 12, color: cs.tertiary),
+        ));
+        spans.add(TextSpan(text: '${_fmtToken(input)}→${_fmtToken(output)}', style: TextStyle(
+          fontSize: 10, color: cs.onSurfaceVariant,
+        )));
+      }
+    }
+
+    if (spans.isEmpty) return const SizedBox.shrink();
+
+    // Build tooltip message with detailed labels
+    final List<String> tooltipParts = <String>[];
+    if (stats != null) {
+      final int total = (stats['total_segments'] as num?)?.toInt() ?? 0;
+      final int success = (stats['success_count'] as num?)?.toInt() ?? 0;
+      final int failed = (stats['fail_count'] as num?)?.toInt() ?? 0;
+      if (total > 0) {
+        final String failedPart = failed > 0 ? ', $failed failed' : '';
+        tooltipParts.add('Segments: $success succeeded${failedPart}, $total total');
+      }
+    }
+    if (tokens != null) {
+      final int input = (tokens['input_tokens'] as num?)?.toInt() ?? 0;
+      final int output = (tokens['output_tokens'] as num?)?.toInt() ?? 0;
+      if (input > 0) tooltipParts.add('Input tokens:  $input');
+      if (output > 0) tooltipParts.add('Output tokens: $output');
+    }
+
+    return Tooltip(
+      message: tooltipParts.join('\n'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      textStyle: TextStyle(
+        fontSize: 12,
+        color: cs.onInverseSurface,
+        height: 1.4,
+      ),
+      child: RichText(
+        text: TextSpan(children: spans),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  String _fmtToken(int count) {
+    if (count >= 1000000) return '${(count / 1000000).toStringAsFixed(1)}M';
+    if (count >= 1000) return '${(count / 1000).toStringAsFixed(1)}K';
+    return count.toString();
+  }
 }
 
-// ─── Compact status badge ────────────────────────────────────────────────────
+// ─── Batch download bottom bar ───────────────────────────────────────────────
+
+class _BatchDownloadBottomBar extends StatelessWidget {
+  final List<String> taskIds;
+  final Map<String, int> formatCounts;
+  final Future<void> Function(List<String>, String) onDownloadFormat;
+  final Future<void> Function(List<String>) onDownloadAll;
+  final VoidCallback? onClear;
+  final VoidCallback? onSelectFormats;
+
+  const _BatchDownloadBottomBar({
+    required this.taskIds,
+    required this.formatCounts,
+    required this.onDownloadFormat,
+    required this.onDownloadAll,
+    this.onClear,
+    this.onSelectFormats,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme cs = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest,
+        border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
+      ),
+      child: Row(
+        children: <Widget>[
+          // Selection count
+          Text(
+            '${taskIds.length} ${l10n.translationQueueSelected}',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 8),
+          // "Download" label
+          Text(
+            l10n.translationQueueDownloads,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 4),
+          // Format chips (includes "Select" chip at the end)
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _buildFormatChips(l10n),
+              ),
+            ),
+          ),
+          // Clear / delete button
+          if (onClear != null)
+            IconButton(
+              icon: Icon(Icons.delete_outline, size: 20, color: cs.error),
+              tooltip: l10n.translationQueueClearSelection,
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              onPressed: onClear,
+            ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildFormatChips(AppLocalizations l10n) {
+    final List<Widget> chips = <Widget>[
+      // "All" button — download all formats in one ZIP
+      Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: ActionChip(
+          avatar: const Icon(Icons.all_inclusive, size: 16),
+          label: Text(
+            'All (${formatCounts.values.fold(0, (a, b) => a + b)})',
+            style: const TextStyle(fontSize: 12),
+          ),
+          onPressed: () => onDownloadAll(taskIds),
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+        ),
+      ),
+    ];
+
+    const List<(String, IconData)> formats = <(String, IconData)>[
+      ('docx', Icons.description),
+      ('html', Icons.language),
+      ('md', Icons.article),
+      ('md_zip', Icons.folder_zip_outlined),
+      ('pdf', Icons.picture_as_pdf),
+      ('txt', Icons.text_snippet),
+    ];
+    for (final f in formats) {
+      final String ft = f.$1;
+      final int count = formatCounts[ft] ?? 0;
+      if (count == 0) continue;
+      chips.add(Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: ActionChip(
+          avatar: Icon(f.$2, size: 16),
+          label: Text(
+            '${_downloadFormatButtonLabel(ft, l10n)} ($count)',
+            style: const TextStyle(fontSize: 12),
+          ),
+          onPressed: () => onDownloadFormat(taskIds, ft),
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+        ),
+      ));
+    }
+    // "Select" chip — choose per-source-format target
+    if (onSelectFormats != null) {
+      chips.add(Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: ActionChip(
+          avatar: const Icon(Icons.tune, size: 16),
+          label: Text(
+            '${l10n.translationQueueSelectFormats} (${taskIds.length})',
+            style: const TextStyle(fontSize: 12),
+          ),
+          onPressed: onSelectFormats,
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+        ),
+      ));
+    }
+    return chips;
+  }
+}
 
 class _StatusBadge extends StatelessWidget {
   final String status;
@@ -914,6 +1920,18 @@ class _TinyBadge extends StatelessWidget {
 // ─── Download popup menu button ──────────────────────────────────────────────
 
 /// Map download format key to a localized button label.
+String _extensionForFormat(String formatKey) {
+  switch (formatKey) {
+    case 'docx': return 'docx';
+    case 'html': return 'html';
+    case 'md': return 'md';
+    case 'md_zip': return 'zip';
+    case 'pdf': return 'pdf';
+    case 'txt': return 'txt';
+    default: return formatKey;
+  }
+}
+
 String _downloadFormatButtonLabel(String formatKey, AppLocalizations l10n) {
   switch (formatKey) {
     case 'md':
@@ -967,13 +1985,15 @@ class _DownloadFormatButton extends StatelessWidget {
   final String name;
   final String ft;
   final String url;
-  final Future<void> Function(String, String, String, String) onDownload;
+  final bool isFormatConversion;
+  final Future<void> Function(String, String, String, String, bool) onDownload;
 
   const _DownloadFormatButton({
     required this.taskId,
     required this.name,
     required this.ft,
     required this.url,
+    required this.isFormatConversion,
     required this.onDownload,
   });
 
@@ -987,9 +2007,122 @@ class _DownloadFormatButton extends StatelessWidget {
       padding: const EdgeInsets.all(4),
       constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
       onPressed: url.isNotEmpty
-          ? () => onDownload(taskId, ft, url, name)
+          ? () => onDownload(taskId, ft, url, name, isFormatConversion)
           : null,
     );
   }
 }
 
+class _TaskDownloadEntry {
+  final String taskId;
+  final String baseName;
+  final String format;
+  final String url;
+  const _TaskDownloadEntry({
+    required this.taskId,
+    required this.baseName,
+    required this.format,
+    required this.url,
+  });
+}
+
+// ─── Select formats dialog ───────────────────────────────────────────────────
+
+/// Groups tasks by their source file extension so the user picks one target
+/// format per source type, not per individual task.
+class _SourceFormatGroup {
+  final String sourceFormat;
+  final List<String> availableTargetFormats;
+  final List<String> taskIds = <String>[];
+  String selectedTargetFormat;
+
+  _SourceFormatGroup({
+    required this.sourceFormat,
+    required this.availableTargetFormats,
+    required this.selectedTargetFormat,
+  });
+}
+
+class _SelectFormatsDialog extends StatefulWidget {
+  final List<_SourceFormatGroup> groups;
+  final AppLocalizations l10n;
+
+  const _SelectFormatsDialog({
+    required this.groups,
+    required this.l10n,
+  });
+
+  @override
+  State<_SelectFormatsDialog> createState() => _SelectFormatsDialogState();
+}
+
+class _SelectFormatsDialogState extends State<_SelectFormatsDialog> {
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+
+    return AlertDialog(
+      title: Text(widget.l10n.translationQueueSelectFormatsTitle),
+      content: SizedBox(
+        width: 480,
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: widget.groups.length,
+          itemBuilder: (BuildContext context, int index) {
+            final _SourceFormatGroup group = widget.groups[index];
+            final IconData icon = _downloadFormatIcon(group.sourceFormat);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Row(
+                children: <Widget>[
+                  Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${group.sourceFormat.toUpperCase()} '
+                      '(${group.taskIds.length})',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  DropdownButton<String>(
+                    value: group.selectedTargetFormat,
+                    isDense: true,
+                    underline: const SizedBox(),
+                    style: theme.textTheme.bodySmall,
+                    items: group.availableTargetFormats.map((String ft) {
+                      return DropdownMenuItem<String>(
+                        value: ft,
+                        child: Text(
+                          _downloadFormatButtonLabel(ft, widget.l10n),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (String? value) {
+                      if (value != null) {
+                        setState(() {
+                          group.selectedTargetFormat = value;
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text(widget.l10n.translationQueueClearAllCancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: Text(widget.l10n.translationQueueSelectFormatsDownload),
+        ),
+      ],
+    );
+  }
+}

@@ -10,18 +10,18 @@ EPUB compliance fixes for Apple Books / EPUBCheck.
 """
 
 import io
-import logging
 import re
 import zipfile
 from typing import Optional
+
+from backend.logger import unified_logger as logger
+from logger.logger import LogModule
 
 # Use BeautifulSoup for HTML sanitization (already used in mobi_translator)
 try:
     from bs4 import BeautifulSoup
 except ImportError:
     BeautifulSoup = None  # type: ignore
-
-logger = logging.getLogger(__name__)
 
 _OWLANGS_LAYOUT_STYLE_ID = "owlangs-epub-readable-layout"
 
@@ -79,7 +79,7 @@ def normalize_kindle_inline_width_styles(soup) -> int:
             else:
                 del tag["style"]
     if changed:
-        logger.debug(
+        logger.debug(LogModule.EXPORT,
             "normalize_kindle_inline_width_styles: removed Kindle zero-width "
             "inline width from %s element(s) (fixes vertical glyph stacking in browsers)",
             changed,
@@ -116,7 +116,7 @@ def normalize_kindle_inline_height_styles(soup) -> int:
             else:
                 del tag["style"]
     if changed:
-        logger.debug(
+        logger.debug(LogModule.EXPORT,
             "normalize_kindle_inline_height_styles: removed Kindle collapse-prone "
             "inline height from %s element(s) (fixes overlap in browsers)",
             changed,
@@ -177,7 +177,7 @@ def normalize_kindle_overlap_styles(soup) -> int:
             else:
                 del tag["style"]
     if changed:
-        logger.debug(
+        logger.debug(LogModule.EXPORT,
             "normalize_kindle_overlap_styles: cleaned overlap-prone inline styles on "
             "%s element(s)",
             changed,

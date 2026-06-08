@@ -85,6 +85,7 @@ async def detect_max_tokens_limit(
     base_url: str,
     model_name: str,
     api_key: str,
+    requires_api_key: bool = True,
 ) -> Optional[int]:
     """
     Detect max_tokens limit for a platform by trying different values.
@@ -97,10 +98,9 @@ async def detect_max_tokens_limit(
     # Try to get from models API first (OpenAI-compatible)
     try:
         async with httpx.AsyncClient(timeout=10.0, proxy=None, mounts={'http://': None, 'https://': None}) as client:
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            }
+            headers = {"Content-Type": "application/json"}
+            if requires_api_key and api_key and api_key.strip():
+                headers["Authorization"] = f"Bearer {api_key}"
             
             # Try /v1/models endpoint (OpenAI-compatible)
             models_url = f"{base_url.rstrip('/')}/models"
@@ -166,10 +166,9 @@ async def detect_max_tokens_limit(
                         )
                     else:
                         # OpenAI-compatible
-                        headers = {
-                            "Content-Type": "application/json",
-                            "Authorization": f"Bearer {api_key}",
-                        }
+                        headers = {"Content-Type": "application/json"}
+                        if requires_api_key and api_key and api_key.strip():
+                            headers["Authorization"] = f"Bearer {api_key}"
                         payload = {
                             "model": model_name,
                             "messages": [
@@ -241,12 +240,21 @@ async def test_ai_platform_connectivity(
     model_name: str,
     api_key: str,
     detect_max_tokens: bool = True,
+    requires_api_key: bool = True,
+    test_connect_timeout: int = 30,
+    test_request_timeout: int = 10,
 ) -> Dict[str, Any]:
     """Unified AI 平台连通性测试。
 
     返回：{"success": bool, "message"?: str, "error"?: str, "max_tokens"?: int, ...}
     """
     platform = (platform_type or '').lower()
+
+    logger.info(
+        LogModule.AUTH,
+        f"[CONNECTIVITY_TEST] platform={platform}, model={model_name}, "
+        f"test_connect_timeout={test_connect_timeout}s, test_request_timeout={test_request_timeout}s"
+    )
 
     # MinerU cloud: dedicated test (create minimal task)
     if platform == 'mineru':
@@ -267,10 +275,10 @@ async def test_ai_platform_connectivity(
 
     # LLM platforms: use models list API for connectivity test (no token consumption)
     result: Dict[str, Any] = {}
-    
+
     try:
         # Disable proxy for local/remote direct connections
-        async with httpx.AsyncClient(timeout=30.0, proxy=None, mounts={'http://': None, 'https://': None}) as client:
+        async with httpx.AsyncClient(timeout=float(test_connect_timeout), proxy=None, mounts={'http://': None, 'https://': None}) as client:
             if platform == 'anthropic':
                 # Anthropic: use /v1/models endpoint (beta) or fallback to minimal request
                 headers = {
@@ -280,7 +288,7 @@ async def test_ai_platform_connectivity(
                 }
                 # Try models endpoint first (no token consumption)
                 try:
-                    models_resp = await client.get(f"{base_url}/v1/models", headers=headers, timeout=10.0)
+                    models_resp = await client.get(f"{base_url}/v1/models", headers=headers, timeout=float(test_request_timeout))
                     if models_resp.status_code == 200:
                         result["success"] = True
                         result["message"] = "Anthropic API connection successful (models endpoint)"
@@ -300,14 +308,14 @@ async def test_ai_platform_connectivity(
                 headers = {"Content-Type": "application/json"}
                 models_url = f"{base_url}/models?key={api_key}"
                 try:
-                    models_resp = await client.get(models_url, headers=headers, timeout=10.0)
+                    models_resp = await client.get(models_url, headers=headers, timeout=float(test_request_timeout))
                     if models_resp.status_code == 200:
                         result["success"] = True
                         result["message"] = "Google AI connection successful (models endpoint)"
                         # Try to detect max tokens if requested
                         if detect_max_tokens:
                             try:
-                                detected_max = await detect_max_tokens_limit(platform_type, base_url, model_name, api_key)
+                                detected_max = await detect_max_tokens_limit(platform_type, base_url, model_name, api_key, requires_api_key=requires_api_key)
                                 if detected_max:
                                     result["max_tokens"] = detected_max
                                     result["message"] += f" (max_tokens: {detected_max})"
@@ -329,8 +337,15 @@ async def test_ai_platform_connectivity(
 
             elif platform == 'ollama':
                 # Ollama: use /api/tags to list local models (no token consumption)
+                # Strip OpenAI-style path prefixes (/v1, /api/v1) from base_url.
+                # Ollama native API serves /api/tags and /api/chat at the server root.
+                _ollama_base = base_url.rstrip('/')
+                for _suffix in ('/v1', '/api/v1', '/api'):
+                    if _ollama_base.endswith(_suffix):
+                        _ollama_base = _ollama_base[:-len(_suffix)]
+                        break
                 try:
-                    tags_resp = await client.get(f"{base_url}/api/tags", timeout=10.0)
+                    tags_resp = await client.get(f"{_ollama_base}/api/tags", timeout=float(test_request_timeout))
                     if tags_resp.status_code == 200:
                         result["success"] = True
                         result["message"] = "Ollama connection successful (tags endpoint)"
@@ -345,22 +360,22 @@ async def test_ai_platform_connectivity(
                     "options": {"num_predict": 1},
                 }
                 headers = {"Content-Type": "application/json"}
-                resp = await client.post(f"{base_url}/api/chat", json=payload, headers=headers)
+                resp = await client.post(f"{_ollama_base}/api/chat", json=payload, headers=headers)
 
             elif platform == 'local':
                 # Local (OpenAI-compatible): use /v1/models endpoint
                 headers = {"Content-Type": "application/json"}
-                if api_key and api_key.strip():
+                if requires_api_key and api_key and api_key.strip():
                     headers["Authorization"] = f"Bearer {api_key}"
                 try:
-                    models_resp = await client.get(f"{base_url}/models", headers=headers, timeout=10.0)
+                    models_resp = await client.get(f"{base_url}/models", headers=headers, timeout=float(test_request_timeout))
                     if models_resp.status_code == 200:
                         result["success"] = True
                         result["message"] = "Local API connection successful (models endpoint)"
                         # Try to detect max tokens if requested
                         if detect_max_tokens:
                             try:
-                                detected_max = await detect_max_tokens_limit(platform_type, base_url, model_name, api_key)
+                                detected_max = await detect_max_tokens_limit(platform_type, base_url, model_name, api_key, requires_api_key=requires_api_key)
                                 if detected_max:
                                     result["max_tokens"] = detected_max
                                     result["message"] += f" (max_tokens: {detected_max})"
@@ -381,10 +396,9 @@ async def test_ai_platform_connectivity(
             else:
                 # Default: OpenAI-compatible cloud (DeepSeek, OpenAI, etc.)
                 # Use /v1/models endpoint (no token consumption)
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}",
-                }
+                headers = {"Content-Type": "application/json"}
+                if requires_api_key and api_key and api_key.strip():
+                    headers["Authorization"] = f"Bearer {api_key}"
                 
                 # Special handling for platforms with public /models endpoint (e.g., OpenRouter)
                 # These platforms return model list without authentication, so we need to
@@ -393,7 +407,7 @@ async def test_ai_platform_connectivity(
                 
                 if not skip_models_endpoint:
                     try:
-                        models_resp = await client.get(f"{base_url}/models", headers=headers, timeout=10.0)
+                        models_resp = await client.get(f"{base_url}/models", headers=headers, timeout=float(test_request_timeout))
                         if models_resp.status_code == 200:
                             # Validate response content - some platforms return 200 with error
                             try:
@@ -414,7 +428,7 @@ async def test_ai_platform_connectivity(
                                         # Try to detect max tokens if requested
                                         if detect_max_tokens:
                                             try:
-                                                detected_max = await detect_max_tokens_limit(platform_type, base_url, model_name, api_key)
+                                                detected_max = await detect_max_tokens_limit(platform_type, base_url, model_name, api_key, requires_api_key=requires_api_key)
                                                 if detected_max:
                                                     result["max_tokens"] = detected_max
                                                     result["message"] += f" (max_tokens: {detected_max})"
@@ -540,7 +554,7 @@ async def test_ai_platform_connectivity(
             "This is not an Owlangs HTTP route failure — start Ollama or your LLM service, "
             "or correct base_url/model in settings."
         )
-        logger.error(
+        logger.warning(
             LogModule.AUTH,
             f"[TEST_AI_PLATFORM] ConnectError url={base_url!r} platform={platform_type}: {e}",
         )
@@ -556,6 +570,7 @@ async def list_platform_models(
     base_url: str,
     api_key: str,
     api_protocol: Optional[str] = None,
+    requires_api_key: bool = True,
 ) -> list[str]:
     """
     List available models for an AI platform.
@@ -621,9 +636,7 @@ async def list_platform_models(
                 # Anthropic protocol (e.g. platform_type=llm, api_protocol=anthropic): try GET /models once, then static Claude IDs
                 if proto == "anthropic":
                     models_url = f"{base_url.rstrip('/')}/models"
-                    if platform == 'local' and not (api_key and api_key.strip()):
-                        pass
-                    else:
+                    if requires_api_key and api_key and api_key.strip():
                         headers["Authorization"] = f"Bearer {api_key}"
                     resp = await client.get(models_url, headers=headers)
                     if resp.status_code == 200:
@@ -642,10 +655,7 @@ async def list_platform_models(
 
                 # OpenAI-compatible /v1/models or /models endpoint
                 models_url = f"{base_url.rstrip('/')}/models"
-                if platform == 'local' and not (api_key and api_key.strip()):
-                    # Local (OpenAI API): no key required
-                    pass
-                else:
+                if requires_api_key and api_key and api_key.strip():
                     headers["Authorization"] = f"Bearer {api_key}"
                 resp = await client.get(models_url, headers=headers)
             

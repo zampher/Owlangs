@@ -15,6 +15,8 @@ import 'dart:io' if (dart.library.html) '../../../shared/utils/io_stub.dart'
 import '../../../shared/services/translation_service.dart';
 import '../../../shared/utils/app_logger.dart';
 import '../../../shared/utils/message_service.dart';
+import '../../../shared/utils/download_filename_builder.dart';
+import '../../../shared/providers/settings_provider.dart';
 
 // Conditional import for web platform
 import '../../../shared/utils/html_stub.dart' if (dart.library.html) 'dart:html'
@@ -1108,36 +1110,21 @@ class _HtmlPreviewState extends ConsumerState<HtmlPreview> {
         return;
       }
 
-      // Generate filename based on taskId or default
-      // Try to get original filename from downloads if available
-      var originalName = 'translated';
-      if (widget.downloads != null && widget.downloads!.isNotEmpty) {
-        // Try to extract filename from any download URL
-        // Format: /service/download/{taskId}/{fileType}
-        // We'll use taskId as fallback
-        originalName = 'translated_${widget.taskId}';
-      }
-
-      // Remove all extensions from original filename (handle cases like document.md.md)
-      // Split by '.' and take all parts except the last one, then join them
-      final List<String> nameParts = originalName.split('.');
-      String nameWithoutExt;
-      if (nameParts.length > 1) {
-        // Remove the last part (extension) and join the rest
-        nameWithoutExt = nameParts.sublist(0, nameParts.length - 1).join('.');
-      } else {
-        // No extension found, use the whole name
-        nameWithoutExt = originalName;
-      }
-      // Remove '_translated' suffix if it already exists to avoid duplication
-      if (nameWithoutExt.endsWith('_translated')) {
-        nameWithoutExt = nameWithoutExt.substring(
-          0,
-          nameWithoutExt.length - '_translated'.length,
-        );
-      }
+      // Generate filename using shared utility with configurable suffix
+      final suffix = ref.read(globalSettingsProvider).translateOutputSuffix;
+      final originalName = (widget.downloads != null && widget.downloads!.isNotEmpty)
+          ? 'translated_${widget.taskId}'
+          : 'translated';
       final String extension = fileType == 'md' ? 'md' : fileType;
-      final String filename = '${nameWithoutExt}_translated.$extension';
+      final String filename = buildDownloadFilename(
+        originalName: originalName,
+        extension: extension,
+        suffix: suffix,
+      );
+      // Base name without extension for FileSaver
+      final String nameWithoutExt = filename.endsWith('.$extension')
+          ? filename.substring(0, filename.length - extension.length - 1)
+          : filename;
 
       // Save file (Web or Desktop)
       if (kIsWeb) {

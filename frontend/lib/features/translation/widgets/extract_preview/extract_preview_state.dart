@@ -396,6 +396,7 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
     isTranslating = false;
     translationProgress = 0;
     translationStatus = '';
+    translationTimer?.cancel();
     translationTimer = null;
     translationInFlight = false;
     currentTranslationTaskId = null;

@@ -12,7 +12,7 @@
 
 - 从仓库 `configs/` 复制到安装包目录 `config/`：
   - **排除** `secrets.json`（不打包）。
-  - 其余全部复制：`system.json`、`system.json.template`、`platforms.json`、`platforms.json.template`、`ui.json`、`ui.json.template`、`local.json`、`local.json.template`、`app_config.json`、`local_users.json`、`ai_platform_status.json` 等。
+  - 其余全部复制：`system.json`、`system.json.template`、`platforms.json`、`platforms.json.template`、`local.json`、`local.json.template`、`app_config.json`、`local_users.json`、`ai_platform_status.json` 等。
 - 安装包内没有 `secrets.json`，只有 `secrets.json.template`（若存在）。
 
 ### 2. 安装阶段 (installer.nsi)

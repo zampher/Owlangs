@@ -98,14 +98,58 @@ class ConfigService {
   String? get authorizationHeader =>
       _dio.options.headers['Authorization'] as String?;
 
-  // UI文本配置
-  Map<String, dynamic>? _uiTexts;
-
   // Track if we've already logged config load to avoid duplicate logs
   bool _hasLoggedConfigLoad = false;
 
-  /// Get application configuration including AI platforms
-  Future<Map<String, dynamic>?> getAppConfig({int maxRetries = 2}) async {
+  /// Expose shared Dio instance so other services can reuse the same HTTP connection pool.
+  Dio get dio => _dio;
+
+  // In-flight dedup: multiple concurrent callers share one Future
+  Future<Map<String, dynamic>?>? _inFlightAppConfigFuture;
+  Future<Map<String, dynamic>?>? _inFlightSecretsConfigFuture;
+
+  // Short-lived cache for getAppConfig to avoid repeated requests at startup
+  Map<String, dynamic>? _cachedAppConfig;
+  DateTime? _appConfigCacheTime;
+  static const Duration _appConfigCacheTtl = Duration(seconds: 30);
+
+  /// Get application configuration including AI platforms.
+  ///
+  /// Uses in-flight dedup (concurrent callers share one request) and a short-lived
+  /// cache (30s TTL) to reduce redundant network calls during startup.
+  Future<Map<String, dynamic>?> getAppConfig({
+    int maxRetries = 2,
+    bool forceRefresh = false,
+  }) async {
+    // Return cached result if valid
+    if (!forceRefresh && _cachedAppConfig != null && _appConfigCacheTime != null) {
+      final age = DateTime.now().difference(_appConfigCacheTime!);
+      if (age < _appConfigCacheTtl) {
+        return _cachedAppConfig;
+      }
+    }
+
+    // In-flight dedup: if a request is already in progress, wait on it.
+    // Skip dedup when forceRefresh is requested so callers get fresh data.
+    if (!forceRefresh && _inFlightAppConfigFuture != null) {
+      return _inFlightAppConfigFuture;
+    }
+
+    _inFlightAppConfigFuture = _doGetAppConfig(maxRetries: maxRetries);
+    try {
+      final result = await _inFlightAppConfigFuture;
+      // Cache the result
+      if (result != null) {
+        _cachedAppConfig = result;
+        _appConfigCacheTime = DateTime.now();
+      }
+      return result;
+    } finally {
+      _inFlightAppConfigFuture = null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> _doGetAppConfig({int maxRetries = 2}) async {
     // Gate by auth config: if web要求登录且未携带token，则不请求，直接返回null
     await loadAuthConfigOnce();
     final needsAuth = _authRequired ?? false;
@@ -123,10 +167,6 @@ class ConfigService {
         final response = await _dio.get('/auth/app-config');
         if (response.statusCode == 200) {
           final data = response.data;
-          // 缓存UI文本
-          if (data != null && data['ui_texts'] != null) {
-            _uiTexts = data['ui_texts'];
-          }
           // Only log once when config is first loaded (avoid duplicate logs)
           if (kDebugMode && !_hasLoggedConfigLoad) {
             _log(
@@ -168,29 +208,24 @@ class ConfigService {
     return null;
   }
 
-  /// Get UI texts from configuration
-  Map<String, dynamic>? getUITexts() => _uiTexts;
-
-  /// Get specific UI text by path (e.g., 'platform_categories.us_platforms')
-  String? getUIText(String path) {
-    if (_uiTexts == null) return null;
-
-    final parts = path.split('.');
-    dynamic current = _uiTexts;
-
-    for (final part in parts) {
-      if (current is Map<String, dynamic> && current.containsKey(part)) {
-        current = current[part];
-      } else {
-        return null;
-      }
+  /// Get secrets configuration including API keys.
+  ///
+  /// Uses in-flight dedup so concurrent callers share one request.
+  Future<Map<String, dynamic>?> getSecretsConfig() async {
+    // In-flight dedup: if a request is already in progress, wait on it
+    if (_inFlightSecretsConfigFuture != null) {
+      return _inFlightSecretsConfigFuture;
     }
 
-    return current?.toString();
+    _inFlightSecretsConfigFuture = _doGetSecretsConfig();
+    try {
+      return await _inFlightSecretsConfigFuture;
+    } finally {
+      _inFlightSecretsConfigFuture = null;
+    }
   }
 
-  /// Get secrets configuration including API keys
-  Future<Map<String, dynamic>?> getSecretsConfig() async {
+  Future<Map<String, dynamic>?> _doGetSecretsConfig() async {
     try {
       final response = await _dio.get('/auth/app-config/raw-secrets');
       if (response.statusCode == 200) {
@@ -322,6 +357,8 @@ class ConfigService {
     String apiKey, {
     String? baseUrl,
     String? modelName,
+    int? testConnectTimeout,
+    int? testRequestTimeout,
   }) async {
     try {
       // 使用真正的API测试服务
@@ -331,6 +368,8 @@ class ConfigService {
         apiKey,
         baseUrl: baseUrl,
         modelName: modelName,
+        testConnectTimeout: testConnectTimeout,
+        testRequestTimeout: testRequestTimeout,
       );
       // 规范化失败信息：若存在 error，则将其映射到 message，避免仅显示 "Connection failed"
       if (result['success'] == false) {
@@ -650,6 +689,7 @@ class AIPlatformInfo {
     required this.temperatureMax,
     required this.thinkingModeSupported,
     required this.thinkingMode,
+    this.segmentLimit = 100,
     this.recommendedTokens,
     this.performanceNote,
     this.description,
@@ -665,7 +705,14 @@ class AIPlatformInfo {
     this.apiProtocol = 'openai',
     this.chunkSize = 3000,
     this.concurrent = 5,
-  });
+    int? timeout,
+    int? writeTimeout,
+    int? testConnectTimeout,
+    int? testRequestTimeout,
+  }) : timeout = (timeout != null && timeout > 0) ? timeout : (_isLocalUrl(url) ? 300 : 200),
+       writeTimeout = (writeTimeout != null && writeTimeout > 0) ? writeTimeout : 300,
+       testConnectTimeout = (testConnectTimeout != null && testConnectTimeout > 0) ? testConnectTimeout : 30,
+       testRequestTimeout = (testRequestTimeout != null && testRequestTimeout > 0) ? testRequestTimeout : 10;
 
   factory AIPlatformInfo.fromJson(
     String key,
@@ -676,12 +723,9 @@ class AIPlatformInfo {
   }) {
     // Check if API key is required from platform config (default to true for backward compatibility)
     // For backward compatibility: check both new 'requires_api_key' and old 'api_key_optional' fields
-    final bool requiresApiKey = json['requires_api_key'] ?? 
+    final bool requiresApiKey = json['requires_api_key'] ??
         (json['api_key_optional'] == true ? false : true);
-    
-    // Get API protocol (default to 'openai' for backward compatibility)
-    final apiProtocol = (json['api_protocol'] as String?) ?? 'openai';
-    
+
     // Check if API key is valid (non-empty)
     // Empty string means not configured
     final hasValidApiKey = apiKey != null && apiKey.isNotEmpty;
@@ -708,6 +752,8 @@ class AIPlatformInfo {
       temperatureMax: _toDouble(json['temperature_max'], 2),
       thinkingModeSupported: json['thinking_mode_supported'] == true,
       thinkingMode: json['thinking_mode'] ?? 'disable',
+      // Read segment_limit, with migration from old single_segment_retry_mode
+      segmentLimit: _parseSegmentLimit(json),
       recommendedTokens: json['recommended_tokens'] != null ? _toInt(json['recommended_tokens'], null) : null,
       performanceNote: json['performance_note'],
       description: json['description'],
@@ -715,7 +761,7 @@ class AIPlatformInfo {
       apiKey: apiKey,
       isConfigured: isConfigured,
       isApiAvailable: isApiAvailable,
-      platformType: json['platform_type'] ?? 'llm',
+      platformType: _normalizePlatformType(json['platform_type']),
       parserSubtype: json['parser_subtype']?.toString(),
       apiEndpoints: json['api_endpoints'] != null
           ? Map<String, String>.from(
@@ -723,10 +769,39 @@ class AIPlatformInfo {
             )
           : null,
       requiresApiKey: requiresApiKey,
-      apiProtocol: apiProtocol,
+      apiProtocol: (json['api_protocol'] as String?) ?? 'openai',
       chunkSize: _toInt(json['chunk_size'], 3000),
       concurrent: _toInt(json['concurrent'], 5),
+      timeout: _toInt(json['timeout'], null),
+      writeTimeout: _toInt(json['write_timeout'], null),
+      testConnectTimeout: _toInt(json['test_connect_timeout'], null),
+      testRequestTimeout: _toInt(json['test_request_timeout'], null),
     );
+  }
+
+  /// Detect if a URL points to a locally deployed model.
+  static bool _isLocalUrl(String url) {
+    try {
+      final uri = Uri.parse(url.trim());
+      final host = uri.host.toLowerCase();
+      if (host == 'localhost' || host == '127.0.0.1' || host == '[::1]') {
+        return true;
+      }
+      // Private IP ranges: 10.x, 192.168.x, 172.16-31.x
+      final parts = host.split('.');
+      if (parts.length == 4) {
+        final first = int.tryParse(parts[0]);
+        final second = int.tryParse(parts[1]);
+        if (first != null && second != null) {
+          if (first == 10) return true;
+          if (first == 192 && second == 168) return true;
+          if (first == 172 && second >= 16 && second <= 31) return true;
+        }
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
   }
 
   // Helper methods for safe type conversion
@@ -745,6 +820,31 @@ class AIPlatformInfo {
     if (value is String) return double.tryParse(value) ?? defaultValue;
     return defaultValue;
   }
+
+  /// Normalize legacy platform_type values (e.g. 'pdf_parser' → 'parser').
+  static String _normalizePlatformType(String? value) {
+    if (value == null) return 'llm';
+    if (value == 'pdf_parser') return 'parser'; // migrate legacy value
+    return value;
+  }
+
+  /// Parse segment_limit from JSON, with migration from old single_segment_retry_mode.
+  static int _parseSegmentLimit(Map<String, dynamic> json) {
+    // New field takes priority
+    if (json['segment_limit'] != null) {
+      final sl = _toInt(json['segment_limit'], 100);
+      const validLimits = {0, 1, 3, 5, 10, 20, 50, 100, 200, 500, 1000};
+      if (validLimits.contains(sl)) return sl;
+      return 100; // fallback default
+    }
+    // Migrate from old single_segment_retry_mode
+    final old = json['single_segment_retry_mode'];
+    if (old == true || old == 'single') return 1;
+    if (old == 'fixed_5') return 5;
+    if (old == 'fixed_10') return 10;
+    // old == false or 'chunk_size' or anything else → default 100
+    return 100;
+  }
   final String key;
   final String name;
   final String url;
@@ -755,6 +855,8 @@ class AIPlatformInfo {
   final double temperatureMax;
   final bool thinkingModeSupported;
   final String thinkingMode; // "enable", "disable", "default"
+  // Max segments per translation batch (0 = unlimited). Options: 1,3,5,10,20,50,100,200,500,1000
+  final int segmentLimit;
   final int? recommendedTokens;
   final String? performanceNote;
   final String? description;
@@ -770,6 +872,10 @@ class AIPlatformInfo {
   final String apiProtocol;
   final int chunkSize;
   final int concurrent;
+  final int timeout;
+  final int writeTimeout;
+  final int testConnectTimeout;
+  final int testRequestTimeout;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'name': name,
@@ -781,6 +887,7 @@ class AIPlatformInfo {
         'temperature_max': temperatureMax,
         'thinking_mode_supported': thinkingModeSupported,
         'thinking_mode': thinkingMode,
+        'segment_limit': segmentLimit,
         'recommended_tokens': recommendedTokens,
         'performance_note': performanceNote,
         'description': description,
@@ -792,6 +899,10 @@ class AIPlatformInfo {
         'api_endpoints': apiEndpoints,
         'chunk_size': chunkSize,
         'concurrent': concurrent,
+        'timeout': timeout,
+        'write_timeout': writeTimeout,
+        'test_connect_timeout': testConnectTimeout,
+        'test_request_timeout': testRequestTimeout,
         // Intentionally exclude lastTestError from persisted JSON
       };
 
@@ -805,6 +916,7 @@ class AIPlatformInfo {
     double? temperatureMax,
     bool? thinkingModeSupported,
     String? thinkingMode,
+    int? segmentLimit,
     int? recommendedTokens,
     String? performanceNote,
     String? description,
@@ -820,6 +932,10 @@ class AIPlatformInfo {
     String? apiProtocol,
     int? chunkSize,
     int? concurrent,
+    int? timeout,
+    int? writeTimeout,
+    int? testConnectTimeout,
+    int? testRequestTimeout,
   }) =>
       AIPlatformInfo(
         key: key,
@@ -833,6 +949,7 @@ class AIPlatformInfo {
         thinkingModeSupported:
             thinkingModeSupported ?? this.thinkingModeSupported,
         thinkingMode: thinkingMode ?? this.thinkingMode,
+        segmentLimit: segmentLimit ?? this.segmentLimit,
         recommendedTokens: recommendedTokens ?? this.recommendedTokens,
         performanceNote: performanceNote ?? this.performanceNote,
         description: description ?? this.description,
@@ -848,5 +965,9 @@ class AIPlatformInfo {
         apiProtocol: apiProtocol ?? this.apiProtocol,
         chunkSize: chunkSize ?? this.chunkSize,
         concurrent: concurrent ?? this.concurrent,
+        timeout: timeout ?? this.timeout,
+        writeTimeout: writeTimeout ?? this.writeTimeout,
+        testConnectTimeout: testConnectTimeout ?? this.testConnectTimeout,
+        testRequestTimeout: testRequestTimeout ?? this.testRequestTimeout,
       );
 }

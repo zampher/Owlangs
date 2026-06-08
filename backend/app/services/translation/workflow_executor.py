@@ -199,7 +199,7 @@ class WorkflowExecutor:
         prev_progress = task_state.get("progress", 0)
         if prev_progress > 90:
             task_state["progress"] = 10
-            logger.info(
+            logger.debug(
                 LogModule.WORKFLOW,
                 f"[WORKFLOW-EXECUTOR] Reset progress to 10% for translation phase "
                 f"(was {prev_progress}% from prior phase), task_id={task_id}",
@@ -209,11 +209,11 @@ class WorkflowExecutor:
         # Execute the translation with optional progress callback
         if hasattr(workflow, 'translate_async'):
             sig = inspect.signature(workflow.translate_async)
-            logger.info(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] translate_async signature: task_id={task_id}, sig={sig}, params={list(sig.parameters.keys())}")
+            logger.debug(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] translate_async signature: task_id={task_id}, sig={sig}, params={list(sig.parameters.keys())}")
             kwargs = {}
             if 'progress_callback' in sig.parameters:
                 kwargs['progress_callback'] = translation_progress_callback
-                logger.info(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Passing progress_callback to translate_async: task_id={task_id}, callback={translation_progress_callback}")
+                logger.debug(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Passing progress_callback to translate_async: task_id={task_id}, callback={translation_progress_callback}")
             else:
                 logger.warning(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] translate_async does not accept progress_callback parameter: task_id={task_id}, sig={sig.parameters.keys()}, workflow_type={workflow_type}, workflow_class={type(workflow).__name__}")
             if 'task_id' in sig.parameters:
@@ -249,12 +249,12 @@ class WorkflowExecutor:
         logger.info(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Task {task_id}: Translation phase completed, syncing attachments and updating progress")
         
         # Sync workflow attachments after translation
-        logger.info(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Task {task_id}: Syncing workflow attachments after translation")
+        logger.debug(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Task {task_id}: Syncing workflow attachments after translation")
         self._sync_workflow_attachments(task_id, workflow, task_state, reason="post_translate")
-        logger.info(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Task {task_id}: Workflow attachments synced")
+        logger.debug(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Task {task_id}: Workflow attachments synced")
         
         # Update progress
-        logger.info(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Task {task_id}: Updating progress to 100% and setting message")
+        logger.debug(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Task {task_id}: Updating progress to 100% and setting message")
         self.task_manager.add_log(task_id, "info", "Translation completed, generating outputs...")
         if task_state["progress"] < 100:
             task_state["progress"] = 100

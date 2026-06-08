@@ -3,11 +3,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
-    show kIsWeb, kDebugMode, defaultTargetPlatform, TargetPlatform;
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/pagination_bar.dart';
-import '../../../../shared/widgets/page_size_selector.dart';
 import '../../../../shared/utils/pagination.dart';
 import '../../providers/segment_undo_redo_provider.dart';
 import '../../providers/translation_state_provider_family.dart';
@@ -35,18 +34,12 @@ class TranslationResultToolbar extends ConsumerWidget {
     this.onGlobalRedo,
     this.onNavigateToFailedSegment,
     this.onViewPreview,
-    this.onShowSettings,
     this.onShowDownload,
     this.onViewPdfPreview,
     this.onToggleFullscreen,
     this.excludedCount = 0,
     this.isExclusionPanelExpanded = false,
     this.onToggleExclusionPanel,
-    // Filter buttons state (for toolbar filter buttons)
-    this.selectedFilters,
-    this.onFiltersChanged,
-    this.totalSegments,
-    this.failedCount,
     // Search functionality (optional)
     this.isSearchBoxVisible,
     this.searchQuery,
@@ -78,18 +71,12 @@ class TranslationResultToolbar extends ConsumerWidget {
   final VoidCallback? onGlobalRedo;
   final void Function(int direction)? onNavigateToFailedSegment;
   final VoidCallback? onViewPreview;
-  final VoidCallback? onShowSettings;
   final VoidCallback? onShowDownload;
   final VoidCallback? onViewPdfPreview;
   final VoidCallback? onToggleFullscreen;
   final int excludedCount;
   final bool isExclusionPanelExpanded;
   final VoidCallback? onToggleExclusionPanel;
-  // Filter buttons state (for toolbar filter buttons)
-  final Set<String>? selectedFilters;
-  final void Function(Set<String>)? onFiltersChanged;
-  final int? totalSegments;
-  final int? failedCount;
   // Search functionality (optional)
   final bool? isSearchBoxVisible;
   final String? searchQuery;
@@ -135,6 +122,7 @@ class TranslationResultToolbar extends ConsumerWidget {
     final isActive = !isCompletedByArtifacts &&
         (isTranslating ||
             currentOperation == TranslationOperation.translating ||
+            currentOperation == TranslationOperation.retranslating ||
             statusLower == 'processing');
     // Hide progress bar when translation is completed (including processing+100%)
     final isCompleted = isCompletedByArtifacts ||
@@ -145,12 +133,12 @@ class TranslationResultToolbar extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 12,
-        vertical: 4,
-      ), // Adjusted padding to achieve 36px total height
+        vertical: 2,
+      ),
       constraints: const BoxConstraints(
-        minHeight: 36,
-        maxHeight: 36,
-      ), // Fixed height at 36px
+        minHeight: 30,
+        maxHeight: 30,
+      ),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: Border(
@@ -159,62 +147,6 @@ class TranslationResultToolbar extends ConsumerWidget {
       ),
       child: Row(
         children: <Widget>[
-          // Filter buttons (shown only after translation completion, hidden during translation)
-          if (!showProgressBar &&
-              selectedFilters != null &&
-              onFiltersChanged != null &&
-              totalSegments != null) ...<Widget>[
-            // Filter panel toggle button (moved from right to left)
-            if (onToggleExclusionPanel != null)
-              ExclusionPanelButton(
-                excludedCount: excludedCount,
-                isExpanded: isExclusionPanelExpanded,
-                onToggle: onToggleExclusionPanel!,
-              ),
-            const SizedBox(width: 6),
-            // All button (compact - only show count)
-            _buildCompactFilterButton(
-              context: context,
-              label: l10n.translationToolbarFilterAll,
-              count: totalSegments!,
-              isSelected: selectedFilters!.isEmpty,
-              onTap: () => onFiltersChanged!(<String>{}),
-              color: Colors.blue,
-            ),
-            const SizedBox(width: 3),
-            // Failed button (only show if there are failed segments, compact - only show count)
-            if (failedCount != null && failedCount! > 0)
-              _buildCompactFilterButton(
-                context: context,
-                label: l10n.translationToolbarFilterFailed,
-                count: failedCount!,
-                isSelected: selectedFilters!.contains('failed'),
-                onTap: () => onFiltersChanged!(<String>{'failed'}),
-                color: Colors.red,
-              ),
-            if (failedCount != null && failedCount! > 0)
-              const SizedBox(width: 3),
-            // Included button (compact - only show count)
-            _buildCompactFilterButton(
-              context: context,
-              label: l10n.translationToolbarFilterIncluded,
-              count: totalSegments! - excludedCount,
-              isSelected: selectedFilters!.contains('included'),
-              onTap: () => onFiltersChanged!(<String>{'included'}),
-              color: Colors.green,
-            ),
-            const SizedBox(width: 3),
-            // All Excluded button (compact - only show count)
-            _buildCompactFilterButton(
-              context: context,
-              label: l10n.translationToolbarFilterExcluded,
-              count: excludedCount,
-              isSelected: selectedFilters!.contains('all_excluded'),
-              onTap: () => onFiltersChanged!(<String>{'all_excluded'}),
-              color: Colors.red,
-            ),
-            const SizedBox(width: 8), // Spacing after filter buttons
-          ],
           // Progress bar (shown only during active translation, hidden after completion)
           // Progress bar should expand to fill available space
           if (showProgressBar) ...<Widget>[
@@ -297,18 +229,24 @@ class TranslationResultToolbar extends ConsumerWidget {
               ),
             ),
           ],
-          // Other buttons (shown when not actively translating or after completion)
-          // All buttons should be right-aligned when completed
+          // Left group: segment/text display operations (shown after translation)
           if (!showProgressBar) ...<Widget>[
-            // Spacer at the beginning to push all buttons to the right
-            const Spacer(),
+            // Exclusion panel toggle button
+            if (onToggleExclusionPanel != null) ...<Widget>[
+              ExclusionPanelButton(
+                excludedCount: excludedCount,
+                isExpanded: isExclusionPanelExpanded,
+                onToggle: onToggleExclusionPanel!,
+              ),
+              const SizedBox(width: 3),
+            ],
             // Font size controls
             _buildFontSizeControls(context, ref),
             // Global Undo/Redo buttons
             _buildUndoRedoButtons(context, ref),
             // Search button (shown when segments are available)
-            if (totalSegments != null &&
-                totalSegments! > 0 &&
+            if (segmentsPaginationController != null &&
+                segmentsPaginationController!.total > 0 &&
                 onToggleSearch != null)
               IconButton(
                 icon: Icon(
@@ -331,7 +269,7 @@ class TranslationResultToolbar extends ConsumerWidget {
                 icon: const Icon(
                   Icons.arrow_upward,
                   size: 16,
-                ), // Further reduced from 18 to 16
+                ),
                 tooltip: l10n.translationToolbarPrevRetryTooltip,
                 onPressed: onNavigateToFailedSegment != null
                     ? () => onNavigateToFailedSegment!(-1)
@@ -341,13 +279,13 @@ class TranslationResultToolbar extends ConsumerWidget {
                 constraints: const BoxConstraints(
                   minWidth: 28,
                   minHeight: 28,
-                ), // Further reduced button size
+                ),
               ),
               IconButton(
                 icon: const Icon(
                   Icons.arrow_downward,
                   size: 16,
-                ), // Further reduced from 18 to 16
+                ),
                 tooltip: l10n.translationToolbarNextRetryTooltip,
                 onPressed: onNavigateToFailedSegment != null
                     ? () => onNavigateToFailedSegment!(1)
@@ -357,227 +295,202 @@ class TranslationResultToolbar extends ConsumerWidget {
                 constraints: const BoxConstraints(
                   minWidth: 28,
                   minHeight: 28,
-                ), // Further reduced button size
+                ),
               ),
-              const SizedBox(width: 3), // Further reduced spacing
+              const SizedBox(width: 3),
+            ],
+            // AI修复公式按钮（左侧分组最右边）
+            if (onRepairDocxMath != null &&
+                isCompleted &&
+                (statusLower == 'completed' ||
+                    statusLower == 'failed' ||
+                    hasDownloads)) ...<Widget>[
+              IconButton(
+                icon: const Icon(Icons.auto_fix_high, size: 16),
+                tooltip: 'AI 修复 DOCX 公式（Pandoc/texmath）',
+                onPressed: onRepairDocxMath,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 28,
+                  minHeight: 28,
+                ),
+              ),
+              const SizedBox(width: 3),
+            ],
+            // PDF 公式完整性检查（左侧末尾）
+            if (onCheckPdfFormulas != null)
+              IconButton(
+                icon: const Icon(Icons.rule, size: 16),
+                tooltip: '检查 PDF 中的公式完整性',
+                onPressed: onCheckPdfFormulas,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 28,
+                  minHeight: 28,
+                ),
+              ),
+            if (onCheckPdfFormulas != null) const SizedBox(width: 3),
+            // Spacer to push right group to the end
+            const Spacer(),
+          ],
+          // Right group: document download/reading operations (shown after translation)
+          if (!showProgressBar) ...<Widget>[
+            // Pagination bar and page size selector (when completed) - leftmost in right group
+            if (isCompleted &&
+                segmentsPaginationController != null) ...<Widget>[
+              // Pagination bar (only show when there are multiple pages)
+              if (segmentsPaginationController!.totalPages > 1) ...<Widget>[
+                ListenableBuilder(
+                  listenable: segmentsPaginationController!,
+                  builder: (context, _) => PaginationBar(
+                    currentPage: segmentsPaginationController!.currentPage,
+                    totalPages: segmentsPaginationController!.totalPages,
+                    hasPrev: segmentsPaginationController!.hasPrev,
+                    hasNext: segmentsPaginationController!.hasMore,
+                    onPrevPage: segmentsPaginationController!.isLoading
+                        ? null
+                        : (segmentsPaginationController!.hasPrev
+                            ? () async {
+                                await segmentsPaginationController!
+                                    .loadPrevPage();
+                              }
+                            : null),
+                    onNextPage: segmentsPaginationController!.isLoading
+                        ? null
+                        : (segmentsPaginationController!.hasMore
+                            ? () async {
+                                await segmentsPaginationController!
+                                    .loadNextPage();
+                              }
+                            : null),
+                    onJumpToPage: segmentsPaginationController!.isLoading
+                        ? null
+                        : (int page) async {
+                            await segmentsPaginationController!
+                                .jumpToPage(page);
+                          },
+                    showPageJump: false,
+                    height: 28,
+                  ),
+                ),
+              ],
             ],
             // Preview button
             if (_shouldShowPreviewButton()) ...<Widget>[
               IconButton(
                 icon: loadingHtmlPreview
                     ? const SizedBox(
-                        width: 16, // Further reduced from 18
-                        height: 16, // Further reduced from 18
+                        width: 16,
+                        height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(
-                        Icons.preview,
-                        size: 16,
-                      ), // Further reduced from 18 to 16
+                    : const Icon(Icons.preview, size: 16),
                 tooltip: l10n.translationToolbarPreviewTooltip,
                 onPressed: loadingHtmlPreview ? null : onViewPreview,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(
                   minWidth: 28,
                   minHeight: 28,
-                ), // Further reduced button size
+                ),
               ),
-              const SizedBox(width: 3), // Further reduced spacing
+              const SizedBox(width: 3),
             ],
-            // Settings and Download buttons
+            // Download button
             if (isCompleted &&
                 (statusLower == 'completed' ||
                     statusLower == 'failed' ||
                     hasDownloads)) ...<Widget>[
               IconButton(
-                icon: const Icon(
-                  Icons.settings,
-                  size: 16,
-                ), // Further reduced from 18 to 16
-                tooltip: l10n.translationToolbarFormatSettingsTooltip,
-                onPressed: onShowSettings,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 28,
-                  minHeight: 28,
-                ), // Further reduced button size
-              ),
-              const SizedBox(width: 3), // Further reduced spacing
-              IconButton(
-                icon: const Icon(
-                  Icons.download,
-                  size: 16,
-                ), // Further reduced from 18 to 16
+                icon: const Icon(Icons.download, size: 16),
                 tooltip: l10n.translationToolbarExportTooltip,
                 onPressed: onShowDownload,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(
                   minWidth: 28,
                   minHeight: 28,
-                ), // Further reduced button size
-              ),
-              const SizedBox(width: 3), // Further reduced spacing
-              if (onRepairDocxMath != null) ...<Widget>[
-                IconButton(
-                  icon: const Icon(
-                    Icons.auto_fix_high,
-                    size: 16,
-                  ),
-                  tooltip: 'AI 修复 DOCX 公式（Pandoc/texmath）',
-                  onPressed: onRepairDocxMath,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 28,
-                    minHeight: 28,
-                  ),
-                ),
-                const SizedBox(width: 3),
-              ],
-            ],
-            // PDF Preview button (Debug mode only)
-            if (kDebugMode &&
-                (fileName?.toLowerCase().endsWith('.pdf') ?? false) &&
-                (downloads?.containsKey('pdf') ?? false)) ...<Widget>[
-              IconButton(
-                icon: const Icon(
-                  Icons.picture_as_pdf,
-                  size: 16,
-                ), // Further reduced from 18 to 16
-                tooltip: l10n.translationToolbarPdfPreviewTooltip,
-                onPressed: onViewPdfPreview,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 28,
-                  minHeight: 28,
-                ), // Further reduced button size
-              ),
-              const SizedBox(width: 3), // Further reduced spacing
-              // PDF 公式完整性检测按钮（仅 PDF 流程可见）
-              if (onCheckPdfFormulas != null)
-                IconButton(
-                  icon: const Icon(
-                    Icons.rule,
-                    size: 16,
-                  ),
-                  tooltip: '检查 PDF 中的公式完整性',
-                  onPressed: onCheckPdfFormulas,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 28,
-                    minHeight: 28,
-                  ),
-                ),
-              if (onCheckPdfFormulas != null)
-                const SizedBox(width: 3), // Spacing after formula check button
-            ],
-          ],
-          // Pagination bar and page size selector (inserted between Undo/Redo and Filter when completed and visible)
-          // CRITICAL: Show pagination controls when translation is completed, even if only one page
-          // Page size selector should always be visible (allows changing page size), pagination bar only when multiple pages
-          if (!showProgressBar &&
-              isCompleted &&
-              segmentsPaginationController != null) ...<Widget>[
-            // Pagination bar (only show when there are multiple pages)
-            if (segmentsPaginationController!.totalPages > 1) ...<Widget>[
-              const SizedBox(width: 8), // Spacing before pagination
-              ListenableBuilder(
-                listenable: segmentsPaginationController!,
-                builder: (context, _) => PaginationBar(
-                  currentPage: segmentsPaginationController!.currentPage,
-                  totalPages: segmentsPaginationController!.totalPages,
-                  hasPrev: segmentsPaginationController!.hasPrev,
-                  hasNext: segmentsPaginationController!.hasMore,
-                  onPrevPage: segmentsPaginationController!.isLoading
-                      ? null
-                      : (segmentsPaginationController!.hasPrev
-                          ? () async {
-                              await segmentsPaginationController!
-                                  .loadPrevPage();
-                            }
-                          : null),
-                  onNextPage: segmentsPaginationController!.isLoading
-                      ? null
-                      : (segmentsPaginationController!.hasMore
-                          ? () async {
-                              await segmentsPaginationController!
-                                  .loadNextPage();
-                            }
-                          : null),
-                  onJumpToPage: segmentsPaginationController!.isLoading
-                      ? null
-                      : (int page) async {
-                          await segmentsPaginationController!.jumpToPage(page);
-                        },
-                  showPageJump: false,
-                  height: 28, // Compact height to match toolbar
                 ),
               ),
+              const SizedBox(width: 3),
             ],
-            // Page size selector (always show when translation is completed, allows changing page size)
-            const SizedBox(width: 8), // Spacing before page size selector
-            ListenableBuilder(
-              listenable: segmentsPaginationController!,
-              builder: (context, _) => PageSizeSelector(
-                currentPageSize: segmentsPaginationController!.pageSize,
-                onPageSizeChanged: (size) {
-                  segmentsPaginationController!.setPageSize(size);
-                },
-                preferenceKey: 'translation_result_segments_page_size',
-                pageSizeOptions: const <int>[
-                  50,
-                  100,
-                  200,
-                  500,
-                  1000,
-                  2000,
-                ],
-                showLabel: false, // Hide label to save space in toolbar
+            // Merged paragraph view toggle button (before fullscreen in right group)
+            IconButton(
+              icon: Icon(
+                isMergedView ? Icons.label_outlined : Icons.chrome_reader_mode,
+                size: 16,
+              ),
+              tooltip: isMergedView
+                  ? l10n.translationToolbarSegmentView
+                  : l10n.translationToolbarMergedView,
+              onPressed: onToggleMergedView,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: 28,
+                minHeight: 28,
+              ),
+            ),
+            // Fullscreen button
+            IconButton(
+              icon: Icon(
+                isFullscreen && isFullscreenView
+                    ? Icons.fullscreen_exit
+                    : Icons.fullscreen,
+                size: 16,
+              ),
+              tooltip: isFullscreen && isFullscreenView
+                  ? l10n.translationToolbarExitFullscreenTooltip
+                  : l10n.translationToolbarEnterFullscreenTooltip,
+              onPressed: onToggleFullscreen,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: 28,
+                minHeight: 28,
               ),
             ),
           ],
-          // Exclusion panel button - Only show if filter buttons are not shown (fallback for edge cases)
-          if (showProgressBar && onToggleExclusionPanel != null) ...<Widget>[
-            const SizedBox(width: 3),
-            ExclusionPanelButton(
-              excludedCount: excludedCount,
-              isExpanded: isExclusionPanelExpanded,
-              onToggle: onToggleExclusionPanel!,
+          // Fallback during progress: exclusion button + merged view + fullscreen
+          if (showProgressBar) ...<Widget>[
+            const Spacer(),
+            if (onToggleExclusionPanel != null) ...<Widget>[
+              ExclusionPanelButton(
+                excludedCount: excludedCount,
+                isExpanded: isExclusionPanelExpanded,
+                onToggle: onToggleExclusionPanel!,
+              ),
+              const SizedBox(width: 3),
+            ],
+            IconButton(
+              icon: Icon(
+                isMergedView ? Icons.label_outlined : Icons.chrome_reader_mode,
+                size: 16,
+              ),
+              tooltip: isMergedView
+                  ? l10n.translationToolbarSegmentView
+                  : l10n.translationToolbarMergedView,
+              onPressed: onToggleMergedView,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: 28,
+                minHeight: 28,
+              ),
+            ),
+            IconButton(
+              icon: Icon(
+                isFullscreen && isFullscreenView
+                    ? Icons.fullscreen_exit
+                    : Icons.fullscreen,
+                size: 16,
+              ),
+              tooltip: isFullscreen && isFullscreenView
+                  ? l10n.translationToolbarExitFullscreenTooltip
+                  : l10n.translationToolbarEnterFullscreenTooltip,
+              onPressed: onToggleFullscreen,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: 28,
+                minHeight: 28,
+              ),
             ),
           ],
-          // Merged paragraph view toggle button
-          IconButton(
-            icon: Icon(
-              isMergedView ? Icons.label_outlined : Icons.chrome_reader_mode,
-              size: 16,
-            ),
-            tooltip: isMergedView
-                ? l10n.translationToolbarSegmentView
-                : l10n.translationToolbarMergedView,
-            onPressed: onToggleMergedView,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(
-              minWidth: 28,
-              minHeight: 28,
-            ),
-          ),
-          // Fullscreen button - Always shown, rightmost
-          IconButton(
-            icon: Icon(
-              isFullscreen && isFullscreenView
-                  ? Icons.fullscreen_exit
-                  : Icons.fullscreen,
-              size: 16, // Further reduced from 18 to 16
-            ),
-            tooltip: isFullscreen && isFullscreenView
-                ? l10n.translationToolbarExitFullscreenTooltip
-                : l10n.translationToolbarEnterFullscreenTooltip,
-            onPressed: onToggleFullscreen,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(
-              minWidth: 28,
-              minHeight: 28,
-            ), // Further reduced button size
-          ),
         ],
       ),
     );
@@ -691,50 +604,6 @@ class TranslationResultToolbar extends ConsumerWidget {
       ],
     );
   }
-
-  /// Build a compact filter button for the toolbar (simplified text, minimal margins)
-  Widget _buildCompactFilterButton({
-    required BuildContext context,
-    required String label,
-    required int count,
-    required bool isSelected,
-    required VoidCallback onTap,
-    required MaterialColor color,
-  }) =>
-      Tooltip(
-        message: '$label ($count)',
-        child: ActionChip(
-          label: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              if (isSelected)
-                Icon(
-                  Icons.check,
-                  size: 12, // Smaller checkmark icon
-                  color: color.shade700,
-                ),
-              if (isSelected) const SizedBox(width: 2),
-              Text(
-                '$label ($count)', // Show label with count
-                style: TextStyle(
-                  fontSize: 10,
-                  color: isSelected ? color.shade700 : Colors.grey.shade700,
-                ),
-              ),
-            ],
-          ),
-          onPressed: onTap,
-          backgroundColor: isSelected ? color.shade100 : Colors.grey.shade200,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(999),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          visualDensity: VisualDensity.compact,
-          side: BorderSide(
-            color: isSelected ? color.shade300 : Colors.grey.shade400,
-          ),
-        ),
-      );
 
   bool _shouldShowPreviewButton() {
     if (downloads == null || downloads!.isEmpty) {

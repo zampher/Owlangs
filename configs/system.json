@@ -1,29 +1,11 @@
 {
   "_schema_version": 1,
   "auth": {
-    "required": true,
+    "required": false,
     "session_timeout": 3600
   },
   "parsing_engine": {
     "default_engine": "mineru",
-    "engines": {
-      "mineru": {
-        "name": "MinerU",
-        "model": "vlm",
-        "api_url": "https://mineru.net/api/v4",
-        "model_version": "vlm"
-      },
-      "docling": {
-        "name": "Docling",
-        "model": "docling",
-        "type": "docling"
-      },
-      "identity": {
-        "name": "Identity",
-        "model": "identity",
-        "type": "identity"
-      }
-    },
     "default_engine_settings": {
       "formula_ocr": true,
       "skip_translate": false,

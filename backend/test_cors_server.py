@@ -67,40 +67,6 @@ async def get_user_info():
 async def get_app_config():
     """获取应用配置，包括AI平台信息"""
     return {
-        "ui_texts": {
-            "platform_categories": {
-                "us_platforms": "🇺🇸 美国平台",
-                "china_platforms": "🇨🇳 中国平台",
-                "europe_platforms": "🇪🇺 欧洲平台",
-                "japan_platforms": "🇯🇵 日本平台",
-                "korea_platforms": "🇰🇷 韩国平台",
-                "other_platforms": "🌍 其他平台"
-            },
-            "platform_info": {
-                "platform_description": "平台简介",
-                "apply_api_key": "申请API密钥: ",
-                "click_to_apply": "点击申请",
-                "platform_management": "AI Platform Management",
-                "platform_management_description": "Manage AI platform configurations and API keys. Platform settings are loaded from platforms.json, while API keys are managed separately in secrets.json for security."
-            },
-            "platform_specs": {
-                "model": "Model",
-                "max_tokens": "Max Tokens",
-                "temperature": "Temperature",
-                "recommended": "Recommended"
-            },
-            "action_buttons": {
-                "test": "Test",
-                "save": "Save",
-                "test_connection": "Test Connection"
-            },
-            "status_messages": {
-                "configured": "Configured",
-                "connection_successful": "Connection successful!",
-                "connection_failed": "Connection failed!",
-                "api_key_saved": "API key saved!"
-            }
-        },
         "default_platform": "deepseek",
         "ai_platforms": {
             "openai": {
@@ -317,7 +283,7 @@ async def get_app_config():
             "mineru": {
                 "name": "MinerU",
                 "url": "https://mineru.net/api/v4",
-                "model": "vlm",
+                "model": "hybrid-auto-engine",
                 "max_tokens": 0,
                 "temperature": 0.0,
                 "recommended_tokens": None,

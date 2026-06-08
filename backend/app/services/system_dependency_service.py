@@ -10,6 +10,7 @@ and provides guidance for installation.
 
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -20,7 +21,47 @@ from logger.logger import LogModule
 
 def _check_command(cmd: str) -> bool:
     """Check if a command is available in PATH."""
-    return shutil.which(cmd) is not None
+    if shutil.which(cmd):
+        return True
+    if sys.platform == "darwin":
+        return _check_command_macos(cmd)
+    return False
+
+
+def _check_command_macos(cmd: str) -> bool:
+    """
+    macOS GUI/bundled processes often have a minimal PATH.
+    Match OwlangsMenuBar dependency detection (login shell + common paths).
+    """
+    for shell_cmd in (
+        ["/bin/zsh", "-l", "-c", f"command -v {cmd}"],
+        ["/bin/bash", "-l", "-c", f"command -v {cmd}"],
+    ):
+        try:
+            result = subprocess.run(
+                shell_cmd,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return True
+        except Exception:
+            pass
+
+    common_dirs = (
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/Library/TeX/texbin",
+    )
+    for directory in common_dirs:
+        candidate = Path(directory) / cmd
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return True
+    return False
 
 
 def _check_calibre() -> bool:
@@ -156,9 +197,9 @@ def check_system_dependencies() -> Dict[str, any]:
     missing_required = [d for d in missing if not d["optional"]]
     missing_optional = [d for d in missing if d["optional"]]
     
-    # Build macOS-specific guidance
+    # Build macOS-specific guidance (required deps only; optional tools are on-demand)
     macos_guidance = None
-    if is_macos and missing:
+    if is_macos and missing_required:
         macos_guidance = {
             "message": (
                 "Some dependencies are missing. Use the menu bar installer "
@@ -180,6 +221,7 @@ def check_system_dependencies() -> Dict[str, any]:
         "platform": platform,
         "is_macos": is_macos,
         "all_ok": len(missing) == 0,
+        "all_required_ok": len(missing_required) == 0,
         "dependencies": dependencies,
         "missing_count": len(missing),
         "missing_required_count": len(missing_required),

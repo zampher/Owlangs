@@ -537,72 +537,6 @@ namespace OwlangsLauncher.Views
             FrontendStartButton.IsEnabled = !frontendRunning;
             FrontendStopButton.IsEnabled = frontendRunning;
             
-            // Primary action button (main Start App button)
-            if (PrimaryActionButton != null)
-            {
-                if (frontendRunning)
-                {
-                    PrimaryActionButton.Content = "Stop APP";
-                    // Use DangerButtonStyle when stopping
-                    var dangerStyle = Application.Current.TryFindResource("DangerButtonStyle") as Style;
-                    if (dangerStyle != null)
-                    {
-                        // Create a new style based on DangerButtonStyle with disabled state trigger
-                        var customStyle = new Style(typeof(Button), dangerStyle);
-                        customStyle.Triggers.Add(new Trigger
-                        {
-                            Property = UIElement.IsEnabledProperty,
-                            Value = false,
-                            Setters =
-                            {
-                                new Setter(Control.BackgroundProperty, Application.Current.TryFindResource("ButtonSecondaryBrush")),
-                                new Setter(Control.ForegroundProperty, Application.Current.TryFindResource("TextTertiaryBrush"))
-                            }
-                        });
-                        PrimaryActionButton.Style = customStyle;
-                    }
-                    else
-                    {
-                        var dangerBrush = (SolidColorBrush)Application.Current.TryFindResource("ButtonDangerBrush");
-                        var buttonTextBrush = (SolidColorBrush)Application.Current.TryFindResource("ButtonTextBrush");
-                        PrimaryActionButton.Background = dangerBrush ?? new SolidColorBrush(Color.FromRgb(207, 102, 121));
-                        PrimaryActionButton.Foreground = buttonTextBrush ?? new SolidColorBrush(Colors.White);
-                    }
-                    PrimaryActionButton.IsEnabled = true;
-                }
-                else
-                {
-                    PrimaryActionButton.Content = "Start APP";
-                    // Ensure PrimaryButtonStyle is applied with disabled state trigger
-                    var primaryStyle = Application.Current.TryFindResource("PrimaryButtonStyle") as Style;
-                    if (primaryStyle != null)
-                    {
-                        // Create a custom style based on PrimaryButtonStyle with disabled state trigger
-                        var customStyle = new Style(typeof(Button), primaryStyle);
-                        customStyle.Triggers.Add(new Trigger
-                        {
-                            Property = UIElement.IsEnabledProperty,
-                            Value = false,
-                            Setters =
-                            {
-                                new Setter(Control.BackgroundProperty, Application.Current.TryFindResource("ButtonSecondaryBrush")),
-                                new Setter(Control.ForegroundProperty, Application.Current.TryFindResource("TextTertiaryBrush"))
-                            }
-                        });
-                        PrimaryActionButton.Style = customStyle;
-                    }
-                    else
-                    {
-                        // Fallback: ensure blue color (#1976D2) is used
-                        var primaryBrush = (SolidColorBrush)Application.Current.TryFindResource("ButtonPrimaryBrush");
-                        var buttonTextBrush = (SolidColorBrush)Application.Current.TryFindResource("ButtonTextBrush");
-                        PrimaryActionButton.Background = primaryBrush ?? new SolidColorBrush(Color.FromRgb(25, 118, 210)); // #1976D2
-                        PrimaryActionButton.Foreground = buttonTextBrush ?? new SolidColorBrush(Colors.White);
-                    }
-                    PrimaryActionButton.IsEnabled = backendRunning; // Only enable if backend is running
-                }
-            }
-            
             // Update main status
             UpdateMainStatus(backendRunning, frontendRunning);
         }
@@ -661,29 +595,6 @@ namespace OwlangsLauncher.Views
             }
         }
         
-        private void PrimaryActionButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (_frontendService == null)
-            {
-                MessageBox.Show("Frontend service is not available.", "Error", 
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            
-            var isRunning = _frontendService.IsRunning;
-            
-            if (isRunning)
-            {
-                // Stop frontend
-                FrontendStopButton_Click(sender, e);
-            }
-            else
-            {
-                // Start frontend
-                FrontendStartButton_Click(sender, e);
-            }
-        }
-
         private string GetStatusText(BackendStatus status)
         {
             return status switch
@@ -873,30 +784,73 @@ namespace OwlangsLauncher.Views
                     return;
                 }
 
-                // Retry clipboard access because Windows clipboard is a shared resource
-                // and can be temporarily locked by other applications.
-                Exception? lastException = null;
+                int lineCount = LogTextBox.LineCount;
+
+                // Strategy 1: Focus the TextBox, select all, and use WPF's built-in
+                // ApplicationCommands.Copy which follows the same code path as Ctrl+C.
+                LogTextBox.Focus();
+                LogTextBox.SelectAll();
+                DispatcherHelper.DoEvents();
+
                 for (int attempt = 0; attempt < 10; attempt++)
                 {
                     try
                     {
+                        if (ApplicationCommands.Copy.CanExecute(null, LogTextBox))
+                        {
+                            ApplicationCommands.Copy.Execute(null, LogTextBox);
+                            StatusText.Text = $"Copied {lineCount} lines to clipboard";
+                            return;
+                        }
+                    }
+                    catch
+                    {
+                        // Copy command may fail if clipboard is locked
+                    }
+                    System.Threading.Thread.Sleep(150);
+                }
+
+                // Strategy 2: Retry with Clipboard.SetText directly (longer retry window)
+                Exception? lastException = null;
+                for (int attempt = 0; attempt < 20; attempt++)
+                {
+                    try
+                    {
                         System.Windows.Clipboard.SetText(LogTextBox.Text);
-                        StatusText.Text = $"Copied {LogTextBox.LineCount} lines to clipboard";
+                        StatusText.Text = $"Copied {lineCount} lines to clipboard";
                         return;
                     }
                     catch (Exception ex)
                     {
                         lastException = ex;
-                        System.Threading.Thread.Sleep(100);
+                        System.Threading.Thread.Sleep(200);
                     }
                 }
 
-                throw lastException ?? new InvalidOperationException("Failed to access clipboard after multiple attempts.");
+                // Strategy 3 (last resort): Text is already selected and focused.
+                // Show a minimal notification so the user can press Ctrl+C manually.
+                StatusText.Text = "Clipboard busy — text selected, press Ctrl+C to copy";
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to copy logs: {ex.Message}", "Error",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusText.Text = $"Copy failed: {ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// Minimal DoEvents helper to let pending UI messages (focus, selection) process.
+        /// </summary>
+        private static class DispatcherHelper
+        {
+            public static void DoEvents()
+            {
+                var frame = new System.Windows.Threading.DispatcherFrame();
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.Background,
+                    new System.Windows.Threading.DispatcherOperationCallback(
+                        f => { ((System.Windows.Threading.DispatcherFrame)f).Continue = false; return null; }),
+                    frame);
+                System.Windows.Threading.Dispatcher.PushFrame(frame);
             }
         }
 

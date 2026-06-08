@@ -150,10 +150,12 @@ class PptxTranslator(AiTranslator):
                 concurrent=config.concurrent,
                 connect_timeout=getattr(config, 'connect_timeout', 15),
                 timeout=config.timeout,
+                write_timeout=getattr(config, 'write_timeout', None),
                 logger=self.logger,
                 glossary_dict=config.glossary_dict,
                 retry=config.retry,
                 max_tokens=getattr(config, 'max_tokens', None),
+                segment_limit=getattr(config, 'segment_limit', 100),
                 use_seg_tags=True,  # Use SEG-tag format for PPTX segments
             )
             self.translate_agent = SegmentsTranslateAgent(agent_config)

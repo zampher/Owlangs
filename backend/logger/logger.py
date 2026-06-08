@@ -966,7 +966,7 @@ def get_uvicorn_log_config():
             },
             "uvicorn.access": {
                 "handlers": ["access"],
-                "level": "INFO",  # Set to TRACE for detailed access logs
+                "level": "DEBUG",  # DEBUG to suppress poll noise; set TRACE for detailed access logs
                 "propagate": False,
             },
         },

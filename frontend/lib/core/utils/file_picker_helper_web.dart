@@ -16,10 +16,11 @@ library;
 
 import 'dart:async';
 import 'dart:html';
+import 'dart:js_util' as js_util;
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 
 /// Picks files on web via a direct ``<input type="file">`` element.
 ///
@@ -162,19 +163,17 @@ Future<List<PlatformFile>?> webPickDirectoryFiles({
       final reader = FileReader();
 
       reader.addEventListener('loadend', (_) {
-        // Use webkitRelativePath (via dynamic access — not typed in dart:html)
-        // to preserve directory structure when the user picks a folder.
-        // Wrap in try-catch for browsers that don't support webkitRelativePath.
+        // Use webkitRelativePath via js_util to preserve directory structure
+        // when the user picks a folder.  Dynamic-access fallback used to work
+        // in some dart2js versions but is unreliable; js_util is the canonical path.
         String relPath;
         try {
-          final dynamic dynFile = file;
-          relPath = (dynFile.webkitRelativePath is String &&
-                  (dynFile.webkitRelativePath as String).isNotEmpty)
-              ? dynFile.webkitRelativePath as String
-              : file.name;
+          final wrp = js_util.getProperty(file, 'webkitRelativePath');
+          relPath = (wrp is String && wrp.isNotEmpty) ? wrp : file.name;
         } catch (_) {
           relPath = file.name;
         }
+        debugPrint('[FilePickerWeb] Directory file: name=${file.name}, webkitRelativePath=$relPath');
         pickedFiles.add(PlatformFile(
           name: relPath,
           size: file.size,

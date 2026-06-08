@@ -15,6 +15,9 @@ class File {
 
   Future<bool> exists() async => false;
   Future<List<int>> readAsBytes() async => <int>[];
+  List<int> readAsBytesSync() {
+    throw UnsupportedError('File.readAsBytesSync is not supported on web');
+  }
   FileStat statSync() {
     throw UnsupportedError('File.statSync is not supported on web');
   }

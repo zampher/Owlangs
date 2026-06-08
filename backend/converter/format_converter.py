@@ -3,8 +3,9 @@ Document format converter module.
 Supports PDF to DOCX conversion using pdf2docx library.
 """
 
+from backend.logger import unified_logger as logger
+from logger.logger import LogModule
 import asyncio
-import logging
 import os
 import tempfile
 import uuid
@@ -13,8 +14,6 @@ import time
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
-
-logger = logging.getLogger(__name__)
 
 # Global storage for conversion tasks
 conversion_tasks: Dict[str, Dict[str, Any]] = {}

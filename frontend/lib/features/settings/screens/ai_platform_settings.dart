@@ -804,7 +804,13 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
   late TextEditingController _temperatureController;
   late TextEditingController _chunkSizeController;
   late TextEditingController _concurrentController;
+  late TextEditingController _timeoutController;
+  late TextEditingController _writeTimeoutController;
+  late TextEditingController _testConnectTimeoutController;
+  late TextEditingController _testRequestTimeoutController;
+  late bool _thinkingModeSupported; // Whether this platform supports thinking mode
   late String _thinkingMode; // "enable", "disable", "default"
+  late int _segmentLimit; // Max segments per translation batch (0 = unlimited)
   late String _apiProtocol; // "openai", "ollama", "anthropic"
   late bool _hasApiKey; // Whether platform has API key (if false, API key is optional)
   late final FocusNode _temperatureFocusNode;
@@ -832,7 +838,17 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
         TextEditingController(text: widget.platformInfo.chunkSize.toString());
     _concurrentController =
         TextEditingController(text: widget.platformInfo.concurrent.toString());
+    _timeoutController =
+        TextEditingController(text: widget.platformInfo.timeout.toString());
+    _writeTimeoutController =
+        TextEditingController(text: widget.platformInfo.writeTimeout.toString());
+    _testConnectTimeoutController =
+        TextEditingController(text: widget.platformInfo.testConnectTimeout.toString());
+    _testRequestTimeoutController =
+        TextEditingController(text: widget.platformInfo.testRequestTimeout.toString());
+    _thinkingModeSupported = widget.platformInfo.thinkingModeSupported;
     _thinkingMode = widget.platformInfo.thinkingMode;
+    _segmentLimit = widget.platformInfo.segmentLimit;
     _apiProtocol = widget.platformInfo.apiProtocol;
     _hasApiKey = widget.platformInfo.requiresApiKey;
     _temperatureFocusNode = FocusNode();
@@ -853,6 +869,10 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
     _temperatureController.dispose();
     _chunkSizeController.dispose();
     _concurrentController.dispose();
+    _timeoutController.dispose();
+    _writeTimeoutController.dispose();
+    _testConnectTimeoutController.dispose();
+    _testRequestTimeoutController.dispose();
     _temperatureFocusNode.dispose();
     super.dispose();
   }
@@ -873,7 +893,7 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    // Left column: Basic Information
+                    // Left column: Basic Information + API Key
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -886,10 +906,19 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
                           ),
                         ),
                           const SizedBox(height: 8),
-                          _buildTextField(
-                            l10n.aiPlatformPlatformName,
-                            _nameController,
-                            hintText: l10n.aiPlatformPlatformNameHint,
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Expanded(
+                                child: _buildTextField(
+                                  l10n.aiPlatformPlatformName,
+                                  _nameController,
+                                  hintText: l10n.aiPlatformPlatformNameHint,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(child: _buildApiProtocolDropdown()),
+                            ],
                           ),
                           const SizedBox(height: 8),
                           _buildTextField(
@@ -899,28 +928,80 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
                           ),
                           const SizedBox(height: 8),
                           _buildModelField(),
-                          const SizedBox(height: 8),
-                          _buildApiProtocolDropdown(),
-                          if (widget.platformInfo.platformType == 'pdf_parser') ...<Widget>[
+                          if (widget.platformInfo.platformType == 'parser') ...<Widget>[
                             const SizedBox(height: 8),
                             _buildParserSubtypeDropdown(),
                           ],
+                          const SizedBox(height: 16),
+                          _buildHasApiKeySwitch(),
+                          const SizedBox(height: 8),
+                          _buildApiKeyField(),
+                          const SizedBox(height: 8),
+                          _buildThinkingModeSupportedField(),
                         ],
                       ),
                     ),
                     const SizedBox(width: 16),
-                    // Right column: API Configuration & Advanced Parameters
+                    // Right column: Parameters
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
-                          _buildApiSectionHeader(),
-                          const SizedBox(height: 8),
-                          _buildHasApiKeySwitch(),
-                          const SizedBox(height: 8),
-                          _buildApiKeyField(),
+                          Text(
+                            'Parameters',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                           // Only show advanced parameters config for LLM type platforms
                           if (widget.platformInfo.platformType != 'parser') ...<Widget>[
+                            const SizedBox(height: 8),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Expanded(
+                                  child: _buildTextField(
+                                    'Read Timeout (seconds)',
+                                    _timeoutController,
+                                    keyboardType: TextInputType.number,
+                                    hintText: '200 (cloud) or 300 (local). Max wait time for LLM response.',
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _buildTextField(
+                                    'Write Timeout (seconds)',
+                                    _writeTimeoutController,
+                                    keyboardType: TextInputType.number,
+                                    hintText: '300 (default). Max wait time for sending data to LLM.',
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Expanded(
+                                  child: _buildTextField(
+                                    l10n.aiPlatformTestConnectTimeout,
+                                    _testConnectTimeoutController,
+                                    keyboardType: TextInputType.number,
+                                    hintText: l10n.aiPlatformTestConnectTimeoutHint,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _buildTextField(
+                                    l10n.aiPlatformTestRequestTimeout,
+                                    _testRequestTimeoutController,
+                                    keyboardType: TextInputType.number,
+                                    hintText: l10n.aiPlatformTestRequestTimeoutHint,
+                                  ),
+                                ),
+                              ],
+                            ),
                             const SizedBox(height: 8),
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -958,12 +1039,14 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(child: _buildTemperatureField()),
-                              ],
-                            ),
-                            if (widget.platformInfo.thinkingModeSupported) ...<Widget>[
-                              const SizedBox(height: 8),
-                              _buildThinkingModeField(),
                             ],
+                          ),
+                          if (_thinkingModeSupported) ...<Widget>[
+                            const SizedBox(height: 8),
+                            _buildThinkingModeField(),
+                          ],
+                          const SizedBox(height: 8),
+                          _buildSegmentLimitField(),
                           ],
                         ],
                       ),
@@ -1150,6 +1233,7 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
   /// "Has API Key" switch - for local deployments like Ollama that don't require API key
   Widget _buildHasApiKeySwitch() {
     final l10n = AppLocalizations.of(context)!;
+    final apiKeyUrl = widget.platformInfo.tokenLink;
     return SizedBox(
       height: 60,
       child: Container(
@@ -1192,6 +1276,22 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
               ],
             ),
           ),
+          if (apiKeyUrl != null && apiKeyUrl.isNotEmpty)
+            TextButton(
+              onPressed: () => _openApiKeyUrl(apiKeyUrl),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: const Size(0, 28),
+              ),
+              child: Text(
+                l10n.aiPlatformGetApiKey,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.blue.shade700,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
           Switch(
             value: _hasApiKey,
             onChanged: (bool value) {
@@ -1289,41 +1389,6 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
     );
   }
 
-  /// API config section header (with " Get API Key\ link on the right)
-  Widget _buildApiSectionHeader() {
-    final l10n = AppLocalizations.of(context)!;
-    final apiKeyUrl = widget.platformInfo.tokenLink;
-    return Row(
-      children: <Widget>[
-        Text(
-          l10n.aiPlatformApiConfiguration,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const Spacer(),
-        if (apiKeyUrl != null && apiKeyUrl.isNotEmpty)
-          TextButton.icon(
-            onPressed: () => _openApiKeyUrl(apiKeyUrl),
-            icon: Icon(Icons.link, size: 16, color: Colors.blue.shade700),
-            label: Text(
-              l10n.aiPlatformGetApiKey,
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.blue.shade700,
-                decoration: TextDecoration.underline,
-              ),
-            ),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              minimumSize: const Size(0, 28),
-            ),
-          ),
-      ],
-    );
-  }
-
   /// Open API Key management page
   Future<void> _openApiKeyUrl(String url) async {
     try {
@@ -1417,6 +1482,47 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildThinkingModeSupportedField() {
+    final l10n = AppLocalizations.of(context)!;
+    return SwitchListTile(
+      title: Text(l10n.aiPlatformThinkingModeSupported),
+      subtitle: Text(l10n.aiPlatformThinkingModeSupportedHint),
+      value: _thinkingModeSupported,
+      onChanged: (bool value) {
+        setState(() {
+          _thinkingModeSupported = value;
+        });
+      },
+    );
+  }
+
+  Widget _buildSegmentLimitField() {
+    final l10n = AppLocalizations.of(context)!;
+    const List<int> segmentLimitOptions = <int>[1, 3, 5, 10, 20, 50, 100, 200, 500, 1000, 0];
+    String _labelForValue(int v) => v == 0 ? l10n.aiPlatformSegmentLimitUnlimited : v.toString();
+
+    return DropdownButtonFormField<int>(
+      value: segmentLimitOptions.contains(_segmentLimit) ? _segmentLimit : 100,
+      decoration: InputDecoration(
+        labelText: l10n.aiPlatformSegmentLimitLabel,
+        border: const OutlineInputBorder(),
+      ),
+      items: segmentLimitOptions.map((v) {
+        return DropdownMenuItem<int>(
+          value: v,
+          child: Text(_labelForValue(v)),
+        );
+      }).toList(),
+      onChanged: (int? value) {
+        if (value != null) {
+          setState(() {
+            _segmentLimit = value;
+          });
+        }
+      },
     );
   }
 
@@ -1655,7 +1761,13 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
       baseUpdates['temperature'] = double.tryParse(_temperatureController.text) ?? current.temperature;
       baseUpdates['chunkSize'] = int.tryParse(_chunkSizeController.text) ?? current.chunkSize;
       baseUpdates['concurrent'] = int.tryParse(_concurrentController.text) ?? current.concurrent;
-      baseUpdates['thinkingMode'] = current.thinkingModeSupported ? _thinkingMode : current.thinkingMode;
+      baseUpdates['timeout'] = int.tryParse(_timeoutController.text) ?? current.timeout;
+      baseUpdates['write_timeout'] = int.tryParse(_writeTimeoutController.text) ?? current.writeTimeout;
+      baseUpdates['testConnectTimeout'] = int.tryParse(_testConnectTimeoutController.text) ?? current.testConnectTimeout;
+      baseUpdates['testRequestTimeout'] = int.tryParse(_testRequestTimeoutController.text) ?? current.testRequestTimeout;
+      baseUpdates['thinkingModeSupported'] = _thinkingModeSupported;
+      baseUpdates['thinkingMode'] = _thinkingModeSupported ? _thinkingMode : current.thinkingMode;
+      baseUpdates['segmentLimit'] = _segmentLimit;
     }
     
     // Always save API protocol
@@ -1665,7 +1777,7 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
     baseUpdates['requiresApiKey'] = _hasApiKey;
     
     // Save parser subtype for PDF parser platforms
-    if (current.platformType == 'pdf_parser') {
+    if (current.platformType == 'parser') {
       baseUpdates['parserSubtype'] = widget.platformInfo.parserSubtype ?? 'cloud';
     }
     
@@ -1678,7 +1790,13 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
       temperature: baseUpdates['temperature'] as double? ?? current.temperature,
       chunkSize: baseUpdates['chunkSize'] as int? ?? current.chunkSize,
       concurrent: baseUpdates['concurrent'] as int? ?? current.concurrent,
+      timeout: baseUpdates['timeout'] as int? ?? current.timeout,
+      writeTimeout: baseUpdates['write_timeout'] as int? ?? current.writeTimeout,
+      testConnectTimeout: baseUpdates['testConnectTimeout'] as int? ?? current.testConnectTimeout,
+      testRequestTimeout: baseUpdates['testRequestTimeout'] as int? ?? current.testRequestTimeout,
+      thinkingModeSupported: baseUpdates['thinkingModeSupported'] as bool? ?? current.thinkingModeSupported,
       thinkingMode: baseUpdates['thinkingMode'] as String? ?? current.thinkingMode,
+      segmentLimit: baseUpdates['segmentLimit'] as int? ?? current.segmentLimit,
       apiProtocol: baseUpdates['apiProtocol'] as String,
       requiresApiKey: baseUpdates['requiresApiKey'] as bool,
       parserSubtype: baseUpdates['parserSubtype'] as String? ?? current.parserSubtype,
@@ -2069,6 +2187,8 @@ class AIPlatformSettingsNotifier extends StateNotifier<AIPlatformSettings> {
         modelName: (modelNameOverride != null)
             ? modelNameOverride.trim()
             : info?.model,
+        testConnectTimeout: info?.testConnectTimeout,
+        testRequestTimeout: info?.testRequestTimeout,
       );
 
       // Update platform API availability status and last error message
@@ -2357,7 +2477,6 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
   late TextEditingController _nameController;
   late TextEditingController _apiKeyController;
   late TextEditingController _apiUrlController;
-  late TextEditingController _modelVersionController;
   late TextEditingController _parserSubtypeController;
   bool _obscureText = true;
   String? _testResult;
@@ -2375,8 +2494,6 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
     _apiKeyController =
         TextEditingController(text: widget.platformInfo.apiKey ?? '');
     _apiUrlController = TextEditingController(text: widget.platformInfo.url);
-    _modelVersionController =
-        TextEditingController(text: 'vlm'); // MinerU default model version
     _parserSubtypeController =
         TextEditingController(text: widget.platformInfo.parserSubtype ?? 'cloud');
     _hasApiKey = widget.platformInfo.requiresApiKey;
@@ -2387,7 +2504,6 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
     _nameController.dispose();
     _apiKeyController.dispose();
     _apiUrlController.dispose();
-    _modelVersionController.dispose();
     _parserSubtypeController.dispose();
     super.dispose();
   }
@@ -2450,6 +2566,7 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
           : current.name,
       apiKey: _hasApiKey ? _apiKeyController.text.trim() : '',
       url: _apiUrlController.text.trim(),
+      model: 'vlm', // Cloud MinerU API v4 supports: pipeline, vlm, MinerU-HTML
       parserSubtype: _parserSubtypeController.text.trim().isNotEmpty
           ? _parserSubtypeController.text.trim()
           : current.parserSubtype,
@@ -2527,6 +2644,21 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
                     ),
                   ),
                 ],
+              ),
+            ),
+            TextButton(
+              onPressed: _openMinerUApiKeyUrl,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: const Size(0, 28),
+              ),
+              child: Text(
+                l10n.aiPlatformGetMineruApiKey,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.blue.shade700,
+                  decoration: TextDecoration.underline,
+                ),
               ),
             ),
             Switch(
@@ -2623,17 +2755,6 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        TextFormField(
-                          controller: _modelVersionController,
-                          decoration: InputDecoration(
-                            labelText: l10n.aiPlatformModelVersion,
-                            hintText: l10n.aiPlatformModelVersionHint,
-                            prefixIcon: const Icon(Icons.model_training),
-                            border: const OutlineInputBorder(),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
                         DropdownButtonFormField<String>(
                           value: _parserSubtypeController.text.isNotEmpty
                               ? _parserSubtypeController.text
@@ -2662,22 +2783,7 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
                             }
                           },
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          l10n.aiPlatformApiConfiguration,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 16),
                         _buildHasApiKeySwitch(),
                         const SizedBox(height: 8),
                         TextFormField(
@@ -2707,76 +2813,52 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           ),
                         ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          l10n.aiPlatformOcrSettings,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(height: 8),
-                        Row(
+                        Column(
                           children: <Widget>[
-                            Icon(Icons.link, size: 16, color: Colors.blue.shade600),
-                            const SizedBox(width: 4),
-                            TextButton(
-                              onPressed: _openMinerUApiKeyUrl,
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                minimumSize: const Size(0, 24),
-                              ),
-                              child: Text(
-                                l10n.aiPlatformGetMineruApiKey,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.blue.shade600,
-                                  decoration: TextDecoration.underline,
-                                ),
-                              ),
+                            SwitchListTile(
+                              title: Text(l10n.aiPlatformFormulaOcr),
+                              subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle),
+                              value: _formulaOcr,
+                              onChanged: (bool value) {
+                                setState(() {
+                                  _formulaOcr = value;
+                                });
+                              },
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            SwitchListTile(
+                              title: Text(l10n.aiPlatformTableOcr),
+                              subtitle: Text(l10n.aiPlatformTableOcrSubtitle),
+                              value: _tableOcr,
+                              onChanged: (bool value) {
+                                setState(() {
+                                  _tableOcr = value;
+                                });
+                              },
+                              contentPadding: EdgeInsets.zero,
                             ),
                           ],
-                        ),
-                        const SizedBox(height: 8),
-                        SwitchListTile(
-                          title: Text(l10n.aiPlatformFormulaOcr),
-                          subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle),
-                          value: _formulaOcr,
-                          onChanged: (bool value) {
-                            setState(() {
-                              _formulaOcr = value;
-                            });
-                          },
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        SwitchListTile(
-                          title: Text(l10n.aiPlatformTableOcr),
-                          subtitle: Text(l10n.aiPlatformTableOcrSubtitle),
-                          value: _tableOcr,
-                          onChanged: (bool value) {
-                            setState(() {
-                              _tableOcr = value;
-                            });
-                          },
-                          contentPadding: EdgeInsets.zero,
                         ),
                       ],
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _isTestingConnection ? null : _testConnection,
-                  icon: _isTestingConnection
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.wifi_protected_setup),
-                  label: Text(
-                    _isTestingConnection ? l10n.aiPlatformTesting : l10n.aiPlatformTestConnection,
-                  ),
-
-                ),
               ),
               if (_testResult != null) ...<Widget>[
                 const SizedBox(height: 12),
@@ -2828,9 +2910,18 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text(l10n.aiPlatformCancel),
         ),
+        OutlinedButton(
+          onPressed: _isTestingConnection ? null : _testConnection,
+          child: _isTestingConnection
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text(l10n.aiPlatformTestConnection),
+        ),
         FilledButton(
           onPressed: _saveConfig,
-
           child: Text(l10n.aiPlatformSave),
         ),
       ],
@@ -2881,7 +2972,10 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
         TextEditingController(text: widget.platformInfo.apiKey ?? '');
     _apiUrlController = TextEditingController(text: widget.platformInfo.url);
     _modelVersionController =
-        TextEditingController(text: 'vlm'); // MinerU default model version
+        TextEditingController(text: _normalizeModelVersion(
+            widget.platformInfo.model.isNotEmpty
+                ? widget.platformInfo.model
+                : 'hybrid-auto-engine'));
     _parserSubtypeController =
         TextEditingController(text: widget.platformInfo.parserSubtype ?? 'local');
     _hasApiKey = widget.platformInfo.requiresApiKey;
@@ -2896,6 +2990,14 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
     _parserSubtypeController.dispose();
     super.dispose();
   }
+
+  /// Migrate old model version short names to official MinerU 3.2 names.
+  static const Map<String, String> _migrationMap = {
+    'vlm': 'vlm-auto-engine',
+    'hybrid': 'hybrid-auto-engine',
+  };
+  static String _normalizeModelVersion(String mv) =>
+      _migrationMap[mv] ?? mv;
 
   Future<void> _testConnection() async {
     final l10n = AppLocalizations.of(context)!;
@@ -2949,6 +3051,9 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
           : current.name,
       apiKey: _hasApiKey ? _apiKeyController.text.trim() : '',
       url: _apiUrlController.text.trim(),
+      model: _modelVersionController.text.trim().isNotEmpty
+          ? _modelVersionController.text.trim()
+          : current.model,
       parserSubtype: _parserSubtypeController.text.trim().isNotEmpty
           ? _parserSubtypeController.text.trim()
           : current.parserSubtype,
@@ -3026,6 +3131,21 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
                     ),
                   ),
                 ],
+              ),
+            ),
+            TextButton(
+              onPressed: _openApiKeyUrl,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: const Size(0, 28),
+              ),
+              child: Text(
+                l10n.aiPlatformGetMineruApiKey,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.blue.shade700,
+                  decoration: TextDecoration.underline,
+                ),
               ),
             ),
             Switch(
@@ -3122,15 +3242,26 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        TextFormField(
-                          controller: _modelVersionController,
+                        DropdownButtonFormField<String>(
+                          value: _modelVersionController.text,
                           decoration: InputDecoration(
                             labelText: l10n.aiPlatformModelVersion,
-                            hintText: l10n.aiPlatformModelVersionHint,
                             prefixIcon: const Icon(Icons.model_training),
                             border: const OutlineInputBorder(),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           ),
+                          items: const <DropdownMenuItem<String>>[
+                            DropdownMenuItem(value: 'pipeline', child: Text('pipeline')),
+                            DropdownMenuItem(value: 'vlm-auto-engine', child: Text('vlm-auto-engine')),
+                            DropdownMenuItem(value: 'hybrid-auto-engine', child: Text('hybrid-auto-engine')),
+                            DropdownMenuItem(value: 'vlm-http-client', child: Text('vlm-http-client')),
+                            DropdownMenuItem(value: 'hybrid-http-client', child: Text('hybrid-http-client')),
+                          ],
+                          onChanged: (String? value) {
+                            if (value != null) {
+                              _modelVersionController.text = value;
+                            }
+                          },
                         ),
                         const SizedBox(height: 8),
                         DropdownButtonFormField<String>(
@@ -3161,22 +3292,7 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
                             }
                           },
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          l10n.aiPlatformApiConfiguration,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 16),
                         _buildHasApiKeySwitch(),
                         const SizedBox(height: 8),
                         TextFormField(
@@ -3206,76 +3322,52 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           ),
                         ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          l10n.aiPlatformOcrSettings,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(height: 8),
-                        Row(
+                        Column(
                           children: <Widget>[
-                            Icon(Icons.link, size: 16, color: Colors.blue.shade600),
-                            const SizedBox(width: 4),
-                            TextButton(
-                              onPressed: _openApiKeyUrl,
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                minimumSize: const Size(0, 24),
-                              ),
-                              child: Text(
-                                l10n.aiPlatformGetMineruApiKey,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.blue.shade600,
-                                  decoration: TextDecoration.underline,
-                                ),
-                              ),
+                            SwitchListTile(
+                              title: Text(l10n.aiPlatformFormulaOcr),
+                              subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle),
+                              value: _formulaOcr,
+                              onChanged: (bool value) {
+                                setState(() {
+                                  _formulaOcr = value;
+                                });
+                              },
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            SwitchListTile(
+                              title: Text(l10n.aiPlatformTableOcr),
+                              subtitle: Text(l10n.aiPlatformTableOcrSubtitle),
+                              value: _tableOcr,
+                              onChanged: (bool value) {
+                                setState(() {
+                                  _tableOcr = value;
+                                });
+                              },
+                              contentPadding: EdgeInsets.zero,
                             ),
                           ],
-                        ),
-                        const SizedBox(height: 8),
-                        SwitchListTile(
-                          title: Text(l10n.aiPlatformFormulaOcr),
-                          subtitle: Text(l10n.aiPlatformFormulaOcrSubtitle),
-                          value: _formulaOcr,
-                          onChanged: (bool value) {
-                            setState(() {
-                              _formulaOcr = value;
-                            });
-                          },
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        SwitchListTile(
-                          title: Text(l10n.aiPlatformTableOcr),
-                          subtitle: Text(l10n.aiPlatformTableOcrSubtitle),
-                          value: _tableOcr,
-                          onChanged: (bool value) {
-                            setState(() {
-                              _tableOcr = value;
-                            });
-                          },
-                          contentPadding: EdgeInsets.zero,
                         ),
                       ],
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _isTestingConnection ? null : _testConnection,
-                  icon: _isTestingConnection
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.wifi_protected_setup),
-                  label: Text(
-                    _isTestingConnection ? l10n.aiPlatformTesting : l10n.aiPlatformTestConnection,
-                  ),
-
-                ),
               ),
               if (_testResult != null) ...<Widget>[
                 const SizedBox(height: 12),
@@ -3327,9 +3419,18 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text(l10n.aiPlatformCancel),
         ),
+        OutlinedButton(
+          onPressed: _isTestingConnection ? null : _testConnection,
+          child: _isTestingConnection
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text(l10n.aiPlatformTestConnection),
+        ),
         FilledButton(
           onPressed: _saveConfig,
-
           child: Text(l10n.aiPlatformSave),
         ),
       ],

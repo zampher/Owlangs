@@ -279,9 +279,8 @@ def render_layout_html(
 """)
     
     logger.info(
-        "[LAYOUT] render_layout_html: total_blocks=%s, rendered=%s",
-        total_blocks,
-        rendered_blocks,
+        LogModule.LAYOUT,
+        f"[LAYOUT] render_layout_html: total_blocks={total_blocks}, rendered={rendered_blocks}",
     )
     
     return "".join(html_parts)

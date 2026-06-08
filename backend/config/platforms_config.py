@@ -43,6 +43,14 @@ class AIPlatformConfig:
     api_endpoints: Dict[str, str] = field(default_factory=dict)
     chunk_size: int = 3000  # Per-platform chunk size (tokens). Overrides global app_config setting.
     concurrent: int = 5  # Per-platform concurrent requests. Overrides global app_config setting.
+    timeout: Optional[int] = None  # Per-platform read timeout (seconds). Overrides global default.
+    write_timeout: Optional[int] = None  # Per-platform write timeout (seconds). Overrides global default.
+    test_connect_timeout: Optional[int] = None  # Per-platform connect-test client timeout (seconds). Default 30.
+    test_request_timeout: Optional[int] = None  # Per-platform connect-test sub-request timeout (seconds). Default 10.
+    # Maximum number of segments per translation batch (0 = unlimited).
+    # Default: 100 for cloud LLMs, 10 for local LLMs (e.g., Ollama).
+    # Available options: 1, 3, 5, 10, 20, 50, 100, 200, 500, 1000, 0 (unlimited)
+    segment_limit: int = 100
 
 
 @dataclass
@@ -62,7 +70,7 @@ class PlatformsConfig:
             config_path = get_config_file_path(config_file)
             
             if config_path.exists():
-                logger.info(LogModule.CONFIG, f"Loading platforms configuration from: {config_path}")
+                logger.debug(LogModule.CONFIG, f"Loading platforms configuration from: {config_path}")
                 with open(config_path, 'r', encoding='utf-8-sig') as f:
                     data = json.load(f)
 
@@ -94,6 +102,13 @@ class PlatformsConfig:
 
                 config = cls()
                 config.update_from_dict(data)
+                # If migration added defaults for old platforms, persist back to disk
+                if getattr(config, '_needs_migration', False):
+                    try:
+                        config.save_to_file()
+                        logger.info(LogModule.CONFIG, f"Saved migrated platforms.json (timeout/write_timeout defaults): {config_path}")
+                    except Exception as save_err:
+                        logger.warning(LogModule.CONFIG, f"Failed to save migrated platforms.json: {save_err}")
                 logger.debug(LogModule.CONFIG, "Platforms configuration loaded successfully")
                 return config
             else:
@@ -153,15 +168,25 @@ class PlatformsConfig:
         if 'platforms' in data:
             platforms_data = data['platforms']
             self.platforms = {}
+            needs_migration = False
             for platform_key, platform_data in platforms_data.items():
                 if platform_key == 'default_platform':
                     continue
                 if isinstance(platform_data, dict):
                     pdata = dict(platform_data)
                     ptype = pdata.get("platform_type", "llm")
+                    # Normalize legacy platform_type values (e.g. 'pdf_parser' → 'parser')
+                    if ptype == 'pdf_parser':
+                        ptype = 'parser'
+                        pdata['platform_type'] = 'parser'
                     if not platform_type_uses_llm_chunk_concurrent(ptype):
                         pdata.pop("chunk_size", None)
                         pdata.pop("concurrent", None)
+                        pdata.pop("timeout", None)
+                        pdata.pop("write_timeout", None)
+                        pdata.pop("test_connect_timeout", None)
+                        pdata.pop("test_request_timeout", None)
+                        pdata.pop("segment_limit", None)
                     allowed = {f.name for f in fields(AIPlatformConfig)}
                     unknown = sorted(k for k in pdata if k not in allowed)
                     if unknown:
@@ -170,22 +195,124 @@ class PlatformsConfig:
                             f"Platforms '{platform_key}': ignoring keys not defined on AIPlatformConfig: {unknown}",
                         )
                     pdata_filtered = {k: v for k, v in pdata.items() if k in allowed}
+                    # Migrate: fill default timeout/write_timeout for old LLM platforms missing these fields
+                    if ptype == 'llm':
+                        if pdata_filtered.get('timeout') is None:
+                            pdata_filtered['timeout'] = 300
+                            needs_migration = True
+                        if pdata_filtered.get('test_connect_timeout') is None:
+                            pdata_filtered['test_connect_timeout'] = 30
+                            needs_migration = True
+                        if pdata_filtered.get('test_request_timeout') is None:
+                            pdata_filtered['test_request_timeout'] = 10
+                            needs_migration = True
+                        # Migrate: convert old single_segment_retry_mode to new segment_limit
+                        old_ssr = pdata_filtered.pop('single_segment_retry_mode', None)
+                        if 'segment_limit' not in pdata_filtered and old_ssr is not None:
+                            if isinstance(old_ssr, bool):
+                                pdata_filtered['segment_limit'] = 1 if old_ssr else 100
+                            elif old_ssr == 'single':
+                                pdata_filtered['segment_limit'] = 1
+                            elif old_ssr == 'fixed_5':
+                                pdata_filtered['segment_limit'] = 5
+                            elif old_ssr == 'fixed_10':
+                                pdata_filtered['segment_limit'] = 10
+                            # 'chunk_size' (default) → use default 100, no need to set
+                            needs_migration = True
+                            logger.info(
+                                LogModule.CONFIG,
+                                f"Migrated '{platform_key}': single_segment_retry_mode='{old_ssr}' → segment_limit={pdata_filtered.get('segment_limit', 100)}"
+                            )
                     self.platforms[platform_key] = AIPlatformConfig(**pdata_filtered)
+            if needs_migration:
+                self._needs_migration = True
+                logger.info(LogModule.CONFIG, "Migrated old platforms.json: added default timeout/write_timeout for LLM platforms")
     
+    # Field order for consistent JSON serialization (matches platforms.json structure)
+    # Fields exclusive to LLM platforms (not used by parser/converter platforms)
+    _LLM_ONLY_FIELDS = {
+        "model",
+        "max_tokens",
+        "temperature",
+        "temperature_min",
+        "temperature_max",
+        "thinking_mode_supported",
+        "thinking_mode",
+        "recommended_tokens",
+        "api_protocol",
+        "chunk_size",
+        "concurrent",
+        "timeout",
+        "write_timeout",
+        "test_connect_timeout",
+        "test_request_timeout",
+        "segment_limit",
+    }
+
+    # Field order for consistent JSON serialization (matches platforms.json structure)
+    # Fields are grouped by platform type:
+    # - Common fields: name, url, platform_type, parser_subtype, requires_api_key, description, token_link, api_endpoints, performance_note
+    # - LLM-only fields: model, max_tokens, temperature, thinking_mode, chunk_size, concurrent, timeout, etc.
+    _PLATFORM_FIELD_ORDER = [
+        # Common fields (all platform types)
+        "name",
+        "url",
+        "platform_type",
+        "parser_subtype",
+        "requires_api_key",
+        "description",
+        "token_link",
+        "api_endpoints",
+        "performance_note",
+        # LLM-only fields
+        "model",
+        "max_tokens",
+        "temperature",
+        "temperature_min",
+        "temperature_max",
+        "thinking_mode_supported",
+        "thinking_mode",
+        "recommended_tokens",
+        "api_protocol",
+        "chunk_size",
+        "concurrent",
+        "timeout",
+        "write_timeout",
+        "test_connect_timeout",
+        "test_request_timeout",
+        "segment_limit",
+    ]
+
     def get_config_dict(self) -> Dict[str, Any]:
-        """Get configuration dictionary"""
-        config_dict = {
-            '_schema_version': self._schema_version,
-            'default_platform': self.default_platform,
-            'platforms': {}
-        }
-        
-        # Convert platforms to dictionary format (omit LLM-only keys for parser/converter platforms)
+        """Get configuration dictionary with consistent field ordering.
+
+        For non-LLM platforms (parser/converter), LLM-only fields are omitted
+        to keep the configuration clean and avoid confusion.
+        """
+        from collections import OrderedDict
+
+        config_dict: OrderedDict[str, Any] = OrderedDict()
+        config_dict['_schema_version'] = self._schema_version
+        config_dict['default_platform'] = self.default_platform
+        config_dict['platforms'] = OrderedDict()
+
+        # Convert platforms to dictionary format
         for platform_key, platform_config in self.platforms.items():
-            plat_dict = asdict(platform_config)
-            if not platform_type_uses_llm_chunk_concurrent(platform_config.platform_type):
-                plat_dict.pop("chunk_size", None)
-                plat_dict.pop("concurrent", None)
+            # Build ordered dict with consistent field order
+            plat_dict: OrderedDict[str, Any] = OrderedDict()
+            plat_raw = asdict(platform_config)
+
+            # Determine if this is an LLM platform
+            is_llm_platform = platform_type_uses_llm_chunk_concurrent(platform_config.platform_type)
+
+            # Add fields in defined order
+            for field_name in self._PLATFORM_FIELD_ORDER:
+                if field_name in plat_raw:
+                    # Skip LLM-only fields for non-LLM platforms (parser/converter)
+                    if not is_llm_platform and field_name in self._LLM_ONLY_FIELDS:
+                        continue
+                    plat_dict[field_name] = plat_raw[field_name]
+
             config_dict["platforms"][platform_key] = plat_dict
 
         return config_dict
@@ -255,9 +382,10 @@ def get_platforms_config() -> PlatformsConfig:
 def save_platforms_config() -> bool:
     """Save platforms configuration"""
     global _platforms_config
-    if _platforms_config is not None:
-        return _platforms_config.save_to_file()
-    return False
+    if _platforms_config is None:
+        logger.warning(LogModule.CONFIG, "platforms.json save skipped: _platforms_config is None (not loaded or was cleared)")
+        return False
+    return _platforms_config.save_to_file()
 
 
 def clear_platforms_config_cache() -> None:

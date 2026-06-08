@@ -8,12 +8,12 @@ Ollama API is designed for running open-source models locally.
 No API key required, different request/response format from OpenAI.
 """
 
-import logging
 from typing import Dict, Any, Tuple, List, Optional
 
-from .base import LLMProtocol
+from backend.logger import unified_logger as logger
+from logger.logger import LogModule
 
-logger = logging.getLogger(__name__)
+from .base import LLMProtocol
 
 
 class OllamaProtocol(LLMProtocol):
@@ -44,9 +44,40 @@ class OllamaProtocol(LLMProtocol):
         return "ollama"
     
     def get_chat_endpoint(self, base_url: str) -> str:
-        """Get Ollama chat endpoint."""
+        """Get Ollama chat endpoint.
+
+        Ollama's native API serves /api/chat at the server root.
+        If the user configured a base_url with an OpenAI-style /v1 prefix
+        (e.g. http://host:11434/v1), strip it so the URL becomes
+        http://host:11434/api/chat instead of the invalid /v1/api/chat.
+        """
+        raw_url = base_url
         base = base_url.rstrip('/')
-        return f"{base}/api/chat"
+        if base != raw_url:
+            logger.info(
+                LogModule.TRANS,
+                f"[OLLAMA URL] Rstrip trailing slash: raw='{raw_url}' -> base='{base}'"
+            )
+        # Strip common OpenAI-style path prefixes that don't apply to Ollama native API
+        stripped_prefix = None
+        for suffix in ('/v1', '/api/v1', '/api'):
+            if base.endswith(suffix):
+                stripped_prefix = suffix
+                base = base[:-len(suffix)]
+                break
+        final_url = f"{base}/api/chat"
+        if stripped_prefix:
+            logger.info(
+                LogModule.TRANS,
+                f"[OLLAMA URL] Stripped OpenAI-style prefix '{stripped_prefix}': "
+                f"raw='{raw_url}' -> base='{base}' -> final='{final_url}'"
+            )
+        else:
+            logger.info(
+                LogModule.TRANS,
+                f"[OLLAMA URL] No prefix stripped: raw='{raw_url}' -> final='{final_url}'"
+            )
+        return final_url
     
     def prepare_request(
         self,
@@ -57,6 +88,7 @@ class OllamaProtocol(LLMProtocol):
         max_tokens: Optional[int],
         api_key: Optional[str],
         system_prompt: Optional[str] = None,
+        thinking: Optional[str] = None,
     ) -> Tuple[Dict[str, str], Dict[str, Any]]:
         """
         Prepare Ollama-compatible request.
@@ -121,6 +153,11 @@ class OllamaProtocol(LLMProtocol):
         # Users with limited VRAM can override via their Ollama Modelfile.
         DEFAULT_NUM_CTX = 16384
         data["options"]["num_ctx"] = DEFAULT_NUM_CTX
+
+        if thinking == "enable":
+            data["think"] = True
+        elif thinking == "disable":
+            data["think"] = False
         
         return headers, data
     
@@ -160,7 +197,7 @@ class OllamaProtocol(LLMProtocol):
         if not content or content.strip() == "":
             thinking = message.get("thinking", "")
             if thinking and thinking.strip():
-                logger.warning(
+                logger.warning(LogModule.TRANS,
                     f"[OLLAMA] Model returned empty content but has thinking. "
                     f"Finish reason: {response_data.get('done_reason', 'unknown')}. "
                     f"Using thinking content as fallback (may contain reasoning text)."

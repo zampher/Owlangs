@@ -38,7 +38,8 @@ class UserProfile:
     translator_html_insert_mode: str = "replace"
     translator_html_separator: str = " "
     translator_json_paths: str = ""
-    
+    translator_ocr_language: str = "auto"
+
     # AI translation settings (user personalization part)
     translator_thinking_mode: str = "disable"
     translator_target_language: str = "English"
@@ -53,7 +54,12 @@ class UserProfile:
     concurrent: int = 10
     timeout: int = 120
     retry: int = 5
-    
+    segment_auto_retry_rounds: int = 3  # Post-translation auto retry rounds for failed segments
+
+    # Output filename suffix settings
+    translator_output_suffix: str = "_translated"
+    converter_output_suffix: str = "_converted"
+
     # Glossary settings (user personalization part)
     glossary_generate_enable: bool = False
     glossary_agent_config_choice: str = "same"
@@ -95,7 +101,7 @@ class UserProfile:
             profile_file = os.path.join(profile_dir, f"{username}_profile.json")
             
             if os.path.exists(profile_file):
-                logger.info(LogModule.AUTH, f"Loading user configuration from file: {profile_file}")
+                logger.debug(LogModule.AUTH, f"Loading user configuration from file: {profile_file}")
                 with open(profile_file, 'r', encoding='utf-8-sig') as f:
                     data = json.load(f)
                     # Create configuration instance and update fields
@@ -164,6 +170,10 @@ class UserProfile:
                 'translationTimeout': 'timeout',
                 'previewFontSize': 'preview_font_size',
                 'editFontSize': 'edit_font_size',
+                'ocrLanguage': 'translator_ocr_language',
+                'targetLanguage': 'translator_target_language',
+                'translateOutputSuffix': 'translator_output_suffix',
+                'convertOutputSuffix': 'converter_output_suffix',
             }
             
             # Map frontend key to backend key if needed

@@ -1,5 +1,44 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.4.0.0
+
+### New Features
+
+1. **Bilingual document export**: Support exporting bilingual documents.
+2. **Batch document upload**: Support uploading folders with recursive extraction of compressed archives inside, then adding all files to the translation queue.
+3. **Multi-select and batch download in task queue**: In the task queue, users can multi-select tasks and batch download processed documents by type; downloaded documents retain the original folder directory structure.
+4. **Task statistics and relative path**: In task management, display success/failure segment statistics for each translated task, and show the document's relative path.
+5. **MCP interface**: Implemented MCP interface supporting document translation, document format conversion, and more.
+6. **CLI interface**: Implemented CLI interface allowing users to perform format conversion and translation locally via command line.
+7. **PBX glossary import/export**: Support importing and exporting glossaries in PBX format.
+8. **MinerU local model versions**: Support configuring 5 model versions for locally deployed MinerU.
+9. **Configurable segment count per LLM API call**: Support configuring the maximum number of translation segments processed per LLM API call, adjustable based on the model's processing capability.
+10. **Auto-retry failed segments after translation**: After translation completes, automatically detect failed segments (source text unchanged) and trigger retranslation; defaults to 2 retry rounds, configurable by the user.
+11. **Default target language and export suffix settings**: Added default target language setting in translation settings; export filename suffix is now configurable (defaults: _translated/_converted).
+12. **Launcher auto-starts backend and frontend**: Launching the Launcher now automatically starts the backend and desktop frontend.
+13. **Portable edition includes both desktop and web frontends**: The portable edition now includes both the desktop frontend and web frontend, same as the installed version.
+
+### Optimizations
+
+1. **Portable edition multi-file layout**: Changed portable edition from single-file to multi-file to reduce startup time.
+2. **Removed heading font size processing in PDF export**: Cancelled title and subtitle font size processing in exported PDF translation files to avoid font size confusion caused by MinerU incorrectly identifying headings.
+3. **Table export defaults to image**: Exported tables now use images by default.
+4. **MinerU source language descriptions**: In MinerU's source language options, provide detailed descriptions of languages supported by the selected model.
+5. **Home and toolbar button styling**: Optimized the appearance of home page buttons and toolbar buttons.
+6. **Translation timeout in LLM settings**: Moved translation timeout configuration into LLM settings so different models can have different timeout values.
+7. **Startup config loading optimization**: Shared an inflight future among multiple config file callers at startup to avoid redundant loading and reduce startup time.
+8. **Startup stats rendering optimization**: Reused ConfigService's Dio instance for fetching info at startup, preventing translation statistics from stalling for the 30-second timeout before rendering.
+
+### Bug Fixes
+
+1. **Reading mode undo/redo refresh**: In reading mode, undo/redo changes were applied but the frontend did not refresh.
+2. **Retry button in labeled review mode**: In the task queue, when entering labeled review mode, the Retry button was unclickable, preventing LLM re-translation of failed segments.
+3. **PDF export image option for tables and formulas**: In PDF translation, when selecting image export, tables and formulas were still exported as text.
+4. **OpenAI Local communication failure**: Fixed communication failure with OpenAI Local endpoints.
+5. **Local user management create user failure**: Fixed create user failure in local user management.
+
+---
+
 ## Owlangs 1.3.4.0
 
 ### New Features

@@ -16,7 +16,6 @@ from .app_config import AppConfig, get_app_config, save_app_config, clear_app_co
 # New config structure imports
 from .system_config import SystemConfig, get_system_config, save_system_config
 from .platforms_config import PlatformsConfig, get_platforms_config, save_platforms_config
-from .ui_config import UIConfig, get_ui_config, save_ui_config
 from .secrets_manager import SecretsManager, get_secrets_manager
 from .local_config import LocalConfig
 from .config_loader import get_unified_config, save_unified_config, clear_unified_config_cache, load_all_configs
@@ -39,15 +38,12 @@ __all__ = [
     # New config structure exports
     "SystemConfig",
     "PlatformsConfig",
-    "UIConfig",
     "LocalConfig",
     "SecretsManager",
     "get_system_config",
     "save_system_config",
     "get_platforms_config",
     "save_platforms_config",
-    "get_ui_config",
-    "save_ui_config",
     "get_secrets_manager",
     "get_unified_config",
     "load_all_configs",

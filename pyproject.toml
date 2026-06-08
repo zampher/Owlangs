@@ -46,6 +46,7 @@ dependencies = [
     "latex2mathml>=3.77.0",
     "mathml2omml>=0.0.2",
     "mathml2omml-as>=0.1.0",
+    "mcp>=1.0.0",
 ]
 
 # MOBI/EPUB export: Requires the Calibre *application* (ebook-convert), NOT the PyPI package "calibre".
@@ -71,6 +72,7 @@ dev = [
 ]
 [project.scripts]
 backend = "backend.cli:main"
+owlangs = "backend.owlangs_cli:main"
 
 [build-system]
 requires = ["setuptools>=80.9.0"]

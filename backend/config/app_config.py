@@ -44,8 +44,8 @@ class AppConfig:
     # Parsing settings
     translator_convert_engine: str = "mineru"
     translator_mineru_token: str = ""
-    translator_mineru_model_version: str = "vlm"
-    translator_formula_ocr: bool = False
+    translator_mineru_model_version: str = "hybrid-auto-engine"
+    translator_formula_ocr: bool = True
     translator_table_ocr: bool = True
     
     # AI translation settings
@@ -53,15 +53,17 @@ class AppConfig:
     translator_platform_last_platform: str = "https://api.openai.com/v1"
     translator_platform_custom_base_url: str = ""
     translator_thinking_mode: str = "disable"
-    translator_target_language: str = "Chinese"
+    translator_target_language: str = "English"
+    translator_output_suffix: str = "_translated"
+    converter_output_suffix: str = "_converted"
     translator_custom_language: str = ""
     translator_custom_prompt: str = ""
     translator_temperature: float = 0.3
     translator_top_p: float = 1.0
     translator_frequency_penalty: float = 0.0
     translator_presence_penalty: float = 0.0
-    translator_chunk_token_size: int = 8000  # DEPRECATED: Use per-platform chunk_size in platforms.json instead. This global field is kept as backward-compat fallback when a platform lacks its own chunk_size.
-    translator_concurrent: int = 15  # DEPRECATED: Use per-platform concurrent in platforms.json instead. This global field is kept as backward-compat fallback when a platform lacks its own concurrent.
+    translator_chunk_token_size: int = 8000  # DEPRECATED: Use per-platform chunk_size in platforms.json instead. No longer read by any backend code.
+    translator_concurrent: int = 15  # DEPRECATED: Use per-platform concurrent in platforms.json instead. No longer read by any backend code.
     translator_connect_timeout: int = 15  # HTTP connect timeout (seconds) to reduce first-attempt ConnectTimeout
     translator_timeout: int = 120
     translator_retry: int = 2
@@ -177,7 +179,7 @@ class AppConfig:
         try:
             cfg_path = cls._resolve_app_config_path(config_file)
             if cfg_path.exists():
-                logger.info(LogModule.CONFIG, f"Loading application configuration from file: {cfg_path}")
+                logger.debug(LogModule.CONFIG, f"Loading application configuration from file: {cfg_path}")
                 with open(cfg_path, 'r', encoding='utf-8-sig') as f:
                     data = json.load(f)
 

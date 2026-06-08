@@ -28,7 +28,7 @@ def test_get_config_dict_omits_chunk_for_parser():
     cfg.platforms["mineru"] = AIPlatformConfig(
         name="MinerU (Cloud)",
         url="https://example.com",
-        model="vlm",
+        model="hybrid-auto-engine",
         platform_type="parser",
         parser_subtype="cloud",
         chunk_size=9999,

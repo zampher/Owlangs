@@ -75,7 +75,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final service = DependencyCheckService();
     final result = await service.checkDependencies();
-    if (result == null || result.allOk || !mounted) return;
+    if (result == null || !mounted) return;
+
+    // Menubar launcher already checks Homebrew/Redis/Pandoc/XeLaTeX on launch.
+    // Backend also reports optional tools (Calibre, Playwright); do not nag for those.
+    if (result.missingRequiredCount == 0) return;
 
     // Delay slightly to let the UI settle
     await Future.delayed(const Duration(seconds: 2));

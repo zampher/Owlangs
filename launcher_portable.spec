@@ -12,8 +12,21 @@ import shutil
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_all
 
-# Ensure Flutter Web frontend is built and synced before packaging
+# Ensure local source takes precedence over editable installs in the active venv
 _project_root = Path(os.getcwd())
+_project_root_str = str(_project_root)
+_project_backend_str = str(_project_root / 'backend')
+# Remove old editable-install path hooks that shadow local backend
+sys.path = [
+    p for p in sys.path
+    if not (isinstance(p, str) and 'owlangs' in p.lower() and 'editable' in p.lower())
+]
+if _project_backend_str not in sys.path:
+    sys.path.insert(0, _project_backend_str)
+if _project_root_str not in sys.path:
+    sys.path.insert(0, _project_root_str)
+
+# Ensure Flutter Web frontend is built and synced before packaging
 _frontend_build_dir = _project_root / 'frontend' / 'build' / 'web'
 _backend_flutter_dir = _project_root / 'backend' / 'static' / 'flutter-web'
 
@@ -104,6 +117,7 @@ hiddenimports = [
     'backend.utils.docx_math_fragment_llm_repair',
     'backend.utils.llm_client',
     'backend.utils.extract_segments_debug',
+    'backend.utils.bilingual_export_utils',
     'backend.utils.epub_fix',
     'backend.utils.ebook_metadata',
     # App modules
@@ -188,6 +202,44 @@ hiddenimports = [
     'extractor.html_extractor',
     # Config manager
     'backend.config_manager',
+    # MCP server modules
+    'backend.mcp_server',
+    'backend.mcp_server.server',
+    'backend.mcp_server.service_layer',
+    'backend.owlangs_cli',
+    'backend.mcp_server.tools',
+    'backend.mcp_server.tools.config_tools',
+    'backend.mcp_server.tools.translate_tools',
+    'backend.mcp_server.tools.glossary_tools',
+    'backend.mcp_server.tools.convert_tools',
+    'backend.mcp_server.resources',
+    'backend.mcp_server.resources.providers',
+    'backend.mcp_server.prompts',
+    'backend.mcp_server.prompts.templates',
+    # MCP protocol package
+    'mcp',
+    'mcp.server',
+    'mcp.server.fastmcp',
+    'mcp.server.models',
+    'mcp.server.session',
+    'mcp.server.lowlevel',
+    'mcp.shared',
+    'mcp.shared.session',
+    'mcp.shared.request_id',
+    'mcp.shared.context',
+    'mcp.types',
+    'mcp.tool',
+    'mcp.resource',
+    'mcp.prompt',
+    # MCP transport dependencies
+    'sse_starlette',
+    'sse_starlette.sse',
+    'httpx_sse',
+    'jwt',
+    'pydantic_settings',
+    'anyio',
+    'anyio.streams',
+    'anyio.streams.stapled',
     # Markdown extensions (imported by md_translator/md_splitter)
     'markdown.extensions.tables',
     'pymdownx.arithmatex',
@@ -253,8 +305,8 @@ hiddenimports = [
     'backend.app.services.glossary_generation_service',
 ]
 
-# Collect third-party resources for mobi/ebooklib
-for _pkg in ['mobi', 'ebooklib']:
+# Collect third-party resources for mobi/ebooklib/mcp
+for _pkg in ['mobi', 'ebooklib', 'mcp']:
     try:
         _pkg_datas, _, _pkg_hiddenimports = collect_all(_pkg)
         datas += _pkg_datas
@@ -280,7 +332,7 @@ custom_datas = [
     # Configuration templates
     ('./configs/system.json.template', 'configs/'),
     ('./configs/platforms.json.template', 'configs/'),
-    ('./configs/ui.json.template', 'configs/'),
+
     ('./configs/secrets.json.template', 'configs/'),
     ('./configs/local.json.template', 'configs/'),
     ('./configs/translation_config.json.template', 'configs/'),

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "owlangs": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "http://192.168.1.100:8100/mcp"
+      ]
+    }
+  }
+}

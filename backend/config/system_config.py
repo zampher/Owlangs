@@ -133,7 +133,7 @@ class SystemConfig:
             config_path = get_config_file_path(config_file)
             
             if config_path.exists():
-                logger.info(LogModule.CONFIG, f"Loading system configuration from: {config_path}")
+                logger.debug(LogModule.CONFIG, f"Loading system configuration from: {config_path}")
                 with open(config_path, 'r', encoding='utf-8-sig') as f:
                     data = json.load(f)
 
@@ -159,6 +159,10 @@ class SystemConfig:
                         LogModule.CONFIG,
                         f"Failed to merge system.json with template: {merge_err}",
                     )
+
+                # Migrate: strip legacy engines dict from parsing_engine (model info now lives in platforms.json)
+                if isinstance(data.get('parsing_engine'), dict):
+                    data['parsing_engine'].pop('engines', None)
 
                 config = cls()
                 config.update_from_dict(data)
@@ -223,7 +227,6 @@ class SystemConfig:
             pe_data = data['parsing_engine']
             self.parsing_engine = ParsingEngineConfig(
                 default_engine=pe_data.get('default_engine', 'mineru'),
-                engines=pe_data.get('engines', {}),
                 default_engine_settings=pe_data.get('default_engine_settings', {
                     "formula_ocr": False,
                     "table_ocr": True,
@@ -269,7 +272,10 @@ class SystemConfig:
         return {
             '_schema_version': self._schema_version,
             'auth': asdict(self.auth),
-            'parsing_engine': asdict(self.parsing_engine),
+            'parsing_engine': {
+                'default_engine': self.parsing_engine.default_engine,
+                'default_engine_settings': dict(self.parsing_engine.default_engine_settings),
+            },
             'logging': asdict(self.logging),
             'features': asdict(self.features),
             'pdf': asdict(self.pdf),
@@ -302,9 +308,10 @@ def get_system_config() -> SystemConfig:
 def save_system_config() -> bool:
     """Save system configuration"""
     global _system_config
-    if _system_config is not None:
-        return _system_config.save_to_file()
-    return False
+    if _system_config is None:
+        logger.warning(LogModule.CONFIG, "system.json save skipped: _system_config is None (not loaded or was cleared)")
+        return False
+    return _system_config.save_to_file()
 
 
 def clear_system_config_cache() -> None:

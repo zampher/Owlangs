@@ -512,6 +512,19 @@ def _console_port_dialog(port: int, processes: list) -> tuple:
 
 def main():
     """Main entry point for the CLI"""
+    # ── CLI mode: delegate to owlangs_cli for translate/convert/batch etc. ──
+    CLI_COMMANDS = {
+        "translate", "convert", "batch", "status", "download",
+        "cancel", "platform", "formats", "glossary", "config",
+    }
+    # Skip global flags (e.g. --json, -v) placed before the subcommand
+    _cli_idx = 1
+    while _cli_idx < len(sys.argv) and sys.argv[_cli_idx].startswith("-"):
+        _cli_idx += 1
+    if _cli_idx < len(sys.argv) and sys.argv[_cli_idx] in CLI_COMMANDS:
+        from backend.owlangs_cli import main as cli_main
+        sys.exit(cli_main())
+
     # Create parser with description that includes version info
     parser = argparse.ArgumentParser(
         description="Owlangs CLI - Command line interface for Owlangs backend"
@@ -533,6 +546,17 @@ def main():
         '-v', '--version',
         action='store_true',
         help='Show version information'
+    )
+    parser.add_argument(
+        '--mcp-port',
+        type=int,
+        default=8100,
+        help='Port for the MCP HTTP server (default: 8100)'
+    )
+    parser.add_argument(
+        '--no-mcp',
+        action='store_true',
+        help='Disable MCP server startup (start FastAPI only)'
     )
 
     # Strip multiprocessing-fork args before parse_args (PyInstaller + uvicorn reload spawns child with these)
@@ -680,6 +704,27 @@ def main():
             # Start server thread
             server_thread = threading.Thread(target=start_server, daemon=True)
             server_thread.start()
+
+            # ── MCP Server (background thread) ──────────────────────────────────────
+            mcp_port = args.mcp_port or 8100
+            if not args.no_mcp:
+                def start_mcp_server():
+                    try:
+                        from backend.mcp_server.server import mcp
+                        import uvicorn
+                        app = mcp.streamable_http_app()
+                        uvicorn.run(app, host="127.0.0.1", port=mcp_port, log_level="info")
+                    except ImportError as e:
+                        unified_logger.warning(LogModule.SYSTEM, "MCP server not available (install 'mcp' package): {err}", err=e)
+                    except Exception as e:
+                        unified_logger.warning(LogModule.SYSTEM, "MCP server failed to start (port {port}?): {err}", port=mcp_port, err=e)
+
+                mcp_thread = threading.Thread(target=start_mcp_server, daemon=True)
+                mcp_thread.start()
+                unified_logger.info(LogModule.SYSTEM, "MCP server starting on 127.0.0.1:{port}", port=mcp_port)
+            else:
+                unified_logger.info(LogModule.SYSTEM, "MCP server disabled by --no-mcp flag")
+            # ─────────────────────────────────────────────────────────────────────────
 
             # Wait for server to actually start (poll port instead of fixed sleep)
             import time

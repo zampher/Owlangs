@@ -10,13 +10,10 @@ if a translation should be considered as failed or if it's just untranslatable c
 """
 
 import re
-import logging
 from typing import Any, Dict, Tuple
 
 from logger import unified_logger as unified_logger
 from logger.logger import LogModule
-
-logger = logging.getLogger(__name__)
 
 
 def should_treat_as_failure(source: str, translated: str) -> Tuple[bool, str]:
@@ -40,7 +37,7 @@ def should_treat_as_failure(source: str, translated: str) -> Tuple[bool, str]:
     
     # Empty translation is always failure
     if not translated:
-        logger.debug(
+        unified_logger.debug(LogModule.TRANS,
             f"[TRANSLATION_FAILURE] Translation failed: empty response from AI platform\n"
             f"  Source text: {source[:500]!r}\n"
             f"  Translated text: (empty)"
@@ -63,7 +60,7 @@ def should_treat_as_failure(source: str, translated: str) -> Tuple[bool, str]:
     # If source has significant translatable content (>30%), it's a failure
     # OR if source contains CJK characters (which should always be translated), it's a failure
     if translatable_ratio > 0.3 or (has_cjk and source_length > 3):
-        logger.debug(
+        unified_logger.debug(LogModule.TRANS,
             f"[TRANSLATION_FAILURE] Translation failed: response same as source\n"
             f"  Source text: {source[:500]!r}\n"
             f"  Translated text: {translated[:500]!r}\n"
@@ -77,7 +74,7 @@ def should_treat_as_failure(source: str, translated: str) -> Tuple[bool, str]:
         if translatable_ratio < 0.3:
             return False, "Content likely doesn't need translation (short numeric/punctuation)"
         # Even short texts with translatable content should be translated
-        logger.debug(
+        unified_logger.debug(LogModule.TRANS,
             f"[TRANSLATION_FAILURE] Translation failed: response same as source\n"
             f"  Source text: {source[:500]!r}\n"
             f"  Translated text: {translated[:500]!r}\n"
@@ -88,7 +85,7 @@ def should_treat_as_failure(source: str, translated: str) -> Tuple[bool, str]:
     # For longer texts (4+ chars), if same but has some translatable content (>10%),
     # it's likely a failure
     if translatable_ratio > 0.1:
-        logger.debug(
+        unified_logger.debug(LogModule.TRANS,
             f"[TRANSLATION_FAILURE] Translation failed: response same as source\n"
             f"  Source text: {source[:500]!r}\n"
             f"  Translated text: {translated[:500]!r}\n"
@@ -99,7 +96,7 @@ def should_treat_as_failure(source: str, translated: str) -> Tuple[bool, str]:
     # Very long text with low translatable ratio might be special cases
     # (e.g., code, special formatting), but we'll be conservative and mark as failure
     if source_length > 10:
-        logger.debug(
+        unified_logger.debug(LogModule.TRANS,
             f"[TRANSLATION_FAILURE] Translation failed: response same as source (long text)\n"
             f"  Source text: {source[:500]!r}\n"
             f"  Translated text: {translated[:500]!r}\n"
@@ -108,7 +105,7 @@ def should_treat_as_failure(source: str, translated: str) -> Tuple[bool, str]:
         return True, "Translation failed: platform returned untranslated content"
     
     # Default: if same text and low translatable ratio, probably doesn't need translation
-    logger.debug(
+    unified_logger.debug(LogModule.TRANS,
         f"[TRANSLATION_FAILURE] NOT marking as failure: "
         f"source='{source[:100]}...', length={source_length}, "
         f"translatable_ratio={translatable_ratio:.2%}"

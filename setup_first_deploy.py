@@ -59,7 +59,6 @@ def setup_first_deploy():
     config_files = {
         'system.json': 'System configuration',
         'platforms.json': 'Platforms configuration',
-        'ui.json': 'UI configuration',
         'secrets.json': 'Secrets configuration',
         'local.json': 'Local configuration',
         'app_config.json': 'Application configuration'

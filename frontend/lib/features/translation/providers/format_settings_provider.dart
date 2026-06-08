@@ -11,27 +11,76 @@ class FormatSettings {
   const FormatSettings({
     this.tableFormat,
     this.equationFormat,
+    this.bilingualExport,
+    this.bilingualOrder,
+    this.sourceTextItalic,
+    this.sourceTextColor,
+    this.targetTextItalic,
+    this.targetTextColor,
   });
 
   /// Table format: 'html' or 'image'
-  /// Default: 'html' (matches backend default)
+  /// Default: 'html' for non-PDF; 'image' for PDF layout workflow
   final String? tableFormat;
 
   /// Equation format: 'text', 'latex', or 'image'
-  /// Default: 'text' (matches backend default)
+  /// UI radios use 'text' for LaTeX; default is 'text' (LaTeX)
   final String? equationFormat;
 
-  /// Get table format with default fallback
-  String getTableFormat() => tableFormat ?? 'html';
+  /// Bilingual export: true or false
+  /// When true, both source and target text are exported
+  final bool? bilingualExport;
 
-  /// Get equation format with default fallback
-  String getEquationFormat() => equationFormat ?? 'text';
+  /// Bilingual order: 'target_after_source' or 'target_before_source'
+  final String? bilingualOrder;
+
+  /// Source text italic: true or false
+  /// When true, source text paragraphs are rendered in italic
+  final bool? sourceTextItalic;
+
+  /// Source text color: preset name ('gray', 'blue', 'red', 'green', 'orange', 'black')
+  final String? sourceTextColor;
+
+  /// Target text italic: true or false
+  /// When true, target text paragraphs are rendered in italic
+  final bool? targetTextItalic;
+
+  /// Target text color: preset name ('gray', 'blue', 'red', 'green', 'orange', 'black')
+  final String? targetTextColor;
+
+  /// Get table format with default fallback
+  String getTableFormat({bool isPdfWorkflow = false}) =>
+      tableFormat ?? (isPdfWorkflow ? 'image' : 'html');
+
+  /// Get equation format with default fallback (UI radio values: text=LaTeX, image=Image)
+  String getEquationFormat({bool isPdfWorkflow = false}) {
+    final String? stored = equationFormat;
+    if (stored != null) {
+      // Backend may store 'latex'; UI radios use 'text' for LaTeX
+      if (stored == 'latex') return 'text';
+      return stored;
+    }
+    // LaTeX default (stored/sent as 'text' in UI; backend also accepts 'latex')
+    return 'text';
+  }
 
   FormatSettings copyWith({
     String? tableFormat,
     String? equationFormat,
+    bool? bilingualExport,
+    String? bilingualOrder,
+    bool? sourceTextItalic,
+    String? sourceTextColor,
+    bool? targetTextItalic,
+    String? targetTextColor,
     bool clearTableFormat = false,
     bool clearEquationFormat = false,
+    bool clearBilingualExport = false,
+    bool clearBilingualOrder = false,
+    bool clearSourceTextItalic = false,
+    bool clearSourceTextColor = false,
+    bool clearTargetTextItalic = false,
+    bool clearTargetTextColor = false,
   }) =>
       FormatSettings(
         tableFormat:
@@ -39,6 +88,24 @@ class FormatSettings {
         equationFormat: clearEquationFormat
             ? null
             : (equationFormat ?? this.equationFormat),
+        bilingualExport: clearBilingualExport
+            ? null
+            : (bilingualExport ?? this.bilingualExport),
+        bilingualOrder: clearBilingualOrder
+            ? null
+            : (bilingualOrder ?? this.bilingualOrder),
+        sourceTextItalic: clearSourceTextItalic
+            ? null
+            : (sourceTextItalic ?? this.sourceTextItalic),
+        sourceTextColor: clearSourceTextColor
+            ? null
+            : (sourceTextColor ?? this.sourceTextColor),
+        targetTextItalic: clearTargetTextItalic
+            ? null
+            : (targetTextItalic ?? this.targetTextItalic),
+        targetTextColor: clearTargetTextColor
+            ? null
+            : (targetTextColor ?? this.targetTextColor),
       );
 
   @override
@@ -47,10 +114,24 @@ class FormatSettings {
       other is FormatSettings &&
           runtimeType == other.runtimeType &&
           tableFormat == other.tableFormat &&
-          equationFormat == other.equationFormat;
+          equationFormat == other.equationFormat &&
+          bilingualExport == other.bilingualExport &&
+          bilingualOrder == other.bilingualOrder &&
+          sourceTextItalic == other.sourceTextItalic &&
+          sourceTextColor == other.sourceTextColor &&
+          targetTextItalic == other.targetTextItalic &&
+          targetTextColor == other.targetTextColor;
 
   @override
-  int get hashCode => tableFormat.hashCode ^ equationFormat.hashCode;
+  int get hashCode =>
+      tableFormat.hashCode ^
+      equationFormat.hashCode ^
+      bilingualExport.hashCode ^
+      bilingualOrder.hashCode ^
+      sourceTextItalic.hashCode ^
+      sourceTextColor.hashCode ^
+      targetTextItalic.hashCode ^
+      targetTextColor.hashCode;
 }
 
 /// Notifier for managing format settings per task
@@ -78,11 +159,23 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
 
       final String? tableFormat = flowSettings['table_body_format'] as String?;
       final String? equationFormat = flowSettings['equation_format'] as String?;
+      final bool? bilingualExport = flowSettings['bilingual_export'] as bool?;
+      final String? bilingualOrder = flowSettings['bilingual_order'] as String?;
+      final bool? sourceTextItalic = flowSettings['source_text_italic'] as bool?;
+      final String? sourceTextColor = flowSettings['source_text_color'] as String?;
+      final bool? targetTextItalic = flowSettings['target_text_italic'] as bool?;
+      final String? targetTextColor = flowSettings['target_text_color'] as String?;
 
-      if (tableFormat != null || equationFormat != null) {
+      if (tableFormat != null || equationFormat != null || bilingualExport != null || bilingualOrder != null || sourceTextItalic != null || sourceTextColor != null || targetTextItalic != null || targetTextColor != null) {
         state = FormatSettings(
           tableFormat: tableFormat,
           equationFormat: equationFormat,
+          bilingualExport: bilingualExport,
+          bilingualOrder: bilingualOrder,
+          sourceTextItalic: sourceTextItalic,
+          sourceTextColor: sourceTextColor,
+          targetTextItalic: targetTextItalic,
+          targetTextColor: targetTextColor,
         );
         return; // Use Flow state settings
       }
@@ -109,11 +202,29 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
           prefs.getString('format_settings_table_default');
       final String? equationFormat =
           prefs.getString('format_settings_equation_default');
+      final bool? bilingualExport =
+          prefs.getBool('format_settings_bilingual_export_default');
+      final String? bilingualOrder =
+          prefs.getString('format_settings_bilingual_order_default');
+      final bool? sourceTextItalic =
+          prefs.getBool('format_settings_source_text_italic_default');
+      final String? sourceTextColor =
+          prefs.getString('format_settings_source_text_color_default');
+      final bool? targetTextItalic =
+          prefs.getBool('format_settings_target_text_italic_default');
+      final String? targetTextColor =
+          prefs.getString('format_settings_target_text_color_default');
 
-      if (tableFormat != null || equationFormat != null) {
+      if (tableFormat != null || equationFormat != null || bilingualExport != null || bilingualOrder != null || sourceTextItalic != null || sourceTextColor != null || targetTextItalic != null || targetTextColor != null) {
         state = FormatSettings(
           tableFormat: tableFormat,
           equationFormat: equationFormat,
+          bilingualExport: bilingualExport,
+          bilingualOrder: bilingualOrder,
+          sourceTextItalic: sourceTextItalic,
+          sourceTextColor: sourceTextColor,
+          targetTextItalic: targetTextItalic,
+          targetTextColor: targetTextColor,
         );
       }
       // If no user defaults, use code defaults (already set in super constructor)
@@ -145,6 +256,54 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
         // Clear if set to null (use code default)
         await prefs.remove('format_settings_equation_default');
       }
+      if (state.bilingualExport != null) {
+        await prefs.setBool(
+          'format_settings_bilingual_export_default',
+          state.bilingualExport!,
+        );
+      } else {
+        await prefs.remove('format_settings_bilingual_export_default');
+      }
+      if (state.bilingualOrder != null) {
+        await prefs.setString(
+          'format_settings_bilingual_order_default',
+          state.bilingualOrder!,
+        );
+      } else {
+        await prefs.remove('format_settings_bilingual_order_default');
+      }
+      if (state.sourceTextItalic != null) {
+        await prefs.setBool(
+          'format_settings_source_text_italic_default',
+          state.sourceTextItalic!,
+        );
+      } else {
+        await prefs.remove('format_settings_source_text_italic_default');
+      }
+      if (state.sourceTextColor != null) {
+        await prefs.setString(
+          'format_settings_source_text_color_default',
+          state.sourceTextColor!,
+        );
+      } else {
+        await prefs.remove('format_settings_source_text_color_default');
+      }
+      if (state.targetTextItalic != null) {
+        await prefs.setBool(
+          'format_settings_target_text_italic_default',
+          state.targetTextItalic!,
+        );
+      } else {
+        await prefs.remove('format_settings_target_text_italic_default');
+      }
+      if (state.targetTextColor != null) {
+        await prefs.setString(
+          'format_settings_target_text_color_default',
+          state.targetTextColor!,
+        );
+      } else {
+        await prefs.remove('format_settings_target_text_color_default');
+      }
     } catch (e) {
       // Silently fail to avoid disrupting user experience
     }
@@ -166,18 +325,72 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
     state = state.copyWith(equationFormat: format);
   }
 
+  /// Set bilingual export enabled
+  void setBilingualExport(bool enabled) {
+    state = state.copyWith(bilingualExport: enabled);
+  }
+
+  /// Set bilingual order
+  void setBilingualOrder(String order) {
+    if (order != 'target_after_source' && order != 'target_before_source') {
+      return; // Invalid order
+    }
+    state = state.copyWith(bilingualOrder: order);
+  }
+
+  /// Set source text italic
+  void setSourceTextItalic(bool enabled) {
+    state = state.copyWith(sourceTextItalic: enabled);
+  }
+
+  /// Set source text color
+  void setSourceTextColor(String color) {
+    final validColors = <String>{'gray', 'blue', 'red', 'green', 'orange', 'black'};
+    // Empty string means default (no color override)
+    if (color.isNotEmpty && !validColors.contains(color)) {
+      return; // Invalid color
+    }
+    state = state.copyWith(sourceTextColor: color);
+  }
+
+  /// Set target text italic
+  void setTargetTextItalic(bool enabled) {
+    state = state.copyWith(targetTextItalic: enabled);
+  }
+
+  /// Set target text color
+  void setTargetTextColor(String color) {
+    final validColors = <String>{'gray', 'blue', 'red', 'green', 'orange', 'black'};
+    if (!validColors.contains(color)) {
+      return; // Invalid color
+    }
+    state = state.copyWith(targetTextColor: color);
+  }
+
   /// Set both formats
   void setFormats({
     String? tableFormat,
     String? equationFormat,
+    bool? bilingualExport,
+    String? bilingualOrder,
+    bool? sourceTextItalic,
+    String? sourceTextColor,
+    bool? targetTextItalic,
+    String? targetTextColor,
   }) {
     state = state.copyWith(
       tableFormat: tableFormat,
       equationFormat: equationFormat,
+      bilingualExport: bilingualExport,
+      bilingualOrder: bilingualOrder,
+      sourceTextItalic: sourceTextItalic,
+      sourceTextColor: sourceTextColor,
+      targetTextItalic: targetTextItalic,
+      targetTextColor: targetTextColor,
     );
     // Save to Flow state if taskId is available
     if (taskId != null) {
-      _saveToFlowState(tableFormat, equationFormat);
+      _saveToFlowState(tableFormat, equationFormat, bilingualExport, bilingualOrder, sourceTextItalic, sourceTextColor, targetTextItalic, targetTextColor);
     }
   }
 
@@ -185,6 +398,12 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
   Future<void> _saveToFlowState(
     String? tableFormat,
     String? equationFormat,
+    bool? bilingualExport,
+    String? bilingualOrder,
+    bool? sourceTextItalic,
+    String? sourceTextColor,
+    bool? targetTextItalic,
+    String? targetTextColor,
   ) async {
     if (taskId == null) {
       return; // No taskId, cannot save to Flow state
@@ -196,6 +415,12 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
         taskId!,
         tableBodyFormat: tableFormat,
         equationFormat: equationFormat,
+        bilingualExport: bilingualExport,
+        bilingualOrder: bilingualOrder,
+        sourceTextItalic: sourceTextItalic,
+        sourceTextColor: sourceTextColor,
+        targetTextItalic: targetTextItalic,
+        targetTextColor: targetTextColor,
       );
     } catch (e) {
       // Silently fail to avoid disrupting user experience

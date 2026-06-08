@@ -539,7 +539,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationToolbarSwitchToText.
   ///
   /// In en, this message translates to:
-  /// **'Switch to Text'**
+  /// **'Enter Text'**
   String get translationToolbarSwitchToText;
 
   /// No description provided for @translationStatusCompleted.
@@ -668,6 +668,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Translated'**
   String get translationStatsTranslatedLabel;
+
+  /// No description provided for @translationStatsPendingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get translationStatsPendingLabel;
+
+  /// No description provided for @translationStatsClearedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleared'**
+  String get translationStatsClearedLabel;
+
+  /// No description provided for @translationStatsImagesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Images'**
+  String get translationStatsImagesLabel;
 
   /// No description provided for @translationStatsLoadingContent.
   ///
@@ -939,6 +957,12 @@ abstract class AppLocalizations {
   /// **'Export Document'**
   String get translationExportDialogTitle;
 
+  /// No description provided for @translationExportDocumentType.
+  ///
+  /// In en, this message translates to:
+  /// **'Document Type'**
+  String get translationExportDocumentType;
+
   /// No description provided for @translationExportFormatOptionsTitle.
   ///
   /// In en, this message translates to:
@@ -980,6 +1004,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'LaTeX'**
   String get translationExportEquationFormatLatex;
+
+  /// No description provided for @translationExportBilingualExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Bilingual Export'**
+  String get translationExportBilingualExport;
+
+  /// No description provided for @translationExportBilingualOrderTargetAfter.
+  ///
+  /// In en, this message translates to:
+  /// **'Source First'**
+  String get translationExportBilingualOrderTargetAfter;
+
+  /// No description provided for @translationExportBilingualOrderTargetAfterSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Source first, target after'**
+  String get translationExportBilingualOrderTargetAfterSub;
+
+  /// No description provided for @translationExportBilingualOrderTargetBefore.
+  ///
+  /// In en, this message translates to:
+  /// **'Target Before Source'**
+  String get translationExportBilingualOrderTargetBefore;
+
+  /// No description provided for @translationExportBilingualOrderTargetBeforeSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Target first, source after'**
+  String get translationExportBilingualOrderTargetBeforeSub;
+
+  /// No description provided for @translationExportSourceTextItalic.
+  ///
+  /// In en, this message translates to:
+  /// **'Source text italic'**
+  String get translationExportSourceTextItalic;
+
+  /// No description provided for @translationExportSourceTextColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Source text color:'**
+  String get translationExportSourceTextColor;
+
+  /// No description provided for @translationExportTargetTextItalic.
+  ///
+  /// In en, this message translates to:
+  /// **'Target text italic'**
+  String get translationExportTargetTextItalic;
+
+  /// No description provided for @translationExportTargetTextColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Target text color:'**
+  String get translationExportTargetTextColor;
+
+  /// No description provided for @translationExportColorDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get translationExportColorDefault;
+
+  /// No description provided for @translationExportColorGray.
+  ///
+  /// In en, this message translates to:
+  /// **'Gray'**
+  String get translationExportColorGray;
+
+  /// No description provided for @translationExportColorBlue.
+  ///
+  /// In en, this message translates to:
+  /// **'Blue'**
+  String get translationExportColorBlue;
+
+  /// No description provided for @translationExportColorRed.
+  ///
+  /// In en, this message translates to:
+  /// **'Red'**
+  String get translationExportColorRed;
+
+  /// No description provided for @translationExportColorGreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Green'**
+  String get translationExportColorGreen;
+
+  /// No description provided for @translationExportColorOrange.
+  ///
+  /// In en, this message translates to:
+  /// **'Orange'**
+  String get translationExportColorOrange;
+
+  /// No description provided for @translationExportColorBlack.
+  ///
+  /// In en, this message translates to:
+  /// **'Black'**
+  String get translationExportColorBlack;
+
+  /// No description provided for @translationExportDownloadButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get translationExportDownloadButton;
+
+  /// No description provided for @translationExportMdEmbeddedImages.
+  ///
+  /// In en, this message translates to:
+  /// **'MD (Embedded Images)'**
+  String get translationExportMdEmbeddedImages;
+
+  /// No description provided for @translationExportMdWithImagesFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'MD (With Images Folder)'**
+  String get translationExportMdWithImagesFolder;
 
   /// No description provided for @translationLeftPanelExpandTooltip.
   ///
@@ -1334,7 +1472,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationQuickSettingsTitle.
   ///
   /// In en, this message translates to:
-  /// **'Translation Quick Settings'**
+  /// **'Quick Settings'**
   String get translationQuickSettingsTitle;
 
   /// No description provided for @quickSettingsTargetLanguage.
@@ -1703,16 +1841,34 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get homeBackendRetry;
 
+  /// No description provided for @homeNewTask.
+  ///
+  /// In en, this message translates to:
+  /// **'New task'**
+  String get homeNewTask;
+
+  /// No description provided for @homeNewTaskImmersiveTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare source and translation side by side in the UI'**
+  String get homeNewTaskImmersiveTooltip;
+
+  /// No description provided for @homeNewTaskQueuedTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch import files and run the full pipeline in order'**
+  String get homeNewTaskQueuedTooltip;
+
   /// No description provided for @homeNavTranslate.
   ///
   /// In en, this message translates to:
-  /// **'Immersive translation'**
+  /// **'Immersive task'**
   String get homeNavTranslate;
 
   /// No description provided for @homeNavTranslationQueue.
   ///
   /// In en, this message translates to:
-  /// **'Task queue'**
+  /// **'Tasks'**
   String get homeNavTranslationQueue;
 
   /// No description provided for @homeNavAnonymize.
@@ -1730,8 +1886,14 @@ abstract class AppLocalizations {
   /// No description provided for @homeNavDonateHelp.
   ///
   /// In en, this message translates to:
-  /// **'Donate & Help'**
+  /// **'Help'**
   String get homeNavDonateHelp;
+
+  /// No description provided for @homeNavDonate.
+  ///
+  /// In en, this message translates to:
+  /// **'Donate'**
+  String get homeNavDonate;
 
   /// No description provided for @homeNavHome.
   ///
@@ -1744,6 +1906,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Batch upload'**
   String get homeNavBatchUpload;
+
+  /// No description provided for @homeNavTooltipNewTask.
+  ///
+  /// In en, this message translates to:
+  /// **'Start a new translation — immersive side-by-side, or queued batch processing'**
+  String get homeNavTooltipNewTask;
+
+  /// No description provided for @homeNavTooltipTasks.
+  ///
+  /// In en, this message translates to:
+  /// **'View and manage all translation tasks, download completed results'**
+  String get homeNavTooltipTasks;
+
+  /// No description provided for @homeNavTooltipAnonymize.
+  ///
+  /// In en, this message translates to:
+  /// **'Anonymize document content to protect sensitive information'**
+  String get homeNavTooltipAnonymize;
+
+  /// No description provided for @homeNavTooltipSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure language, theme, notifications and more'**
+  String get homeNavTooltipSettings;
+
+  /// No description provided for @homeNavTooltipSetupWizard.
+  ///
+  /// In en, this message translates to:
+  /// **'Guided setup wizard to configure your translation environment'**
+  String get homeNavTooltipSetupWizard;
+
+  /// No description provided for @homeNavTooltipHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Get help and technical support'**
+  String get homeNavTooltipHelp;
+
+  /// No description provided for @homeNavTooltipDonate.
+  ///
+  /// In en, this message translates to:
+  /// **'Support our open source project'**
+  String get homeNavTooltipDonate;
+
+  /// No description provided for @homeNavTooltipHome.
+  ///
+  /// In en, this message translates to:
+  /// **'Return to home page'**
+  String get homeNavTooltipHome;
+
+  /// No description provided for @homeNavTooltipGitHub.
+  ///
+  /// In en, this message translates to:
+  /// **'View source code on GitHub — star us if you find it useful!'**
+  String get homeNavTooltipGitHub;
 
   /// No description provided for @batchUploadTitle.
   ///
@@ -1792,6 +2008,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Select file'**
   String get batchUploadSelectSingleFile;
+
+  /// No description provided for @batchUploadSingleFileDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a single file to translate'**
+  String get batchUploadSingleFileDescription;
+
+  /// No description provided for @batchUploadAddFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Add files'**
+  String get batchUploadAddFiles;
 
   /// No description provided for @batchUploadFilesFound.
   ///
@@ -2036,8 +2264,14 @@ abstract class AppLocalizations {
   /// No description provided for @translationQueueNewQueuedTask.
   ///
   /// In en, this message translates to:
-  /// **'Queued translation'**
+  /// **'Queued task'**
   String get translationQueueNewQueuedTask;
+
+  /// No description provided for @translationQueueImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get translationQueueImport;
 
   /// No description provided for @translationQueueBackToQueueTooltip.
   ///
@@ -2249,11 +2483,71 @@ abstract class AppLocalizations {
   /// **'Could not clear your queue: {error}'**
   String translationQueueClearMyQueueFailed(Object error);
 
+  /// No description provided for @translationQueueErrorMessageCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Error message copied'**
+  String get translationQueueErrorMessageCopied;
+
+  /// No description provided for @translationQueueSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'selected'**
+  String get translationQueueSelected;
+
+  /// No description provided for @translationQueueSelectMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get translationQueueSelectMode;
+
+  /// No description provided for @translationQueueClearSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear selection'**
+  String get translationQueueClearSelection;
+
+  /// No description provided for @translationQueueBatchDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch download failed: {error}'**
+  String translationQueueBatchDownloadFailed(Object error);
+
+  /// No description provided for @translationQueueBatchDownloadSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch download: {fileType} ready'**
+  String translationQueueBatchDownloadSuccess(Object fileType);
+
   /// No description provided for @translationQueueView.
   ///
   /// In en, this message translates to:
   /// **'Reading Edit'**
   String get translationQueueView;
+
+  /// No description provided for @translationQueueViewSourcePath.
+  ///
+  /// In en, this message translates to:
+  /// **'View original file path'**
+  String get translationQueueViewSourcePath;
+
+  /// No description provided for @translationQueueSourcePathTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Source File Path'**
+  String get translationQueueSourcePathTitle;
+
+  /// No description provided for @translationQueueFileNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'File Name'**
+  String get translationQueueFileNameLabel;
+
+  /// No description provided for @translationQueueRelativePathLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Relative Path'**
+  String get translationQueueRelativePathLabel;
 
   /// No description provided for @homeFeatureUnderDevelopment.
   ///
@@ -2330,7 +2624,7 @@ abstract class AppLocalizations {
   /// No description provided for @homePhaseViewer.
   ///
   /// In en, this message translates to:
-  /// **'Viewer'**
+  /// **'Revise'**
   String get homePhaseViewer;
 
   /// No description provided for @homePhaseAnonymize.
@@ -2350,6 +2644,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Export'**
   String get homePhaseExport;
+
+  /// No description provided for @taskDefaultTitleTranslate.
+  ///
+  /// In en, this message translates to:
+  /// **'Task'**
+  String get taskDefaultTitleTranslate;
+
+  /// No description provided for @taskDefaultTitleAnonymize.
+  ///
+  /// In en, this message translates to:
+  /// **'Anonymization'**
+  String get taskDefaultTitleAnonymize;
 
   /// No description provided for @homeReleaseNotesTitle.
   ///
@@ -2699,6 +3005,18 @@ abstract class AppLocalizations {
   /// **'Enable OCR for tables'**
   String get settingsTableOcrSubtitle;
 
+  /// No description provided for @settingsMineruModelVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Model Version'**
+  String get settingsMineruModelVersion;
+
+  /// No description provided for @settingsMineruModelVersionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select the MinerU parsing mode (pipeline, vlm-auto-engine, hybrid-auto-engine, vlm-http-client, or hybrid-http-client)'**
+  String get settingsMineruModelVersionSubtitle;
+
   /// No description provided for @settingsAnonymizationNewTaskNotice.
   ///
   /// In en, this message translates to:
@@ -2806,6 +3124,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Arabic'**
   String get settingsOcrLangArabic;
+
+  /// No description provided for @settingsOcrLangAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto Detect'**
+  String get settingsOcrLangAuto;
+
+  /// No description provided for @mineruLangAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto Detect'**
+  String get mineruLangAuto;
+
+  /// No description provided for @mineruLangChServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Chinese (Server)'**
+  String get mineruLangChServer;
+
+  /// No description provided for @mineruLangChLite.
+  ///
+  /// In en, this message translates to:
+  /// **'Chinese (Lite)'**
+  String get mineruLangChLite;
+
+  /// No description provided for @mineruLangTamil.
+  ///
+  /// In en, this message translates to:
+  /// **'Tamil'**
+  String get mineruLangTamil;
+
+  /// No description provided for @mineruLangTelugu.
+  ///
+  /// In en, this message translates to:
+  /// **'Telugu'**
+  String get mineruLangTelugu;
+
+  /// No description provided for @mineruLangKannada.
+  ///
+  /// In en, this message translates to:
+  /// **'Kannada'**
+  String get mineruLangKannada;
+
+  /// No description provided for @mineruLangLatinScript.
+  ///
+  /// In en, this message translates to:
+  /// **'Latin Script'**
+  String get mineruLangLatinScript;
+
+  /// No description provided for @mineruLangArabicScript.
+  ///
+  /// In en, this message translates to:
+  /// **'Arabic Script'**
+  String get mineruLangArabicScript;
+
+  /// No description provided for @mineruLangEastSlavic.
+  ///
+  /// In en, this message translates to:
+  /// **'East Slavic'**
+  String get mineruLangEastSlavic;
+
+  /// No description provided for @mineruLangCyrillicScript.
+  ///
+  /// In en, this message translates to:
+  /// **'Cyrillic Script'**
+  String get mineruLangCyrillicScript;
+
+  /// No description provided for @mineruLangDevanagariScript.
+  ///
+  /// In en, this message translates to:
+  /// **'Devanagari Script'**
+  String get mineruLangDevanagariScript;
 
   /// No description provided for @settingsTabsGlossary.
   ///
@@ -3692,6 +4082,228 @@ abstract class AppLocalizations {
   /// **'Save failed: {message}'**
   String settingsUserManagementSaveFailed(Object message);
 
+  /// No description provided for @settingsLocalUsersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Local Users'**
+  String get settingsLocalUsersTitle;
+
+  /// No description provided for @settingsLocalUsersAddUser.
+  ///
+  /// In en, this message translates to:
+  /// **'Add user'**
+  String get settingsLocalUsersAddUser;
+
+  /// No description provided for @settingsLocalUsersNoUsers.
+  ///
+  /// In en, this message translates to:
+  /// **'No local users found.'**
+  String get settingsLocalUsersNoUsers;
+
+  /// No description provided for @settingsLocalUsersDialogAddTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add local user'**
+  String get settingsLocalUsersDialogAddTitle;
+
+  /// No description provided for @settingsLocalUsersDialogEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit local user'**
+  String get settingsLocalUsersDialogEditTitle;
+
+  /// No description provided for @settingsLocalUsersFieldUsername.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get settingsLocalUsersFieldUsername;
+
+  /// No description provided for @settingsLocalUsersFieldDisplayName.
+  ///
+  /// In en, this message translates to:
+  /// **'Display name (optional)'**
+  String get settingsLocalUsersFieldDisplayName;
+
+  /// No description provided for @settingsLocalUsersFieldEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Email (optional)'**
+  String get settingsLocalUsersFieldEmail;
+
+  /// No description provided for @settingsLocalUsersFieldRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Role'**
+  String get settingsLocalUsersFieldRole;
+
+  /// No description provided for @settingsLocalUsersRoleUser.
+  ///
+  /// In en, this message translates to:
+  /// **'User'**
+  String get settingsLocalUsersRoleUser;
+
+  /// No description provided for @settingsLocalUsersRoleAdmin.
+  ///
+  /// In en, this message translates to:
+  /// **'Admin'**
+  String get settingsLocalUsersRoleAdmin;
+
+  /// No description provided for @settingsLocalUsersFieldPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get settingsLocalUsersFieldPassword;
+
+  /// No description provided for @settingsLocalUsersPasswordHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'8-128 chars, upper, lower, digit'**
+  String get settingsLocalUsersPasswordHelper;
+
+  /// No description provided for @settingsLocalUsersValidationUsernameRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Username is required'**
+  String get settingsLocalUsersValidationUsernameRequired;
+
+  /// No description provided for @settingsLocalUsersValidationPasswordRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Password is required'**
+  String get settingsLocalUsersValidationPasswordRequired;
+
+  /// No description provided for @settingsLocalUsersValidationPasswordTooShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must be at least 8 characters'**
+  String get settingsLocalUsersValidationPasswordTooShort;
+
+  /// No description provided for @settingsLocalUsersValidationPasswordTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must be no more than 128 characters'**
+  String get settingsLocalUsersValidationPasswordTooLong;
+
+  /// No description provided for @settingsLocalUsersValidationPasswordComplexity.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must contain uppercase, lowercase, and digit'**
+  String get settingsLocalUsersValidationPasswordComplexity;
+
+  /// No description provided for @settingsLocalUsersOperationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Operation failed'**
+  String get settingsLocalUsersOperationFailed;
+
+  /// No description provided for @settingsLocalUsersResetPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset password'**
+  String get settingsLocalUsersResetPassword;
+
+  /// No description provided for @settingsLocalUsersResetPasswordTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset password: {username}'**
+  String settingsLocalUsersResetPasswordTitle(Object username);
+
+  /// No description provided for @settingsLocalUsersFieldNewPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'New password'**
+  String get settingsLocalUsersFieldNewPassword;
+
+  /// No description provided for @settingsLocalUsersPasswordResetSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Password reset successfully'**
+  String get settingsLocalUsersPasswordResetSuccess;
+
+  /// No description provided for @settingsLocalUsersPasswordResetFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to reset password'**
+  String get settingsLocalUsersPasswordResetFailed;
+
+  /// No description provided for @settingsLocalUsersDeleteUser.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get settingsLocalUsersDeleteUser;
+
+  /// No description provided for @settingsLocalUsersDeleteUserTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete user: {username}'**
+  String settingsLocalUsersDeleteUserTitle(Object username);
+
+  /// No description provided for @settingsLocalUsersDeleteConfirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'This action will permanently delete the user from local user store. This cannot be undone.'**
+  String get settingsLocalUsersDeleteConfirmation;
+
+  /// No description provided for @settingsLocalUsersDeleteSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'User deleted'**
+  String get settingsLocalUsersDeleteSuccess;
+
+  /// No description provided for @settingsLocalUsersDeleteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to delete user'**
+  String get settingsLocalUsersDeleteFailed;
+
+  /// No description provided for @settingsLocalUsersEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get settingsLocalUsersEdit;
+
+  /// No description provided for @settingsLocalUsersCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get settingsLocalUsersCancel;
+
+  /// No description provided for @settingsLocalUsersSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get settingsLocalUsersSave;
+
+  /// No description provided for @settingsLocalUsersConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get settingsLocalUsersConfirm;
+
+  /// No description provided for @settingsLocalUsersTableUsername.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get settingsLocalUsersTableUsername;
+
+  /// No description provided for @settingsLocalUsersTableDisplayName.
+  ///
+  /// In en, this message translates to:
+  /// **'Display name'**
+  String get settingsLocalUsersTableDisplayName;
+
+  /// No description provided for @settingsLocalUsersTableEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Email'**
+  String get settingsLocalUsersTableEmail;
+
+  /// No description provided for @settingsLocalUsersTableRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Role'**
+  String get settingsLocalUsersTableRole;
+
   /// No description provided for @settingsLdapEnabled.
   ///
   /// In en, this message translates to:
@@ -4172,35 +4784,11 @@ abstract class AppLocalizations {
   /// **'UI Language'**
   String get setupWizardUiLanguageLabel;
 
-  /// No description provided for @setupWizardMineruQuestion.
-  ///
-  /// In en, this message translates to:
-  /// **'Do you need to translate PDF / images on this device?'**
-  String get setupWizardMineruQuestion;
-
-  /// No description provided for @setupWizardMineruYes.
-  ///
-  /// In en, this message translates to:
-  /// **'Yes (recommended; enables MinerU document parsing)'**
-  String get setupWizardMineruYes;
-
-  /// No description provided for @setupWizardMineruNo.
-  ///
-  /// In en, this message translates to:
-  /// **'Not for now (LLM-only translation for plain text, etc.)'**
-  String get setupWizardMineruNo;
-
   /// No description provided for @setupWizardMineruDescription.
   ///
   /// In en, this message translates to:
   /// **'MinerU handles layout parsing and segmentation for PDF / images.\nEnter MinerU API Key and URL below, then click \"Test Connection\" to verify.'**
   String get setupWizardMineruDescription;
-
-  /// No description provided for @setupWizardMineruSkipped.
-  ///
-  /// In en, this message translates to:
-  /// **'You chose not to configure MinerU. You can enable PDF translation later in Settings.'**
-  String get setupWizardMineruSkipped;
 
   /// No description provided for @setupWizardMineruConfigTitle.
   ///
@@ -4303,6 +4891,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enable AI reasoning process for better translation quality'**
   String get aiPlatformThinkingHint;
+
+  /// No description provided for @aiPlatformThinkingModeSupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Support Thinking Mode'**
+  String get aiPlatformThinkingModeSupported;
+
+  /// No description provided for @aiPlatformThinkingModeSupportedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable this if the platform supports thinking mode (e.g., Ollama with Qwen3)'**
+  String get aiPlatformThinkingModeSupportedHint;
+
+  /// No description provided for @aiPlatformSegmentLimitLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Segment Limit'**
+  String get aiPlatformSegmentLimitLabel;
+
+  /// No description provided for @aiPlatformSegmentLimitHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Max segments per translation batch. Limits are applied together with chunk size. 0 = unlimited (cloud), 10 = recommended for local LLMs'**
+  String get aiPlatformSegmentLimitHint;
+
+  /// No description provided for @aiPlatformSegmentLimitUnlimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited'**
+  String get aiPlatformSegmentLimitUnlimited;
 
   /// No description provided for @aiPlatformPleaseEnterApiKeyFirst.
   ///
@@ -4409,8 +5027,56 @@ abstract class AppLocalizations {
   /// No description provided for @aiPlatformModelVersionHint.
   ///
   /// In en, this message translates to:
-  /// **'vlm'**
+  /// **'hybrid-auto-engine'**
   String get aiPlatformModelVersionHint;
+
+  /// No description provided for @aiPlatformTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Read Timeout (seconds)'**
+  String get aiPlatformTimeout;
+
+  /// No description provided for @aiPlatformTimeoutHint.
+  ///
+  /// In en, this message translates to:
+  /// **'200 (cloud) or 300 (local). Max wait time for LLM response.'**
+  String get aiPlatformTimeoutHint;
+
+  /// No description provided for @aiPlatformWriteTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Write Timeout (seconds)'**
+  String get aiPlatformWriteTimeout;
+
+  /// No description provided for @aiPlatformWriteTimeoutHint.
+  ///
+  /// In en, this message translates to:
+  /// **'300 (default). Max wait time for sending data to LLM.'**
+  String get aiPlatformWriteTimeoutHint;
+
+  /// No description provided for @aiPlatformTestConnectTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Test Timeout (seconds)'**
+  String get aiPlatformTestConnectTimeout;
+
+  /// No description provided for @aiPlatformTestConnectTimeoutHint.
+  ///
+  /// In en, this message translates to:
+  /// **'30 (default). Max wait time for connectivity test before starting translation.'**
+  String get aiPlatformTestConnectTimeoutHint;
+
+  /// No description provided for @aiPlatformTestRequestTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Test Request Timeout (seconds)'**
+  String get aiPlatformTestRequestTimeout;
+
+  /// No description provided for @aiPlatformTestRequestTimeoutHint.
+  ///
+  /// In en, this message translates to:
+  /// **'10 (default). Max wait for each probe request during connectivity test.'**
+  String get aiPlatformTestRequestTimeoutHint;
 
   /// No description provided for @aiPlatformMineruApiUrlHint.
   ///
@@ -4472,17 +5138,17 @@ abstract class AppLocalizations {
   /// **'These settings will apply to new translation tasks only.'**
   String get settingsTranslationNotice;
 
-  /// No description provided for @settingsTranslationAutoGlossaryTitle.
+  /// No description provided for @settingsTargetLanguageTitle.
   ///
   /// In en, this message translates to:
-  /// **'Auto Generate Glossary'**
-  String get settingsTranslationAutoGlossaryTitle;
+  /// **'Default Target Language'**
+  String get settingsTargetLanguageTitle;
 
-  /// No description provided for @settingsTranslationAutoGlossarySubtitle.
+  /// No description provided for @settingsTargetLanguageNotice.
   ///
   /// In en, this message translates to:
-  /// **'Automatically generate glossary after translation (applies to new tasks)'**
-  String get settingsTranslationAutoGlossarySubtitle;
+  /// **'Sets the default target language for new translation tasks. You can still change it per task in Quick Settings.'**
+  String get settingsTargetLanguageNotice;
 
   /// No description provided for @settingsTranslationParamsTitle.
   ///
@@ -4501,18 +5167,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recommended: 3 (adjust 1–8 based on model and quota)'**
   String get settingsTranslationConcurrentHint;
-
-  /// No description provided for @settingsTranslationTimeoutTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Timeout (seconds)'**
-  String get settingsTranslationTimeoutTitle;
-
-  /// No description provided for @settingsTranslationTimeoutHint.
-  ///
-  /// In en, this message translates to:
-  /// **'120 (recommended: 120-300 seconds)'**
-  String get settingsTranslationTimeoutHint;
 
   /// No description provided for @settingsTranslationChunkRetryTitle.
   ///
@@ -4645,6 +5299,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Source language matches target language'**
   String get settingsExclusionLanguageMatchSubtitle;
+
+  /// No description provided for @settingsTranslateOutputSuffixTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation Output Suffix'**
+  String get settingsTranslateOutputSuffixTitle;
+
+  /// No description provided for @settingsTranslateOutputSuffixHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Appended to translated filenames (leave empty for no suffix)'**
+  String get settingsTranslateOutputSuffixHint;
+
+  /// No description provided for @settingsConvertOutputSuffixTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversion Output Suffix'**
+  String get settingsConvertOutputSuffixTitle;
+
+  /// No description provided for @settingsConvertOutputSuffixHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Appended to converted filenames (leave empty for no suffix)'**
+  String get settingsConvertOutputSuffixHint;
 
   /// No description provided for @settingsLanguageDialogTitle.
   ///
@@ -5540,6 +6218,30 @@ abstract class AppLocalizations {
   /// **'Labeled Edit'**
   String get translationQueueEdit;
 
+  /// No description provided for @translationQueueSelectFormats.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get translationQueueSelectFormats;
+
+  /// No description provided for @translationQueueSelectFormatsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Download Formats'**
+  String get translationQueueSelectFormatsTitle;
+
+  /// No description provided for @translationQueueSelectFormatsFormatLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Format'**
+  String get translationQueueSelectFormatsFormatLabel;
+
+  /// No description provided for @translationQueueSelectFormatsDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get translationQueueSelectFormatsDownload;
+
   /// No description provided for @reeditTitle.
   ///
   /// In en, this message translates to:
@@ -5605,6 +6307,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cancel'**
   String get fetchUrlCancel;
+
+  /// Button label to fetch content from a URL
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch URL'**
+  String get fetchUrl;
+
+  /// Button label to close the URL input field
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get fetchUrlClose;
 
   /// No description provided for @loginSubtitleFeatures.
   ///
@@ -5731,6 +6445,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'If you are an administrator, please follow the password recovery process.'**
   String get loginPasswordRecoveryAdminGuide;
+
+  /// No description provided for @commonDarkMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark Mode'**
+  String get commonDarkMode;
+
+  /// No description provided for @commonLightMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Light Mode'**
+  String get commonLightMode;
 }
 
 class _AppLocalizationsDelegate
