@@ -14,6 +14,9 @@
 8. **MinerU local model versions**: Support configuring 5 model versions for locally deployed MinerU.
 9. **Configurable segment count per LLM API call**: Support configuring the maximum number of translation segments processed per LLM API call, adjustable based on the model's processing capability.
 10. **Auto-retry failed segments after translation**: After translation completes, automatically detect failed segments (source text unchanged) and trigger retranslation; defaults to 2 retry rounds, configurable by the user.
+11. **Default target language and export suffix settings**: Added default target language setting in translation settings; export filename suffix is now configurable (defaults: _translated/_converted).
+12. **Launcher auto-starts backend and frontend**: Launching the Launcher now automatically starts the backend and desktop frontend.
+13. **Portable edition includes both desktop and web frontends**: The portable edition now includes both the desktop frontend and web frontend, same as the installed version.
 
 ### Optimizations
 
