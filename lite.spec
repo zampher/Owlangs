@@ -262,6 +262,36 @@ hiddenimports = [
     # mobi dependencies (ensure loguru and imghdr are included in frozen build)
     'loguru',
     'imghdr',
+    # Exporter modules (imported by all workflows for output generation)
+    'exporter',
+    'exporter.base',
+    # IR (intermediate representation) and glossary (imported by mobi/epub workflows)
+    'ir',
+    'ir.document',
+    'glossary',
+    'glossary.glossary',
+    # Translator AI modules (imported by mobi/epub workflows)
+    'translator',
+    'translator.ai_translator',
+    'translator.ai_translator.mobi_translator',
+    'translator.ai_translator.epub_translator',
+    # Additional extractor modules for mobi/epub
+    'extractor.mobi_extractor',
+    'extractor.epub_extractor',
+    # Logger modules (optional, for enhanced logging)
+    'backend.logger',
+    'backend.logger.logger',
+    'backend.logger.log_messages',
+    'backend.logger.module_log_manager',
+    'backend.logger.module_logging',
+    # Config modules
+    'backend.app.config',
+    'backend.app.config.pagination_config',
+    # Additional services modules (imported by workflow_config_builder)
+    'backend.app.services.status',
+    'backend.app.services.status.status_service',
+    'backend.app.services.format_conversion_service',
+    'backend.app.services.glossary_generation_service',
 ]
 
 # mobi/ebooklib: required for MOBI/EPUB extraction and conversion in frozen build
