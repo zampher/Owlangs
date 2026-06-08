@@ -368,8 +368,11 @@ class PortableLauncher:
         print(f"[Launcher] Opening browser: {url}", flush=True)
         webbrowser.open(url)
     
-    def run_interactive(self) -> int:
+    def run_interactive(self, no_browser: bool = False) -> int:
         """Run in interactive mode (with console output).
+
+        Args:
+            no_browser: If True, skip opening the browser.
 
         Returns:
             Exit code.
@@ -402,8 +405,9 @@ class PortableLauncher:
             self.stop_server()
             return 1
 
-        # Open browser
-        self.open_browser()
+        # Open browser (unless --no-browser)
+        if not no_browser:
+            self.open_browser()
 
         print()
         print("-" * 60, flush=True)
@@ -421,9 +425,12 @@ class PortableLauncher:
             self.stop_server()
 
         return 0
-    
-    def run_silent(self) -> int:
+
+    def run_silent(self, no_browser: bool = False) -> int:
         """Run in silent mode (no console output, for background service).
+
+        Args:
+            no_browser: If True, skip opening the browser.
 
         Returns:
             Exit code.
@@ -439,8 +446,8 @@ class PortableLauncher:
         if not self.start_server():
             return 1
 
-        # Wait and open browser
-        if self.wait_for_server():
+        # Wait and open browser (unless --no-browser)
+        if self.wait_for_server() and not no_browser:
             self.open_browser()
 
         # Wait for server to finish (daemon thread keeps running)
@@ -512,7 +519,9 @@ def main():
                         help='Initialize configuration files and exit')
     parser.add_argument('--edit-config', metavar='NAME', default=None,
                         help='Open configuration file in editor (e.g., secrets)')
-    
+    parser.add_argument('--no-browser', action='store_true',
+                        help='Do not open the web browser on startup')
+
     args = parser.parse_args()
     
     launcher = PortableLauncher()
@@ -530,9 +539,9 @@ def main():
     
     # Run launcher
     if args.silent:
-        return launcher.run_silent()
+        return launcher.run_silent(no_browser=args.no_browser)
     else:
-        return launcher.run_interactive()
+        return launcher.run_interactive(no_browser=args.no_browser)
 
 
 if __name__ == '__main__':

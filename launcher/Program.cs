@@ -281,20 +281,28 @@ namespace OwlangsLauncher
 
         private void OnBackendStatusChanged(object? sender, BackendStatus status)
         {
+            LauncherLogger.Info($"OnBackendStatusChanged called: status={status}, frontendService={_frontendService != null}, autoStart={_frontendService?.AutoStartEnabled}");
+
             // Auto-start frontend when backend is ready
             if (status == BackendStatus.Running && _frontendService != null && _frontendService.AutoStartEnabled)
             {
+                LauncherLogger.Info("OnBackendStatusChanged: condition met, scheduling frontend start in 2s");
+
                 // Wait a bit to ensure backend is fully ready
                 System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ =>
                 {
-                    // Check frontend_type from config
-                    var frontendType = ConfigService.GetFrontendType();
-                    LauncherLogger.Info($"OnBackendStatusChanged: frontend_type = {frontendType}");
-                    
-                    if (frontendType == "web")
+                    LauncherLogger.Info("OnBackendStatusChanged: 2s delay complete, checking frontend_type");
+
+                    try
                     {
-                        // Web version: open browser instead of starting desktop frontend
-                        LauncherLogger.Info("OnBackendStatusChanged: Opening browser for web version");
+                        // Check frontend_type from config
+                        var frontendType = ConfigService.GetFrontendType();
+                        LauncherLogger.Info($"OnBackendStatusChanged: frontend_type = {frontendType}");
+
+                    // "web" or "both": open browser
+                    if (frontendType == "web" || frontendType == "both")
+                    {
+                        LauncherLogger.Info($"OnBackendStatusChanged: Opening browser ({frontendType} mode)");
                         try
                         {
                             var startInfo = new ProcessStartInfo
@@ -310,13 +318,21 @@ namespace OwlangsLauncher
                             LauncherLogger.Error($"OnBackendStatusChanged: Failed to open browser: {ex.Message}");
                         }
                     }
-                    else if (_frontendService != null && !_frontendService.IsRunning)
+
+                    // "desktop" or "both": start desktop frontend
+                    if ((frontendType == "desktop" || frontendType == "both")
+                        && _frontendService != null && !_frontendService.IsRunning)
                     {
-                        // Desktop version: start desktop frontend
+                        LauncherLogger.Info($"OnBackendStatusChanged: Starting desktop frontend ({frontendType} mode)");
                         Application.Current.Dispatcher.Invoke(() =>
                         {
                             _frontendService.StartFrontend();
                         });
+                    }
+                    }
+                    catch (Exception ex)
+                    {
+                        LauncherLogger.Error($"OnBackendStatusChanged: error in delayed frontend start: {ex.Message}");
                     }
                 });
             }

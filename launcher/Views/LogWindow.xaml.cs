@@ -784,30 +784,73 @@ namespace OwlangsLauncher.Views
                     return;
                 }
 
-                // Retry clipboard access because Windows clipboard is a shared resource
-                // and can be temporarily locked by other applications.
-                Exception? lastException = null;
+                int lineCount = LogTextBox.LineCount;
+
+                // Strategy 1: Focus the TextBox, select all, and use WPF's built-in
+                // ApplicationCommands.Copy which follows the same code path as Ctrl+C.
+                LogTextBox.Focus();
+                LogTextBox.SelectAll();
+                DispatcherHelper.DoEvents();
+
                 for (int attempt = 0; attempt < 10; attempt++)
                 {
                     try
                     {
+                        if (ApplicationCommands.Copy.CanExecute(null, LogTextBox))
+                        {
+                            ApplicationCommands.Copy.Execute(null, LogTextBox);
+                            StatusText.Text = $"Copied {lineCount} lines to clipboard";
+                            return;
+                        }
+                    }
+                    catch
+                    {
+                        // Copy command may fail if clipboard is locked
+                    }
+                    System.Threading.Thread.Sleep(150);
+                }
+
+                // Strategy 2: Retry with Clipboard.SetText directly (longer retry window)
+                Exception? lastException = null;
+                for (int attempt = 0; attempt < 20; attempt++)
+                {
+                    try
+                    {
                         System.Windows.Clipboard.SetText(LogTextBox.Text);
-                        StatusText.Text = $"Copied {LogTextBox.LineCount} lines to clipboard";
+                        StatusText.Text = $"Copied {lineCount} lines to clipboard";
                         return;
                     }
                     catch (Exception ex)
                     {
                         lastException = ex;
-                        System.Threading.Thread.Sleep(100);
+                        System.Threading.Thread.Sleep(200);
                     }
                 }
 
-                throw lastException ?? new InvalidOperationException("Failed to access clipboard after multiple attempts.");
+                // Strategy 3 (last resort): Text is already selected and focused.
+                // Show a minimal notification so the user can press Ctrl+C manually.
+                StatusText.Text = "Clipboard busy — text selected, press Ctrl+C to copy";
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to copy logs: {ex.Message}", "Error",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusText.Text = $"Copy failed: {ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// Minimal DoEvents helper to let pending UI messages (focus, selection) process.
+        /// </summary>
+        private static class DispatcherHelper
+        {
+            public static void DoEvents()
+            {
+                var frame = new System.Windows.Threading.DispatcherFrame();
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.Background,
+                    new System.Windows.Threading.DispatcherOperationCallback(
+                        f => { ((System.Windows.Threading.DispatcherFrame)f).Continue = false; return null; }),
+                    frame);
+                System.Windows.Threading.Dispatcher.PushFrame(frame);
             }
         }
 

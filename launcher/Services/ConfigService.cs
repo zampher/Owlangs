@@ -158,22 +158,24 @@ namespace OwlangsLauncher.Services
 
         /// <summary>
         /// Get frontend type from config ("desktop", "web", or "both")
-        /// Returns "web" if not found or on error
+        /// If not configured, auto-detects: returns "desktop" when owlangs.exe exists
+        /// in the frontend/ directory, otherwise "web".
         /// </summary>
         public static string GetFrontendType()
         {
             try
             {
                 var config = LoadConfig();
-                if (config == null)
-                    return "web";
-
-                if (config.RootElement.TryGetProperty("frontend_type", out var frontendTypeProperty))
+                if (config != null)
                 {
-                    var frontendType = frontendTypeProperty.GetString();
-                    if (!string.IsNullOrEmpty(frontendType))
+                    if (config.RootElement.TryGetProperty("frontend_type", out var frontendTypeProperty))
                     {
-                        return frontendType.ToLower();
+                        var frontendType = frontendTypeProperty.GetString();
+                        if (!string.IsNullOrEmpty(frontendType))
+                        {
+                            LauncherLogger.Info($"ConfigService: frontend_type={frontendType} (from config)");
+                            return frontendType.ToLower();
+                        }
                     }
                 }
             }
@@ -182,6 +184,17 @@ namespace OwlangsLauncher.Services
                 LauncherLogger.Error($"ConfigService: Error reading frontend_type: {ex.Message}");
             }
 
+            // Auto-detect: if owlangs.exe exists in <installDir>\frontend\, use "desktop"
+            var appDir = AppDomain.CurrentDomain.BaseDirectory;
+            var installDir = GetInstallDirectory(appDir);
+            var frontendExePath = Path.Combine(installDir, "frontend", "owlangs.exe");
+            if (File.Exists(frontendExePath))
+            {
+                LauncherLogger.Info($"ConfigService: frontend_type not configured, auto-detected 'desktop' (found {frontendExePath})");
+                return "desktop";
+            }
+
+            LauncherLogger.Info($"ConfigService: frontend_type not configured, defaulting to 'web' ({frontendExePath} not found)");
             return "web";
         }
     }
