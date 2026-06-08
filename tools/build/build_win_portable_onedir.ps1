@@ -387,6 +387,14 @@ if (Test-Path $src3rdParty) {
     Write-Host "[staging] WARNING: 3rdParty source not found" -ForegroundColor Yellow
 }
 
+# Create launcher batch file at package root (convenient entry point)
+$batPath = Join-Path $buildDir "Start_Owlangs.bat"
+@"
+@echo off
+start "" "%~dp0launcher\OwlangsLauncher.exe"
+"@ | Set-Content -Path $batPath -Encoding ASCII
+Write-Host "[package] Created Owlangs.bat at package root" -ForegroundColor Green
+
 # ── Step 9: Create README ──
 if (-not $SkipDesktop) {
     $readmeContent = @"
@@ -395,7 +403,8 @@ Owlangs Portable Edition (Onedir) v$Version
 
 Quick Start
 -----------
-Double-click launcher\OwlangsLauncher.exe to automatically:
+Double-click Start_Owlangs.bat at the package root, or directly run
+launcher\OwlangsLauncher.exe to automatically:
 1. Start the backend service
 2. Launch the desktop app (frontend\owlangs.exe)
 3. Also accessible via browser at http://localhost:8800
@@ -486,7 +495,8 @@ Write-Host "  $buildDir" -ForegroundColor Cyan
 Write-Host ""
 if (-not $SkipDesktop) {
     Write-Host "Entry point:" -ForegroundColor Yellow
-    Write-Host "  $buildDir\launcher\OwlangsLauncher.exe" -ForegroundColor Cyan
+    Write-Host "  $buildDir\Start_Owlangs.bat" -ForegroundColor Cyan
+    Write-Host "  (or directly: $buildDir\launcher\OwlangsLauncher.exe)" -ForegroundColor Gray
     Write-Host ""
 }
 Write-Host "Distribution:" -ForegroundColor Yellow
