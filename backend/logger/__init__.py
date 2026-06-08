@@ -18,7 +18,7 @@ if __name__ != "logger":
 __all__ = []
 from .logger import unified_logger, unified_logger_frontend, LogLevel, LogModule, format_content_for_log
 from .module_log_manager import module_log_manager
-from .module_logging import enable_module_logging, disable_module_logging, is_module_logging_enabled
+from .module_logging import enable_module_logging, is_module_logging_enabled
 
 __all__ = [
     "unified_logger",
@@ -28,6 +28,5 @@ __all__ = [
     "format_content_for_log",
     "module_log_manager",
     "enable_module_logging",
-    "disable_module_logging",
     "is_module_logging_enabled",
 ]

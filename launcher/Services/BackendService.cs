@@ -26,8 +26,9 @@ namespace OwlangsLauncher.Services
 
         public BackendService()
         {
-            // 5s timeout for health check: backend cold start (frozen exe) can take several seconds
-            _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            // 30s timeout for health check: backend under heavy load (e.g. language detection)
+            // can delay responses beyond 5s, causing false "unhealthy" reports
+            _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
             
             // Get installation directory
             var appDir = AppDomain.CurrentDomain.BaseDirectory;

@@ -80,9 +80,8 @@ def normalize_kindle_inline_width_styles(soup) -> int:
                 del tag["style"]
     if changed:
         logger.debug(LogModule.EXPORT,
-            "normalize_kindle_inline_width_styles: removed Kindle zero-width "
-            "inline width from %s element(s) (fixes vertical glyph stacking in browsers)",
-            changed,
+            f"normalize_kindle_inline_width_styles: removed Kindle zero-width "
+            f"inline width from {changed} element(s) (fixes vertical glyph stacking in browsers)"
         )
     return changed
 
@@ -117,9 +116,8 @@ def normalize_kindle_inline_height_styles(soup) -> int:
                 del tag["style"]
     if changed:
         logger.debug(LogModule.EXPORT,
-            "normalize_kindle_inline_height_styles: removed Kindle collapse-prone "
-            "inline height from %s element(s) (fixes overlap in browsers)",
-            changed,
+            f"normalize_kindle_inline_height_styles: removed Kindle collapse-prone "
+            f"inline height from {changed} element(s) (fixes overlap in browsers)"
         )
     return changed
 
@@ -178,9 +176,8 @@ def normalize_kindle_overlap_styles(soup) -> int:
                 del tag["style"]
     if changed:
         logger.debug(LogModule.EXPORT,
-            "normalize_kindle_overlap_styles: cleaned overlap-prone inline styles on "
-            "%s element(s)",
-            changed,
+            f"normalize_kindle_overlap_styles: cleaned overlap-prone inline styles on "
+            f"{changed} element(s)"
         )
     return changed
 

@@ -9,8 +9,7 @@ Handles both backend log generation and frontend log display
 import json
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional
-# Removed unused import: get_global_config
+from typing import Dict, Any
 
 
 class LogMessageManager:

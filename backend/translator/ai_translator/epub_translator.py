@@ -269,7 +269,7 @@ class EpubTranslator(AiTranslator):
                         # Save texts for segment recording
                         task_state['epub_original_texts'] = original_texts
                         task_state['epub_translated_texts'] = translated_texts
-                        self.logger.debug(
+                        self.logger.debug(LogModule.TRANS,
                             f"[EPUB_TRANSLATOR] Saved {len(original_texts)} original_texts and "
                             f"{len(translated_texts)} translated_texts to task_state for segment recording"
                         )

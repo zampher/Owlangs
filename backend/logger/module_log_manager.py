@@ -175,46 +175,6 @@ class ModuleLogManager:
         """Check if module logging feature is enabled."""
         self._ensure_initialized()
         return self._enabled
-    
-    def print_startup_status(self):
-        """
-        Print module logging status at startup.
-        
-        This method is safe to call during startup and will not block.
-        """
-        try:
-            self._ensure_initialized()
-            
-            if not self._enabled:
-                # Module logging is disabled, no need to print
-                return
-            
-            enabled_modules = []
-            disabled_modules = []
-            
-            for module, levels in sorted(self._module_states.items()):
-                enabled_levels = [level for level, enabled in levels.items() if enabled]
-                if enabled_levels:
-                    enabled_modules.append(f"  {module:12s}: {', '.join(enabled_levels)}")
-                else:
-                    disabled_modules.append(f"  {module:12s}: All disabled")
-            
-            if enabled_modules or disabled_modules:
-                print("\n" + "="*60)
-                print("Module Logging Status:")
-                print("="*60)
-                if enabled_modules:
-                    print("Enabled Modules:")
-                    for m in enabled_modules:
-                        print(m)
-                if disabled_modules:
-                    print("\nDisabled Modules:")
-                    for m in disabled_modules:
-                        print(m)
-                print("="*60 + "\n")
-        except Exception:
-            # Silently fail to avoid blocking startup
-            pass
 
 
 # Create global instance (delayed initialization)

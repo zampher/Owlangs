@@ -116,6 +116,19 @@ hiddenimports = [
     'pptx.shapes.autoshape', 'pptx.table', 'pptx.shapes.freeform', 'pptx.text.text',
     'layout.base', 'layout.mineru_layout_model',
     'loguru', 'imghdr',
+    # Exporter modules (used by all workflows for output generation)
+    'exporter.base',
+    # IR (intermediate representation) and glossary (imported by mobi/epub workflows)
+    'ir.document', 'glossary.glossary',
+    # Logger modules
+    'backend.logger.logger', 'backend.logger.log_messages',
+    'backend.logger.module_log_manager', 'backend.logger.module_logging',
+    # Config modules
+    'backend.app.config.pagination_config',
+    # Additional services
+    'backend.app.services.status.status_service',
+    'backend.app.services.format_conversion_service',
+    'backend.app.services.glossary_generation_service',
 ]
 
 for _pkg in ['mobi', 'ebooklib', 'mcp']:

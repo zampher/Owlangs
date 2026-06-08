@@ -7,8 +7,7 @@ from typing import Any, Dict, Optional, overload
 from contextlib import contextmanager
 import contextvars
 from pathlib import Path
-from logging.handlers import TimedRotatingFileHandler, RotatingFileHandler
-import os
+from logging.handlers import RotatingFileHandler
 
 try:
     from concurrent_log_handler import ConcurrentRotatingFileHandler
@@ -143,8 +142,8 @@ def get_truncation_limits() -> Dict[str, Optional[int]]:
     return default
 
 
-# Backward-compatible alias within this module: ensure no direct import-time dependency on config_loader.
-# Some parts of this module still call get_unified_config(); route them through the safe accessor.
+# Alias used for module-level initialization (after this point, before UnifiedLogger.__init__).
+# Provides a public name for _get_unified_config within this module.
 get_unified_config = _get_unified_config
 
 
@@ -275,7 +274,6 @@ class JSONFormatter(logging.Formatter):
 
 # ---- Context support ----
 # NOTE: Keep typing compatible with Python 3.9 (no PEP 604 `X | Y`).
-from typing import Optional
 
 _ctx_request_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("request_id", default=None)
 _ctx_task_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("task_id", default=None)
@@ -551,29 +549,6 @@ class UnifiedLogger:
             if 'file_handler_debug' in globals() and file_handler_debug:
                 self.logger.addHandler(file_handler_debug)
     
-    def set_show_date(self, show_date: bool):
-        """Dynamically change date display"""
-        self.show_date = show_date
-        if isinstance(self.formatter, CompactFormatter):
-            if show_date:
-                datefmt = '%Y-%m-%d %H:%M:%S'
-            else:
-                datefmt = '%H:%M:%S'
-            self.formatter.show_date = show_date
-            self.formatter.datefmt = datefmt
-        
-        # Recreate handlers to apply the change
-        self.logger.handlers.clear()
-        if _get_console_enabled():
-            ch = logging.StreamHandler()
-            ch.setFormatter(self.formatter)
-            self.logger.addHandler(ch)
-        if _get_file_enabled():
-            if 'file_handler' in globals() and file_handler:
-                self.logger.addHandler(file_handler)
-            if 'file_handler_debug' in globals() and file_handler_debug:
-                self.logger.addHandler(file_handler_debug)
-
     def set_level(self, level_name: str):
         """Dynamically set logger level (e.g., TRACE/DEBUG/INFO)."""
         try:
@@ -687,12 +662,7 @@ class UnifiedLogger:
             if v is not None:
                 extra[k] = v
         self.logger.log(log_level, formatted_message, extra=extra)
-    
-    # Unified logging interface
-    def log(self, level: LogLevel, module: LogModule, message: str, **kwargs):
-        """Unified logging method with level and module parameters"""
-        self._log(level, module, message, **kwargs)
-    
+
     # Only (module, message) is supported. Single-arg e.g. debug("msg") raises TypeError at runtime.
     @overload
     def info(self, module: LogModule, message: str, **kwargs: Any) -> None: ...
@@ -846,7 +816,7 @@ class AccessLogFormatter(CompactFormatter):
         # Set log_module to SYSTEM for access logs (or could be WORKFLOW)
         module = getattr(record, 'log_module', 'SYSTEM')
         
-        # Map log levels to compact format（保持原有行为：不再强制改写 /api/health 级别，交由 HealthCheckFilter 决定是否丢弃）
+        # Map log levels to compact format (health check filtering is handled by HealthCheckFilter)
         level_mapping = {
             'TRACE': 'TRACE',
             'INFO': 'INFO',
@@ -871,8 +841,6 @@ class AccessLogFormatter(CompactFormatter):
 
 def get_uvicorn_log_config():
     """Get uvicorn log configuration with timestamps for all logs."""
-    import logging
-    
     # Get configuration for health check filter
     filter_health_check = True  # Default: filter health check logs
     try:

@@ -9,7 +9,6 @@ unified_logger. Module logging is disabled by default and can be enabled via con
 When enabled, only messages for modules enabled in module_log_manager are emitted.
 """
 
-from typing import Optional
 from .logger import unified_logger, LogModule
 from .module_log_manager import module_log_manager
 
@@ -118,25 +117,6 @@ def enable_module_logging():
     unified_logger.trace = _trace_with_module
 
     _module_logging_enabled = True
-
-
-def disable_module_logging():
-    """
-    Disable module-based filtering by restoring original unified_logger methods.
-    """
-    global _module_logging_enabled
-
-    if not _module_logging_enabled:
-        return
-
-    unified_logger.debug = _original_debug
-    unified_logger.info = _original_info
-    unified_logger.warning = _original_warning
-    unified_logger.error = _original_error
-    unified_logger.success = _original_success
-    unified_logger.trace = _original_trace
-
-    _module_logging_enabled = False
 
 
 def is_module_logging_enabled() -> bool:
