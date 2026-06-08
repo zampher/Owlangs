@@ -36,10 +36,15 @@ class PlatformService:
         try:
             # Check if base_url is None or empty
             if not base_url:
+                logger.info(LogModule.SYSTEM, "[PLATFORM DETECT] base_url is empty, returning None")
                 return None
-            
+
             base_url_lower = base_url.lower()
-            
+            logger.info(
+                LogModule.SYSTEM,
+                f"[PLATFORM DETECT] Determining platform for base_url='{base_url}', model_id='{model_id}'"
+            )
+
             # First, try to match against configured platforms (exact match priority)
             try:
                 from backend.config.config_loader import get_unified_config
@@ -52,33 +57,63 @@ class PlatformService:
                         if base_url_lower in config_url_lower or config_url_lower in base_url_lower:
                             # If model_id is provided, try to match; otherwise accept URL match
                             if not model_id or platform_config.model == model_id:
+                                logger.info(
+                                    LogModule.SYSTEM,
+                                    f"[PLATFORM DETECT] Matched configured platform '{platform_key}' "
+                                    f"by URL+model: config_url='{platform_config.url}', model='{platform_config.model}'"
+                                )
                                 return platform_key
                             # If model doesn't match but URL is exact, still use this platform
                             # (user may have changed model but kept same endpoint)
                             if base_url_lower == config_url_lower:
+                                logger.info(
+                                    LogModule.SYSTEM,
+                                    f"[PLATFORM DETECT] Matched configured platform '{platform_key}' "
+                                    f"by exact URL (model mismatch, using platform anyway)"
+                                )
                                 return platform_key
             except Exception:
                 pass
-            
+
             # If no exact match, try common platform mappings based on URL patterns
+            detected = None
+            matched_pattern = None
             if 'api.openai.com' in base_url_lower:
-                return 'openai'
+                detected = 'openai'
+                matched_pattern = 'api.openai.com'
             elif 'api.deepseek.com' in base_url_lower:
-                return 'deepseek'
+                detected = 'deepseek'
+                matched_pattern = 'api.deepseek.com'
             elif 'doubao' in base_url_lower:
-                return 'doubao'
+                detected = 'doubao'
+                matched_pattern = 'doubao'
             elif 'qianwen' in base_url_lower or 'dashscope' in base_url_lower:
-                return 'qianwen'
+                detected = 'qianwen'
+                matched_pattern = 'qianwen/dashscope'
             elif 'api.anthropic.com' in base_url_lower:
-                return 'anthropic'
+                detected = 'anthropic'
+                matched_pattern = 'api.anthropic.com'
             elif 'gemini' in base_url_lower or 'google' in base_url_lower:
-                return 'gemini'
+                detected = 'gemini'
+                matched_pattern = 'gemini/google'
             elif ':11434' in base_url_lower or 'ollama' in base_url_lower:
-                return 'ollama'
-            
-            return None
+                detected = 'ollama'
+                matched_pattern = ':11434/ollama'
+
+            if detected:
+                logger.info(
+                    LogModule.SYSTEM,
+                    f"[PLATFORM DETECT] URL pattern fallback: matched '{detected}' "
+                    f"via pattern '{matched_pattern}' from base_url='{base_url}'"
+                )
+            else:
+                logger.info(
+                    LogModule.SYSTEM,
+                    f"[PLATFORM DETECT] No platform matched for base_url='{base_url}', returning None"
+                )
+            return detected
         except Exception as e:
-            logger.warning(LogModule.SYSTEM, f"Failed to determine platform key: {e}")
+            logger.warning(LogModule.SYSTEM, f"[PLATFORM DETECT] Failed to determine platform key: {e}")
             return None
     
     def get_max_tokens(

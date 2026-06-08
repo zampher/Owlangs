@@ -314,9 +314,18 @@ class Agent:
                     if ":11434" in baseurl_lower or "ollama" in baseurl_lower or "/api/chat" in baseurl_lower:
                         protocol_name = "ollama"
                         self.api_type = "ollama"
+                        # Determine which pattern matched for logging
+                        matched_patterns = []
+                        if ":11434" in baseurl_lower:
+                            matched_patterns.append("port:11434")
+                        if "ollama" in baseurl_lower:
+                            matched_patterns.append("hostname:ollama")
+                        if "/api/chat" in baseurl_lower:
+                            matched_patterns.append("path:/api/chat")
                         unified_logger.info(
                             LogModule.TRANS,
-                            f"[API_TYPE] Auto-detected Ollama from URL pattern: {self.baseurl}"
+                            f"[OLLAMA DETECT] Auto-detected Ollama from base_url='{self.baseurl}', "
+                            f"matched patterns: {', '.join(matched_patterns)}"
                         )
             
             # Use protocol factory

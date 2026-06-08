@@ -51,13 +51,33 @@ class OllamaProtocol(LLMProtocol):
         (e.g. http://host:11434/v1), strip it so the URL becomes
         http://host:11434/api/chat instead of the invalid /v1/api/chat.
         """
+        raw_url = base_url
         base = base_url.rstrip('/')
+        if base != raw_url:
+            logger.info(
+                LogModule.TRANS,
+                f"[OLLAMA URL] Rstrip trailing slash: raw='{raw_url}' -> base='{base}'"
+            )
         # Strip common OpenAI-style path prefixes that don't apply to Ollama native API
+        stripped_prefix = None
         for suffix in ('/v1', '/api/v1', '/api'):
             if base.endswith(suffix):
+                stripped_prefix = suffix
                 base = base[:-len(suffix)]
                 break
-        return f"{base}/api/chat"
+        final_url = f"{base}/api/chat"
+        if stripped_prefix:
+            logger.info(
+                LogModule.TRANS,
+                f"[OLLAMA URL] Stripped OpenAI-style prefix '{stripped_prefix}': "
+                f"raw='{raw_url}' -> base='{base}' -> final='{final_url}'"
+            )
+        else:
+            logger.info(
+                LogModule.TRANS,
+                f"[OLLAMA URL] No prefix stripped: raw='{raw_url}' -> final='{final_url}'"
+            )
+        return final_url
     
     def prepare_request(
         self,

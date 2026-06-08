@@ -499,6 +499,8 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description='Owlangs Single-File Launcher')
+    parser.add_argument('-i', '--interactive', action='store_true',
+                        help='Start in interactive mode (launcher default)')
     parser.add_argument('--version', action='version',
                         version=f'%(prog)s {__version__}',
                         help='Show version information and exit')
