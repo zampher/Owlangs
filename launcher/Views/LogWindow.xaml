@@ -132,15 +132,6 @@
                                         Margin="3,0" Padding="12,6" Style="{StaticResource SecondaryButtonStyle}" 
                                         FontSize="11" MinWidth="70"/>
                             </StackPanel>
-                            <Button x:Name="BottomOpenBrowserButton"
-                                    Content="Open in Browser"
-                                    Click="OpenBrowserButton_Click"
-                                    Margin="0,8,0,0"
-                                    Padding="12,6"
-                                    FontSize="11"
-                                    MinWidth="70"
-                                    Style="{StaticResource SecondaryButtonStyle}"
-                                    HorizontalAlignment="Stretch"/>
                         </StackPanel>
                     </Border>
                 </Grid>
