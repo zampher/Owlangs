@@ -182,7 +182,7 @@ class ConverterMineruConfig(X2MarkdownConverterConfig):
 # HTTP Client Configuration
 # Increased connect timeout for large-file SSL handshakes on slow networks.
 # Increased pool timeout to avoid exhaustion during frequent polling.
-timeout = httpx.Timeout(connect=60.0, read=300.0, write=300.0, pool=30.0)
+timeout = httpx.Timeout(connect=60.0, read=600.0, write=600.0, pool=30.0)
 
 import ssl
 ssl_context = ssl.create_default_context()
