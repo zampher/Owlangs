@@ -148,6 +148,113 @@ namespace OwlangsLauncher.Services
         }
 
         /// <summary>
+        /// Get launcher auto-start backend setting (default: true)
+        /// </summary>
+        public static bool GetAutoStartBackend()
+        {
+            return GetBooleanConfig("launcher_auto_start_backend", defaultValue: true);
+        }
+
+        /// <summary>
+        /// Get launcher auto-start frontend setting (default: true)
+        /// </summary>
+        public static bool GetAutoStartFrontend()
+        {
+            return GetBooleanConfig("launcher_auto_start_frontend", defaultValue: true);
+        }
+
+        /// <summary>
+        /// Get launcher auto-open browser setting (default: true)
+        /// </summary>
+        public static bool GetAutoOpenBrowser()
+        {
+            return GetBooleanConfig("launcher_auto_open_browser", defaultValue: true);
+        }
+
+        /// <summary>
+        /// Set a launcher boolean config value and persist to file
+        /// </summary>
+        public static void SetBooleanConfig(string key, bool value)
+        {
+            try
+            {
+                var configPath = GetConfigPath();
+                var jsonText = "{}";
+                if (File.Exists(configPath))
+                {
+                    jsonText = File.ReadAllText(configPath);
+                }
+
+                using var doc = JsonDocument.Parse(jsonText);
+                var root = doc.RootElement;
+
+                // Rebuild JSON with the updated value
+                using var stream = new MemoryStream();
+                using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true });
+                writer.WriteStartObject();
+
+                bool keyWritten = false;
+                foreach (var prop in root.EnumerateObject())
+                {
+                    if (prop.Name == key)
+                    {
+                        writer.WriteBoolean(key, value);
+                        keyWritten = true;
+                    }
+                    else
+                    {
+                        prop.WriteTo(writer);
+                    }
+                }
+                if (!keyWritten)
+                {
+                    writer.WriteBoolean(key, value);
+                }
+
+                writer.WriteEndObject();
+                writer.Flush();
+
+                var dir = Path.GetDirectoryName(configPath);
+                if (dir != null && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                File.WriteAllText(configPath, System.Text.Encoding.UTF8.GetString(stream.ToArray()));
+                LauncherLogger.Info($"ConfigService: Set {key}={value} in {configPath}");
+
+                // Clear cache so next read picks up the change
+                ClearCache();
+            }
+            catch (Exception ex)
+            {
+                LauncherLogger.Error($"ConfigService: Failed to set {key}: {ex.Message}");
+            }
+        }
+
+        private static bool GetBooleanConfig(string key, bool defaultValue)
+        {
+            try
+            {
+                var config = LoadConfig();
+                if (config == null)
+                    return defaultValue;
+
+                if (config.RootElement.TryGetProperty(key, out var prop)
+                    && (prop.ValueKind == System.Text.Json.JsonValueKind.True
+                        || prop.ValueKind == System.Text.Json.JsonValueKind.False))
+                {
+                    return prop.GetBoolean();
+                }
+            }
+            catch (Exception ex)
+            {
+                LauncherLogger.Error($"ConfigService: Error reading {key}: {ex.Message}");
+            }
+            return defaultValue;
+        }
+
+        /// <summary>
         /// Clear config cache (useful for testing or when config changes)
         /// </summary>
         public static void ClearCache()

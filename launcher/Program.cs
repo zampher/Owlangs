@@ -115,6 +115,9 @@ namespace OwlangsLauncher
             _backendService = new BackendService();
             _frontendService = new FrontendService();
             _redisService = new RedisService();
+
+            // Apply auto-start config to frontend service
+            _frontendService.AutoStartEnabled = ConfigService.GetAutoStartFrontend();
             
             // Step 2: Create IPC service (20%)
             UpdateSplashStatus("Setting up IPC service...", 20);
@@ -299,8 +302,9 @@ namespace OwlangsLauncher
                         var frontendType = ConfigService.GetFrontendType();
                         LauncherLogger.Info($"OnBackendStatusChanged: frontend_type = {frontendType}");
 
-                    // "web" or "both": open browser
-                    if (frontendType == "web" || frontendType == "both")
+                    // "web" or "both": open browser (if auto-open is enabled)
+                    if (ConfigService.GetAutoOpenBrowser()
+                        && (frontendType == "web" || frontendType == "both"))
                     {
                         LauncherLogger.Info($"OnBackendStatusChanged: Opening browser ({frontendType} mode)");
                         try

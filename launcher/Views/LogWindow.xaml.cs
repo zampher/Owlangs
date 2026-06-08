@@ -79,6 +79,15 @@ namespace OwlangsLauncher.Views
             UpdateBackendStatus();
             UpdateFrontendStatus();
             UpdateControlButtons();
+
+            // Initialize auto-start checkboxes from config
+            BackendAutoStartCheckBox.IsChecked = ConfigService.GetAutoStartBackend();
+            if (_frontendService != null)
+            {
+                FrontendAutoStartCheckBox.IsChecked = ConfigService.GetAutoStartFrontend();
+                _frontendService.AutoStartEnabled = FrontendAutoStartCheckBox.IsChecked == true;
+            }
+            BrowserAutoOpenCheckBox.IsChecked = ConfigService.GetAutoOpenBrowser();
             
             // Start status update timer (update every second)
             _statusUpdateTimer = new DispatcherTimer
@@ -442,14 +451,14 @@ namespace OwlangsLauncher.Views
         {
             var status = _backendService.Status;
             var isRunning = _backendService.IsRunning;
-            
-            // Update status text
-            BackendStatusText.Text = GetStatusText(status);
-            
-            // Update status detail
+
+            // Status text is integrated into the detail line
+            var statusText = GetStatusText(status);
+
+            // Update status detail with status and port info
             if (isRunning && status == BackendStatus.Running)
             {
-                BackendStatusDetail.Text = "Port: 8800 | Health: OK";
+                BackendStatusDetail.Text = $"{statusText} | Port: 8800 | Health: OK";
             }
             else if (status == BackendStatus.Starting)
             {
@@ -461,7 +470,7 @@ namespace OwlangsLauncher.Views
             }
             else if (status == BackendStatus.Unhealthy)
             {
-                BackendStatusDetail.Text = "Port: 8800 | Health: Unhealthy";
+                BackendStatusDetail.Text = $"{statusText} | Port: 8800 | Health: Unhealthy";
             }
             else if (status == BackendStatus.Error)
             {
@@ -494,25 +503,21 @@ namespace OwlangsLauncher.Views
         {
             if (_frontendService == null)
             {
-                FrontendStatusText.Text = "Not Available";
-                FrontendStatusDetail.Text = "Frontend service not initialized";
+                FrontendStatusDetail.Text = "Not available";
                 FrontendStatusBrush.Color = Colors.Gray;
                 return;
             }
-            
+
             var isRunning = _frontendService.IsRunning;
-            
-            // Update status text
-            FrontendStatusText.Text = isRunning ? "Running" : "Stopped";
-            
-            // Update status detail
+
+            // Status integrated into detail line
             if (isRunning)
             {
-                FrontendStatusDetail.Text = "Process active";
+                FrontendStatusDetail.Text = "Running | Process active";
             }
             else
             {
-                FrontendStatusDetail.Text = "Not running";
+                FrontendStatusDetail.Text = "Stopped | Not running";
             }
             
             // Update status indicator color (use theme-aware colors)
@@ -739,6 +744,26 @@ namespace OwlangsLauncher.Views
                 MessageBox.Show($"Failed to open browser: {ex.Message}", "Error",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private void BackendAutoStartCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            var isChecked = BackendAutoStartCheckBox.IsChecked == true;
+            ConfigService.SetBooleanConfig("launcher_auto_start_backend", isChecked);
+        }
+
+        private void FrontendAutoStartCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            var isChecked = FrontendAutoStartCheckBox.IsChecked == true;
+            ConfigService.SetBooleanConfig("launcher_auto_start_frontend", isChecked);
+            if (_frontendService != null)
+                _frontendService.AutoStartEnabled = isChecked;
+        }
+
+        private void BrowserAutoOpenCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            var isChecked = BrowserAutoOpenCheckBox.IsChecked == true;
+            ConfigService.SetBooleanConfig("launcher_auto_open_browser", isChecked);
         }
 
         private void ClearButton_Click(object sender, RoutedEventArgs e)

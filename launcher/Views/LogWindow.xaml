@@ -63,76 +63,119 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    
+
                     <!-- Section Title -->
                     <TextBlock Grid.Row="0" Text="Server Control" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TextForegroundBrush}" Margin="0,0,0,15"/>
-                    
+
                     <!-- Backend Status and Control -->
                     <Border Grid.Row="1" Background="{DynamicResource WindowBackgroundBrush}" Padding="12" Margin="0,0,0,10" CornerRadius="4" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-                        <StackPanel>
-                            <TextBlock Text="Server" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource TextForegroundBrush}" Margin="0,0,0,8"/>
-                            <Grid Margin="0,0,0,10">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <!-- Row 0: Checkbox + Status -->
+                            <Grid Grid.Row="0" Margin="0,0,0,10">
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <Ellipse x:Name="BackendStatusIndicator" Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center">
+                                <CheckBox x:Name="BackendAutoStartCheckBox" Grid.Column="0"
+                                          IsChecked="True" VerticalAlignment="Center" Margin="0,0,8,0"
+                                          Checked="BackendAutoStartCheckBox_Changed"
+                                          Unchecked="BackendAutoStartCheckBox_Changed">
+                                    <TextBlock Text="Auto-start" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                </CheckBox>
+                                <Ellipse x:Name="BackendStatusIndicator" Grid.Column="1" Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center">
                                     <Ellipse.Fill>
                                         <SolidColorBrush x:Name="BackendStatusBrush"/>
                                     </Ellipse.Fill>
                                 </Ellipse>
-                                <StackPanel Grid.Column="1">
-                                    <TextBlock x:Name="BackendStatusText" Text="Stopped" Foreground="{DynamicResource TextForegroundBrush}" FontSize="11"/>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock x:Name="BackendStatusText" Text="Server" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource TextForegroundBrush}"/>
                                     <TextBlock x:Name="BackendStatusDetail" Text="Port: 8800" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="10" Margin="0,2,0,0"/>
                                 </StackPanel>
                             </Grid>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                <Button x:Name="BackendStartButton" Content="Start" Click="BackendStartButton_Click" 
-                                        Margin="3,0" Padding="12,6" Style="{StaticResource PrimaryButtonStyle}" 
+                            <!-- Row 1: Buttons -->
+                            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button x:Name="BackendStartButton" Content="Start" Click="BackendStartButton_Click"
+                                        Margin="3,0" Padding="12,6" Style="{StaticResource PrimaryButtonStyle}"
                                         FontSize="11" MinWidth="70"/>
-                                <Button x:Name="BackendStopButton" Content="Stop" Click="BackendStopButton_Click" 
-                                        Margin="3,0" Padding="12,6" Style="{StaticResource DangerButtonStyle}" 
+                                <Button x:Name="BackendStopButton" Content="Stop" Click="BackendStopButton_Click"
+                                        Margin="3,0" Padding="12,6" Style="{StaticResource DangerButtonStyle}"
                                         FontSize="11" MinWidth="70" IsEnabled="False"/>
-                                <Button x:Name="BackendRestartButton" Content="Restart" Click="BackendRestartButton_Click" 
-                                        Margin="3,0" Padding="12,6" Style="{StaticResource PrimaryButtonStyle}" 
+                                <Button x:Name="BackendRestartButton" Content="Restart" Click="BackendRestartButton_Click"
+                                        Margin="3,0" Padding="12,6" Style="{StaticResource PrimaryButtonStyle}"
                                         FontSize="11" MinWidth="70" IsEnabled="False"/>
                             </StackPanel>
-                        </StackPanel>
+                        </Grid>
                     </Border>
-                    
+
                     <!-- Frontend Status and Control -->
-                    <Border Grid.Row="2" Background="{DynamicResource WindowBackgroundBrush}" Padding="12" CornerRadius="4" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-                        <StackPanel>
-                            <TextBlock Text="App" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource TextForegroundBrush}" Margin="0,0,0,8"/>
-                            <Grid Margin="0,0,0,10">
+                    <Border Grid.Row="2" Background="{DynamicResource WindowBackgroundBrush}" Padding="12" Margin="0,0,0,10" CornerRadius="4" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <!-- Row 0: Checkbox + Status -->
+                            <Grid Grid.Row="0" Margin="0,0,0,10">
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <Ellipse x:Name="FrontendStatusIndicator" Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center">
+                                <CheckBox x:Name="FrontendAutoStartCheckBox" Grid.Column="0"
+                                          IsChecked="True" VerticalAlignment="Center" Margin="0,0,8,0"
+                                          Checked="FrontendAutoStartCheckBox_Changed"
+                                          Unchecked="FrontendAutoStartCheckBox_Changed">
+                                    <TextBlock Text="Auto-start" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                </CheckBox>
+                                <Ellipse x:Name="FrontendStatusIndicator" Grid.Column="1" Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center">
                                     <Ellipse.Fill>
                                         <SolidColorBrush x:Name="FrontendStatusBrush"/>
                                     </Ellipse.Fill>
                                 </Ellipse>
-                                <StackPanel Grid.Column="1">
-                                    <TextBlock x:Name="FrontendStatusText" Text="Stopped" Foreground="{DynamicResource TextForegroundBrush}" FontSize="11"/>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock x:Name="FrontendStatusText" Text="App" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource TextForegroundBrush}"/>
                                     <TextBlock x:Name="FrontendStatusDetail" Text="Not running" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="10" Margin="0,2,0,0"/>
                                 </StackPanel>
                             </Grid>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                <Button x:Name="FrontendStartButton" Content="Start" Click="FrontendStartButton_Click" 
-                                        Margin="3,0" Padding="12,6" Style="{StaticResource PrimaryButtonStyle}" 
+                            <!-- Row 1: Buttons -->
+                            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button x:Name="FrontendStartButton" Content="Start" Click="FrontendStartButton_Click"
+                                        Margin="3,0" Padding="12,6" Style="{StaticResource PrimaryButtonStyle}"
                                         FontSize="11" MinWidth="70"/>
-                                <Button x:Name="FrontendStopButton" Content="Stop" Click="FrontendStopButton_Click" 
-                                        Margin="3,0" Padding="12,6" Style="{StaticResource DangerButtonStyle}" 
+                                <Button x:Name="FrontendStopButton" Content="Stop" Click="FrontendStopButton_Click"
+                                        Margin="3,0" Padding="12,6" Style="{StaticResource DangerButtonStyle}"
                                         FontSize="11" MinWidth="70" IsEnabled="False"/>
-                                <Button x:Name="OpenBrowserButton" Content="Browser" Click="OpenBrowserButton_Click" 
-                                        Margin="3,0" Padding="12,6" Style="{StaticResource SecondaryButtonStyle}" 
-                                        FontSize="11" MinWidth="70"/>
                             </StackPanel>
-                        </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Browser Control -->
+                    <Border Grid.Row="3" Background="{DynamicResource WindowBackgroundBrush}" Padding="12" CornerRadius="4" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="BrowserAutoOpenCheckBox" Grid.Column="0"
+                                      IsChecked="True" VerticalAlignment="Center" Margin="0,0,8,0"
+                                      Checked="BrowserAutoOpenCheckBox_Changed"
+                                      Unchecked="BrowserAutoOpenCheckBox_Changed">
+                                <TextBlock Text="Auto-open" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                            </CheckBox>
+                            <TextBlock Grid.Column="1" Text="Browser" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource TextForegroundBrush}" VerticalAlignment="Center"/>
+                            <Button x:Name="OpenBrowserButton" Grid.Column="2" Content="Open" Click="OpenBrowserButton_Click"
+                                    Margin="3,0" Padding="12,6" Style="{StaticResource SecondaryButtonStyle}"
+                                    FontSize="11" MinWidth="70" VerticalAlignment="Center"/>
+                        </Grid>
                     </Border>
                 </Grid>
             </Border>
