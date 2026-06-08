@@ -86,6 +86,7 @@ hiddenimports = [
     'backend.logger.module_log_manager',
     'backend.logger.module_logging',
     # backend.utils (cli injects sys.modules["utils"] = backend.utils)
+    'utils',  # Must be imported first: aliases backend.utils.* → utils.* for legacy imports
     'backend.utils',
     'backend.runtime_version',
     'backend.utils.resource_utils',

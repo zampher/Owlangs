@@ -29,6 +29,7 @@ _version = "1.4.0.0"
 datas = []
 binaries = []
 hiddenimports = [
+    'utils',  # Must be first: aliases backend.utils.* → utils.* for legacy imports
     'backend.utils', 'backend.runtime_version',
     'backend.utils.resource_utils', 'backend.utils.redis_manager',
     'backend.utils.utils', 'backend.utils.language_utils',
@@ -166,9 +167,9 @@ custom_datas = [
 
 if sys.platform.startswith('win'):
     _redis_files = [
-        ('./3rdParty/windows/Redis-x64-3.0.504/redis-server.exe', '3rdParty/windows/Redis-x64-3.0.504/'),
-        ('./3rdParty/windows/Redis-x64-3.0.504/redis.windows.conf', '3rdParty/windows/Redis-x64-3.0.504/'),
-        ('./3rdParty/windows/Redis-x64-3.0.504/redis.windows-service.conf', '3rdParty/windows/Redis-x64-3.0.504/'),
+        ('./3rdParty/windows/Redis-8.8.0-Windows-x64-msys2-with-Service/redis-server.exe', '3rdParty/windows/Redis-8.8.0-Windows-x64-msys2-with-Service/'),
+        ('./3rdParty/windows/Redis-8.8.0-Windows-x64-msys2-with-Service/redis.windows.conf', '3rdParty/windows/Redis-8.8.0-Windows-x64-msys2-with-Service/'),
+        ('./3rdParty/windows/Redis-8.8.0-Windows-x64-msys2-with-Service/redis.windows-service.conf', '3rdParty/windows/Redis-8.8.0-Windows-x64-msys2-with-Service/'),
     ]
     for _src, _dst in _redis_files:
         if os.path.exists(_src):

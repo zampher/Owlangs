@@ -105,7 +105,7 @@ class LocalRedisManager:
             # 0. Check EXE-side directory (single-file portable mode: 3rdParty alongside EXE)
             #    This is the highest priority for portable/single-file deployments.
             try:
-                exe_side = Path(sys.executable).parent / "3rdParty" / "windows" / "Redis-x64-3.0.504"
+                exe_side = Path(sys.executable).parent / "3rdParty" / "windows" / "Redis-8.8.0-Windows-x64-msys2-with-Service"
                 exe_side_server = exe_side / "redis-server.exe"
                 if exe_side_server.exists():
                     unified_logger.info(LogModule.SYSTEM, f"Found Redis alongside executable: {exe_side_server}")
@@ -119,19 +119,19 @@ class LocalRedisManager:
                 # Running from PyInstaller - try to find Redis relative to executable
                 exe_path = Path(sys.executable)
                 # Onedir: EXE and 3rdParty are in the same folder
-                redis_dir = exe_path.parent / "3rdParty" / "windows" / "Redis-x64-3.0.504"
+                redis_dir = exe_path.parent / "3rdParty" / "windows" / "Redis-8.8.0-Windows-x64-msys2-with-Service"
                 redis_server = redis_dir / "redis-server.exe"
                 if redis_server.exists():
                     unified_logger.info(LogModule.SYSTEM, f"Found Redis in onedir directory: {redis_server}")
                     return redis_server
                 # Onedir / onefile fallback: _MEIPASS contains bundled 3rdParty
-                meipass_redis = Path(sys._MEIPASS) / "3rdParty" / "windows" / "Redis-x64-3.0.504" / "redis-server.exe"
+                meipass_redis = Path(sys._MEIPASS) / "3rdParty" / "windows" / "Redis-8.8.0-Windows-x64-msys2-with-Service" / "redis-server.exe"
                 if meipass_redis.exists():
                     unified_logger.info(LogModule.SYSTEM, f"Found Redis in PyInstaller bundle directory: {meipass_redis}")
                     return meipass_redis
                 # Legacy: EXE is in a subdir (e.g. bin/), Redis is in parent
                 install_base = exe_path.parent.parent
-                redis_dir = install_base / "3rdParty" / "windows" / "Redis-x64-3.0.504"
+                redis_dir = install_base / "3rdParty" / "windows" / "Redis-8.8.0-Windows-x64-msys2-with-Service"
                 redis_server = redis_dir / "redis-server.exe"
                 if redis_server.exists():
                     unified_logger.info(LogModule.SYSTEM, f"Found Redis in installation directory: {redis_server}")
@@ -148,21 +148,21 @@ class LocalRedisManager:
             ]:
                 if not install_dir.exists():
                     continue
-                redis_dir = install_dir / "3rdParty" / "windows" / "Redis-x64-3.0.504"
+                redis_dir = install_dir / "3rdParty" / "windows" / "Redis-8.8.0-Windows-x64-msys2-with-Service"
                 redis_server = redis_dir / "redis-server.exe"
                 if redis_server.exists():
                     unified_logger.info(LogModule.SYSTEM, f"Found Redis in installation directory: {redis_server}")
                     return redis_server
             
             # 3. Check development directory
-            dev_redis_dir = Path(__file__).parent.parent.parent / "3rdParty" / "windows" / "Redis-x64-3.0.504"
+            dev_redis_dir = Path(__file__).parent.parent.parent / "3rdParty" / "windows" / "Redis-8.8.0-Windows-x64-msys2-with-Service"
             dev_redis_server = dev_redis_dir / "redis-server.exe"
             if dev_redis_server.exists():
                 unified_logger.info(LogModule.SYSTEM, f"Found Redis in development directory: {dev_redis_server}")
                 return dev_redis_server
 
             # 4. Check current working directory
-            cwd_redis_dir = Path.cwd() / "3rdParty" / "windows" / "Redis-x64-3.0.504"
+            cwd_redis_dir = Path.cwd() / "3rdParty" / "windows" / "Redis-8.8.0-Windows-x64-msys2-with-Service"
             cwd_redis_server = cwd_redis_dir / "redis-server.exe"
             if cwd_redis_server.exists():
                 unified_logger.info(LogModule.SYSTEM, f"Found Redis in current directory: {cwd_redis_server}")
@@ -201,6 +201,7 @@ class LocalRedisManager:
                     host=self.redis_host,
                     port=self.redis_port,
                     socket_connect_timeout=1.0,
+                    protocol=2,  # Force RESP2 for compatibility (avoids HELLO command issues)
                 )
                 client.ping()
                 result[0] = True
@@ -343,7 +344,8 @@ class LocalRedisManager:
                 port=self.redis_port,
                 decode_responses=True,
                 socket_connect_timeout=5,
-                socket_timeout=5
+                socket_timeout=5,
+                protocol=2,  # Force RESP2 for compatibility (avoids HELLO command issues)
             )
             # Test connection
             self.redis_client.ping()

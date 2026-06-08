@@ -82,7 +82,8 @@ class AuthSessionManager:
                 password=self.config.redis_password,
                 decode_responses=True,
                 socket_connect_timeout=2,
-                socket_timeout=2
+                socket_timeout=2,
+                protocol=2,  # Force RESP2 for compatibility (avoids HELLO command issues)
             )
             # Test connection
             self.redis_client.ping()

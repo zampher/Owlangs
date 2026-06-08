@@ -260,7 +260,7 @@ begin
   AppDir := ExpandConstant('{app}');
   
   // Try to find redis-cli.exe in common locations (match actual package layout)
-  RedisCliPath := AppDir + '\3rdParty\windows\Redis-x64-3.0.504\redis-cli.exe';
+  RedisCliPath := AppDir + '\3rdParty\windows\Redis-8.8.0-Windows-x64-msys2-with-Service\redis-cli.exe';
   if not FileExists(RedisCliPath) then
   begin
     // Fallback for older or alternate layouts

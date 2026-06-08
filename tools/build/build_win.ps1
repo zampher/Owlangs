@@ -745,8 +745,8 @@ function Make-WinPackage {
     }
 
     # Copy Redis binaries/configs to package (exclude .pdb, .docx, and other non-runtime files)
-    $redisSourceDir = "3rdParty\windows\Redis-x64-3.0.504"
-    $redisPackageDir = "$packageRoot\3rdParty\windows\Redis-x64-3.0.504"
+    $redisSourceDir = "3rdParty\windows\Redis-8.8.0-Windows-x64-msys2-with-Service"
+    $redisPackageDir = "$packageRoot\3rdParty\windows\Redis-8.8.0-Windows-x64-msys2-with-Service"
     $redisExcludeExtensions = @('.pdb', '.docx', '.doc', '.md', '.txt', '.html', '.rtf')
     if (Test-Path $redisSourceDir) {
         Write-Host "[$packageType] Copying Redis binaries (excluding .pdb, .docx, docs)..." -ForegroundColor Yellow
@@ -999,11 +999,11 @@ if exist "%PDLATEX_SRC%\bin\windows\xelatex.exe" (
 )
 
 REM Ensure Redis files are properly copied
-if exist "%INSTALL_DIR%\3rdParty\windows\Redis-x64-3.0.504\redis-server.exe" (
+if exist "%INSTALL_DIR%\3rdParty\windows\Redis-8.8.0-Windows-x64-msys2-with-Service\redis-server.exe" (
     echo ✅ Redis executable found in installation directory
 ) else (
     echo ❌ WARNING: Redis executable not found in installation directory
-    echo Expected location: %INSTALL_DIR%\3rdParty\windows\Redis-x64-3.0.504\redis-server.exe
+    echo Expected location: %INSTALL_DIR%\3rdParty\windows\Redis-8.8.0-Windows-x64-msys2-with-Service\redis-server.exe
 )
 
 REM Prepare Windows public configuration directory

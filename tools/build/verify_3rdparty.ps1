@@ -53,13 +53,13 @@ function Test-3rdPartyModules {
     }
 
     # Check Redis
-    $redisDir = Join-Path $tpDir "Redis-x64-3.0.504"
+    $redisDir = Join-Path $tpDir "Redis-8.8.0-Windows-x64-msys2-with-Service"
     $redisExe = Join-Path $redisDir "redis-server.exe"
     if (Test-Path $redisExe) {
         $hasRedis = $true
-        Write-Host "  OK: Redis found: Redis-x64-3.0.504\redis-server.exe" -ForegroundColor Green
+        Write-Host "  OK: Redis found: Redis-8.8.0-Windows-x64-msys2-with-Service\redis-server.exe" -ForegroundColor Green
     } else {
-        $issues += "MISSING: Redis-x64-3.0.504\redis-server.exe not found"
+        $issues += "MISSING: Redis-8.8.0-Windows-x64-msys2-with-Service\redis-server.exe not found"
     }
 
     return $issues

@@ -313,8 +313,8 @@ function Make-WinPackage-Web {
     Write-Host "[$packageType] Skipping spaCy models (will be downloaded to C:\ProgramData\Owlangs\models\spacy at runtime)" -ForegroundColor Gray
     
     # Copy Redis binaries (exclude .pdb, .docx, and other non-runtime files)
-    $redisSourceDir = "3rdParty\windows\Redis-x64-3.0.504"
-    $redisPackageDir = "$packageRoot\3rdParty\windows\Redis-x64-3.0.504"
+    $redisSourceDir = "3rdParty\windows\Redis-8.8.0-Windows-x64-msys2-with-Service"
+    $redisPackageDir = "$packageRoot\3rdParty\windows\Redis-8.8.0-Windows-x64-msys2-with-Service"
     $redisExcludeExtensions = @('.pdb', '.docx', '.doc', '.md', '.txt', '.html', '.rtf')
     if (Test-Path $redisSourceDir) {
         Write-Host "[$packageType] Copying Redis binaries (excluding .pdb, .docx, docs)..." -ForegroundColor Yellow

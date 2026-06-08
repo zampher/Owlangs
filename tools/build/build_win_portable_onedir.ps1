@@ -221,6 +221,7 @@ Write-Host "[build] Using launcher_portable_onedir.spec" -ForegroundColor Yellow
 
 $env:OWLANGS_VERSION = $Version
 $env:OWLANGS_FRONTEND = "web"
+$env:REDIS_ENABLED = "false"  # Disable Redis during build (not needed for onedir deployment)
 
 if ($IncludeAnonymize) {
     $env:OWLANGS_INCLUDE_ANONYMIZE = "1"
@@ -250,6 +251,7 @@ try {
     Remove-Item Env:\OWLANGS_FRONTEND -ErrorAction SilentlyContinue
     Remove-Item Env:\OWLANGS_INCLUDE_ANONYMIZE -ErrorAction SilentlyContinue
     Remove-Item Env:\OWLANGS_SKIP_SPACY -ErrorAction SilentlyContinue
+    Remove-Item Env:\REDIS_ENABLED -ErrorAction SilentlyContinue
 }
 
 Write-Host ""

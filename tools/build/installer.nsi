@@ -275,7 +275,7 @@ Section "Uninstall"
     DetailPrint "Stopping Redis service if running..."
     ; Write a temporary PowerShell script to gracefully stop Redis and force-kill if still running
     FileOpen $0 "$TEMP\owlangs_stop_redis.ps1" w
-    FileWrite $0 "$$redisCli = '$INSTDIR\3rdParty\windows\Redis-x64-3.0.504\redis-cli.exe'$\r$\n"
+    FileWrite $0 "$$redisCli = '$INSTDIR\3rdParty\windows\Redis-8.8.0-Windows-x64-msys2-with-Service\redis-cli.exe'$\r$\n"
     FileWrite $0 "if (-not (Test-Path $$redisCli)) {$\r$\n"
     FileWrite $0 "  $$redisCli = '$INSTDIR\3rdParty\windows\redis\redis-cli.exe'$\r$\n"
     FileWrite $0 "}$\r$\n"

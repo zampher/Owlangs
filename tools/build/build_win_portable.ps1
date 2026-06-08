@@ -131,11 +131,11 @@ if (Test-Path "$distDir\3rdParty") {
 }
 
 # Copy Redis
-if (Test-Path "3rdParty\windows\Redis-x64-3.0.504") {
-    $dest = Join-Path $distDir "3rdParty\windows\Redis-x64-3.0.504"
+if (Test-Path "3rdParty\windows\Redis-8.8.0-Windows-x64-msys2-with-Service") {
+    $dest = Join-Path $distDir "3rdParty\windows\Redis-8.8.0-Windows-x64-msys2-with-Service"
     Write-Host "[staging] Copying Redis..." -ForegroundColor Yellow
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
-    Copy-Item -Path "3rdParty\windows\Redis-x64-3.0.504\*" -Destination $dest -Recurse -Force
+    Copy-Item -Path "3rdParty\windows\Redis-8.8.0-Windows-x64-msys2-with-Service\*" -Destination $dest -Recurse -Force
 }
 
 # Copy Pandoc if available
