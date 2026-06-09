@@ -22,6 +22,7 @@ A powerful AI-powered document translation platform designed for professionals w
 - **Segment-level editing**: Review and refine individual translation segments
 - **Bilingual reading**: Side-by-side source and target text comparison
 - **Bilingual export**: Generate bilingual documents for review and collaboration
+- **Auto-retry failed segments**: Automatically detect and retry failed segments after translation
 
 ### Smart Glossary Management
 - **Auto-detection**: Automatically identify and extract terminology from documents
@@ -34,10 +35,10 @@ A powerful AI-powered document translation platform designed for professionals w
 - **Team collaboration**: Domain controller integration for enterprise environments
 
 ### Batch Processing & Queue Management
-- **Batch import**: Import multiple files or ZIP archives at once
+- **Batch import**: Import multiple files or folders at once, with recursive ZIP extraction
 - **Translation queue**: Manage, prioritize, and track all translation tasks
 - **Re-edit tasks**: Re-enter completed tasks in the queue for revision and editing
-- **Batch export**: Export multiple tasks in a single archive, preserving original relative paths
+- **Batch export**: Multi-select tasks and export in a single archive, preserving original relative paths
 
 ### Integration
 - **MCP & CLI**: Integrates with mainstream AI agent frameworks
