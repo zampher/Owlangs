@@ -204,8 +204,7 @@ async def login_page(
     """Login page"""
     from .config import AuthConfig
     config = AuthConfig.get_config()
-    return templates.TemplateResponse("login.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "login.html", {
         "next_url": next_url,
         "error": error,
         "ldap_enabled": config.ldap_enabled,
