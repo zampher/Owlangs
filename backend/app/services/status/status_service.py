@@ -4037,7 +4037,7 @@ class StatusService:
             
             # Build block_indices and block_texts from segment indices
             block_indices = []
-            block_texts = []
+            block_texts = chunk.get("block_texts") or []
             for seg_idx in chunk_segment_indices:
                 if seg_idx < len(all_segments):
                     seg = all_segments[seg_idx]
@@ -4050,9 +4050,12 @@ class StatusService:
                     for bidx in seg_block_indices:
                         if bidx not in block_indices:
                             block_indices.append(bidx)
-                    seg_text = seg.get("text", "")
-                    if seg_text:
-                        block_texts.append(seg_text)
+            if not block_texts:
+                for seg_idx in chunk_segment_indices:
+                    if seg_idx < len(all_segments):
+                        seg_text = all_segments[seg_idx].get("text", "")
+                        if seg_text:
+                            block_texts.append(seg_text)
             
             # Estimate tokens for this chunk
             estimated_tokens = None

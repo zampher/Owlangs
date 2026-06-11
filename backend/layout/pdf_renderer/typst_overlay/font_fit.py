@@ -8,9 +8,14 @@ Calculates optimal font sizes, line heights (leading), and font weights
 based on the bounding box dimensions of each layout block.
 """
 
-from typing import Tuple
+from typing import Any, Optional, Tuple
 
 from layout.pdf_renderer.typst_overlay.models import RenderBlock
+from layout.pdf_renderer.typst_overlay.text_metrics import (
+    block_needs_math_fit,
+    estimate_typographic_units,
+    is_single_line_bbox,
+)
 
 
 # ---- Constants ----
@@ -48,14 +53,7 @@ class FontFitCalculator:
         """
         Estimate an appropriate font size for a render block.
 
-        Algorithm:
-          1. If block.raw contains a font_size hint, use it.
-          2. Otherwise estimate from bbox height:
-             - Available height = bbox_height * (1 - vertical_margin)
-             - Estimated font size = available_height / (line_count * leading_ratio)
-
-        Returns:
-            Font size in points.
+        Uses typographic units so inline math counts wider than plain chars.
         """
         if block.font_size_pt > 0.0 and block.font_size_pt != DEFAULT_FONT_SIZE_PT:
             return block.font_size_pt
@@ -64,17 +62,19 @@ class FontFitCalculator:
         bbox_height = max(1.0, y1 - y0)
         available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
 
-        # Estimate line count: assume average line with 60 chars at current size
-        text_len = len(block.plain_text or block.markdown_text or "")
-        if text_len == 0:
+        text = block.plain_text or block.markdown_text or ""
+        typo_units = estimate_typographic_units(text)
+        if typo_units <= 0:
             return self.default_size_pt
 
         x0, _, x1, _ = block.inner_bbox
         bbox_width = max(1.0, x1 - x0)
-        chars_per_line = max(1.0, bbox_width / (self.default_size_pt * LATIN_CHAR_WIDTH_RATIO))
-        line_count = max(1.0, text_len / chars_per_line)
+        chars_per_line = max(
+            1.0,
+            bbox_width / (self.default_size_pt * LATIN_CHAR_WIDTH_RATIO),
+        )
+        line_count = max(1.0, typo_units / chars_per_line)
 
-        # font_size = available_height / (line_count * leading_ratio)
         estimated = available_h / (line_count * self.default_leading_em)
         return round(max(self.min_size_pt, min(self.max_size_pt, estimated)), 1)
 
@@ -95,16 +95,21 @@ class FontFitCalculator:
             return block.font_weight
         return "regular"
 
-    def calculate_fit_params(self, block: RenderBlock, *, preserve_font_size: bool = False) -> RenderBlock:
+    def calculate_fit_params(
+        self,
+        block: RenderBlock,
+        *,
+        preserve_font_size: bool = False,
+        layout_raw: Optional[Any] = None,
+    ) -> RenderBlock:
         """
         Fill in any missing fit-to-box parameters on the block.
 
         Args:
             block: The render block to compute parameters for.
             preserve_font_size: If True, keep the existing font_size_pt and
-                leading_em values instead of re-estimating them. Useful for
-                cross-page continuation blocks that should match the parent
-                paragraph's font size.
+                leading_em values instead of re-estimating them.
+            layout_raw: Optional MinerU raw block dict for inline_equation spans.
 
         Returns:
             A new RenderBlock with complete font/fit parameters.
@@ -117,15 +122,22 @@ class FontFitCalculator:
         if not preserve_font_size and (leading <= 0 or leading == DEFAULT_LEADING_EM):
             leading = self.estimate_leading(font_size)
 
-        # For blocks with many chars relative to bbox size, enable fit-to-box
         _, _, x1, _ = block.inner_bbox
         _, y0, _, y1 = block.inner_bbox
         bbox_width = max(1.0, x1 - block.inner_bbox[0])
         bbox_height = max(1.0, y1 - y0)
-        char_count = len(block.plain_text or block.markdown_text or "")
+        text = block.plain_text or block.markdown_text or ""
+        typo_units = estimate_typographic_units(text)
+        has_math = block_needs_math_fit(text, layout_raw)
 
-        needs_fit = char_count > 0 and (
-            char_count * font_size * 0.52 > bbox_width * 1.2  # text wider than box
+        needs_fit = typo_units > 0 and (
+            typo_units * font_size * LATIN_CHAR_WIDTH_RATIO > bbox_width * 1.2
+            or has_math
+        )
+        fit_single_line = (
+            needs_fit
+            and has_math
+            and is_single_line_bbox(bbox_height, layout_raw)
         )
 
         return RenderBlock(
@@ -134,7 +146,7 @@ class FontFitCalculator:
                 "font_size_pt": font_size,
                 "leading_em": leading,
                 "fit_to_box": needs_fit,
-                "fit_single_line": False,
+                "fit_single_line": fit_single_line,
                 "fit_min_font_size_pt": max(self.min_size_pt, font_size * 0.5),
                 "fit_max_font_size_pt": min(self.max_size_pt, font_size * 1.2),
                 "fit_min_leading_em": max(0.8, leading * 0.7),

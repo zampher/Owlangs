@@ -488,15 +488,20 @@ class PDFGenerator:
             
             try:
                 expected_blocks = len(text_block_indices)
-                block_hints: List[str] = []
-                if seg_index < len(layout_chunk_block_texts):
-                    candidate_hints = layout_chunk_block_texts[seg_index] or []
-                    if len(candidate_hints) == expected_blocks:
-                        block_hints = candidate_hints
-                if len(block_hints) != expected_blocks:
-                    block_hints = [(layout_block_original_texts.get(idx) or "") for idx in text_block_indices]
-                
-                per_block_texts = _distribute_text_to_blocks(text, block_hints)
+                if expected_blocks == 1:
+                    # One layout block per segment: never split by partial span hints.
+                    per_block_texts = [text.strip()]
+                else:
+                    block_hints = [
+                        (layout_block_original_texts.get(idx) or "")
+                        for idx in text_block_indices
+                    ]
+                    if all(not hint.strip() for hint in block_hints):
+                        if seg_index < len(layout_chunk_block_texts):
+                            candidate_hints = layout_chunk_block_texts[seg_index] or []
+                            if len(candidate_hints) == expected_blocks:
+                                block_hints = candidate_hints
+                    per_block_texts = _distribute_text_to_blocks(text, block_hints)
                 
                 for block_index_int, block_text in zip(text_block_indices, per_block_texts):
                     try:
@@ -529,6 +534,66 @@ class PDFGenerator:
                 merged = "\n".join(part for part in parts if part).strip()
                 if merged:
                     block_text_map[idx] = merged
+
+        self._reconcile_block_text_map_lengths(
+            block_text_map,
+            segments,
+            text_field,
+            layout_block_original_texts,
+            block_index_to_type,
+            block_index_to_raw,
+        )
         
         return block_text_map
+
+    @staticmethod
+    def _reconcile_block_text_map_lengths(
+        block_text_map: Dict[int, str],
+        segments: List[Dict],
+        text_field: str,
+        layout_block_original_texts: Dict[int, str],
+        block_index_to_type: Dict[int, str],
+        block_index_to_raw: Dict[int, Dict],
+    ) -> None:
+        """Recover block text when mapping used a partial segment instead of full paragraph."""
+        from layout.pdf_renderer.typst_overlay.text_metrics import (
+            is_suspiciously_short_mapped_text,
+        )
+
+        dedicated_texts: Dict[int, List[str]] = defaultdict(list)
+        for seg in segments:
+            seg_text = (seg.get(text_field) or "").strip()
+            if not seg_text:
+                continue
+            text_indices: List[int] = []
+            for raw_idx in seg.get("layout_block_indices") or []:
+                try:
+                    block_index_int = int(raw_idx)
+                except (TypeError, ValueError):
+                    continue
+                if block_index_to_type.get(block_index_int) == "image":
+                    continue
+                raw = block_index_to_raw.get(block_index_int, {})
+                if isinstance(raw, dict) and raw.get("_cross_page_pair_of") is not None:
+                    continue
+                text_indices.append(block_index_int)
+            if len(text_indices) == 1:
+                dedicated_texts[text_indices[0]].append(seg_text)
+
+        for block_index, original in layout_block_original_texts.items():
+            mapped = (block_text_map.get(block_index) or "").strip()
+            if not is_suspiciously_short_mapped_text(mapped, original):
+                continue
+            candidates = dedicated_texts.get(block_index) or []
+            if not candidates:
+                continue
+            best = max(candidates, key=len)
+            if len(best) > len(mapped):
+                logger.warning(
+                    LogModule.EXPORT,
+                    f"[LAYOUT] block_text_map[{block_index}] suspiciously short "
+                    f"(mapped={len(mapped)}, layout={len(original)}); "
+                    f"recovering from dedicated segment text ({len(best)} chars)",
+                )
+                block_text_map[block_index] = best
 

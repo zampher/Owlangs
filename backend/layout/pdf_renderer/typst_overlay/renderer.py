@@ -793,7 +793,8 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 )
                 if main_bbox is not None:
                     rb.inner_bbox = main_bbox
-                rb = self._font_fit.calculate_fit_params(rb)
+                layout_raw = getattr(block, "raw", None) or {}
+                rb = self._font_fit.calculate_fit_params(rb, layout_raw=layout_raw)
                 blocks.append(rb)
                 total_blocks += 1
 
@@ -833,7 +834,9 @@ class TypstOverlayRenderer(BasePDFRenderer):
                         }
                     )
                     cp_block = self._font_fit.calculate_fit_params(
-                        cp_block, preserve_font_size=True
+                        cp_block,
+                        preserve_font_size=True,
+                        layout_raw=layout_raw,
                     )
                     render_blocks_by_page.setdefault(resolved_page, []).append(cp_block)
                     total_blocks += 1
