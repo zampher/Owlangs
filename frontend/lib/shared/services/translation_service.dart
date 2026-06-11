@@ -864,6 +864,58 @@ class TranslationService {
     return (resp.data as Map).cast<String, dynamic>();
   }
 
+  /// Exclude multiple segments in one API call
+  Future<Map<String, dynamic>> excludeSegmentsBatch(
+    String taskId,
+    List<int> segmentIndices,
+  ) async {
+    if (segmentIndices.isEmpty) {
+      return <String, dynamic>{
+        'success': true,
+        'segments': <Map<String, dynamic>>[],
+        'failed_indices': <int>[],
+      };
+    }
+    debugPrint(
+      '[TranslationService] excludeSegmentsBatch called: taskId=$taskId, '
+      'count=${segmentIndices.length}',
+    );
+    final dio = _buildAuthedDio();
+    final resp = await dio.post(
+      '/service/translation-segments/$taskId/exclude-batch',
+      data: <String, dynamic>{'segment_indices': segmentIndices},
+    );
+    _segmentsCache.remove(taskId);
+    _segmentsRequests.remove(taskId);
+    return (resp.data as Map).cast<String, dynamic>();
+  }
+
+  /// Unexclude multiple segments in one API call
+  Future<Map<String, dynamic>> unexcludeSegmentsBatch(
+    String taskId,
+    List<int> segmentIndices,
+  ) async {
+    if (segmentIndices.isEmpty) {
+      return <String, dynamic>{
+        'success': true,
+        'segments': <Map<String, dynamic>>[],
+        'failed_indices': <int>[],
+      };
+    }
+    debugPrint(
+      '[TranslationService] unexcludeSegmentsBatch called: taskId=$taskId, '
+      'count=${segmentIndices.length}',
+    );
+    final dio = _buildAuthedDio();
+    final resp = await dio.post(
+      '/service/translation-segments/$taskId/unexclude-batch',
+      data: <String, dynamic>{'segment_indices': segmentIndices},
+    );
+    _segmentsCache.remove(taskId);
+    _segmentsRequests.remove(taskId);
+    return (resp.data as Map).cast<String, dynamic>();
+  }
+
   /// Update exclusion reason for a segment
   Future<Map<String, dynamic>> updateExclusionReason(
     String taskId,

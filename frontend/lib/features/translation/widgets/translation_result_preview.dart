@@ -2955,39 +2955,37 @@ class _TranslationResultPreviewState
 
       // Batch call API for all matching segments
       final TranslationService svc = TranslationService();
-      final List<Future<Map<String, dynamic>>> excludeFutures = matchingIndices
-          .map((idx) => svc.excludeSegment(_apiTaskId(), idx))
-          .toList();
-      final List<Map<String, dynamic>> results =
-          await Future.wait(excludeFutures);
+      final Map<String, dynamic> batchResult =
+          await svc.excludeSegmentsBatch(_apiTaskId(), matchingIndices);
+      final List<dynamic> segmentsRaw =
+          batchResult['segments'] as List<dynamic>? ?? <dynamic>[];
 
       // Update target text and metadata for all segments (from backend response)
-      for (int i = 0; i < matchingIndices.length && i < results.length; i++) {
-        final int idx = matchingIndices[i];
-        final Map<String, dynamic>? segment =
-            results[i]['segment'] as Map<String, dynamic>?;
-        if (segment != null) {
-          // Update target text
-          if (idx < _targetParagraphs.length) {
-            final String targetText = segment['target_text'] as String? ?? '';
-            _targetParagraphs[idx] = targetText;
-          }
-          // CRITICAL: Update metadata from backend response to ensure consistency
-          final String? exclusionReason =
-              segment['exclusion_reason'] as String?;
-          final bool isExcluded = segment['is_excluded'] as bool? ?? false;
-          if (_allSegmentsMetadata.containsKey(idx)) {
-            _allSegmentsMetadata[idx] = <String, dynamic>{
-              ..._allSegmentsMetadata[idx]!,
-              'is_excluded': isExcluded,
-              'exclusion_reason': exclusionReason,
-            };
-          } else {
-            _allSegmentsMetadata[idx] = <String, dynamic>{
-              'is_excluded': isExcluded,
-              'exclusion_reason': exclusionReason,
-            };
-          }
+      for (final dynamic segRaw in segmentsRaw) {
+        if (segRaw is! Map) continue;
+        final Map<String, dynamic> segment = segRaw.cast<String, dynamic>();
+        final int idx = segment['segment_index'] as int? ?? -1;
+        if (idx < 0) continue;
+        // Update target text
+        if (idx < _targetParagraphs.length) {
+          final String targetText = segment['target_text'] as String? ?? '';
+          _targetParagraphs[idx] = targetText;
+        }
+        // CRITICAL: Update metadata from backend response to ensure consistency
+        final String? exclusionReason =
+            segment['exclusion_reason'] as String?;
+        final bool isExcluded = segment['is_excluded'] as bool? ?? false;
+        if (_allSegmentsMetadata.containsKey(idx)) {
+          _allSegmentsMetadata[idx] = <String, dynamic>{
+            ..._allSegmentsMetadata[idx]!,
+            'is_excluded': isExcluded,
+            'exclusion_reason': exclusionReason,
+          };
+        } else {
+          _allSegmentsMetadata[idx] = <String, dynamic>{
+            'is_excluded': isExcluded,
+            'exclusion_reason': exclusionReason,
+          };
         }
       }
 
@@ -3280,55 +3278,57 @@ class _TranslationResultPreviewState
 
       // Batch call API for all matching segments
       final TranslationService svc = TranslationService();
-      final List<Future<Map<String, dynamic>>> unexcludeFutures =
-          matchingIndices
-              .map((idx) => svc.unexcludeSegment(_apiTaskId(), idx))
-              .toList();
-      final List<Map<String, dynamic>> results =
-          await Future.wait(unexcludeFutures);
+      final Map<String, dynamic> batchResult =
+          await svc.unexcludeSegmentsBatch(_apiTaskId(), matchingIndices);
+      final List<dynamic> segmentsRaw =
+          batchResult['segments'] as List<dynamic>? ?? <dynamic>[];
+      final Set<int> updatedIndices = <int>{};
 
-      // Update state and metadata for all matching segments
-      for (int i = 0; i < matchingIndices.length && i < results.length; i++) {
-        final int idx = matchingIndices[i];
-        final Map<String, dynamic>? segment =
-            results[i]['segment'] as Map<String, dynamic>?;
+      // Update state and metadata for all segments returned by backend
+      for (final dynamic segRaw in segmentsRaw) {
+        if (segRaw is! Map) continue;
+        final Map<String, dynamic> segment = segRaw.cast<String, dynamic>();
+        final int idx = segment['segment_index'] as int? ?? -1;
+        if (idx < 0) continue;
+        updatedIndices.add(idx);
 
-        if (segment != null) {
-          // CRITICAL: Update metadata from backend response to ensure consistency
-          final String? exclusionReason =
-              segment['exclusion_reason'] as String?;
-          final bool isExcluded = segment['is_excluded'] as bool? ?? false;
-          if (_allSegmentsMetadata.containsKey(idx)) {
-            _allSegmentsMetadata[idx] = <String, dynamic>{
-              ..._allSegmentsMetadata[idx]!,
-              'is_excluded': isExcluded,
-              'exclusion_reason': exclusionReason,
-            };
-          } else {
-            _allSegmentsMetadata[idx] = <String, dynamic>{
-              'is_excluded': isExcluded,
-              'exclusion_reason': exclusionReason,
-            };
-          }
-
-          // Update target text if backend returned updated segment data
-          if (idx < _targetParagraphs.length) {
-            final String targetText = segment['modified_text'] as String? ??
-                segment['target_text'] as String? ??
-                '';
-            if (targetText.isNotEmpty) {
-              _targetParagraphs[idx] = targetText;
-            }
-          }
+        // CRITICAL: Update metadata from backend response to ensure consistency
+        final String? exclusionReason =
+            segment['exclusion_reason'] as String?;
+        final bool isExcluded = segment['is_excluded'] as bool? ?? false;
+        if (_allSegmentsMetadata.containsKey(idx)) {
+          _allSegmentsMetadata[idx] = <String, dynamic>{
+            ..._allSegmentsMetadata[idx]!,
+            'is_excluded': isExcluded,
+            'exclusion_reason': exclusionReason,
+          };
         } else {
-          // Fallback: Update metadata cache if backend didn't return segment
-          if (_allSegmentsMetadata.containsKey(idx)) {
-            _allSegmentsMetadata[idx] = <String, dynamic>{
-              ..._allSegmentsMetadata[idx]!,
-              'is_excluded': false,
-              'exclusion_reason': null,
-            };
+          _allSegmentsMetadata[idx] = <String, dynamic>{
+            'is_excluded': isExcluded,
+            'exclusion_reason': exclusionReason,
+          };
+        }
+
+        // Update target text if backend returned updated segment data
+        if (idx < _targetParagraphs.length) {
+          final String targetText = segment['modified_text'] as String? ??
+              segment['target_text'] as String? ??
+              '';
+          if (targetText.isNotEmpty) {
+            _targetParagraphs[idx] = targetText;
           }
+        }
+      }
+
+      // Fallback for indices not returned in batch response
+      for (final int idx in matchingIndices) {
+        if (updatedIndices.contains(idx)) continue;
+        if (_allSegmentsMetadata.containsKey(idx)) {
+          _allSegmentsMetadata[idx] = <String, dynamic>{
+            ..._allSegmentsMetadata[idx]!,
+            'is_excluded': false,
+            'exclusion_reason': null,
+          };
         }
       }
 

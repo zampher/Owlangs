@@ -3535,6 +3535,108 @@ def unexclude_translation_segment(
     return segment
 
 
+def exclude_translation_segments_batch(
+    task_id: str,
+    segment_indices: List[int],
+    task_state: Optional[dict] = None,
+) -> dict:
+    """
+    Exclude multiple translation segments in one task_state load.
+
+    Returns dict with success flag, updated segment dicts, and failed indices.
+    """
+    if task_state is None:
+        from backend.app.services.task import task_manager
+        task_state = task_manager.get_task(task_id)
+    if task_state is None:
+        logger.warning(LogModule.TRANS, f"[EXCLUDE_BATCH] Task {task_id} not found")
+        return {
+            "success": False,
+            "segments": [],
+            "failed_indices": list(segment_indices),
+        }
+
+    segments_out: List[dict] = []
+    failed_indices: List[int] = []
+    seen: set[int] = set()
+    for segment_index in segment_indices:
+        idx = int(segment_index)
+        if idx in seen:
+            continue
+        seen.add(idx)
+        segment = exclude_translation_segment(
+            task_id=task_id,
+            segment_index=idx,
+            task_state=task_state,
+        )
+        if segment is None:
+            failed_indices.append(idx)
+        else:
+            segments_out.append(segment)
+
+    logger.info(
+        LogModule.TRANS,
+        f"[EXCLUDE_BATCH] Task {task_id}: excluded {len(segments_out)}/{len(seen)} segments"
+        + (f", failed={failed_indices}" if failed_indices else ""),
+    )
+    return {
+        "success": len(failed_indices) == 0,
+        "segments": segments_out,
+        "failed_indices": failed_indices,
+    }
+
+
+def unexclude_translation_segments_batch(
+    task_id: str,
+    segment_indices: List[int],
+    task_state: Optional[dict] = None,
+) -> dict:
+    """
+    Unexclude multiple translation segments in one task_state load.
+
+    Returns dict with success flag, updated segment dicts, and failed indices.
+    """
+    if task_state is None:
+        from backend.app.services.task import task_manager
+        task_state = task_manager.get_task(task_id)
+    if task_state is None:
+        logger.warning(LogModule.TRANS, f"[UNEXCLUDE_BATCH] Task {task_id} not found")
+        return {
+            "success": False,
+            "segments": [],
+            "failed_indices": list(segment_indices),
+        }
+
+    segments_out: List[dict] = []
+    failed_indices: List[int] = []
+    seen: set[int] = set()
+    for segment_index in segment_indices:
+        idx = int(segment_index)
+        if idx in seen:
+            continue
+        seen.add(idx)
+        segment = unexclude_translation_segment(
+            task_id=task_id,
+            segment_index=idx,
+            task_state=task_state,
+        )
+        if segment is None:
+            failed_indices.append(idx)
+        else:
+            segments_out.append(segment)
+
+    logger.info(
+        LogModule.TRANS,
+        f"[UNEXCLUDE_BATCH] Task {task_id}: unexcluded {len(segments_out)}/{len(seen)} segments"
+        + (f", failed={failed_indices}" if failed_indices else ""),
+    )
+    return {
+        "success": len(failed_indices) == 0,
+        "segments": segments_out,
+        "failed_indices": failed_indices,
+    }
+
+
 def _get_total_segment_count(task_state: dict) -> int:
     """Get total segment count from task_state (source_chunks_cache or segment_info or translation_segments)."""
     cache_info = task_state.get("source_chunks_cache", {})

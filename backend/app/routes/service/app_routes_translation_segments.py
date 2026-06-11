@@ -508,6 +508,105 @@ async def unexclude_segment_api(
 
 
 @router.post(
+    "/translation-segments/{task_id}/exclude-batch",
+    summary="Exclude multiple segments from translation",
+    description=(
+        "Mark multiple translation segments as excluded in a single request. "
+        "Excluded segments revert to the original text and are skipped in subsequent translations."
+    ),
+    responses={
+        200: {"description": "Batch exclude completed (check failed_indices for partial failures)."},
+        404: {"description": "Task ID not found."},
+    },
+)
+async def exclude_segments_batch_api(
+    task_id: str,
+    body: dict = Body(...),
+):
+    """Exclude multiple translation segments in one request."""
+    segment_indices_raw = body.get("segment_indices")
+    if not isinstance(segment_indices_raw, list):
+        raise HTTPException(
+            status_code=400,
+            detail="Request body must include 'segment_indices' as a list of integers.",
+        )
+    try:
+        segment_indices = [int(idx) for idx in segment_indices_raw]
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Each entry in 'segment_indices' must be an integer.",
+        ) from exc
+
+    logger.info(
+        LogModule.ROUTE,
+        f"[EXCLUDE_BATCH_API] Received exclude-batch for task {task_id}, "
+        f"count={len(segment_indices)}",
+    )
+
+    if task_manager.get_task(task_id) is None:
+        logger.warning(
+            LogModule.ROUTE,
+            f"[EXCLUDE_BATCH_API] Task ID '{task_id}' not found",
+        )
+        raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
+
+    result = _ts_module().exclude_translation_segments_batch(
+        task_id=task_id,
+        segment_indices=segment_indices,
+    )
+    return JSONResponse(content=result)
+
+
+@router.post(
+    "/translation-segments/{task_id}/unexclude-batch",
+    summary="Remove exclusion from multiple segments",
+    description="Remove the exclusion flag from multiple segments in a single request.",
+    responses={
+        200: {"description": "Batch unexclude completed (check failed_indices for partial failures)."},
+        404: {"description": "Task ID not found."},
+    },
+)
+async def unexclude_segments_batch_api(
+    task_id: str,
+    body: dict = Body(...),
+):
+    """Remove exclusion from multiple translation segments in one request."""
+    segment_indices_raw = body.get("segment_indices")
+    if not isinstance(segment_indices_raw, list):
+        raise HTTPException(
+            status_code=400,
+            detail="Request body must include 'segment_indices' as a list of integers.",
+        )
+    try:
+        segment_indices = [int(idx) for idx in segment_indices_raw]
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Each entry in 'segment_indices' must be an integer.",
+        ) from exc
+
+    logger.info(
+        LogModule.ROUTE,
+        f"[UNEXCLUDE_BATCH_API] Received unexclude-batch for task {task_id}, "
+        f"count={len(segment_indices)}",
+    )
+
+    if task_manager.get_task(task_id) is None:
+        logger.warning(
+            LogModule.ROUTE,
+            f"[UNEXCLUDE_BATCH_API] Task ID '{task_id}' not found",
+        )
+        raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
+
+    result = _ts_module().unexclude_translation_segments_batch(
+        task_id=task_id,
+        segment_indices=segment_indices,
+    )
+    return JSONResponse(content=result)
+
+
+@router.post(
     "/translation-segments/{task_id}/exclude-all",
     summary="Exclude all segments",
     description="Mark all segments as excluded. Segments not already excluded are marked with user (manual) exclusion.",

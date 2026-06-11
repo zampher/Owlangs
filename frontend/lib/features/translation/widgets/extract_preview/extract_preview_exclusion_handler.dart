@@ -45,6 +45,54 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
   // The following should be provided by the State class:
   // - void _log(String message, {LogLevel level = LogLevel.debug})
 
+  /// Batch exclude/unexclude via a single API call (avoids N sequential HTTP round-trips).
+  Future<(int success, int fail)> batchUpdateSegmentExclusion({
+    required String taskId,
+    required List<int> indices,
+    required bool exclude,
+    required int myGeneration,
+    required String operationLabel,
+  }) async {
+    if (indices.isEmpty) {
+      return (0, 0);
+    }
+    if (exclusionOperationGeneration != myGeneration) {
+      AppLogger.log(
+        'ExtractPreview',
+        '$operationLabel aborted: superseded by newer operation '
+            '(my=$myGeneration, current=$exclusionOperationGeneration)',
+        level: LogLevel.info,
+      );
+      return (0, 0);
+    }
+
+    final TranslationService svc = TranslationService();
+    try {
+      final Map<String, dynamic> result = exclude
+          ? await svc.excludeSegmentsBatch(taskId, indices)
+          : await svc.unexcludeSegmentsBatch(taskId, indices);
+      final List<dynamic> failedRaw =
+          result['failed_indices'] as List<dynamic>? ?? <dynamic>[];
+      final int failCount = failedRaw.length;
+      final int successCount = indices.length - failCount;
+      if (failCount > 0) {
+        AppLogger.log(
+          'ExtractPreview',
+          '$operationLabel partial failure: success=$successCount, failed=$failCount',
+          level: LogLevel.warn,
+        );
+      }
+      return (successCount, failCount);
+    } catch (e) {
+      AppLogger.log(
+        'ExtractPreview',
+        '$operationLabel batch API failed: $e',
+        level: LogLevel.warn,
+      );
+      return (0, indices.length);
+    }
+  }
+
   // ============================================================================
   // Exclusion Statistics and Counts
   // ============================================================================
@@ -723,75 +771,39 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
       }
 
       final TranslationService svc = TranslationService();
-      int successCount = 0;
-      int failCount = 0;
+      final List<int> batchIndices = identifierSegments.toList();
+      final (int successCount, int failCount) =
+          await batchUpdateSegmentExclusion(
+        taskId: extractWidget.taskId,
+        indices: batchIndices,
+        exclude: exclude,
+        myGeneration: myGeneration,
+        operationLabel: exclude
+            ? 'Identifier exclude'
+            : 'Identifier unexclude',
+      );
+      if (successCount == 0 &&
+          failCount == 0 &&
+          exclusionOperationGeneration != myGeneration) {
+        return;
+      }
 
-      if (exclude) {
-        for (final index in identifierSegments) {
-          // Abort if a newer operation has started
-          if (exclusionOperationGeneration != myGeneration) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Identifier exclude aborted: superseded by newer operation '
-                  '(my=$myGeneration, current=$exclusionOperationGeneration)',
-              level: LogLevel.info,
-            );
-            return;
-          }
-          try {
-            await svc.excludeSegment(extractWidget.taskId, index);
-            successCount++;
-          } catch (e) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Failed to exclude identifier segment $index: $e',
-              level: LogLevel.warn,
-            );
-            failCount++;
-          }
-        }
-        if (mounted && exclusionOperationGeneration == myGeneration) {
+      if (mounted && exclusionOperationGeneration == myGeneration) {
+        if (exclude) {
           MessageService.showInfo(
             context,
             'Excluded $successCount identifier segment(s)${failCount > 0 ? ' ($failCount failed)' : ''}',
           );
-        }
-      } else {
-        for (final index in identifierSegments) {
-          // Abort if a newer operation has started
-          if (exclusionOperationGeneration != myGeneration) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Identifier unexclude aborted: superseded by newer operation '
-                  '(my=$myGeneration, current=$exclusionOperationGeneration)',
-              level: LogLevel.info,
-            );
-            return;
-          }
-          try {
-            await svc.unexcludeSegment(extractWidget.taskId, index);
-            successCount++;
-          } catch (e) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Failed to unexclude identifier segment $index: $e',
-              level: LogLevel.warn,
-            );
-            failCount++;
-          }
-        }
-        if (mounted && exclusionOperationGeneration == myGeneration) {
-          if (failCount > 0) {
-            MessageService.showWarning(
-              context,
-              'Unexcluded $successCount identifier segment(s), $failCount failed (content-based exclusions cannot be removed)',
-            );
-          } else {
-            MessageService.showInfo(
-              context,
-              'Unexcluded $successCount identifier segment(s)',
-            );
-          }
+        } else if (failCount > 0) {
+          MessageService.showWarning(
+            context,
+            'Unexcluded $successCount identifier segment(s), $failCount failed (content-based exclusions cannot be removed)',
+          );
+        } else {
+          MessageService.showInfo(
+            context,
+            'Unexcluded $successCount identifier segment(s)',
+          );
         }
       }
 
@@ -1192,73 +1204,38 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
       }
 
       final TranslationService svc = TranslationService();
-      int successCount = 0;
-      int failCount = 0;
+      final List<int> batchIndices = formulaSegments.toList();
+      final (int successCount, int failCount) =
+          await batchUpdateSegmentExclusion(
+        taskId: extractWidget.taskId,
+        indices: batchIndices,
+        exclude: exclude,
+        myGeneration: myGeneration,
+        operationLabel:
+            exclude ? 'Formula exclude' : 'Formula unexclude',
+      );
+      if (successCount == 0 &&
+          failCount == 0 &&
+          exclusionOperationGeneration != myGeneration) {
+        return;
+      }
 
-      if (exclude) {
-        for (final index in formulaSegments) {
-          if (exclusionOperationGeneration != myGeneration) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Formula exclude aborted: superseded by newer operation '
-                  '(my=$myGeneration, current=$exclusionOperationGeneration)',
-              level: LogLevel.info,
-            );
-            return;
-          }
-          try {
-            await svc.excludeSegment(extractWidget.taskId, index);
-            successCount++;
-          } catch (e) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Failed to exclude formula segment $index: $e',
-              level: LogLevel.warn,
-            );
-            failCount++;
-          }
-        }
-        if (mounted && exclusionOperationGeneration == myGeneration) {
+      if (mounted && exclusionOperationGeneration == myGeneration) {
+        if (exclude) {
           MessageService.showInfo(
             context,
             'Excluded $successCount formula segment(s)${failCount > 0 ? ' ($failCount failed)' : ''}',
           );
-        }
-      } else {
-        for (final index in formulaSegments) {
-          if (exclusionOperationGeneration != myGeneration) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Formula unexclude aborted: superseded by newer operation '
-                  '(my=$myGeneration, current=$exclusionOperationGeneration)',
-              level: LogLevel.info,
-            );
-            return;
-          }
-          try {
-            await svc.unexcludeSegment(extractWidget.taskId, index);
-            successCount++;
-          } catch (e) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Failed to unexclude formula segment $index: $e',
-              level: LogLevel.warn,
-            );
-            failCount++;
-          }
-        }
-        if (mounted && exclusionOperationGeneration == myGeneration) {
-          if (failCount > 0) {
-            MessageService.showWarning(
-              context,
-              'Unexcluded $successCount formula segment(s), $failCount failed',
-            );
-          } else {
-            MessageService.showInfo(
-              context,
-              'Unexcluded $successCount formula segment(s)',
-            );
-          }
+        } else if (failCount > 0) {
+          MessageService.showWarning(
+            context,
+            'Unexcluded $successCount formula segment(s), $failCount failed',
+          );
+        } else {
+          MessageService.showInfo(
+            context,
+            'Unexcluded $successCount formula segment(s)',
+          );
         }
       }
 
@@ -1403,73 +1380,37 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
       }
 
       final TranslationService svc = TranslationService();
-      int successCount = 0;
-      int failCount = 0;
+      final List<int> batchIndices = tableSegments.toList();
+      final (int successCount, int failCount) =
+          await batchUpdateSegmentExclusion(
+        taskId: extractWidget.taskId,
+        indices: batchIndices,
+        exclude: exclude,
+        myGeneration: myGeneration,
+        operationLabel: exclude ? 'Table exclude' : 'Table unexclude',
+      );
+      if (successCount == 0 &&
+          failCount == 0 &&
+          exclusionOperationGeneration != myGeneration) {
+        return;
+      }
 
-      if (exclude) {
-        for (final index in tableSegments) {
-          if (exclusionOperationGeneration != myGeneration) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Table exclude aborted: superseded by newer operation '
-                  '(my=$myGeneration, current=$exclusionOperationGeneration)',
-              level: LogLevel.info,
-            );
-            return;
-          }
-          try {
-            await svc.excludeSegment(extractWidget.taskId, index);
-            successCount++;
-          } catch (e) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Failed to exclude table segment $index: $e',
-              level: LogLevel.warn,
-            );
-            failCount++;
-          }
-        }
-        if (mounted && exclusionOperationGeneration == myGeneration) {
+      if (mounted && exclusionOperationGeneration == myGeneration) {
+        if (exclude) {
           MessageService.showInfo(
             context,
             'Excluded $successCount table segment(s)${failCount > 0 ? ' ($failCount failed)' : ''}',
           );
-        }
-      } else {
-        for (final index in tableSegments) {
-          if (exclusionOperationGeneration != myGeneration) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Table unexclude aborted: superseded by newer operation '
-                  '(my=$myGeneration, current=$exclusionOperationGeneration)',
-              level: LogLevel.info,
-            );
-            return;
-          }
-          try {
-            await svc.unexcludeSegment(extractWidget.taskId, index);
-            successCount++;
-          } catch (e) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Failed to unexclude table segment $index: $e',
-              level: LogLevel.warn,
-            );
-            failCount++;
-          }
-        }
-        if (mounted && exclusionOperationGeneration == myGeneration) {
-          if (failCount > 0) {
-            MessageService.showWarning(
-              context,
-              'Unexcluded $successCount table segment(s), $failCount failed (content-based exclusions cannot be removed)',
-            );
-          } else {
-            MessageService.showInfo(
-              context,
-              'Unexcluded $successCount table segment(s)',
-            );
-          }
+        } else if (failCount > 0) {
+          MessageService.showWarning(
+            context,
+            'Unexcluded $successCount table segment(s), $failCount failed (content-based exclusions cannot be removed)',
+          );
+        } else {
+          MessageService.showInfo(
+            context,
+            'Unexcluded $successCount table segment(s)',
+          );
         }
       }
 
@@ -1671,73 +1612,37 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
       }
 
       final TranslationService svc = TranslationService();
-      int successCount = 0;
-      int failCount = 0;
+      final List<int> batchIndices = chartSegments.toList();
+      final (int successCount, int failCount) =
+          await batchUpdateSegmentExclusion(
+        taskId: extractWidget.taskId,
+        indices: batchIndices,
+        exclude: exclude,
+        myGeneration: myGeneration,
+        operationLabel: exclude ? 'Chart exclude' : 'Chart unexclude',
+      );
+      if (successCount == 0 &&
+          failCount == 0 &&
+          exclusionOperationGeneration != myGeneration) {
+        return;
+      }
 
-      if (exclude) {
-        for (final index in chartSegments) {
-          if (exclusionOperationGeneration != myGeneration) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Chart exclude aborted: superseded by newer operation '
-                  '(my=$myGeneration, current=$exclusionOperationGeneration)',
-              level: LogLevel.info,
-            );
-            return;
-          }
-          try {
-            await svc.excludeSegment(extractWidget.taskId, index);
-            successCount++;
-          } catch (e) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Failed to exclude chart segment $index: $e',
-              level: LogLevel.warn,
-            );
-            failCount++;
-          }
-        }
-        if (mounted && exclusionOperationGeneration == myGeneration) {
+      if (mounted && exclusionOperationGeneration == myGeneration) {
+        if (exclude) {
           MessageService.showInfo(
             context,
             'Excluded $successCount chart segment(s)${failCount > 0 ? ' ($failCount failed)' : ''}',
           );
-        }
-      } else {
-        for (final index in chartSegments) {
-          if (exclusionOperationGeneration != myGeneration) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Chart unexclude aborted: superseded by newer operation '
-                  '(my=$myGeneration, current=$exclusionOperationGeneration)',
-              level: LogLevel.info,
-            );
-            return;
-          }
-          try {
-            await svc.unexcludeSegment(extractWidget.taskId, index);
-            successCount++;
-          } catch (e) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Failed to unexclude chart segment $index: $e',
-              level: LogLevel.warn,
-            );
-            failCount++;
-          }
-        }
-        if (mounted && exclusionOperationGeneration == myGeneration) {
-          if (failCount > 0) {
-            MessageService.showWarning(
-              context,
-              'Unexcluded $successCount chart segment(s), $failCount failed (content-based exclusions cannot be removed)',
-            );
-          } else {
-            MessageService.showInfo(
-              context,
-              'Unexcluded $successCount chart segment(s)',
-            );
-          }
+        } else if (failCount > 0) {
+          MessageService.showWarning(
+            context,
+            'Unexcluded $successCount chart segment(s), $failCount failed (content-based exclusions cannot be removed)',
+          );
+        } else {
+          MessageService.showInfo(
+            context,
+            'Unexcluded $successCount chart segment(s)',
+          );
         }
       }
 
@@ -1943,62 +1848,29 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
       }
 
       final TranslationService svc = TranslationService();
-      int successCount = 0;
-      int failCount = 0;
+      final List<int> batchIndices = userSelectedSegments.toList();
+      final (int successCount, int failCount) =
+          await batchUpdateSegmentExclusion(
+        taskId: extractWidget.taskId,
+        indices: batchIndices,
+        exclude: exclude,
+        myGeneration: myGeneration,
+        operationLabel:
+            exclude ? 'UserSelected exclude' : 'UserSelected unexclude',
+      );
+      if (successCount == 0 &&
+          failCount == 0 &&
+          exclusionOperationGeneration != myGeneration) {
+        return;
+      }
 
-      if (exclude) {
-        for (final index in userSelectedSegments) {
-          if (exclusionOperationGeneration != myGeneration) {
-            AppLogger.log(
-              'ExtractPreview',
-              'UserSelected exclude aborted: superseded by newer operation '
-                  '(my=$myGeneration, current=$exclusionOperationGeneration)',
-              level: LogLevel.info,
-            );
-            return;
-          }
-          try {
-            await svc.excludeSegment(extractWidget.taskId, index);
-            successCount++;
-          } catch (e) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Failed to exclude user selected segment $index: $e',
-              level: LogLevel.warn,
-            );
-            failCount++;
-          }
-        }
-        if (mounted && exclusionOperationGeneration == myGeneration) {
+      if (mounted && exclusionOperationGeneration == myGeneration) {
+        if (exclude) {
           MessageService.showInfo(
             context,
             'Excluded $successCount user selected segment(s)${failCount > 0 ? ' ($failCount failed)' : ''}',
           );
-        }
-      } else {
-        for (final index in userSelectedSegments) {
-          if (exclusionOperationGeneration != myGeneration) {
-            AppLogger.log(
-              'ExtractPreview',
-              'UserSelected unexclude aborted: superseded by newer operation '
-                  '(my=$myGeneration, current=$exclusionOperationGeneration)',
-              level: LogLevel.info,
-            );
-            return;
-          }
-          try {
-            await svc.unexcludeSegment(extractWidget.taskId, index);
-            successCount++;
-          } catch (e) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Failed to unexclude user selected segment $index: $e',
-              level: LogLevel.warn,
-            );
-            failCount++;
-          }
-        }
-        if (mounted && exclusionOperationGeneration == myGeneration) {
+        } else {
           MessageService.showInfo(
             context,
             'Unexcluded $successCount user selected segment(s)${failCount > 0 ? ' ($failCount failed)' : ''}',
@@ -2201,73 +2073,38 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
       }
 
       final TranslationService svc = TranslationService();
-      int successCount = 0;
-      int failCount = 0;
+      final List<int> batchIndices = referenceSegments.toList();
+      final (int successCount, int failCount) =
+          await batchUpdateSegmentExclusion(
+        taskId: extractWidget.taskId,
+        indices: batchIndices,
+        exclude: exclude,
+        myGeneration: myGeneration,
+        operationLabel:
+            exclude ? 'Reference exclude' : 'Reference unexclude',
+      );
+      if (successCount == 0 &&
+          failCount == 0 &&
+          exclusionOperationGeneration != myGeneration) {
+        return;
+      }
 
-      if (exclude) {
-        for (final index in referenceSegments) {
-          if (exclusionOperationGeneration != myGeneration) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Reference exclude aborted: superseded by newer operation '
-                  '(my=$myGeneration, current=$exclusionOperationGeneration)',
-              level: LogLevel.info,
-            );
-            return;
-          }
-          try {
-            await svc.excludeSegment(extractWidget.taskId, index);
-            successCount++;
-          } catch (e) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Failed to exclude reference segment $index: $e',
-              level: LogLevel.warn,
-            );
-            failCount++;
-          }
-        }
-        if (mounted && exclusionOperationGeneration == myGeneration) {
+      if (mounted && exclusionOperationGeneration == myGeneration) {
+        if (exclude) {
           MessageService.showInfo(
             context,
             'Excluded $successCount reference segment(s)${failCount > 0 ? ' ($failCount failed)' : ''}',
           );
-        }
-      } else {
-        for (final index in referenceSegments) {
-          if (exclusionOperationGeneration != myGeneration) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Reference unexclude aborted: superseded by newer operation '
-                  '(my=$myGeneration, current=$exclusionOperationGeneration)',
-              level: LogLevel.info,
-            );
-            return;
-          }
-          try {
-            await svc.unexcludeSegment(extractWidget.taskId, index);
-            successCount++;
-          } catch (e) {
-            AppLogger.log(
-              'ExtractPreview',
-              'Failed to unexclude reference segment $index: $e',
-              level: LogLevel.warn,
-            );
-            failCount++;
-          }
-        }
-        if (mounted && exclusionOperationGeneration == myGeneration) {
-          if (failCount > 0) {
-            MessageService.showWarning(
-              context,
-              'Unexcluded $successCount reference segment(s), $failCount failed',
-            );
-          } else {
-            MessageService.showInfo(
-              context,
-              'Unexcluded $successCount reference segment(s)',
-            );
-          }
+        } else if (failCount > 0) {
+          MessageService.showWarning(
+            context,
+            'Unexcluded $successCount reference segment(s), $failCount failed',
+          );
+        } else {
+          MessageService.showInfo(
+            context,
+            'Unexcluded $successCount reference segment(s)',
+          );
         }
       }
 

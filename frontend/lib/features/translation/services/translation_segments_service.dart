@@ -317,6 +317,18 @@ class TranslationSegmentsService {
     return svc.unexcludeSegment(taskId, index);
   }
 
+  /// Exclude multiple segments in one API call
+  Future<Map<String, dynamic>> excludeSegmentsBatch(List<int> indices) async {
+    final svc = TranslationService();
+    return svc.excludeSegmentsBatch(taskId, indices);
+  }
+
+  /// Unexclude multiple segments in one API call
+  Future<Map<String, dynamic>> unexcludeSegmentsBatch(List<int> indices) async {
+    final svc = TranslationService();
+    return svc.unexcludeSegmentsBatch(taskId, indices);
+  }
+
   /// Clear segment
   Future<void> clearSegment(
     int index, {
