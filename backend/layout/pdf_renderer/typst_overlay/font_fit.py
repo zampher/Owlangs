@@ -8,7 +8,9 @@ Calculates optimal font sizes, line heights (leading), and font weights
 based on the bounding box dimensions of each layout block.
 """
 
-from typing import Any, Optional, Tuple
+import math
+import statistics
+from typing import Any, List, Optional, Tuple
 
 from layout.pdf_renderer.typst_overlay.models import RenderBlock
 from layout.pdf_renderer.typst_overlay.text_metrics import (
@@ -35,6 +37,86 @@ MIN_FONT_SIZE_PT = 6.0
 MAX_FONT_SIZE_PT = 24.0
 DEFAULT_FONT_SIZE_PT = 10.0
 DEFAULT_LEADING_EM = 1.25
+
+# MinerU ref_text lines (~21pt bbox) typically use ~9pt body; cap estimate as fraction of height.
+REF_TEXT_FONT_HEIGHT_RATIO = 0.48
+# Unified bibliography font is floored to this step (10.1 -> 10.0, 10.6 -> 10.5).
+REF_TEXT_FONT_QUANTIZE_STEP_PT = 0.5
+# Applied after median + quantize (10.0 -> 9.5).
+REF_TEXT_UNIFIED_FONT_OFFSET_PT = -0.5
+# Per-line glyph box height as em of font size (Typst par leading is extra gap).
+REF_TEXT_LINE_METRICS_EM = 0.88
+# Target render height as a fraction of ref_text bbox height.
+REF_TEXT_FIT_HEIGHT_RATIO = 0.90
+REF_TEXT_MIN_LEADING_EM = 0.48
+REF_TEXT_MAX_LEADING_EM = 0.72
+REF_TEXT_LEADING_QUANTIZE_STEP_EM = 0.05
+# Trigger fit_to_box when estimated line box exceeds this fraction of bbox height.
+SHORT_BBOX_HEIGHT_OVERFLOW_RATIO = 0.85
+
+
+def _layout_block_type(layout_raw: Any) -> str:
+    if isinstance(layout_raw, dict):
+        return str(layout_raw.get("type") or "")
+    return ""
+
+
+def is_ref_text_layout(layout_raw: Any, block_type: str = "") -> bool:
+    """True when MinerU marks this block as bibliography / reference text."""
+    if block_type == "ref_text":
+        return True
+    return _layout_block_type(layout_raw) == "ref_text"
+
+
+def quantize_ref_font_size_pt(
+    size_pt: float,
+    *,
+    step: float = REF_TEXT_FONT_QUANTIZE_STEP_PT,
+    min_size_pt: float = MIN_FONT_SIZE_PT,
+    max_size_pt: float = MAX_FONT_SIZE_PT,
+) -> float:
+    """Floor bibliography font size to the nearest 0.5pt step."""
+    clamped = max(min_size_pt, min(max_size_pt, size_pt))
+    if step <= 0:
+        return round(clamped, 1)
+    quantized = math.floor(clamped / step + 1e-9) * step
+    return round(max(min_size_pt, min(max_size_pt, quantized)), 1)
+
+
+def quantize_ref_leading_em(
+    leading_em: float,
+    *,
+    step: float = REF_TEXT_LEADING_QUANTIZE_STEP_EM,
+    min_leading_em: float = REF_TEXT_MIN_LEADING_EM,
+    max_leading_em: float = REF_TEXT_MAX_LEADING_EM,
+) -> float:
+    """Floor bibliography leading to the nearest 0.05em step."""
+    clamped = max(min_leading_em, min(max_leading_em, leading_em))
+    if step <= 0:
+        return round(clamped, 2)
+    quantized = math.floor(clamped / step + 1e-9) * step
+    return round(max(min_leading_em, min(max_leading_em, quantized)), 2)
+
+
+def _estimate_line_count(
+    bbox_height: float,
+    typo_units: float,
+    chars_per_line: float,
+    layout_raw: Any,
+) -> float:
+    """Combine visual, width-wrap, and block-type signals for line count."""
+    wrap_lines = typo_units / max(chars_per_line, 1.0)
+    visual_lines = estimate_visual_line_count(bbox_height, layout_raw)
+    block_type = _layout_block_type(layout_raw)
+
+    if is_single_line_bbox(bbox_height, layout_raw):
+        # Short boxes (bibliography lines): do not treat the full bbox as one
+        # body paragraph line — prefer width-based wrap for long citations.
+        if block_type == "ref_text" or wrap_lines > 1.05:
+            return max(1.0, wrap_lines)
+        return max(1.0, visual_lines, wrap_lines)
+
+    return max(1.0, visual_lines, wrap_lines)
 
 
 class FontFitCalculator:
@@ -79,14 +161,111 @@ class FontFitCalculator:
             1.0,
             bbox_width / (self.default_size_pt * LATIN_CHAR_WIDTH_RATIO),
         )
-        line_count = max(
-            1.0,
-            estimate_visual_line_count(bbox_height, layout_raw),
-            typo_units / chars_per_line,
+        line_count = _estimate_line_count(
+            bbox_height, typo_units, chars_per_line, layout_raw,
         )
 
         estimated = available_h / (line_count * self.default_leading_em)
+
+        block_type = _layout_block_type(layout_raw)
+        if block_type == "ref_text":
+            estimated = min(estimated, bbox_height * REF_TEXT_FONT_HEIGHT_RATIO)
+        elif is_single_line_bbox(bbox_height, layout_raw):
+            # Generic short single-line boxes: never exceed what fits one em line.
+            estimated = min(estimated, available_h / 1.05)
+
         return round(max(self.min_size_pt, min(self.max_size_pt, estimated)), 1)
+
+    def compute_unified_ref_font_size(
+        self,
+        candidates: List[float],
+    ) -> Optional[float]:
+        """
+        Derive one bibliography font size from per-block estimates.
+
+        Uses the median so more ref_text bboxes stabilize the result and
+        outliers (very short/long entries) have limited influence.
+        """
+        valid = [
+            c for c in candidates
+            if c > 0 and self.min_size_pt <= c <= self.max_size_pt
+        ]
+        if not valid:
+            return None
+        median = statistics.median(valid)
+        quantized = quantize_ref_font_size_pt(
+            median,
+            min_size_pt=self.min_size_pt,
+            max_size_pt=self.max_size_pt,
+        )
+        adjusted = quantized + REF_TEXT_UNIFIED_FONT_OFFSET_PT
+        return round(
+            max(self.min_size_pt, min(self.max_size_pt, adjusted)),
+            1,
+        )
+
+    def estimate_ref_text_leading_em(
+        self,
+        block: RenderBlock,
+        font_size_pt: float,
+        layout_raw: Any = None,
+    ) -> float:
+        """
+        Estimate Typst par(leading) for a bibliography block at a fixed font size.
+
+        Solves from bbox height and wrapped line count so the stack fits inside
+        the MinerU ref_text bbox without overlapping adjacent entries.
+        """
+        if font_size_pt <= 0:
+            return REF_TEXT_MIN_LEADING_EM
+
+        _, y0, _, y1 = block.inner_bbox
+        bbox_height = max(1.0, y1 - y0)
+        fit_height = bbox_height * REF_TEXT_FIT_HEIGHT_RATIO
+        body_per_line = font_size_pt * REF_TEXT_LINE_METRICS_EM
+
+        text = block.plain_text or block.markdown_text or ""
+        typo_units = estimate_typographic_units(text, layout_raw)
+        x0, _, x1, _ = block.inner_bbox
+        bbox_width = max(1.0, x1 - x0)
+        chars_per_line = max(
+            1.0,
+            bbox_width / max(font_size_pt * LATIN_CHAR_WIDTH_RATIO, 0.1),
+        )
+        line_count = _estimate_line_count(
+            bbox_height, typo_units, chars_per_line, layout_raw,
+        )
+        line_count = max(1.0, line_count)
+        visual_lines = max(1, int(math.ceil(line_count - 1e-6)))
+
+        if visual_lines <= 1:
+            remaining = fit_height - body_per_line
+            leading = (
+                remaining / max(font_size_pt, 0.1)
+                if remaining > 0
+                else REF_TEXT_MIN_LEADING_EM
+            )
+        else:
+            bodies = visual_lines * body_per_line
+            gaps = max(visual_lines - 1, 1)
+            leading = (fit_height - bodies) / (gaps * max(font_size_pt, 0.1))
+
+        leading = max(0.20, min(REF_TEXT_MAX_LEADING_EM, leading))
+        return quantize_ref_leading_em(leading)
+
+    def compute_unified_ref_leading_em(
+        self,
+        candidates: List[float],
+    ) -> Optional[float]:
+        """Derive one bibliography leading from per-block bbox-fit estimates."""
+        valid = [
+            c for c in candidates
+            if c > 0 and REF_TEXT_MIN_LEADING_EM <= c <= REF_TEXT_MAX_LEADING_EM
+        ]
+        if not valid:
+            return None
+        median = statistics.median(valid)
+        return quantize_ref_leading_em(median)
 
     def estimate_leading(self, font_size_pt: float) -> float:
         """Estimate line-height (in em) for a given font size."""
@@ -111,6 +290,8 @@ class FontFitCalculator:
         *,
         preserve_font_size: bool = False,
         layout_raw: Optional[Any] = None,
+        ref_unified_font_pt: Optional[float] = None,
+        ref_unified_leading_em: Optional[float] = None,
     ) -> RenderBlock:
         """
         Fill in any missing fit-to-box parameters on the block.
@@ -124,25 +305,73 @@ class FontFitCalculator:
         Returns:
             A new RenderBlock with complete font/fit parameters.
         """
+        block_type = _layout_block_type(layout_raw)
+        is_ref_text = is_ref_text_layout(layout_raw, block_type=block_type)
+        use_unified_ref = (
+            is_ref_text
+            and ref_unified_font_pt is not None
+            and ref_unified_font_pt > 0
+        )
+
         font_size = block.font_size_pt
-        if not preserve_font_size and (font_size <= 0 or font_size == DEFAULT_FONT_SIZE_PT):
+        if use_unified_ref:
+            font_size = ref_unified_font_pt
+        elif not preserve_font_size and (
+            font_size <= 0 or font_size == DEFAULT_FONT_SIZE_PT
+        ):
             font_size = self.estimate_font_size(block, layout_raw=layout_raw)
 
         leading = block.leading_em
-        if not preserve_font_size and (leading <= 0 or leading == DEFAULT_LEADING_EM):
+        if use_unified_ref:
+            if ref_unified_leading_em is not None and ref_unified_leading_em > 0:
+                leading = ref_unified_leading_em
+            else:
+                leading = self.estimate_ref_text_leading_em(
+                    block, font_size, layout_raw=layout_raw,
+                )
+        elif not preserve_font_size and (
+            leading <= 0 or leading == DEFAULT_LEADING_EM
+        ):
             leading = self.estimate_leading(font_size)
 
         _, _, x1, _ = block.inner_bbox
         _, y0, _, y1 = block.inner_bbox
-        bbox_width = max(1.0, x1 - block.inner_bbox[0])
         bbox_height = max(1.0, y1 - y0)
+
+        if use_unified_ref:
+            return RenderBlock(
+                **{
+                    **block.__dict__,
+                    "font_size_pt": font_size,
+                    "leading_em": leading,
+                    "fit_to_box": False,
+                    "fit_single_line": False,
+                    "fit_min_font_size_pt": font_size,
+                    "fit_max_font_size_pt": font_size,
+                    "fit_min_leading_em": leading,
+                    "fit_max_height_pt": bbox_height * 0.9,
+                }
+            )
+
+        bbox_width = max(1.0, x1 - block.inner_bbox[0])
         text = block.plain_text or block.markdown_text or ""
         typo_units = estimate_typographic_units(text, layout_raw)
         has_math = block_needs_math_fit(text, layout_raw)
+        short_single_line = is_single_line_bbox(bbox_height, layout_raw)
+        wrap_ratio = typo_units / max(
+            1.0, bbox_width / max(font_size * LATIN_CHAR_WIDTH_RATIO, 0.1),
+        )
+        height_overflow = (
+            short_single_line
+            and font_size * leading > bbox_height * SHORT_BBOX_HEIGHT_OVERFLOW_RATIO
+            and (is_ref_text or wrap_ratio >= 0.35)
+        )
 
         needs_fit = typo_units > 0 and (
             typo_units * font_size * LATIN_CHAR_WIDTH_RATIO > bbox_width * 1.2
             or has_math
+            or height_overflow
+            or (is_ref_text and short_single_line)
         )
         fit_single_line = (
             needs_fit
