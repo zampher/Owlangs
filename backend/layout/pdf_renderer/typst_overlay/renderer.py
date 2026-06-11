@@ -339,11 +339,19 @@ class TypstOverlayRenderer(BasePDFRenderer):
         page_index = getattr(block, "page_index", 0) or 0
         block_key = getattr(block, "index", 0)
 
-        if total_area <= 0:
-            # Fallback: split translated text at roughly 70/30 (main/cross)
-            ratio = 0.7
-        else:
+        # Split by source character length (primary). Bbox area is a poor proxy when
+        # (large area) while the cross-page tail is a short continuation (small area).
+        main_len = sum(TypstOverlayRenderer._line_text_length(ml) for ml in main_lines)
+        cross_len = sum(
+            TypstOverlayRenderer._line_text_length(cpl) for cpl in cross_page_lines
+        )
+        total_len = main_len + cross_len
+        if total_len > 0:
+            ratio = main_len / total_len
+        elif total_area > 0:
             ratio = main_area / total_area
+        else:
+            ratio = 0.7
 
         # Split translated text proportionally
         split_pos = max(1, round(len(translated_text) * ratio))
@@ -382,6 +390,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     "page_index": page_index + 1,
                     "bbox": (lx0, ly0, lx1, ly1),
                     "text": line_text,
+                    "line_raw": cp_line,
                 })
 
         # Compute the bbox covering only the main (on-page) lines
@@ -807,10 +816,16 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     resolved_page = self._resolve_cross_page_target(
                         page.page_index, cp["bbox"], layout_doc,
                     )
+                    cp_line_raw = cp.get("line_raw")
+                    cp_layout_raw = (
+                        {"lines": [cp_line_raw]} if isinstance(cp_line_raw, dict) else None
+                    )
+                    cp_bbox = cp["bbox"]
+                    cp_height = max(1.0, cp_bbox[3] - cp_bbox[1])
                     cp_block = RenderBlock(
                         block_id=cp["block_id"],
                         page_index=resolved_page,
-                        inner_bbox=cp["bbox"],
+                        inner_bbox=cp_bbox,
                         markdown_text=cp["text"],
                         plain_text=cp["text"],
                         render_kind="plain_line" if len(cp["text"]) < 80 else "plain",
@@ -821,11 +836,10 @@ class TypstOverlayRenderer(BasePDFRenderer):
                         opaque_fill=True,
                         cover_fill=(1.0, 1.0, 1.0),
                     )
-                    # Calculate a font size independently for the cross-page block
-                    # (its bbox and text length differ from the main block), but cap
-                    # it at the main block's size so the two parts stay visually
-                    # consistent and never exceed the parent paragraph's scale.
-                    cp_estimate = self._font_fit.estimate_font_size(cp_block)
+                    # Estimate font size from the cross-page line bbox/text only.
+                    cp_estimate = self._font_fit.estimate_font_size(
+                        cp_block, layout_raw=cp_layout_raw,
+                    )
                     cp_font_size = min(rb.font_size_pt, cp_estimate)
                     cp_block = RenderBlock(
                         **{
@@ -836,8 +850,21 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     cp_block = self._font_fit.calculate_fit_params(
                         cp_block,
                         preserve_font_size=True,
-                        layout_raw=layout_raw,
+                        layout_raw=cp_layout_raw,
                     )
+                    # Cross-page tails sit in a tight bbox; always constrain height.
+                    if not cp_block.fit_to_box:
+                        cp_block = RenderBlock(
+                            **{
+                                **cp_block.__dict__,
+                                "fit_to_box": True,
+                                "fit_max_height_pt": cp_height * 0.9,
+                                "fit_min_font_size_pt": max(
+                                    self._font_fit.min_size_pt,
+                                    cp_font_size * 0.5,
+                                ),
+                            }
+                        )
                     render_blocks_by_page.setdefault(resolved_page, []).append(cp_block)
                     total_blocks += 1
 
