@@ -14,6 +14,7 @@ from layout.pdf_renderer.typst_overlay.models import RenderBlock
 from layout.pdf_renderer.typst_overlay.text_metrics import (
     block_needs_math_fit,
     estimate_typographic_units,
+    estimate_visual_line_count,
     is_single_line_bbox,
 )
 
@@ -49,11 +50,16 @@ class FontFitCalculator:
         self.max_size_pt = max_size_pt
         self.default_leading_em = default_leading_em
 
-    def estimate_font_size(self, block: RenderBlock) -> float:
+    def estimate_font_size(
+        self,
+        block: RenderBlock,
+        layout_raw: Any = None,
+    ) -> float:
         """
         Estimate an appropriate font size for a render block.
 
-        Uses typographic units so inline math counts wider than plain chars.
+        Uses typographic units and visual line count from bbox height so MinerU
+        single-line entries that wrap across many visual lines are handled.
         """
         if block.font_size_pt > 0.0 and block.font_size_pt != DEFAULT_FONT_SIZE_PT:
             return block.font_size_pt
@@ -63,7 +69,7 @@ class FontFitCalculator:
         available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
 
         text = block.plain_text or block.markdown_text or ""
-        typo_units = estimate_typographic_units(text)
+        typo_units = estimate_typographic_units(text, layout_raw)
         if typo_units <= 0:
             return self.default_size_pt
 
@@ -73,7 +79,11 @@ class FontFitCalculator:
             1.0,
             bbox_width / (self.default_size_pt * LATIN_CHAR_WIDTH_RATIO),
         )
-        line_count = max(1.0, typo_units / chars_per_line)
+        line_count = max(
+            1.0,
+            estimate_visual_line_count(bbox_height, layout_raw),
+            typo_units / chars_per_line,
+        )
 
         estimated = available_h / (line_count * self.default_leading_em)
         return round(max(self.min_size_pt, min(self.max_size_pt, estimated)), 1)
@@ -116,7 +126,7 @@ class FontFitCalculator:
         """
         font_size = block.font_size_pt
         if not preserve_font_size and (font_size <= 0 or font_size == DEFAULT_FONT_SIZE_PT):
-            font_size = self.estimate_font_size(block)
+            font_size = self.estimate_font_size(block, layout_raw=layout_raw)
 
         leading = block.leading_em
         if not preserve_font_size and (leading <= 0 or leading == DEFAULT_LEADING_EM):
@@ -127,7 +137,7 @@ class FontFitCalculator:
         bbox_width = max(1.0, x1 - block.inner_bbox[0])
         bbox_height = max(1.0, y1 - y0)
         text = block.plain_text or block.markdown_text or ""
-        typo_units = estimate_typographic_units(text)
+        typo_units = estimate_typographic_units(text, layout_raw)
         has_math = block_needs_math_fit(text, layout_raw)
 
         needs_fit = typo_units > 0 and (

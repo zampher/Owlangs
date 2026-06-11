@@ -49,5 +49,34 @@ class TestFontFitCalculator(unittest.TestCase):
         self.assertFalse(fitted.fit_to_box)
 
 
+    def test_tall_paragraph_with_citations_uses_multiline_fit(self):
+        calc = FontFitCalculator()
+        raw = {
+            "lines": [
+                {
+                    "spans": [
+                        {"type": "text", "content": "Natural Language Inference ... interest  "},
+                        {"type": "inline_equation", "content": "[58, 35, 44]"},
+                        {"type": "text", "content": " , the task remains challenging ..."},
+                    ]
+                }
+            ]
+        }
+        text = (
+            "Natural Language Inference ... interest [58, 35, 44] , "
+            "the task remains challenging due to ..."
+        )
+        block = RenderBlock(
+            block_id="b3",
+            page_index=0,
+            inner_bbox=(104.0, 511.0, 506.0, 599.0),
+            plain_text=text,
+            markdown_text=text,
+        )
+        fitted = calc.calculate_fit_params(block, layout_raw=raw)
+        self.assertTrue(fitted.fit_to_box)
+        self.assertFalse(fitted.fit_single_line)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -8,10 +8,41 @@ import unittest
 from layout.pdf_renderer.typst_overlay.text_metrics import (
     block_needs_math_fit,
     estimate_typographic_units,
+    estimate_visual_line_count,
     is_single_line_bbox,
     is_suspiciously_short_mapped_text,
     layout_raw_has_inline_equation,
 )
+
+# layout.json Introduction paragraph: 1 MinerU line, bbox height 101pt, 3 citations
+INTRO_MULTI_CITATION_RAW = {
+    "lines": [
+        {
+            "spans": [
+                {"type": "text", "content": "The ability to learn effectively from raw text ... resources  "},
+                {"type": "inline_equation", "content": "[61]"},
+                {"type": "text", "content": " . In these situations ... embeddings  "},
+                {"type": "inline_equation", "content": "[10, 39, 42]"},
+                {"type": "text", "content": "  to improve performance ... tasks  "},
+                {"type": "inline_equation", "content": "[8, 11, 26, 45]"},
+                {"type": "text", "content": " ."},
+            ]
+        }
+    ]
+}
+
+# layout.json index 7: NLI paragraph, bbox height 88pt, 1 citation
+NLI_CITATION_RAW = {
+    "lines": [
+        {
+            "spans": [
+                {"type": "text", "content": "Natural Language Inference ... interest  "},
+                {"type": "inline_equation", "content": "[58, 35, 44]"},
+                {"type": "text", "content": " , the task remains challenging ..."},
+            ]
+        }
+    ]
+}
 
 
 class TestTextMetrics(unittest.TestCase):
@@ -43,9 +74,29 @@ class TestTextMetrics(unittest.TestCase):
         self.assertTrue(layout_raw_has_inline_equation(raw))
         self.assertTrue(block_needs_math_fit("plain text", raw))
 
-    def test_single_line_bbox_heuristic(self):
-        self.assertTrue(is_single_line_bbox(23.0, None))
-        self.assertFalse(is_single_line_bbox(60.0, None))
+    def test_single_line_bbox_uses_height_not_mineru_line_count(self):
+        self.assertTrue(is_single_line_bbox(23.0, INTRO_MULTI_CITATION_RAW))
+        self.assertFalse(is_single_line_bbox(101.0, INTRO_MULTI_CITATION_RAW))
+        self.assertFalse(is_single_line_bbox(88.0, NLI_CITATION_RAW))
+
+    def test_visual_line_count_from_tall_bbox(self):
+        self.assertGreaterEqual(estimate_visual_line_count(101.0, INTRO_MULTI_CITATION_RAW), 5.0)
+        self.assertGreaterEqual(estimate_visual_line_count(88.0, NLI_CITATION_RAW), 4.0)
+        self.assertEqual(estimate_visual_line_count(23.0, None), 1.0)
+
+    def test_plain_citation_bonus_from_layout_raw(self):
+        text = "some interest [58, 35, 44] , the task remains"
+        without_raw = estimate_typographic_units(text)
+        with_raw = estimate_typographic_units(text, NLI_CITATION_RAW)
+        self.assertGreater(with_raw, without_raw)
+
+    def test_multi_citation_intro_plain_text(self):
+        text = (
+            "The ability ... resources [61] . In ... embeddings [10, 39, 42] "
+            "to improve ... tasks [8, 11, 26, 45] ."
+        )
+        units = estimate_typographic_units(text, INTRO_MULTI_CITATION_RAW)
+        self.assertGreater(units, float(len(text)))
 
     def test_suspicious_short_mapping(self):
         original = "Overall, the only extra parameters we require during fine-tuning are W_{y}"
