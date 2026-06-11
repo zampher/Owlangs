@@ -707,6 +707,7 @@ class StatusService:
         has_layout_for_pdf = False
         has_tables = False
         has_interline_equations = False
+        has_charts = False
         page_count = 0  # Initialize page count
         
         # Extract page count from layout_document for PDF files
@@ -719,21 +720,25 @@ class StatusService:
                         has_layout_for_pdf = True
                         page_count = layout_doc.page_count
                         logger.trace(LogModule.WORKFLOW, f"PDF file with layout_document available for task {task_id}: {page_count} pages")
-                        # Check if document has tables and interline_equations
+                        # Check if document has tables, interline_equations, and charts
                         for page in layout_doc.pages:
                             for block in page.blocks:
                                 if block.type == "table":
                                     has_tables = True
                                 elif block.type == "interline_equation":
                                     has_interline_equations = True
-                                if has_tables and has_interline_equations:
+                                elif block.type == "chart":
+                                    has_charts = True
+                                if has_tables and has_interline_equations and has_charts:
                                     break
-                            if has_tables and has_interline_equations:
+                            if has_tables and has_interline_equations and has_charts:
                                 break
                         if has_tables:
                             logger.trace(LogModule.WORKFLOW, f"PDF file has tables for task {task_id}")
                         if has_interline_equations:
                             logger.trace(LogModule.WORKFLOW, f"PDF file has interline_equations for task {task_id}")
+                        if has_charts:
+                            logger.trace(LogModule.WORKFLOW, f"PDF file has charts for task {task_id}")
                 except Exception as e:
                     logger.warning(LogModule.WORKFLOW, f"[STATUS] Failed to extract page count from layout_document: {e}")
         
@@ -1124,10 +1129,11 @@ class StatusService:
         if detected_language:
             task_state["detected_language"] = detected_language
         
-        # Add has_tables and has_interline_equations fields for PDF files (for format selection dialog)
+        # Add has_tables, has_interline_equations, and has_charts fields for PDF files (for format selection dialog)
         if is_pdf_file:
             task_state["has_tables"] = has_tables
             task_state["has_interline_equations"] = has_interline_equations
+            task_state["has_charts"] = has_charts
 
         # Ensure response is JSON-serializable (e.g. after re-fetch in already_running branch)
         self._sanitize_task_state_for_json(task_state, task_id)
@@ -3353,6 +3359,11 @@ class StatusService:
                                 is_table_body = True
                                 block_type = "table_body"
                         # If not table_body, treat as normal text (caption or footnote)
+                    elif block_type == "chart":
+                        # Check if chunk is a chart_body type from LayoutMarkdownBuilder
+                        chunk_type = getattr(chunk, "chunk_type", None)
+                        if chunk_type == "chart_body":
+                            block_type = "chart_body"
             
             # Also check if chunk text contains image placeholder (fallback)
             # CRITICAL: Only treat as image if block_type is NOT image_caption
@@ -3476,6 +3487,9 @@ class StatusService:
             if is_excluded:
                 excluded_segment_indices_list.append(chunk_idx)
             
+            # Determine if this is a chart_body segment
+            is_chart_body = block_type == "chart_body"
+            
             # Build segment data
             # CRITICAL: Store original segment index (chunk_idx) for proper mapping
             # chunk_idx is the index in layout_result.chunks, which is the original segment index
@@ -3493,6 +3507,7 @@ class StatusService:
                 "is_footer": is_footer,
                 "is_excluded": is_excluded,
                 "is_table_body": is_table_body,  # Mark if this is table_body (for frontend display)
+                "is_chart_body": is_chart_body,  # Mark if this is chart_body (for frontend display)
             }
             
             # Add exclusion_reason if segment is excluded
@@ -4050,7 +4065,21 @@ class StatusService:
             # Determine chunk type based on whether it's excluded
             is_chunk_excluded = chunk.get("is_excluded", False)
             chunk_type = "text"
-            if is_chunk_excluded:
+            
+            # CRITICAL: Check for chart_body type from original layout_result.chunks
+            # This ensures chart segments are properly identified even when rendered as images
+            original_chunk_type = None
+            if layout_result and layout_result.chunks and len(layout_result.chunks) > len(serialized_chunks):
+                # Try to find matching chunk by segment indices
+                for orig_chunk in layout_result.chunks:
+                    orig_seg_indices = orig_chunk.block_indices if hasattr(orig_chunk, 'block_indices') else []
+                    if orig_seg_indices == chunk_segment_indices:
+                        original_chunk_type = orig_chunk.chunk_type if hasattr(orig_chunk, 'chunk_type') else None
+                        break
+            
+            if original_chunk_type == "chart_body":
+                chunk_type = "chart_body"  # Preserve chart_body type for exclusion detection
+            elif is_chunk_excluded:
                 # Check if this excluded chunk is an image segment
                 if chunk_segment_indices and chunk_segment_indices[0] < len(all_segments):
                     seg = all_segments[chunk_segment_indices[0]]
@@ -5464,15 +5493,18 @@ class StatusService:
         # Get format settings from task_state (stored in payload or directly in task_state)
         table_body_format = None
         equation_format = None
+        chart_body_format = None
         
         # Check task_state directly first
         if "table_body_format" in task_state:
             table_body_format = task_state["table_body_format"]
         if "equation_format" in task_state:
             equation_format = task_state["equation_format"]
+        if "chart_body_format" in task_state:
+            chart_body_format = task_state["chart_body_format"]
         
         # Fallback to payload if not in task_state
-        if table_body_format is None or equation_format is None:
+        if table_body_format is None or equation_format is None or chart_body_format is None:
             payload = task_state.get("payload")
             if payload:
                 if isinstance(payload, dict):
@@ -5480,16 +5512,21 @@ class StatusService:
                         table_body_format = payload.get("table_body_format")
                     if equation_format is None:
                         equation_format = payload.get("equation_format")
+                    if chart_body_format is None:
+                        chart_body_format = payload.get("chart_body_format")
                 elif hasattr(payload, 'table_body_format'):
                     if table_body_format is None:
                         table_body_format = getattr(payload, 'table_body_format', None)
                     if equation_format is None:
                         equation_format = getattr(payload, 'equation_format', None)
+                    if chart_body_format is None:
+                        chart_body_format = getattr(payload, 'chart_body_format', None)
         
         return {
             "task_id": task_id,
             "table_body_format": table_body_format,
             "equation_format": equation_format,
+            "chart_body_format": chart_body_format,
         }
     
     def update_format_settings(
@@ -5497,6 +5534,7 @@ class StatusService:
         task_id: str,
         table_body_format: Optional[str] = None,
         equation_format: Optional[str] = None,
+        chart_body_format: Optional[str] = None,
         bilingual_export: Optional[bool] = None,
         bilingual_order: Optional[str] = None,
         source_text_italic: Optional[bool] = None,
@@ -5511,6 +5549,7 @@ class StatusService:
             task_id: Unique task identifier
             table_body_format: Table format ('html' or 'image')
             equation_format: Equation format ('text' or 'image')
+            chart_body_format: Chart format ('html' or 'image', default: 'image')
             bilingual_export: Enable bilingual export (True/False)
             bilingual_order: Bilingual order ('target_after_source' or 'target_before_source')
             source_text_italic: Source text italic (True/False)
@@ -5528,11 +5567,13 @@ class StatusService:
         if task_state is None:
             raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
         
-        # Validate format values (table: html|image; equation: text|latex|image for PDF export/preview)
+        # Validate format values (table: html|image; equation: text|latex|image; chart: html|image for PDF export/preview)
         if table_body_format is not None and table_body_format not in ("html", "image"):
             raise HTTPException(status_code=400, detail=f"Invalid table_body_format: {table_body_format}. Must be 'html' or 'image'.")
         if equation_format is not None and equation_format not in ("text", "latex", "image"):
             raise HTTPException(status_code=400, detail=f"Invalid equation_format: {equation_format}. Must be 'text', 'latex', or 'image'.")
+        if chart_body_format is not None and chart_body_format not in ("html", "image"):
+            raise HTTPException(status_code=400, detail=f"Invalid chart_body_format: {chart_body_format}. Must be 'html' or 'image'.")
         if bilingual_order is not None and bilingual_order not in ("target_after_source", "target_before_source"):
             raise HTTPException(status_code=400, detail=f"Invalid bilingual_order: {bilingual_order}. Must be 'target_after_source' or 'target_before_source'.")
         if source_text_color is not None and source_text_color not in ("gray", "blue", "red", "green", "orange", "black"):
@@ -5546,6 +5587,8 @@ class StatusService:
             updates["table_body_format"] = table_body_format
         if equation_format is not None:
             updates["equation_format"] = equation_format
+        if chart_body_format is not None:
+            updates["chart_body_format"] = chart_body_format
         if bilingual_export is not None:
             updates["bilingual_export"] = bilingual_export
         if bilingual_order is not None:
@@ -5571,6 +5614,8 @@ class StatusService:
                     payload["table_body_format"] = table_body_format
                 if equation_format is not None:
                     payload["equation_format"] = equation_format
+                if chart_body_format is not None:
+                    payload["chart_body_format"] = chart_body_format
                 if bilingual_export is not None:
                     payload["bilingual_export"] = bilingual_export
                 if bilingual_order is not None:
@@ -5602,6 +5647,8 @@ class StatusService:
                         setattr(payload, 'target_text_italic', target_text_italic)
                     if target_text_color is not None:
                         setattr(payload, 'target_text_color', target_text_color)
+                    if chart_body_format is not None:
+                        setattr(payload, 'chart_body_format', chart_body_format)
                 except Exception as e:
                     logger.debug(LogModule.WORKFLOW, f"[STATUS] Failed to update payload format settings: {e}")
         
@@ -5609,6 +5656,7 @@ class StatusService:
             "task_id": task_id,
             "table_body_format": table_body_format or task_state.get("table_body_format"),
             "equation_format": equation_format or task_state.get("equation_format"),
+            "chart_body_format": chart_body_format or task_state.get("chart_body_format"),
             "bilingual_export": bilingual_export if bilingual_export is not None else task_state.get("bilingual_export"),
             "bilingual_order": bilingual_order or task_state.get("bilingual_order"),
             "source_text_italic": source_text_italic if source_text_italic is not None else task_state.get("source_text_italic"),

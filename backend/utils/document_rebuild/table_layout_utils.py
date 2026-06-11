@@ -462,3 +462,113 @@ def _extract_equation_from_layout_block(block) -> tuple[Optional[str], Optional[
         equation_image_path = block.image_path
     
     return equation_content, equation_image_path
+
+
+def _extract_chart_from_layout_block(block) -> tuple[Optional[str], Optional[str]]:
+    """
+    Extract chart content (markdown table) and image path from layout block.
+
+    Args:
+        block: LayoutBlock instance
+
+    Returns:
+        Tuple of (chart_content, chart_image_path), both can be None
+        chart_content is markdown table format text from MinerU
+    """
+    if not hasattr(block, 'raw') or not isinstance(block.raw, dict):
+        return None, None
+
+    raw_block = block.raw
+    nested_blocks = raw_block.get("blocks", [])
+
+    chart_content = None
+    chart_image_path = None
+
+    for sub in nested_blocks:
+        if not isinstance(sub, dict):
+            continue
+        if str(sub.get("type", "")) != "chart_body":
+            continue
+
+        lines = sub.get("lines", [])
+        for line in lines:
+            if not isinstance(line, dict):
+                continue
+            spans = line.get("spans", [])
+            for span in spans:
+                if not isinstance(span, dict):
+                    continue
+                if span.get("type") == "chart":
+                    content = span.get("content")
+                    if isinstance(content, str) and content.strip():
+                        chart_content = content
+                    img_path = span.get("image_path")
+                    if isinstance(img_path, str) and img_path.strip():
+                        chart_image_path = img_path
+                    if chart_content or chart_image_path:
+                        break
+            if chart_content or chart_image_path:
+                break
+        if chart_content or chart_image_path:
+            break
+
+    # Also check block.image_path as fallback
+    if not chart_image_path and hasattr(block, 'image_path') and block.image_path:
+        chart_image_path = str(block.image_path)
+
+    return chart_content, chart_image_path
+
+
+def _is_chart_body_segment(
+    target_text: Optional[str],
+    chart_block_idx: int,
+    segments: List[Dict[str, Any]],
+    segment: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """
+    Determine if a segment is the chart body rather than caption.
+
+    Chart body may be:
+    - Image placeholder markdown: ![Chart](layoutimgN)
+    - Markdown table (html chart_body_format)
+    """
+    if segment and segment.get("chunk_type") == "chart_body":
+        return True
+
+    source_text = (segment or {}).get("source_text") or ""
+    for candidate in (target_text, source_text):
+        if not candidate:
+            continue
+        text = str(candidate).strip()
+        # Image-format chart body (layout PDF export path)
+        if re.match(r"^!\[[^\]]*\]\([^)]+\)\s*$", text):
+            return True
+        if "layoutimg" in text and text.startswith("!["):
+            return True
+
+    if not target_text:
+        return False
+
+    # Check if text contains markdown table syntax
+    text = str(target_text).strip()
+
+    # Markdown table has | characters and typically has a separator line with - and |
+    has_pipe = "|" in text
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+    # Check for markdown table separator pattern (| --- | --- |)
+    has_separator = any(
+        "|" in ln and all(c in " -:|" for c in ln.replace("|", "").strip())
+        for ln in lines
+    )
+
+    # If it has both | and looks like a table, it's likely chart body
+    if has_pipe and has_separator:
+        return True
+
+    # If it has | but no clear separator, check if multiple lines start with |
+    pipe_lines = [ln for ln in lines if ln.startswith("|")]
+    if len(pipe_lines) >= 2:
+        return True
+
+    return False

@@ -332,6 +332,8 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
           formatSettings.getTableFormat(isPdfWorkflow: _isPdfWorkflow);
       queryParams['equation_format'] =
           formatSettings.getEquationFormat(isPdfWorkflow: _isPdfWorkflow);
+      queryParams['chart_body_format'] =
+          formatSettings.getChartFormat(isPdfWorkflow: _isPdfWorkflow);
 
       if (formatSettings.bilingualExport == true) {
         queryParams['bilingual_export'] = 'true';
@@ -341,7 +343,7 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
 
       downloadUrl = uri.replace(queryParameters: queryParams).toString();
       _unifiedPreviewWidgetLog(
-        'Final download URL: $downloadUrl, tableFormat=${formatSettings.getTableFormat(isPdfWorkflow: _isPdfWorkflow)}, equationFormat=${formatSettings.getEquationFormat(isPdfWorkflow: _isPdfWorkflow)}',
+        'Final download URL: $downloadUrl, tableFormat=${formatSettings.getTableFormat(isPdfWorkflow: _isPdfWorkflow)}, equationFormat=${formatSettings.getEquationFormat(isPdfWorkflow: _isPdfWorkflow)}, chartFormat=${formatSettings.getChartFormat(isPdfWorkflow: _isPdfWorkflow)}',
         level: LogLevel.info,
       );
 
@@ -454,10 +456,11 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
     }
   }
 
-  /// Show preview settings dialog (for table and equation formats)
+  /// Show preview settings dialog (for table, equation, and chart formats)
   Future<void> _showPreviewSettingsDialog(
     bool hasTables,
     bool hasInterlineEquations,
+    bool hasCharts,
   ) async {
     _unifiedPreviewWidgetLog('[Dialog] Showing preview settings dialog');
 
@@ -471,6 +474,8 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
           formatSettings.getTableFormat(isPdfWorkflow: _isPdfWorkflow);
       var equationFormat =
           formatSettings.getEquationFormat(isPdfWorkflow: _isPdfWorkflow);
+      var chartFormat =
+          formatSettings.getChartFormat(isPdfWorkflow: _isPdfWorkflow);
 
       await DialogHelper.showGeneralDialog(
         context: context,
@@ -559,6 +564,40 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
                         },
                       ),
                     ],
+                    if (hasCharts) ...<Widget>[
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Chart Format:',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      RadioListTile<String>(
+                        title: const Text('Image'),
+                        subtitle: const Text('Display charts as images (recommended)'),
+                        value: 'image',
+                        groupValue: chartFormat,
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              chartFormat = value;
+                            });
+                          }
+                        },
+                      ),
+                      RadioListTile<String>(
+                        title: const Text('HTML'),
+                        subtitle: const Text('Display charts as HTML tables'),
+                        value: 'html',
+                        groupValue: chartFormat,
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              chartFormat = value;
+                            });
+                          }
+                        },
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -578,6 +617,7 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
                     formatNotifier.setFormats(
                       tableFormat: tableFormat,
                       equationFormat: equationFormat,
+                      chartFormat: chartFormat,
                     );
                     // Save as user defaults
                     await formatNotifier.saveAsUserDefaults();
@@ -598,6 +638,7 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
                     formatNotifier.setFormats(
                       tableFormat: tableFormat,
                       equationFormat: equationFormat,
+                      chartFormat: chartFormat,
                     );
                     // Reload preview with new formats after dialog closes
                     // Use addPostFrameCallback to ensure state is updated before reloading
@@ -630,7 +671,7 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
     }
   }
 
-  /// Show download dialog
+  /// Show download dialog with format settings
   Future<void> _showDownloadDialog() async {
     _unifiedPreviewWidgetLog('[Dialog] Showing download dialog');
 
@@ -701,39 +742,217 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
         return;
       }
 
+      // Get current status to check for tables, equations, charts
+      final Map<String, dynamic>? status = _currentStatus;
+      final bool hasTables = status?['has_tables'] == true;
+      final bool hasInterlineEquations = status?['has_interline_equations'] == true;
+      final bool hasCharts = status?['has_charts'] == true;
+
+      // Get current format settings from provider
+      final FormatSettings formatSettings = ref.read(
+        formatSettingsProviderFamily(widget.taskId),
+      );
+
+      // Create state variables for dialog with current settings
+      var tableFormat = formatSettings.getTableFormat(isPdfWorkflow: _isPdfWorkflow);
+      var equationFormat = formatSettings.getEquationFormat(isPdfWorkflow: _isPdfWorkflow);
+      var chartFormat = formatSettings.getChartFormat(isPdfWorkflow: _isPdfWorkflow);
+
       await DialogHelper.showDialog(
         context: context,
-        builder: (BuildContext context) => AlertDialog(
-          title: const Text('Export Document'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: downloadOptions.map((Map<String, dynamic> option) {
-              final String fileType = option['type'] as String;
-              final String label = option['label'] as String;
-              final bool? embedImages = option['embedImages'] as bool?;
-              final String downloadKey = embedImages != null
-                  ? '${fileType}_${embedImages ? 'embedded' : 'with_images'}'
-                  : fileType;
-              final bool isFormatDownloading =
-                  _downloading[downloadKey] ?? false;
-              return ListTile(
-                enabled: !isFormatDownloading,
-                leading: isFormatDownloading
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(_getFormatIcon(fileType)),
-                title: Text(label),
-                onTap: isFormatDownloading
-                    ? null
-                    : () {
-                        Navigator.of(context).pop();
-                        _handleDownload(fileType, embedImages: embedImages);
-                      },
-              );
-            }).toList(),
+        builder: (BuildContext context) => StatefulBuilder(
+          builder: (BuildContext context, StateSetter setDialogState) => AlertDialog(
+            title: const Text('Export Document'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  // Format Settings Section (only for PDF workflow)
+                  if (_isPdfWorkflow) ...<Widget>[
+                    const Text(
+                      'Format Settings',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    if (hasTables) ...<Widget>[
+                      const Text(
+                        'Table Format:',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      RadioListTile<String>(
+                        title: const Text('Image'),
+                        subtitle: const Text('Export tables as images'),
+                        value: 'image',
+                        groupValue: tableFormat,
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              tableFormat = value;
+                            });
+                          }
+                        },
+                      ),
+                      RadioListTile<String>(
+                        title: const Text('HTML'),
+                        subtitle: const Text('Export tables as HTML'),
+                        value: 'html',
+                        groupValue: tableFormat,
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              tableFormat = value;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (hasInterlineEquations) ...<Widget>[
+                      const Text(
+                        'Equation Format:',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      RadioListTile<String>(
+                        title: const Text('Image'),
+                        subtitle: const Text('Export equations as images (best quality)'),
+                        value: 'image',
+                        groupValue: equationFormat,
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              equationFormat = value;
+                            });
+                          }
+                        },
+                      ),
+                      RadioListTile<String>(
+                        title: const Text('LaTeX'),
+                        subtitle: const Text('Export equations as LaTeX text'),
+                        value: 'text',
+                        groupValue: equationFormat,
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              equationFormat = value;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (hasCharts) ...<Widget>[
+                      const Text(
+                        'Chart Format:',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      RadioListTile<String>(
+                        title: const Text('Image'),
+                        subtitle: const Text('Export charts as images (recommended)'),
+                        value: 'image',
+                        groupValue: chartFormat,
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              chartFormat = value;
+                            });
+                          }
+                        },
+                      ),
+                      RadioListTile<String>(
+                        title: const Text('HTML'),
+                        subtitle: const Text('Export charts as HTML tables'),
+                        value: 'html',
+                        groupValue: chartFormat,
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              chartFormat = value;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    const Divider(),
+                    const SizedBox(height: 8),
+                  ],
+                  const Text(
+                    'Export Format:',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  ...downloadOptions.map((Map<String, dynamic> option) {
+                    final String fileType = option['type'] as String;
+                    final String label = option['label'] as String;
+                    final bool? embedImages = option['embedImages'] as bool?;
+                    final String downloadKey = embedImages != null
+                        ? '${fileType}_${embedImages ? 'embedded' : 'with_images'}'
+                        : fileType;
+                    final bool isFormatDownloading =
+                        _downloading[downloadKey] ?? false;
+                    return ListTile(
+                      enabled: !isFormatDownloading,
+                      leading: isFormatDownloading
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(_getFormatIcon(fileType)),
+                      title: Text(label),
+                      onTap: isFormatDownloading
+                          ? null
+                          : () {
+                              // Apply format settings to provider before download
+                              if (_isPdfWorkflow) {
+                                final FormatSettingsNotifier formatNotifier = ref.read(
+                                  formatSettingsProviderFamily(widget.taskId).notifier,
+                                );
+                                formatNotifier.setFormats(
+                                  tableFormat: tableFormat,
+                                  equationFormat: equationFormat,
+                                  chartFormat: chartFormat,
+                                );
+                              }
+                              Navigator.of(context).pop();
+                              _handleDownload(fileType, embedImages: embedImages);
+                            },
+                    );
+                  }).toList(),
+                ],
+              ),
+            ),
+            actions: <Widget>[
+              if (_isPdfWorkflow)
+                TextButton.icon(
+                  icon: const Icon(Icons.save_outlined, size: 18),
+                  label: const Text('Save as Default'),
+                  onPressed: () async {
+                    // Apply settings to provider
+                    final FormatSettingsNotifier formatNotifier = ref.read(
+                      formatSettingsProviderFamily(widget.taskId).notifier,
+                    );
+                    formatNotifier.setFormats(
+                      tableFormat: tableFormat,
+                      equationFormat: equationFormat,
+                      chartFormat: chartFormat,
+                    );
+                    // Save as user defaults
+                    await formatNotifier.saveAsUserDefaults();
+                    if (context.mounted) {
+                      MessageService.showSuccess(
+                        context,
+                        'Default format settings saved',
+                      );
+                    }
+                  },
+                ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+            ],
           ),
         ),
       );
@@ -771,6 +990,8 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
               formatSettings.getTableFormat(isPdfWorkflow: _isPdfWorkflow);
           queryParams['equation_format'] =
               formatSettings.getEquationFormat(isPdfWorkflow: _isPdfWorkflow);
+          queryParams['chart_body_format'] =
+              formatSettings.getChartFormat(isPdfWorkflow: _isPdfWorkflow);
 
           // For MD downloads, add embed_images parameter
           if (fileType == 'md' && embedImages != null) {
@@ -845,6 +1066,8 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
             formatSettings.getTableFormat(isPdfWorkflow: _isPdfWorkflow);
         queryParams['equation_format'] =
             formatSettings.getEquationFormat(isPdfWorkflow: _isPdfWorkflow);
+        queryParams['chart_body_format'] =
+            formatSettings.getChartFormat(isPdfWorkflow: _isPdfWorkflow);
 
         // For MD downloads, add embed_images parameter
         if (fileType == 'md' && embedImages != null) {
@@ -1069,11 +1292,12 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
     }
     _lastFormatSettings = formatSettings;
 
-    // Get status to check for tables and equations
+    // Get status to check for tables, equations, and charts
     final Map<String, dynamic>? status = _currentStatus;
     final bool hasTables = status?['has_tables'] == true;
     final bool hasInterlineEquations =
         status?['has_interline_equations'] == true;
+    final bool hasCharts = status?['has_charts'] == true;
     final bool isCompleted = status != null &&
         ((status['status'] ?? '').toString().toLowerCase() == 'completed' ||
             (status['status'] ?? '').toString().toLowerCase() == 'failed');
@@ -1088,6 +1312,7 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
         _buildToolbar(
           hasTables,
           hasInterlineEquations,
+          hasCharts,
           isActive,
           isCompleted,
           showProgress,
@@ -1122,6 +1347,7 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
   Widget _buildToolbar(
     bool hasTables,
     bool hasInterlineEquations,
+    bool hasCharts,
     bool isActive,
     bool isCompleted,
     bool showProgressBar,
@@ -1234,6 +1460,7 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
                     _showPreviewSettingsDialog(
                       hasTables,
                       hasInterlineEquations,
+                      hasCharts,
                     );
                     _unifiedPreviewWidgetLog('[Toolbar] Settings dialog shown');
                   } catch (e, stackTrace) {

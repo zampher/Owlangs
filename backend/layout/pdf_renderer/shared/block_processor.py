@@ -471,6 +471,31 @@ class BlockProcessor:
                                         image_data = BlockProcessor.extract_image_from_zip(zip_file, img_path)
                                         if image_data:
                                             image_data_map[img_path] = image_data
+
+        # Extract chart images from chart blocks
+        for block in layout_doc.iter_blocks():
+            if block.type != "chart":
+                continue
+            raw_block = block.raw if hasattr(block, "raw") and isinstance(block.raw, dict) else {}
+            nested_blocks = raw_block.get("blocks", []) if isinstance(raw_block, dict) else []
+            for sub in nested_blocks:
+                if not isinstance(sub, dict):
+                    continue
+                if sub.get("type") != "chart_body":
+                    continue
+                for line in sub.get("lines") or []:
+                    if not isinstance(line, dict):
+                        continue
+                    for span in line.get("spans") or []:
+                        if not isinstance(span, dict):
+                            continue
+                        if span.get("type") != "chart":
+                            continue
+                        img_path = span.get("image_path")
+                        if isinstance(img_path, str) and img_path.strip():
+                            image_data = BlockProcessor.extract_image_from_zip(zip_file, img_path)
+                            if image_data:
+                                image_data_map[img_path] = image_data
         
         return image_data_map
 

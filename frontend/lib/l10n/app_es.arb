@@ -157,6 +157,9 @@
   "translationExportEquationFormatLabel": "Formato de Ecuación:",
   "translationExportEquationFormatImage": "Imagen",
   "translationExportEquationFormatLatex": "LaTeX",
+  "translationExportChartFormatLabel": "Formato de Gráfico:",
+  "translationExportChartFormatImage": "Imagen",
+  "translationExportChartFormatHtml": "HTML",
   "translationLeftPanelExpandTooltip": "Expandir panel izquierdo",
   "translationLeftPanelCollapseTooltip": "Contraer panel izquierdo",
   "translationSnackGlossarySaved": "Glosario guardado",
@@ -1048,6 +1051,8 @@
   "settingsExclusionStructuralSubtitle": "Encabezados, pies de página, notas al pie, números de página",
   "settingsExclusionTableTitle": "Tabla",
   "settingsExclusionTableSubtitle": "Contenido de tabla (tablas markdown / PDF)",
+  "settingsExclusionChartTitle": "Gráfico",
+  "settingsExclusionChartSubtitle": "Contenido de gráfico (Figure, bloques chart)",
   "settingsExclusionLanguageMatchTitle": "Coincidencia de Idioma",
   "settingsExclusionLanguageMatchSubtitle": "El idioma de origen coincide con el idioma de destino",
   "settingsTranslateOutputSuffixTitle": "Translation Output Suffix",
@@ -1315,5 +1320,9 @@
   "translationExportDownloadButton": "Descargar",
 
   "translationExportMdEmbeddedImages": "MD (con imágenes incrustadas)",
-  "translationExportMdWithImagesFolder": "MD (con carpeta de imágenes)"
+  "translationExportMdWithImagesFolder": "MD (con carpeta de imágenes)",
+  "translationExportPdfPreserveLayout": "PDF diseño original",
+  "translationExportPdfPreserveLayoutDesc": "Superpone la traducción sobre el diseño PDF original",
+  "translationExportPdfReflow": "PDF recompuesto",
+  "translationExportPdfReflowDesc": "Recompuesto desde Markdown traducido; el diseño puede diferir del original"
 }

@@ -52,6 +52,7 @@ class ExclusionDefaultsConfig:
     identifier: bool = True
     structural: bool = False
     table: bool = False
+    chart: bool = False  # Chart content (Figure, chart blocks) - default not excluded
     language_match: bool = False
     # When False, language_match detection is disabled globally (no detection or marking).
     # When True, language_match detection is enabled but still respects per-reason auto-exclude flags.

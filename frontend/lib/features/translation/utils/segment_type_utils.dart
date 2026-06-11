@@ -33,6 +33,10 @@ String? segmentFilterKeyFromMetadata(Map<String, dynamic> metadata) {
     return ExclusionReason.table.value;
   }
 
+  if (blockType == 'chart_body') {
+    return ExclusionReason.chart.value;
+  }
+
   if (blockType == 'interline_equation') {
     return ExclusionReason.formula.value;
   }

@@ -90,8 +90,11 @@ def detect_exclusion_reason(
         # Priority 3: Table Body (from block_type or is_table flag) - STRICT for PDF
         if block_type == "table_body" or (is_table and block_type != "table_caption" and block_type != "table_footnote") or _is_table_segment(text_stripped):
             return (ExclusionReason.TABLE, {"block_type": "table_body"})
+        # Priority 4: Chart Body (from block_type) - STRICT for PDF, optional exclusion
+        if block_type == "chart_body":
+            return (ExclusionReason.CHART, {"block_type": "chart_body"})
     
-    # Priority 3 (non-PDF) or Priority 4 (PDF): Identifier (URL, email, serial number, pure numbers, etc.)
+    # Priority 3 (non-PDF) or Priority 5 (PDF): Identifier (URL, email, serial number, pure numbers, etc.)
     # For non-PDF formats: Identifier takes priority over Table
     # For PDF format: Identifier is checked after Table (only if not already identified as table)
     from exclusion.detection.identifier_detector import (
@@ -214,7 +217,11 @@ def detect_exclusion_reason(
         if block_type == "table_body" or (is_table and block_type != "table_caption" and block_type != "table_footnote") or _is_table_segment(text_stripped):
             return (ExclusionReason.TABLE, {"block_type": "table_body"})
     
-    # Priority 5: Reference (from block_type)
+    # Priority 5: Chart Body (from block_type) - optional exclusion, default not excluded
+    if block_type == "chart_body":
+        return (ExclusionReason.CHART, {"block_type": "chart_body"})
+    
+    # Priority 6: Reference (from block_type)
     if block_type == "ref_text":
         return (ExclusionReason.REFERENCE, {"block_type": block_type})
     

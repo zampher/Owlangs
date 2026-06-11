@@ -162,7 +162,7 @@ async def service_update_excluded_segments_route(
 @router.get(
     "/format-settings/{task_id}",
     summary="Get format settings for a task",
-    description="Get table_body_format and equation_format settings from task state.",
+    description="Get table_body_format, equation_format, and chart_body_format settings from task state.",
     responses={
         200: {
             "description": "Successfully retrieved format settings.",
@@ -170,7 +170,8 @@ async def service_update_excluded_segments_route(
                 "example": {
                     "task_id": "a1b2c3d4",
                     "table_body_format": "html",
-                    "equation_format": "text"
+                    "equation_format": "text",
+                    "chart_body_format": "image"
                 }
             }}
         },
@@ -186,7 +187,7 @@ async def service_get_format_settings_route(task_id: str = FastApiPath(..., desc
 @router.put(
     "/format-settings/{task_id}",
     summary="Update format settings for a task",
-    description="Update table_body_format and equation_format settings in task state.",
+    description="Update table_body_format, equation_format, and chart_body_format settings in task state.",
     responses={
         200: {
             "description": "Successfully updated format settings.",
@@ -195,6 +196,7 @@ async def service_get_format_settings_route(task_id: str = FastApiPath(..., desc
                     "task_id": "a1b2c3d4",
                     "table_body_format": "image",
                     "equation_format": "image",
+                    "chart_body_format": "image",
                     "message": "Format settings updated successfully"
                 }
             }}
@@ -207,6 +209,7 @@ async def service_update_format_settings_route(
     task_id: str = FastApiPath(..., description="Unique task identifier."),
     table_body_format: Optional[str] = FastApiQuery(None, description="Table format: 'html' or 'image'"),
     equation_format: Optional[str] = FastApiQuery(None, description="Equation format: 'text' or 'image'"),
+    chart_body_format: Optional[str] = FastApiQuery(None, description="Chart format: 'html' or 'image' (default: 'image')"),
     bilingual_export: Optional[bool] = FastApiQuery(None, description="Enable bilingual export: true or false"),
     bilingual_order: Optional[str] = FastApiQuery(None, description="Bilingual order: 'target_after_source' or 'target_before_source'"),
     source_text_italic: Optional[bool] = FastApiQuery(None, description="Source text italic: true or false"),
@@ -219,6 +222,7 @@ async def service_update_format_settings_route(
         task_id,
         table_body_format=table_body_format,
         equation_format=equation_format,
+        chart_body_format=chart_body_format,
         bilingual_export=bilingual_export,
         bilingual_order=bilingual_order,
         source_text_italic=source_text_italic,

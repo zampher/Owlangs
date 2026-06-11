@@ -166,6 +166,10 @@ def sanitize_typst_markdown_for_compile(markdown: str) -> str:
     text = text.replace(r"\circled{\parallel}", r"\circ")
     text = text.replace(r"\textcircled{\times}", r"\otimes")
     text = text.replace(r"\textcircled{\parallel}", r"\circ")
+    # Remove Markdown image references (e.g., ![alt](path)) to avoid Typst compilation errors
+    # when image files are not available. For overlay rendering, image/table/chart visuals
+    # should remain on the original PDF, not re-rendered through Typst.
+    text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", "", text)
     return text
 
 
@@ -507,11 +511,33 @@ def _render_cover_block(block_id: str, block: RenderBlock) -> str:
     return "\n".join(parts) + "\n"
 
 
+def _render_image_block(block_id: str, block: RenderBlock) -> str:
+    """Render an embedded chart/table body image at the layout bbox."""
+    if not block.image_rel_path:
+        return ""
+
+    x0, y0, x1, y1 = block.inner_bbox
+    width = max(4.0, x1 - x0)
+    height = max(4.0, y1 - y0)
+    rel_path = block.image_rel_path.replace("\\", "/")
+    var_prefix = block_id.replace("-", "_")
+    img_var = f"{var_prefix}_img"
+
+    parts = [
+        f'#let {img_var} = image("{rel_path}", width: {round(width, 1)}pt, '
+        f"height: {round(height, 1)}pt, fit: \"contain\")",
+        _typst_place_context(x0, y0, img_var),
+    ]
+    return "\n".join(parts) + "\n"
+
+
 def render_block_to_typst(block_id: str, block: RenderBlock,
                           *, force_opaque: bool = False) -> str:
     """Generate the Typst source lines for a single RenderBlock (matching retain-pdf dispatch logic)."""
     if block.skip_reason:
         return ""
+    if block.render_kind == "image":
+        return _render_image_block(block_id, block)
     if block.use_cover_fill:
         return _render_cover_block(block_id, block)
     if block.render_kind in ("plain", "plain_line"):

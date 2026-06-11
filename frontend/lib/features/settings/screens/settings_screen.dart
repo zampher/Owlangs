@@ -1005,6 +1005,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
         'icon': 'table_chart',
       },
       <String, String>{
+        'key': 'chart',
+        'title': AppLocalizations.of(context)!.settingsExclusionChartTitle,
+        'subtitle':
+            AppLocalizations.of(context)!.settingsExclusionChartSubtitle,
+        'icon': 'insert_chart',
+      },
+      <String, String>{
         'key': 'language_match',
         'title':
             AppLocalizations.of(context)!.settingsExclusionLanguageMatchTitle,

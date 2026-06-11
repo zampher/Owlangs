@@ -59,6 +59,9 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
   /// Track table segments and exclusion state
   List<int> tableSegmentIndices = <int>[];
 
+  /// Track chart segments (for checkbox and filtering)
+  List<int> chartSegmentIndices = <int>[];
+
   /// Track formula segments (for checkbox and filtering)
   List<int> formulaSegmentIndices = <int>[];
 
@@ -86,6 +89,7 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
   Set<int> _headerSet = const <int>{};
   Set<int> _footerSet = const <int>{};
   Set<int> _tableSet = const <int>{};
+  Set<int> _chartSet = const <int>{};
   Set<int> _formulaSet = const <int>{};
   Set<int> _identifierSet = const <int>{};
   Set<int> _languageMatchedSet = const <int>{};
@@ -103,6 +107,7 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
     _headerSet = headerSegmentIndices.toSet();
     _footerSet = footerSegmentIndices.toSet();
     _tableSet = tableSegmentIndices.toSet();
+    _chartSet = chartSegmentIndices.toSet();
     _formulaSet = formulaSegmentIndices.toSet();
     _identifierSet = identifierSegmentIndices.toSet();
     _languageMatchedSet = languageMatchedSegmentIndices.toSet();
@@ -122,6 +127,8 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
         return _footerSet.contains(index);
       case 'table':
         return _tableSet.contains(index);
+      case 'chart':
+        return _chartSet.contains(index);
       case 'formula':
         return _formulaSet.contains(index);
       case 'identifier':
@@ -147,6 +154,8 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
         return _footerSet;
       case 'table':
         return _tableSet;
+      case 'chart':
+        return _chartSet;
       case 'formula':
         return _formulaSet;
       case 'identifier':
@@ -368,6 +377,7 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
     excludeHeaders = false;
     excludeFooters = false;
     tableSegmentIndices = <int>[];
+    chartSegmentIndices = <int>[];
     identifierSegmentIndices = <int>[];
     languageMatchedSegmentIndices = <int>[];
     userSelectedSegmentIndices = <int>[];

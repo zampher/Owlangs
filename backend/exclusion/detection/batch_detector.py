@@ -142,8 +142,10 @@ def _process_single_segment(
     # --- Config-driven auto-exclusion decision ---
     # Build effective set: config defaults + auto_exclude_optional override
     effective_excluded = default_excluded_reasons if default_excluded_reasons is not None else ExclusionReason.get_default_excluded()
-    if auto_exclude_optional and ExclusionReason.TABLE not in effective_excluded:
-        effective_excluded = effective_excluded | {ExclusionReason.TABLE}
+    if auto_exclude_optional:
+        # Add optional types (TABLE, CHART) to effective_excluded if not already present
+        optional_reasons = {ExclusionReason.TABLE, ExclusionReason.CHART}
+        effective_excluded = effective_excluded | {r for r in optional_reasons if r not in effective_excluded}
 
     if detected_reason in effective_excluded:
         # Auto-exclude per configuration
@@ -246,7 +248,7 @@ class ExclusionDetectionBatch:
             format_specific_data: Optional format-specific data for each segment
                 (e.g., {"0": {"chunk_block_indices": [1, 2], "chunk_type": "image"}})
             preserve_existing: If True, preserve existing exclusions from task_state
-            auto_exclude_optional: If True, automatically exclude optional types (TABLE)
+            auto_exclude_optional: If True, automatically exclude optional types (TABLE, CHART)
         
         Returns:
             Tuple of (excluded_segments, all_detected_reasons):

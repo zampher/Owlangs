@@ -6,11 +6,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../shared/services/translation_service.dart';
 
 /// Format settings state for a task
-/// Manages table_body_format and equation_format settings
+/// Manages table_body_format, equation_format, and chart_body_format settings
 class FormatSettings {
   const FormatSettings({
     this.tableFormat,
     this.equationFormat,
+    this.chartFormat,
     this.bilingualExport,
     this.bilingualOrder,
     this.sourceTextItalic,
@@ -26,6 +27,10 @@ class FormatSettings {
   /// Equation format: 'text', 'latex', or 'image'
   /// UI radios use 'text' for LaTeX; default is 'text' (LaTeX)
   final String? equationFormat;
+
+  /// Chart format: 'html' or 'image'
+  /// Default: 'image' for safety (preserves chart appearance)
+  final String? chartFormat;
 
   /// Bilingual export: true or false
   /// When true, both source and target text are exported
@@ -64,9 +69,15 @@ class FormatSettings {
     return 'text';
   }
 
+  /// Get chart format with default fallback
+  /// Default is 'image' for safety (preserves original chart appearance)
+  String getChartFormat({bool isPdfWorkflow = false}) =>
+      chartFormat ?? (isPdfWorkflow ? 'image' : 'image');
+
   FormatSettings copyWith({
     String? tableFormat,
     String? equationFormat,
+    String? chartFormat,
     bool? bilingualExport,
     String? bilingualOrder,
     bool? sourceTextItalic,
@@ -75,6 +86,7 @@ class FormatSettings {
     String? targetTextColor,
     bool clearTableFormat = false,
     bool clearEquationFormat = false,
+    bool clearChartFormat = false,
     bool clearBilingualExport = false,
     bool clearBilingualOrder = false,
     bool clearSourceTextItalic = false,
@@ -88,6 +100,9 @@ class FormatSettings {
         equationFormat: clearEquationFormat
             ? null
             : (equationFormat ?? this.equationFormat),
+        chartFormat: clearChartFormat
+            ? null
+            : (chartFormat ?? this.chartFormat),
         bilingualExport: clearBilingualExport
             ? null
             : (bilingualExport ?? this.bilingualExport),
@@ -115,6 +130,7 @@ class FormatSettings {
           runtimeType == other.runtimeType &&
           tableFormat == other.tableFormat &&
           equationFormat == other.equationFormat &&
+          chartFormat == other.chartFormat &&
           bilingualExport == other.bilingualExport &&
           bilingualOrder == other.bilingualOrder &&
           sourceTextItalic == other.sourceTextItalic &&
@@ -126,6 +142,7 @@ class FormatSettings {
   int get hashCode =>
       tableFormat.hashCode ^
       equationFormat.hashCode ^
+      chartFormat.hashCode ^
       bilingualExport.hashCode ^
       bilingualOrder.hashCode ^
       sourceTextItalic.hashCode ^
@@ -159,6 +176,7 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
 
       final String? tableFormat = flowSettings['table_body_format'] as String?;
       final String? equationFormat = flowSettings['equation_format'] as String?;
+      final String? chartFormat = flowSettings['chart_body_format'] as String?;
       final bool? bilingualExport = flowSettings['bilingual_export'] as bool?;
       final String? bilingualOrder = flowSettings['bilingual_order'] as String?;
       final bool? sourceTextItalic = flowSettings['source_text_italic'] as bool?;
@@ -166,10 +184,11 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
       final bool? targetTextItalic = flowSettings['target_text_italic'] as bool?;
       final String? targetTextColor = flowSettings['target_text_color'] as String?;
 
-      if (tableFormat != null || equationFormat != null || bilingualExport != null || bilingualOrder != null || sourceTextItalic != null || sourceTextColor != null || targetTextItalic != null || targetTextColor != null) {
+      if (tableFormat != null || equationFormat != null || chartFormat != null || bilingualExport != null || bilingualOrder != null || sourceTextItalic != null || sourceTextColor != null || targetTextItalic != null || targetTextColor != null) {
         state = FormatSettings(
           tableFormat: tableFormat,
           equationFormat: equationFormat,
+          chartFormat: chartFormat,
           bilingualExport: bilingualExport,
           bilingualOrder: bilingualOrder,
           sourceTextItalic: sourceTextItalic,
@@ -202,6 +221,8 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
           prefs.getString('format_settings_table_default');
       final String? equationFormat =
           prefs.getString('format_settings_equation_default');
+      final String? chartFormat =
+          prefs.getString('format_settings_chart_default');
       final bool? bilingualExport =
           prefs.getBool('format_settings_bilingual_export_default');
       final String? bilingualOrder =
@@ -215,10 +236,11 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
       final String? targetTextColor =
           prefs.getString('format_settings_target_text_color_default');
 
-      if (tableFormat != null || equationFormat != null || bilingualExport != null || bilingualOrder != null || sourceTextItalic != null || sourceTextColor != null || targetTextItalic != null || targetTextColor != null) {
+      if (tableFormat != null || equationFormat != null || chartFormat != null || bilingualExport != null || bilingualOrder != null || sourceTextItalic != null || sourceTextColor != null || targetTextItalic != null || targetTextColor != null) {
         state = FormatSettings(
           tableFormat: tableFormat,
           equationFormat: equationFormat,
+          chartFormat: chartFormat,
           bilingualExport: bilingualExport,
           bilingualOrder: bilingualOrder,
           sourceTextItalic: sourceTextItalic,
@@ -255,6 +277,15 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
       } else {
         // Clear if set to null (use code default)
         await prefs.remove('format_settings_equation_default');
+      }
+      if (state.chartFormat != null) {
+        await prefs.setString(
+          'format_settings_chart_default',
+          state.chartFormat!,
+        );
+      } else {
+        // Clear if set to null (use code default)
+        await prefs.remove('format_settings_chart_default');
       }
       if (state.bilingualExport != null) {
         await prefs.setBool(
@@ -325,6 +356,14 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
     state = state.copyWith(equationFormat: format);
   }
 
+  /// Set chart format
+  void setChartFormat(String format) {
+    if (format != 'html' && format != 'image') {
+      return; // Invalid format
+    }
+    state = state.copyWith(chartFormat: format);
+  }
+
   /// Set bilingual export enabled
   void setBilingualExport(bool enabled) {
     state = state.copyWith(bilingualExport: enabled);
@@ -371,6 +410,7 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
   void setFormats({
     String? tableFormat,
     String? equationFormat,
+    String? chartFormat,
     bool? bilingualExport,
     String? bilingualOrder,
     bool? sourceTextItalic,
@@ -381,6 +421,7 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
     state = state.copyWith(
       tableFormat: tableFormat,
       equationFormat: equationFormat,
+      chartFormat: chartFormat,
       bilingualExport: bilingualExport,
       bilingualOrder: bilingualOrder,
       sourceTextItalic: sourceTextItalic,
@@ -390,7 +431,7 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
     );
     // Save to Flow state if taskId is available
     if (taskId != null) {
-      _saveToFlowState(tableFormat, equationFormat, bilingualExport, bilingualOrder, sourceTextItalic, sourceTextColor, targetTextItalic, targetTextColor);
+      _saveToFlowState(tableFormat, equationFormat, chartFormat, bilingualExport, bilingualOrder, sourceTextItalic, sourceTextColor, targetTextItalic, targetTextColor);
     }
   }
 
@@ -398,6 +439,7 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
   Future<void> _saveToFlowState(
     String? tableFormat,
     String? equationFormat,
+    String? chartFormat,
     bool? bilingualExport,
     String? bilingualOrder,
     bool? sourceTextItalic,
@@ -415,6 +457,7 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
         taskId!,
         tableBodyFormat: tableFormat,
         equationFormat: equationFormat,
+        chartBodyFormat: chartFormat,
         bilingualExport: bilingualExport,
         bilingualOrder: bilingualOrder,
         sourceTextItalic: sourceTextItalic,
@@ -436,6 +479,11 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
   /// Clear equation format (use default)
   void clearEquationFormat() {
     state = state.copyWith(clearEquationFormat: true);
+  }
+
+  /// Clear chart format (use default)
+  void clearChartFormat() {
+    state = state.copyWith(clearChartFormat: true);
   }
 
   /// Reset all settings to defaults

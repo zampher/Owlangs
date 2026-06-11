@@ -101,6 +101,7 @@ class GlobalSettings {
       'identifier': true,
       'structural': false,
       'table': false,
+      'chart': false,  // Chart is optional, default not excluded
       'language_match': false,
     },
   });
@@ -171,6 +172,7 @@ class GlobalSettings {
                 'identifier': true,
                 'structural': false,
                 'table': false,
+                'chart': false,  // Chart is optional, default not excluded
                 'language_match': false,
               },
         ),

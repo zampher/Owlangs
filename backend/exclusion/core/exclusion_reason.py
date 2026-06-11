@@ -29,6 +29,9 @@ class ExclusionReason(str, Enum):
     TABLE = "table"                    # Table content (markdown table, PDF table block, etc.)
                                         # Default: not excluded (most tables can be translated)
                                         # User can choose to exclude tables if needed
+    CHART = "chart"                      # Chart content (Figure, chart blocks)
+                                        # Default: not excluded (charts often have translatable captions)
+                                        # User can choose to exclude charts if needed
     
     # Language-based exclusions (may change with target language)
     LANGUAGE_MATCH = "language_match"  # Source language matches target language
@@ -54,12 +57,12 @@ class ExclusionReason(str, Enum):
     @classmethod
     def is_optional(cls, reason: "ExclusionReason") -> bool:
         """Check if exclusion reason is optional (can be excluded by user choice, default: not excluded)."""
-        return reason == cls.TABLE
+        return reason in {cls.TABLE, cls.CHART}
 
     @classmethod
     def is_default_not_excluded(cls, reason: "ExclusionReason") -> bool:
-        """Reasons that are detected but not excluded by default; user chooses via checkbox (Structural, Language Match, Table)."""
-        return reason in {cls.TABLE, cls.STRUCTURAL, cls.LANGUAGE_MATCH}
+        """Reasons that are detected but not excluded by default; user chooses via checkbox (Structural, Language Match, Table, Chart)."""
+        return reason in {cls.TABLE, cls.CHART, cls.STRUCTURAL, cls.LANGUAGE_MATCH}
 
     @classmethod
     def is_language_based(cls, reason: "ExclusionReason") -> bool:
@@ -89,6 +92,7 @@ class ExclusionReason(str, Enum):
                 cls.IDENTIFIER: cfg.identifier,
                 cls.STRUCTURAL: cfg.structural,
                 cls.TABLE: cfg.table,
+                cls.CHART: cfg.chart,
                 cls.LANGUAGE_MATCH: cfg.language_match,
             }
             return {reason for reason, enabled in _mapping.items() if enabled}

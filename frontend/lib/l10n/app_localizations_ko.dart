@@ -499,6 +499,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationExportEquationFormatLatex => 'LaTeX';
 
   @override
+  String get translationExportChartFormatLabel => '차트 형식:';
+
+  @override
+  String get translationExportChartFormatImage => '이미지';
+
+  @override
+  String get translationExportChartFormatHtml => 'HTML';
+
+  @override
   String get translationExportBilingualExport => '이중 언어 내보내기';
 
   @override
@@ -555,6 +564,20 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get translationExportMdWithImagesFolder => 'MD (이미지 폴더)';
+
+  @override
+  String get translationExportPdfPreserveLayout => '원版식 PDF';
+
+  @override
+  String get translationExportPdfPreserveLayoutDesc =>
+      '원본 PDF 레이아웃에 번역을 겹쳐 구성과 차트 위치 유지';
+
+  @override
+  String get translationExportPdfReflow => '재排版 PDF';
+
+  @override
+  String get translationExportPdfReflowDesc =>
+      '번역 Markdown으로 재조판. 원문과 레이아웃이 다를 수 있음';
 
   @override
   String get translationLeftPanelExpandTooltip => '왼쪽 패널 확장';
@@ -2889,6 +2912,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsExclusionTableSubtitle => '표 콘텐츠 (마크다운 / PDF 표)';
+
+  @override
+  String get settingsExclusionChartTitle => '차트';
+
+  @override
+  String get settingsExclusionChartSubtitle => '차트 콘텐츠 (Figure, chart 블록)';
 
   @override
   String get settingsExclusionLanguageMatchTitle => '언어 일치';

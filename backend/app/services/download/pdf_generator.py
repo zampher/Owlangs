@@ -125,25 +125,37 @@ class PDFGenerator:
                 )
                 logger.info(LogModule.EXPORT,f"[LAYOUT] Built block text map: {len(block_text_map)} blocks mapped")
             
-            # Get ZIP bytes for image extraction
+            # Get ZIP bytes for image extraction (chart/table/image embedding)
             zip_bytes = None
-            attachments = task_state.get("attachments", {})
-            if "mineru" in attachments:
-                try:
-                    mineru_attachment = attachments["mineru"]
-                    if hasattr(mineru_attachment, "content"):
-                        zip_bytes = mineru_attachment.content
-                except Exception as e:
-                    logger.debug(LogModule.EXPORT, f"Failed to get ZIP bytes from attachments: {e}")
+            try:
+                from backend.app.services.download.download_service import _resolve_layout_zip_bytes
+                zip_bytes = _resolve_layout_zip_bytes(task_state)
+            except Exception:
+                attachments = task_state.get("attachments", {})
+                if "mineru" in attachments:
+                    try:
+                        mineru_attachment = attachments["mineru"]
+                        if hasattr(mineru_attachment, "content"):
+                            zip_bytes = mineru_attachment.content
+                        elif isinstance(mineru_attachment, bytes):
+                            zip_bytes = mineru_attachment
+                    except Exception as e:
+                        logger.debug(LogModule.EXPORT, f"Failed to get ZIP bytes from attachments: {e}")
+            if not zip_bytes:
+                logger.warning(
+                    LogModule.EXPORT,
+                    f"[PDF] Task {task_id}: layout ZIP not found; chart image embedding may fail",
+                )
             
-            # Resolve table/equation format (PDF defaults: table=image, equation=latex)
+            # Resolve table/equation/chart format (PDF defaults: table=image, chart=image, equation=latex)
             from backend.app.services.download.download_service import _resolve_export_format_settings
 
-            equation_format_resolved, table_body_format_resolved = _resolve_export_format_settings(
+            equation_format_resolved, table_body_format_resolved, chart_body_format_resolved = _resolve_export_format_settings(
                 task_state,
                 task_state.get("payload"),
                 equation_format,
                 table_body_format,
+                None,
             )
             
             # Check if we should use ReportLab for direct PDF generation
@@ -200,6 +212,7 @@ class PDFGenerator:
                             zip_bytes=zip_bytes,
                             table_body_format=table_body_format_resolved,
                             equation_format=equation_format_resolved,
+                            chart_body_format=chart_body_format_resolved,
                             target_language=target_language,
                             renderer_type=_rt,
                         )

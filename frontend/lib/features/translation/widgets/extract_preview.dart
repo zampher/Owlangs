@@ -1782,8 +1782,9 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                 originalFilename.toLowerCase().endsWith('.docx');
             final bool isPdfOrDocx = isPdfFile || isDocxFile;
 
-            // Track table and formula segments (for exclusion checkboxes)
+            // Track table, chart and formula segments (for exclusion checkboxes)
             tableSegmentIndices.clear();
+            chartSegmentIndices.clear();
             formulaSegmentIndices.clear();
             // Track identifier, language_match, and user_selected segments
             identifierSegmentIndices.clear();
@@ -1827,6 +1828,13 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                   tableSegmentIndices.add(i);
                   _log(
                     '[ExtractPreview] Found table segment at index $i: block_type=$blockType, is_table_body=$isTableBody',
+                    level: LogLevel.info,
+                  );
+                } else if (blockType == 'chart_body') {
+                  // Track chart body segments (chart_caption is treated as normal text)
+                  chartSegmentIndices.add(i);
+                  _log(
+                    '[ExtractPreview] Found chart segment at index $i: block_type=$blockType',
                     level: LogLevel.info,
                   );
                 } else if (blockType == 'interline_equation') {
@@ -2434,8 +2442,9 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
             segmentTypeInfo.clear(); // Clear old type info
             segmentExclusionReasons.clear(); // Clear old exclusion reasons
 
-            // Track formula, identifier, language_match, and user_selected segments
+            // Track formula, chart, identifier, language_match, and user_selected segments
             formulaSegmentIndices.clear();
+            chartSegmentIndices.clear();
             identifierSegmentIndices.clear();
             languageMatchedSegmentIndices.clear();
             userSelectedSegmentIndices.clear();
@@ -2523,6 +2532,15 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                   );
                   if (!formulaSegmentIndices.contains(index)) {
                     formulaSegmentIndices.add(index);
+                  }
+                } else if (blockType == 'chart_body') {
+                  // Track chart body segments
+                  segmentExclusionReasons.putIfAbsent(
+                    index,
+                    () => ExclusionReason.chart.value,
+                  );
+                  if (!chartSegmentIndices.contains(index)) {
+                    chartSegmentIndices.add(index);
                   }
                 }
 

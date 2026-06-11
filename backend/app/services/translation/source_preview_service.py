@@ -2077,20 +2077,36 @@ class SourcePreviewService:
             pre_existing_excluded_indices = set(ExclusionManager.get_excluded_segments(task_state).keys())
 
             for idx, chunk in enumerate(layout_result.chunks):
-                is_image = chunk.chunk_type == "image"
+                is_chart_body = chunk.chunk_type == "chart_body"
+                is_image = chunk.chunk_type == "image" or (
+                    is_chart_body and bool(chunk.image_path)
+                )
                 placeholder_id = None
                 chunk_text = chunk.text
                 
-                if is_image:
-                    placeholder_id = chunk.image_placeholder or f"layoutimg{idx}"
-                    chunk_text = chunk_text or f"<ph-{placeholder_id}>"
-                    data_uri = _read_image_data_uri(chunk.image_path)
-                    alt_text = chunk.image_alt or (chunk.image_path or "Image")
-                    image_data_map[placeholder_id] = {
-                        "data": data_uri or "",
-                        "alt": alt_text or "Image",
-                    }
-                    image_segment_indices.append(idx)
+                if is_image or is_chart_body:
+                    if chunk.image_path or is_chart_body:
+                        placeholder_id = chunk.image_placeholder or f"layoutimg{idx}"
+                    if is_image and not chunk_text:
+                        chunk_text = chunk_text or f"<ph-{placeholder_id}>"
+                    data_uri = _read_image_data_uri(chunk.image_path) if chunk.image_path else None
+                    if placeholder_id and data_uri:
+                        alt_text = chunk.image_alt or (chunk.image_path or "Image")
+                        image_data_map[placeholder_id] = {
+                            "data": data_uri or "",
+                            "alt": alt_text or "Image",
+                        }
+                        if chunk.image_path:
+                            filename_key = os.path.basename(
+                                chunk.image_path.replace("\\", "/")
+                            )
+                            if filename_key and filename_key not in image_data_map:
+                                image_data_map[filename_key] = {
+                                    "data": data_uri,
+                                    "alt": chunk.image_path,
+                                }
+                    if is_image or (is_chart_body and placeholder_id):
+                        image_segment_indices.append(idx)
                 else:
                     # Check if this is an equation image
                     import re
@@ -2112,7 +2128,7 @@ class SourcePreviewService:
                 
                 # Estimate tokens for this chunk
                 estimated_tokens = None
-                if not is_image:
+                if not is_image and not is_chart_body:
                     from utils.token_estimator import estimate_chunk_input_tokens
                     estimated_tokens = estimate_chunk_input_tokens(
                         chunk_text,
@@ -2124,6 +2140,9 @@ class SourcePreviewService:
                 is_excluded = False
                 exclusion_reason_val: Optional[str] = None
                 if is_image:
+                    is_excluded = True
+                    exclusion_reason_val = ExclusionReason.IMAGE.value
+                elif is_chart_body:
                     is_excluded = True
                     exclusion_reason_val = ExclusionReason.IMAGE.value
                 else:

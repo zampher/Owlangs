@@ -56,6 +56,13 @@ def _collect_redaction_rects(
             raw = getattr(block, "raw", None) or {}
             is_cross_page_pair = isinstance(raw, dict) and raw.get("_cross_page_pair_of") is not None
 
+            # Skip chart blocks - they should always stay on original PDF
+            # Chart visual content (images) must not be redacted
+            if block.type == "chart":
+                # Chart blocks should NEVER be redacted - they always have visual content
+                # that must remain on the original PDF
+                continue
+
             # Skip blocks that are neither text blocks nor cross-page paired blocks
             if not block.has_text() and not is_cross_page_pair:
                 continue
@@ -129,10 +136,16 @@ def _collect_redaction_rects(
             ))
             merge_prev_rect_count += 1
 
-        # Count image blocks on this page (should NOT be redacted)
+        # Count image blocks and chart blocks on this page (should NOT be redacted)
         page_images = list(page.iter_image_blocks())
-        if page_images:
-            image_block_count += len(page_images)
+        visual_blocks_excluded = len(page_images)
+        
+        # Also count all chart blocks (they are all excluded from redaction)
+        chart_block_count = sum(1 for block in page.blocks if block.type == "chart")
+        visual_blocks_excluded += chart_block_count
+        
+        if visual_blocks_excluded:
+            image_block_count += visual_blocks_excluded
         if rects:
             # Merge with any cross-page rects that landed on this page
             if page.page_index in redaction_map:
@@ -192,6 +205,7 @@ def clean_source_pdf(
     *,
     merge_rects: bool = True,
     fill_color: Tuple[float, float, float] = (1.0, 1.0, 1.0),
+    extra_redaction_rects: Optional[Dict[int, List[Tuple[float, float, float, float]]]] = None,
 ) -> bytes:
     """
     Clean original text from a source PDF and return the cleaned PDF bytes.
@@ -231,6 +245,17 @@ def clean_source_pdf(
     try:
         # Collect redaction rects from layout blocks
         redaction_map = _collect_redaction_rects(layout_doc)
+
+        if extra_redaction_rects:
+            for page_idx, extra_rects in extra_redaction_rects.items():
+                if not extra_rects:
+                    continue
+                redaction_map.setdefault(page_idx, []).extend(extra_rects)
+            unified_logger.info(
+                LogModule.RESTOR,
+                f"[SOURCE_CLEANUP] Added {sum(len(v) for v in extra_redaction_rects.values())} "
+                f"extra redaction rect(s) for embedded chart/table images",
+            )
 
         redacted_page_count = 0
         total_rect_count = 0

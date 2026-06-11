@@ -158,6 +158,9 @@
   "translationExportEquationFormatLabel": "数式の形式:",
   "translationExportEquationFormatImage": "画像",
   "translationExportEquationFormatLatex": "LaTeX",
+  "translationExportChartFormatLabel": "チャートの形式:",
+  "translationExportChartFormatImage": "画像",
+  "translationExportChartFormatHtml": "HTML",
   "translationLeftPanelExpandTooltip": "左パネルを展開",
   "translationLeftPanelCollapseTooltip": "左パネルを折りたたむ",
   "translationSnackGlossarySaved": "用語集を保存しました",
@@ -970,6 +973,8 @@
   "settingsExclusionStructuralSubtitle": "ヘッダー、フッター、脚注、ページ番号",
   "settingsExclusionTableTitle": "表",
   "settingsExclusionTableSubtitle": "表コンテンツ（マークダウン / PDF表）",
+  "settingsExclusionChartTitle": "チャート",
+  "settingsExclusionChartSubtitle": "チャートコンテンツ（Figure、chartブロック）",
   "settingsExclusionLanguageMatchTitle": "言語一致",
   "settingsExclusionLanguageMatchSubtitle": "ソース言語がターゲット言語と一致",
   "settingsTranslateOutputSuffixTitle": "Translation Output Suffix",
@@ -1239,5 +1244,9 @@
   "translationExportDownloadButton": "ダウンロード",
 
   "translationExportMdEmbeddedImages": "MD（画像埋め込み）",
-  "translationExportMdWithImagesFolder": "MD（画像フォルダ）"
+  "translationExportMdWithImagesFolder": "MD（画像フォルダ）",
+  "translationExportPdfPreserveLayout": "原版式 PDF",
+  "translationExportPdfPreserveLayoutDesc": "元の PDF 版式に訳文を重ね、レイアウトと図表位置を維持",
+  "translationExportPdfReflow": "再排版 PDF",
+  "translationExportPdfReflowDesc": "訳文 Markdown から再排版。版式は原文と異なる場合があります"
 }

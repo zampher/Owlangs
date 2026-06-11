@@ -497,6 +497,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationExportEquationFormatLatex => 'LaTeX';
 
   @override
+  String get translationExportChartFormatLabel => '图表格式：';
+
+  @override
+  String get translationExportChartFormatImage => '图片';
+
+  @override
+  String get translationExportChartFormatHtml => 'HTML';
+
+  @override
   String get translationExportBilingualExport => '双语导出';
 
   @override
@@ -552,6 +561,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get translationExportMdWithImagesFolder => 'MD（图片文件夹）';
+
+  @override
+  String get translationExportPdfPreserveLayout => '原版式 PDF';
+
+  @override
+  String get translationExportPdfPreserveLayoutDesc =>
+      '在原 PDF 版式上叠加译文，保留布局与图表位置';
+
+  @override
+  String get translationExportPdfReflow => '重新排版 PDF';
+
+  @override
+  String get translationExportPdfReflowDesc => '由译文 Markdown 重新排版，版式可能与原文不同';
 
   @override
   String get translationLeftPanelExpandTooltip => '展开左侧面板';
@@ -2859,6 +2881,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsExclusionTableSubtitle => '表格内容（markdown / PDF表格）';
+
+  @override
+  String get settingsExclusionChartTitle => '图表';
+
+  @override
+  String get settingsExclusionChartSubtitle => '图表内容（Figure、chart块）';
 
   @override
   String get settingsExclusionLanguageMatchTitle => '语言匹配';

@@ -86,11 +86,9 @@ class _PdfPreviewWebState extends State<PdfPreview> {
   String _buildPdfUrl() {
     final uri = Uri.parse(widget.downloadUrl);
     final params = Map<String, String>.from(uri.queryParameters);
-    if (_useHighFidelity) {
-      params['renderer_type'] = 'typst_overlay';
-    } else {
-      params.remove('renderer_type');
-    }
+    // Explicit renderer_type: backend defaults missing param to typst_overlay.
+    params['renderer_type'] =
+        _useHighFidelity ? 'typst_overlay' : 'pandoc';
     return uri.replace(queryParameters: params).toString();
   }
 
@@ -314,8 +312,8 @@ class _PdfPreviewWebState extends State<PdfPreview> {
             const Spacer(),
             IconButton(
               tooltip: _useHighFidelity
-                  ? 'Switch to Standard PDF'
-                  : 'Switch to High-Fidelity PDF',
+                  ? 'Switch to reflow PDF'
+                  : 'Switch to original layout PDF',
               onPressed: () {
                 setState(() {
                   _useHighFidelity = !_useHighFidelity;

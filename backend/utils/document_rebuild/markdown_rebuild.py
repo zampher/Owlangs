@@ -16,6 +16,8 @@ from utils.image_placeholder_utils import _replace_placeholders_with_images, PLA
 from utils.mixed_formula_text import mixed_text_to_md, has_mixed_formula_content
 from .html_tag_utils import _close_unclosed_inline_tags
 from .table_layout_utils import (
+    _extract_chart_from_layout_block,
+    _is_chart_body_segment,
     _is_markdown_table,
     _markdown_table_to_html,
     _replace_table_cells_with_translations,
@@ -288,6 +290,7 @@ def _rebuild_markdown_from_layout_segments(
     block_index_to_type: Dict[int, str],
     equation_format: Optional[str] = None,
     table_body_format: Optional[str] = None,
+    chart_body_format: Optional[str] = None,
     bilingual_export: bool = False,
     target_first: bool = False,
     source_text_italic: bool = False,
@@ -307,6 +310,7 @@ def _rebuild_markdown_from_layout_segments(
         block_index_to_type: Mapping from block index to block type
         equation_format: Optional format for equations ('text' or 'image')
         table_body_format: Optional format for tables ('html' or 'image')
+        chart_body_format: Optional format for charts ('html' or 'image', default: 'image')
         
     Returns:
         Rebuilt markdown content string
@@ -401,7 +405,7 @@ def _rebuild_markdown_from_layout_segments(
     
     # Check if we need to apply format parameters
     should_apply_format = (
-        equation_format is not None or table_body_format is not None
+        equation_format is not None or table_body_format is not None or chart_body_format is not None
     )
     
     # Build block index to block mapping (used for format processing and title heading level)
@@ -485,6 +489,56 @@ def _rebuild_markdown_from_layout_segments(
                     if is_table_block and table_block_idx is not None:
                         target_idx_to_table_block[i] = table_block_idx
                         target_idx_to_is_table_body[i] = is_table_body_segment
+
+                    # Handle chart format for chart blocks (similar to table handling)
+                    is_chart_block = "chart" in block_types
+                    is_chart_body_segment = False
+                    chart_block_idx = None
+                    if is_chart_block:
+                        for bidx in block_indices:
+                            btype = block_index_to_type.get(bidx, "")
+                            if btype == "chart":
+                                chart_block_idx = bidx
+                                # Chart body: image markdown (![Chart](layoutimgN)) or markdown table
+                                is_chart_body_segment = _is_chart_body_segment(
+                                    target_text, chart_block_idx, segments, segment=segment
+                                )
+                                break
+
+                    if is_chart_block and chart_block_idx is not None and chart_body_format and is_chart_body_segment:
+                        chart_block = block_index_to_block.get(chart_block_idx)
+                        if chart_block:
+                            chart_content, chart_image_path = _extract_chart_from_layout_block(chart_block)
+
+                            if chart_body_format == "image" and chart_image_path:
+                                filename = chart_image_path.split('/')[-1].split('\\')[-1]
+                                formatted = f"![Chart]({filename})"
+                                logger.info(
+                                    LogModule.RESTOR,
+                                    f"[HTML-REBUILD] Replaced chart body segment {segment_index} "
+                                    f"with image format for block {chart_block_idx}"
+                                )
+                            elif chart_body_format == "html" and chart_content:
+                                # Chart content is markdown table, convert to HTML
+                                formatted = _markdown_table_to_html(chart_content)
+                                logger.info(
+                                    LogModule.RESTOR,
+                                    f"[HTML-REBUILD] Replaced chart body segment {segment_index} "
+                                    f"with HTML format for block {chart_block_idx}"
+                                )
+                            else:
+                                logger.debug(
+                                    LogModule.RESTOR,
+                                    f"[HTML-REBUILD] Chart body segment {segment_index} for block {chart_block_idx}: "
+                                    f"chart_body_format={chart_body_format}, chart_content={'present' if chart_content else 'None'}, "
+                                    f"keeping original target_text"
+                                )
+                        else:
+                            logger.warning(
+                                LogModule.RESTOR,
+                                f"[HTML-REBUILD] Chart block {chart_block_idx} not found in block_index_to_block"
+                            )
+
                     if is_table_block and table_body_format and is_table_body_segment and table_block_idx is not None:
                         table_block = block_index_to_block.get(table_block_idx)
                         if table_block:
@@ -932,6 +986,7 @@ def rebuild_markdown_document_from_segments(
     output_dir: Optional[Path] = None,
     equation_format: Optional[str] = None,
     table_body_format: Optional[str] = None,
+    chart_body_format: Optional[str] = None,
     bilingual_export: bool = False,
     target_first: bool = False,
 ) -> Optional[MarkdownDocument]:
@@ -947,6 +1002,7 @@ def rebuild_markdown_document_from_segments(
         output_dir: Optional output directory for saving images
         equation_format: Optional format for equations ('text' or 'image')
         table_body_format: Optional format for tables ('html' or 'image')
+        chart_body_format: Optional format for charts ('html' or 'image', default: 'image')
         bilingual_export: If True, interleave source and target text for each segment.
         target_first: If True and bilingual_export is True, place target before source.
         
@@ -1075,6 +1131,7 @@ def rebuild_markdown_document_from_segments(
                 block_index_to_type=block_index_to_type,
                 equation_format=equation_format,
                 table_body_format=table_body_format,
+                chart_body_format=chart_body_format,
                 bilingual_export=bilingual_export,
                 target_first=target_first,
                 source_text_italic=style_source_italic,

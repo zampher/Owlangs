@@ -76,6 +76,7 @@ def _get_image_layout_for_grouping(
     task_state: Dict[str, Any],
     equation_format: Optional[str] = None,
     table_body_format: Optional[str] = None,
+    chart_body_format: Optional[str] = None,
 ) -> tuple:
     """
     Get (image_block_indices, path_to_block_index, layout_document) from task_state for layout-based
@@ -91,6 +92,7 @@ def _get_image_layout_for_grouping(
     layout_doc = task_state.get("layout_document")
     eq_fmt = equation_format if equation_format is not None else (task_state.get("equation_format") if task_state else None)
     tbl_fmt = table_body_format if table_body_format is not None else (task_state.get("table_body_format") if task_state else None)
+    chart_fmt = chart_body_format if chart_body_format is not None else (task_state.get("chart_body_format") if task_state else None)
     logger.debug(
         LogModule.EXPORT,
         f"[DOWNLOAD] Layout for image grouping: segs_data_type={type(segs_data).__name__ if segs_data else None}, "
@@ -103,6 +105,7 @@ def _get_image_layout_for_grouping(
         seg_list, layout_doc,
         equation_format=eq_fmt,
         table_body_format=tbl_fmt,
+        chart_body_format=chart_fmt,
     )
     logger.info(LogModule.EXPORT, f"[DOWNLOAD] image_block_indices from layout: len={len(indices) if indices else 0}, indices={indices[:20] if indices and len(indices) <= 20 else (indices[:20] if indices else [])}, path_mappings={len(path_to_block_index) if path_to_block_index else 0}")
     return (indices if indices else None, path_to_block_index if path_to_block_index else None, layout_doc)
@@ -167,6 +170,7 @@ def _populate_layout_placeholder_image_map(
     layout_result: Any = None,
     equation_format: str = "text",
     table_body_format: str = "html",
+    chart_body_format: str = "image",
 ) -> int:
     """
     Register layoutimg{N} keys (and filename aliases) for PDF figure placeholders.
@@ -188,6 +192,7 @@ def _populate_layout_placeholder_image_map(
             deep_split=deep_split,
             equation_format=equation_format,
             table_body_format=table_body_format,
+            chart_body_format=chart_body_format,
         )
         layout_result = builder.build(layout_doc)
 
@@ -270,7 +275,8 @@ def _populate_layout_placeholder_image_map(
             return data_uri
 
         for idx, chunk in enumerate(chunks):
-            if chunk.chunk_type != "image":
+            # Handle both image chunks and chart_body chunks (when rendered as images)
+            if chunk.chunk_type != "image" and chunk.chunk_type != "chart_body":
                 continue
             placeholder_id = chunk.image_placeholder or f"layoutimg{idx}"
             alt_text = chunk.image_alt or (chunk.image_path or "Image")
@@ -312,40 +318,76 @@ def _populate_layout_placeholder_image_map(
     return registered
 
 
+def _resolve_layout_zip_bytes(task_state: Dict[str, Any]) -> Optional[bytes]:
+    """Resolve MinerU layout ZIP bytes for chart/table/image export (matches DOCX path)."""
+    zip_bytes = task_state.get("layout_source_zip")
+    if isinstance(zip_bytes, bytes) and zip_bytes:
+        return zip_bytes
+
+    attachments = task_state.get("attachments") or {}
+    mineru = attachments.get("mineru")
+    if isinstance(mineru, bytes) and mineru:
+        return mineru
+    if mineru is not None and hasattr(mineru, "content"):
+        content = getattr(mineru, "content", None)
+        if isinstance(content, bytes) and content:
+            return content
+
+    zip_path = task_state.get("mineru_zip_path")
+    if zip_path:
+        try:
+            path = Path(zip_path)
+            if path.exists():
+                return path.read_bytes()
+        except Exception:
+            pass
+    return None
+
+
 def _resolve_export_format_settings(
     task_state: Dict[str, Any],
     payload: Any = None,
     equation_format: Optional[str] = None,
     table_body_format: Optional[str] = None,
+    chart_body_format: Optional[str] = None,
 ) -> tuple:
-    """Return normalized (equation_format, table_body_format) for export."""
+    """Return normalized (equation_format, table_body_format, chart_body_format) for export."""
     payload_obj = payload if payload is not None else task_state.get("payload")
     eq = equation_format if equation_format is not None else task_state.get("equation_format")
     tbl = table_body_format if table_body_format is not None else task_state.get("table_body_format")
+    chart = chart_body_format if chart_body_format is not None else task_state.get("chart_body_format")
     if payload_obj:
         if isinstance(payload_obj, dict):
             if eq is None:
                 eq = payload_obj.get("equation_format")
             if tbl is None:
                 tbl = payload_obj.get("table_body_format")
+            if chart is None:
+                chart = payload_obj.get("chart_body_format")
         else:
             if eq is None:
                 eq = getattr(payload_obj, "equation_format", None)
             if tbl is None:
                 tbl = getattr(payload_obj, "table_body_format", None)
-    # PDF flow: default to image for tables, latex for equations
+            if chart is None:
+                chart = getattr(payload_obj, "chart_body_format", None)
+    # PDF flow: default to image for tables/charts, latex for equations
     orig_filename = (task_state.get("original_filename") or "").lower()
     is_pdf_flow = orig_filename.endswith(".pdf")
     default_eq = "latex" if is_pdf_flow else "text"
     default_tbl = "image" if is_pdf_flow else "html"
+    default_chart = "image" if is_pdf_flow else "html"
 
     eq = (eq or default_eq).lower().strip()
     tbl = (tbl or default_tbl).lower().strip()
+    chart = (chart or default_chart).lower().strip()
     if eq not in ("text", "latex", "image"):
         eq = default_eq
     if tbl not in ("html", "image"):
         tbl = default_tbl
-    return eq, tbl
+    if chart not in ("html", "image"):
+        chart = default_chart
+    return eq, tbl, chart
 
 
 def _resolve_bilingual_settings(
@@ -412,8 +454,9 @@ def _build_image_data_map_for_format_export(
     md_content: str,
     equation_format: str,
     table_body_format: str,
+    chart_body_format: str = "image",
 ) -> Dict[str, Dict[str, str]]:
-    """Build image_data_map for equation/table image export from layout ZIP and task cache."""
+    """Build image_data_map for equation/table/chart image export from layout ZIP and task cache."""
     image_data_map = _image_data_map_from_task_state(task_state)
     layout_doc = task_state.get("layout_document")
     orig_l = (task_state.get("original_filename") or "").lower()
@@ -431,6 +474,7 @@ def _build_image_data_map_for_format_export(
         layout_result=None,
         equation_format=equation_format,
         table_body_format=table_body_format,
+        chart_body_format=chart_body_format,
     )
 
     if not _format_requires_md2docx(equation_format, table_body_format):
@@ -468,11 +512,12 @@ def _export_md_content_to_docx_bytes(
     md_content: str,
     equation_format: str,
     table_body_format: str,
+    chart_body_format: str = "image",
     payload: Any = None,
     file_stem: Optional[str] = None,
 ) -> bytes:
     """
-    Export rebuilt markdown to DOCX via MD2DOCXExporter (supports equation/table as images).
+    Export rebuilt markdown to DOCX via MD2DOCXExporter (supports equation/table/chart as images).
     Used by download_file and output_generator when format requires embedded images.
     """
     from workflow.md_based_workflow import MarkdownBasedWorkflow, MarkdownBasedWorkflowConfig
@@ -488,14 +533,14 @@ def _export_md_content_to_docx_bytes(
     file_stem = file_stem or task_state.get("original_filename_stem", "translated")
 
     image_data_map = _build_image_data_map_for_format_export(
-        task_state, md_content, equation_format, table_body_format
+        task_state, md_content, equation_format, table_body_format, chart_body_format
     )
     if image_data_map:
         task_state["image_data_map"] = image_data_map
 
     to_lang, docx_font_name = _get_to_lang_and_docx_font(task_state, payload)
     _img_bidx, _path_to_bidx, _layout = _get_image_layout_for_grouping(
-        task_state, equation_format=equation_format, table_body_format=table_body_format
+        task_state, equation_format=equation_format, table_body_format=table_body_format, chart_body_format=chart_body_format
     )
     html_config = MD2HTMLExporterConfig(
         preserve_line_breaks=is_pdf_file,
@@ -506,6 +551,7 @@ def _export_md_content_to_docx_bytes(
     _docx_debug_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output" / "debug"
     docx_config = MD2DOCXExporterConfig(
         table_body_format=table_body_format,
+        chart_body_format=chart_body_format,
         equation_format=equation_format,
         image_data_map=image_data_map,
         font_name=docx_font_name,
@@ -519,6 +565,7 @@ def _export_md_content_to_docx_bytes(
                 docx_config = MD2DOCXExporterConfig(
                     layout_document=layout_doc,
                     table_body_format=table_body_format,
+                    chart_body_format=chart_body_format,
                     equation_format=equation_format,
                     image_data_map=image_data_map,
                     font_name=docx_font_name,
@@ -579,10 +626,11 @@ def _docx_stash_download_kwargs(task_state: Dict[str, Any]) -> Dict[str, Any]:
     orig_l = (task_state.get("original_filename") or "").lower()
     kwargs: Dict[str, Any] = {}
     if wt == "markdown_based" and orig_l.endswith(".pdf"):
-        eq, tbl = _resolve_export_format_settings(task_state)
+        eq, tbl, chart = _resolve_export_format_settings(task_state)
         if _format_requires_md2docx(eq, tbl):
             kwargs["equation_format"] = eq
             kwargs["table_body_format"] = tbl
+            kwargs["chart_body_format"] = chart
     enabled, target_first, src_italic, src_color, tgt_italic, tgt_color = _resolve_bilingual_settings(
         task_state
     )
@@ -959,6 +1007,7 @@ async def _typst_overlay_pdf_response(
     table_body_format: Optional[str],
     equation_format: Optional[str],
     pdf_generator: PDFGenerator,
+    chart_body_format: Optional[str] = None,
 ) -> FileResponse:
     """Generate a high-fidelity PDF using Typst overlay rendering.
 
@@ -1007,18 +1056,28 @@ async def _typst_overlay_pdf_response(
             is_deep_split_enabled=is_deep_split_enabled,
         )
 
-    # Get zip bytes from MinerU attachment (for embedded images)
-    zip_bytes = None
-    attachments = task_state.get("attachments", {})
-    mineru_bytes = attachments.get("mineru")
-    if isinstance(mineru_bytes, bytes):
-        zip_bytes = mineru_bytes
+    # Get zip bytes from layout_source_zip (same source as DOCX / layoutimg registration)
+    zip_bytes = _resolve_layout_zip_bytes(task_state)
+    if not zip_bytes:
+        logger.warning(
+            LogModule.EXPORT,
+            f"[TYPST_OVERLAY] Task {task_id}: layout ZIP not found; "
+            f"chart/table image embedding will be skipped",
+        )
+
+    payload_obj = task_state.get("payload")
+    eq_fmt, tbl_fmt, chart_fmt = _resolve_export_format_settings(
+        task_state,
+        payload_obj,
+        equation_format,
+        table_body_format,
+        chart_body_format,
+    )
 
     from layout.pdf_renderer import render_layout_pdf
 
     loop = asyncio.get_event_loop()
     target_language = None
-    payload_obj = task_state.get("payload")
     if isinstance(payload_obj, dict):
         target_language = payload_obj.get("to_lang") or payload_obj.get("target_language")
     elif hasattr(payload_obj, "to_lang"):
@@ -1038,8 +1097,9 @@ async def _typst_overlay_pdf_response(
                 translated_text_by_block_index=block_text_map if block_text_map else None,
                 zip_bytes=zip_bytes,
                 output_path=pdf_file,
-                table_body_format=table_body_format or "html",
-                equation_format=equation_format or "text",
+                table_body_format=tbl_fmt,
+                equation_format=eq_fmt,
+                chart_body_format=chart_fmt,
                 target_language=target_language,
                 renderer_type="typst_overlay",
                 source_pdf_path=source_pdf_path,
@@ -1310,6 +1370,7 @@ class DownloadService:
         file_type: str,
         table_body_format: Optional[str] = None,
         equation_format: Optional[str] = None,
+        chart_body_format: Optional[str] = None,
         embed_images: Optional[bool] = None,
         ebook_engine: Optional[str] = None,
         bilingual_export: Optional[bool] = None,
@@ -1328,6 +1389,7 @@ class DownloadService:
             file_type: File type to download
             table_body_format: Optional table format override
             equation_format: Optional equation format override
+            chart_body_format: Optional chart format override (default: 'image')
             embed_images: Optional flag for MD downloads
             ebook_engine: For epub/mobi: 'pandoc' or 'calibre' (optional; only used when both are available)
 
@@ -1378,8 +1440,8 @@ class DownloadService:
 
         payload = task_state.get("payload")
 
-        equation_format, table_body_format = _resolve_export_format_settings(
-            task_state, payload, equation_format, table_body_format
+        equation_format, table_body_format, chart_body_format = _resolve_export_format_settings(
+            task_state, payload, equation_format, table_body_format, chart_body_format
         )
 
         # Resolve bilingual settings from query params -> task_state -> payload
@@ -1537,8 +1599,8 @@ class DownloadService:
         # When user requests equation_format or table_body_format (e.g. image), do not use cached DOCX; regenerate to respect format.
         if workflow_type == "markdown_based" and file_type == "docx":
             docx_info = task_state.get("downloadable_files", {}).get("docx")
-            stored_eq, stored_tbl = _resolve_export_format_settings(
-                task_state, payload, equation_format, table_body_format
+            stored_eq, stored_tbl, stored_chart = _resolve_export_format_settings(
+                task_state, payload, equation_format, table_body_format, chart_body_format
             )
             needs_format_regen = bool(
                 equation_format
@@ -1682,8 +1744,9 @@ class DownloadService:
                         # Validate and use format parameters (already resolved for PDF defaults)
                         eq_format = equation_format
                         table_format = table_body_format
+                        chart_format = chart_body_format
                     
-                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Regenerating from translated segments with equation_format={eq_format}, table_body_format={table_format}")
+                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Regenerating from translated segments with equation_format={eq_format}, table_body_format={table_format}, chart_body_format={chart_format}")
                     
                         # Check if format parameters differ from translation time
                         _pl = task_state.get("payload")
@@ -1723,6 +1786,7 @@ class DownloadService:
                                     file_stem=task_state.get("original_filename_stem"),
                                     equation_format=eq_format,
                                     table_body_format=table_format,
+                                    chart_body_format=chart_format,
                                     bilingual_export=bilingual_enabled,
                                     target_first=target_first,
                                 )
@@ -1747,7 +1811,8 @@ class DownloadService:
                                         max_chunk_chars=chunk_size,
                                         deep_split=deep_split_enabled,
                                         equation_format=eq_format,
-                                        table_body_format=table_format
+                                        table_body_format=table_format,
+                                        chart_body_format=chart_format,
                                     )
                                     layout_result = builder.build(layout_doc)
                                     md_content = layout_result.markdown_text
@@ -1760,7 +1825,8 @@ class DownloadService:
                                     max_chunk_chars=chunk_size,
                                     deep_split=deep_split_enabled,
                                     equation_format=eq_format,
-                                    table_body_format=table_format
+                                    table_body_format=table_format,
+                                    chart_body_format=chart_format,
                                 )
                                 layout_result = builder.build(layout_doc)
                                 md_content = layout_result.markdown_text
@@ -1799,6 +1865,7 @@ class DownloadService:
                                         layout_result=layout_result,
                                         equation_format=eq_format,
                                         table_body_format=table_format,
+                                        chart_body_format=chart_format,
                                     )
                                     
                                     # Parse markdown to find image references and map them
@@ -1848,12 +1915,13 @@ class DownloadService:
                                 logger.warning(LogModule.EXPORT, f"[DOWNLOAD] No images found in image_data_map after regeneration")
                         else:
                             # Rebuild markdown from translated segments (this gives us translated content)
-                            # Use format parameters if available (eq_format and table_format are defined above)
+                            # Use format parameters if available (eq_format, table_format, chart_format are defined above)
                             rebuilt_doc = rebuild_markdown_document_from_segments(
                                 task_state,
                                 file_stem=task_state.get("original_filename_stem"),
                                 equation_format=eq_format,
                                 table_body_format=table_format,
+                                chart_body_format=chart_format,
                                 bilingual_export=bilingual_enabled,
                                 target_first=target_first,
                             )
@@ -1880,7 +1948,7 @@ class DownloadService:
                                 image_data_map: dict[str, dict[str, str]] = {}
                                 
                                 # If format parameters were used, extract images from layout_source_zip
-                                if (equation_format or table_body_format) and is_pdf_file and layout_doc:
+                                if (equation_format or table_body_format or chart_body_format) and is_pdf_file and layout_doc:
                                     zip_bytes = task_state.get("layout_source_zip")
                                     zip_file = None
                                     if zip_bytes:
@@ -1910,6 +1978,7 @@ class DownloadService:
                                                 layout_result=None,
                                                 equation_format=eq_format,
                                                 table_body_format=table_format,
+                                                chart_body_format=chart_format,
                                             )
                                             
                                             # Parse markdown to find image references (from format-switched tables/equations)
@@ -2241,17 +2310,19 @@ class DownloadService:
                             else:
                                 deep_split_enabled = bool(getattr(payload, 'deep_split', True))
                     
-                        # Use resolved format parameters (PDF defaults: equation=latex, table=image)
+                        # Use resolved format parameters (PDF defaults: equation=latex, table=image, chart=image)
                         eq_format = equation_format
                         table_format = table_body_format
+                        chart_format = chart_body_format
                     
-                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Regenerating from layout_document with equation_format={eq_format}, table_body_format={table_format}, chunk_size={chunk_size}, deep_split={deep_split_enabled}")
+                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Regenerating from layout_document with equation_format={eq_format}, table_body_format={table_format}, chart_body_format={chart_format}, chunk_size={chunk_size}, deep_split={deep_split_enabled}")
                     
                         builder = LayoutMarkdownBuilder(
                             max_chunk_chars=chunk_size,
                             deep_split=deep_split_enabled,
                             equation_format=eq_format,
-                            table_body_format=table_format
+                            table_body_format=table_format,
+                            chart_body_format=chart_format,
                         )
                         layout_result = builder.build(layout_doc)
                         md_content = layout_result.markdown_text
@@ -2425,6 +2496,7 @@ class DownloadService:
                             layout_result=None,
                             equation_format=eq_format,
                             table_body_format=table_format,
+                            chart_body_format=chart_format,
                         )
                         if image_data_map:
                             task_state["image_data_map"] = image_data_map
@@ -3103,9 +3175,27 @@ class DownloadService:
                                     task_state, task_id, file_stem,
                                     table_body_format, equation_format,
                                     self.pdf_generator,
+                                    chart_body_format=chart_body_format,
                                 )
 
-                            # Revision PDF: match OutputGenerator — Pandoc MD→PDF by default.
+                            if renderer_type == "pandoc":
+                                logger.info(
+                                    LogModule.EXPORT,
+                                    f"[DOWNLOAD] Revision PDF task {task_id}: Pandoc MD→PDF "
+                                    f"(renderer_type=pandoc)",
+                                )
+                                md_raw = workflow.export_to_markdown()
+                                if isinstance(md_raw, bytes):
+                                    md_raw = md_raw.decode("utf-8", errors="replace")
+                                return _pandoc_pdf_file_response_from_md(
+                                    task_state,
+                                    task_id,
+                                    md_raw or "",
+                                    equation_format,
+                                    table_body_format,
+                                )
+
+                            # Revision PDF: legacy layout path (ReportLab/HTML) when enabled.
                             # Layout ReportLab/HTML path only runs when ENABLE_LAYOUT_PDF_GENERATION is True (see pdf_generator.py).
                             _pdf_stem = file_stem
                             output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
@@ -3407,6 +3497,24 @@ class DownloadService:
                                             task_state, task_id, file_stem,
                                             table_body_format, equation_format,
                                             self.pdf_generator,
+                                            chart_body_format=chart_body_format,
+                                        )
+
+                                    if renderer_type == "pandoc":
+                                        logger.info(
+                                            LogModule.EXPORT,
+                                            f"[DOWNLOAD] Revision PDF task {task_id}: Pandoc MD→PDF "
+                                            f"(renderer_type=pandoc, docx workflow)",
+                                        )
+                                        md_raw = workflow.export_to_markdown()
+                                        if isinstance(md_raw, bytes):
+                                            md_raw = md_raw.decode("utf-8", errors="replace")
+                                        return _pandoc_pdf_file_response_from_md(
+                                            task_state,
+                                            task_id,
+                                            md_raw or "",
+                                            equation_format,
+                                            table_body_format,
                                         )
 
                                     # For PDF files, only use layout-based generation (high-fidelity, no fallback)
@@ -3725,6 +3833,7 @@ class DownloadService:
                         task_state, task_id, file_stem,
                         table_body_format, equation_format,
                         self.pdf_generator,
+                        chart_body_format=chart_body_format,
                     )
 
                 # For PDF files, only use layout-based generation (high-fidelity, no fallback to HTML-to-PDF)
@@ -3869,12 +3978,15 @@ class DownloadService:
                                 else:
                                     deep_split_enabled = bool(getattr(payload, 'deep_split', True))
                         
-                            # Validate equation_format
+                            # Validate equation_format and chart_body_format
                             eq_format = (equation_format or "text").lower().strip()
                             if eq_format not in ("text", "latex", "image"):
                                 eq_format = "text"
+                            chart_format = (chart_body_format or "image").lower().strip()
+                            if chart_format not in ("html", "image"):
+                                chart_format = "image"
                         
-                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Regenerating MD from layout with equation_format={eq_format}, chunk_size={chunk_size}, deep_split={deep_split_enabled}")
+                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Regenerating MD from layout with equation_format={eq_format}, table_body_format={table_body_format}, chart_body_format={chart_format}, chunk_size={chunk_size}, deep_split={deep_split_enabled}")
                         
                             # CRITICAL: Check if we have translation segments (translated content)
                             # If yes, we should rebuild from translated segments with new format, not from original layout
@@ -3893,6 +4005,7 @@ class DownloadService:
                                     file_stem=task_state.get("original_filename_stem"),
                                     equation_format=eq_format,
                                     table_body_format=table_body_format.lower() if table_body_format else None,
+                                    chart_body_format=chart_format,
                                 )
                                 
                                 if rebuilt_doc and hasattr(rebuilt_doc, 'content'):
@@ -3909,7 +4022,8 @@ class DownloadService:
                                     builder = LayoutMarkdownBuilder(
                                         max_chunk_chars=chunk_size,
                                         deep_split=deep_split_enabled,
-                                        equation_format=eq_format
+                                        equation_format=eq_format,
+                                        chart_body_format=chart_format,
                                     )
                                     layout_result = builder.build(layout_doc)
                                     md_content = layout_result.markdown_text
@@ -3918,7 +4032,8 @@ class DownloadService:
                                 builder = LayoutMarkdownBuilder(
                                     max_chunk_chars=chunk_size,
                                     deep_split=deep_split_enabled,
-                                    equation_format=eq_format
+                                    equation_format=eq_format,
+                                    chart_body_format=chart_format,
                                 )
                                 layout_result = builder.build(layout_doc)
                                 md_content = layout_result.markdown_text
@@ -4019,6 +4134,7 @@ class DownloadService:
                                     layout_result=None,
                                     equation_format=eq_format,
                                     table_body_format=table_body_format,
+                                    chart_body_format=chart_format,
                                 )
                             
                             file_stem = task_state.get("original_filename_stem", "translated")

@@ -70,6 +70,9 @@ class RenderBlock:
     fit_target_height_pt: float = 0.0
     fit_shift_up_pt: float = 0.0
 
+    # -- embedded visual (chart/table body as image) --
+    image_rel_path: str = ""                # path relative to Typst work dir
+
     # -- advanced --
     math_map: Optional[List[dict]] = None    # formula identifier -> latex map
     preserve_line_breaks: bool = False

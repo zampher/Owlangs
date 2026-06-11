@@ -4499,6 +4499,8 @@ class _TranslationResultPreviewState
     }
 
     final String tableFormat = exportOptions['tableFormat'] ?? 'image';
+    final String equationFormat = exportOptions['equationFormat'] ?? 'image';
+    final String chartFormat = exportOptions['chartFormat'] ?? 'image';
     final String pdfType = exportOptions['pdfType'] ?? 'translated';
 
     if (mounted) {
@@ -4520,6 +4522,8 @@ class _TranslationResultPreviewState
         icon: pdfType == 'original' ? Icons.bug_report : Icons.picture_as_pdf,
         content: _buildPdfPreview(
           tableFormat: tableFormat,
+          equationFormat: equationFormat,
+          chartFormat: chartFormat,
           pdfType: pdfType,
         ),
         dataRef: <String, dynamic>{
@@ -4558,7 +4562,7 @@ class _TranslationResultPreviewState
   }
 
   /// Build PDF preview widget
-  Widget _buildPdfPreview({String? tableFormat, String? pdfType}) {
+  Widget _buildPdfPreview({String? tableFormat, String? equationFormat, String? chartFormat, String? pdfType}) {
     String? relativeUrl;
 
     // If original PDF is selected (debug mode only), build debug URL
@@ -4578,18 +4582,23 @@ class _TranslationResultPreviewState
       );
     }
 
-    // Add table_body_format query parameter if provided
+    // Add format query parameters if provided
     var finalUrl = relativeUrl;
+    final Uri uri = Uri.parse(relativeUrl);
+    final Map<String, dynamic> queryParams = <String, dynamic>{
+      ...uri.queryParameters,
+    };
     if (tableFormat != null) {
-      final Uri uri = Uri.parse(relativeUrl);
-      final Uri updatedUri = uri.replace(
-        queryParameters: <String, dynamic>{
-          ...uri.queryParameters,
-          'table_body_format': tableFormat,
-        },
-      );
-      finalUrl = updatedUri.toString();
+      queryParams['table_body_format'] = tableFormat;
     }
+    if (equationFormat != null) {
+      queryParams['equation_format'] = equationFormat;
+    }
+    if (chartFormat != null) {
+      queryParams['chart_body_format'] = chartFormat;
+    }
+    final Uri updatedUri = uri.replace(queryParameters: queryParams);
+    finalUrl = updatedUri.toString();
 
     final String viewerUrl = finalUrl.startsWith('http')
         ? finalUrl
@@ -5128,6 +5137,21 @@ class _TranslationResultPreviewState
           'embedImages': null,
           'ebookEngine': 'pandoc',
         });
+      } else if (format == 'pdf') {
+        downloadOptions.add(<String, dynamic>{
+          'type': 'pdf',
+          'label': l10n.translationExportPdfPreserveLayout,
+          'description': l10n.translationExportPdfPreserveLayoutDesc,
+          'embedImages': null,
+          'rendererType': 'typst_overlay',
+        });
+        downloadOptions.add(<String, dynamic>{
+          'type': 'pdf',
+          'label': l10n.translationExportPdfReflow,
+          'description': l10n.translationExportPdfReflowDesc,
+          'embedImages': null,
+          'rendererType': 'pandoc',
+        });
       } else {
         downloadOptions.add(<String, dynamic>{
           'type': format,
@@ -5137,24 +5161,15 @@ class _TranslationResultPreviewState
       }
     }
 
-    // Add high-fidelity PDF option below standard PDF when PDF is available
-    if (availableFormats.contains('pdf') && !isDocWorkflow) {
-      downloadOptions.add(<String, dynamic>{
-        'type': 'pdf',
-        'label': '高保真 PDF',
-        'embedImages': null,
-        'rendererType': 'typst_overlay',
-      });
-    }
-
     // Check if this is a PDF workflow (markdown_based) to show format options
     final bool isPdfWorkflow =
         resolvedWorkflowType == 'markdown_based' || isPdfFile;
     final bool hasTables = status?['has_tables'] as bool? ?? false;
     final bool hasInterlineEquations =
         status?['has_interline_equations'] as bool? ?? false;
+    final bool hasCharts = status?['has_charts'] as bool? ?? false;
     final bool showFormatOptions =
-        isPdfWorkflow && (hasTables || hasInterlineEquations);
+        isPdfWorkflow && (hasTables || hasInterlineEquations || hasCharts);
 
     // Determine whether bilingual export option should be shown
     final bool supportsBilingual = <String>{
@@ -5201,6 +5216,8 @@ class _TranslationResultPreviewState
               formatSettings.getTableFormat(isPdfWorkflow: isPdfWorkflow);
           String equationFormat =
               formatSettings.getEquationFormat(isPdfWorkflow: isPdfWorkflow);
+          String chartFormat =
+              formatSettings.getChartFormat(isPdfWorkflow: isPdfWorkflow);
           bool bilingualExport = formatSettings.bilingualExport ?? false;
           String bilingualOrder =
               formatSettings.bilingualOrder ?? 'target_after_source';
@@ -5367,6 +5384,72 @@ class _TranslationResultPreviewState
                                     ),
                                     Text(
                                       l10n.translationExportEquationFormatLatex,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        if (hasCharts) ...<Widget>[
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              SizedBox(
+                                width: 120, // Fixed width for label alignment
+                                child: Text(
+                                  l10n.translationExportChartFormatLabel,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Row(
+                                  children: <Widget>[
+                                    Radio<String>(
+                                      value: 'image',
+                                      groupValue: chartFormat,
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          setDialogState(() {
+                                            chartFormat = value;
+                                          });
+                                          ref
+                                              .read(
+                                                formatSettingsProviderFamily(
+                                                        _apiTaskId(),)
+                                                    .notifier,
+                                              )
+                                              .setChartFormat(value);
+                                        }
+                                      },
+                                    ),
+                                    Text(
+                                      l10n.translationExportChartFormatImage,
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Radio<String>(
+                                      value: 'html',
+                                      groupValue: chartFormat,
+                                      onChanged: (value) {
+                                        if (value != null) {
+                                          setDialogState(() {
+                                            chartFormat = value;
+                                          });
+                                          ref
+                                              .read(
+                                                formatSettingsProviderFamily(
+                                                        _apiTaskId(),)
+                                                    .notifier,
+                                              )
+                                              .setChartFormat(value);
+                                        }
+                                      },
+                                    ),
+                                    Text(
+                                      l10n.translationExportChartFormatHtml,
                                     ),
                                   ],
                                 ),
@@ -5646,10 +5729,26 @@ class _TranslationResultPreviewState
                               final int index = entry.key;
                               final Map<String, dynamic> option = entry.value;
                               final String label = option['label'] as String;
+                              final String? description =
+                                  option['description'] as String?;
                               return RadioListTile<int>(
                                 value: index,
                                 groupValue: selectedDownloadIndex,
                                 title: Text(label),
+                                subtitle: description != null &&
+                                        description.isNotEmpty
+                                    ? Text(
+                                        description,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                      )
+                                    : null,
                                 dense: true,
                                 onChanged: (value) {
                                   if (value != null) {
@@ -5686,12 +5785,14 @@ class _TranslationResultPreviewState
                           selectedOption['rendererType'] as String?;
                       final currentTableFormat = tableFormat;
                       final currentEquationFormat = equationFormat;
+                      final currentChartFormat = chartFormat;
                       Navigator.of(context, rootNavigator: true).pop();
                       _handlePreviewFormatDownload(
                         fileType,
                         embedImages: embedImages,
                         tableFormat: currentTableFormat,
                         equationFormat: currentEquationFormat,
+                        chartFormat: currentChartFormat,
                         ebookEngine: ebookEngine,
                         rendererType: rendererType,
                       );
@@ -5723,6 +5824,7 @@ class _TranslationResultPreviewState
     bool? embedImages,
     String? tableFormat,
     String? equationFormat,
+    String? chartFormat,
     String? ebookEngine,
     String? rendererType,
   }) async {
@@ -5756,6 +5858,8 @@ class _TranslationResultPreviewState
             formatSettings.getTableFormat(isPdfWorkflow: isPdfWorkflow);
         queryParams['equation_format'] = equationFormat ??
             formatSettings.getEquationFormat(isPdfWorkflow: isPdfWorkflow);
+        queryParams['chart_body_format'] = chartFormat ??
+            formatSettings.getChartFormat(isPdfWorkflow: isPdfWorkflow);
         if (fileType == 'md' && embedImages != null) {
           queryParams['embed_images'] = embedImages.toString();
         }
@@ -5766,7 +5870,7 @@ class _TranslationResultPreviewState
         queryParams['ebook_engine'] = ebookEngine;
       }
 
-      // Add renderer_type for Typst overlay (high-fidelity PDF)
+      // Add renderer_type for PDF export (typst_overlay | pandoc)
       if (rendererType != null && rendererType.isNotEmpty) {
         queryParams['renderer_type'] = rendererType;
       }
@@ -5806,18 +5910,36 @@ class _TranslationResultPreviewState
   }
 
   /// Show PDF export dialog with table format and PDF type (translated/original) options
-  /// Returns a Map with 'tableFormat' and 'pdfType' keys, or null if cancelled
+  /// Returns a Map with 'tableFormat', 'equationFormat', 'chartFormat' and 'pdfType' keys, or null if cancelled
   Future<Map<String, String>?> _showPdfExportDialog() async {
     final FormatSettings formatSettings = ref.read(
       formatSettingsProviderFamily(_apiTaskId()),
     );
     final String initialTableFormat =
         formatSettings.getTableFormat(isPdfWorkflow: true);
+    final String initialEquationFormat =
+        formatSettings.getEquationFormat(isPdfWorkflow: true);
+    final String initialChartFormat =
+        formatSettings.getChartFormat(isPdfWorkflow: true);
+
+    // Get status to check for tables, equations, charts
+    Map<String, dynamic>? status;
+    try {
+      final TranslationService svc = TranslationService();
+      status = await svc.getStatus(_apiTaskId());
+    } catch (e) {
+      status = null;
+    }
+    final bool hasTables = status?['has_tables'] as bool? ?? false;
+    final bool hasInterlineEquations = status?['has_interline_equations'] as bool? ?? false;
+    final bool hasCharts = status?['has_charts'] as bool? ?? false;
 
     return DialogHelper.showDialog<Map<String, String>>(
         context: context,
         builder: (BuildContext context) {
-          String selectedFormat = initialTableFormat;
+          String selectedTableFormat = initialTableFormat;
+          String selectedEquationFormat = initialEquationFormat;
+          String selectedChartFormat = initialChartFormat;
           String selectedPdfType = 'translated'; // Default: translated PDF
 
           return AlertDialog(
@@ -5894,41 +6016,121 @@ class _TranslationResultPreviewState
                     const SizedBox(height: 8),
                   ],
                   // Table format selection
-                  const Text(
-                    'Choose how tables should be rendered in the PDF:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  RadioListTile<String>(
-                    title: const Text('HTML'),
-                    subtitle: const Text(
-                      'Tables rendered as HTML text (translatable)',
+                  if (hasTables) ...<Widget>[
+                    const Text(
+                      'Choose how tables should be rendered in the PDF:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    value: 'html',
-                    groupValue: selectedFormat,
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() {
-                          selectedFormat = value;
-                        });
-                      }
-                    },
-                  ),
-                  RadioListTile<String>(
-                    title: const Text('Image'),
-                    subtitle: const Text(
-                      'Tables rendered as images (not translatable)',
+                    const SizedBox(height: 8),
+                    RadioListTile<String>(
+                      title: const Text('HTML'),
+                      subtitle: const Text(
+                        'Tables rendered as HTML text (translatable)',
+                      ),
+                      value: 'html',
+                      groupValue: selectedTableFormat,
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            selectedTableFormat = value;
+                          });
+                        }
+                      },
                     ),
-                    value: 'image',
-                    groupValue: selectedFormat,
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() {
-                          selectedFormat = value;
-                        });
-                      }
-                    },
-                  ),
+                    RadioListTile<String>(
+                      title: const Text('Image'),
+                      subtitle: const Text(
+                        'Tables rendered as images (not translatable)',
+                      ),
+                      value: 'image',
+                      groupValue: selectedTableFormat,
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            selectedTableFormat = value;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  // Equation format selection
+                  if (hasInterlineEquations) ...<Widget>[
+                    const Text(
+                      'Choose how equations should be rendered in the PDF:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    RadioListTile<String>(
+                      title: const Text('Image'),
+                      subtitle: const Text(
+                        'Equations rendered as images (best quality)',
+                      ),
+                      value: 'image',
+                      groupValue: selectedEquationFormat,
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            selectedEquationFormat = value;
+                          });
+                        }
+                      },
+                    ),
+                    RadioListTile<String>(
+                      title: const Text('LaTeX'),
+                      subtitle: const Text(
+                        'Equations rendered as LaTeX text',
+                      ),
+                      value: 'text',
+                      groupValue: selectedEquationFormat,
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            selectedEquationFormat = value;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  // Chart format selection
+                  if (hasCharts) ...<Widget>[
+                    const Text(
+                      'Choose how charts should be rendered in the PDF:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    RadioListTile<String>(
+                      title: const Text('Image'),
+                      subtitle: const Text(
+                        'Charts rendered as images (recommended)',
+                      ),
+                      value: 'image',
+                      groupValue: selectedChartFormat,
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            selectedChartFormat = value;
+                          });
+                        }
+                      },
+                    ),
+                    RadioListTile<String>(
+                      title: const Text('HTML'),
+                      subtitle: const Text(
+                        'Charts rendered as HTML tables (translatable)',
+                      ),
+                      value: 'html',
+                      groupValue: selectedChartFormat,
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            selectedChartFormat = value;
+                          });
+                        }
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -5939,7 +6141,9 @@ class _TranslationResultPreviewState
               ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(<String, String>{
-                  'tableFormat': selectedFormat,
+                  'tableFormat': selectedTableFormat,
+                  'equationFormat': selectedEquationFormat,
+                  'chartFormat': selectedChartFormat,
                   'pdfType': selectedPdfType,
                 }), // Confirm
                 child: const Text('OK'),

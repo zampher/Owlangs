@@ -33,7 +33,9 @@ Pipeline Overview::
         Translated PDF (bytes)
 """
 
+import io
 import time
+import zipfile
 from pathlib import Path
 from typing import Dict, List, Optional
 from tempfile import mkdtemp
@@ -58,6 +60,11 @@ from layout.pdf_renderer.typst_overlay.source_cleanup import (
 from layout.pdf_renderer.typst_overlay.overlay_merge import (
     merge_overlay_pdf,
 )
+from layout.pdf_renderer.typst_overlay.visual_images import (
+    collect_visual_image_placements,
+    lookup_image_bytes,
+)
+from layout.pdf_renderer.shared.block_processor import BlockProcessor
 from logger.logger import unified_logger, LogModule
 
 
@@ -423,6 +430,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 or stripped.startswith('<table')
                 or stripped.startswith('</table')
                 or stripped.startswith('<img')
+                or stripped.startswith('![')  # Markdown image syntax: ![alt](path)
             ):
                 if body_start is None:
                     body_start = i
@@ -554,6 +562,104 @@ class TypstOverlayRenderer(BasePDFRenderer):
 
         return result
 
+    def _load_image_data_map(self, layout_doc: LayoutDocument) -> Dict[str, bytes]:
+        """Load MinerU layout images from ZIP bytes attached to config."""
+        zip_bytes = getattr(self.config, "zip_bytes", None)
+        if not zip_bytes:
+            unified_logger.warning(
+                LogModule.RESTOR,
+                "[TYPST_OVERLAY] No layout ZIP bytes in config; "
+                "chart/table image embedding unavailable (regular image blocks may still "
+                "appear from the source PDF layer)",
+            )
+            return {}
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zip_file:
+                return BlockProcessor.extract_all_images_from_layout(layout_doc, zip_file)
+        except Exception as exc:
+            unified_logger.warning(
+                LogModule.RESTOR,
+                f"[TYPST_OVERLAY] Failed to load images from layout ZIP: {exc}",
+            )
+            return {}
+
+    def _append_visual_image_render_blocks(
+        self,
+        layout_doc: LayoutDocument,
+        render_blocks_by_page: Dict[int, List[RenderBlock]],
+        *,
+        work_dir: Path,
+        image_data_map: Dict[str, bytes],
+    ) -> Dict[int, List[tuple]]:
+        """Write chart/table body images and append image RenderBlocks. Returns extra redaction rects."""
+        chart_fmt = getattr(self.config, "chart_body_format", "image") or "image"
+        table_fmt = getattr(self.config, "table_body_format", "html") or "html"
+        placements = collect_visual_image_placements(
+            layout_doc,
+            chart_body_format=chart_fmt,
+            table_body_format=table_fmt,
+            image_data_map=image_data_map,
+        )
+        if chart_fmt == "image":
+            chart_count = sum(
+                1 for page in layout_doc.pages for block in page.blocks if block.type == "chart"
+            )
+            if chart_count and not any(p.block_type == "chart" for p in placements):
+                unified_logger.warning(
+                    LogModule.RESTOR,
+                    f"[TYPST_OVERLAY] layout has {chart_count} chart block(s) but 0 chart "
+                    f"image placements (zip_images={len(image_data_map)}, "
+                    f"check layout_source_zip and chart_body nested image_path)",
+                )
+        if not placements:
+            return {}
+
+        images_dir = work_dir / "images"
+        images_dir.mkdir(parents=True, exist_ok=True)
+        extra_redaction: Dict[int, List[tuple]] = {}
+        margin_pt = 2.0
+
+        for placement in placements:
+            image_bytes = lookup_image_bytes(image_data_map, placement.image_path)
+            if not image_bytes:
+                unified_logger.warning(
+                    LogModule.RESTOR,
+                    f"[TYPST_OVERLAY] Missing image bytes for {placement.block_type} "
+                    f"block {placement.block_index}: {placement.image_path}",
+                )
+                continue
+
+            filename = Path(placement.image_path).name
+            dest_path = images_dir / filename
+            if not dest_path.exists():
+                dest_path.write_bytes(image_bytes)
+
+            rel_path = f"images/{filename}"
+            rb = RenderBlock(
+                block_id=f"visual-{placement.block_type}-{placement.block_index}",
+                page_index=placement.page_index,
+                inner_bbox=placement.inner_bbox,
+                render_kind="image",
+                image_rel_path=rel_path,
+            )
+            render_blocks_by_page.setdefault(placement.page_index, []).append(rb)
+
+            x0, y0, x1, y1 = placement.inner_bbox
+            extra_redaction.setdefault(placement.page_index, []).append((
+                max(0, x0 - margin_pt),
+                max(0, y0 - margin_pt),
+                x1 + margin_pt,
+                y1 + margin_pt,
+            ))
+            unified_logger.info(
+                LogModule.RESTOR,
+                f"[TYPST_OVERLAY] Embedded {placement.block_type} image for block "
+                f"{placement.block_index} on page {placement.page_index + 1}: "
+                f"{filename}, bbox=({x0:.1f},{y0:.1f},{x1:.1f},{y1:.1f})",
+            )
+
+        return extra_redaction
+
     def render(self, layout_doc: LayoutDocument) -> bytes:
         """
         Render LayoutDocument to high-fidelity translated PDF.
@@ -600,13 +706,32 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 if not block.has_text():
                     # Log skipped blocks (images, tables, etc.)
                     _img = getattr(block, 'image_path', None) or ""
+                    
+                    # For chart blocks, also check nested raw data for image_path
+                    if block.type == "chart" and not _img:
+                        raw = getattr(block, 'raw', None) or {}
+                        if isinstance(raw, dict):
+                            nested_blocks = raw.get("blocks") or []
+                            for sub in nested_blocks:
+                                if isinstance(sub, dict) and sub.get("type") == "chart_body":
+                                    for line in sub.get("lines") or []:
+                                        if isinstance(line, dict):
+                                            for span in line.get("spans") or []:
+                                                if isinstance(span, dict) and span.get("image_path"):
+                                                    _img = span.get("image_path")
+                                                    break
+                                        if _img:
+                                            break
+                                if _img:
+                                    break
+                    
                     skipped_blocks.append((
                         getattr(block, 'index', '?'),
                         getattr(block, 'type', '?'),
                         _img,
                         block.bbox,
                     ))
-                    continue  # Skip image/table blocks — they stay on original PDF
+                    continue  # Skip image/table/chart blocks — they stay on original PDF
 
                 # Use block.index (from MinerU layout) as the mapping key
                 block_key = block.index if block.index is not None else total_blocks
@@ -720,6 +845,16 @@ class TypstOverlayRenderer(BasePDFRenderer):
             )
             return self._source_pdf_path.read_bytes()
 
+        # ---- Step 1b: Embed chart/table body images when format=image ----
+        temp_dir = Path(mkdtemp(prefix="owlangs_typst_"))
+        image_data_map = self._load_image_data_map(layout_doc)
+        extra_redaction_rects = self._append_visual_image_render_blocks(
+            layout_doc,
+            render_blocks_by_page,
+            work_dir=temp_dir,
+            image_data_map=image_data_map,
+        )
+
         # ---- Step 2: Clean source PDF ----
         # For image-based PDFs (scanned documents), redaction-based cleanup
         # is ineffective.  Use background-embed mode instead.
@@ -731,6 +866,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 self._source_pdf_path,
                 layout_doc,
                 merge_rects=True,
+                extra_redaction_rects=extra_redaction_rects or None,
             )
             diagnostics["cleanup_elapsed"] = time.perf_counter() - cleanup_started
         except Exception as e:
@@ -834,7 +970,6 @@ class TypstOverlayRenderer(BasePDFRenderer):
 
         # ---- Step 5: Compile Typst → overlay PDF ----
         compile_started = time.perf_counter()
-        temp_dir = Path(mkdtemp(prefix="owlangs_typst_"))
         typ_path = temp_dir / "overlay.typ"
         pdf_path = temp_dir / "overlay.pdf"
 

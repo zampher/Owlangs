@@ -165,6 +165,9 @@
   "translationExportEquationFormatLabel": "Equation Format:",
   "translationExportEquationFormatImage": "Image",
   "translationExportEquationFormatLatex": "LaTeX",
+  "translationExportChartFormatLabel": "Chart Format:",
+  "translationExportChartFormatImage": "Image",
+  "translationExportChartFormatHtml": "HTML",
 
   "translationExportBilingualExport": "Bilingual Export",
   "translationExportBilingualOrderTargetAfter": "Source First",
@@ -186,6 +189,10 @@
 
   "translationExportMdEmbeddedImages": "MD (Embedded Images)",
   "translationExportMdWithImagesFolder": "MD (With Images Folder)",
+  "translationExportPdfPreserveLayout": "Original Layout PDF",
+  "translationExportPdfPreserveLayoutDesc": "Overlay translation on the original PDF layout",
+  "translationExportPdfReflow": "Reflow PDF",
+  "translationExportPdfReflowDesc": "Re-typeset from translation Markdown; layout may differ from the source",
 
   "translationLeftPanelExpandTooltip": "Expand left panel",
   "translationLeftPanelCollapseTooltip": "Collapse left panel",
@@ -1031,6 +1038,8 @@
   "settingsExclusionStructuralSubtitle": "Headers, footers, footnotes, page numbers",
   "settingsExclusionTableTitle": "Table",
   "settingsExclusionTableSubtitle": "Table content (markdown / PDF tables)",
+  "settingsExclusionChartTitle": "Chart",
+  "settingsExclusionChartSubtitle": "Chart content (Figure, chart blocks)",
   "settingsExclusionLanguageMatchTitle": "Language Match",
   "settingsExclusionLanguageMatchSubtitle": "Source language matches target language",
   "settingsTranslateOutputSuffixTitle": "Translation Output Suffix",

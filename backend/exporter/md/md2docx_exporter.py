@@ -64,6 +64,7 @@ class MD2DOCXExporterConfig(MDExporterConfig):
     layout_document: 'LayoutDocument | None' = None  # Optional layout document for PDF workflow
     image_data_map: dict = None  # Optional image data map for embedding images in DOCX
     table_body_format: str = "image"  # Table format: "html" or "image"
+    chart_body_format: str = "image"  # Chart format: "html" or "image" (default: "image" for safety)
     equation_format: str = "text"  # Equation format: "text" (LaTeX), "latex", or "image"
     debug_output_dir: Optional[Path] = None  # If set, write MD input to debug_output_dir/docx_export_input.md for debugging
 

@@ -16,7 +16,6 @@ library;
 
 import 'dart:async';
 import 'dart:html';
-import 'dart:js_util' as js_util;
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -163,12 +162,13 @@ Future<List<PlatformFile>?> webPickDirectoryFiles({
       final reader = FileReader();
 
       reader.addEventListener('loadend', (_) {
-        // Use webkitRelativePath via js_util to preserve directory structure
-        // when the user picks a folder.  Dynamic-access fallback used to work
-        // in some dart2js versions but is unreliable; js_util is the canonical path.
+        // Access webkitRelativePath via dynamic cast to preserve directory structure
+        // when the user picks a folder. The webkitdirectory attribute ensures this
+        // property is available on File objects from directory selection.
         String relPath;
         try {
-          final wrp = js_util.getProperty(file, 'webkitRelativePath');
+          final dynamic fileDynamic = file;
+          final wrp = fileDynamic.webkitRelativePath;
           relPath = (wrp is String && wrp.isNotEmpty) ? wrp : file.name;
         } catch (_) {
           relPath = file.name;

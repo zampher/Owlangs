@@ -110,6 +110,27 @@ def _extract_image_path_from_layout_block(block_data: Dict[str, Any]) -> Optiona
                     if img_path:
                         return str(img_path)
     
+    # For chart blocks, check nested 'blocks' -> 'chart_body' -> lines -> spans -> image_path
+    block_type = block_data.get("type", "")
+    if block_type == "chart":
+        for sub_block in blocks:
+            if not isinstance(sub_block, dict):
+                continue
+            if sub_block.get("type") == "chart_body":
+                lines = sub_block.get("lines", [])
+                for line in lines:
+                    if not isinstance(line, dict):
+                        continue
+                    spans = line.get("spans", [])
+                    for span in spans:
+                        if not isinstance(span, dict):
+                            continue
+                        # Check for chart spans with image_path
+                        if span.get("type") == "chart":
+                            img_path = span.get("image_path")
+                            if img_path:
+                                return str(img_path)
+    
     # Also check direct 'image_path' field
     img_path = block_data.get("image_path")
     if img_path:

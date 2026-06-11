@@ -66,6 +66,7 @@ async def service_download_file_route(
         file_type: str = FastApiPath(..., description="File type to download.", examples=["html", "md", "json", "csv", "docx", "srt", "epub", "mobi", "ts", "pdf"]),
         table_body_format: Optional[str] = FastApiQuery(None, description="Table format for PDF rendering: 'html' or 'image' (overrides task payload setting, only applies to PDF downloads)", examples=["html", "image"]),
         equation_format: Optional[str] = FastApiQuery(None, description="Equation format for PDF rendering: 'text' (LaTeX) or 'image' (overrides task payload setting, only applies to PDF/MD downloads)", examples=["text", "image"]),
+        chart_body_format: Optional[str] = FastApiQuery(None, description="Chart format for PDF rendering: 'html' or 'image' (overrides task payload setting, only applies to PDF/MD downloads). Default: 'image'", examples=["html", "image"]),
         embed_images: Optional[bool] = FastApiQuery(None, description="For MD downloads: if True, embed images as data URIs; if False, save images to folder and return ZIP. Default: True (embed).", examples=[True, False]),
         ebook_engine: Optional[str] = FastApiQuery(None, description="For epub/mobi: 'pandoc' or 'calibre'. Only used when both converters are available; choose which path to use for export.", examples=["pandoc", "calibre"]),
         bilingual_export: Optional[bool] = FastApiQuery(None, description="Enable bilingual export: include both source and target text in the output file.", examples=[True, False]),
@@ -74,7 +75,7 @@ async def service_download_file_route(
         source_text_color: Optional[str] = FastApiQuery(None, description="Source text color for bilingual export: 'gray', 'blue', 'red', 'green', 'orange', 'black'.", examples=["gray", "blue", "red"]),
         target_text_italic: Optional[bool] = FastApiQuery(None, description="Render target text in italic for bilingual export.", examples=[True, False]),
         target_text_color: Optional[str] = FastApiQuery(None, description="Target text color for bilingual export: 'gray', 'blue', 'red', 'green', 'orange', 'black'.", examples=["gray", "blue", "red"]),
-        renderer_type: Optional[str] = FastApiQuery(None, description="PDF renderer type: 'typst_overlay' for high-fidelity Typst overlay. Only applies to PDF downloads.", examples=["typst_overlay"]),
+        renderer_type: Optional[str] = FastApiQuery(None, description="PDF renderer: 'typst_overlay' = preserve original layout (default when omitted); 'pandoc' = reflow from Markdown via Pandoc+XeLaTeX. PDF downloads only.", examples=["typst_overlay", "pandoc"]),
 ):
     """Download translation result files."""
     resp = await download_service.download_file(
@@ -82,6 +83,7 @@ async def service_download_file_route(
         file_type=file_type,
         table_body_format=table_body_format,
         equation_format=equation_format,
+        chart_body_format=chart_body_format,
         embed_images=embed_images,
         ebook_engine=ebook_engine,
         bilingual_export=bilingual_export,

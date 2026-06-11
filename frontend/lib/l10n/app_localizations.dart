@@ -1005,6 +1005,24 @@ abstract class AppLocalizations {
   /// **'LaTeX'**
   String get translationExportEquationFormatLatex;
 
+  /// No description provided for @translationExportChartFormatLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Chart Format:'**
+  String get translationExportChartFormatLabel;
+
+  /// No description provided for @translationExportChartFormatImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Image'**
+  String get translationExportChartFormatImage;
+
+  /// No description provided for @translationExportChartFormatHtml.
+  ///
+  /// In en, this message translates to:
+  /// **'HTML'**
+  String get translationExportChartFormatHtml;
+
   /// No description provided for @translationExportBilingualExport.
   ///
   /// In en, this message translates to:
@@ -1118,6 +1136,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'MD (With Images Folder)'**
   String get translationExportMdWithImagesFolder;
+
+  /// No description provided for @translationExportPdfPreserveLayout.
+  ///
+  /// In en, this message translates to:
+  /// **'Original Layout PDF'**
+  String get translationExportPdfPreserveLayout;
+
+  /// No description provided for @translationExportPdfPreserveLayoutDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Overlay translation on the original PDF layout'**
+  String get translationExportPdfPreserveLayoutDesc;
+
+  /// No description provided for @translationExportPdfReflow.
+  ///
+  /// In en, this message translates to:
+  /// **'Reflow PDF'**
+  String get translationExportPdfReflow;
+
+  /// No description provided for @translationExportPdfReflowDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-typeset from translation Markdown; layout may differ from the source'**
+  String get translationExportPdfReflowDesc;
 
   /// No description provided for @translationLeftPanelExpandTooltip.
   ///
@@ -5287,6 +5329,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Table content (markdown / PDF tables)'**
   String get settingsExclusionTableSubtitle;
+
+  /// No description provided for @settingsExclusionChartTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chart'**
+  String get settingsExclusionChartTitle;
+
+  /// No description provided for @settingsExclusionChartSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chart content (Figure, chart blocks)'**
+  String get settingsExclusionChartSubtitle;
 
   /// No description provided for @settingsExclusionLanguageMatchTitle.
   ///

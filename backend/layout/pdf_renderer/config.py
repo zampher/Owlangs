@@ -25,6 +25,7 @@ class PDFRendererConfig:
         zip_bytes: Optional[bytes] = None,
         table_body_format: str = "html",
         equation_format: str = "text",
+        chart_body_format: str = "image",
         target_language: Optional[str] = None,
         output_path: Optional[Path] = None,
         # --- Typst overlay renderer fields ---
@@ -33,12 +34,13 @@ class PDFRendererConfig:
     ):
         """
         Initialize PDF renderer configuration.
-        
+
         Args:
             translated_text_by_block_index: Optional mapping from block index to translated text
             zip_bytes: Optional ZIP bytes for extracting images
             table_body_format: Table format ("html" or "image")
             equation_format: Equation format ("text" for LaTeX or "image" for rendered images)
+            chart_body_format: Chart format ("html" or "image")
             target_language: Optional target language code/name for font selection
             output_path: Optional path to save PDF file (for debugging)
             source_pdf_path: Path to the original PDF file (required for Typst overlay renderer)
@@ -48,9 +50,10 @@ class PDFRendererConfig:
         self.zip_bytes = zip_bytes
         self.table_body_format = table_body_format
         self.equation_format = equation_format
+        self.chart_body_format = chart_body_format
         self.target_language = target_language
         self.output_path = output_path
-        
+
         # Typst overlay renderer fields
         self.source_pdf_path: Optional[Union[str, Path]] = source_pdf_path
         self.typst_font_family: Optional[str] = typst_font_family

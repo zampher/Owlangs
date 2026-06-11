@@ -158,6 +158,9 @@
   "translationExportEquationFormatLabel": "公式格式：",
   "translationExportEquationFormatImage": "图片",
   "translationExportEquationFormatLatex": "LaTeX",
+  "translationExportChartFormatLabel": "图表格式：",
+  "translationExportChartFormatImage": "图片",
+  "translationExportChartFormatHtml": "HTML",
 
   "translationExportBilingualExport": "双语导出",
   "translationExportBilingualOrderTargetAfter": "原文在前",
@@ -179,6 +182,10 @@
 
   "translationExportMdEmbeddedImages": "MD（嵌入图片）",
   "translationExportMdWithImagesFolder": "MD（图片文件夹）",
+  "translationExportPdfPreserveLayout": "原版式 PDF",
+  "translationExportPdfPreserveLayoutDesc": "在原 PDF 版式上叠加译文，保留布局与图表位置",
+  "translationExportPdfReflow": "重新排版 PDF",
+  "translationExportPdfReflowDesc": "由译文 Markdown 重新排版，版式可能与原文不同",
 
   "translationLeftPanelExpandTooltip": "展开左侧面板",
   "translationLeftPanelCollapseTooltip": "折叠左侧面板",
@@ -992,6 +999,8 @@
   "settingsExclusionStructuralSubtitle": "页眉、页脚、脚注、页码",
   "settingsExclusionTableTitle": "表格",
   "settingsExclusionTableSubtitle": "表格内容（markdown / PDF表格）",
+  "settingsExclusionChartTitle": "图表",
+  "settingsExclusionChartSubtitle": "图表内容（Figure、chart块）",
   "settingsExclusionLanguageMatchTitle": "语言匹配",
   "settingsExclusionLanguageMatchSubtitle": "源语言与目标语言匹配",
   "settingsTranslateOutputSuffixTitle": "翻译输出后缀",

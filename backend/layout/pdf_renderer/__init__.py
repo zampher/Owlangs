@@ -77,6 +77,7 @@ def render_layout_pdf(
     output_path: Optional[Path] = None,
     table_body_format: str = "html",
     equation_format: str = "text",
+    chart_body_format: str = "image",
     target_language: Optional[str] = None,
     renderer_type: str = "reportlab",
     html_converter: str = "playwright",
@@ -97,6 +98,7 @@ def render_layout_pdf(
         output_path: Optional path to save PDF file (for debugging)
         table_body_format: Table format ("html" or "image")
         equation_format: Equation format ("text" for LaTeX or "image" for rendered images)
+        chart_body_format: Chart format ("html" or "image")
         target_language: Optional target language code/name for font selection
         renderer_type: Renderer type
             - "reportlab": Use ReportLab for direct PDF generation (current default)
@@ -121,6 +123,7 @@ def render_layout_pdf(
         zip_bytes=zip_bytes,
         table_body_format=table_body_format,
         equation_format=equation_format,
+        chart_body_format=chart_body_format,
         target_language=target_language,
         output_path=output_path,
         source_pdf_path=source_pdf_path,

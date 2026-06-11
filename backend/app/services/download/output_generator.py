@@ -742,13 +742,14 @@ class OutputGenerator:
                     from utils.document_rebuild import rebuild_markdown_document_from_segments
                     from backend.app.services.download.download_service import _resolve_export_format_settings
 
-                    eq_fmt, tbl_fmt = _resolve_export_format_settings(task_state, payload)
+                    eq_fmt, tbl_fmt, chart_fmt = _resolve_export_format_settings(task_state, payload)
                     rebuilt_doc = rebuild_markdown_document_from_segments(
                         task_state,
                         file_stem=file_stem,
                         output_dir=output_dir,
                         equation_format=eq_fmt,
                         table_body_format=tbl_fmt,
+                        chart_body_format=chart_fmt,
                     )
                     if rebuilt_doc and hasattr(rebuilt_doc, "content"):
                         raw = rebuilt_doc.content
@@ -775,14 +776,16 @@ class OutputGenerator:
                         from utils.document_rebuild import rebuild_markdown_document_from_segments
                         eq_fmt = task_state.get("equation_format") or (payload.get("equation_format") if isinstance(payload, dict) else getattr(payload, "equation_format", None)) or "text"
                         tbl_fmt = task_state.get("table_body_format") or (payload.get("table_body_format") if isinstance(payload, dict) else getattr(payload, "table_body_format", None)) or "html"
+                        chart_fmt = task_state.get("chart_body_format") or (payload.get("chart_body_format") if isinstance(payload, dict) else getattr(payload, "chart_body_format", None)) or "image"
                         from backend.app.services.download.download_service import _resolve_export_format_settings
-                        eq_fmt, tbl_fmt = _resolve_export_format_settings(task_state, payload, eq_fmt, tbl_fmt)
+                        eq_fmt, tbl_fmt, chart_fmt = _resolve_export_format_settings(task_state, payload, eq_fmt, tbl_fmt, chart_fmt)
                         rebuilt_doc = rebuild_markdown_document_from_segments(
                             task_state,
                             file_stem=file_stem,
                             output_dir=output_dir,
                             equation_format=eq_fmt,
                             table_body_format=tbl_fmt,
+                            chart_body_format=chart_fmt,
                         )
                         if rebuilt_doc and hasattr(rebuilt_doc, "content"):
                             raw = rebuilt_doc.content
@@ -802,7 +805,7 @@ class OutputGenerator:
                     _export_md_content_to_docx_bytes,
                 )
 
-                eq_fmt, tbl_fmt = _resolve_export_format_settings(task_state, payload)
+                eq_fmt, tbl_fmt, chart_fmt = _resolve_export_format_settings(task_state, payload)
                 if is_pdf_with_layout and _format_requires_md2docx(eq_fmt, tbl_fmt):
                     try:
                         docx_bytes = _export_md_content_to_docx_bytes(
@@ -810,6 +813,7 @@ class OutputGenerator:
                             md_content,
                             eq_fmt,
                             tbl_fmt,
+                            chart_fmt,
                             payload=payload,
                             file_stem=file_stem,
                         )

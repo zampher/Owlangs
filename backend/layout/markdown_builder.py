@@ -17,7 +17,7 @@ from logger import unified_logger as logger
 from logger.logger import LogModule
 
 
-ChunkType = Literal["text", "image", "table_body"]
+ChunkType = Literal["text", "image", "table_body", "chart_body"]
 
 
 @dataclass(frozen=True)
@@ -58,6 +58,7 @@ class LayoutMarkdownBuilder:
         deep_split: bool = True,
         equation_format: str = "text",  # "text" or "image" for interline_equation blocks
         table_body_format: str = "html",  # "html" or "image" for table blocks
+        chart_body_format: str = "image",  # "image" or "html" for chart blocks (default: image for safety)
         include_structural_blocks: bool = False,  # If True, include header/footer/page_number blocks (for Extract phase)
     ):
         self.max_chunk_chars = max_chunk_chars
@@ -65,6 +66,7 @@ class LayoutMarkdownBuilder:
         self.deep_split = deep_split
         self.equation_format = equation_format
         self.table_body_format = table_body_format
+        self.chart_body_format = chart_body_format
         self.include_structural_blocks = include_structural_blocks
         self._image_counter = 0
 
@@ -868,6 +870,151 @@ def _build_layout_markdown(
                 )
                 _flush_text_chunk(chunks, current_text_parts, current_block_sequence)
                 current_chars_ref[0] = 0
+
+            continue
+
+        # Handle chart blocks (similar to table handling)
+        if block.type == "chart":
+            _flush_text_chunk(chunks, current_text_parts, current_block_sequence)
+            current_chars_ref[0] = 0
+
+            raw_block = block.raw or {}
+            nested_blocks = (
+                raw_block.get("blocks") or [] if isinstance(raw_block, dict) else []
+            )
+
+            # Extract chart components: caption, body (with markdown table content and image), footnotes
+            caption_text = None
+            for sub in nested_blocks:
+                if not isinstance(sub, dict):
+                    continue
+                sub_type = str(sub.get("type", ""))
+                if sub_type == "chart_caption":
+                    lines = sub.get("lines") or []
+                    line_texts: list[str] = []
+                    for line in lines:
+                        if not isinstance(line, dict):
+                            continue
+                        spans = line.get("spans") or []
+                        line_parts: list[str] = []
+                        for span in spans:
+                            if not isinstance(span, dict):
+                                continue
+                            content = span.get("content")
+                            if isinstance(content, str) and content.strip():
+                                line_parts.append(content.strip())
+                            elif span.get("type") == "text":
+                                span_text = span.get("text")
+                                if isinstance(span_text, str) and span_text.strip():
+                                    line_parts.append(span_text.strip())
+                        if line_parts:
+                            line_text = " ".join(line_parts).strip()
+                            if line_text:
+                                line_texts.append(line_text)
+                    merged_caption = "\n".join(line_texts).strip()
+                    if merged_caption:
+                        caption_text = merged_caption
+                        logger.debug(LogModule.LAYOUT, "[LAYOUT] Chart caption extracted from nested block "
+                            f"page={block.page_index}, block_index={block_index}, "
+                            f"text_preview={caption_text[:120]!r}"
+                        )
+                        break
+
+            # Extract chart body (markdown table content and image_path)
+            chart_content: Optional[str] = None
+            chart_image_path: Optional[str] = None
+            for sub in nested_blocks:
+                if not isinstance(sub, dict):
+                    continue
+                if str(sub.get("type", "")) != "chart_body":
+                    continue
+                lines = sub.get("lines") or []
+                for line in lines:
+                    if not isinstance(line, dict):
+                        continue
+                    spans = line.get("spans") or []
+                    for span in spans:
+                        if not isinstance(span, dict):
+                            continue
+                        if span.get("type") == "chart":
+                            # Extract markdown table content
+                            content = span.get("content")
+                            if isinstance(content, str) and content.strip():
+                                chart_content = content
+                            # Extract image_path
+                            img_path = span.get("image_path")
+                            if isinstance(img_path, str) and img_path.strip():
+                                chart_image_path = img_path
+                            if chart_content or chart_image_path:
+                                break
+                    if chart_content or chart_image_path:
+                        break
+                if chart_content or chart_image_path:
+                    break
+
+            # Use block.image_path as fallback
+            if not chart_image_path and block.image_path:
+                chart_image_path = block.image_path
+
+            # Add chart components in order: caption -> body
+            # 1. Chart caption (first, always translated)
+            if caption_text:
+                logger.info(LogModule.LAYOUT, "[LAYOUT] Chart caption will be added as separate text segment (before chart body): "
+                    f"block_index={block_index}, page={block.page_index}, "
+                    f"text_preview={caption_text[:120]!r}"
+                )
+                _append_text_piece_for_builder(
+                    caption_text,
+                    block_index,
+                    builder.max_chunk_chars,
+                    current_text_parts,
+                    current_block_sequence,
+                    current_chars_ref,
+                    chunks,
+                )
+                _flush_text_chunk(chunks, current_text_parts, current_block_sequence)
+                current_chars_ref[0] = 0
+
+            # 2. Chart body (based on chart_body_format)
+            chart_body_format = builder.chart_body_format
+            if chart_body_format == "image" and chart_image_path:
+                # Use image format for chart
+                placeholder_id = builder._next_image_placeholder()
+                image_text = f"![Chart]({placeholder_id})"
+                logger.info(LogModule.LAYOUT, "[LAYOUT] Chart body will be rendered as image: "
+                    f"page={block.page_index}, block_index={block_index}, "
+                    f"image_path={chart_image_path}"
+                )
+                chunks.append(
+                    LayoutChunk(
+                        text=image_text,
+                        chunk_type="chart_body",  # Keep as chart_body for exclusion detection, even when rendered as image
+                        block_indices=[block_index] if block_index >= 0 else [],
+                        image_path=chart_image_path,
+                        image_placeholder=placeholder_id,
+                        image_alt="Chart",
+                    )
+                )
+            elif chart_content:
+                # Use HTML/text format for chart (treat as markdown table)
+                # For translation, keep the entire chart body as a single segment
+                logger.debug(
+                    LogModule.LAYOUT,
+                    "[LAYOUT] Chart body kept as markdown table text: "
+                    f"page={block.page_index}, block_index={block_index}, "
+                    f"text_preview={chart_content[:120]!r}"
+                )
+                _flush_text_chunk(chunks, current_text_parts, current_block_sequence)
+                current_chars_ref[0] = 0
+                chunks.append(
+                    LayoutChunk(
+                        text=chart_content,
+                        chunk_type="chart_body",
+                        block_indices=[block_index] if block_index >= 0 else [],
+                        block_texts=[chart_content],
+                        image_path=None,
+                    )
+                )
 
             continue
 

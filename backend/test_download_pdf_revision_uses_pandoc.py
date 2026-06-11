@@ -19,9 +19,9 @@ class TestDownloadPdfRevisionPandocPath(unittest.TestCase):
         self.assertTrue(path.is_file(), msg=f"Missing {path}")
         source = path.read_text(encoding="utf-8")
         self.assertIn(
-            "ENABLE_LAYOUT_PDF_GENERATION",
+            "renderer_type == \"pandoc\"",
             source,
-            msg="Revision PDF path must branch on ENABLE_LAYOUT_PDF_GENERATION so Pandoc is used when flag is False.",
+            msg="Revision PDF path must honor renderer_type=pandoc and use Pandoc MD→PDF.",
         )
         self.assertIn(
             "_pandoc_pdf_file_response_from_md",

@@ -158,6 +158,9 @@
   "translationExportEquationFormatLabel": "수식 형식:",
   "translationExportEquationFormatImage": "이미지",
   "translationExportEquationFormatLatex": "LaTeX",
+  "translationExportChartFormatLabel": "차트 형식:",
+  "translationExportChartFormatImage": "이미지",
+  "translationExportChartFormatHtml": "HTML",
   "translationLeftPanelExpandTooltip": "왼쪽 패널 확장",
   "translationLeftPanelCollapseTooltip": "왼쪽 패널 축소",
   "translationSnackGlossarySaved": "용어집 저장됨",
@@ -970,6 +973,8 @@
   "settingsExclusionStructuralSubtitle": "머리글, 바닥글, 각주, 페이지 번호",
   "settingsExclusionTableTitle": "표",
   "settingsExclusionTableSubtitle": "표 콘텐츠 (마크다운 / PDF 표)",
+  "settingsExclusionChartTitle": "차트",
+  "settingsExclusionChartSubtitle": "차트 콘텐츠 (Figure, chart 블록)",
   "settingsExclusionLanguageMatchTitle": "언어 일치",
   "settingsExclusionLanguageMatchSubtitle": "원본 언어가 대상 언어와 일치함",
   "settingsTranslateOutputSuffixTitle": "Translation Output Suffix",
@@ -1239,5 +1244,9 @@
   "translationExportDownloadButton": "다운로드",
 
   "translationExportMdEmbeddedImages": "MD (이미지 포함)",
-  "translationExportMdWithImagesFolder": "MD (이미지 폴더)"
+  "translationExportMdWithImagesFolder": "MD (이미지 폴더)",
+  "translationExportPdfPreserveLayout": "원版식 PDF",
+  "translationExportPdfPreserveLayoutDesc": "원본 PDF 레이아웃에 번역을 겹쳐 구성과 차트 위치 유지",
+  "translationExportPdfReflow": "재排版 PDF",
+  "translationExportPdfReflowDesc": "번역 Markdown으로 재조판. 원문과 레이아웃이 다를 수 있음"
 }

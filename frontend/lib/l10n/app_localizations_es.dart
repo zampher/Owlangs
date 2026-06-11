@@ -522,6 +522,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationExportEquationFormatLatex => 'LaTeX';
 
   @override
+  String get translationExportChartFormatLabel => 'Formato de Gráfico:';
+
+  @override
+  String get translationExportChartFormatImage => 'Imagen';
+
+  @override
+  String get translationExportChartFormatHtml => 'HTML';
+
+  @override
   String get translationExportBilingualExport => 'Exportación Bilingüe';
 
   @override
@@ -582,6 +591,20 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get translationExportMdWithImagesFolder =>
       'MD (con carpeta de imágenes)';
+
+  @override
+  String get translationExportPdfPreserveLayout => 'PDF diseño original';
+
+  @override
+  String get translationExportPdfPreserveLayoutDesc =>
+      'Superpone la traducción sobre el diseño PDF original';
+
+  @override
+  String get translationExportPdfReflow => 'PDF recompuesto';
+
+  @override
+  String get translationExportPdfReflowDesc =>
+      'Recompuesto desde Markdown traducido; el diseño puede diferir del original';
 
   @override
   String get translationLeftPanelExpandTooltip => 'Expandir panel izquierdo';
@@ -3028,6 +3051,13 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get settingsExclusionTableSubtitle =>
       'Contenido de tabla (tablas markdown / PDF)';
+
+  @override
+  String get settingsExclusionChartTitle => 'Gráfico';
+
+  @override
+  String get settingsExclusionChartSubtitle =>
+      'Contenido de gráfico (Figure, bloques chart)';
 
   @override
   String get settingsExclusionLanguageMatchTitle => 'Coincidencia de Idioma';

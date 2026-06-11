@@ -1981,6 +1981,7 @@ def get_image_block_indices_from_layout(
     layout_document: Any,
     equation_format: Optional[str] = None,
     table_body_format: Optional[str] = None,
+    chart_body_format: Optional[str] = None,
 ) -> Tuple[List[int], Dict[str, int]]:
     """
     Build list of layout block indices for each image segment in document order, and a mapping from image paths to block indices.
@@ -1993,6 +1994,7 @@ def get_image_block_indices_from_layout(
         layout_document: LayoutDocument with iter_blocks() and blocks with .index, .bbox, .has_image(), .type
         equation_format: Optional "text" | "latex" | "image" – when not "image", equation blocks are excluded
         table_body_format: Optional "html" | "image" – when not "image", table body image blocks are excluded
+        chart_body_format: Optional "html" | "image" – when not "image", chart body image blocks are excluded
 
     Returns:
         Tuple of (list of block indices in document order, dict mapping normalized image path to block index).
@@ -2018,6 +2020,7 @@ def get_image_block_indices_from_layout(
     segs_with_layout = 0
     eq_fmt = (equation_format or "text").strip().lower()
     tbl_fmt = (table_body_format or "html").strip().lower()
+    chart_fmt = (chart_body_format or "image").strip().lower()
     from utils.translation_segments import _is_image_segment
 
     for seg in segments:
@@ -2040,6 +2043,8 @@ def get_image_block_indices_from_layout(
                 include = eq_fmt == "image"
             elif btype == "table":
                 include = tbl_fmt == "image"
+            elif btype == "chart":
+                include = chart_fmt == "image"
             else:
                 include = True
             if not include:
@@ -2056,9 +2061,9 @@ def get_image_block_indices_from_layout(
                 if "." in placeholder_id and any(placeholder_id.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]):
                     image_path = placeholder_id
 
-            # For formula/table blocks: extract image_path from the layout block itself
+            # For formula/table/chart blocks: extract image_path from the layout block itself
             # when the segment does not carry image_path (e.g. equation_image_path from MinerU spans)
-            if not image_path and btype in ("interline_equation", "formula", "equation", "table"):
+            if not image_path and btype in ("interline_equation", "formula", "equation", "table", "chart"):
                 block_img_path = getattr(block, "image_path", None)
                 if block_img_path:
                     image_path = str(block_img_path)

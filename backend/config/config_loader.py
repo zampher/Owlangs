@@ -314,7 +314,7 @@ class UnifiedConfig:
             if isinstance(ed, dict):
                 cfg = self.system.exclusion_defaults
                 for attr in ('image', 'formula', 'reference', 'identifier',
-                             'structural', 'table', 'language_match'):
+                             'structural', 'table', 'chart', 'language_match'):
                     if attr in ed:
                         setattr(cfg, attr, bool(ed[attr]))
     

@@ -236,3 +236,57 @@ def test_build_image_data_map_text_html_includes_layoutimg_for_pdf():
 
     assert "layoutimg0" in image_map
     assert image_map["layoutimg0"]["data"].startswith("data:image/")
+
+
+def test_populate_layout_placeholder_image_map_registers_chart_body():
+    import io
+    import zipfile
+
+    from layout.markdown_builder import LayoutChunk
+    from backend.app.services.download.download_service import _populate_layout_placeholder_image_map
+
+    hash_name = "394134b7dae435eead816acd1bdff502432cdb085e50d62275c63d5233043cd5.jpg"
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w") as zf:
+        zf.writestr(f"images/{hash_name}", b"\xff\xd8\xff fake jpeg")
+    zip_bytes = zip_buf.getvalue()
+
+    layout_result = MagicMock()
+    layout_result.chunks = [
+        LayoutChunk(
+            text="![Chart](layoutimg1)",
+            chunk_type="chart_body",
+            block_indices=[82],
+            image_path=f"images/{hash_name}",
+            image_placeholder="layoutimg1",
+            image_alt="Chart",
+        ),
+    ]
+    task_state = {"layout_source_zip": zip_bytes, "chunk_size": 8000, "deep_split_enabled": False}
+    image_data_map: dict = {}
+
+    count = _populate_layout_placeholder_image_map(
+        image_data_map,
+        task_state,
+        layout_doc=MagicMock(),
+        layout_result=layout_result,
+        chart_body_format="image",
+    )
+
+    assert count == 1
+    assert "layoutimg1" in image_data_map
+    assert image_data_map["layoutimg1"]["data"].startswith("data:image/")
+
+
+def test_is_chart_body_segment_detects_layoutimg_markdown():
+    from utils.document_rebuild.table_layout_utils import _is_chart_body_segment
+
+    assert _is_chart_body_segment("![Chart](layoutimg1)", 82, [])
+    assert _is_chart_body_segment("![Chart](layoutimg2)", 83, [])
+    assert not _is_chart_body_segment("Figure 2: caption text only", 83, [])
+    assert _is_chart_body_segment(
+        None,
+        82,
+        [],
+        segment={"chunk_type": "chart_body", "source_text": "![Chart](layoutimg1)"},
+    )

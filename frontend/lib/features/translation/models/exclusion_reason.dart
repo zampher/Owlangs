@@ -10,6 +10,7 @@ enum ExclusionReason {
   image('image', 'Image', Icons.image, Colors.blue),
   formula('formula', 'Formula', Icons.functions, Colors.purple),
   table('table', 'Table', Icons.table_chart, Colors.teal),
+  chart('chart', 'Chart', Icons.insert_chart, Colors.indigo),
   reference('reference', 'Reference', Icons.format_quote, Colors.orange),
   identifier('identifier', 'Identifier', Icons.tag, Colors.grey),
   structural('structural', 'Structural', Icons.view_headline, Colors.brown),
@@ -39,6 +40,8 @@ enum ExclusionReason {
         return l10n.settingsExclusionFormulaTitle;
       case ExclusionReason.table:
         return l10n.settingsExclusionTableTitle;
+      case ExclusionReason.chart:
+        return l10n.settingsExclusionChartTitle;
       case ExclusionReason.reference:
         return l10n.settingsExclusionReferenceTitle;
       case ExclusionReason.identifier:
@@ -66,7 +69,7 @@ enum ExclusionReason {
 
   /// Check if this exclusion reason is content-based (cannot be unexcluded)
   /// Content-based exclusions: image, formula, identifier, reference, structural
-  /// Note: table is NOT content-based - it's optional (user can choose to exclude)
+  /// Note: table and chart are NOT content-based - they're optional (user can choose to exclude)
   bool get isContentBased =>
       this == image ||
       this == formula ||
@@ -81,12 +84,13 @@ enum ExclusionReason {
   bool get isUserBased => this == userSelected;
 
   /// Check if this exclusion can be unexcluded by user
-  /// user_selected, language_match, identifier, table, and formula can be unexcluded
-  /// formula, identifier and table can be modified by user (e.g., if they were incorrectly detected)
+  /// user_selected, language_match, identifier, table, chart and formula can be unexcluded
+  /// formula, identifier, table and chart can be modified by user (e.g., if they were incorrectly detected)
   bool get canUnexclude =>
       isUserBased ||
       isLanguageBased ||
       this == identifier ||
       this == table ||
+      this == chart ||
       this == formula;
 }

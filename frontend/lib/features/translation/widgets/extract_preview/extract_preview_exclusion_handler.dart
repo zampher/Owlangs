@@ -127,7 +127,7 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
       }
     }
 
-    // CRITICAL: Use stored indices for formula, reference, header, footer, table, identifier, language_match, user_selected counts
+    // CRITICAL: Use stored indices for formula, reference, header, footer, table, chart, identifier, language_match, user_selected counts
     // These are more reliable than parsing block_type or exclusion_reason for each segment
     // and are set during initial data load
     if (formulaSegmentIndices.isNotEmpty) {
@@ -144,6 +144,9 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
     }
     if (tableSegmentIndices.isNotEmpty) {
       counts[ExclusionReason.table.value] = tableSegmentIndices.length;
+    }
+    if (chartSegmentIndices.isNotEmpty) {
+      counts[ExclusionReason.chart.value] = chartSegmentIndices.length;
     }
     if (identifierSegmentIndices.isNotEmpty) {
       counts[ExclusionReason.identifier.value] =
@@ -204,6 +207,7 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
     'identifier',
     'structural',
     'table',
+    'chart',
     'language_match',
     'user_selected',
   ];
@@ -318,6 +322,19 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
       states['table'] = excludedTableCount > 0;
     }
 
+    // Chart exclusion - check if any chart segments are currently excluded
+    // Default to false (not excluded) if chart segments exist, same as table
+    // CRITICAL: Use chartSegmentIndices and check is_excluded status, not exclusion_reason
+    // This ensures we correctly identify charts even when they're not yet excluded
+    if (chartSegmentIndices.isNotEmpty) {
+      // Check how many chart segments are currently excluded
+      final int excludedChartCount =
+          excludedSegments.intersection(indexSetFor('chart')).length;
+      // If any chart segments are excluded, checkbox should be checked
+      // This allows partial exclusion (user can exclude some charts but not all)
+      states['chart'] = excludedChartCount > 0;
+    }
+
     // User Selected exclusion - check if any user_selected or unknown segments are currently excluded
     // CRITICAL: Use userSelectedSegmentIndices and check excluded status
     // This ensures we correctly identify user-selected segments even when they're not yet excluded
@@ -397,6 +414,8 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
         segmentType = 'structural_footer';
       } else if (indexSetContains('table', index)) {
         segmentType = ExclusionReason.table.value;
+      } else if (indexSetContains('chart', index)) {
+        segmentType = ExclusionReason.chart.value;
       } else if (indexSetContains('formula', index)) {
         segmentType = ExclusionReason.formula.value;
       } else if (indexSetContains('user_selected', index)) {
@@ -587,6 +606,15 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
         });
         // Logging should be done by the State class's _log method
         // _log('[ExtractPreview] Table exclusion checkbox updated: exclude=$exclude, ...', level: LogLevel.info);
+        break;
+      case 'chart':
+        // Chart exclusion - bulk exclude/unexclude all chart segments
+        await handleExcludeChartSegments(exclude);
+        setState(() {
+          categoryExclusionStates['chart'] = exclude;
+        });
+        // Logging should be done by the State class's _log method
+        // _log('[ExtractPreview] Chart exclusion checkbox updated: exclude=$exclude, ...', level: LogLevel.info);
         break;
       case 'user_selected':
         // User Selected exclusion - bulk exclude/unexclude all user_selected and unknown segments
@@ -1564,6 +1592,274 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
         MessageService.showError(
           context,
           'Error handling table exclusion: $e',
+        );
+      }
+    } finally {
+      endExclusionUpdate(ref, providerKey);
+    }
+  }
+
+  /// Handle exclude/unexclude chart segments in bulk
+  Future<void> handleExcludeChartSegments(bool exclude) async {
+    final ExtractPreview extractWidget = widget as ExtractPreview;
+    final int myGeneration = exclusionOperationGeneration;
+    AppLogger.log(
+      'ExtractPreview',
+      '_handleExcludeChartSegments called: exclude=$exclude, '
+          'chartSegmentCount=${chartSegmentIndices.length}, '
+          'generation=$myGeneration, taskId=${extractWidget.taskId}',
+      level: LogLevel.info,
+    );
+
+    final String providerKey = extractWidget.flowId ?? extractWidget.taskId;
+    try {
+      beginExclusionUpdate(ref, providerKey);
+      if (chartSegmentIndices.isEmpty) {
+        AppLogger.log(
+          'ExtractPreview',
+          'No chart segments found (chartSegmentIndices is empty)',
+          level: LogLevel.warn,
+        );
+        return;
+      }
+
+      // Use cached set for O(1) lookups (avoids List.toSet() allocation)
+      final Set<int> chartSegments = indexSetFor('chart');
+
+      // Optimistic update
+      if (mounted) {
+        final ExcludedSegmentsNotifier excludedNotifier =
+            ref.read(excludedSegmentsProviderFamily(providerKey).notifier);
+
+        Set<int> optimisticExcluded;
+        if (exclude) {
+          final Set<int> currentExcluded =
+              ref.read(excludedSegmentsProviderFamily(providerKey));
+          optimisticExcluded = <int>{...currentExcluded, ...chartSegments};
+        } else {
+          final Set<int> currentExcluded =
+              ref.read(excludedSegmentsProviderFamily(providerKey));
+          optimisticExcluded = currentExcluded.difference(chartSegments);
+        }
+
+        excludedNotifier.setExcluded(optimisticExcluded);
+
+        for (final index in chartSegments) {
+          if (exclude) {
+            segmentExclusionReasons[index] = ExclusionReason.chart.value;
+          } else {
+            segmentExclusionReasons.remove(index);
+            segmentExclusionMetadata.remove(index);
+          }
+        }
+
+        setState(() {});
+
+        AppLogger.log(
+          'ExtractPreview',
+          'Optimistic update: exclude=$exclude, '
+              'updated ${chartSegments.length} chart segments immediately for instant UI feedback',
+          level: LogLevel.info,
+        );
+
+        // CRITICAL: When filter is active, refresh pagination immediately after
+        // optimistic update so the filtered list reflects the change right away.
+        if (filterMode == 'rebuild' && selectedExclusionFilters.isNotEmpty) {
+          clearFilteredCountCache();
+          await paginationController.loadFirstPage();
+        }
+      }
+
+      final TranslationService svc = TranslationService();
+      int successCount = 0;
+      int failCount = 0;
+
+      if (exclude) {
+        for (final index in chartSegments) {
+          if (exclusionOperationGeneration != myGeneration) {
+            AppLogger.log(
+              'ExtractPreview',
+              'Chart exclude aborted: superseded by newer operation '
+                  '(my=$myGeneration, current=$exclusionOperationGeneration)',
+              level: LogLevel.info,
+            );
+            return;
+          }
+          try {
+            await svc.excludeSegment(extractWidget.taskId, index);
+            successCount++;
+          } catch (e) {
+            AppLogger.log(
+              'ExtractPreview',
+              'Failed to exclude chart segment $index: $e',
+              level: LogLevel.warn,
+            );
+            failCount++;
+          }
+        }
+        if (mounted && exclusionOperationGeneration == myGeneration) {
+          MessageService.showInfo(
+            context,
+            'Excluded $successCount chart segment(s)${failCount > 0 ? ' ($failCount failed)' : ''}',
+          );
+        }
+      } else {
+        for (final index in chartSegments) {
+          if (exclusionOperationGeneration != myGeneration) {
+            AppLogger.log(
+              'ExtractPreview',
+              'Chart unexclude aborted: superseded by newer operation '
+                  '(my=$myGeneration, current=$exclusionOperationGeneration)',
+              level: LogLevel.info,
+            );
+            return;
+          }
+          try {
+            await svc.unexcludeSegment(extractWidget.taskId, index);
+            successCount++;
+          } catch (e) {
+            AppLogger.log(
+              'ExtractPreview',
+              'Failed to unexclude chart segment $index: $e',
+              level: LogLevel.warn,
+            );
+            failCount++;
+          }
+        }
+        if (mounted && exclusionOperationGeneration == myGeneration) {
+          if (failCount > 0) {
+            MessageService.showWarning(
+              context,
+              'Unexcluded $successCount chart segment(s), $failCount failed (content-based exclusions cannot be removed)',
+            );
+          } else {
+            MessageService.showInfo(
+              context,
+              'Unexcluded $successCount chart segment(s)',
+            );
+          }
+        }
+      }
+
+      // Skip backend refresh if superseded
+      if (exclusionOperationGeneration != myGeneration) {
+        AppLogger.log(
+          'ExtractPreview',
+          'Chart exclusion post-sync skipped: superseded '
+              '(my=$myGeneration, current=$exclusionOperationGeneration)',
+          level: LogLevel.info,
+        );
+        return;
+      }
+
+      Set<int>? backendExcluded;
+      if (mounted && !exclude) {
+        try {
+          final Map<String, dynamic> statusData =
+              await svc.getStatus(extractWidget.taskId);
+          if (exclusionOperationGeneration != myGeneration) return;
+          final Map<String, dynamic>? segmentsMetadata =
+              statusData['segments_metadata'] as Map<String, dynamic>?;
+
+          if (segmentsMetadata != null) {
+            final List<dynamic>? excludedIndicesList =
+                segmentsMetadata['excluded_segment_indices'] as List<dynamic>?;
+            backendExcluded = excludedIndicesList != null
+                ? excludedIndicesList.map((idx) => idx as int).toSet()
+                : <int>{};
+            final List<dynamic>? userUnexcludedList =
+                segmentsMetadata['user_unexcluded_segments'] as List<dynamic>?;
+            if (userUnexcludedList != null && userUnexcludedList.isNotEmpty) {
+              final Set<int> userUnexcluded =
+                  userUnexcludedList.map((idx) => idx as int).toSet();
+              backendExcluded = backendExcluded.difference(userUnexcluded);
+            }
+
+            AppLogger.log(
+              'ExtractPreview',
+              'Refreshed excluded segments from backend after unexclude: '
+                  'backend excluded count=${backendExcluded.length}, chart segments=${chartSegments.length}',
+              level: LogLevel.info,
+            );
+          }
+        } catch (e) {
+          AppLogger.log(
+            'ExtractPreview',
+            'Failed to refresh excluded segments from backend after unexclude: $e',
+            level: LogLevel.warn,
+          );
+        }
+      }
+
+      // Final sync — only if still the latest operation
+      if (mounted && exclusionOperationGeneration == myGeneration) {
+        final String providerKey = extractWidget.flowId ?? extractWidget.taskId;
+        final ExcludedSegmentsNotifier excludedNotifier =
+            ref.read(excludedSegmentsProviderFamily(providerKey).notifier);
+
+        Set<int> finalExcluded;
+        if (exclude) {
+          if (failCount > 0) {
+            try {
+              final Map<String, dynamic> statusData =
+                  await svc.getStatus(extractWidget.taskId);
+              if (exclusionOperationGeneration != myGeneration) return;
+              final Map<String, dynamic>? segmentsMetadata =
+                  statusData['segments_metadata'] as Map<String, dynamic>?;
+              if (segmentsMetadata != null) {
+                final List<dynamic>? excludedIndicesList =
+                    segmentsMetadata['excluded_segment_indices']
+                        as List<dynamic>?;
+                if (excludedIndicesList != null) {
+                  finalExcluded =
+                      excludedIndicesList.map((idx) => idx as int).toSet();
+                  excludedNotifier.setExcluded(finalExcluded);
+                  AppLogger.log(
+                    'ExtractPreview',
+                    'Synced excluded segments with backend after partial failures: '
+                        'backend excluded count=${finalExcluded.length}',
+                    level: LogLevel.info,
+                  );
+                }
+              }
+            } catch (e) {
+              AppLogger.log(
+                'ExtractPreview',
+                'Failed to sync with backend after partial failures: $e',
+                level: LogLevel.warn,
+              );
+            }
+          }
+        } else {
+          if (backendExcluded != null) {
+            finalExcluded = backendExcluded;
+            excludedNotifier.setExcluded(finalExcluded);
+            AppLogger.log(
+              'ExtractPreview',
+              'Synced excluded segments with backend after unexclude: '
+                  'backend excluded count=${finalExcluded.length}',
+              level: LogLevel.info,
+            );
+          }
+        }
+
+        AppLogger.log(
+          'ExtractPreview',
+          'Final chart exclusion state: exclude=$exclude, '
+              'success=$successCount, failed=$failCount',
+          level: LogLevel.info,
+        );
+      }
+    } catch (e) {
+      AppLogger.log(
+        'ExtractPreview',
+        'Error handling chart exclusion: $e',
+        level: LogLevel.error,
+      );
+      if (mounted) {
+        MessageService.showError(
+          context,
+          'Error handling chart exclusion: $e',
         );
       }
     } finally {

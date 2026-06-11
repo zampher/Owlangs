@@ -164,6 +164,7 @@ class TranslationService {
     String taskId, {
     String? tableBodyFormat,
     String? equationFormat,
+    String? chartBodyFormat,
     bool? bilingualExport,
     String? bilingualOrder,
     bool? sourceTextItalic,
@@ -178,6 +179,9 @@ class TranslationService {
     }
     if (equationFormat != null) {
       queryParams['equation_format'] = equationFormat;
+    }
+    if (chartBodyFormat != null) {
+      queryParams['chart_body_format'] = chartBodyFormat;
     }
     if (bilingualExport != null) {
       queryParams['bilingual_export'] = bilingualExport;
@@ -249,9 +253,37 @@ class TranslationService {
   }
 
   /// 拼接下载链接（前端直接跳转）
-  String buildDownloadUrl(String taskId, String fileType) {
+  String buildDownloadUrl(
+    String taskId,
+    String fileType, {
+    String? tableBodyFormat,
+    String? equationFormat,
+    String? chartBodyFormat,
+    String? rendererType,
+  }) {
     // 与后端保持相对路径，复用当前域名与端口
-    return '/service/download/$taskId/$fileType';
+    final queryParams = <String, String>{};
+    if (tableBodyFormat != null) {
+      queryParams['table_body_format'] = tableBodyFormat;
+    }
+    if (equationFormat != null) {
+      queryParams['equation_format'] = equationFormat;
+    }
+    if (chartBodyFormat != null) {
+      queryParams['chart_body_format'] = chartBodyFormat;
+    }
+    if (rendererType != null) {
+      queryParams['renderer_type'] = rendererType;
+    }
+    
+    var url = '/service/download/$taskId/$fileType';
+    if (queryParams.isNotEmpty) {
+      final queryString = queryParams.entries
+          .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
+          .join('&');
+      url = '$url?$queryString';
+    }
+    return url;
   }
 
   /// 拼接debug文件链接（前端直接跳转）

@@ -32,6 +32,8 @@ from .html_tag_utils import (
 from .table_layout_utils import (
     _extract_table_from_layout_block,
     _extract_equation_from_layout_block,
+    _extract_chart_from_layout_block,
+    _is_chart_body_segment,
     _is_markdown_table,
     _markdown_table_to_html,
     _replace_table_cells_with_translations,
