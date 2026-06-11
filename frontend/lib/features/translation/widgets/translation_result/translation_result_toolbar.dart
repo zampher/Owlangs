@@ -395,6 +395,20 @@ class TranslationResultToolbar extends ConsumerWidget {
               ),
               const SizedBox(width: 3),
             ],
+            // PDF preview button (high-fidelity)
+            if (_shouldShowPdfPreviewButton()) ...<Widget>[
+              IconButton(
+                icon: const Icon(Icons.picture_as_pdf, size: 16),
+                tooltip: 'PDF Preview',
+                onPressed: onViewPdfPreview,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 28,
+                  minHeight: 28,
+                ),
+              ),
+              const SizedBox(width: 3),
+            ],
             // Download button
             if (isCompleted &&
                 (statusLower == 'completed' ||
@@ -644,6 +658,17 @@ class TranslationResultToolbar extends ConsumerWidget {
     }
 
     return false;
+  }
+
+  bool _shouldShowPdfPreviewButton() {
+    if (downloads == null || downloads!.isEmpty) {
+      return false;
+    }
+
+    final isPdfFile = fileName?.toLowerCase().endsWith('.pdf') ?? false;
+    final hasPdfDownload = downloads!.containsKey('pdf');
+
+    return isPdfFile && hasPdfDownload && onViewPdfPreview != null;
   }
 
   Color _getStatusColor(String status) {

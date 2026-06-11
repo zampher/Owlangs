@@ -20,7 +20,10 @@ from logger.logger import LogModule
 # When False, this generator will short-circuit and not create additional PDFs,
 # so that the system only uses the Pandoc+XeLaTeX markdown-based PDF that is
 # already generated for markdown_based workflows.
-ENABLE_LAYOUT_PDF_GENERATION: bool = False
+ENABLE_LAYOUT_PDF_GENERATION: bool = True
+# Default PDF renderer type: "typst_overlay" (high-fidelity, preserves original layout)
+# or "reportlab" (direct rendering, no HTML intermediate).
+DEFAULT_PDF_RENDERER_TYPE: str = "typst_overlay"
 class PDFGenerator:
     """Service for generating PDF files."""
     
@@ -41,7 +44,8 @@ class PDFGenerator:
         task_state: Dict[str, Any],
         task_id: str,
         table_body_format: Optional[str] = None,
-        equation_format: Optional[str] = None
+        equation_format: Optional[str] = None,
+        renderer_type: Optional[str] = None,  # "reportlab" (default) or "typst_overlay"
     ) -> Path:
         """
         Generate PDF from layout document using ReportLab (direct rendering, no HTML intermediate).
@@ -180,7 +184,7 @@ class PDFGenerator:
                         # Generate PDF using ReportLab
                         # Run in thread pool to avoid blocking event loop
                         loop = asyncio.get_event_loop()
-                        logger.info(LogModule.EXPORT, "[REPORTLAB] Executing ReportLab PDF generation in thread pool to avoid blocking")
+                        logger.info(LogModule.EXPORT, f"[PDF] Executing PDF generation in thread pool (renderer={renderer_type or DEFAULT_PDF_RENDERER_TYPE})")
                         # Extract target language from task_state
                         target_language = None
                         payload_obj = task_state.get("payload")
@@ -188,19 +192,32 @@ class PDFGenerator:
                             target_language = payload_obj.get("to_lang") or payload_obj.get("target_language")
                         elif hasattr(payload_obj, "to_lang"):
                             target_language = getattr(payload_obj, "to_lang", None) or getattr(payload_obj, "target_language", None)
-                        
+
+                        # Build renderer kwargs based on renderer type
+                        _rt = renderer_type or DEFAULT_PDF_RENDERER_TYPE
+                        render_kwargs = dict(
+                            translated_text_by_block_index=block_text_map if block_text_map else None,
+                            zip_bytes=zip_bytes,
+                            table_body_format=table_body_format_resolved,
+                            equation_format=equation_format_resolved,
+                            target_language=target_language,
+                            renderer_type=_rt,
+                        )
+                        if _rt == "typst_overlay":
+                            source_pdf = task_state.get("original_file_path")
+                            if not source_pdf or not Path(source_pdf).exists():
+                                logger.warning(LogModule.EXPORT, f"[PDF] source_pdf_path not found, falling back to ReportLab")
+                                _rt = "reportlab"
+                                render_kwargs["renderer_type"] = _rt
+                            else:
+                                render_kwargs["source_pdf_path"] = source_pdf
+                                render_kwargs["output_path"] = pdf_file
+                        else:
+                            render_kwargs["output_path"] = output_dir / f"{file_stem}_reportlab_debug.pdf" if logger.level <= 10 else None
+
                         pdf_bytes = await loop.run_in_executor(
                             None,
-                            lambda: render_layout_pdf(
-                                layout_doc,
-                                translated_text_by_block_index=block_text_map if block_text_map else None,
-                                zip_bytes=zip_bytes,
-                                output_path=output_dir / f"{file_stem}_reportlab_debug.pdf" if logger.level <= 10 else None,  # 10 is DEBUG level
-                                table_body_format=table_body_format_resolved,
-                                equation_format=equation_format_resolved,
-                                target_language=target_language,
-                                renderer_type="reportlab",  # Use ReportLab renderer
-                            )
+                            lambda: render_layout_pdf(layout_doc, **render_kwargs)
                         )
                         
                         # Save PDF
@@ -331,13 +348,15 @@ class PDFGenerator:
         block_text_sequences = defaultdict(list) if is_deep_split_enabled else None
         layout_chunk_block_texts: List[List[str]] = task_state.get("layout_chunk_block_texts") or []
         
-        # Build block index to type mapping and original texts for hints
+        # Build block index to type mapping, original texts, and raw data for hints
         layout_block_original_texts: Dict[int, str] = {}
         block_index_to_type: Dict[int, str] = {}
+        block_index_to_raw: Dict[int, Dict] = {}
         for block in layout_doc.iter_blocks():
             if block.index is not None:
                 layout_block_original_texts[block.index] = (block.text or "").strip()
                 block_index_to_type[block.index] = block.type
+                block_index_to_raw[block.index] = getattr(block, "raw", None) or {}
         
         # Helper function to distribute text to multiple blocks (with whitespace boundary handling)
         def _split_by_newlines(text: str, expected: int) -> List[str]:
@@ -425,6 +444,14 @@ class PDFGenerator:
                 except (TypeError, ValueError):
                     continue
                 block_type = block_index_to_type.get(block_index_int)
+
+                # Skip cross-page paired blocks: they have no standalone text;
+                # their share of the translation is rendered via the source block's
+                # _split_cross_page_text logic.
+                raw = block_index_to_raw.get(block_index_int, {})
+                if isinstance(raw, dict) and raw.get("_cross_page_pair_of") is not None:
+                    continue
+
                 if block_type == "image":
                     # Keep image blocks for potential caption mapping
                     image_block_indices.append(block_index_int)

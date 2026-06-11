@@ -377,6 +377,73 @@ def parse_layout_json(layout_path: Path) -> LayoutDocument:
     
     doc = LayoutDocument(pages=pages, engine="mineru", metadata=metadata)
     _infer_title_heading_levels(doc)
+
+    # --- Post-process: detect cross-page block pairs ---
+    # MinerU marks cross-page spans with "cross_page": true. The text of such spans
+    # also appears as an independent block on the next page. We pair them so that:
+    # 1. Extract: both blocks map to the same segment (chunk)
+    # 2. Translate: the paragraph is translated as a whole
+    # 3. Render: the translation is split proportionally by bbox area
+    cross_page_sources: Dict[int, Dict] = {}
+    for page in doc.pages:
+        for block in page.blocks:
+            raw = getattr(block, "raw", None) or {}
+            if not isinstance(raw, dict):
+                continue
+            for line in raw.get("lines", []):
+                if not isinstance(line, dict):
+                    continue
+                for span in line.get("spans", []):
+                    if isinstance(span, dict) and span.get("cross_page"):
+                        cp_bbox = tuple(line.get("bbox") or span.get("bbox") or [])
+                        cp_text = (span.get("content") or "").strip()
+                        if len(cp_bbox) == 4 and cp_text and block.index is not None:
+                            cross_page_sources[block.index] = {
+                                "target_page": page.page_index + 1,
+                                "cross_bbox": cp_bbox,
+                                "cross_text": cp_text,
+                            }
+
+    # Find matching standalone blocks on the target pages
+    for page in doc.pages:
+        for block in page.blocks:
+            if block.index is None:
+                continue
+            for src_idx, src_info in list(cross_page_sources.items()):
+                if page.page_index != src_info["target_page"]:
+                    continue
+                # Determine block text for matching (para_blocks may have empty lines)
+                block_text_for_match = (block.text or "").strip()
+                if not block_text_for_match and isinstance(block.raw, dict):
+                    block_text_for_match = (_extract_text_from_layout_block(block.raw) or "").strip()
+                # Also accept blocks whose lines were deleted/merged (MinerU para_blocks
+                # clears cross-page target block lines after merging into source block).
+                lines_deleted = isinstance(block.raw, dict) and bool(block.raw.get("lines_deleted") or block.raw.get("merge_prev"))
+                if (
+                    block.bbox == src_info["cross_bbox"]
+                    and (block_text_for_match == src_info["cross_text"] or lines_deleted)
+                ):
+                    # Pair found: clear standalone block's text to avoid duplicate segments
+                    block.text = None
+                    block.raw = dict(block.raw) if block.raw else {}
+                    block.raw["_cross_page_pair_of"] = src_idx
+
+                    # Record pair info on the source block
+                    for src_page in doc.pages:
+                        for src_block in src_page.blocks:
+                            if src_block.index == src_idx:
+                                src_block.raw = dict(src_block.raw) if src_block.raw else {}
+                                pairs = src_block.raw.get("_cross_page_pairs", [])
+                                pairs.append({
+                                    "index": block.index,
+                                    "bbox": block.bbox,
+                                    "page_index": page.page_index,
+                                })
+                                src_block.raw["_cross_page_pairs"] = pairs
+                                break
+                    del cross_page_sources[src_idx]
+                    break
+
     return doc
 
 

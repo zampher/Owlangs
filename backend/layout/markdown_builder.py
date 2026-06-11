@@ -987,6 +987,27 @@ def _build_layout_markdown(
         # CRITICAL: For PDF files, segmentation should always be one block = one segment
         # Chunking (merging multiple segments) is handled separately by chunk merging logic
         # deep_split only controls whether to split a single block's text by paragraphs
+
+        # Collect cross-page paired block indices so both blocks map to the same segment
+        raw = getattr(block, "raw", None) or {}
+        pair_indices: List[int] = []
+        if isinstance(raw, dict):
+            for pair in raw.get("_cross_page_pairs", []):
+                if isinstance(pair, dict):
+                    pidx = pair.get("index")
+                    if pidx is not None:
+                        pair_indices.append(pidx)
+
+        def _make_block_indices(base_idx: int) -> List[int]:
+            if base_idx < 0:
+                return list(pair_indices)
+            return [base_idx] + pair_indices
+
+        def _make_block_texts(base_text: str) -> List[str]:
+            texts = [base_text] if block_index >= 0 else []
+            texts.extend([""] * len(pair_indices))
+            return texts
+
         if builder.deep_split:
             # Split block text by paragraphs, but each paragraph becomes a separate segment
             # For titles, don't split by paragraphs (titles should remain as single segments)
@@ -995,8 +1016,8 @@ def _build_layout_markdown(
                     LayoutChunk(
                         text=formatted_text,
                         chunk_type="text",
-                        block_indices=[block_index] if block_index >= 0 else [],
-                        block_texts=[formatted_text] if block_index >= 0 else [],
+                        block_indices=_make_block_indices(block_index),
+                        block_texts=_make_block_texts(formatted_text),
                         image_path=None,
                     )
                 )
@@ -1011,8 +1032,8 @@ def _build_layout_markdown(
                         LayoutChunk(
                             text=para.strip(),
                             chunk_type="text",
-                            block_indices=[block_index] if block_index >= 0 else [],
-                            block_texts=[para.strip()] if block_index >= 0 else [],
+                            block_indices=_make_block_indices(block_index),
+                            block_texts=_make_block_texts(para.strip()),
                             image_path=None,
                         )
                     )
@@ -1027,8 +1048,8 @@ def _build_layout_markdown(
                 LayoutChunk(
                     text=formatted_text,
                     chunk_type="text",
-                    block_indices=[block_index] if block_index >= 0 else [],
-                    block_texts=[formatted_text] if block_index >= 0 else [],
+                    block_indices=_make_block_indices(block_index),
+                    block_texts=_make_block_texts(formatted_text),
                     image_path=None,
                 )
             )

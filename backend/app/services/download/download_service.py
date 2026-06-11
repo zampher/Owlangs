@@ -29,7 +29,7 @@ from logger.logger import LogModule
 from app.services.task import TaskManager
 
 # Relative import avoids circular import via app.services.download.__init__
-from .pdf_generator import ENABLE_LAYOUT_PDF_GENERATION, PDFGenerator
+from .pdf_generator import ENABLE_LAYOUT_PDF_GENERATION, PDFGenerator, DEFAULT_PDF_RENDERER_TYPE
 
 # Media type mapping for different file types
 MEDIA_TYPES = {
@@ -952,6 +952,125 @@ def completed_task_download_urls(task_id: str, task_state: Dict[str, Any]) -> Di
     return out
 
 
+async def _typst_overlay_pdf_response(
+    task_state: Dict[str, Any],
+    task_id: str,
+    file_stem: str,
+    table_body_format: Optional[str],
+    equation_format: Optional[str],
+    pdf_generator: PDFGenerator,
+) -> FileResponse:
+    """Generate a high-fidelity PDF using Typst overlay rendering.
+
+    This bypasses ENABLE_LAYOUT_PDF_GENERATION since Typst overlay is
+    an independent rendering path.
+    """
+    from layout.pdf_renderer import TYPST_OVERLAY_AVAILABLE as _toa, _typst_overlay_import_error as _toe
+
+    if not _toa:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Typst overlay renderer is not available: {_toe}",
+        )
+
+    layout_doc = task_state.get("layout_document")
+    if layout_doc is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Layout document is not available for Typst overlay rendering.",
+        )
+
+    source_pdf_path = task_state.get("original_file_path")
+    if not source_pdf_path or not Path(source_pdf_path).exists():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Original PDF file not found for Typst overlay rendering: {source_pdf_path}",
+        )
+
+    # Build block text map from translation segments
+    segments_data = task_state.get("translation_segments")
+    if not segments_data or not isinstance(segments_data, dict):
+        block_text_map: Dict[int, str] = {}
+    else:
+        segments = segments_data.get("segments") or []
+        is_deep_split_enabled = bool(task_state.get("deep_split"))
+        # Use modified_text or target_text (translated text from segments)
+        text_field = "modified_text"
+        has_modified = any(seg.get("modified_text") for seg in segments)
+        if not has_modified:
+            text_field = "target_text"
+        block_text_map = pdf_generator.build_block_text_map_from_segments(
+            layout_doc,
+            segments,
+            text_field=text_field,
+            task_state=task_state,
+            is_deep_split_enabled=is_deep_split_enabled,
+        )
+
+    # Get zip bytes from MinerU attachment (for embedded images)
+    zip_bytes = None
+    attachments = task_state.get("attachments", {})
+    mineru_bytes = attachments.get("mineru")
+    if isinstance(mineru_bytes, bytes):
+        zip_bytes = mineru_bytes
+
+    from layout.pdf_renderer import render_layout_pdf
+
+    loop = asyncio.get_event_loop()
+    target_language = None
+    payload_obj = task_state.get("payload")
+    if isinstance(payload_obj, dict):
+        target_language = payload_obj.get("to_lang") or payload_obj.get("target_language")
+    elif hasattr(payload_obj, "to_lang"):
+        target_language = getattr(payload_obj, "to_lang", None) or getattr(payload_obj, "target_language", None)
+
+    # Save PDF
+    output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
+    output_dir.mkdir(exist_ok=True)
+    sfx = _get_output_suffix(task_state)
+    pdf_file = output_dir / f"{file_stem}{sfx}.pdf"
+
+    try:
+        await loop.run_in_executor(
+            None,
+            lambda: render_layout_pdf(
+                layout_doc,
+                translated_text_by_block_index=block_text_map if block_text_map else None,
+                zip_bytes=zip_bytes,
+                output_path=pdf_file,
+                table_body_format=table_body_format or "html",
+                equation_format=equation_format or "text",
+                target_language=target_language,
+                renderer_type="typst_overlay",
+                source_pdf_path=source_pdf_path,
+            ),
+        )
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(
+            LogModule.EXPORT,
+            f"[TYPST_OVERLAY] Render failed: {error_msg}",
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"High-fidelity PDF generation failed: {error_msg}",
+        )
+
+    # Store in task_state for caching
+    task_state.setdefault("downloadable_files", {})["pdf"] = {"path": str(pdf_file)}
+
+    logger.info(
+        LogModule.EXPORT,
+        f"[TYPST_OVERLAY] High-fidelity PDF generated: {pdf_file.stat().st_size} bytes",
+    )
+
+    return FileResponse(
+        path=str(pdf_file),
+        media_type="application/pdf",
+        filename=pdf_file.name,
+    )
+
+
 def _pandoc_pdf_file_response_from_md(
     task_state: Dict[str, Any],
     task_id: str,
@@ -1199,6 +1318,7 @@ class DownloadService:
         source_text_color: Optional[str] = None,
         target_text_italic: Optional[bool] = None,
         target_text_color: Optional[str] = None,
+        renderer_type: Optional[str] = None,
     ) -> FileResponse:
         """
         Download translation result file.
@@ -1219,7 +1339,6 @@ class DownloadService:
         """
         # Get task state from task manager
         task_state = self.task_manager.get_task(task_id)
-        sfx = _get_output_suffix(task_state)
         if not task_state:
             from backend.app.services.translation.translation_result_stash import (
                 get_stashed_file_path,
@@ -1231,7 +1350,7 @@ class DownloadService:
                 meta = load_meta(task_id)
                 stem = Path((meta or {}).get("original_filename") or "translated").stem
                 ext = Path(stashed).suffix or ""
-                filename = f"{stem}{sfx}{ext}"
+                filename = f"{stem}_translated{ext}"
                 media_type = MEDIA_TYPES.get(file_type, "application/octet-stream")
                 logger.info(
                     LogModule.EXPORT,
@@ -1239,7 +1358,15 @@ class DownloadService:
                 )
                 return FileResponse(path=stashed, media_type=media_type, filename=filename)
             raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
-        
+
+        sfx = _get_output_suffix(task_state)
+
+        # Default to typst_overlay for PDF downloads so that the high-fidelity
+        # rendering path (_typst_overlay_pdf_response) is used instead of
+        # falling through to the Pandoc MD→PDF rebuild.
+        if file_type == "pdf" and renderer_type is None:
+            renderer_type = "typst_overlay"
+
         # Check if task has failed
         task_status = task_state.get("status")
         if task_status == "failed":
@@ -2971,6 +3098,13 @@ class DownloadService:
                                         detail="High-fidelity PDF generation requires layout information, which is not available for this task. Please ensure the file was processed with a layout-aware converter (e.g., MinerU)."
                                     )
                         
+                            if renderer_type == "typst_overlay":
+                                return await _typst_overlay_pdf_response(
+                                    task_state, task_id, file_stem,
+                                    table_body_format, equation_format,
+                                    self.pdf_generator,
+                                )
+
                             # Revision PDF: match OutputGenerator — Pandoc MD→PDF by default.
                             # Layout ReportLab/HTML path only runs when ENABLE_LAYOUT_PDF_GENERATION is True (see pdf_generator.py).
                             _pdf_stem = file_stem
@@ -3268,6 +3402,13 @@ class DownloadService:
                                         )
                         
                                 elif file_type == "pdf":
+                                    if renderer_type == "typst_overlay":
+                                        return await _typst_overlay_pdf_response(
+                                            task_state, task_id, file_stem,
+                                            table_body_format, equation_format,
+                                            self.pdf_generator,
+                                        )
+
                                     # For PDF files, only use layout-based generation (high-fidelity, no fallback)
                                     # BUT: For MOBI/EPUB workflows, PDF should already have been generated via HTML-to-PDF.
                                     workflow_type = task_state.get("workflow_type") or task_state.get("payload", {}).get("workflow_type")
@@ -3579,6 +3720,13 @@ class DownloadService:
         if not has_revisions:
             # Special handling for PDF files - only use layout-based generation (high-fidelity)
             if file_type == "pdf":
+                if renderer_type == "typst_overlay":
+                    return await _typst_overlay_pdf_response(
+                        task_state, task_id, file_stem,
+                        table_body_format, equation_format,
+                        self.pdf_generator,
+                    )
+
                 # For PDF files, only use layout-based generation (high-fidelity, no fallback to HTML-to-PDF)
                 original_filename = task_state.get("original_filename", "")
                 is_pdf_file = original_filename.lower().endswith('.pdf')

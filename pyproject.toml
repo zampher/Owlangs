@@ -47,6 +47,7 @@ dependencies = [
     "mathml2omml>=0.0.2",
     "mathml2omml-as>=0.1.0",
     "mcp>=1.0.0",
+    "PyMuPDF>=1.24.0",
 ]
 
 # MOBI/EPUB export: Requires the Calibre *application* (ebook-convert), NOT the PyPI package "calibre".

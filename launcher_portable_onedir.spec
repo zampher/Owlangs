@@ -115,7 +115,20 @@ hiddenimports = [
     'pptx', 'pptx.util', 'pptx.dml.color', 'pptx.enum.shapes',
     'pptx.enum.text', 'pptx.shapes.base', 'pptx.shapes.group',
     'pptx.shapes.autoshape', 'pptx.table', 'pptx.shapes.freeform', 'pptx.text.text',
-    'layout.base', 'layout.mineru_layout_model',
+    'layout', 'layout.base', 'layout.mineru_layout_model', 'layout.markdown_builder',
+    # layout PDF renderer - Typst overlay (high-fidelity PDF export)
+    'layout.pdf_renderer', 'layout.pdf_renderer.config',
+    'layout.pdf_renderer.typst_overlay',
+    'layout.pdf_renderer.typst_overlay.renderer',
+    'layout.pdf_renderer.typst_overlay.compiler',
+    'layout.pdf_renderer.typst_overlay.emitter',
+    'layout.pdf_renderer.typst_overlay.models',
+    'layout.pdf_renderer.typst_overlay.font_fit',
+    'layout.pdf_renderer.typst_overlay.formula_safety',
+    'layout.pdf_renderer.typst_overlay.source_cleanup',
+    'layout.pdf_renderer.typst_overlay.overlay_merge',
+    # PyMuPDF (required by typst overlay source_cleanup and overlay_merge)
+    'fitz',
     'loguru', 'imghdr',
     # Exporter modules (used by all workflows for output generation)
     'exporter.base',

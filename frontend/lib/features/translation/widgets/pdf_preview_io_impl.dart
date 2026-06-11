@@ -29,11 +29,23 @@ class _PdfPreviewIoState extends State<PdfPreview> {
   String? _error;
   int _currentPage = 1;
   int _totalPages = 0;
+  bool _useHighFidelity = false;
 
   @override
   void initState() {
     super.initState();
     _loadPdf();
+  }
+
+  String _buildPdfUrl() {
+    final uri = Uri.parse(widget.downloadUrl);
+    final params = Map<String, String>.from(uri.queryParameters);
+    if (_useHighFidelity) {
+      params['renderer_type'] = 'typst_overlay';
+    } else {
+      params.remove('renderer_type');
+    }
+    return uri.replace(queryParameters: params).toString();
   }
 
   Future<void> _loadPdf() async {
@@ -44,7 +56,8 @@ class _PdfPreviewIoState extends State<PdfPreview> {
 
     try {
       final svc = TranslationService();
-      final data = await svc.downloadFile(widget.downloadUrl);
+      final url = _buildPdfUrl();
+      final data = await svc.downloadFile(url);
       final documentFuture = PdfDocument.openData(Uint8List.fromList(data));
       _controller?.dispose();
       _controller = PdfControllerPinch(document: documentFuture);
@@ -177,6 +190,21 @@ class _PdfPreviewIoState extends State<PdfPreview> {
               icon: const Icon(Icons.chevron_right),
             ),
             const SizedBox(width: 8),
+            IconButton(
+              tooltip: _useHighFidelity
+                  ? 'Switch to Standard PDF'
+                  : 'Switch to High-Fidelity PDF',
+              onPressed: () {
+                setState(() {
+                  _useHighFidelity = !_useHighFidelity;
+                });
+                _loadPdf();
+              },
+              icon: Icon(
+                _useHighFidelity ? Icons.high_quality : Icons.hd,
+                color: _useHighFidelity ? Colors.blue : null,
+              ),
+            ),
             IconButton(
               tooltip: 'Download PDF',
               onPressed: () {

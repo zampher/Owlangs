@@ -74,6 +74,7 @@ async def service_download_file_route(
         source_text_color: Optional[str] = FastApiQuery(None, description="Source text color for bilingual export: 'gray', 'blue', 'red', 'green', 'orange', 'black'.", examples=["gray", "blue", "red"]),
         target_text_italic: Optional[bool] = FastApiQuery(None, description="Render target text in italic for bilingual export.", examples=[True, False]),
         target_text_color: Optional[str] = FastApiQuery(None, description="Target text color for bilingual export: 'gray', 'blue', 'red', 'green', 'orange', 'black'.", examples=["gray", "blue", "red"]),
+        renderer_type: Optional[str] = FastApiQuery(None, description="PDF renderer type: 'typst_overlay' for high-fidelity Typst overlay. Only applies to PDF downloads.", examples=["typst_overlay"]),
 ):
     """Download translation result files."""
     resp = await download_service.download_file(
@@ -89,6 +90,7 @@ async def service_download_file_route(
         source_text_color=source_text_color,
         target_text_italic=target_text_italic,
         target_text_color=target_text_color,
+        renderer_type=renderer_type,
     )
     try:
         if isinstance(resp, FileResponse):

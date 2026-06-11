@@ -5137,6 +5137,16 @@ class _TranslationResultPreviewState
       }
     }
 
+    // Add high-fidelity PDF option below standard PDF when PDF is available
+    if (availableFormats.contains('pdf') && !isDocWorkflow) {
+      downloadOptions.add(<String, dynamic>{
+        'type': 'pdf',
+        'label': '高保真 PDF',
+        'embedImages': null,
+        'rendererType': 'typst_overlay',
+      });
+    }
+
     // Check if this is a PDF workflow (markdown_based) to show format options
     final bool isPdfWorkflow =
         resolvedWorkflowType == 'markdown_based' || isPdfFile;
@@ -5169,6 +5179,8 @@ class _TranslationResultPreviewState
       {'value': 'black', 'color': Colors.black, 'label': l10n.translationExportColorBlack},
     ];
 
+    int selectedDownloadIndex = 0;
+
     DialogHelper.showGeneralDialog(
       context: context,
       barrierColor: Colors.black54,
@@ -5199,7 +5211,6 @@ class _TranslationResultPreviewState
           String targetTextColor =
               formatSettings.targetTextColor ?? 'gray';
 
-          int selectedDownloadIndex = 0;
           return StatefulBuilder(
             builder: (BuildContext context, setDialogState) => Material(
               type: MaterialType.transparency,
@@ -5671,6 +5682,8 @@ class _TranslationResultPreviewState
                           selectedOption['embedImages'] as bool?;
                       final ebookEngine =
                           selectedOption['ebookEngine'] as String?;
+                      final rendererType =
+                          selectedOption['rendererType'] as String?;
                       final currentTableFormat = tableFormat;
                       final currentEquationFormat = equationFormat;
                       Navigator.of(context, rootNavigator: true).pop();
@@ -5680,6 +5693,7 @@ class _TranslationResultPreviewState
                         tableFormat: currentTableFormat,
                         equationFormat: currentEquationFormat,
                         ebookEngine: ebookEngine,
+                        rendererType: rendererType,
                       );
                     },
                     child: Text(l10n.translationExportDownloadButton),
@@ -5710,6 +5724,7 @@ class _TranslationResultPreviewState
     String? tableFormat,
     String? equationFormat,
     String? ebookEngine,
+    String? rendererType,
   }) async {
     if (widget.onDownload == null) {
       MessageService.showError(context, 'Download not available');
@@ -5749,6 +5764,11 @@ class _TranslationResultPreviewState
       // For EPUB/MOBI, add ebook_engine when user chose Pandoc or Calibre
       if ((fileType == 'epub' || fileType == 'mobi') && ebookEngine != null) {
         queryParams['ebook_engine'] = ebookEngine;
+      }
+
+      // Add renderer_type for Typst overlay (high-fidelity PDF)
+      if (rendererType != null && rendererType.isNotEmpty) {
+        queryParams['renderer_type'] = rendererType;
       }
 
       // Add bilingual parameters if enabled

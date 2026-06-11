@@ -2049,13 +2049,31 @@ def get_image_block_indices_from_layout(
             # Check multiple possible fields: image_path, placeholder_id (may be filename), source_text
             image_path = seg.get("image_path") or seg.get("source_text", "")
             placeholder_id = seg.get("placeholder_id", "")
-            
+
             # If we have placeholder_id, it might be the filename (e.g., "e077a90c.jpg")
             # Check if placeholder_id looks like a filename (has extension)
             if not image_path and placeholder_id:
                 if "." in placeholder_id and any(placeholder_id.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]):
                     image_path = placeholder_id
-            
+
+            # For formula/table blocks: extract image_path from the layout block itself
+            # when the segment does not carry image_path (e.g. equation_image_path from MinerU spans)
+            if not image_path and btype in ("interline_equation", "formula", "equation", "table"):
+                block_img_path = getattr(block, "image_path", None)
+                if block_img_path:
+                    image_path = str(block_img_path)
+                # Also check inside raw spans (e.g. interline_equation span.image_path)
+                if not image_path:
+                    raw_block = getattr(block, "raw", None) or {}
+                    for line in raw_block.get("lines", []):
+                        for span in line.get("spans", []):
+                            span_img = span.get("image_path")
+                            if span_img:
+                                image_path = str(span_img)
+                                break
+                        if image_path:
+                            break
+
             if image_path:
                 # Normalize path: extract filename, lowercase, remove path separators
                 # Handle markdown image syntax: ![alt](path) -> extract path

@@ -7,7 +7,7 @@ PDF renderer configuration.
 This module defines the configuration class used by all PDF renderer implementations.
 """
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 from pathlib import Path
 
 
@@ -27,6 +27,9 @@ class PDFRendererConfig:
         equation_format: str = "text",
         target_language: Optional[str] = None,
         output_path: Optional[Path] = None,
+        # --- Typst overlay renderer fields ---
+        source_pdf_path: Optional[Union[str, Path]] = None,
+        typst_font_family: Optional[str] = None,
     ):
         """
         Initialize PDF renderer configuration.
@@ -38,6 +41,8 @@ class PDFRendererConfig:
             equation_format: Equation format ("text" for LaTeX or "image" for rendered images)
             target_language: Optional target language code/name for font selection
             output_path: Optional path to save PDF file (for debugging)
+            source_pdf_path: Path to the original PDF file (required for Typst overlay renderer)
+            typst_font_family: Typst font family name (default: "Noto Sans CJK SC")
         """
         self.translated_text_by_block_index = translated_text_by_block_index or {}
         self.zip_bytes = zip_bytes
@@ -45,6 +50,10 @@ class PDFRendererConfig:
         self.equation_format = equation_format
         self.target_language = target_language
         self.output_path = output_path
+        
+        # Typst overlay renderer fields
+        self.source_pdf_path: Optional[Union[str, Path]] = source_pdf_path
+        self.typst_font_family: Optional[str] = typst_font_family
         
         # These will be populated during rendering
         self.type_font_baselines: Dict[str, float] = {}

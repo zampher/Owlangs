@@ -28,6 +28,7 @@ class _PdfPreviewWebState extends State<PdfPreview> {
   String? _error;
   html.IFrameElement? _iframe;
   String? _blobUrl;
+  bool _useHighFidelity = false;
 
   // Static flag to ensure registration only happens once
   static bool _factoryRegistered = false;
@@ -82,6 +83,17 @@ class _PdfPreviewWebState extends State<PdfPreview> {
     }
   }
 
+  String _buildPdfUrl() {
+    final uri = Uri.parse(widget.downloadUrl);
+    final params = Map<String, String>.from(uri.queryParameters);
+    if (_useHighFidelity) {
+      params['renderer_type'] = 'typst_overlay';
+    } else {
+      params.remove('renderer_type');
+    }
+    return uri.replace(queryParameters: params).toString();
+  }
+
   Future<void> _loadPdf() async {
     setState(() {
       _loading = true;
@@ -92,7 +104,8 @@ class _PdfPreviewWebState extends State<PdfPreview> {
       print('[PDF Preview] Starting to load PDF from: ${widget.downloadUrl}');
 
       final svc = TranslationService();
-      final data = await svc.downloadFile(widget.downloadUrl);
+      final url = _buildPdfUrl();
+      final data = await svc.downloadFile(url);
 
       if (data.isEmpty) {
         throw Exception('Downloaded PDF data is empty');
@@ -101,6 +114,15 @@ class _PdfPreviewWebState extends State<PdfPreview> {
       print(
         '[PDF Preview] Downloaded ${data.length} bytes, creating blob URL...',
       );
+
+      // Revoke previous blob URL to free memory (e.g. when toggling renderer)
+      if (_blobUrl != null) {
+        try {
+          html.Url.revokeObjectUrl(_blobUrl!);
+        } catch (e) {
+          print('[PDF Preview] Error revoking previous blob URL: $e');
+        }
+      }
 
       // Create a Blob from the PDF data
       final blob = html.Blob(<dynamic>[data], 'application/pdf');
@@ -290,6 +312,21 @@ class _PdfPreviewWebState extends State<PdfPreview> {
           children: <Widget>[
             const Text('PDF Viewer (Browser Native)'),
             const Spacer(),
+            IconButton(
+              tooltip: _useHighFidelity
+                  ? 'Switch to Standard PDF'
+                  : 'Switch to High-Fidelity PDF',
+              onPressed: () {
+                setState(() {
+                  _useHighFidelity = !_useHighFidelity;
+                });
+                _loadPdf();
+              },
+              icon: Icon(
+                _useHighFidelity ? Icons.high_quality : Icons.hd,
+                color: _useHighFidelity ? Colors.blue : null,
+              ),
+            ),
             IconButton(
               tooltip: 'Download PDF',
               onPressed: () {
