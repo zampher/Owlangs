@@ -63,6 +63,8 @@ from layout.pdf_renderer.typst_overlay.overlay_merge import (
 from layout.pdf_renderer.typst_overlay.visual_images import (
     collect_visual_image_placements,
     lookup_image_bytes,
+    extract_equation_image_path,
+    EQUATION_BLOCK_TYPES,
 )
 from layout.pdf_renderer.shared.block_processor import BlockProcessor
 from logger.logger import unified_logger, LogModule
@@ -591,13 +593,15 @@ class TypstOverlayRenderer(BasePDFRenderer):
         work_dir: Path,
         image_data_map: Dict[str, bytes],
     ) -> Dict[int, List[tuple]]:
-        """Write chart/table body images and append image RenderBlocks. Returns extra redaction rects."""
+        """Write chart/table/equation images and append image RenderBlocks. Returns extra redaction rects."""
         chart_fmt = getattr(self.config, "chart_body_format", "image") or "image"
         table_fmt = getattr(self.config, "table_body_format", "html") or "html"
+        eq_fmt = getattr(self.config, "equation_format", "text") or "text"
         placements = collect_visual_image_placements(
             layout_doc,
             chart_body_format=chart_fmt,
             table_body_format=table_fmt,
+            equation_format=eq_fmt,
             image_data_map=image_data_map,
         )
         if chart_fmt == "image":
@@ -610,6 +614,20 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     f"[TYPST_OVERLAY] layout has {chart_count} chart block(s) but 0 chart "
                     f"image placements (zip_images={len(image_data_map)}, "
                     f"check layout_source_zip and chart_body nested image_path)",
+                )
+        if eq_fmt.strip().lower() == "image":
+            eq_count = sum(
+                1
+                for page in layout_doc.pages
+                for block in page.blocks
+                if block.type in EQUATION_BLOCK_TYPES
+            )
+            if eq_count and not any(p.block_type == "equation" for p in placements):
+                unified_logger.warning(
+                    LogModule.RESTOR,
+                    f"[TYPST_OVERLAY] layout has {eq_count} equation block(s) but 0 equation "
+                    f"image placements (zip_images={len(image_data_map)}, "
+                    f"check layout_source_zip and interline_equation image_path)",
                 )
         if not placements:
             return {}
@@ -689,6 +707,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
         render_blocks_by_page: Dict[int, List[RenderBlock]] = {}
         total_blocks = 0
         skipped_blocks = []  # [(block_index, block_type, image_path or "no-image")]
+        eq_fmt = (getattr(self.config, "equation_format", "text") or "text").strip().lower()
 
         for page in layout_doc.pages:
             blocks: List[RenderBlock] = []
@@ -702,6 +721,16 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     rb = self._font_fit.calculate_fit_params(rb)
                     blocks.append(rb)
                     total_blocks += 1
+
+                if eq_fmt == "image" and block.type in EQUATION_BLOCK_TYPES:
+                    eq_img = extract_equation_image_path(block) or ""
+                    skipped_blocks.append((
+                        getattr(block, 'index', '?'),
+                        getattr(block, 'type', '?'),
+                        eq_img,
+                        block.bbox,
+                    ))
+                    continue
 
                 if not block.has_text():
                     # Log skipped blocks (images, tables, etc.)
@@ -845,7 +874,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
             )
             return self._source_pdf_path.read_bytes()
 
-        # ---- Step 1b: Embed chart/table body images when format=image ----
+        # ---- Step 1b: Embed chart/table/equation images when format=image ----
         temp_dir = Path(mkdtemp(prefix="owlangs_typst_"))
         image_data_map = self._load_image_data_map(layout_doc)
         extra_redaction_rects = self._append_visual_image_render_blocks(

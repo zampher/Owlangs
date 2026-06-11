@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from layout.pdf_renderer.typst_overlay.visual_images import (
     collect_visual_image_placements,
     lookup_image_bytes,
+    extract_equation_image_path,
 )
 
 
@@ -74,6 +75,65 @@ class TestVisualImagePlacements(unittest.TestCase):
             layout_doc,
             chart_body_format="html",
             table_body_format="html",
+            image_data_map=image_map,
+        )
+
+        self.assertEqual(placements, [])
+
+    def test_collect_equation_placements_when_format_image(self):
+        eq_block = SimpleNamespace(
+            type="interline_equation",
+            index=35,
+            bbox=(100.0, 200.0, 500.0, 240.0),
+            image_path=None,
+            raw={
+                "lines": [
+                    {
+                        "spans": [
+                            {
+                                "type": "interline_equation",
+                                "image_path": "eqhash123.jpg",
+                                "content": "L_1(U)=...",
+                            }
+                        ]
+                    }
+                ]
+            },
+        )
+        page = SimpleNamespace(page_index=1, blocks=[eq_block])
+        layout_doc = SimpleNamespace(pages=[page])
+        image_map = {"eqhash123.jpg": b"equation-bytes"}
+
+        placements = collect_visual_image_placements(
+            layout_doc,
+            chart_body_format="image",
+            table_body_format="html",
+            equation_format="image",
+            image_data_map=image_map,
+        )
+
+        self.assertEqual(len(placements), 1)
+        self.assertEqual(placements[0].block_index, 35)
+        self.assertEqual(placements[0].block_type, "equation")
+        self.assertEqual(extract_equation_image_path(eq_block), "eqhash123.jpg")
+
+    def test_skip_equation_placements_when_format_text(self):
+        eq_block = SimpleNamespace(
+            type="interline_equation",
+            index=35,
+            bbox=(100.0, 200.0, 500.0, 240.0),
+            image_path="eqhash123.jpg",
+            raw={},
+        )
+        page = SimpleNamespace(page_index=1, blocks=[eq_block])
+        layout_doc = SimpleNamespace(pages=[page])
+        image_map = {"eqhash123.jpg": b"equation-bytes"}
+
+        placements = collect_visual_image_placements(
+            layout_doc,
+            chart_body_format="image",
+            table_body_format="html",
+            equation_format="text",
             image_data_map=image_map,
         )
 
