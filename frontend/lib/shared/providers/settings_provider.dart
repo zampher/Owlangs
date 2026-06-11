@@ -97,7 +97,7 @@ class GlobalSettings {
     this.exclusionDefaults = const <String, bool>{
       'image': true,
       'formula': true,
-      'reference': true,
+      'reference': false,
       'identifier': true,
       'structural': false,
       'table': false,
@@ -168,7 +168,7 @@ class GlobalSettings {
               const <String, bool>{
                 'image': true,
                 'formula': true,
-                'reference': true,
+                'reference': false,
                 'identifier': true,
                 'structural': false,
                 'table': false,

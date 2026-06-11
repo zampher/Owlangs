@@ -48,7 +48,7 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
 
   /// Track reference segments and exclusion state
   List<int> referenceSegmentIndices = <int>[];
-  bool excludeReferences = true; // Default to exclude references
+  bool excludeReferences = false; // Default: do not exclude references
 
   /// Track header and footer segments and exclusion state
   List<int> headerSegmentIndices = <int>[];
@@ -371,7 +371,7 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
     segmentExclusionMetadata = <int, Map<String, dynamic>>{};
     segmentTypeInfo = <int, Map<String, dynamic>>{};
     referenceSegmentIndices = <int>[];
-    excludeReferences = true;
+    excludeReferences = false;
     headerSegmentIndices = <int>[];
     footerSegmentIndices = <int>[];
     excludeHeaders = false;

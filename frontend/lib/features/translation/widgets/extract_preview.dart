@@ -1906,28 +1906,41 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                     .where((index) => referenceSegmentIndices.contains(index))
                     .length;
 
+                final bool defaultExcludeReferences =
+                    ref.read(globalSettingsProvider).exclusionDefaults['reference'] ??
+                        false;
+
                 if (excludedReferenceCount == referenceSegmentIndices.length) {
-                  // All references are already excluded by backend
-                  // Just update local state, no need to call API
+                  // All references are already excluded (user or prior session)
                   _log(
-                    '[ExtractPreview] All ${referenceSegmentIndices.length} reference segments are already excluded by backend, skipping exclusion API call',
+                    '[ExtractPreview] All ${referenceSegmentIndices.length} reference segments are already excluded, skipping exclusion API call',
                     level: LogLevel.info,
                   );
                   setState(() {
                     excludeReferences = true;
+                    categoryExclusionStates['reference'] = true;
                   });
                 } else if (excludedReferenceCount == 0) {
-                  // No references are excluded, need to exclude them
-                  // Use new method that supports all formats and has optimistic update
-                  _log(
-                    '[ExtractPreview] No reference segments are excluded, calling exclusion API',
-                    level: LogLevel.info,
-                  );
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) {
-                      _handleExcludeReferenceSegments(true);
-                    }
-                  });
+                  if (defaultExcludeReferences) {
+                    _log(
+                      '[ExtractPreview] No reference segments excluded; auto-excluding per exclusion_defaults.reference=true',
+                      level: LogLevel.info,
+                    );
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        _handleExcludeReferenceSegments(true);
+                      }
+                    });
+                  } else {
+                    _log(
+                      '[ExtractPreview] No reference segments excluded; default is not to exclude references',
+                      level: LogLevel.info,
+                    );
+                    setState(() {
+                      excludeReferences = false;
+                      categoryExclusionStates['reference'] = false;
+                    });
+                  }
                 } else {
                   // Partial exclusion - some references are excluded, some are not
                   // Update local state to reflect current backend state

@@ -91,7 +91,7 @@
   "exclusion_defaults": {
     "image": true,
     "formula": true,
-    "reference": true,
+    "reference": false,
     "identifier": true,
     "structural": false,
     "table": false,

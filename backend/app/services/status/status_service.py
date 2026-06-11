@@ -3478,9 +3478,8 @@ class StatusService:
                     )
                     if detected_result:
                         detected_reason, _ = detected_result
-                        # Only exclude types that are neither optional nor default-not-excluded.
-                        # TABLE: optional (user choice). STRUCTURAL/LANGUAGE_MATCH: default not excluded (user choice).
-                        if not ExclusionReason.is_optional(detected_reason) and not ExclusionReason.is_default_not_excluded(detected_reason):
+                        default_excluded = ExclusionReason.get_default_excluded()
+                        if detected_reason in default_excluded:
                             is_excluded = True
             
             # Track excluded segment indices for translation

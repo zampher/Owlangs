@@ -48,7 +48,7 @@ class ExclusionDefaultsConfig:
     """
     image: bool = True
     formula: bool = True
-    reference: bool = True
+    reference: bool = False
     identifier: bool = True
     structural: bool = False
     table: bool = False

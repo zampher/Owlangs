@@ -61,8 +61,14 @@ class ExclusionReason(str, Enum):
 
     @classmethod
     def is_default_not_excluded(cls, reason: "ExclusionReason") -> bool:
-        """Reasons that are detected but not excluded by default; user chooses via checkbox (Structural, Language Match, Table, Chart)."""
-        return reason in {cls.TABLE, cls.CHART, cls.STRUCTURAL, cls.LANGUAGE_MATCH}
+        """Reasons detected but not auto-excluded unless enabled in exclusion_defaults."""
+        return reason in {
+            cls.TABLE,
+            cls.CHART,
+            cls.STRUCTURAL,
+            cls.LANGUAGE_MATCH,
+            cls.REFERENCE,
+        }
 
     @classmethod
     def is_language_based(cls, reason: "ExclusionReason") -> bool:
@@ -98,4 +104,4 @@ class ExclusionReason(str, Enum):
             return {reason for reason, enabled in _mapping.items() if enabled}
         except Exception:
             # Fallback: original hard-coded defaults
-            return {cls.IMAGE, cls.FORMULA, cls.REFERENCE, cls.IDENTIFIER}
+            return {cls.IMAGE, cls.FORMULA, cls.IDENTIFIER}

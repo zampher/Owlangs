@@ -5218,7 +5218,6 @@ class _TranslationResultPreviewState
               formatSettings.getEquationFormat(isPdfWorkflow: isPdfWorkflow);
           String chartFormat =
               formatSettings.getChartFormat(isPdfWorkflow: isPdfWorkflow);
-          bool bilingualExport = formatSettings.bilingualExport ?? false;
           String bilingualOrder =
               formatSettings.bilingualOrder ?? 'target_after_source';
           bool sourceTextItalic = formatSettings.sourceTextItalic ?? false;
@@ -5228,18 +5227,22 @@ class _TranslationResultPreviewState
           String targetTextColor =
               formatSettings.targetTextColor ?? 'gray';
 
-          final Map<String, dynamic> selectedDownloadOption =
-              downloadOptions[selectedDownloadIndex];
-          final String? selectedRendererType =
-              selectedDownloadOption['rendererType'] as String?;
-          final bool isPreserveLayoutPdf =
-              selectedDownloadOption['type'] == 'pdf' &&
-              selectedRendererType == 'typst_overlay';
-          final bool bilingualAvailable =
-              supportsBilingual && !isPreserveLayoutPdf;
-
           return StatefulBuilder(
-            builder: (BuildContext context, setDialogState) => Material(
+            builder: (BuildContext context, setDialogState) {
+              final Map<String, dynamic> selectedDownloadOption =
+                  downloadOptions[selectedDownloadIndex];
+              final String? selectedRendererType =
+                  selectedDownloadOption['rendererType'] as String?;
+              final bool isPreserveLayoutPdf =
+                  selectedDownloadOption['type'] == 'pdf' &&
+                  selectedRendererType == 'typst_overlay';
+              final bool bilingualAvailable =
+                  supportsBilingual && !isPreserveLayoutPdf;
+              final bool bilingualExport =
+                  bilingualAvailable &&
+                  (formatSettings.bilingualExport ?? false);
+
+              return Material(
               type: MaterialType.transparency,
               child: AlertDialog(
                 title: Text(l10n.translationExportDialogTitle),
@@ -5473,41 +5476,34 @@ class _TranslationResultPreviewState
                       if (supportsBilingual) ...<Widget>[
                         Opacity(
                           opacity: bilingualAvailable ? 1.0 : 0.4,
-                          child: AbsorbPointer(
-                            absorbing: !bilingualAvailable,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: <Widget>[
-                                Checkbox(
-                                  value: bilingualAvailable
-                                      ? bilingualExport
-                                      : false,
-                                  onChanged: bilingualAvailable
-                                      ? (value) {
-                                          if (value != null) {
-                                            setDialogState(() {
-                                              bilingualExport = value;
-                                            });
-                                            ref
-                                                .read(
-                                                  formatSettingsProviderFamily(
-                                                          _apiTaskId(),)
-                                                      .notifier,
-                                                )
-                                                .setBilingualExport(value);
-                                          }
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: <Widget>[
+                              Checkbox(
+                                value: bilingualExport,
+                                onChanged: bilingualAvailable
+                                    ? (bool? value) {
+                                        if (value == null) {
+                                          return;
                                         }
-                                      : null,
+                                        ref
+                                            .read(
+                                              formatSettingsProviderFamily(
+                                                      _apiTaskId(),)
+                                                  .notifier,
+                                            )
+                                            .setBilingualExport(value);
+                                      }
+                                    : null,
+                              ),
+                              Expanded(
+                                child: Text(
+                                  l10n.translationExportBilingualExport,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600),
                                 ),
-                                Expanded(
-                                  child: Text(
-                                    l10n.translationExportBilingualExport,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                         // Always show options, but disable when bilingual is off
@@ -5774,28 +5770,29 @@ class _TranslationResultPreviewState
                                       )
                                     : null,
                                 dense: true,
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    selectedDownloadIndex = value;
-                                    final Map<String, dynamic> newOption =
-                                        downloadOptions[value];
-                                    final String? newRendererType =
-                                        newOption['rendererType'] as String?;
-                                    final bool preserveLayoutPdf =
-                                        newOption['type'] == 'pdf' &&
-                                        newRendererType == 'typst_overlay';
-                                    if (preserveLayoutPdf && bilingualExport) {
-                                      bilingualExport = false;
-                                      ref
-                                          .read(
-                                            formatSettingsProviderFamily(
-                                                    _apiTaskId(),)
-                                                .notifier,
-                                          )
-                                          .setBilingualExport(false);
-                                    }
-                                    setDialogState(() {});
+                                onChanged: (int? value) {
+                                  if (value == null) {
+                                    return;
                                   }
+                                  final Map<String, dynamic> newOption =
+                                      downloadOptions[value];
+                                  final String? newRendererType =
+                                      newOption['rendererType'] as String?;
+                                  final bool preserveLayoutPdf =
+                                      newOption['type'] == 'pdf' &&
+                                      newRendererType == 'typst_overlay';
+                                  if (preserveLayoutPdf) {
+                                    ref
+                                        .read(
+                                          formatSettingsProviderFamily(
+                                                  _apiTaskId(),)
+                                              .notifier,
+                                        )
+                                        .setBilingualExport(false);
+                                  }
+                                  setDialogState(() {
+                                    selectedDownloadIndex = value;
+                                  });
                                 },
                               );
                             }),
@@ -5842,7 +5839,8 @@ class _TranslationResultPreviewState
                   ),
                 ],
               ),
-            ),
+            );
+            },
           );
         },
       ),
