@@ -5228,6 +5228,16 @@ class _TranslationResultPreviewState
           String targetTextColor =
               formatSettings.targetTextColor ?? 'gray';
 
+          final Map<String, dynamic> selectedDownloadOption =
+              downloadOptions[selectedDownloadIndex];
+          final String? selectedRendererType =
+              selectedDownloadOption['rendererType'] as String?;
+          final bool isPreserveLayoutPdf =
+              selectedDownloadOption['type'] == 'pdf' &&
+              selectedRendererType == 'typst_overlay';
+          final bool bilingualAvailable =
+              supportsBilingual && !isPreserveLayoutPdf;
+
           return StatefulBuilder(
             builder: (BuildContext context, setDialogState) => Material(
               type: MaterialType.transparency,
@@ -5461,39 +5471,53 @@ class _TranslationResultPreviewState
                       ],
                       // Bilingual export options
                       if (supportsBilingual) ...<Widget>[
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: <Widget>[
-                            Checkbox(
-                              value: bilingualExport,
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setDialogState(() {
-                                    bilingualExport = value;
-                                  });
-                                  ref
-                                      .read(
-                                        formatSettingsProviderFamily(
-                                                _apiTaskId(),)
-                                            .notifier,
-                                      )
-                                      .setBilingualExport(value);
-                                }
-                              },
+                        Opacity(
+                          opacity: bilingualAvailable ? 1.0 : 0.4,
+                          child: AbsorbPointer(
+                            absorbing: !bilingualAvailable,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: <Widget>[
+                                Checkbox(
+                                  value: bilingualAvailable
+                                      ? bilingualExport
+                                      : false,
+                                  onChanged: bilingualAvailable
+                                      ? (value) {
+                                          if (value != null) {
+                                            setDialogState(() {
+                                              bilingualExport = value;
+                                            });
+                                            ref
+                                                .read(
+                                                  formatSettingsProviderFamily(
+                                                          _apiTaskId(),)
+                                                      .notifier,
+                                                )
+                                                .setBilingualExport(value);
+                                          }
+                                        }
+                                      : null,
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    l10n.translationExportBilingualExport,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ],
                             ),
-                            Expanded(
-                              child: Text(
-                                l10n.translationExportBilingualExport,
-                                style: const TextStyle(fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                         // Always show options, but disable when bilingual is off
                         Opacity(
-                          opacity: bilingualExport ? 1.0 : 0.4,
+                          opacity: bilingualAvailable && bilingualExport
+                              ? 1.0
+                              : 0.4,
                           child: AbsorbPointer(
-                            absorbing: !bilingualExport,
+                            absorbing:
+                                !bilingualAvailable || !bilingualExport,
                             child: Padding(
                               padding: const EdgeInsets.only(left: 32.0),
                               child: Column(
@@ -5753,6 +5777,23 @@ class _TranslationResultPreviewState
                                 onChanged: (value) {
                                   if (value != null) {
                                     selectedDownloadIndex = value;
+                                    final Map<String, dynamic> newOption =
+                                        downloadOptions[value];
+                                    final String? newRendererType =
+                                        newOption['rendererType'] as String?;
+                                    final bool preserveLayoutPdf =
+                                        newOption['type'] == 'pdf' &&
+                                        newRendererType == 'typst_overlay';
+                                    if (preserveLayoutPdf && bilingualExport) {
+                                      bilingualExport = false;
+                                      ref
+                                          .read(
+                                            formatSettingsProviderFamily(
+                                                    _apiTaskId(),)
+                                                .notifier,
+                                          )
+                                          .setBilingualExport(false);
+                                    }
                                     setDialogState(() {});
                                   }
                                 },
@@ -5875,11 +5916,12 @@ class _TranslationResultPreviewState
         queryParams['renderer_type'] = rendererType;
       }
 
-      // Add bilingual parameters if enabled
+      // Add bilingual parameters if enabled (not supported for preserve-layout PDF)
       final formatSettings = ref.read(
         formatSettingsProviderFamily(_apiTaskId()),
       );
-      if (formatSettings.bilingualExport == true) {
+      if (formatSettings.bilingualExport == true &&
+          rendererType != 'typst_overlay') {
         queryParams['bilingual_export'] = 'true';
         queryParams['bilingual_order'] =
             formatSettings.bilingualOrder ?? 'target_after_source';
