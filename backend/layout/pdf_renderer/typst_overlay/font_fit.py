@@ -15,7 +15,9 @@ from typing import Any, List, Optional, Tuple
 from layout.pdf_renderer.typst_overlay.models import RenderBlock
 from layout.pdf_renderer.typst_overlay.text_metrics import (
     block_needs_math_fit,
+    count_embedded_newlines,
     count_non_cross_page_lines,
+    count_visual_lines_from_content,
     estimate_typographic_units,
     estimate_visual_line_count,
     is_single_line_bbox,
@@ -157,20 +159,31 @@ def _estimate_line_count(
     typo_units: float,
     chars_per_line: float,
     layout_raw: Any,
+    text: str = "",
 ) -> float:
     """Combine visual, width-wrap, and block-type signals for line count."""
     wrap_lines = typo_units / max(chars_per_line, 1.0)
-    visual_lines = estimate_visual_line_count(bbox_height, layout_raw)
-    block_type = _layout_block_type(layout_raw)
+    visual_lines = estimate_visual_line_count(bbox_height, layout_raw, text=text)
+    embedded_lines = float(count_visual_lines_from_content(text, layout_raw))
+    if embedded_lines > 1.0:
+        visual_lines = max(visual_lines, embedded_lines)
 
     if is_single_line_bbox(bbox_height, layout_raw):
-        # Short boxes (bibliography lines): do not treat the full bbox as one
-        # body paragraph line — prefer width-based wrap for long citations.
-        if block_type == "ref_text" or wrap_lines > 1.05:
-            return max(1.0, wrap_lines)
+        # Short boxes: combine width-wrap with bbox-height / embedded-\\n visual lines.
+        # Never return wrap_lines alone — patent headers with \\n or ~30pt bbox are
+        # two visual lines even when translated text is shorter than the source.
         return max(1.0, visual_lines, wrap_lines)
 
     return max(1.0, visual_lines, wrap_lines)
+
+
+def _is_true_single_visual_line(
+    bbox_height: float,
+    layout_raw: Any,
+    text: str = "",
+) -> bool:
+    """True when the block bbox fits exactly one visual text line."""
+    return estimate_visual_line_count(bbox_height, layout_raw, text=text) <= 1.05
 
 
 class FontFitCalculator:
@@ -226,7 +239,7 @@ class FontFitCalculator:
             bbox_width / (self.default_size_pt * LATIN_CHAR_WIDTH_RATIO),
         )
         line_count = _estimate_line_count(
-            bbox_height, typo_units, chars_per_line, layout_raw,
+            bbox_height, typo_units, chars_per_line, layout_raw, text=text,
         )
 
         estimated = available_h / (line_count * self.default_leading_em)
@@ -234,7 +247,10 @@ class FontFitCalculator:
         block_type = _layout_block_type(layout_raw)
         if block_type == "ref_text":
             estimated = min(estimated, bbox_height * REF_TEXT_FONT_HEIGHT_RATIO)
-        elif is_single_line_bbox(bbox_height, layout_raw):
+        elif (
+            _is_true_single_visual_line(bbox_height, layout_raw, text=text)
+            and count_embedded_newlines(text, layout_raw) == 0
+        ):
             # Generic short single-line boxes: never exceed what fits one em line.
             estimated = min(estimated, available_h / 1.05)
 
@@ -297,7 +313,7 @@ class FontFitCalculator:
             bbox_width / max(font_size_pt * LATIN_CHAR_WIDTH_RATIO, 0.1),
         )
         line_count = _estimate_line_count(
-            bbox_height, typo_units, chars_per_line, layout_raw,
+            bbox_height, typo_units, chars_per_line, layout_raw, text=text,
         )
         line_count = max(1.0, line_count)
         visual_lines = max(1, int(math.ceil(line_count - 1e-6)))
@@ -439,9 +455,18 @@ class FontFitCalculator:
         typo_units = estimate_typographic_units(text, layout_raw)
         has_math = block_needs_math_fit(text, layout_raw)
         short_single_line = is_single_line_bbox(bbox_height, layout_raw)
+        visual_lines = estimate_visual_line_count(bbox_height, layout_raw, text=text)
         wrap_ratio = typo_units / max(
             1.0, bbox_width / max(font_size * LATIN_CHAR_WIDTH_RATIO, 0.1),
         )
+        text_width_at_font = typo_units * font_size * LATIN_CHAR_WIDTH_RATIO
+        width_overflow = text_width_at_font > bbox_width * 0.95
+        will_wrap = (
+            wrap_ratio > 1.05
+            or width_overflow
+            or (short_single_line and visual_lines >= 2.0)
+        )
+        has_embedded_breaks = count_embedded_newlines(text, layout_raw) > 0
         height_overflow = (
             short_single_line
             and font_size * leading > bbox_height * SHORT_BBOX_HEIGHT_OVERFLOW_RATIO
@@ -453,6 +478,7 @@ class FontFitCalculator:
             or has_math
             or height_overflow
             or (is_ref_text and short_single_line)
+            or (short_single_line and will_wrap)
         )
         fit_single_line = (
             needs_fit
@@ -460,11 +486,18 @@ class FontFitCalculator:
             and is_single_line_bbox(bbox_height, layout_raw)
         )
 
+        render_kind = block.render_kind
+        preserve_line_breaks = block.preserve_line_breaks or has_embedded_breaks
+        if preserve_line_breaks and render_kind in ("plain", "plain_line"):
+            render_kind = "markdown"
+
         return RenderBlock(
             **{
                 **block.__dict__,
                 "font_size_pt": font_size,
                 "leading_em": leading,
+                "render_kind": render_kind,
+                "preserve_line_breaks": preserve_line_breaks,
                 "fit_to_box": needs_fit,
                 "fit_single_line": fit_single_line,
                 "fit_min_font_size_pt": max(self.min_size_pt, font_size * 0.5),

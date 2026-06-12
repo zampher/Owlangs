@@ -3,9 +3,12 @@
 
 """Unit tests for Typst overlay visual image placement."""
 
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
+from layout.pdf_renderer.typst_overlay.renderer import TypstOverlayRenderer
 from layout.pdf_renderer.typst_overlay.visual_images import (
     collect_visual_image_placements,
     lookup_image_bytes,
@@ -138,6 +141,61 @@ class TestVisualImagePlacements(unittest.TestCase):
         )
 
         self.assertEqual(placements, [])
+
+    def test_append_visual_images_writes_into_work_dir(self):
+        table_block = SimpleNamespace(
+            type="table",
+            index=68,
+            bbox=(76.0, 639.0, 295.0, 738.0),
+            image_path=None,
+            raw={
+                "blocks": [
+                    {
+                        "type": "table_body",
+                        "bbox": [76.0, 639.0, 295.0, 738.0],
+                        "lines": [
+                            {
+                                "spans": [
+                                    {
+                                        "type": "table",
+                                        "image_path": "7fd5c0d0ae5e5fe06ac5bfa7c4c0b44aaa22355dfff50d590e0124085837b301.jpg",
+                                    }
+                                ]
+                            }
+                        ],
+                    }
+                ]
+            },
+        )
+        page = SimpleNamespace(page_index=3, blocks=[table_block])
+        layout_doc = SimpleNamespace(pages=[page])
+        image_map = {
+            "7fd5c0d0ae5e5fe06ac5bfa7c4c0b44aaa22355dfff50d590e0124085837b301.jpg": b"table-jpg",
+        }
+        render_blocks_by_page: dict = {}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work_dir = Path(tmp)
+            renderer = TypstOverlayRenderer.__new__(TypstOverlayRenderer)
+            renderer.config = SimpleNamespace(
+                chart_body_format="image",
+                table_body_format="image",
+                equation_format="text",
+            )
+            renderer._append_visual_image_render_blocks(
+                layout_doc,
+                render_blocks_by_page,
+                work_dir=work_dir,
+                image_data_map=image_map,
+            )
+            image_path = work_dir / "images" / "7fd5c0d0ae5e5fe06ac5bfa7c4c0b44aaa22355dfff50d590e0124085837b301.jpg"
+            self.assertTrue(image_path.is_file())
+            self.assertEqual(image_path.read_bytes(), b"table-jpg")
+            self.assertEqual(len(render_blocks_by_page.get(3, [])), 1)
+            self.assertEqual(
+                render_blocks_by_page[3][0].image_rel_path,
+                "images/7fd5c0d0ae5e5fe06ac5bfa7c4c0b44aaa22355dfff50d590e0124085837b301.jpg",
+            )
 
 
 if __name__ == "__main__":

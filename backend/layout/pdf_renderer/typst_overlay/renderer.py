@@ -34,6 +34,7 @@ Pipeline Overview::
 """
 
 import io
+import shutil
 import time
 import zipfile
 from pathlib import Path
@@ -1052,20 +1053,20 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 "[TYPST_OVERLAY] Using background-embed mode for image-based PDF "
                 "(source page embedded as Typst background image)"
             )
-            bg_temp_dir = Path(mkdtemp(prefix="owlangs_typst_"))
-            bg_typ_path = bg_temp_dir / "overlay.typ"
-            bg_pdf_path = bg_temp_dir / "overlay.pdf"
+            # Reuse temp_dir so table/chart images written in Step 1b remain on disk
+            # for Typst image("images/...") references in overlay.typ.
+            work_dir = temp_dir
+            bg_typ_path = work_dir / "overlay.typ"
+            bg_pdf_path = work_dir / "overlay.pdf"
 
             emit_started = time.perf_counter()
-            # Save source PDF to temp dir for Typst to read as image
-            src_pdf_in_workdir = bg_temp_dir / "source.pdf"
-            import shutil
+            src_pdf_in_workdir = work_dir / "source.pdf"
             shutil.copy2(self._source_pdf_path, src_pdf_in_workdir)
             typst_source = build_typst_background_source(
                 page_specs,
                 background_pdf_path=src_pdf_in_workdir,
                 font_family=self._font_family,
-                work_dir=bg_temp_dir,
+                work_dir=work_dir,
             )
             diagnostics["emit_elapsed"] = time.perf_counter() - emit_started
 

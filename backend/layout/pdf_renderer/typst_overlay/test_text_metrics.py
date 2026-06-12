@@ -7,6 +7,8 @@ import unittest
 
 from layout.pdf_renderer.typst_overlay.text_metrics import (
     block_needs_math_fit,
+    count_embedded_newlines,
+    count_visual_lines_from_content,
     estimate_typographic_units,
     estimate_visual_line_count,
     is_single_line_bbox,
@@ -107,6 +109,27 @@ class TestTextMetrics(unittest.TestCase):
                 original,
             )
         )
+
+    def test_embedded_newline_in_span_counts_as_two_lines(self):
+        raw = {
+            "lines": [
+                {
+                    "spans": [
+                        {
+                            "type": "text",
+                            "content": "(12) United States Patent\nEisen",
+                        }
+                    ]
+                }
+            ]
+        }
+        self.assertEqual(count_embedded_newlines("", raw), 1)
+        self.assertEqual(count_visual_lines_from_content("", raw), 2)
+        # bbox height 31pt: was treated as 1 line; should infer ~2 lines
+        self.assertGreaterEqual(estimate_visual_line_count(31.0, raw), 2.0)
+
+    def test_tight_bbox_single_line_stays_one_line(self):
+        self.assertEqual(estimate_visual_line_count(14.0, None, text="US 8,672,145 B2"), 1.0)
 
 
 if __name__ == "__main__":

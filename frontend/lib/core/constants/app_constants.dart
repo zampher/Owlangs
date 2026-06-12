@@ -3,7 +3,7 @@
 class AppConstants {
   // App Info
   static const String appName = 'Owlangs';
-  static const String appVersion = '1.4.0.0';
+  static const String appVersion = '1.5.0.0';
 
   // Planned version for feature messages (e.g. "Will be available in vX.X.X.X")
   static const String plannedVersionAnonymize = '2.0.0.0';

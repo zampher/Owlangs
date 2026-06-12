@@ -291,6 +291,104 @@ class TestFontFitCalculator(unittest.TestCase):
         self.assertFalse(fitted.fit_to_box)
         self.assertGreaterEqual(fitted.font_size_pt, 10.0)
 
+    def test_patent_header_two_lines_smaller_font(self):
+        calc = FontFitCalculator()
+        raw = {
+            "type": "text",
+            "lines": [
+                {
+                    "spans": [
+                        {
+                            "type": "text",
+                            "content": "(12) United States Patent\nEisen",
+                        }
+                    ]
+                }
+            ],
+        }
+        text = "(12) United States Patent\nEisen"
+        block = RenderBlock(
+            block_id="patent_hdr",
+            page_index=0,
+            inner_bbox=(76.0, 67.0, 256.0, 98.0),
+            plain_text=text,
+            markdown_text=text,
+        )
+        fitted = calc.calculate_fit_params(block, layout_raw=raw)
+        self.assertTrue(fitted.preserve_line_breaks)
+        self.assertEqual(fitted.render_kind, "markdown")
+        self.assertLessEqual(fitted.font_size_pt, 12.0)
+        self.assertGreaterEqual(fitted.font_size_pt, 8.0)
+
+    def test_narrow_patent_number_enables_fit_when_translation_wraps(self):
+        calc = FontFitCalculator()
+        raw = {
+            "type": "text",
+            "lines": [{"spans": [{"type": "text", "content": "US 8,672,145 B2"}]}],
+        }
+        translated = "美国专利 US 8,672,145 B2 号"
+        block = RenderBlock(
+            block_id="patent_no",
+            page_index=0,
+            inner_bbox=(430.0, 70.0, 528.0, 84.0),
+            plain_text=translated,
+            markdown_text=translated,
+        )
+        fitted = calc.calculate_fit_params(block, layout_raw=raw)
+        self.assertTrue(fitted.fit_to_box)
+
+    def test_uspc_classification_two_embedded_lines(self):
+        """layout-1.json index 20: (52) U.S. Cl. + long USPC line with embedded newline."""
+        calc = FontFitCalculator()
+        raw = {
+            "type": "text",
+            "bbox": [311, 118, 528, 148],
+            "lines": [
+                {
+                    "spans": [
+                        {
+                            "type": "text",
+                            "content": (
+                                "(52) U.S. Cl.\n"
+                                "USPC ..... 210/502.1; 210/290; 210/348; "
+                                "210/488; 210/489; 210/490"
+                            ),
+                        }
+                    ]
+                }
+            ],
+        }
+        # Medium translation without \\n still sits in a ~30pt two-line bbox.
+        text = (
+            "(52) U.S. Cl. USPC ..... 210/502.1; 210/290; 210/348; "
+            "210/488; 210/489"
+        )
+        block = RenderBlock(
+            block_id="uspc",
+            page_index=0,
+            inner_bbox=(311.0, 118.0, 528.0, 148.0),
+            plain_text=text,
+            markdown_text=text,
+        )
+        fitted = calc.calculate_fit_params(block, layout_raw=raw)
+        self.assertLessEqual(fitted.font_size_pt, 12.0)
+        self.assertGreaterEqual(fitted.font_size_pt, 7.0)
+
+        text_with_breaks = (
+            "(52) U.S. Cl.\n"
+            "USPC ..... 210/502.1; 210/290; 210/348; 210/488; 210/489; 210/490"
+        )
+        block_nl = RenderBlock(
+            block_id="uspc_nl",
+            page_index=0,
+            inner_bbox=(311.0, 118.0, 528.0, 148.0),
+            plain_text=text_with_breaks,
+            markdown_text=text_with_breaks,
+        )
+        fitted_nl = calc.calculate_fit_params(block_nl, layout_raw=raw)
+        self.assertTrue(fitted_nl.preserve_line_breaks)
+        self.assertLessEqual(fitted_nl.font_size_pt, 12.0)
+
 
 if __name__ == "__main__":
     unittest.main()

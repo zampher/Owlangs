@@ -79,23 +79,63 @@ def count_non_cross_page_lines(raw: Any) -> int:
     return count
 
 
-def estimate_visual_line_count(bbox_height_pt: float, layout_raw: Any = None) -> float:
+def count_embedded_newlines(text: str = "", layout_raw: Any = None) -> int:
+    """Return the maximum number of ``\\n`` characters in text or MinerU spans."""
+    max_newlines = 0
+    if text:
+        max_newlines = max(max_newlines, text.count("\n"))
+    if isinstance(layout_raw, dict):
+        for line in layout_raw.get("lines") or []:
+            if not isinstance(line, dict):
+                continue
+            for span in line.get("spans") or []:
+                if not isinstance(span, dict):
+                    continue
+                content = span.get("content")
+                if isinstance(content, str):
+                    max_newlines = max(max_newlines, content.count("\n"))
+    return max_newlines
+
+
+def count_visual_lines_from_content(text: str = "", layout_raw: Any = None) -> int:
+    """Visual line count implied by embedded newlines (0 newlines → 1 line)."""
+    newline_count = count_embedded_newlines(text, layout_raw)
+    if newline_count <= 0:
+        return 1
+    return newline_count + 1
+
+
+def estimate_visual_line_count(
+    bbox_height_pt: float,
+    layout_raw: Any = None,
+    text: str = "",
+) -> float:
     """
     Estimate how many visual lines fit in the block bbox.
 
     MinerU often stores a wrapped paragraph as a single logical ``lines[]`` entry,
     so line count from raw is unreliable; bbox height is the primary signal.
+    Embedded ``\\n`` in span content (e.g. patent headers) also signals multiple lines
+    even when ``lines[]`` has only one entry and bbox height is ≤ 32pt.
     """
     if bbox_height_pt <= 0:
         return 1.0
-    if bbox_height_pt <= SINGLE_LINE_BBOX_HEIGHT_PT:
-        return 1.0
+
     from_height = max(1.0, bbox_height_pt / TYPICAL_BODY_LINE_HEIGHT_PT)
     from_raw = float(count_non_cross_page_lines(layout_raw)) if layout_raw else 1.0
-    # Never trust raw line count alone when bbox is tall (whole paragraph as one line).
-    if bbox_height_pt > SINGLE_LINE_BBOX_HEIGHT_PT:
-        return max(from_height, from_raw if from_raw > 1 else from_height)
-    return max(from_height, from_raw)
+    embedded_lines = float(count_visual_lines_from_content(text, layout_raw))
+
+    if bbox_height_pt <= SINGLE_LINE_BBOX_HEIGHT_PT:
+        if embedded_lines > 1.0:
+            return max(embedded_lines, from_height)
+        if from_height >= 2.0:
+            return max(from_height, from_raw if from_raw > 1.0 else from_height)
+        return 1.0
+
+    lines = max(from_height, from_raw if from_raw > 1.0 else from_height)
+    if embedded_lines > 1.0:
+        lines = max(lines, embedded_lines)
+    return lines
 
 
 def block_needs_math_fit(text: str, layout_raw: Any = None) -> bool:
