@@ -440,6 +440,8 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
       segmentType = 'structural_footer';
     } else if (blockType == 'table_body' || (isTableBody ?? false)) {
       segmentType = ExclusionReason.table.value;
+    } else if (blockType == 'chart_body') {
+      segmentType = ExclusionReason.chart.value;
     } else if (blockType == 'interline_equation') {
       segmentType = ExclusionReason.formula.value;
     } else if (exclusionReason != null) {

@@ -1482,6 +1482,7 @@ class _TranslationResultPreviewState
             'detected_exclusion_reason': detectedExclusionReason,
             if (exclusionMetadata != null)
               'exclusion_metadata': exclusionMetadata,
+            ...segmentClassificationFieldsFromApi(segment),
           };
         }
 
@@ -1690,6 +1691,7 @@ class _TranslationResultPreviewState
               'detected_exclusion_reason': detectedExclusionReason,
               if (exclusionMetadata != null)
                 'exclusion_metadata': exclusionMetadata,
+              ...segmentClassificationFieldsFromApi(segment),
             };
           }
         });

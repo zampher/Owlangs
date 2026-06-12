@@ -58,6 +58,43 @@ String? segmentFilterKeyFromMetadata(Map<String, dynamic> metadata) {
   return reasonToUse;
 }
 
+/// Classification fields copied from a translation-segments API item.
+Map<String, dynamic> segmentClassificationFieldsFromApi(
+  Map<dynamic, dynamic> segment,
+) {
+  final dynamic segInfoRaw = segment['segment_info'];
+  final Map<String, dynamic>? segInfo = segInfoRaw is Map
+      ? Map<String, dynamic>.from(segInfoRaw)
+      : null;
+
+  String? blockType = segment['block_type'] as String?;
+  blockType ??= segInfo?['block_type'] as String?;
+
+  final bool isTableBody = segment['is_table_body'] as bool? ??
+      segInfo?['is_table_body'] as bool? ??
+      false;
+
+  return <String, dynamic>{
+    if (blockType != null && blockType.isNotEmpty) 'block_type': blockType,
+    if (isTableBody) 'is_table_body': true,
+  };
+}
+
+/// Whether [metadata] matches any selected type filter in [selectedFilters].
+///
+/// Classifies by detected segment type (see [segmentFilterKeyFromMetadata]),
+/// not by whether the segment is currently excluded.
+bool matchesSegmentTypeFilter(
+  Map<String, dynamic> metadata,
+  Set<String> selectedFilters,
+) {
+  if (selectedFilters.isEmpty) {
+    return true;
+  }
+  final String? filterKey = segmentFilterKeyFromMetadata(metadata);
+  return filterKey != null && selectedFilters.contains(filterKey);
+}
+
 /// Build counts by type for ALL segments (not just excluded ones).
 ///
 /// This ensures Translate phase FilterChips remain usable even for

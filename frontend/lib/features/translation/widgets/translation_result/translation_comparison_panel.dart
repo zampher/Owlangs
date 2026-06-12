@@ -12,6 +12,7 @@ import '../../../../shared/providers/settings_provider.dart';
 import '../../providers/segment_undo_redo_provider.dart';
 import '../../models/segment_pair.dart';
 import '../../utils/segment_height_cache.dart';
+import '../../utils/segment_type_utils.dart';
 import 'translation_segment_item.dart';
 
 /// State-based filter keys (mutually exclusive - single select)
@@ -633,10 +634,11 @@ class TranslationComparisonPanel extends ConsumerWidget {
                 return const SizedBox.shrink();
               }
             } else {
-              // Type-based filtering (exclusion reason types from exclusion panel)
-              if (!isExcluded ||
-                  exclusionReason == null ||
-                  !selectedExclusionFilters!.contains(exclusionReason)) {
+              // Type-based filtering (detected segment type, not excluded state)
+              if (!matchesSegmentTypeFilter(
+                metadata,
+                selectedExclusionFilters!,
+              )) {
                 return const SizedBox.shrink();
               }
             }
@@ -820,9 +822,10 @@ class TranslationComparisonPanel extends ConsumerWidget {
               return const SizedBox.shrink();
             }
           } else {
-            if (!isExcluded ||
-                exclusionReason == null ||
-                !selectedExclusionFilters!.contains(exclusionReason)) {
+            if (!matchesSegmentTypeFilter(
+              metadata,
+              selectedExclusionFilters!,
+            )) {
               return const SizedBox.shrink();
             }
           }
