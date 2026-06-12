@@ -9,6 +9,7 @@ import '../utils/app_logger.dart';
 import '../utils/message_service.dart';
 import '../utils/dialog_helper.dart';
 import '../../features/translation/providers/format_settings_provider.dart';
+import '../../features/translation/widgets/translation_result/preview_viewport.dart';
 import 'unified_preview.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -40,6 +41,7 @@ class UnifiedPreviewWidget extends ConsumerStatefulWidget {
     this.showProgressBar = false,
     this.onCancel,
     this.onStatusUpdate,
+    this.onRequestPreviewSettings,
   });
 
   /// Task ID
@@ -80,6 +82,11 @@ class UnifiedPreviewWidget extends ConsumerStatefulWidget {
     Map<String, String> downloads,
   )? onStatusUpdate;
 
+  /// Reopen unified preview settings (translation preview only).
+  /// When set, the settings button opens this callback instead of the legacy
+  /// format-only dialog.
+  final Future<void> Function()? onRequestPreviewSettings;
+
   @override
   ConsumerState<UnifiedPreviewWidget> createState() =>
       _UnifiedPreviewWidgetState();
@@ -106,12 +113,25 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
   String? _displayMessage;
   FormatSettings?
       _lastFormatSettings; // Track last format settings to detect changes
+  late final PreviewViewportController _viewportController;
+  late final PreviewFullscreenOverlay _fullscreenOverlay;
+  bool _isFullscreen = false;
 
   bool get _isPdfWorkflow => widget.downloads.containsKey('pdf');
 
   @override
   void initState() {
     super.initState();
+    _viewportController = PreviewViewportController();
+    _fullscreenOverlay = PreviewFullscreenOverlay(
+      onExit: () {
+        if (mounted) {
+          setState(() {
+            _isFullscreen = false;
+          });
+        }
+      },
+    );
     _currentDownloads = widget.downloads;
     _previewType = widget.previewType;
     if (widget.enableStatusPolling) {
@@ -141,7 +161,26 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
   @override
   void dispose() {
     _statusTimer?.cancel();
+    _fullscreenOverlay.dispose();
+    _viewportController.dispose();
     super.dispose();
+  }
+
+  void _toggleFullscreen() {
+    if (_isFullscreen) {
+      _fullscreenOverlay.exit();
+      return;
+    }
+    _fullscreenOverlay.enter(
+      context: context,
+      builder: (BuildContext overlayContext) => _buildPreviewShell(
+        overlayContext,
+        isFullscreenView: true,
+      ),
+    );
+    setState(() {
+      _isFullscreen = true;
+    });
   }
 
   void _startStatusPolling() {
@@ -1292,6 +1331,17 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
     }
     _lastFormatSettings = formatSettings;
 
+    return _buildPreviewShell(context, isFullscreenView: false);
+  }
+
+  Widget _buildPreviewShell(
+    BuildContext context, {
+    required bool isFullscreenView,
+  }) {
+    if (_isFullscreen && !isFullscreenView) {
+      return const SizedBox.shrink();
+    }
+
     // Get status to check for tables, equations, and charts
     final Map<String, dynamic>? status = _currentStatus;
     final bool hasTables = status?['has_tables'] == true;
@@ -1308,7 +1358,6 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
 
     return Column(
       children: <Widget>[
-        // Toolbar with Settings and Download buttons
         _buildToolbar(
           hasTables,
           hasInterlineEquations,
@@ -1320,8 +1369,6 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
           _statusText,
           _displayMessage,
         ),
-
-        // Main preview content
         Expanded(
           child: _loadingPreview
               ? const Center(
@@ -1331,7 +1378,14 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
                   ),
                 )
               : _previewContent != null
-                  ? _buildPreviewContent()
+                  ? PreviewZoomableViewport(
+                      controller: _viewportController,
+                      child: SizedBox(
+                        width: MediaQuery.sizeOf(context).width,
+                        height: MediaQuery.sizeOf(context).height,
+                        child: _buildPreviewContent(),
+                      ),
+                    )
                   : const Center(
                       child: Padding(
                         padding: EdgeInsets.all(32),
@@ -1449,19 +1503,37 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
               ],
             ],
             const Spacer(),
+            PreviewZoomToolbarActions(
+              viewportController: _viewportController,
+              iconSize: 16,
+              compact: true,
+            ),
+            const SizedBox(width: 3),
             // Settings and Download buttons (only show when completed or if not using status polling)
             if (isCompleted || !widget.enableStatusPolling) ...<Widget>[
               IconButton(
                 icon: const Icon(Icons.settings, size: 16),
-                tooltip: 'Preview Settings',
+                tooltip: widget.onRequestPreviewSettings != null
+                    ? 'Preview settings'
+                    : 'Preview Settings',
                 onPressed: () {
                   _unifiedPreviewWidgetLog('[Toolbar] Settings button pressed');
                   try {
-                    _showPreviewSettingsDialog(
-                      hasTables,
-                      hasInterlineEquations,
-                      hasCharts,
-                    );
+                    if (_isFullscreen) {
+                      _fullscreenOverlay.exit();
+                      setState(() {
+                        _isFullscreen = false;
+                      });
+                    }
+                    if (widget.onRequestPreviewSettings != null) {
+                      unawaited(widget.onRequestPreviewSettings!());
+                    } else {
+                      _showPreviewSettingsDialog(
+                        hasTables,
+                        hasInterlineEquations,
+                        hasCharts,
+                      );
+                    }
                     _unifiedPreviewWidgetLog('[Toolbar] Settings dialog shown');
                   } catch (e, stackTrace) {
                     _unifiedPreviewWidgetLog(
@@ -1499,6 +1571,12 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
                 ),
               ),
             ],
+            PreviewViewportTrailingActions(
+              viewportController: _viewportController,
+              isFullscreen: _isFullscreen,
+              onToggleFullscreen: _toggleFullscreen,
+              iconSize: 16,
+            ),
           ],
         ),
       );

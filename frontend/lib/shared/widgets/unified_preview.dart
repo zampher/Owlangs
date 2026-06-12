@@ -7,11 +7,11 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../utils/html_stub.dart' if (dart.library.html) 'dart:html' as html;
 import '../utils/ui_web_stub.dart' if (dart.library.html) 'dart:ui_web'
     as ui_web;
-import 'package:webview_flutter/webview_flutter.dart';
-import 'dart:convert';
+import 'desktop_html_webview.dart';
 import 'markdown_text_with_images.dart';
 import '../providers/settings_provider.dart';
 import '../utils/app_logger.dart';
+import '../utils/dialog_helper.dart';
 import '../../core/constants/app_constants.dart';
 
 void _unifiedPreviewLog(String message, {LogLevel level = LogLevel.debug}) {
@@ -31,6 +31,9 @@ class UnifiedPreview extends ConsumerStatefulWidget {
     this.fontSize,
     this.onDisablePointerEvents,
     this.onEnablePointerEvents,
+    this.embedInCompareScroll = false,
+    this.onEmbedHeightChanged,
+    this.comparePaneKey,
   });
 
   /// Content to display (MD or HTML)
@@ -57,6 +60,15 @@ class UnifiedPreview extends ConsumerStatefulWidget {
   /// Callback to enable iframe pointer-events (after dialog closes)
   final VoidCallback? onEnablePointerEvents;
 
+  /// Embed HTML in compare column: no internal scroll, auto height for outer scroll.
+  final bool embedInCompareScroll;
+
+  /// Called when compare embed content height changes (e.g. after KaTeX render).
+  final VoidCallback? onEmbedHeightChanged;
+
+  /// Optional stable key for compare pane platform view registration.
+  final String? comparePaneKey;
+
   @override
   ConsumerState<UnifiedPreview> createState() => _UnifiedPreviewState();
 }
@@ -64,6 +76,67 @@ class UnifiedPreview extends ConsumerStatefulWidget {
 class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
   String? _viewId;
   bool _iframeRegistered = false;
+  html.IFrameElement? _registeredIframe;
+  String? _iframeBlobUrl;
+  String? _loadedHtmlContent;
+
+  @override
+  void dispose() {
+    if (_iframeBlobUrl != null) {
+      try {
+        html.Url.revokeObjectUrl(_iframeBlobUrl!);
+      } catch (_) {}
+      _iframeBlobUrl = null;
+    }
+    super.dispose();
+  }
+
+  void _notifyEmbedHeightChanged() {
+    widget.onEmbedHeightChanged?.call();
+  }
+
+  void _updateCompareIframeHeight(html.IFrameElement iframe) {
+    if (!kIsWeb) {
+      return;
+    }
+    try {
+      final html.WindowBase? windowBase = iframe.contentWindow;
+      if (windowBase is! html.Window) {
+        return;
+      }
+      final html.Window window = windowBase;
+      final html.Element? root =
+          window.document.scrollingElement ?? window.document.documentElement;
+      if (root == null) {
+        return;
+      }
+      final int height = root.scrollHeight.toInt();
+      if (height <= 0) {
+        return;
+      }
+      final String nextHeight = '${height}px';
+      if (iframe.style.height != nextHeight) {
+        iframe.style.height = nextHeight;
+        _notifyEmbedHeightChanged();
+      }
+    } catch (e) {
+      _unifiedPreviewLog(
+        'Compare embed height measure failed: $e',
+        level: LogLevel.warn,
+      );
+    }
+  }
+
+  void _scheduleCompareHeightUpdates(html.IFrameElement iframe) {
+    for (final int delayMs in <int>[0, 100, 300, 800, 1500, 3000]) {
+      Future<void>.delayed(Duration(milliseconds: delayMs), () {
+        if (!mounted || _registeredIframe != iframe) {
+          return;
+        }
+        _updateCompareIframeHeight(iframe);
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,40 +153,62 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
     final bool hasLaTeX = latexBlockPattern.hasMatch(widget.content) ||
         latexInlinePattern.hasMatch(widget.content);
 
-    // For HTML preview or MD with LaTeX, use HTML rendering with KaTeX
-    if (widget.contentType == 'html' || hasLaTeX) {
-      // Prepare HTML content
-      String htmlContent;
-      if (widget.contentType == 'html') {
-        htmlContent = _wrapHtmlWithKaTeX(widget.content);
-      } else {
-        htmlContent = _wrapMarkdownInHtml(widget.content);
-      }
+    // Web: HTML or MD+LaTeX via iframe+KaTeX. Desktop: HTML export only via WebView2.
+    final bool useWebHtmlRenderer =
+        widget.contentType == 'html' || (hasLaTeX && kIsWeb);
 
-      // Use iframe for web, fallback for desktop
+    if (useWebHtmlRenderer) {
+      final String htmlContent = widget.contentType == 'html'
+          ? _wrapHtmlWithKaTeX(widget.content)
+          : _wrapMarkdownInHtml(widget.content);
+
       if (kIsWeb) {
+        if (widget.embedInCompareScroll) {
+          return _buildWebCompareEmbed(htmlContent);
+        }
         return _buildWebIframe(htmlContent);
-      } else {
-        // Desktop: show HTML source or use WebView if available
-        return _buildDesktopHtmlPreview(htmlContent);
       }
-    } else {
-      // For MD without LaTeX, use MarkdownTextWithImages (better performance)
-      final GlobalSettings globalSettings = ref.read(globalSettingsProvider);
-      return SingleChildScrollView(
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          child: MarkdownTextWithImages(
-            text: widget.content,
-            imageDataMap: widget.imageDataMap,
-            enableSelection: widget.enableSelection,
-            style: TextStyle(
-              fontSize: widget.fontSize ?? globalSettings.previewFontSize,
-            ),
-          ),
-        ),
+      return DesktopHtmlWebView(
+        htmlContent: htmlContent,
+        fallback: _buildFallbackPreview(),
       );
     }
+
+    // MD on desktop (including LaTeX): Markdown renderer avoids WebView2 crashes.
+    final GlobalSettings globalSettings = ref.read(globalSettingsProvider);
+    return SingleChildScrollView(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        child: MarkdownTextWithImages(
+          text: widget.content,
+          imageDataMap: widget.imageDataMap,
+          enableSelection: widget.enableSelection,
+          style: TextStyle(
+            fontSize: widget.fontSize ?? globalSettings.previewFontSize,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build iframe for web platform
+  Widget _buildWebPlatformView(
+    String viewType, {
+    void Function(int id)? onPlatformViewCreated,
+  }) {
+    return ValueListenableBuilder<int>(
+      valueListenable: DialogHelper.activeDialogCount,
+      builder: (BuildContext context, int openDialogs, Widget? child) {
+        if (openDialogs > 0) {
+          return const ColoredBox(color: Colors.white);
+        }
+        return child!;
+      },
+      child: HtmlElementView(
+        viewType: viewType,
+        onPlatformViewCreated: onPlatformViewCreated,
+      ),
+    );
   }
 
   /// Build iframe for web platform
@@ -123,49 +218,26 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
     }
 
     try {
-      // Create a unique view ID for the iframe
+      // One stable view id and iframe element per widget instance.
       _viewId ??=
-          'unified_preview_${widget.taskId}_${DateTime.now().millisecondsSinceEpoch}';
+          'unified_preview_${widget.taskId}_${widget.comparePaneKey ?? 'main'}_${identityHashCode(this)}';
 
-      // Always use blob URL to avoid CSP issues
-      final html.Blob blob = html.Blob(<dynamic>[htmlContent], 'text/html');
-      final String iframeSrc = html.Url.createObjectUrlFromBlob(blob);
+      if (_registeredIframe == null) {
+        final html.IFrameElement iframe = html.IFrameElement()
+          ..style.border = 'none'
+          ..style.width = '100%'
+          ..style.height = '100%'
+          ..allowFullscreen = true
+          ..id = 'unified_preview_iframe_$_viewId';
 
-      // Create iframe element
-      final html.IFrameElement iframe = html.IFrameElement()
-        ..src = iframeSrc
-        ..style.border = 'none'
-        ..style.width = '100%'
-        ..style.height = '100%'
-        ..allowFullscreen = true
-        ..id =
-            'unified_preview_iframe_${widget.taskId}'; // Add ID for easy access
+        iframe.setAttribute('data-preview-iframe', 'true');
 
-      // Add attribute for easy selection (for dialog pointer-events control)
-      iframe.setAttribute('data-preview-iframe', 'true');
+        iframe.style.zIndex = '1';
+        iframe.style.position = 'relative';
 
-      // Set explicit z-index and position to ensure iframe stays below dialogs
-      // This works together with the CSS in index.html
-      iframe.style.zIndex = '1';
-      iframe.style.position = 'relative';
+        _registeredIframe = iframe;
 
-      // Register the iframe with Flutter (only register once per viewId)
-      if (!_iframeRegistered) {
-        try {
-          // ignore: undefined_prefixed_name
-          ui_web.platformViewRegistry.registerViewFactory(
-            _viewId!,
-            (int viewId) => iframe,
-          );
-          _iframeRegistered = true;
-        } catch (e) {
-          _unifiedPreviewLog(
-            'Error registering iframe: $e',
-            level: LogLevel.error,
-          );
-          // If registration fails, try with a new viewId
-          _viewId =
-              'unified_preview_${widget.taskId}_${DateTime.now().millisecondsSinceEpoch}';
+        if (!_iframeRegistered) {
           try {
             // ignore: undefined_prefixed_name
             ui_web.platformViewRegistry.registerViewFactory(
@@ -173,19 +245,45 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
               (int viewId) => iframe,
             );
             _iframeRegistered = true;
-          } catch (e2) {
+          } catch (e) {
             _unifiedPreviewLog(
-              'Failed to register iframe with new viewId: $e2',
+              'Error registering iframe: $e',
               level: LogLevel.error,
             );
+            _viewId =
+                'unified_preview_${widget.taskId}_${DateTime.now().millisecondsSinceEpoch}';
+            try {
+              // ignore: undefined_prefixed_name
+              ui_web.platformViewRegistry.registerViewFactory(
+                _viewId!,
+                (int viewId) => iframe,
+              );
+              _iframeRegistered = true;
+            } catch (e2) {
+              _unifiedPreviewLog(
+                'Failed to register iframe with new viewId: $e2',
+                level: LogLevel.error,
+              );
+            }
           }
         }
       }
 
-      // Return HtmlElementView to display the iframe
-      return HtmlElementView(
-        viewType: _viewId!,
-        onPlatformViewCreated: (id) {
+      if (_loadedHtmlContent != htmlContent) {
+        _loadedHtmlContent = htmlContent;
+        if (_iframeBlobUrl != null) {
+          try {
+            html.Url.revokeObjectUrl(_iframeBlobUrl!);
+          } catch (_) {}
+        }
+        final html.Blob blob = html.Blob(<dynamic>[htmlContent], 'text/html');
+        _iframeBlobUrl = html.Url.createObjectUrlFromBlob(blob);
+        _registeredIframe!.src = _iframeBlobUrl;
+      }
+
+      return _buildWebPlatformView(
+        _viewId!,
+        onPlatformViewCreated: (int id) {
           _unifiedPreviewLog('HtmlElementView created with id: $id');
         },
       );
@@ -198,47 +296,81 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
     }
   }
 
-  /// Build desktop HTML preview using WebView
-  Widget _buildDesktopHtmlPreview(String htmlContent) {
-    // Use WebView to render HTML content properly
-    // This ensures HTML tables and other elements are rendered, not shown as source code
-    try {
-      final WebViewController controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(Colors.transparent)
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onPageFinished: (url) {
-              _unifiedPreviewLog('WebView page finished loading: $url');
-            },
-          ),
-        )
-        ..loadRequest(
-          Uri.dataFromString(
-            htmlContent,
-            mimeType: 'text/html',
-            encoding: Encoding.getByName('utf-8'),
-          ),
-        );
+  /// Compare column embed: iframe grows to content height, outer scroll only.
+  Widget _buildWebCompareEmbed(String htmlContent) {
+    if (!kIsWeb || htmlContent.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
-      return WebViewWidget(controller: controller);
-    } catch (e) {
-      _unifiedPreviewLog('Error creating WebView: $e', level: LogLevel.error);
-      // Fallback to showing HTML source if WebView fails
-      return SingleChildScrollView(
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          child: SelectableText.rich(
-            TextSpan(
-              text: htmlContent,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ),
+    try {
+      _viewId ??=
+          'unified_preview_compare_${widget.taskId}_${widget.comparePaneKey ?? 'pane'}_${identityHashCode(this)}';
+
+      if (_registeredIframe == null) {
+        final html.IFrameElement iframe = html.IFrameElement()
+          ..style.border = 'none'
+          ..style.width = '100%'
+          ..style.height = '1px'
+          ..style.display = 'block'
+          ..style.overflow = 'hidden'
+          ..allowFullscreen = true
+          ..id = 'unified_preview_compare_iframe_$_viewId';
+
+        iframe.setAttribute('data-preview-iframe', 'true');
+        iframe.setAttribute('scrolling', 'no');
+
+        iframe.onLoad.listen((_) {
+          _updateCompareIframeHeight(iframe);
+          _scheduleCompareHeightUpdates(iframe);
+        });
+
+        _registeredIframe = iframe;
+
+        if (!_iframeRegistered) {
+          try {
+            // ignore: undefined_prefixed_name
+            ui_web.platformViewRegistry.registerViewFactory(
+              _viewId!,
+              (int viewId) => iframe,
+            );
+            _iframeRegistered = true;
+          } catch (e) {
+            _unifiedPreviewLog(
+              'Error registering compare embed iframe: $e',
+              level: LogLevel.error,
+            );
+          }
+        }
+      }
+
+      if (_loadedHtmlContent != htmlContent) {
+        _loadedHtmlContent = htmlContent;
+        if (_iframeBlobUrl != null) {
+          try {
+            html.Url.revokeObjectUrl(_iframeBlobUrl!);
+          } catch (_) {}
+        }
+        final html.Blob blob = html.Blob(<dynamic>[htmlContent], 'text/html');
+        _iframeBlobUrl = html.Url.createObjectUrlFromBlob(blob);
+        _registeredIframe!.src = _iframeBlobUrl;
+        _scheduleCompareHeightUpdates(_registeredIframe!);
+      }
+
+      return _buildWebPlatformView(
+        _viewId!,
+        onPlatformViewCreated: (int id) {
+          _unifiedPreviewLog('Compare embed HtmlElementView created: $id');
+          if (_registeredIframe != null) {
+            _scheduleCompareHeightUpdates(_registeredIframe!);
+          }
+        },
       );
+    } catch (e, stackTrace) {
+      _unifiedPreviewLog(
+        'Error creating compare embed: $e\n$stackTrace',
+        level: LogLevel.error,
+      );
+      return _buildFallbackPreview();
     }
   }
 
@@ -1269,6 +1401,15 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
   /// Build complete HTML document with KaTeX support
   String _buildCompleteHtmlDocument(String bodyHtml) {
     final String baseUrl = AppConstants.baseUrl;
+    final String compareEmbedCss = widget.embedInCompareScroll
+        ? '''
+        html, body {
+            overflow: hidden !important;
+            height: auto !important;
+            min-height: 0 !important;
+        }
+        '''
+        : '';
     return '''
 <!DOCTYPE html>
 <html lang="en">
@@ -1278,6 +1419,7 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
     <meta http-equiv="Content-Security-Policy" content="script-src 'self' $baseUrl 'unsafe-inline' 'unsafe-eval'; style-src 'self' $baseUrl 'unsafe-inline'; font-src 'self' $baseUrl data:; img-src 'self' $baseUrl data: blob:;">
     <title>Preview</title>
     <style>
+        $compareEmbedCss
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             line-height: 1.6;

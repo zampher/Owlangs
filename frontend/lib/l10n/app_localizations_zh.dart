@@ -576,6 +576,56 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationExportPdfReflowDesc => '由译文 Markdown 重新排版，版式可能与原文不同';
 
   @override
+  String get translationPreviewDialogTitle => '预览设置';
+
+  @override
+  String get translationPreviewStart => '开始预览';
+
+  @override
+  String get translationPreviewModeSectionTitle => '译文预览';
+
+  @override
+  String get translationPreviewModeHtml => 'HTML / Markdown';
+
+  @override
+  String get translationPreviewModeHtmlDesc => '在浏览器中查看渲染后的译文（默认）';
+
+  @override
+  String get translationPreviewFullDocumentCompare => '全文对照预览';
+
+  @override
+  String get translationPreviewFullDocumentCompareDesc =>
+      '左右并排查看原文与译文（导出格式效果，适用于上方任一预览方式）';
+
+  @override
+  String get translationPreviewSyncScroll => '绑定滚动条';
+
+  @override
+  String get translationPreviewSyncScrollDesc =>
+      '勾选后隐藏左右面板滚动条，仅保留右侧统一滚动条同时控制原文与译文（PDF 对照）';
+
+  @override
+  String get translationPreviewPanelSource => '原文';
+
+  @override
+  String get translationPreviewPanelTarget => '译文';
+
+  @override
+  String get translationPreviewNoExtraOptions => '当前预览方式无额外参数';
+
+  @override
+  String get translationPreviewReopenSettings => '预览设置';
+
+  @override
+  String get translationPreviewZoomIn => '放大';
+
+  @override
+  String get translationPreviewZoomOut => '缩小';
+
+  @override
+  String get translationPreviewZoomReset => '重置缩放';
+
+  @override
   String get translationLeftPanelExpandTooltip => '展开左侧面板';
 
   @override

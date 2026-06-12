@@ -14,6 +14,7 @@ import base64
 import mimetypes
 import asyncio
 import tempfile
+import threading
 import zipfile
 import re
 import shutil
@@ -30,6 +31,18 @@ from app.services.task import TaskManager
 
 # Relative import avoids circular import via app.services.download.__init__
 from .pdf_generator import ENABLE_LAYOUT_PDF_GENERATION, PDFGenerator, DEFAULT_PDF_RENDERER_TYPE
+
+# Serialize pandoc PDF generation per task to avoid concurrent writes to the same path.
+_pandoc_pdf_gen_locks: Dict[str, threading.Lock] = {}
+_pandoc_pdf_gen_locks_guard = threading.Lock()
+
+
+def _pandoc_pdf_gen_lock(task_id: str) -> threading.Lock:
+    with _pandoc_pdf_gen_locks_guard:
+        if task_id not in _pandoc_pdf_gen_locks:
+            _pandoc_pdf_gen_locks[task_id] = threading.Lock()
+        return _pandoc_pdf_gen_locks[task_id]
+
 
 # Media type mapping for different file types
 MEDIA_TYPES = {
@@ -1137,7 +1150,7 @@ def _pandoc_pdf_file_response_from_md(
     md_content: str,
     equation_format: Optional[str],
     table_body_format: Optional[str],
-) -> FileResponse:
+) -> Response:
     """
     Export Markdown to PDF via Pandoc + XeLaTeX (same pipeline as OutputGenerator).
     Shared by revision-download and stash-less rebuild paths.
@@ -1168,91 +1181,101 @@ def _pandoc_pdf_file_response_from_md(
         _img_bidx, _path_to_bidx, _layout = _get_image_layout_for_grouping(
             task_state, equation_format=equation_format, table_body_format=table_body_format
         )
-        try:
-            ok = convert_md_to_pdf(
-                resolved_md,
-                str(pdf_file_path),
-                output_dir=output_dir,
-                to_lang=to_lang,
-                image_block_indices=_img_bidx,
-                path_to_block_index=_path_to_bidx,
-                layout_document=_layout if _path_to_bidx else None,
-                layout_block_bbox=task_state.get("layout_block_bbox"),
-            )
-        except Exception as e:
-            if isinstance(e, PdfExportLatexError):
-                segs = (task_state.get("translation_segments") or {}).get("segments") or []
-                segment_index = None
-                candidates: list[int] = []
-                match_basis = "unknown"
+        with _pandoc_pdf_gen_lock(task_id):
+            try:
+                ok = convert_md_to_pdf(
+                    resolved_md,
+                    str(pdf_file_path),
+                    output_dir=output_dir,
+                    to_lang=to_lang,
+                    image_block_indices=_img_bidx,
+                    path_to_block_index=_path_to_bidx,
+                    layout_document=_layout if _path_to_bidx else None,
+                    layout_block_bbox=task_state.get("layout_block_bbox"),
+                )
+            except Exception as e:
+                if isinstance(e, PdfExportLatexError):
+                    segs = (task_state.get("translation_segments") or {}).get("segments") or []
+                    segment_index = None
+                    candidates: list[int] = []
+                    match_basis = "unknown"
 
-                def _best_effort_find_segment_index() -> None:
-                    nonlocal segment_index, match_basis
-                    if not isinstance(segs, list) or not segs:
-                        return
-                    md_snippet = (e.md_snippet or "").strip()
-                    if md_snippet:
-                        match_basis = "md_snippet"
-                        lines = [ln.strip() for ln in md_snippet.splitlines() if len((ln or "").strip()) >= 16]
-                        for seg in segs:
-                            t = (seg or {}).get("target_text", "")
-                            if not t:
-                                continue
-                            for ln in lines[:10]:
-                                if ln and ln in t:
+                    def _best_effort_find_segment_index() -> None:
+                        nonlocal segment_index, match_basis
+                        if not isinstance(segs, list) or not segs:
+                            return
+                        md_snippet = (e.md_snippet or "").strip()
+                        if md_snippet:
+                            match_basis = "md_snippet"
+                            lines = [ln.strip() for ln in md_snippet.splitlines() if len((ln or "").strip()) >= 16]
+                            for seg in segs:
+                                t = (seg or {}).get("target_text", "")
+                                if not t:
+                                    continue
+                                for ln in lines[:10]:
+                                    if ln and ln in t:
+                                        segment_index = (seg or {}).get("segment_index")
+                                        return
+                        token = (getattr(e, "error_token", "") or "").strip()
+                        if token:
+                            match_basis = f"error_token:{token}"
+                            for seg in segs:
+                                t = (seg or {}).get("target_text", "")
+                                if t and token in t:
                                     segment_index = (seg or {}).get("segment_index")
                                     return
-                    token = (getattr(e, "error_token", "") or "").strip()
-                    if token:
-                        match_basis = f"error_token:{token}"
-                        for seg in segs:
-                            t = (seg or {}).get("target_text", "")
-                            if t and token in t:
-                                segment_index = (seg or {}).get("segment_index")
-                                return
 
-                _best_effort_find_segment_index()
-                if isinstance(segment_index, int) and segment_index >= 0:
-                    candidates.append(segment_index)
-                    for d in (1, 2, 3):
-                        if segment_index - d >= 0:
-                            candidates.append(segment_index - d)
-                task_state["pdf_export_latex_issue"] = {
-                    "error_type": e.error_type,
-                    "line_no": e.line_no,
-                    "segment_index": segment_index,
-                    "candidate_segment_indices": candidates,
-                    "match_basis": match_basis,
-                    "error_token": getattr(e, "error_token", "") or "",
-                    "md_snippet": e.md_snippet,
-                    "tex_snippet": e.tex_snippet,
-                    "stderr_excerpt": (e.stderr or "")[:2000],
-                    "debug_tex_path": str(e.debug_tex_path) if e.debug_tex_path else None,
-                    "debug_md_path": str(e.debug_md_path) if e.debug_md_path else None,
-                }
-                hint = f" Suspected bad segment: {segment_index}." if segment_index is not None else ""
-                upstream = f" It may be caused by an earlier segment near: {candidates}." if candidates else ""
+                    _best_effort_find_segment_index()
+                    if isinstance(segment_index, int) and segment_index >= 0:
+                        candidates.append(segment_index)
+                        for d in (1, 2, 3):
+                            if segment_index - d >= 0:
+                                candidates.append(segment_index - d)
+                    task_state["pdf_export_latex_issue"] = {
+                        "error_type": e.error_type,
+                        "line_no": e.line_no,
+                        "segment_index": segment_index,
+                        "candidate_segment_indices": candidates,
+                        "match_basis": match_basis,
+                        "error_token": getattr(e, "error_token", "") or "",
+                        "md_snippet": e.md_snippet,
+                        "tex_snippet": e.tex_snippet,
+                        "stderr_excerpt": (e.stderr or "")[:2000],
+                        "debug_tex_path": str(e.debug_tex_path) if e.debug_tex_path else None,
+                        "debug_md_path": str(e.debug_md_path) if e.debug_md_path else None,
+                    }
+                    hint = f" Suspected bad segment: {segment_index}." if segment_index is not None else ""
+                    upstream = f" It may be caused by an earlier segment near: {candidates}." if candidates else ""
+                    raise HTTPException(
+                        status_code=500,
+                        detail="PDF generation failed due to a LaTeX compilation error."
+                        + hint
+                        + upstream
+                        + " Please use the segment 'Fix formula' action and retry export. Check server logs for details.",
+                    )
+                raise
+
+            if ok and pdf_file_path.exists() and pdf_file_path.stat().st_size > 0:
+                pdf_bytes = pdf_file_path.read_bytes()
+            else:
                 raise HTTPException(
                     status_code=500,
-                    detail="PDF generation failed due to a LaTeX compilation error."
-                    + hint
-                    + upstream
-                    + " Please use the segment 'Fix formula' action and retry export. Check server logs for details.",
+                    detail="PDF generation via Pandoc failed (Pandoc/XeLaTeX may be missing or conversion error). Check server logs.",
                 )
-            raise
 
-        if ok and pdf_file_path.exists():
-            logger.info(
-                LogModule.EXPORT,
-                f"[DOWNLOAD] PDF generated via pandoc (MD → XeLaTeX → PDF) task_id={task_id}",
-            )
-            filename = pdf_file_path.name
-            media_type = MEDIA_TYPES.get("pdf", "application/pdf")
-            return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
-        raise HTTPException(
-            status_code=500,
-            detail="PDF generation via Pandoc failed (Pandoc/XeLaTeX may be missing or conversion error). Check server logs.",
+        logger.info(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] PDF generated via pandoc (MD → XeLaTeX → PDF) task_id={task_id} bytes={len(pdf_bytes)}",
         )
+        filename = pdf_file_path.name
+        media_type = MEDIA_TYPES.get("pdf", "application/pdf")
+        response = Response(
+            content=pdf_bytes,
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+        response.owlangs_stash_path = str(pdf_file_path)  # type: ignore[attr-defined]
+        return response
     except HTTPException:
         raise
     except Exception as e:
@@ -1266,6 +1289,68 @@ def _pandoc_pdf_file_response_from_md(
             status_code=500,
             detail=message,
         )
+
+
+def _source_html_file_response_from_segments(
+    task_state: Dict[str, Any],
+    task_id: str,
+    equation_format: Optional[str],
+    table_body_format: Optional[str],
+) -> Optional[FileResponse]:
+    """Build source-only HTML preview (original text, export format)."""
+    from utils.translation_segments import get_translation_segments
+
+    segments_data = get_translation_segments(None, task_state)
+    if not segments_data:
+        return None
+    segments = segments_data.get("segments") or []
+    if not segments:
+        return None
+
+    source_segments: List[Dict[str, Any]] = []
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        source_text = seg.get("source_text") or ""
+        cloned = dict(seg)
+        cloned["target_text"] = source_text
+        cloned["modified_text"] = None
+        cloned["modified"] = False
+        source_segments.append(cloned)
+
+    # Shallow view only — task_state may hold asyncio tasks and other non-copyable refs.
+    export_keys = (
+        "original_filename_stem",
+        "original_filename",
+        "payload",
+        "layout_block_bbox",
+        "layout_document",
+        "image_data_map",
+        "translation_image_data_map",
+        "temp_dir",
+        "output_suffix",
+        "source_input_type",
+        "layout_chunk_block_map",
+        "block_type_mapping",
+        "layout_source_zip",
+        "equation_format",
+        "table_body_format",
+        "chart_body_format",
+    )
+    temp_state: Dict[str, Any] = {
+        key: task_state[key] for key in export_keys if key in task_state
+    }
+    temp_state["translation_segments"] = {
+        **segments_data,
+        "segments": source_segments,
+    }
+    temp_state["bilingual_export"] = False
+    return _markdown_based_html_file_response_from_segments(
+        temp_state,
+        task_id,
+        equation_format,
+        table_body_format,
+    )
 
 
 def _markdown_based_html_file_response_from_segments(
@@ -1423,6 +1508,31 @@ class DownloadService:
 
         sfx = _get_output_suffix(task_state)
 
+        # Serve uploaded source PDF for bilingual PDF compare preview (PDF tasks only).
+        if file_type == "source-pdf":
+            original_filename = task_state.get("original_filename") or ""
+            if not original_filename.lower().endswith(".pdf"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Source PDF preview is only available for PDF uploads.",
+                )
+            source_path = task_state.get("original_file_path")
+            if not source_path or not Path(source_path).exists():
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Original PDF file not found for task '{task_id}'.",
+                )
+            filename = Path(original_filename).name
+            logger.info(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Task {task_id}: Serving source PDF for compare preview",
+            )
+            return FileResponse(
+                path=source_path,
+                media_type="application/pdf",
+                filename=filename,
+            )
+
         # Default to typst_overlay for PDF downloads so that the high-fidelity
         # rendering path (_typst_overlay_pdf_response) is used instead of
         # falling through to the Pandoc MD→PDF rebuild.
@@ -1459,6 +1569,24 @@ class DownloadService:
             task_state.pop("source_text_color", None)
         if target_color:
             task_state["target_text_color"] = target_color
+
+        if file_type == "source-html":
+            resp = _source_html_file_response_from_segments(
+                task_state,
+                task_id,
+                equation_format,
+                table_body_format,
+            )
+            if resp is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Source HTML preview not available for task '{task_id}'.",
+                )
+            logger.info(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Task {task_id}: Serving source HTML for compare preview",
+            )
+            return resp
 
         # Generate missing file on-demand if not in downloadable_files
         downloadable_files = task_state.get("downloadable_files", {})

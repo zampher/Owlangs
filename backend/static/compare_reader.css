@@ -1,0 +1,157 @@
+/* SPDX-FileCopyrightText: 2026 Zampher */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+:root {
+  --compare-page-bg: #f5f5f7;
+  --compare-panel-bg: #ffffff;
+  --compare-border: #d1d1d6;
+  --compare-header-bg: #ebebf0;
+  --compare-text: #1d1d1f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--compare-page-bg);
+  color: var(--compare-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+.compare-scroll-shell {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  background: var(--compare-page-bg);
+}
+
+.compare-scroll-shell[data-zoomed="1"] {
+  overflow: hidden;
+}
+
+.compare-scroll-shell[data-linked-scroll="1"][data-zoomed="0"] {
+  overflow: auto;
+}
+
+.compare-scroll-shell[data-linked-scroll="0"][data-zoomed="0"] {
+  overflow: hidden;
+}
+
+.compare-page {
+  min-height: 100%;
+  height: 100%;
+}
+
+.compare-scroll-shell[data-zoomed="1"] .compare-page {
+  height: 100%;
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0;
+  align-items: stretch;
+  min-height: 100%;
+  height: 100%;
+}
+
+.compare-panel {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--compare-panel-bg);
+  border-right: 1px solid var(--compare-border);
+}
+
+.compare-panel:last-child {
+  border-right: none;
+}
+
+.compare-panel-header {
+  flex: 0 0 auto;
+  z-index: 2;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--compare-header-bg);
+  border-bottom: 1px solid var(--compare-border);
+}
+
+.compare-scroll-shell[data-zoomed="0"] .compare-panel-header {
+  position: sticky;
+  top: 0;
+}
+
+.compare-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0;
+  overflow: auto;
+}
+
+.compare-scroll-shell[data-linked-scroll="1"][data-zoomed="0"] .compare-panel-body {
+  overflow: visible;
+}
+
+.compare-scroll-shell[data-zoomed="1"] .compare-panel-body {
+  overflow: auto;
+}
+
+.compare-panel-scaler {
+  transform-origin: top left;
+}
+
+.compare-panel-scroll-size {
+  position: relative;
+}
+
+.compare-panel-body iframe {
+  display: block;
+  width: 100%;
+  border: none;
+  overflow: hidden;
+  min-height: 120px;
+  background: #fff;
+}
+
+.compare-boot-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--compare-page-bg);
+  z-index: 10;
+}
+
+.compare-boot-loading.hidden {
+  display: none;
+}
+
+.compare-boot-loading-card {
+  min-width: 280px;
+  padding: 20px 24px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+.compare-boot-loading-text {
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.compare-error {
+  padding: 24px;
+  color: #b42318;
+  white-space: pre-wrap;
+}

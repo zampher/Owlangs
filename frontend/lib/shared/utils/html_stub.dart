@@ -13,14 +13,24 @@ class ScriptElement {
   void remove() {}
 }
 
+class StyleElement extends Element {
+  String text = '';
+}
+
 class Document {
+  Element? get head => null;
   BodyElement? get body => null;
   Element? getElementById(String id) => null;
   List<Element> querySelectorAll(String selector) => <Element>[];
   Element? querySelector(String selector) => null;
+  Element? get scrollingElement => null;
+  Element? get documentElement => null;
+  void addEventListener(String type, EventListener? callback, [bool? useCapture]) {}
+  void removeEventListener(String type, EventListener? callback, [bool? useCapture]) {}
 }
 
-class BodyElement {
+class BodyElement extends Element {
+  @override
   void append(element) {}
 }
 
@@ -30,16 +40,53 @@ class Element {
   bool hasAttribute(String name) => false;
   Element? querySelector(String selector) => null;
   List<Element> querySelectorAll(String selector) => <Element>[];
+  List<Element> get children => <Element>[];
   dynamic style;
   void append(node) {}
+  void remove() {}
+  num get scrollTop => 0;
+  set scrollTop(num value) {}
+  num get scrollLeft => 0;
+  set scrollLeft(num value) {}
+  num get scrollHeight => 0;
+  num get clientHeight => 0;
+  num get scrollWidth => 0;
+  num get clientWidth => 0;
 }
 
 class IFrameElement extends Element {
   @override
   String? src;
   bool allowFullscreen = false;
+  WindowBase? get contentWindow => null;
+  Stream<Event> get onLoad => const Stream.empty();
   void setAttribute(String name, String value) {}
 }
+
+abstract class WindowBase {
+  void postMessage(
+    Object? message,
+    String targetOrigin, [
+    List<Object>? transfer,
+  ]) {}
+}
+
+class Window implements WindowBase {
+  Document get document => _stubDocument;
+  Navigator get navigator => Navigator();
+  void requestAnimationFrame(Function callback) {}
+  void addEventListener(String type, EventListener? callback, [bool? useCapture]) {}
+  void removeEventListener(String type, EventListener? callback, [bool? useCapture]) {}
+
+  @override
+  void postMessage(
+    Object? message,
+    String targetOrigin, [
+    List<Object>? transfer,
+  ]) {}
+}
+
+final Document _stubDocument = Document();
 
 class Event {
   void preventDefault() {}
@@ -80,11 +127,3 @@ class Navigator {
 
 /// Stub for dart:html EventListener on non-web (callback type for addEventListener).
 typedef EventListener = void Function(Event event);
-
-class Window {
-  void requestAnimationFrame(Function callback) {}
-  void addEventListener(String type, EventListener? callback) {}
-  void removeEventListener(String type, EventListener? callback) {}
-  Document get document => _documentInstance;
-  Navigator get navigator => Navigator();
-}

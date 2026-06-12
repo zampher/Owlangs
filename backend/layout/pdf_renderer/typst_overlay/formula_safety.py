@@ -9,7 +9,7 @@ beyond normal text boundaries (e.g., subscripts, fractions, square roots).
 This module calculates additional top/bottom padding to prevent formula
 overflow within fixed-size blocks.
 
-Ported from retain-pdf formula_safety.py.
+Derived from the preserve-layout PDF overlay formula safety module.
 """
 
 from __future__ import annotations

@@ -176,8 +176,10 @@
     /* Ensure preview iframes can be controlled via pointer-events */
     iframe[data-preview-iframe="true"],
     iframe[id*="unified_preview_iframe_"],
+    iframe[id*="unified_preview_compare_iframe_"],
     iframe[id*="html_preview_"],
-    iframe[id*="html_content_preview_"] {
+    iframe[id*="html_content_preview_"],
+    iframe[id*="html_compare_reader_iframe_"] {
       z-index: 1 !important;
       position: relative !important;
     }
@@ -491,19 +493,15 @@
     });
   </script>
   
-  <!-- Placeholder pdfjsLib for pdfx plugin (we don't use pdf.js, but plugin checks for it) -->
-  <script>
-    // Set a minimal placeholder to satisfy pdfx plugin's check
-    // We use browser native iframe for PDF preview, not pdf.js
-    if (!globalThis.pdfjsLib) {
-      globalThis.pdfjsLib = {
-        GlobalWorkerOptions: { workerSrc: '' },
-        getDocument: function() {
-          return { promise: Promise.reject(new Error('pdf.js is not used - using browser native iframe instead')) };
-        }
-      };
-      console.log('[PDF] Placeholder pdfjsLib set for pdfx plugin compatibility');
-    }
+  <script src='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs' type='module'></script>
+  <script type='module'>
+  var { pdfjsLib } = globalThis;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.mjs';
+
+  var pdfRenderOptions = {
+    cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/cmaps/',
+    cMapPacked: true,
+  }
   </script>
   
   <!-- Load Flutter -->

@@ -1,214 +1,235 @@
 // SPDX-FileCopyrightText: 2025 QinHan
 // SPDX-License-Identifier: MPL-2.0
 
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:pdfx/pdfx.dart';
 
-import '../../../shared/services/translation_service.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../../shared/utils/compare_scroll_sync/compare_scroll_sync.dart';
+import 'pdf_continuous_scroll_view.dart';
+import 'translation_result/preview_selection.dart';
+import 'translation_result/preview_viewport.dart';
 
 class PdfPreview extends StatefulWidget {
   const PdfPreview({
     required this.downloadUrl,
     required this.viewerUrl,
     super.key,
+    this.rendererType,
+    this.panelLabel,
+    this.compact = false,
     this.onDownload,
+    this.onRequestPreviewSettings,
+    this.scrollSyncGroup,
+    this.scrollSyncPaneId,
   });
+
   final String downloadUrl;
   final String viewerUrl;
+  final String? rendererType;
+  final String? panelLabel;
+  final bool compact;
   final void Function(String format, String url)? onDownload;
+  final Future<PreviewSelection?> Function()? onRequestPreviewSettings;
+  final CompareScrollSyncGroup? scrollSyncGroup;
+  final String? scrollSyncPaneId;
 
   @override
   State<PdfPreview> createState() => _PdfPreviewIoState();
 }
 
 class _PdfPreviewIoState extends State<PdfPreview> {
-  PdfControllerPinch? _controller;
-  bool _loading = true;
-  String? _error;
-  int _currentPage = 1;
+  String? _rendererType;
   int _totalPages = 0;
-  bool _useHighFidelity = false;
+  PreviewViewportController? _viewportController;
+  PreviewFullscreenOverlay? _fullscreenOverlay;
+  bool _isFullscreen = false;
+
+  bool get _supportsViewportControls => !widget.compact;
 
   @override
   void initState() {
     super.initState();
-    _loadPdf();
+    if (_supportsViewportControls) {
+      _viewportController = PreviewViewportController();
+      _fullscreenOverlay = PreviewFullscreenOverlay(
+        onExit: () {
+          if (mounted) {
+            setState(() {
+              _isFullscreen = false;
+            });
+          }
+        },
+      );
+    }
+    _rendererType = widget.rendererType;
   }
 
-  String _buildPdfUrl() {
-    final uri = Uri.parse(widget.downloadUrl);
-    final params = Map<String, String>.from(uri.queryParameters);
-    params['renderer_type'] =
-        _useHighFidelity ? 'typst_overlay' : 'pandoc';
-    return uri.replace(queryParameters: params).toString();
+  @override
+  void didUpdateWidget(covariant PdfPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.rendererType != widget.rendererType ||
+        oldWidget.downloadUrl != widget.downloadUrl) {
+      _rendererType = widget.rendererType;
+    }
   }
 
-  Future<void> _loadPdf() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-      final svc = TranslationService();
-      final url = _buildPdfUrl();
-      final data = await svc.downloadFile(url);
-      final documentFuture = PdfDocument.openData(Uint8List.fromList(data));
-      _controller?.dispose();
-      _controller = PdfControllerPinch(document: documentFuture);
+  Future<void> _openPreviewSettings() async {
+    final Future<PreviewSelection?> Function()? callback =
+        widget.onRequestPreviewSettings;
+    if (callback == null) {
+      return;
+    }
+    final PreviewSelection? selection = await callback();
+    if (!mounted) {
+      return;
+    }
+    if (selection == null || !selection.mode.usesPdfPreview) {
+      return;
+    }
+    final String? nextRenderer = selection.mode.rendererType;
+    if (nextRenderer != null && nextRenderer != _rendererType) {
       setState(() {
-        _loading = false;
-        _totalPages = 0;
-        _currentPage = 1;
-      });
-    } catch (e) {
-      setState(() {
-        _loading = false;
-        _error = e.toString();
+        _rendererType = nextRenderer;
       });
     }
   }
 
+  void _toggleFullscreen() {
+    if (!_supportsViewportControls || _fullscreenOverlay == null) {
+      return;
+    }
+    if (_isFullscreen) {
+      _fullscreenOverlay!.exit();
+      return;
+    }
+    _fullscreenOverlay!.enter(
+      context: context,
+      builder: (BuildContext overlayContext) => _buildPreviewShell(
+        overlayContext,
+        isFullscreenView: true,
+      ),
+    );
+    setState(() {
+      _isFullscreen = true;
+    });
+  }
+
   @override
   void dispose() {
-    _controller?.dispose();
+    _fullscreenOverlay?.dispose();
+    _viewportController?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+    if (_isFullscreen && _supportsViewportControls) {
+      return const SizedBox.shrink();
     }
 
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Icon(Icons.picture_as_pdf, size: 48, color: Colors.redAccent),
-            const SizedBox(height: 16),
-            Text(
-              'Failed to load PDF',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: Colors.redAccent),
-            ),
-            const SizedBox(height: 24),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              alignment: WrapAlignment.center,
-              children: <Widget>[
-                ElevatedButton.icon(
-                  onPressed: _loadPdf,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Retry'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    widget.onDownload?.call('pdf', widget.downloadUrl);
-                  },
-                  icon: const Icon(Icons.download),
-                  label: const Text('Download'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
+    final AppLocalizations? l10n = AppLocalizations.of(context);
+    return _buildPreviewShell(context, isFullscreenView: false, l10n: l10n);
+  }
+
+  Widget _buildPreviewShell(
+    BuildContext context, {
+    required bool isFullscreenView,
+    AppLocalizations? l10n,
+  }) {
+    final Widget body = PdfContinuousPreviewLoader(
+      key: ValueKey<String>('$_rendererType:${widget.downloadUrl}'),
+      downloadUrl: widget.downloadUrl,
+      rendererType: _rendererType,
+      onDocumentLoaded: (PdfDocument document) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _totalPages = document.pagesCount;
+        });
+      },
+    );
 
     return Column(
       children: <Widget>[
-        _buildToolbar(context),
+        _buildToolbar(context, l10n, isFullscreenView: isFullscreenView),
         const Divider(height: 1),
         Expanded(
-          child: PdfViewPinch(
-            controller: _controller!,
-            padding: 16,
-            onDocumentLoaded: (details) {
-              setState(() {
-                _totalPages = details.pagesCount;
-              });
-            },
-            onPageChanged: (page) {
-              setState(() {
-                _currentPage = page;
-              });
-            },
-          ),
+          child: _supportsViewportControls
+              ? PreviewZoomableViewport(
+                  controller: _viewportController!,
+                  childHandlesVerticalScroll: true,
+                  child: body,
+                )
+              : body,
         ),
       ],
     );
   }
 
-  Widget _buildToolbar(BuildContext context) => Container(
+  String _toolbarTitle(AppLocalizations? l10n) {
+    if (widget.panelLabel != null) {
+      return widget.panelLabel!;
+    }
+    if (_rendererType == 'typst_overlay') {
+      return l10n?.translationExportPdfPreserveLayout ?? 'Preserve layout';
+    }
+    return l10n?.translationExportPdfReflow ?? 'Reflow PDF';
+  }
+
+  Widget _buildToolbar(
+    BuildContext context,
+    AppLocalizations? l10n, {
+    bool isFullscreenView = false,
+  }) =>
+      Container(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: EdgeInsets.symmetric(
+          horizontal: widget.compact ? 8 : 16,
+          vertical: widget.compact ? 4 : 8,
+        ),
         child: Row(
           children: <Widget>[
             Text(
-              'Page $_currentPage / $_totalPages',
+              _toolbarTitle(l10n),
               style: Theme.of(context).textTheme.bodyMedium,
             ),
+            if (!widget.compact && _totalPages > 0) ...<Widget>[
+              const SizedBox(width: 16),
+              Text('$_totalPages pages'),
+            ],
             const Spacer(),
-            IconButton(
-              tooltip: 'Previous page',
-              onPressed: _currentPage > 1
-                  ? () {
-                      _controller?.previousPage(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeInOut,
-                      );
-                    }
-                  : null,
-              icon: const Icon(Icons.chevron_left),
-            ),
-            IconButton(
-              tooltip: 'Next page',
-              onPressed: _currentPage < _totalPages
-                  ? () {
-                      _controller?.nextPage(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeInOut,
-                      );
-                    }
-                  : null,
-              icon: const Icon(Icons.chevron_right),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              tooltip: _useHighFidelity
-                  ? 'Switch to reflow PDF'
-                  : 'Switch to original layout PDF',
-              onPressed: () {
-                setState(() {
-                  _useHighFidelity = !_useHighFidelity;
-                });
-                _loadPdf();
-              },
-              icon: Icon(
-                _useHighFidelity ? Icons.high_quality : Icons.hd,
-                color: _useHighFidelity ? Colors.blue : null,
+            if (_supportsViewportControls && _viewportController != null)
+              PreviewZoomToolbarActions(
+                viewportController: _viewportController!,
+                iconSize: 20,
               ),
-            ),
-            IconButton(
-              tooltip: 'Download PDF',
-              onPressed: () {
-                widget.onDownload?.call('pdf', widget.downloadUrl);
-              },
-              icon: const Icon(Icons.download),
-            ),
+            if (!widget.compact &&
+                widget.onRequestPreviewSettings != null) ...<Widget>[
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip:
+                    l10n?.translationPreviewReopenSettings ?? 'Preview settings',
+                onPressed: _openPreviewSettings,
+                icon: const Icon(Icons.settings),
+              ),
+            ],
+            if (!widget.compact && widget.onDownload != null)
+              IconButton(
+                tooltip: 'Download PDF',
+                onPressed: () {
+                  widget.onDownload?.call('pdf', widget.downloadUrl);
+                },
+                icon: const Icon(Icons.download),
+              ),
+            if (_supportsViewportControls && _viewportController != null)
+              PreviewViewportTrailingActions(
+                viewportController: _viewportController!,
+                isFullscreen: _isFullscreen,
+                onToggleFullscreen: _toggleFullscreen,
+                iconSize: 20,
+              ),
           ],
         ),
       );

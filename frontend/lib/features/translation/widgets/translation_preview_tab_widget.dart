@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/widgets/unified_preview_widget.dart';
+import 'translation_result/preview_selection.dart';
 
 /// Widget to display Translation Preview in a tab with toolbar
 /// (Settings and Download buttons)
@@ -15,11 +16,13 @@ class TranslationPreviewTabWidget extends ConsumerStatefulWidget {
     super.key,
     this.flowId,
     this.onDownload,
+    this.onRequestPreviewSettings,
   });
   final String taskId;
   final String? flowId;
   final Map<String, String> downloads;
   final Function(String fileType, String url)? onDownload;
+  final Future<PreviewSelection?> Function()? onRequestPreviewSettings;
 
   @override
   ConsumerState<TranslationPreviewTabWidget> createState() =>
@@ -30,15 +33,22 @@ class _TranslationPreviewTabWidgetState
     extends ConsumerState<TranslationPreviewTabWidget> {
   @override
   Widget build(BuildContext context) {
-    // Use UnifiedPreviewWidget for consistent rendering with Convert
+    final Future<void> Function()? previewSettingsCallback =
+        widget.onRequestPreviewSettings == null
+            ? null
+            : () async {
+                await widget.onRequestPreviewSettings!();
+              };
+
     return UnifiedPreviewWidget(
       taskId: widget.taskId,
       flowId: widget.flowId,
       downloads: widget.downloads,
       onDownload: widget.onDownload,
+      onRequestPreviewSettings: previewSettingsCallback,
       title: 'Translation Preview',
       icon: Icons.preview,
-      previewType: 'md', // Use markdown preview for translation
+      previewType: 'md',
     );
   }
 }

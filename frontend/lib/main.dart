@@ -38,12 +38,15 @@ import 'shared/utils/app_logger.dart';
 import 'shared/utils/desktop_drop_utils_stub.dart'
     if (dart.library.html) 'shared/utils/desktop_drop_utils_web.dart'
     as drop_utils;
+import 'shared/utils/webview_platform_bootstrap_stub.dart'
+    if (dart.library.io) 'shared/utils/webview_platform_bootstrap.dart';
 
 // Global variable to track runApp call time for diagnostics
 DateTime? _runAppCallTime;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  ensureWebViewPlatformRegistered();
 
   // On web, override desktop_drop's window property drag handlers so that
   // their (unimplemented) method channel is never called during drag.

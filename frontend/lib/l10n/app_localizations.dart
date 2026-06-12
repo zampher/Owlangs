@@ -1161,6 +1161,102 @@ abstract class AppLocalizations {
   /// **'Re-typeset from translation Markdown; layout may differ from the source'**
   String get translationExportPdfReflowDesc;
 
+  /// No description provided for @translationPreviewDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview Settings'**
+  String get translationPreviewDialogTitle;
+
+  /// No description provided for @translationPreviewStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Preview'**
+  String get translationPreviewStart;
+
+  /// No description provided for @translationPreviewModeSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation preview'**
+  String get translationPreviewModeSectionTitle;
+
+  /// No description provided for @translationPreviewModeHtml.
+  ///
+  /// In en, this message translates to:
+  /// **'HTML / Markdown'**
+  String get translationPreviewModeHtml;
+
+  /// No description provided for @translationPreviewModeHtmlDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'View rendered translation in the browser (default)'**
+  String get translationPreviewModeHtmlDesc;
+
+  /// No description provided for @translationPreviewFullDocumentCompare.
+  ///
+  /// In en, this message translates to:
+  /// **'Full document comparison'**
+  String get translationPreviewFullDocumentCompare;
+
+  /// No description provided for @translationPreviewFullDocumentCompareDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'View source and translation side by side (export format; works with any preview mode above)'**
+  String get translationPreviewFullDocumentCompareDesc;
+
+  /// No description provided for @translationPreviewSyncScroll.
+  ///
+  /// In en, this message translates to:
+  /// **'Link scrollbars'**
+  String get translationPreviewSyncScroll;
+
+  /// No description provided for @translationPreviewSyncScrollDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, link PDF compare panes with a shared scroll bar (PDF compare only)'**
+  String get translationPreviewSyncScrollDesc;
+
+  /// No description provided for @translationPreviewPanelSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get translationPreviewPanelSource;
+
+  /// No description provided for @translationPreviewPanelTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation'**
+  String get translationPreviewPanelTarget;
+
+  /// No description provided for @translationPreviewNoExtraOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'No extra options for this preview mode'**
+  String get translationPreviewNoExtraOptions;
+
+  /// No description provided for @translationPreviewReopenSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview settings'**
+  String get translationPreviewReopenSettings;
+
+  /// No description provided for @translationPreviewZoomIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Zoom in'**
+  String get translationPreviewZoomIn;
+
+  /// No description provided for @translationPreviewZoomOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Zoom out'**
+  String get translationPreviewZoomOut;
+
+  /// No description provided for @translationPreviewZoomReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset zoom'**
+  String get translationPreviewZoomReset;
+
   /// No description provided for @translationLeftPanelExpandTooltip.
   ///
   /// In en, this message translates to:

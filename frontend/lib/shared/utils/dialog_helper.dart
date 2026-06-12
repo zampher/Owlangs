@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2025 QinHan
 // SPDX-License-Identifier: MPL-2.0
 
+import 'package:flutter/foundation.dart' show kIsWeb, ValueNotifier;
 import 'package:flutter/material.dart' hide showDialog, showGeneralDialog;
 import 'package:flutter/material.dart' as FlutterMaterial
     show showDialog, showGeneralDialog;
-import 'package:flutter/foundation.dart' show kIsWeb;
 // Conditional import for web platform (for iframe pointer-events control)
 import 'html_stub.dart' if (dart.library.html) 'dart:html' as html;
 import 'app_logger.dart';
@@ -13,136 +13,191 @@ void _dialogHelperLog(String message, {LogLevel level = LogLevel.debug}) {
   AppLogger.log('DialogHelper', message, level: level);
 }
 
-/// Helper class for showing dialogs with automatic iframe pointer-events control
-/// This ensures dialogs are not blocked by preview iframes on Flutter Web
+/// Helper class for showing dialogs with automatic preview-layer suppression.
+/// Web iframes and desktop WebView2 HWNDs can render above Flutter modal routes.
 class DialogHelper {
-  /// Disable pointer-events on preview iframes (to prevent them from blocking dialogs)
-  /// This is a defense-in-depth approach: CSS z-index ensures dialogs are above,
-  /// but pointer-events ensures iframe doesn't intercept clicks even if z-index fails
+  /// Number of dialogs currently open (supports nested dialogs).
+  static final ValueNotifier<int> activeDialogCount = ValueNotifier<int>(0);
+
+  static bool get isDialogOpen => activeDialogCount.value > 0;
+
+  /// Prefer root navigator context so modals sit above preview tabs/WebViews.
+  static BuildContext dialogContext(BuildContext context) {
+    return Navigator.of(context, rootNavigator: true).context;
+  }
+
+  static void _beginDialog() {
+    activeDialogCount.value++;
+    _suppressPreviewLayers();
+  }
+
+  static void _endDialog() {
+    if (activeDialogCount.value > 0) {
+      activeDialogCount.value--;
+    }
+    if (activeDialogCount.value == 0) {
+      _restorePreviewLayers();
+    }
+  }
+
+  static const String _previewIframeScript = '''
+    (function() {
+      function isPreviewIframe(iframe) {
+        if (!iframe) return false;
+        if (iframe.getAttribute('data-preview-iframe') === 'true') return true;
+        var id = iframe.id || '';
+        return id.indexOf('unified_preview_iframe_') >= 0 ||
+          id.indexOf('unified_preview_compare_iframe_') >= 0 ||
+          id.indexOf('html_preview_') >= 0 ||
+          id.indexOf('html_content_preview_') >= 0 ||
+          id.indexOf('html_compare_reader_iframe_') >= 0;
+      }
+
+      function forEachPreviewIframe(callback) {
+        var seen = new Set();
+        var tagged = document.querySelectorAll('iframe[data-preview-iframe="true"]');
+        for (var i = 0; i < tagged.length; i++) {
+          if (!seen.has(tagged[i])) {
+            seen.add(tagged[i]);
+            callback(tagged[i]);
+          }
+        }
+        var allIframes = document.querySelectorAll('iframe');
+        for (var j = 0; j < allIframes.length; j++) {
+          if (isPreviewIframe(allIframes[j]) && !seen.has(allIframes[j])) {
+            seen.add(allIframes[j]);
+            callback(allIframes[j]);
+          }
+        }
+      }
+
+      window.__owlangsPreviewLayerRestore = window.__owlangsPreviewLayerRestore || [];
+
+      window.__owlangsHidePreviewLayers = function() {
+        window.__owlangsPreviewLayerRestore = [];
+        forEachPreviewIframe(function(iframe) {
+          window.__owlangsPreviewLayerRestore.push({
+            node: iframe,
+            visibility: iframe.style.visibility,
+            pointerEvents: iframe.style.pointerEvents
+          });
+          iframe.style.visibility = 'hidden';
+          iframe.style.pointerEvents = 'none';
+        });
+        var platformViews = document.querySelectorAll('flt-platform-view');
+        for (var k = 0; k < platformViews.length; k++) {
+          var view = platformViews[k];
+          var iframe = view.querySelector('iframe');
+          if (!isPreviewIframe(iframe)) continue;
+          window.__owlangsPreviewLayerRestore.push({
+            node: view,
+            visibility: view.style.visibility,
+            pointerEvents: view.style.pointerEvents
+          });
+          view.style.visibility = 'hidden';
+          view.style.pointerEvents = 'none';
+        }
+      };
+
+      window.__owlangsRestorePreviewLayers = function() {
+        var entries = window.__owlangsPreviewLayerRestore || [];
+        for (var i = 0; i < entries.length; i++) {
+          var entry = entries[i];
+          if (!entry || !entry.node) continue;
+          entry.node.style.visibility = entry.visibility || '';
+          entry.node.style.pointerEvents = entry.pointerEvents || '';
+        }
+        window.__owlangsPreviewLayerRestore = [];
+      };
+    })();
+  ''';
+
+  static bool _previewScriptInstalled = false;
+
+  static void _ensurePreviewIframeScript() {
+    if (!kIsWeb || _previewScriptInstalled) {
+      return;
+    }
+    try {
+      final html.ScriptElement scriptElement = html.ScriptElement()
+        ..text = _previewIframeScript;
+      html.document.body?.append(scriptElement);
+      Future<void>.delayed(
+        const Duration(milliseconds: 100),
+        scriptElement.remove,
+      );
+      _previewScriptInstalled = true;
+    } catch (e) {
+      _dialogHelperLog(
+        '[Dialog] Failed to install preview layer script: $e',
+        level: LogLevel.warn,
+      );
+    }
+  }
+
+  static void _runWebPreviewScript(String invoke) {
+    if (!kIsWeb) {
+      return;
+    }
+    try {
+      _ensurePreviewIframeScript();
+      final html.ScriptElement scriptElement = html.ScriptElement()
+        ..text = invoke;
+      html.document.body?.append(scriptElement);
+      Future<void>.delayed(
+        const Duration(milliseconds: 100),
+        scriptElement.remove,
+      );
+    } catch (e) {
+      _dialogHelperLog(
+        '[Dialog] Failed to run preview layer script: $e',
+        level: LogLevel.warn,
+      );
+    }
+  }
+
+  static void _suppressPreviewLayers() {
+    _runWebPreviewScript(
+      'window.__owlangsHidePreviewLayers && window.__owlangsHidePreviewLayers();',
+    );
+  }
+
+  static void _restorePreviewLayers() {
+    _runWebPreviewScript(
+      'window.__owlangsRestorePreviewLayers && window.__owlangsRestorePreviewLayers();',
+    );
+  }
+
+  /// Disable pointer-events on preview iframes (legacy API, kept for callers).
   static void disablePreviewPointerEvents() {
-    if (kIsWeb) {
-      try {
-        // Use JavaScript to disable pointer-events on all preview iframes
-        // This includes both the iframe element and the flt-platform-view wrapper
-        const String script = '''
-          (function() {
-            // Disable pointer-events on iframes
-            var iframes = document.querySelectorAll('iframe[data-preview-iframe="true"]');
-            for (var i = 0; i < iframes.length; i++) {
-              iframes[i].style.pointerEvents = 'none';
-            }
-            // Also try to find iframes by ID pattern
-            var allIframes = document.querySelectorAll('iframe');
-            for (var i = 0; i < allIframes.length; i++) {
-              if (allIframes[i].id && (allIframes[i].id.includes('unified_preview_iframe_') ||
-                  allIframes[i].id.includes('html_preview_') ||
-                  allIframes[i].id.includes('html_content_preview_'))) {
-                allIframes[i].style.pointerEvents = 'none';
-              }
-            }
-            // Also disable pointer-events on flt-platform-view containers that wrap iframes
-            var platformViews = document.querySelectorAll('flt-platform-view');
-            for (var i = 0; i < platformViews.length; i++) {
-              var iframe = platformViews[i].querySelector('iframe');
-              if (iframe && (iframe.hasAttribute('data-preview-iframe') ||
-                  iframe.id && (iframe.id.includes('unified_preview_iframe_') ||
-                  iframe.id.includes('html_preview_') ||
-                  iframe.id.includes('html_content_preview_')))) {
-                platformViews[i].style.pointerEvents = 'none';
-              }
-            }
-          })();
-        ''';
-        // Execute script using ScriptElement
-        final html.ScriptElement scriptElement = html.ScriptElement()
-          ..text = script;
-        html.document.body?.append(scriptElement);
-        // Remove script element after execution
-        Future.delayed(const Duration(milliseconds: 100), scriptElement.remove);
-        // Disabled preview iframe pointer-events (logging removed)
-      } catch (e) {
-        _dialogHelperLog(
-          '[Dialog] Failed to disable iframe pointer-events: $e',
-          level: LogLevel.warn,
-        );
-      }
-    }
+    _suppressPreviewLayers();
   }
 
-  /// Enable pointer-events on preview iframes (after dialog closes)
+  /// Enable pointer-events on preview iframes (legacy API, kept for callers).
   static void enablePreviewPointerEvents() {
-    if (kIsWeb) {
-      try {
-        const String script = '''
-          (function() {
-            // Enable pointer-events on iframes
-            var iframes = document.querySelectorAll('iframe[data-preview-iframe="true"]');
-            for (var i = 0; i < iframes.length; i++) {
-              iframes[i].style.pointerEvents = 'auto';
-            }
-            // Also try to find iframes by ID pattern
-            var allIframes = document.querySelectorAll('iframe');
-            for (var i = 0; i < allIframes.length; i++) {
-              if (allIframes[i].id && (allIframes[i].id.includes('unified_preview_iframe_') ||
-                  allIframes[i].id.includes('html_preview_') ||
-                  allIframes[i].id.includes('html_content_preview_'))) {
-                allIframes[i].style.pointerEvents = 'auto';
-              }
-            }
-            // Also enable pointer-events on flt-platform-view containers
-            var platformViews = document.querySelectorAll('flt-platform-view');
-            for (var i = 0; i < platformViews.length; i++) {
-              var iframe = platformViews[i].querySelector('iframe');
-              if (iframe && (iframe.hasAttribute('data-preview-iframe') ||
-                  iframe.id && (iframe.id.includes('unified_preview_iframe_') ||
-                  iframe.id.includes('html_preview_') ||
-                  iframe.id.includes('html_content_preview_')))) {
-                platformViews[i].style.pointerEvents = 'auto';
-              }
-            }
-          })();
-        ''';
-        // Execute script using ScriptElement
-        final html.ScriptElement scriptElement = html.ScriptElement()
-          ..text = script;
-        html.document.body?.append(scriptElement);
-        // Remove script element after execution
-        Future.delayed(const Duration(milliseconds: 100), scriptElement.remove);
-        // Enabled preview iframe pointer-events (logging removed)
-      } catch (e) {
-        _dialogHelperLog(
-          '[Dialog] Failed to enable iframe pointer-events: $e',
-          level: LogLevel.warn,
-        );
-      }
+    if (!isDialogOpen) {
+      _restorePreviewLayers();
     }
   }
 
-  /// Show a dialog with automatic iframe pointer-events control
-  /// This is a wrapper around Flutter's showDialog that automatically handles iframe blocking
+  /// Show a dialog with automatic preview-layer suppression.
   static Future<T?> showDialog<T>({
     required BuildContext context,
     required WidgetBuilder builder,
     bool barrierDismissible = true,
     Color? barrierColor,
     String? barrierLabel,
-    bool useRootNavigator = false,
+    bool useRootNavigator = true,
     RouteSettings? routeSettings,
     Offset? anchorPoint,
   }) async {
-    _dialogHelperLog('[Dialog] Showing dialog with iframe control');
-
-    // Disable pointer-events on iframe if present (to prevent it from blocking dialog)
-    disablePreviewPointerEvents();
-
-    // Wait a bit to ensure iframe pointer-events are disabled before showing dialog
-    await Future.delayed(const Duration(milliseconds: 100));
+    _dialogHelperLog('[Dialog] Showing dialog with preview layer control');
+    _beginDialog();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
 
     try {
-      // Use Flutter's showDialog directly (not recursive)
-      // Import showDialog from material.dart with alias to avoid recursion
       final T? result = await FlutterMaterial.showDialog<T>(
-        context: context,
+        context: dialogContext(context),
         builder: builder,
         barrierDismissible: barrierDismissible,
         barrierColor: barrierColor,
@@ -151,42 +206,31 @@ class DialogHelper {
         routeSettings: routeSettings,
         anchorPoint: anchorPoint,
       );
-      // Re-enable pointer-events after dialog closes
-      enablePreviewPointerEvents();
       return result;
-    } catch (e) {
-      // Re-enable pointer-events even if dialog failed
-      enablePreviewPointerEvents();
-      rethrow;
+    } finally {
+      _endDialog();
     }
   }
 
-  /// Show a general dialog with automatic iframe pointer-events control
-  /// This is a wrapper around Flutter's showGeneralDialog that automatically handles iframe blocking
+  /// Show a general dialog with automatic preview-layer suppression.
   static Future<T?> showGeneralDialog<T>({
     required BuildContext context,
     required RoutePageBuilder pageBuilder,
     bool barrierDismissible = true,
     Color? barrierColor,
     String? barrierLabel,
-    bool useRootNavigator = false,
+    bool useRootNavigator = true,
     RouteSettings? routeSettings,
     Offset? anchorPoint,
     RouteTransitionsBuilder? transitionBuilder,
     Duration transitionDuration = const Duration(milliseconds: 200),
   }) async {
-    // Showing general dialog with iframe control (logging removed)
-
-    // Disable pointer-events on iframe if present (to prevent it from blocking dialog)
-    disablePreviewPointerEvents();
-
-    // Wait a bit to ensure iframe pointer-events are disabled before showing dialog
-    await Future.delayed(const Duration(milliseconds: 100));
+    _beginDialog();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
 
     try {
-      // Use Flutter's showGeneralDialog directly (not recursive)
-      final T? result = await FlutterMaterial.showGeneralDialog<T>(
-        context: context,
+      return await FlutterMaterial.showGeneralDialog<T>(
+        context: dialogContext(context),
         pageBuilder: pageBuilder,
         barrierDismissible: barrierDismissible,
         barrierColor: barrierColor ?? Colors.black54,
@@ -197,13 +241,8 @@ class DialogHelper {
         transitionBuilder: transitionBuilder,
         transitionDuration: transitionDuration,
       );
-      // Re-enable pointer-events after dialog closes
-      enablePreviewPointerEvents();
-      return result;
-    } catch (e) {
-      // Re-enable pointer-events even if dialog failed
-      enablePreviewPointerEvents();
-      rethrow;
+    } finally {
+      _endDialog();
     }
   }
 }

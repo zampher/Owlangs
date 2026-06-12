@@ -78,7 +78,7 @@ def _block_fill_arg(block: RenderBlock, *, force_opaque: bool = False) -> str:
 
 
 def _typst_place_context(x_pt: float, y_pt: float, body_name: str) -> str:
-    """Generate a Typst #context { place(...) } call (as in retain-pdf)."""
+    """Generate a Typst #context { place(...) } call for overlay placement."""
     return (f"#context {{\n"
             f"  place(top + left, dx: {round(x_pt, 1)}pt, dy: {round(y_pt, 1)}pt, {body_name})\n"
             f"}}\n")
@@ -130,7 +130,7 @@ def _typst_plain_markdown_expr(md_name: str, font_size_pt: float,
                                 leading_em: float, font_weight: str,
                                 text_fill: str, first_line_indent_pt: float,
                                 justify_text: str) -> str:
-    """Generate static markdown rendering expression with leading (matching retain-pdf)."""
+    """Generate static markdown rendering expression with line leading."""
     return (
         f"set text(size: {font_size_pt}pt, weight: \"{font_weight}\", fill: {text_fill}); "
         f"set par(leading: {leading_em}em, justify: {justify_text}); "
@@ -153,7 +153,7 @@ def _typst_plain_text_expr(text_name: str, font_size_pt: float,
 
 
 def sanitize_typst_markdown_for_compile(markdown: str) -> str:
-    """Sanitize markdown to avoid common Typst compilation errors (ported from retain-pdf)."""
+    """Sanitize markdown to avoid common Typst compilation errors in overlay blocks."""
     text = str(markdown or "")
     text = re.sub(r"\$\s*\^\s*\{\s*\\(?:circled|textcircled)\s*R\s*\}\s*\$", "®", text)
     text = re.sub(r"\$\s*\^\s*\{\s*\\(?:circled|textcircled)\s*\{\s*R\s*\}\s*\}\s*\$", "®", text)
@@ -173,7 +173,7 @@ def sanitize_typst_markdown_for_compile(markdown: str) -> str:
     return text
 
 
-# ---- TOC entry rendering helpers (ported from retain-pdf) ----
+# ---- TOC entry rendering helpers ----
 
 def _toc_text_units(text: str) -> float:
     """Estimate text width in character units for TOC leader dot calculation."""
@@ -208,7 +208,7 @@ def _toc_leader_text(prefix_title: str, page_label: str, *,
 
 def _render_toc_entries(block_id: str, block: RenderBlock,
                         text_fill: str) -> str:
-    """Render TOC (table-of-contents) entries with layout/measure/place (ported from retain-pdf)."""
+    """Render TOC (table-of-contents) entries with layout/measure/place."""
     parts: list[str] = []
     font_weight = block.font_weight or "regular"
     var_prefix = block_id.replace("-", "_")
@@ -283,7 +283,7 @@ def _render_plain_block(block_id: str, block: RenderBlock,
     if not text.strip():
         return ""
 
-    # Long plain text: use markdown fit rendering (as retain-pdf does for plain > 40 chars)
+    # Long plain text: use markdown fit rendering (> 40 chars)
     if len(text) > PLAIN_LINE_FIT_MAX_CHARS:
         text_var = f"{var_prefix}_txt"
         body_var = f"{var_prefix}_body"
@@ -348,7 +348,7 @@ def _render_preserved_line_boxes(block_id: str, block: RenderBlock,
     font_weight = block.font_weight or "regular"
     var_prefix = block_id.replace("-", "_")
 
-    # Render cover rect if present (matching retain-pdf _build_preserved_line_box_typst)
+    # Render cover rect if present (preserved line box overlay)
     if block.use_cover_fill and block.cover_bbox and len(block.cover_bbox) == 4:
         cover_name = f"{var_prefix}_cover"
         cx0, cy0, cx1, cy1 = block.cover_bbox
@@ -402,7 +402,7 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
     justify = _typst_bool(block.justify_text)
     first_indent = max(0.0, block.first_line_indent_pt)
 
-    # Calculate formula safety insets (matching retain-pdf block_renderer)
+    # Calculate formula safety insets (block renderer path)
     formula_insets = formula_safety_insets_pt(
         text,
         block.math_map,
@@ -411,7 +411,7 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
     )
     content_fit_height = max(MIN_BLOCK_SIZE_PT, height - formula_insets.total_pt)
 
-    # TOC entries (matching retain-pdf _build_toc_entry_typst dispatch)
+    # TOC entries (dedicated TOC entry dispatch)
     if block.toc_entries:
         return _render_toc_entries(block_id, block, text_fill)
 
@@ -439,7 +439,7 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
 
     if block.fit_to_box:
         if block.fit_single_line:
-            # Single-line fit mode (matching retain-pdf block_renderer)
+            # Single-line fit mode (block renderer path)
             max_font_pt = max(block.font_size_pt, block.fit_max_font_size_pt or block.font_size_pt)
             min_font_pt = max(1.0, min(block.fit_min_font_size_pt or block.font_size_pt, block.font_size_pt))
             fit_w = max(width, block.fit_target_width_pt) if block.fit_target_width_pt > 0 else width
@@ -474,7 +474,7 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
         ]
         return "\n".join(parts) + "\n"
     else:
-        # Static rendering with leading (matching retain-pdf typst_plain_markdown_expr)
+        # Static rendering with leading (_typst_plain_markdown_expr)
         body_expr = _typst_plain_markdown_expr(
             md_var, block.font_size_pt, block.leading_em,
             block.font_weight, text_fill, first_indent, justify)
@@ -533,7 +533,7 @@ def _render_image_block(block_id: str, block: RenderBlock) -> str:
 
 def render_block_to_typst(block_id: str, block: RenderBlock,
                           *, force_opaque: bool = False) -> str:
-    """Generate the Typst source lines for a single RenderBlock (matching retain-pdf dispatch logic)."""
+    """Generate the Typst source lines for a single RenderBlock (overlay dispatch logic)."""
     if block.skip_reason:
         return ""
     if block.render_kind == "image":
@@ -547,7 +547,7 @@ def render_block_to_typst(block_id: str, block: RenderBlock,
 
 # --- Helper functions for Typst source ---
 
-# ---- Typst helper functions (proven in retain-pdf) ----
+# ---- Typst helper functions for preserve-layout overlay ----
 
 FIT_SIZE_FN = '''
 #let pdftr_fit_size(lo, hi, eps, fits) = {

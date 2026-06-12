@@ -95,6 +95,7 @@
     "identifier": true,
     "structural": false,
     "table": false,
+    "chart": false,
     "language_match": false,
     "language_match_exclusion_detection": false
   }

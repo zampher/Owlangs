@@ -194,6 +194,23 @@
   "translationExportPdfReflow": "Reflow PDF",
   "translationExportPdfReflowDesc": "Re-typeset from translation Markdown; layout may differ from the source",
 
+  "translationPreviewDialogTitle": "Preview Settings",
+  "translationPreviewStart": "Start Preview",
+  "translationPreviewModeSectionTitle": "Translation preview",
+  "translationPreviewModeHtml": "HTML / Markdown",
+  "translationPreviewModeHtmlDesc": "View rendered translation in the browser (default)",
+  "translationPreviewFullDocumentCompare": "Full document comparison",
+  "translationPreviewFullDocumentCompareDesc": "View source and translation side by side (export format; works with any preview mode above)",
+  "translationPreviewSyncScroll": "Link scrollbars",
+  "translationPreviewSyncScrollDesc": "When enabled, link PDF compare panes with a shared scroll bar (PDF compare only)",
+  "translationPreviewPanelSource": "Source",
+  "translationPreviewPanelTarget": "Translation",
+  "translationPreviewNoExtraOptions": "No extra options for this preview mode",
+  "translationPreviewReopenSettings": "Preview settings",
+  "translationPreviewZoomIn": "Zoom in",
+  "translationPreviewZoomOut": "Zoom out",
+  "translationPreviewZoomReset": "Reset zoom",
+
   "translationLeftPanelExpandTooltip": "Expand left panel",
   "translationLeftPanelCollapseTooltip": "Collapse left panel",
 

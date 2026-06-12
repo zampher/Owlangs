@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Document Compare Reader</title>
+    <link rel="stylesheet" href="/static/compare_reader.css" />
+  </head>
+  <body>
+    <div id="compare-boot-loading" class="compare-boot-loading" aria-live="polite">
+      <div class="compare-boot-loading-card">
+        <div id="compare-boot-loading-text" class="compare-boot-loading-text">
+          Loading compare preview…
+        </div>
+      </div>
+    </div>
+
+    <div id="compare-scroll-shell" class="compare-scroll-shell">
+      <div class="compare-page">
+        <main id="compare-grid" class="compare-grid">
+          <section class="compare-panel">
+            <header id="compare-source-label" class="compare-panel-header">
+              Source
+            </header>
+            <div class="compare-panel-body">
+              <iframe
+                id="compare-source-frame"
+                title="Source document"
+              ></iframe>
+            </div>
+          </section>
+
+          <section class="compare-panel">
+            <header id="compare-target-label" class="compare-panel-header">
+              Target
+            </header>
+            <div class="compare-panel-body">
+              <iframe
+                id="compare-target-frame"
+                title="Target document"
+              ></iframe>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script src="/static/compare_reader.js"></script>
+  </body>
+</html>

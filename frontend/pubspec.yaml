@@ -67,6 +67,7 @@ dependencies:
   freezed: ^2.4.6
   json_annotation: ^4.8.1
   charset: ^2.0.1
+  webview_win_floating: 3.0.3
 
 dev_dependencies:
   flutter_test:

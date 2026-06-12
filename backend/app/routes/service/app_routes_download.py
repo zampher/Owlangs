@@ -14,7 +14,7 @@ import zipfile
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Path as FastApiPath, Query as FastApiQuery
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from backend.app.services.download import DownloadService
@@ -27,6 +27,20 @@ router = APIRouter()
 
 # Initialize service instance
 download_service = DownloadService(task_manager)
+
+_PREVIEW_INLINE_FILE_TYPES = frozenset({"html", "source-html", "md"})
+
+
+def _apply_inline_preview_headers(
+    resp: FileResponse,
+    file_type: str,
+    preview: bool,
+) -> None:
+    """Serve HTML/MD inline for iframe compare preview instead of attachment download."""
+    if not preview or file_type not in _PREVIEW_INLINE_FILE_TYPES:
+        return
+    filename = getattr(resp, "filename", None) or "preview.html"
+    resp.headers["Content-Disposition"] = f'inline; filename="{filename}"'
 
 
 class BatchDownloadRequest(BaseModel):
@@ -76,6 +90,7 @@ async def service_download_file_route(
         target_text_italic: Optional[bool] = FastApiQuery(None, description="Render target text in italic for bilingual export.", examples=[True, False]),
         target_text_color: Optional[str] = FastApiQuery(None, description="Target text color for bilingual export: 'gray', 'blue', 'red', 'green', 'orange', 'black'.", examples=["gray", "blue", "red"]),
         renderer_type: Optional[str] = FastApiQuery(None, description="PDF renderer: 'typst_overlay' = preserve original layout (default when omitted); 'pandoc' = reflow from Markdown via Pandoc+XeLaTeX. PDF downloads only.", examples=["typst_overlay", "pandoc"]),
+        preview: Optional[bool] = FastApiQuery(None, description="When true, serve HTML/MD with Content-Disposition inline for iframe preview.", examples=[True]),
 ):
     """Download translation result files."""
     resp = await download_service.download_file(
@@ -95,13 +110,15 @@ async def service_download_file_route(
         renderer_type=renderer_type,
     )
     try:
-        if isinstance(resp, FileResponse):
+        if isinstance(resp, (FileResponse, Response)):
             # Prevent browser caching — ensures bilingual toggle works correctly
             resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             resp.headers["Pragma"] = "no-cache"
             resp.headers["Expires"] = "0"
+            if preview and isinstance(resp, FileResponse):
+                _apply_inline_preview_headers(resp, file_type, True)
 
-            path = getattr(resp, "path", None)
+            path = getattr(resp, "path", None) or getattr(resp, "owlangs_stash_path", None)
             ts = task_manager.get_task(task_id)
             if path and ts:
                 from backend.app.services.translation.translation_result_stash import (

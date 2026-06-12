@@ -578,6 +578,59 @@ class AppLocalizationsJa extends AppLocalizations {
       '訳文 Markdown から再排版。版式は原文と異なる場合があります';
 
   @override
+  String get translationPreviewDialogTitle => 'Preview Settings';
+
+  @override
+  String get translationPreviewStart => 'Start Preview';
+
+  @override
+  String get translationPreviewModeSectionTitle => 'Translation preview';
+
+  @override
+  String get translationPreviewModeHtml => 'HTML / Markdown';
+
+  @override
+  String get translationPreviewModeHtmlDesc =>
+      'View rendered translation in the browser (default)';
+
+  @override
+  String get translationPreviewFullDocumentCompare =>
+      'Full document comparison';
+
+  @override
+  String get translationPreviewFullDocumentCompareDesc =>
+      'View source and translation side by side (export format; works with any preview mode above)';
+
+  @override
+  String get translationPreviewSyncScroll => 'Link scrollbars';
+
+  @override
+  String get translationPreviewSyncScrollDesc =>
+      'When enabled, link PDF compare panes with a shared scroll bar (PDF compare only)';
+
+  @override
+  String get translationPreviewPanelSource => 'Source';
+
+  @override
+  String get translationPreviewPanelTarget => 'Translation';
+
+  @override
+  String get translationPreviewNoExtraOptions =>
+      'No extra options for this preview mode';
+
+  @override
+  String get translationPreviewReopenSettings => 'Preview settings';
+
+  @override
+  String get translationPreviewZoomIn => 'Zoom in';
+
+  @override
+  String get translationPreviewZoomOut => 'Zoom out';
+
+  @override
+  String get translationPreviewZoomReset => 'Reset zoom';
+
+  @override
   String get translationLeftPanelExpandTooltip => '左パネルを展開';
 
   @override

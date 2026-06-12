@@ -35,7 +35,6 @@ class TranslationResultToolbar extends ConsumerWidget {
     this.onNavigateToFailedSegment,
     this.onViewPreview,
     this.onShowDownload,
-    this.onViewPdfPreview,
     this.onToggleFullscreen,
     this.excludedCount = 0,
     this.isExclusionPanelExpanded = false,
@@ -72,7 +71,6 @@ class TranslationResultToolbar extends ConsumerWidget {
   final void Function(int direction)? onNavigateToFailedSegment;
   final VoidCallback? onViewPreview;
   final VoidCallback? onShowDownload;
-  final VoidCallback? onViewPdfPreview;
   final VoidCallback? onToggleFullscreen;
   final int excludedCount;
   final bool isExclusionPanelExpanded;
@@ -375,8 +373,12 @@ class TranslationResultToolbar extends ConsumerWidget {
                 ),
               ],
             ],
-            // Preview button
-            if (_shouldShowPreviewButton()) ...<Widget>[
+            // Unified preview button (HTML / side-by-side / PDF via dialog)
+            if (isCompleted &&
+                onViewPreview != null &&
+                (statusLower == 'completed' ||
+                    statusLower == 'failed' ||
+                    hasDownloads)) ...<Widget>[
               IconButton(
                 icon: loadingHtmlPreview
                     ? const SizedBox(
@@ -387,20 +389,6 @@ class TranslationResultToolbar extends ConsumerWidget {
                     : const Icon(Icons.preview, size: 16),
                 tooltip: l10n.translationToolbarPreviewTooltip,
                 onPressed: loadingHtmlPreview ? null : onViewPreview,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 28,
-                  minHeight: 28,
-                ),
-              ),
-              const SizedBox(width: 3),
-            ],
-            // PDF preview button (high-fidelity)
-            if (_shouldShowPdfPreviewButton()) ...<Widget>[
-              IconButton(
-                icon: const Icon(Icons.picture_as_pdf, size: 16),
-                tooltip: 'PDF Preview',
-                onPressed: onViewPdfPreview,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(
                   minWidth: 28,
@@ -617,58 +605,6 @@ class TranslationResultToolbar extends ConsumerWidget {
         ),
       ],
     );
-  }
-
-  bool _shouldShowPreviewButton() {
-    if (downloads == null || downloads!.isEmpty) {
-      return false;
-    }
-
-    final isPdfFile = fileName?.toLowerCase().endsWith('.pdf') ?? false;
-    final hasPdfDownload = downloads!.containsKey('pdf');
-
-    // For PDF files, show viewer if PDF download is available
-    if (isPdfFile && hasPdfDownload) {
-      return true;
-    }
-
-    // For other files, show viewer if HTML or MD download is available
-    final hasHtmlDownload = downloads!.containsKey('html');
-    final hasMdDownload = downloads!.containsKey('md');
-    if (hasHtmlDownload || hasMdDownload) {
-      // Don't show viewer for DOCX, PPTX, XLSX, MD, or PNG files
-      final fileNameLower = fileName?.toLowerCase() ?? '';
-      final isDocxFile =
-          fileNameLower.endsWith('.docx') || fileNameLower.endsWith('.doc');
-      final isPptxFile =
-          fileNameLower.endsWith('.pptx') || fileNameLower.endsWith('.ppt');
-      final isXlsxFile = fileNameLower.endsWith('.xlsx') ||
-          fileNameLower.endsWith('.xls') ||
-          fileNameLower.endsWith('.csv');
-      final isMdFile = fileNameLower.endsWith('.md');
-      final isPngFile = fileNameLower.endsWith('.png') ||
-          fileNameLower.endsWith('.jpg') ||
-          fileNameLower.endsWith('.jpeg');
-
-      return !isDocxFile &&
-          !isPptxFile &&
-          !isXlsxFile &&
-          !isMdFile &&
-          !isPngFile;
-    }
-
-    return false;
-  }
-
-  bool _shouldShowPdfPreviewButton() {
-    if (downloads == null || downloads!.isEmpty) {
-      return false;
-    }
-
-    final isPdfFile = fileName?.toLowerCase().endsWith('.pdf') ?? false;
-    final hasPdfDownload = downloads!.containsKey('pdf');
-
-    return isPdfFile && hasPdfDownload && onViewPdfPreview != null;
   }
 
   Color _getStatusColor(String status) {

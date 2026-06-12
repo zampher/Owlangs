@@ -7,7 +7,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/app_config.dart';
 import '../../../shared/services/translation_service.dart';
@@ -35,6 +35,10 @@ import '../models/segment_pair.dart';
 import '../widgets/pdf_preview.dart';
 import '../../../shared/config/pagination_config.dart';
 import '../widgets/translation_quick_settings.dart';
+import '../widgets/translation_result/preview_selection.dart';
+import '../widgets/translation_result/translation_preview_dialog.dart';
+import '../widgets/translation_result/translation_full_compare_preview_tab.dart';
+import '../widgets/translation_result/preview_url_utils.dart';
 import 'translation_preview_tab_widget.dart';
 import '../../../shared/utils/pagination.dart';
 import '../../../shared/utils/paginated_scroll_manager.dart';
@@ -122,6 +126,15 @@ class _TranslationResultPreviewState
   final Map<int, GlobalKey> segmentPairKeys =
       <int, GlobalKey<State<StatefulWidget>>>{};
 
+  /// Last preview mode chosen in the unified preview dialog (null = use workflow default).
+  TranslationPreviewMode? _lastPreviewMode;
+
+  /// Whether full-document compare was enabled in the last preview dialog.
+  bool _lastFullDocumentCompare = false;
+
+  /// Whether linked scroll was enabled for full-document compare preview.
+  bool _lastSyncScroll = false;
+
   /// TaskId for which we already fetched on-demand download links (so we only fetch once per task).
   String? _lastTaskIdForOnDemandDownloadsFetch;
 
@@ -157,6 +170,98 @@ class _TranslationResultPreviewState
       return widget.taskId;
     }
     return widget.taskId;
+  }
+
+  bool _isPdfSourceFile() {
+    final fileNameLower = widget.fileName?.toLowerCase() ?? '';
+    return fileNameLower.endsWith('.pdf');
+  }
+
+  bool _translationLooksComplete(dynamic translationState) {
+    if (translationState == null) {
+      return false;
+    }
+    final String status =
+        (translationState.statusText ?? '').toString().toLowerCase();
+    final int progress = translationState.progress is int
+        ? translationState.progress as int
+        : int.tryParse('${translationState.progress}') ?? 0;
+    final bool isTranslating = translationState.isTranslating == true;
+    if (status == 'completed' || status == 'failed') {
+      return true;
+    }
+    if (status == 'processing' && progress >= 100) {
+      return true;
+    }
+    if (!isTranslating && progress >= 100) {
+      return true;
+    }
+    final dynamic downloads = translationState.downloads;
+    return downloads is Map && downloads.isNotEmpty && !isTranslating;
+  }
+
+  Map<String, String>? _mergeDownloadMaps(
+    Map<String, String>? widgetDownloads,
+    Map<String, String>? stateDownloads,
+  ) {
+    if ((widgetDownloads == null || widgetDownloads.isEmpty) &&
+        (stateDownloads == null || stateDownloads.isEmpty)) {
+      return null;
+    }
+    final Map<String, String> merged = <String, String>{};
+    if (widgetDownloads != null) {
+      merged.addAll(widgetDownloads);
+    }
+    if (stateDownloads != null) {
+      merged.addAll(stateDownloads);
+    }
+    return merged;
+  }
+
+  Map<String, String>? _resolveEffectiveDownloads(dynamic translationState) {
+    Map<String, String>? stateDownloads;
+    if (translationState?.downloads is Map) {
+      final Map raw = translationState.downloads as Map;
+      if (raw.isNotEmpty) {
+        stateDownloads = raw.map(
+          (dynamic k, dynamic v) => MapEntry(k.toString(), v.toString()),
+        );
+      }
+    }
+
+    Map<String, String>? merged =
+        _mergeDownloadMaps(widget.downloads, stateDownloads);
+
+    if (_isPdfSourceFile() &&
+        _apiTaskId() != 'pending' &&
+        _translationLooksComplete(translationState) &&
+        merged?.containsKey('pdf') != true) {
+      merged ??= <String, String>{};
+      merged['pdf'] = TranslationService().buildDownloadUrl(_apiTaskId(), 'pdf');
+    }
+
+    return merged;
+  }
+
+  bool _shouldFetchOnDemandDownloads(
+    Map<String, String>? effectiveDownloads,
+    dynamic translationState,
+  ) {
+    if (_apiTaskId() == 'pending' || widget.flowId == null) {
+      return false;
+    }
+    if (_lastTaskIdForOnDemandDownloadsFetch == _apiTaskId()) {
+      return false;
+    }
+    if (effectiveDownloads == null || effectiveDownloads.isEmpty) {
+      return true;
+    }
+    if (_isPdfSourceFile() &&
+        !effectiveDownloads.containsKey('pdf') &&
+        _translationLooksComplete(translationState)) {
+      return true;
+    }
+    return false;
   }
 
   void _notifyTranslationWorkspaceMutation() {
@@ -3863,19 +3968,13 @@ class _TranslationResultPreviewState
         ? ref.read(translationStateProviderFamily(widget.flowId!).notifier)
         : null;
 
-    // Prefer state.downloads so we reflect on-demand links after refresh; fallback to widget.downloads.
-    final Map<String, String>? stateDownloads = translationState?.downloads;
-    final bool stateDownloadsNonEmpty =
-        stateDownloads != null && stateDownloads.isNotEmpty;
+    // Merge widget + state downloads; synthesize PDF on-demand URL when needed.
     final Map<String, String>? effectiveDownloads =
-        stateDownloadsNonEmpty ? stateDownloads : widget.downloads;
+        _resolveEffectiveDownloads(translationState);
 
-    // When completed/failed with empty downloads (e.g. restored flow), fetch status once to get on-demand links.
-    if (_apiTaskId() != 'pending' &&
-        widget.flowId != null &&
-        translationNotifier != null &&
-        (effectiveDownloads == null || effectiveDownloads.isEmpty) &&
-        _lastTaskIdForOnDemandDownloadsFetch != _apiTaskId()) {
+    // Refresh status when downloads are missing or PDF link absent after completion.
+    if (translationNotifier != null &&
+        _shouldFetchOnDemandDownloads(effectiveDownloads, translationState)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _lastTaskIdForOnDemandDownloadsFetch == _apiTaskId()) {
           return;
@@ -3926,9 +4025,8 @@ class _TranslationResultPreviewState
                 onGlobalRedo: _handleGlobalRedo,
                 onNavigateToFailedSegment: (direction) =>
                     _navigateToFailedSegment(direction: direction),
-                onViewPreview: _viewTranslationPreview,
+                onViewPreview: _onViewPreview,
                 onShowDownload: _showDownloadDialog,
-                onViewPdfPreview: _viewPdfPreview,
                 onToggleFullscreen: _toggleFullscreen,
                 excludedCount: _calculateExcludedCount(),
                 isExclusionPanelExpanded: _isExclusionPanelExpanded,
@@ -4480,186 +4578,102 @@ class _TranslationResultPreviewState
     }
   }
 
-  /// View PDF preview
-  Future<void> _viewPdfPreview() async {
-    final bool isPdfFile =
-        widget.fileName?.toLowerCase().endsWith('.pdf') ?? false;
-    final bool hasPdfDownload = widget.downloads?.containsKey('pdf') ?? false;
+  String _resolvedWorkflowType() {
+    return widget.workflowType ??
+        (widget.flowId != null
+            ? ref
+                .read(translationQuickSettingsProviderFamily(widget.flowId!))
+                .workflowType
+            : ref.read(translationQuickSettingsProvider).workflowType);
+  }
 
-    if (!isPdfFile || !hasPdfDownload) {
-      MessageService.showWarning(context, 'PDF preview not available');
-      return;
-    }
+  PreviewTabsNotifier _previewTabsNotifier() {
+    return widget.flowId != null
+        ? ref.read(previewTabsProviderFamily(widget.flowId!).notifier)
+        : ref.read(previewTabsProvider.notifier);
+  }
 
-    // Show dialog to select table format and PDF type (translated/original)
-    final Map<String, String>? exportOptions = await _showPdfExportDialog();
-    if (exportOptions == null) {
-      // User cancelled, don't open preview
-      return;
-    }
-
-    final String tableFormat = exportOptions['tableFormat'] ?? 'image';
-    final String equationFormat = exportOptions['equationFormat'] ?? 'image';
-    final String chartFormat = exportOptions['chartFormat'] ?? 'image';
-    final String pdfType = exportOptions['pdfType'] ?? 'translated';
-
-    if (mounted) {
-      setState(() {
-        _loadingHtmlPreview = true;
-      });
-    }
-
-    try {
-      // Add PDF preview tab
-      final PreviewTabsNotifier tabsNotifier = widget.flowId != null
-          ? ref.read(previewTabsProviderFamily(widget.flowId!).notifier)
-          : ref.read(previewTabsProvider.notifier);
-
-      final PreviewTab pdfTab = PreviewTab(
-        id: 'pdf_preview_${_apiTaskId()}_${DateTime.now().millisecondsSinceEpoch}',
-        type: PreviewTabType.translationResult,
-        title: pdfType == 'original' ? 'Original PDF (Debug)' : 'PDF Viewer',
-        icon: pdfType == 'original' ? Icons.bug_report : Icons.picture_as_pdf,
-        content: _buildPdfPreview(
-          tableFormat: tableFormat,
-          equationFormat: equationFormat,
-          chartFormat: chartFormat,
-          pdfType: pdfType,
-        ),
-        dataRef: <String, dynamic>{
-          'taskId': _apiTaskId(),
-          'flowId': widget.flowId,
-          'downloads': widget.downloads,
-        },
-      );
-
-      tabsNotifier.addTab(pdfTab);
-
-      // Find the index of the newly added tab and switch to it
-      final List<PreviewTab> currentTabs = widget.flowId != null
-          ? ref.read(previewTabsProviderFamily(widget.flowId!)).tabs
-          : ref.read(previewTabsProvider).tabs;
-      final int tabIndex =
-          currentTabs.indexWhere((PreviewTab t) => t.id == pdfTab.id);
-      if (tabIndex >= 0) {
-        tabsNotifier.switchToTab(tabIndex);
-      }
-
-      if (mounted) {
-        MessageService.showSuccess(context, 'PDF preview opened');
-      }
-    } catch (e) {
-      if (mounted) {
-        MessageService.showError(context, 'Failed to open PDF preview: $e');
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingHtmlPreview = false;
-        });
-      }
+  void _switchToPreviewTab(String tabId) {
+    final PreviewTabsNotifier tabsNotifier = _previewTabsNotifier();
+    final List<PreviewTab> currentTabs = widget.flowId != null
+        ? ref.read(previewTabsProviderFamily(widget.flowId!)).tabs
+        : ref.read(previewTabsProvider).tabs;
+    final int tabIndex =
+        currentTabs.indexWhere((PreviewTab t) => t.id == tabId);
+    if (tabIndex >= 0) {
+      tabsNotifier.switchToTab(tabIndex);
     }
   }
 
-  /// Build PDF preview widget
-  Widget _buildPdfPreview({String? tableFormat, String? equationFormat, String? chartFormat, String? pdfType}) {
-    String? relativeUrl;
-
-    // If original PDF is selected (debug mode only), build debug URL
-    if (pdfType == 'original' && kDebugMode) {
-      final TranslationService svc = TranslationService();
-      // Build debug URL for original PDF
-      final String debugUrl = svc.buildDebugUrl(_apiTaskId(), 'original-pdf');
-      relativeUrl = debugUrl;
-    } else {
-      // Translated PDF (default)
-      relativeUrl = widget.downloads?['pdf'];
+  /// Unified preview entry: dialog → launch selected mode.
+  Future<void> _onViewPreview() async {
+    final PreviewSelection? selection = await _showPreviewDialogInternal();
+    if (selection != null) {
+      await _launchPreview(selection);
     }
+  }
 
-    if (relativeUrl == null) {
-      return const Center(
-        child: Text('PDF download not available'),
-      );
-    }
+  Future<PreviewSelection?> _showPreviewDialogInternal({
+    TranslationPreviewMode? initialMode,
+  }) async {
+    final dynamic translationState = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!))
+        : null;
+    final Map<String, String>? effectiveDownloads =
+        _resolveEffectiveDownloads(translationState);
 
-    // Add format query parameters if provided
-    var finalUrl = relativeUrl;
-    final Uri uri = Uri.parse(relativeUrl);
-    final Map<String, dynamic> queryParams = <String, dynamic>{
-      ...uri.queryParameters,
-    };
-    if (tableFormat != null) {
-      queryParams['table_body_format'] = tableFormat;
-    }
-    if (equationFormat != null) {
-      queryParams['equation_format'] = equationFormat;
-    }
-    if (chartFormat != null) {
-      queryParams['chart_body_format'] = chartFormat;
-    }
-    final Uri updatedUri = uri.replace(queryParameters: queryParams);
-    finalUrl = updatedUri.toString();
-
-    final String viewerUrl = finalUrl.startsWith('http')
-        ? finalUrl
-        : '${AppConfig.baseUrl}$finalUrl';
-
-    return PdfPreview(
-      downloadUrl: finalUrl,
-      viewerUrl: viewerUrl,
-      onDownload: widget.onDownload,
+    return showTranslationPreviewDialog(
+      context: context,
+      ref: ref,
+      taskId: _apiTaskId(),
+      isPdfFile: _isPdfSourceFile(),
+      hasPdfDownload: effectiveDownloads?.containsKey('pdf') ?? false,
+      resolvedWorkflowType: _resolvedWorkflowType(),
+      initialMode: initialMode ??
+          _lastPreviewMode ??
+          defaultPreviewModeForDialog(
+            isPdfFile: _isPdfSourceFile(),
+            hasPdfDownload: effectiveDownloads?.containsKey('pdf') ?? false,
+            resolvedWorkflowType: _resolvedWorkflowType(),
+          ),
+      initialFullDocumentCompare: _lastFullDocumentCompare,
+      initialSyncScroll: _lastSyncScroll,
     );
   }
 
-  /// View Translation Preview (HTML format using unified_preview.dart)
-  Future<void> _viewTranslationPreview() async {
-    _translationResultLog(
-      '[Preview] _viewTranslationPreview called, taskId=${_apiTaskId()}, flowId=${widget.flowId}',
-      level: LogLevel.info,
+  Future<PreviewSelection?> _handlePreviewSettingsRequest() async {
+    final PreviewSelection? selection = await _showPreviewDialogInternal(
+      initialMode: _lastPreviewMode,
     );
+    if (selection != null) {
+      await _launchPreview(selection);
+    }
+    return selection;
+  }
 
-    // Get downloads from widget first, then from translation state if needed
+  Future<Map<String, String>?> _resolvePreviewDownloads() async {
     var downloads = widget.downloads;
-    _translationResultLog(
-      '[Preview] Initial downloads from widget: ${downloads?.keys.toList()}',
-    );
 
     if ((downloads == null || downloads.isEmpty) && widget.flowId != null) {
-      // Try to get downloads from translation state
       try {
         final TranslationStateFamily translationState =
             ref.read(translationStateProviderFamily(widget.flowId!));
         final Map<String, String> stateDownloads = translationState.downloads;
-        _translationResultLog(
-          '[Preview] Downloads from translation state: ${stateDownloads.keys.toList()}',
-        );
         if (stateDownloads.isNotEmpty) {
           downloads = stateDownloads.map(
             (String k, String v) => MapEntry(k.toString(), v.toString()),
           );
         }
-      } catch (e) {
-        _translationResultLog(
-          '[Preview] Failed to get downloads from translation state: $e',
-          level: LogLevel.warn,
-        );
-        // Fallback to widget.downloads
-      }
+      } catch (_) {}
     }
 
-    _translationResultLog(
-      '[Preview] Final downloads: ${downloads?.keys.toList()}, hasHtml=${downloads?.containsKey('html')}, hasMd=${downloads?.containsKey('md')}',
-      level: LogLevel.info,
-    );
+    final dynamic translationState = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!))
+        : null;
+    downloads = _resolveEffectiveDownloads(translationState) ?? downloads;
 
-    // If no HTML or MD in downloads, try to get from status API or build URL directly
     if (downloads == null ||
         (!downloads.containsKey('html') && !downloads.containsKey('md'))) {
-      _translationResultLog(
-        '[Preview] No HTML or MD in downloads, trying to get from status API...',
-        level: LogLevel.info,
-      );
-
       try {
         final TranslationService svc = TranslationService();
         final Map<String, dynamic> status = await svc.getStatus(_apiTaskId());
@@ -4667,56 +4681,30 @@ class _TranslationResultPreviewState
             status['downloads'] as Map<String, dynamic>?;
 
         if (statusDownloads != null && statusDownloads.isNotEmpty) {
-          final Map<String, String> statusDownloadsMap = statusDownloads
-              .map((String k, v) => MapEntry(k.toString(), v.toString()));
-
-          _translationResultLog(
-            '[Preview] Status API downloads: ${statusDownloadsMap.keys.toList()}',
-            level: LogLevel.info,
-          );
-
-          // Merge status downloads with existing downloads
           downloads ??= <String, String>{};
-          downloads.addAll(statusDownloadsMap);
+          downloads.addAll(
+            statusDownloads.map(
+              (String k, dynamic v) => MapEntry(k.toString(), v.toString()),
+            ),
+          );
         }
 
-        // If still no HTML/MD, try to build URL directly (backend may have it even if not in downloads)
         if (downloads != null &&
             !downloads.containsKey('html') &&
             !downloads.containsKey('md')) {
-          // Building download URL directly...
-
-          // Try MD first, then HTML
-          final String mdUrl = svc.buildDownloadUrl(_apiTaskId(), 'md');
-          final String htmlUrl = svc.buildDownloadUrl(_apiTaskId(), 'html');
-
-          // Add to downloads map (will be validated when actually downloading)
-          downloads['md'] = mdUrl;
-          downloads['html'] = htmlUrl;
-
-          // Built download URLs
+          downloads['md'] = svc.buildDownloadUrl(_apiTaskId(), 'md');
+          downloads['html'] = svc.buildDownloadUrl(_apiTaskId(), 'html');
         }
-      } catch (e) {
-        _translationResultLog(
-          '[Preview] Failed to get downloads from status or build URL: $e',
-          level: LogLevel.warn,
-        );
-      }
+      } catch (_) {}
     }
 
-    // Final check: if still no HTML/MD, show warning
-    if (downloads == null ||
-        (!downloads.containsKey('html') && !downloads.containsKey('md'))) {
-      _translationResultLog(
-        '[Preview] No HTML or MD download available after all attempts, showing warning',
-        level: LogLevel.warn,
-      );
-      MessageService.showWarning(
-        context,
-        'Translation preview not available. Please wait for translation to complete.',
-      );
-      return;
-    }
+    return downloads;
+  }
+
+  Future<void> _launchPreview(PreviewSelection selection) async {
+    _lastPreviewMode = selection.mode;
+    _lastFullDocumentCompare = selection.fullDocumentCompare;
+    _lastSyncScroll = selection.syncScroll;
 
     if (mounted) {
       setState(() {
@@ -4725,29 +4713,62 @@ class _TranslationResultPreviewState
     }
 
     try {
-      // Creating Translation Preview tab
-
-      // Add Translation Preview tab
-      final PreviewTabsNotifier tabsNotifier = widget.flowId != null
-          ? ref.read(previewTabsProviderFamily(widget.flowId!).notifier)
-          : ref.read(previewTabsProvider.notifier);
-
-      // TabsNotifier obtained
-
-      // Use TranslationPreviewTabWidget (with toolbar) like the original implementation
-      final TranslationPreviewTabWidget previewContent =
-          TranslationPreviewTabWidget(
-        taskId: _apiTaskId(),
-        flowId: widget.flowId,
-        downloads: downloads,
-        onDownload: widget.onDownload,
+      if (selection.fullDocumentCompare) {
+        await _openFullDocumentCompareTab(baseMode: selection.mode);
+        return;
+      }
+      switch (selection.mode) {
+        case TranslationPreviewMode.html:
+          await _openHtmlPreviewTab();
+        case TranslationPreviewMode.pdfPreserve:
+          await _openPdfPreviewTab(rendererType: 'typst_overlay');
+        case TranslationPreviewMode.pdfReflow:
+          await _openPdfPreviewTab(rendererType: 'pandoc');
+      }
+    } catch (e, stackTrace) {
+      _translationResultLog(
+        '[Preview] Failed to launch preview (${selection.mode}): $e\n$stackTrace',
+        level: LogLevel.error,
       );
+      if (mounted) {
+        MessageService.showError(context, 'Failed to open preview: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingHtmlPreview = false;
+        });
+      }
+    }
+  }
 
-      // Use fixed ID for Preview tab (like the original implementation)
-      final PreviewTab previewTab = PreviewTab(
-        id: 'translation_preview_tab',
+  Future<void> _openHtmlPreviewTab() async {
+    final Map<String, String>? downloads = await _resolvePreviewDownloads();
+    if (downloads == null ||
+        (!downloads.containsKey('html') && !downloads.containsKey('md'))) {
+      MessageService.showWarning(
+        context,
+        'HTML preview not available. Try full document comparison instead.',
+      );
+      return;
+    }
+
+    final TranslationPreviewTabWidget previewContent =
+        TranslationPreviewTabWidget(
+      taskId: _apiTaskId(),
+      flowId: widget.flowId,
+      downloads: downloads,
+      onDownload: widget.onDownload,
+      onRequestPreviewSettings: _handlePreviewSettingsRequest,
+    );
+
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    const String tabId = 'translation_preview_tab';
+    _previewTabsNotifier().updateOrAddTab(
+      PreviewTab(
+        id: tabId,
         type: PreviewTabType.translationResult,
-        title: 'Translation Preview',
+        title: l10n.translationPreviewModeHtml,
         icon: Icons.preview,
         content: previewContent,
         dataRef: <String, dynamic>{
@@ -4755,275 +4776,138 @@ class _TranslationResultPreviewState
           'downloads': downloads,
           'flowId': widget.flowId,
         },
-      );
-
-      // PreviewTab created
-
-      // Use updateOrAddTab like the original implementation
-      tabsNotifier.updateOrAddTab(previewTab);
-      // Tab added to tabsNotifier
-
-      // Find the index of the newly added tab and switch to it
-      final List<PreviewTab> currentTabs = widget.flowId != null
-          ? ref.read(previewTabsProviderFamily(widget.flowId!)).tabs
-          : ref.read(previewTabsProvider).tabs;
-      // Current tabs count: ${currentTabs.length}
-
-      final int tabIndex = currentTabs
-          .indexWhere((PreviewTab t) => t.id == 'translation_preview_tab');
-      // Tab index found: $tabIndex
-
-      if (tabIndex >= 0) {
-        tabsNotifier.switchToTab(tabIndex);
-        // Switched to tab at index $tabIndex
-      } else {
-        _translationResultLog(
-          '[Preview] WARNING: Tab index not found after adding tab',
-          level: LogLevel.warn,
-        );
-      }
-
-      if (mounted) {
-        MessageService.showSuccess(context, 'Translation preview opened');
-        // Success message shown
-      }
-    } catch (e, stackTrace) {
-      _translationResultLog(
-        '[Preview] ERROR: Failed to open translation preview: $e\n$stackTrace',
-        level: LogLevel.error,
-      );
-      if (mounted) {
-        MessageService.showError(
-          context,
-          'Failed to open translation preview: $e',
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingHtmlPreview = false;
-        });
-        // Loading state reset
-      }
-    }
+      ),
+    );
+    _switchToPreviewTab(tabId);
   }
 
-  /// Show preview settings dialog (similar to Convert)
-  Future<void> _showPreviewSettingsDialog() async {
-    try {
-      // Get status to check for tables and equations
-      final TranslationService svc = TranslationService();
-      Map<String, dynamic> status;
-      try {
-        status = await svc.getStatus(_apiTaskId());
-      } catch (e) {
-        // Gracefully handle 404 when task has been released
-        final errorString = e.toString();
-        if (errorString.contains('404') || errorString.contains('Not Found')) {
-          if (mounted) {
-            MessageService.showInfo(
-              context,
-              'Preview settings are not available because the task has been released.',
-            );
-          }
-          return;
-        }
-        rethrow;
-      }
-      final bool hasTables = status['has_tables'] == true;
-      final bool hasInterlineEquations =
-          status['has_interline_equations'] == true;
-
-      // Check if there are any images (tables or equations as images)
-      final bool hasImages = _imageDataMap.isNotEmpty ||
-          (status['image_data_map'] != null &&
-              (status['image_data_map'] as Map).isNotEmpty);
-
-      if (!hasTables && !hasInterlineEquations && !hasImages) {
-        MessageService.showInfo(
-          context,
-          'No image elements found. No settings needed.',
-        );
-        return;
-      }
-
-      if (!hasTables && !hasInterlineEquations) {
-        MessageService.showInfo(context, 'No tables or equations to configure');
-        return;
-      }
-
-      // Get current format settings from provider
-      final formatSettings = ref.read(
-        formatSettingsProviderFamily(_apiTaskId()),
-      );
-      // Create state variables for dialog with current settings or defaults
-      final bool isPdfFile = widget.fileName?.toLowerCase().endsWith('.pdf') ?? false;
-      final bool isPdfWorkflow = widget.workflowType == 'markdown_based' || isPdfFile;
-      var tableFormat =
-          formatSettings.getTableFormat(isPdfWorkflow: isPdfWorkflow);
-      var equationFormat =
-          formatSettings.getEquationFormat(isPdfWorkflow: isPdfWorkflow);
-
-      await DialogHelper.showGeneralDialog(
-        context: context,
-        barrierColor: Colors.black54,
-        barrierLabel: 'Preview Settings',
-        useRootNavigator: true,
-        pageBuilder: (
-          dialogContext,
-          animation,
-          secondaryAnimation,
-        ) =>
-            StatefulBuilder(
-          builder: (BuildContext context, setDialogState) => Material(
-            type: MaterialType.transparency,
-            child: AlertDialog(
-              title: const Text('Preview Settings'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    if (hasTables) ...<Widget>[
-                      const Text(
-                        'Table Format:',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 8),
-                      RadioListTile<String>(
-                        title: const Text('Image'),
-                        subtitle: const Text('Display tables as images'),
-                        value: 'image',
-                        groupValue: tableFormat,
-                        onChanged: (value) {
-                          if (value != null) {
-                            setDialogState(() {
-                              tableFormat = value;
-                            });
-                          }
-                        },
-                      ),
-                      RadioListTile<String>(
-                        title: const Text('HTML'),
-                        subtitle: const Text('Convert HTML tables to markdown'),
-                        value: 'html',
-                        groupValue: tableFormat,
-                        onChanged: (value) {
-                          if (value != null) {
-                            setDialogState(() {
-                              tableFormat = value;
-                            });
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    if (hasInterlineEquations) ...<Widget>[
-                      const Text(
-                        'Equation Format:',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 8),
-                      RadioListTile<String>(
-                        title: const Text('Image'),
-                        subtitle: const Text('Display equations as images'),
-                        value: 'image',
-                        groupValue: equationFormat,
-                        onChanged: (value) {
-                          if (value != null) {
-                            setDialogState(() {
-                              equationFormat = value;
-                            });
-                          }
-                        },
-                      ),
-                      RadioListTile<String>(
-                        title: const Text('LaTeX'),
-                        subtitle:
-                            const Text('Display equations as LaTeX formulas'),
-                        value: 'text',
-                        groupValue: equationFormat,
-                        onChanged: (value) {
-                          if (value != null) {
-                            setDialogState(() {
-                              equationFormat = value;
-                            });
-                          }
-                        },
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              actions: <Widget>[
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context, rootNavigator: true).pop();
-                  },
-                  child: const Text('Cancel'),
-                ),
-                TextButton.icon(
-                  icon: const Icon(Icons.save_outlined, size: 18),
-                  label: const Text('Save as Default'),
-                  onPressed: () async {
-                    // Apply settings to provider first
-                    final formatNotifier = ref.read(
-                      formatSettingsProviderFamily(_apiTaskId()).notifier,
-                    );
-                    if (hasTables) {
-                      formatNotifier.setTableFormat(tableFormat);
-                    }
-                    if (hasInterlineEquations) {
-                      formatNotifier.setEquationFormat(equationFormat);
-                    }
-                    // Save as user defaults
-                    await formatNotifier.saveAsUserDefaults();
-                    // Use dialogContext instead of context to show message in dialog
-                    MessageService.showSuccess(
-                      dialogContext,
-                      'Default format settings saved',
-                    );
-                  },
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context, rootNavigator: true).pop();
-                    // Apply settings to provider
-                    final formatNotifier = ref.read(
-                      formatSettingsProviderFamily(_apiTaskId()).notifier,
-                    );
-                    if (hasTables) {
-                      formatNotifier.setTableFormat(tableFormat);
-                    }
-                    if (hasInterlineEquations) {
-                      formatNotifier.setEquationFormat(equationFormat);
-                    }
-                    MessageService.showSuccess(context, 'Settings applied');
-                    // Note: Translation Preview uses UnifiedPreviewWidget which will
-                    // automatically reload when format settings change via watch
-                  },
-                  child: const Text('Apply'),
-                ),
-              ],
-            ),
-          ),
-        ),
-        transitionBuilder: (
-          BuildContext context,
-          Animation<double> animation,
-          Animation<double> secondaryAnimation,
-          Widget child,
-        ) =>
-            FadeTransition(
-          opacity: animation,
-          child: child,
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        MessageService.showError(context, 'Failed to show settings: $e');
-      }
+  Future<void> _openFullDocumentCompareTab({
+    required TranslationPreviewMode baseMode,
+  }) async {
+    final dynamic translationState = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!))
+        : null;
+    final Map<String, String>? effectiveDownloads =
+        _resolveEffectiveDownloads(translationState);
+    Map<String, String>? downloads = effectiveDownloads;
+    if (baseMode == TranslationPreviewMode.html) {
+      downloads = await _resolvePreviewDownloads();
     }
+
+    if (baseMode.usesPdfPreview &&
+        (!_isPdfSourceFile() || effectiveDownloads?.containsKey('pdf') != true)) {
+      MessageService.showWarning(context, 'PDF comparison preview not available');
+      return;
+    }
+
+    String? translatedHtmlUrl = downloads?['html'];
+    translatedHtmlUrl ??= downloads?['md'];
+    if (baseMode == TranslationPreviewMode.html && translatedHtmlUrl == null) {
+      MessageService.showWarning(context, 'HTML comparison preview not available');
+      return;
+    }
+
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    const String tabId = 'translation_preview_tab';
+    _previewTabsNotifier().updateOrAddTab(
+      PreviewTab(
+        id: tabId,
+        type: PreviewTabType.translationResult,
+        title: l10n.translationPreviewFullDocumentCompare,
+        icon: Icons.compare_arrows,
+        content: TranslationFullComparePreviewTab(
+          taskId: _apiTaskId(),
+          baseMode: baseMode,
+          isPdfSource: _isPdfSourceFile(),
+          isPdfWorkflow: _resolvedWorkflowType() == 'markdown_based' ||
+              _isPdfSourceFile(),
+          translatedPdfUrl: effectiveDownloads?['pdf'],
+          translatedHtmlUrl: translatedHtmlUrl,
+          initialSyncScroll: _lastSyncScroll,
+          onSyncScrollChanged: (bool enabled) {
+            _lastSyncScroll = enabled;
+          },
+          onRequestPreviewSettings: _handlePreviewSettingsRequest,
+          onDownload: widget.onDownload,
+        ),
+        dataRef: <String, dynamic>{
+          'taskId': _apiTaskId(),
+          'flowId': widget.flowId,
+          'downloads': effectiveDownloads,
+        },
+      ),
+    );
+    _switchToPreviewTab(tabId);
+  }
+
+  Future<void> _openPdfPreviewTab({required String rendererType}) async {
+    final dynamic translationState = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!))
+        : null;
+    final Map<String, String>? effectiveDownloads =
+        _resolveEffectiveDownloads(translationState);
+
+    if (!_isPdfSourceFile() || effectiveDownloads?.containsKey('pdf') != true) {
+      MessageService.showWarning(context, 'PDF preview not available');
+      return;
+    }
+
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final String title = rendererType == 'typst_overlay'
+        ? l10n.translationExportPdfPreserveLayout
+        : l10n.translationExportPdfReflow;
+
+    const String tabId = 'translation_preview_tab';
+    _previewTabsNotifier().updateOrAddTab(
+      PreviewTab(
+        id: tabId,
+        type: PreviewTabType.translationResult,
+        title: title,
+        icon: Icons.picture_as_pdf,
+        content: _buildPdfPreview(rendererType: rendererType),
+        dataRef: <String, dynamic>{
+          'taskId': _apiTaskId(),
+          'flowId': widget.flowId,
+          'downloads': effectiveDownloads,
+        },
+      ),
+    );
+    _switchToPreviewTab(tabId);
+  }
+
+  /// Build PDF preview widget (Typst overlay or Pandoc reflow).
+  Widget _buildPdfPreview({required String rendererType}) {
+    final dynamic translationState = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!))
+        : null;
+    final String? relativeUrl =
+        _resolveEffectiveDownloads(translationState)?['pdf'];
+
+    if (relativeUrl == null) {
+      return const Center(child: Text('PDF download not available'));
+    }
+
+    final FormatSettings formatSettings = ref.read(
+      formatSettingsProviderFamily(_apiTaskId()),
+    );
+    const bool isPdfWorkflow = true;
+    final Map<String, String> queryParams = buildPreviewExportQueryParams(
+      formatSettings,
+      isPdfWorkflow: isPdfWorkflow,
+      rendererType: rendererType,
+    );
+    final String finalUrl = mergePreviewUrl(relativeUrl, queryParams);
+    final String viewerUrl = finalUrl.startsWith('http')
+        ? finalUrl
+        : '${AppConfig.baseUrl}$finalUrl';
+
+    return PdfPreview(
+      downloadUrl: finalUrl,
+      viewerUrl: viewerUrl,
+      rendererType: rendererType,
+      onDownload: widget.onDownload,
+      onRequestPreviewSettings: _handlePreviewSettingsRequest,
+    );
   }
 
   /// Show download dialog. Export formats are fixed per workflow type;
@@ -5947,250 +5831,5 @@ class _TranslationResultPreviewState
         MessageService.showError(context, 'Failed to download $fileType: $e');
       }
     }
-  }
-
-  /// Show PDF export dialog with table format and PDF type (translated/original) options
-  /// Returns a Map with 'tableFormat', 'equationFormat', 'chartFormat' and 'pdfType' keys, or null if cancelled
-  Future<Map<String, String>?> _showPdfExportDialog() async {
-    final FormatSettings formatSettings = ref.read(
-      formatSettingsProviderFamily(_apiTaskId()),
-    );
-    final String initialTableFormat =
-        formatSettings.getTableFormat(isPdfWorkflow: true);
-    final String initialEquationFormat =
-        formatSettings.getEquationFormat(isPdfWorkflow: true);
-    final String initialChartFormat =
-        formatSettings.getChartFormat(isPdfWorkflow: true);
-
-    // Get status to check for tables, equations, charts
-    Map<String, dynamic>? status;
-    try {
-      final TranslationService svc = TranslationService();
-      status = await svc.getStatus(_apiTaskId());
-    } catch (e) {
-      status = null;
-    }
-    final bool hasTables = status?['has_tables'] as bool? ?? false;
-    final bool hasInterlineEquations = status?['has_interline_equations'] as bool? ?? false;
-    final bool hasCharts = status?['has_charts'] as bool? ?? false;
-
-    return DialogHelper.showDialog<Map<String, String>>(
-        context: context,
-        builder: (BuildContext context) {
-          String selectedTableFormat = initialTableFormat;
-          String selectedEquationFormat = initialEquationFormat;
-          String selectedChartFormat = initialChartFormat;
-          String selectedPdfType = 'translated'; // Default: translated PDF
-
-          return AlertDialog(
-            title: const Text('PDF Preview Options'),
-            content: StatefulBuilder(
-              builder: (BuildContext context, setState) => Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  // Development notice banner
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange.shade300),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Icon(
-                          Icons.construction,
-                          color: Colors.orange.shade700,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'PDF export is still under development. The generated PDF may have imperfections such as layout shifts or missing fonts. We are continuously improving this feature.',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.orange.shade900,
-                              height: 1.4,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // PDF type selection (only in debug mode)
-                  if (kDebugMode) ...<Widget>[
-                    const Text(
-                      'Select PDF type:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    RadioListTile<String>(
-                      title: const Text('Translated PDF'),
-                      subtitle: const Text('Translated version (default)'),
-                      value: 'translated',
-                      groupValue: selectedPdfType,
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() {
-                            selectedPdfType = value;
-                          });
-                        }
-                      },
-                    ),
-                    RadioListTile<String>(
-                      title: const Text('Original PDF'),
-                      subtitle: const Text('Original version (debug only)'),
-                      value: 'original',
-                      groupValue: selectedPdfType,
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() {
-                            selectedPdfType = value;
-                          });
-                        }
-                      },
-                    ),
-                    const Divider(),
-                    const SizedBox(height: 8),
-                  ],
-                  // Table format selection
-                  if (hasTables) ...<Widget>[
-                    const Text(
-                      'Choose how tables should be rendered in the PDF:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    RadioListTile<String>(
-                      title: const Text('HTML'),
-                      subtitle: const Text(
-                        'Tables rendered as HTML text (translatable)',
-                      ),
-                      value: 'html',
-                      groupValue: selectedTableFormat,
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() {
-                            selectedTableFormat = value;
-                          });
-                        }
-                      },
-                    ),
-                    RadioListTile<String>(
-                      title: const Text('Image'),
-                      subtitle: const Text(
-                        'Tables rendered as images (not translatable)',
-                      ),
-                      value: 'image',
-                      groupValue: selectedTableFormat,
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() {
-                            selectedTableFormat = value;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  // Equation format selection
-                  if (hasInterlineEquations) ...<Widget>[
-                    const Text(
-                      'Choose how equations should be rendered in the PDF:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    RadioListTile<String>(
-                      title: const Text('Image'),
-                      subtitle: const Text(
-                        'Equations rendered as images (best quality)',
-                      ),
-                      value: 'image',
-                      groupValue: selectedEquationFormat,
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() {
-                            selectedEquationFormat = value;
-                          });
-                        }
-                      },
-                    ),
-                    RadioListTile<String>(
-                      title: const Text('LaTeX'),
-                      subtitle: const Text(
-                        'Equations rendered as LaTeX text',
-                      ),
-                      value: 'text',
-                      groupValue: selectedEquationFormat,
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() {
-                            selectedEquationFormat = value;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  // Chart format selection
-                  if (hasCharts) ...<Widget>[
-                    const Text(
-                      'Choose how charts should be rendered in the PDF:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    RadioListTile<String>(
-                      title: const Text('Image'),
-                      subtitle: const Text(
-                        'Charts rendered as images (recommended)',
-                      ),
-                      value: 'image',
-                      groupValue: selectedChartFormat,
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() {
-                            selectedChartFormat = value;
-                          });
-                        }
-                      },
-                    ),
-                    RadioListTile<String>(
-                      title: const Text('HTML'),
-                      subtitle: const Text(
-                        'Charts rendered as HTML tables (translatable)',
-                      ),
-                      value: 'html',
-                      groupValue: selectedChartFormat,
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() {
-                            selectedChartFormat = value;
-                          });
-                        }
-                      },
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(), // Cancel
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(<String, String>{
-                  'tableFormat': selectedTableFormat,
-                  'equationFormat': selectedEquationFormat,
-                  'chartFormat': selectedChartFormat,
-                  'pdfType': selectedPdfType,
-                }), // Confirm
-                child: const Text('OK'),
-              ),
-            ],
-          );
-        },
-      );
   }
 }

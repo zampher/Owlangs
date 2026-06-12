@@ -286,6 +286,27 @@ class TranslationService {
     return url;
   }
 
+  /// Source (original) PDF URL for full-document compare preview.
+  String buildSourcePdfUrl(String taskId) {
+    return '/service/download/$taskId/source-pdf';
+  }
+
+  /// Source-only HTML URL for full-document compare preview.
+  String buildSourceHtmlUrl(
+    String taskId, {
+    String? tableBodyFormat,
+    String? equationFormat,
+    String? chartBodyFormat,
+  }) {
+    return buildDownloadUrl(
+      taskId,
+      'source-html',
+      tableBodyFormat: tableBodyFormat,
+      equationFormat: equationFormat,
+      chartBodyFormat: chartBodyFormat,
+    );
+  }
+
   /// 拼接debug文件链接（前端直接跳转）
   String buildDebugUrl(String taskId, String fileType) {
     // 与后端保持相对路径，复用当前域名与端口
