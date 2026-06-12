@@ -15,9 +15,11 @@ from typing import Any, List, Optional, Tuple
 from layout.pdf_renderer.typst_overlay.models import RenderBlock
 from layout.pdf_renderer.typst_overlay.text_metrics import (
     block_needs_math_fit,
+    count_non_cross_page_lines,
     estimate_typographic_units,
     estimate_visual_line_count,
     is_single_line_bbox,
+    SINGLE_LINE_BBOX_HEIGHT_PT,
 )
 
 
@@ -54,6 +56,12 @@ REF_TEXT_LEADING_QUANTIZE_STEP_EM = 0.05
 # Trigger fit_to_box when estimated line box exceeds this fraction of bbox height.
 SHORT_BBOX_HEIGHT_OVERFLOW_RATIO = 0.85
 
+# Title blocks: MinerU marks type "title" but often omits span size; bbox height is reliable.
+TITLE_SINGLE_LINE_FONT_HEIGHT_RATIO = 0.86
+TITLE_TYPICAL_LINE_HEIGHT_PT = 18.0
+TITLE_LEADING_EM = 1.12
+TITLE_MIN_FONT_SIZE_PT = 10.0
+
 
 def _layout_block_type(layout_raw: Any) -> str:
     if isinstance(layout_raw, dict):
@@ -66,6 +74,52 @@ def is_ref_text_layout(layout_raw: Any, block_type: str = "") -> bool:
     if block_type == "ref_text":
         return True
     return _layout_block_type(layout_raw) == "ref_text"
+
+
+def is_title_layout(layout_raw: Any, block_type: str = "", heading_level: int = 0) -> bool:
+    """True when MinerU or heading metadata marks this block as a title / heading."""
+    if block_type in ("title", "header"):
+        return True
+    if heading_level >= 1:
+        return True
+    return _layout_block_type(layout_raw) in ("title", "header")
+
+
+def estimate_title_font_size_pt(
+    bbox_height: float,
+    layout_raw: Any = None,
+    *,
+    min_size_pt: float = TITLE_MIN_FONT_SIZE_PT,
+    max_size_pt: float = MAX_FONT_SIZE_PT,
+) -> float:
+    """
+    Estimate title font size from bbox height and MinerU line structure.
+
+    Section headings often have a tight single-line bbox (~11pt) where body-style
+    line-count heuristics shrink the font below the original. Document titles use
+    a taller bbox with one logical ``lines[]`` entry but multiple visual lines;
+    prefer bbox-based visual line count over body line height (14pt).
+    """
+    if bbox_height <= 0:
+        return DEFAULT_FONT_SIZE_PT
+
+    raw_line_count = max(1, count_non_cross_page_lines(layout_raw))
+    available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
+
+    if (
+        bbox_height <= SINGLE_LINE_BBOX_HEIGHT_PT
+        and raw_line_count == 1
+    ):
+        estimated = bbox_height * TITLE_SINGLE_LINE_FONT_HEIGHT_RATIO
+    else:
+        visual_lines = max(
+            float(raw_line_count),
+            bbox_height / TITLE_TYPICAL_LINE_HEIGHT_PT,
+        )
+        estimated = available_h / (visual_lines * TITLE_LEADING_EM)
+
+    clamped = max(min_size_pt, min(max_size_pt, estimated))
+    return round(clamped, 1)
 
 
 def quantize_ref_font_size_pt(
@@ -148,6 +202,16 @@ class FontFitCalculator:
 
         _, y0, _, y1 = block.inner_bbox
         bbox_height = max(1.0, y1 - y0)
+
+        block_type = _layout_block_type(layout_raw)
+        if is_title_layout(layout_raw, block_type=block_type):
+            return estimate_title_font_size_pt(
+                bbox_height,
+                layout_raw,
+                min_size_pt=max(self.min_size_pt, TITLE_MIN_FONT_SIZE_PT),
+                max_size_pt=self.max_size_pt,
+            )
+
         available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
 
         text = block.plain_text or block.markdown_text or ""
@@ -307,6 +371,7 @@ class FontFitCalculator:
         """
         block_type = _layout_block_type(layout_raw)
         is_ref_text = is_ref_text_layout(layout_raw, block_type=block_type)
+        is_title = is_title_layout(layout_raw, block_type=block_type)
         use_unified_ref = (
             is_ref_text
             and ref_unified_font_pt is not None
@@ -349,6 +414,22 @@ class FontFitCalculator:
                     "fit_min_font_size_pt": font_size,
                     "fit_max_font_size_pt": font_size,
                     "fit_min_leading_em": leading,
+                    "fit_max_height_pt": bbox_height * 0.9,
+                }
+            )
+
+        if is_title:
+            title_leading = leading if leading > 0 and leading != DEFAULT_LEADING_EM else TITLE_LEADING_EM
+            return RenderBlock(
+                **{
+                    **block.__dict__,
+                    "font_size_pt": font_size,
+                    "leading_em": title_leading,
+                    "fit_to_box": False,
+                    "fit_single_line": False,
+                    "fit_min_font_size_pt": max(self.min_size_pt, font_size * 0.85),
+                    "fit_max_font_size_pt": min(self.max_size_pt, font_size * 1.05),
+                    "fit_min_leading_em": max(0.9, title_leading * 0.9),
                     "fit_max_height_pt": bbox_height * 0.9,
                 }
             )

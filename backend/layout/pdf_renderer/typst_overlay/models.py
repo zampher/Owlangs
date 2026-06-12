@@ -127,7 +127,8 @@ def layout_block_to_render_block(
         # Image/table blocks: skip text rendering, keep original
         render_kind = "skip"
     elif block_type in ('title', 'header') or heading_level >= 1:
-        render_kind = "plain_line" if heading_level >= 1 else "plain"
+        # Titles use markdown rendering so multi-line document titles wrap with leading.
+        render_kind = "markdown"
     elif len(translated_text) < 80:
         render_kind = "plain_line"
     else:
@@ -143,7 +144,11 @@ def layout_block_to_render_block(
     block_font_weight = font_weight
     if isinstance(raw, dict):
         # Some MinerU output includes font_size in raw['orig_font_size'] or similar
-        raw_font_size = raw.get('font_size') or raw.get('orig_font_size')
+        raw_font_size = (
+            raw.get('font_size')
+            or raw.get('orig_font_size')
+            or raw.get('inferred_font_size')
+        )
         if raw_font_size and isinstance(raw_font_size, (int, float)):
             block_font_size = float(raw_font_size)
         raw_font_weight = raw.get('font_weight') or raw.get('weight')

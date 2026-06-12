@@ -8,6 +8,7 @@ import unittest
 from layout.pdf_renderer.typst_overlay.font_fit import (
     FontFitCalculator,
     REF_TEXT_MAX_LEADING_EM,
+    estimate_title_font_size_pt,
     quantize_ref_font_size_pt,
     quantize_ref_leading_em,
 )
@@ -245,6 +246,50 @@ class TestFontFitCalculator(unittest.TestCase):
         self.assertEqual(quantize_ref_leading_em(0.63), 0.60)
         self.assertEqual(quantize_ref_leading_em(0.67), 0.65)
         self.assertEqual(quantize_ref_leading_em(0.72), 0.70)
+
+    def test_section_title_single_line_bbox(self):
+        """MinerU section heading: tight ~11pt bbox, one lines[] entry."""
+        raw = {
+            "type": "title",
+            "bbox": [105, 464, 192, 475],
+            "lines": [{"spans": [{"type": "text", "content": "1 Introduction"}]}],
+        }
+        size = estimate_title_font_size_pt(11.0, raw)
+        self.assertGreaterEqual(size, 10.0)
+        self.assertLessEqual(size, 11.0)
+
+    def test_document_title_tall_bbox(self):
+        """Paper title: ~41pt bbox, one logical line but multiple visual lines."""
+        raw = {
+            "type": "title",
+            "bbox": [170, 97, 442, 138],
+            "lines": [{
+                "spans": [{
+                    "type": "text",
+                    "content": "Improving Language Understanding by Generative Pre-Training",
+                }],
+            }],
+        }
+        size = estimate_title_font_size_pt(41.0, raw)
+        self.assertGreaterEqual(size, 12.0)
+        self.assertLessEqual(size, 16.0)
+
+    def test_title_blocks_skip_fit_to_box(self):
+        calc = FontFitCalculator()
+        raw = {
+            "type": "title",
+            "lines": [{"spans": [{"type": "text", "content": "1 Introduction"}]}],
+        }
+        block = RenderBlock(
+            block_id="title",
+            page_index=0,
+            inner_bbox=(105.0, 464.0, 192.0, 475.0),
+            plain_text="1 Introduction",
+            markdown_text="1 Introduction",
+        )
+        fitted = calc.calculate_fit_params(block, layout_raw=raw)
+        self.assertFalse(fitted.fit_to_box)
+        self.assertGreaterEqual(fitted.font_size_pt, 10.0)
 
 
 if __name__ == "__main__":
