@@ -789,7 +789,8 @@ namespace OwlangsLauncher.Views
                 var configDirs = new[]
                 {
                     @"C:\ProgramData\Owlangs",
-                    @"C:\Users\Public\Owlangs"
+                    @"C:\Users\Public\Owlangs",
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Owlangs", "cache")
                 };
 
                 foreach (var dir in configDirs)
