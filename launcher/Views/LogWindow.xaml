@@ -64,6 +64,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
@@ -187,6 +188,15 @@
                                         FontSize="11" MinWidth="70"/>
                             </StackPanel>
                         </Grid>
+                    </Border>
+
+                    <!-- Reset Default Config -->
+                    <Border Grid.Row="4" Background="{DynamicResource WindowBackgroundBrush}" Padding="12" CornerRadius="4" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" VerticalAlignment="Top">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <Button x:Name="ResetConfigButton" Content="Reset Default Config" Click="ResetConfigButton_Click"
+                                    Margin="3,0" Padding="12,6" Style="{StaticResource PrimaryButtonStyle}"
+                                    FontSize="11" MinWidth="150" ToolTip="Clear all configuration files and restart backend"/>
+                        </StackPanel>
                     </Border>
                 </Grid>
             </Border>

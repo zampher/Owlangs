@@ -752,6 +752,85 @@ namespace OwlangsLauncher.Views
             }
         }
 
+        private async void ResetConfigButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Confirmation dialog
+            var result = ThemedMessageBox.Show(
+                this,
+                "This will clear all configuration files in:\n" +
+                "  - C:\\ProgramData\\Owlangs\n" +
+                "  - C:\\Users\\Public\\Owlangs\n\n" +
+                "The backend will be restarted afterwards.\n\n" +
+                "Are you sure you want to continue?",
+                "Reset to default config",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            try
+            {
+                ResetConfigButton.IsEnabled = false;
+                StatusText.Text = "Resetting configuration...";
+
+                // Step 1: Stop backend
+                if (_backendService.IsRunning)
+                {
+                    StatusText.Text = "Stopping backend...";
+                    await _backendService.StopBackend();
+                    // Wait for backend to fully stop
+                    await Task.Delay(2000);
+                }
+
+                // Step 2: Clear config directories
+                var configDirs = new[]
+                {
+                    @"C:\ProgramData\Owlangs",
+                    @"C:\Users\Public\Owlangs"
+                };
+
+                foreach (var dir in configDirs)
+                {
+                    try
+                    {
+                        if (Directory.Exists(dir))
+                        {
+                            Directory.Delete(dir, recursive: true);
+                            LauncherLogger.Info($"ResetConfig: deleted {dir}");
+                        }
+                        else
+                        {
+                            LauncherLogger.Info($"ResetConfig: {dir} does not exist, skipping");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LauncherLogger.Warn($"ResetConfig: failed to delete {dir}: {ex.Message}");
+                    }
+                }
+
+                StatusText.Text = "Configuration cleared. Restarting backend...";
+
+                // Step 3: Restart backend
+                _backendService.StartBackend();
+                StatusText.Text = "Configuration reset complete. Backend restarted.";
+            }
+            catch (Exception ex)
+            {
+                LauncherLogger.Error($"ResetConfig: error: {ex.Message}");
+                MessageBox.Show($"Failed to reset configuration: {ex.Message}", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusText.Text = "Reset configuration failed.";
+            }
+            finally
+            {
+                ResetConfigButton.IsEnabled = true;
+            }
+        }
+
         private void BackendAutoStartCheckBox_Changed(object sender, RoutedEventArgs e)
         {
             if (_suppressCheckBoxEvents) return;
