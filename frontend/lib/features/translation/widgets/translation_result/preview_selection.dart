@@ -37,6 +37,10 @@ extension TranslationPreviewModeX on TranslationPreviewMode {
       this == TranslationPreviewMode.html ||
       this == TranslationPreviewMode.pdfReflow;
 
+  /// Default full-document compare for this preview mode (preserve PDF only).
+  bool get defaultFullDocumentCompare =>
+      this == TranslationPreviewMode.pdfPreserve;
+
   /// Default linked-scroll for full-document compare (preserve PDF only).
   bool get defaultFullCompareSyncScroll =>
       this == TranslationPreviewMode.pdfPreserve;

@@ -130,10 +130,10 @@ class _TranslationResultPreviewState
   TranslationPreviewMode? _lastPreviewMode;
 
   /// Whether full-document compare was enabled in the last preview dialog.
-  bool _lastFullDocumentCompare = false;
+  bool? _lastFullDocumentCompare;
 
   /// Whether linked scroll was enabled for full-document compare preview.
-  bool _lastSyncScroll = false;
+  bool? _lastSyncScroll;
 
   /// TaskId for which we already fetched on-demand download links (so we only fetch once per task).
   String? _lastTaskIdForOnDemandDownloadsFetch;
@@ -4624,6 +4624,18 @@ class _TranslationResultPreviewState
     final Map<String, String>? effectiveDownloads =
         _resolveEffectiveDownloads(translationState);
 
+    final TranslationPreviewMode resolvedMode = initialMode ??
+        _lastPreviewMode ??
+        defaultPreviewModeForDialog(
+          isPdfFile: _isPdfSourceFile(),
+          hasPdfDownload: effectiveDownloads?.containsKey('pdf') ?? false,
+          resolvedWorkflowType: _resolvedWorkflowType(),
+        );
+    final bool resolvedFullCompare = _lastFullDocumentCompare ??
+        resolvedMode.defaultFullDocumentCompare;
+    final bool resolvedSyncScroll = _lastSyncScroll ??
+        (resolvedFullCompare ? resolvedMode.defaultFullCompareSyncScroll : false);
+
     return showTranslationPreviewDialog(
       context: context,
       ref: ref,
@@ -4631,15 +4643,9 @@ class _TranslationResultPreviewState
       isPdfFile: _isPdfSourceFile(),
       hasPdfDownload: effectiveDownloads?.containsKey('pdf') ?? false,
       resolvedWorkflowType: _resolvedWorkflowType(),
-      initialMode: initialMode ??
-          _lastPreviewMode ??
-          defaultPreviewModeForDialog(
-            isPdfFile: _isPdfSourceFile(),
-            hasPdfDownload: effectiveDownloads?.containsKey('pdf') ?? false,
-            resolvedWorkflowType: _resolvedWorkflowType(),
-          ),
-      initialFullDocumentCompare: _lastFullDocumentCompare,
-      initialSyncScroll: _lastSyncScroll,
+      initialMode: resolvedMode,
+      initialFullDocumentCompare: resolvedFullCompare,
+      initialSyncScroll: resolvedSyncScroll,
     );
   }
 
@@ -4825,7 +4831,8 @@ class _TranslationResultPreviewState
               _isPdfSourceFile(),
           translatedPdfUrl: effectiveDownloads?['pdf'],
           translatedHtmlUrl: translatedHtmlUrl,
-          initialSyncScroll: _lastSyncScroll,
+          initialSyncScroll:
+              _lastSyncScroll ?? baseMode.defaultFullCompareSyncScroll,
           onSyncScrollChanged: (bool enabled) {
             _lastSyncScroll = enabled;
           },

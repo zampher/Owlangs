@@ -87,10 +87,10 @@ Future<PreviewSelection?> showTranslationPreviewDialog({
     selectedMode = modeOptions.first.mode;
   }
   bool fullDocumentCompareSelected = initialFullDocumentCompare;
-  bool syncScrollSelected = initialFullDocumentCompare &&
-          initialMode == selectedMode
-      ? initialSyncScroll
-      : selectedMode.defaultFullCompareSyncScroll;
+  bool syncScrollSelected = fullDocumentCompareSelected &&
+      (initialFullDocumentCompare && initialMode == selectedMode
+          ? initialSyncScroll
+          : selectedMode.defaultFullCompareSyncScroll);
 
   Map<String, dynamic>? status;
   try {
@@ -227,8 +227,13 @@ Future<PreviewSelection?> showTranslationPreviewDialog({
                                     setDialogState(() {
                                       selectedModeIndex = value;
                                       selectedMode = modeOptions[value].mode;
-                                      syncScrollSelected =
-                                          selectedMode.defaultFullCompareSyncScroll;
+                                      if (selectedMode.defaultFullDocumentCompare) {
+                                        fullDocumentCompareSelected = true;
+                                        syncScrollSelected =
+                                            selectedMode.defaultFullCompareSyncScroll;
+                                      } else {
+                                        syncScrollSelected = false;
+                                      }
                                     });
                                   },
                                   title: Text(modeOptions[i].label),
