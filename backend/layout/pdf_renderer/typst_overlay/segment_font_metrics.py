@@ -8,12 +8,20 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from layout.base import LayoutBlock, LayoutDocument
-from layout.pdf_renderer.typst_overlay.font_fit import FontFitCalculator
+from layout.pdf_renderer.typst_overlay.font_fit import (
+    DEFAULT_LEADING_EM,
+    FontFitCalculator,
+)
 from layout.pdf_renderer.typst_overlay.models import RenderBlock, layout_block_to_render_block
 
 FONT_SIZE_PT_MIN = 5.0
 FONT_SIZE_PT_MAX = 72.0
 FONT_SIZE_PT_STEP = 0.1
+
+LEADING_EM_MIN = 0.35
+LEADING_EM_MAX = 3.0
+LEADING_EM_STEP = 0.05
+LEADING_EM_DEFAULT = DEFAULT_LEADING_EM
 
 VALID_FONT_WEIGHTS = frozenset({"regular", "bold"})
 VALID_FONT_STYLES = frozenset({"normal", "italic"})
@@ -92,6 +100,32 @@ def segment_font_style_source(segment: Dict[str, Any]) -> str:
     return "auto"
 
 
+def clamp_leading_em(value: float) -> float:
+    """Clamp user/computed line spacing to supported PDF range."""
+    clamped = max(LEADING_EM_MIN, min(LEADING_EM_MAX, float(value)))
+    steps = round(clamped / LEADING_EM_STEP)
+    return round(steps * LEADING_EM_STEP, 2)
+
+
+def normalize_user_leading_em(value: Any) -> Optional[float]:
+    """Parse and validate a user line spacing (em); return None when invalid."""
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < LEADING_EM_MIN or parsed > LEADING_EM_MAX:
+        return None
+    return clamp_leading_em(parsed)
+
+
+def segment_leading_em_source(segment: Dict[str, Any]) -> str:
+    if normalize_user_leading_em(segment.get("leading_em")) is not None:
+        return "user"
+    return "auto"
+
+
 def compute_block_font_weight_from_layout(block: LayoutBlock) -> str:
     """Infer font weight from MinerU layout metadata."""
     raw = getattr(block, "raw", None) or {}
@@ -154,6 +188,19 @@ def compute_block_render_font_size_pt(
     calculator: Optional[FontFitCalculator] = None,
 ) -> Optional[float]:
     """Dry-run Typst font fit for one layout block."""
+    metrics = compute_block_render_fit_metrics(
+        block, text, calculator=calculator,
+    )
+    return metrics[0] if metrics else None
+
+
+def compute_block_render_fit_metrics(
+    block: LayoutBlock,
+    text: str,
+    *,
+    calculator: Optional[FontFitCalculator] = None,
+) -> Optional[tuple[float, float]]:
+    """Dry-run Typst font fit; return (font_size_pt, leading_em)."""
     if not text or not text.strip():
         return None
     if not is_font_size_editable_block_type(getattr(block, "type", "") or "text"):
@@ -167,7 +214,10 @@ def compute_block_render_font_size_pt(
         translated_text=text,
     )
     fitted = calc.calculate_fit_params(rb, layout_raw=layout_raw)
-    return round(float(fitted.font_size_pt), 1)
+    return (
+        round(float(fitted.font_size_pt), 1),
+        round(float(fitted.leading_em), 2),
+    )
 
 
 def enrich_segment_font_fields(
@@ -181,11 +231,13 @@ def enrich_segment_font_fields(
     segment["font_size_source"] = segment_font_size_source(segment)
     segment["font_weight_source"] = segment_font_weight_source(segment)
     segment["font_style_source"] = segment_font_style_source(segment)
+    segment["leading_em_source"] = segment_leading_em_source(segment)
 
     if layout_doc is None:
         segment.pop("computed_font_size_pt", None)
         segment.pop("computed_font_weight", None)
         segment.pop("computed_font_style", None)
+        segment.pop("computed_leading_em", None)
         return
 
     block_map: Dict[int, LayoutBlock] = {}
@@ -201,6 +253,7 @@ def enrich_segment_font_fields(
         segment.pop("computed_font_size_pt", None)
         segment.pop("computed_font_weight", None)
         segment.pop("computed_font_style", None)
+        segment.pop("computed_leading_em", None)
         return
 
     block = block_map[block_idx]
@@ -208,6 +261,7 @@ def enrich_segment_font_fields(
         segment.pop("computed_font_size_pt", None)
         segment.pop("computed_font_weight", None)
         segment.pop("computed_font_style", None)
+        segment.pop("computed_leading_em", None)
         return
 
     segment["computed_font_weight"] = compute_block_font_weight_from_layout(block)
@@ -222,15 +276,17 @@ def enrich_segment_font_fields(
             or segment.get("source_text")
             or ""
         )
-    computed = compute_block_render_font_size_pt(
+    computed = compute_block_render_fit_metrics(
         block,
         str(content),
         calculator=calculator,
     )
     if computed is not None:
-        segment["computed_font_size_pt"] = computed
+        segment["computed_font_size_pt"] = computed[0]
+        segment["computed_leading_em"] = computed[1]
     else:
         segment.pop("computed_font_size_pt", None)
+        segment.pop("computed_leading_em", None)
 
 
 def enrich_segments_font_fields(
@@ -358,6 +414,23 @@ def build_block_font_style_map_from_segments(
     return block_map
 
 
+def build_block_leading_map_from_segments(
+    segments: List[Dict[str, Any]],
+    task_state: Optional[Dict[str, Any]] = None,
+) -> Dict[int, float]:
+    """Expand segment-level user leading overrides to layout block indices."""
+    block_map: Dict[int, float] = {}
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        leading = normalize_user_leading_em(seg.get("leading_em"))
+        if leading is None:
+            continue
+        for idx in resolve_segment_layout_block_indices(seg, task_state):
+            block_map[idx] = leading
+    return block_map
+
+
 def segments_have_user_font_overrides(
     segments: List[Dict[str, Any]],
 ) -> bool:
@@ -370,6 +443,8 @@ def segments_have_user_font_overrides(
         if normalize_user_font_weight(seg.get("font_weight")) is not None:
             return True
         if normalize_user_font_style(seg.get("font_style")) is not None:
+            return True
+        if normalize_user_leading_em(seg.get("leading_em")) is not None:
             return True
     return False
 
@@ -413,15 +488,20 @@ def apply_user_typography_override(
     *,
     font_weight: Optional[str] = None,
     font_style: Optional[str] = None,
+    leading_em: Optional[float] = None,
 ) -> RenderBlock:
-    """Apply user font weight/style to a render block."""
+    """Apply user font weight/style/leading to a render block."""
     updates: Dict[str, Any] = {}
     normalized_weight = normalize_user_font_weight(font_weight)
     normalized_style = normalize_user_font_style(font_style)
+    normalized_leading = normalize_user_leading_em(leading_em)
     if normalized_weight is not None:
         updates["font_weight"] = normalized_weight
     if normalized_style is not None:
         updates["font_style"] = normalized_style
+    if normalized_leading is not None:
+        updates["leading_em"] = normalized_leading
+        updates["fit_min_leading_em"] = normalized_leading
     if not updates:
         return rb
     return RenderBlock(**{**rb.__dict__, **updates})

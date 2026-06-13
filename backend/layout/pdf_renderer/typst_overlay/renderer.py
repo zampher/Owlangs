@@ -753,6 +753,18 @@ class TypstOverlayRenderer(BasePDFRenderer):
         value = overrides.get(block_key)
         return str(value) if value is not None else None
 
+    def _block_leading_override_em(self, block_key: int) -> Optional[float]:
+        overrides = getattr(self.config, "leading_em_by_block_index", None) or {}
+        if not overrides:
+            return None
+        value = overrides.get(block_key)
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
     def _apply_block_typography_overrides(
         self,
         rb: RenderBlock,
@@ -760,12 +772,14 @@ class TypstOverlayRenderer(BasePDFRenderer):
     ) -> RenderBlock:
         weight = self._block_font_weight_override(block_key)
         style = self._block_font_style_override(block_key)
-        if weight is None and style is None:
+        leading = self._block_leading_override_em(block_key)
+        if weight is None and style is None and leading is None:
             return rb
         return apply_user_typography_override(
             rb,
             font_weight=weight,
             font_style=style,
+            leading_em=leading,
         )
 
     def _collect_unified_ref_metrics(

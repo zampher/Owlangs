@@ -86,6 +86,9 @@ class TranslationSegmentItem extends StatefulWidget {
     this.fontStyle,
     this.computedFontStyle,
     this.fontStyleSource,
+    this.leadingEm,
+    this.computedLeadingEm,
+    this.leadingEmSource,
     this.onFontSizeChanged,
   });
   final String text;
@@ -139,11 +142,15 @@ class TranslationSegmentItem extends StatefulWidget {
   final String? fontStyle;
   final String? computedFontStyle;
   final String? fontStyleSource;
+  final double? leadingEm;
+  final double? computedLeadingEm;
+  final String? leadingEmSource;
   final void Function(
     int index, {
     double? fontSizePt,
     String? fontWeight,
     String? fontStyle,
+    double? leadingEm,
     bool reset,
   })? onFontSizeChanged;
 
@@ -630,13 +637,15 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     if (style == 'italic') {
       styleParts.add('I');
     }
+    styleParts.add('↕${_effectiveLeadingEm().toStringAsFixed(2)}');
     return styleParts.join(' · ');
   }
 
   bool _hasPdfTypographyOverride() {
     return (widget.fontSizeSource == 'user' && widget.fontSizePt != null) ||
         widget.fontWeightSource == 'user' ||
-        widget.fontStyleSource == 'user';
+        widget.fontStyleSource == 'user' ||
+        widget.leadingEmSource == 'user';
   }
 
   String _effectiveFontWeight() {
@@ -651,6 +660,15 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
       return widget.fontStyle!;
     }
     return widget.computedFontStyle ?? widget.fontStyle ?? 'normal';
+  }
+
+  double _effectiveLeadingEm() {
+    if (widget.leadingEmSource == 'user' && widget.leadingEm != null) {
+      return widget.leadingEm!;
+    }
+    return widget.computedLeadingEm ??
+        widget.leadingEm ??
+        kPdfLeadingEmDefault;
   }
 
   Future<void> _openFontSizeDialog() async {
@@ -672,6 +690,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
       initialFontSizePt: initialSize,
       initialFontWeight: _effectiveFontWeight(),
       initialFontStyle: _effectiveFontStyle(),
+      initialLeadingEm: _effectiveLeadingEm(),
     );
 
     if (!mounted || result == null) {
@@ -686,6 +705,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
       fontSizePt: result.fontSizePt,
       fontWeight: result.fontWeight,
       fontStyle: result.fontStyle,
+      leadingEm: result.leadingEm,
     );
   }
 

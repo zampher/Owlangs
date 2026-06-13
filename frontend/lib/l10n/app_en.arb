@@ -1353,6 +1353,22 @@
   "segmentPdfTypographyPreviewLabel": "Preview",
   "segmentPdfTypographyBold": "Bold",
   "segmentPdfTypographyItalic": "Italic",
+  "segmentPdfTypographyFontSizeLabel": "Font size: {sizePt} pt",
+  "@segmentPdfTypographyFontSizeLabel": {
+    "placeholders": {
+      "sizePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfTypographyLeadingLabel": "Line spacing: {leadingEm} em",
+  "@segmentPdfTypographyLeadingLabel": {
+    "placeholders": {
+      "leadingEm": {
+        "type": "String"
+      }
+    }
+  },
   "segmentPdfFontSizeReset": "Reset to auto",
   "segmentPdfFontSizeApply": "Apply"
 }

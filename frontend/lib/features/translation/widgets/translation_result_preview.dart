@@ -2582,6 +2582,13 @@ class _TranslationResultPreviewState
         'computed_font_style': segment['computed_font_style'],
       if (segment.containsKey('font_style_source'))
         'font_style_source': segment['font_style_source'],
+      if (segment.containsKey('leading_em'))
+        'leading_em': _parseOptionalDouble(segment['leading_em']),
+      if (segment.containsKey('computed_leading_em'))
+        'computed_leading_em':
+            _parseOptionalDouble(segment['computed_leading_em']),
+      if (segment.containsKey('leading_em_source'))
+        'leading_em_source': segment['leading_em_source'],
     };
   }
 
@@ -4513,6 +4520,7 @@ class _TranslationResultPreviewState
     double? fontSizePt,
     String? fontWeight,
     String? fontStyle,
+    double? leadingEm,
     bool reset = false,
   }) async {
     try {
@@ -4524,6 +4532,7 @@ class _TranslationResultPreviewState
         fontSizeReset: reset,
         fontWeight: fontWeight,
         fontStyle: fontStyle,
+        leadingEm: leadingEm,
         pdfFontReset: reset,
       );
 
@@ -4537,6 +4546,8 @@ class _TranslationResultPreviewState
             'font_weight_source': 'auto',
             'font_style': null,
             'font_style_source': 'auto',
+            'leading_em': null,
+            'leading_em_source': 'auto',
           } else ...<String, dynamic>{
             if (fontSizePt != null) 'font_size_pt': fontSizePt,
             if (fontSizePt != null) 'font_size_source': 'user',
@@ -4544,6 +4555,8 @@ class _TranslationResultPreviewState
             if (fontWeight != null) 'font_weight_source': 'user',
             if (fontStyle != null) 'font_style': fontStyle,
             if (fontStyle != null) 'font_style_source': 'user',
+            if (leadingEm != null) 'leading_em': leadingEm,
+            if (leadingEm != null) 'leading_em_source': 'user',
           },
         };
       } else {
@@ -4555,6 +4568,8 @@ class _TranslationResultPreviewState
             'font_weight_source': 'auto',
             'font_style': null,
             'font_style_source': 'auto',
+            'leading_em': null,
+            'leading_em_source': 'auto',
           } else ...<String, dynamic>{
             if (fontSizePt != null) 'font_size_pt': fontSizePt,
             if (fontSizePt != null) 'font_size_source': 'user',
@@ -4562,6 +4577,8 @@ class _TranslationResultPreviewState
             if (fontWeight != null) 'font_weight_source': 'user',
             if (fontStyle != null) 'font_style': fontStyle,
             if (fontStyle != null) 'font_style_source': 'user',
+            if (leadingEm != null) 'leading_em': leadingEm,
+            if (leadingEm != null) 'leading_em_source': 'user',
           },
         };
       }

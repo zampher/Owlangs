@@ -110,6 +110,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
     double? fontSizePt,
     String? fontWeight,
     String? fontStyle,
+    double? leadingEm,
     bool reset,
   })? onFontSizeChanged;
 
@@ -160,6 +161,24 @@ class TranslationComparisonPanel extends ConsumerWidget {
   String? _readComputedFontStyle(Map<String, dynamic> metadata) {
     final dynamic raw = metadata['computed_font_style'];
     return raw is String ? raw : null;
+  }
+
+  double? _readLeadingEm(Map<String, dynamic> metadata) {
+    return _readOptionalDouble(metadata['leading_em']);
+  }
+
+  double? _readComputedLeadingEm(Map<String, dynamic> metadata) {
+    return _readOptionalDouble(metadata['computed_leading_em']);
+  }
+
+  double? _readOptionalDouble(dynamic raw) {
+    if (raw is num) {
+      return raw.toDouble();
+    }
+    if (raw is String) {
+      return double.tryParse(raw);
+    }
+    return null;
   }
 
   /// Calculate counts for state-based filter chips
@@ -759,6 +778,9 @@ class TranslationComparisonPanel extends ConsumerWidget {
               fontStyle: _readFontStyle(metadata),
               computedFontStyle: _readComputedFontStyle(metadata),
               fontStyleSource: metadata['font_style_source'] as String?,
+              leadingEm: _readLeadingEm(metadata),
+              computedLeadingEm: _readComputedLeadingEm(metadata),
+              leadingEmSource: metadata['leading_em_source'] as String?,
               onFontSizeChanged: onFontSizeChanged,
             ),
           );
@@ -946,6 +968,9 @@ class TranslationComparisonPanel extends ConsumerWidget {
                   fontStyle: _readFontStyle(metadata),
                   computedFontStyle: _readComputedFontStyle(metadata),
                   fontStyleSource: metadata['font_style_source'] as String?,
+                  leadingEm: _readLeadingEm(metadata),
+                  computedLeadingEm: _readComputedLeadingEm(metadata),
+                  leadingEmSource: metadata['leading_em_source'] as String?,
                   onFontSizeChanged: onFontSizeChanged,
                 ),
               )

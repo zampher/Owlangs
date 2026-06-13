@@ -250,6 +250,7 @@ class PDFGenerator:
                 font_size_by_block_index: Dict[int, float] = {}
                 font_weight_by_block_index: Dict[int, str] = {}
                 font_style_by_block_index: Dict[int, str] = {}
+                leading_em_by_block_index: Dict[int, float] = {}
             else:
                 segments = segments_data.get("segments") or []
                 is_deep_split_enabled = bool(task_state.get("deep_split"))
@@ -283,6 +284,7 @@ class PDFGenerator:
                     build_block_font_map_from_segments,
                     build_block_font_style_map_from_segments,
                     build_block_font_weight_map_from_segments,
+                    build_block_leading_map_from_segments,
                 )
                 font_size_by_block_index = build_block_font_map_from_segments(
                     segments,
@@ -293,6 +295,10 @@ class PDFGenerator:
                     task_state,
                 )
                 font_style_by_block_index = build_block_font_style_map_from_segments(
+                    segments,
+                    task_state,
+                )
+                leading_em_by_block_index = build_block_leading_map_from_segments(
                     segments,
                     task_state,
                 )
@@ -405,6 +411,11 @@ class PDFGenerator:
                             font_style_by_block_index=(
                                 font_style_by_block_index
                                 if font_style_by_block_index
+                                else None
+                            ),
+                            leading_em_by_block_index=(
+                                leading_em_by_block_index
+                                if leading_em_by_block_index
                                 else None
                             ),
                         )

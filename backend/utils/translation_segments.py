@@ -2908,6 +2908,8 @@ def update_translation_segment(
     font_style: Optional[str] = None,
     font_weight_reset: bool = False,
     font_style_reset: bool = False,
+    leading_em: Optional[float] = None,
+    leading_em_reset: bool = False,
     pdf_font_reset: bool = False,
     task_state: Optional[dict] = None,
 ) -> Optional[dict]:
@@ -3097,6 +3099,43 @@ def update_translation_segment(
             logger.info(
                 LogModule.TRANS,
                 f"Set font_style={normalized_style} for segment {segment_index} on task {task_id}",
+            )
+
+    if leading_em_reset or pdf_font_reset:
+        segment.pop("leading_em", None)
+        segment["modified"] = True
+        segment["modified_by"] = modified_by or segment.get("modified_by")
+        segment["modified_at"] = time.time()
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            invalidate_pdf_export_cache,
+        )
+        invalidate_pdf_export_cache(task_state)
+        logger.info(
+            LogModule.TRANS,
+            f"Reset leading_em for segment {segment_index} on task {task_id}",
+        )
+    elif leading_em is not None:
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            normalize_user_leading_em,
+        )
+        normalized_leading = normalize_user_leading_em(leading_em)
+        if normalized_leading is None:
+            logger.warning(
+                LogModule.TRANS,
+                f"Invalid leading_em={leading_em} for segment {segment_index} task {task_id}",
+            )
+        else:
+            segment["leading_em"] = normalized_leading
+            segment["modified"] = True
+            segment["modified_by"] = modified_by or segment.get("modified_by")
+            segment["modified_at"] = time.time()
+            from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+                invalidate_pdf_export_cache,
+            )
+            invalidate_pdf_export_cache(task_state)
+            logger.info(
+                LogModule.TRANS,
+                f"Set leading_em={normalized_leading} for segment {segment_index} on task {task_id}",
             )
     
     logger.info(LogModule.TRANS, f"Segment {segment_index} update completed for task {task_id}: modified={segment.get('modified', False)}")

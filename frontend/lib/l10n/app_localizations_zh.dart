@@ -3609,6 +3609,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get segmentPdfTypographyItalic => '斜体';
 
   @override
+  String segmentPdfTypographyFontSizeLabel(String sizePt) {
+    return '字号：$sizePt pt';
+  }
+
+  @override
+  String segmentPdfTypographyLeadingLabel(String leadingEm) {
+    return '行距：$leadingEm em';
+  }
+
+  @override
   String get segmentPdfFontSizeReset => '恢复自动';
 
   @override

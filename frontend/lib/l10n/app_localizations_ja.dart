@@ -3641,6 +3641,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get segmentPdfTypographyItalic => 'Italic';
 
   @override
+  String segmentPdfTypographyFontSizeLabel(String sizePt) {
+    return 'Font size: $sizePt pt';
+  }
+
+  @override
+  String segmentPdfTypographyLeadingLabel(String leadingEm) {
+    return 'Line spacing: $leadingEm em';
+  }
+
+  @override
   String get segmentPdfFontSizeReset => 'Reset to auto';
 
   @override

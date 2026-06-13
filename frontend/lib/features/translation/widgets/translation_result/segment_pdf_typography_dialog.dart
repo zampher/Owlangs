@@ -9,10 +9,21 @@ const double kPdfFontSizeMin = 5.0;
 const double kPdfFontSizeMax = 72.0;
 const double kPdfFontSizeStep = 0.1;
 
+const double kPdfLeadingEmMin = 0.35;
+const double kPdfLeadingEmMax = 3.0;
+const double kPdfLeadingEmStep = 0.05;
+const double kPdfLeadingEmDefault = 1.25;
+
 double snapPdfFontSize(double value) {
   final double clamped = value.clamp(kPdfFontSizeMin, kPdfFontSizeMax);
   final int steps = (clamped / kPdfFontSizeStep).round();
   return double.parse((steps * kPdfFontSizeStep).toStringAsFixed(1));
+}
+
+double snapPdfLeadingEm(double value) {
+  final double clamped = value.clamp(kPdfLeadingEmMin, kPdfLeadingEmMax);
+  final int steps = (clamped / kPdfLeadingEmStep).round();
+  return double.parse((steps * kPdfLeadingEmStep).toStringAsFixed(2));
 }
 
 /// Result from the PDF typography settings dialog.
@@ -22,15 +33,17 @@ class SegmentPdfTypographyResult {
     this.fontSizePt,
     this.fontWeight,
     this.fontStyle,
+    this.leadingEm,
   });
 
   final bool reset;
   final double? fontSizePt;
   final String? fontWeight;
   final String? fontStyle;
+  final double? leadingEm;
 }
 
-/// Show dialog to adjust PDF font size, weight, and style with live preview.
+/// Show dialog to adjust PDF font size, weight, style, and leading with preview.
 Future<SegmentPdfTypographyResult?> showSegmentPdfTypographyDialog({
   required BuildContext context,
   required String previewText,
@@ -38,6 +51,7 @@ Future<SegmentPdfTypographyResult?> showSegmentPdfTypographyDialog({
   required double initialFontSizePt,
   required String initialFontWeight,
   required String initialFontStyle,
+  required double initialLeadingEm,
 }) {
   return showDialog<SegmentPdfTypographyResult>(
     context: context,
@@ -48,6 +62,7 @@ Future<SegmentPdfTypographyResult?> showSegmentPdfTypographyDialog({
         initialFontSizePt: initialFontSizePt,
         initialFontWeight: initialFontWeight,
         initialFontStyle: initialFontStyle,
+        initialLeadingEm: initialLeadingEm,
       );
     },
   );
@@ -60,6 +75,7 @@ class _SegmentPdfTypographyDialog extends StatefulWidget {
     required this.initialFontSizePt,
     required this.initialFontWeight,
     required this.initialFontStyle,
+    required this.initialLeadingEm,
   });
 
   final String previewText;
@@ -67,6 +83,7 @@ class _SegmentPdfTypographyDialog extends StatefulWidget {
   final double initialFontSizePt;
   final String initialFontWeight;
   final String initialFontStyle;
+  final double initialLeadingEm;
 
   @override
   State<_SegmentPdfTypographyDialog> createState() =>
@@ -75,6 +92,7 @@ class _SegmentPdfTypographyDialog extends StatefulWidget {
 
 class _SegmentPdfTypographyDialogState extends State<_SegmentPdfTypographyDialog> {
   late double _fontSizePt;
+  late double _leadingEm;
   late bool _isBold;
   late bool _isItalic;
 
@@ -82,6 +100,7 @@ class _SegmentPdfTypographyDialogState extends State<_SegmentPdfTypographyDialog
   void initState() {
     super.initState();
     _fontSizePt = snapPdfFontSize(widget.initialFontSizePt);
+    _leadingEm = snapPdfLeadingEm(widget.initialLeadingEm);
     _isBold = widget.initialFontWeight == 'bold';
     _isItalic = widget.initialFontStyle == 'italic';
   }
@@ -89,7 +108,7 @@ class _SegmentPdfTypographyDialogState extends State<_SegmentPdfTypographyDialog
   String _previewSample() {
     final String trimmed = widget.previewText.trim();
     if (trimmed.isEmpty) {
-      return 'Aa 字体预览 Font preview 123';
+      return 'Aa 字体预览 Font preview 123\n第二行预览 Second line preview';
     }
     const int maxLen = 160;
     if (trimmed.length <= maxLen) {
@@ -136,7 +155,7 @@ class _SegmentPdfTypographyDialogState extends State<_SegmentPdfTypographyDialog
                     fontWeight: _isBold ? FontWeight.bold : FontWeight.normal,
                     fontStyle:
                         _isItalic ? FontStyle.italic : FontStyle.normal,
-                    height: 1.25,
+                    height: _leadingEm,
                     color: colors.onSurface,
                   ),
                 ),
@@ -144,9 +163,8 @@ class _SegmentPdfTypographyDialogState extends State<_SegmentPdfTypographyDialog
             ),
             const SizedBox(height: 16),
             Text(
-              _fontSizePt.toStringAsFixed(1),
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleLarge,
+              l10n.segmentPdfTypographyFontSizeLabel(_fontSizePt.toStringAsFixed(1)),
+              style: theme.textTheme.labelMedium,
             ),
             Slider(
               value: _fontSizePt,
@@ -159,6 +177,25 @@ class _SegmentPdfTypographyDialogState extends State<_SegmentPdfTypographyDialog
               onChanged: (double value) {
                 setState(() {
                   _fontSizePt = snapPdfFontSize(value);
+                });
+              },
+            ),
+            const SizedBox(height: 4),
+            Text(
+              l10n.segmentPdfTypographyLeadingLabel(_leadingEm.toStringAsFixed(2)),
+              style: theme.textTheme.labelMedium,
+            ),
+            Slider(
+              value: _leadingEm,
+              min: kPdfLeadingEmMin,
+              max: kPdfLeadingEmMax,
+              divisions:
+                  ((kPdfLeadingEmMax - kPdfLeadingEmMin) / kPdfLeadingEmStep)
+                      .round(),
+              label: _leadingEm.toStringAsFixed(2),
+              onChanged: (double value) {
+                setState(() {
+                  _leadingEm = snapPdfLeadingEm(value);
                 });
               },
             ),
@@ -223,6 +260,7 @@ class _SegmentPdfTypographyDialogState extends State<_SegmentPdfTypographyDialog
                 fontSizePt: _fontSizePt,
                 fontWeight: _isBold ? 'bold' : 'regular',
                 fontStyle: _isItalic ? 'italic' : 'normal',
+                leadingEm: _leadingEm,
               ),
             );
           },

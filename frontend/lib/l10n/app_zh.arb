@@ -1290,6 +1290,22 @@
   "segmentPdfTypographyPreviewLabel": "预览",
   "segmentPdfTypographyBold": "粗体",
   "segmentPdfTypographyItalic": "斜体",
+  "segmentPdfTypographyFontSizeLabel": "字号：{sizePt} pt",
+  "@segmentPdfTypographyFontSizeLabel": {
+    "placeholders": {
+      "sizePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfTypographyLeadingLabel": "行距：{leadingEm} em",
+  "@segmentPdfTypographyLeadingLabel": {
+    "placeholders": {
+      "leadingEm": {
+        "type": "String"
+      }
+    }
+  },
   "segmentPdfFontSizeReset": "恢复自动",
   "segmentPdfFontSizeApply": "应用"
 }

@@ -87,6 +87,7 @@ def render_layout_pdf(
     font_size_by_block_index: Optional[Dict[int, float]] = None,
     font_weight_by_block_index: Optional[Dict[int, str]] = None,
     font_style_by_block_index: Optional[Dict[int, str]] = None,
+    leading_em_by_block_index: Optional[Dict[int, float]] = None,
 ) -> bytes:
     """
     Unified PDF rendering entry point.
@@ -134,6 +135,7 @@ def render_layout_pdf(
         font_size_by_block_index=font_size_by_block_index,
         font_weight_by_block_index=font_weight_by_block_index,
         font_style_by_block_index=font_style_by_block_index,
+        leading_em_by_block_index=leading_em_by_block_index,
     )
 
     # Select renderer

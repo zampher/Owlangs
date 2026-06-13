@@ -56,6 +56,7 @@ class TranslationSegment:
     font_size_pt: Optional[float] = None
     font_weight: Optional[str] = None
     font_style: Optional[str] = None
+    leading_em: Optional[float] = None
     
     @classmethod
     def create(
@@ -115,6 +116,7 @@ class TranslationSegment:
             "font_size_pt": self.font_size_pt,
             "font_weight": self.font_weight,
             "font_style": self.font_style,
+            "leading_em": self.leading_em,
         }
     
     @classmethod
@@ -152,6 +154,7 @@ class TranslationSegment:
             font_size_pt=data.get("font_size_pt"),
             font_weight=data.get("font_weight"),
             font_style=data.get("font_style"),
+            leading_em=data.get("leading_em"),
         )
     
     def update_target_text(self, new_text: str, modified_by: Optional[str] = None) -> None:

@@ -569,6 +569,7 @@ class TranslationService {
     bool fontSizeReset = false,
     String? fontWeight,
     String? fontStyle,
+    double? leadingEm,
     bool pdfFontReset = false,
   }) async {
     final dio = _buildAuthedDio();
@@ -587,6 +588,7 @@ class TranslationService {
       }
       if (fontWeight != null) body['font_weight'] = fontWeight;
       if (fontStyle != null) body['font_style'] = fontStyle;
+      if (leadingEm != null) body['leading_em'] = leadingEm;
     }
 
     final resp = await dio.post(

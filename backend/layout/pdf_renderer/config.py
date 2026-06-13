@@ -34,6 +34,7 @@ class PDFRendererConfig:
         font_size_by_block_index: Optional[Dict[int, float]] = None,
         font_weight_by_block_index: Optional[Dict[int, str]] = None,
         font_style_by_block_index: Optional[Dict[int, str]] = None,
+        leading_em_by_block_index: Optional[Dict[int, float]] = None,
     ):
         """
         Initialize PDF renderer configuration.
@@ -63,6 +64,7 @@ class PDFRendererConfig:
         self.font_size_by_block_index = font_size_by_block_index or {}
         self.font_weight_by_block_index = font_weight_by_block_index or {}
         self.font_style_by_block_index = font_style_by_block_index or {}
+        self.leading_em_by_block_index = leading_em_by_block_index or {}
         
         # These will be populated during rendering
         self.type_font_baselines: Dict[str, float] = {}

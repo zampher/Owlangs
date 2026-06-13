@@ -13,6 +13,7 @@ from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
     apply_user_font_override,
     apply_user_typography_override,
     build_block_font_map_from_segments,
+    build_block_leading_map_from_segments,
     build_block_font_style_map_from_segments,
     build_block_font_weight_map_from_segments,
     clamp_font_size_pt,
@@ -20,9 +21,11 @@ from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
     normalize_user_font_size_pt,
     normalize_user_font_style,
     normalize_user_font_weight,
+    normalize_user_leading_em,
     segment_font_size_source,
     segment_font_style_source,
     segment_font_weight_source,
+    segment_leading_em_source,
 )
 
 
@@ -142,10 +145,35 @@ def test_apply_user_typography_override():
         markdown_text="Sample text",
     )
     styled = apply_user_typography_override(
-        rb, font_weight="bold", font_style="italic",
+        rb, font_weight="bold", font_style="italic", leading_em=1.25,
     )
     assert styled.font_weight == "bold"
     assert styled.font_style == "italic"
+    assert styled.leading_em == 1.25
+    assert styled.fit_min_leading_em == 1.25
+
+
+def test_normalize_user_leading_em():
+    assert normalize_user_leading_em(None) is None
+    assert normalize_user_leading_em(1.25) == 1.25
+    assert normalize_user_leading_em(1.24) == 1.25
+    assert normalize_user_leading_em(0.2) is None
+
+
+def test_build_block_leading_map_from_segments():
+    segments = [
+        {
+            "segment_index": 0,
+            "leading_em": 1.5,
+            "layout_block_indices": [4],
+        },
+    ]
+    assert build_block_leading_map_from_segments(segments) == {4: 1.5}
+
+
+def test_segment_leading_em_source():
+    assert segment_leading_em_source({}) == "auto"
+    assert segment_leading_em_source({"leading_em": 1.25}) == "user"
 
 
 def test_segment_font_weight_and_style_source():

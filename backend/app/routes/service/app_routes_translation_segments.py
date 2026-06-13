@@ -394,6 +394,8 @@ async def update_segment_api(
     font_style = body.get("font_style")
     font_weight_reset = bool(body.get("font_weight_reset", False))
     font_style_reset = bool(body.get("font_style_reset", False))
+    leading_em = body.get("leading_em")
+    leading_em_reset = bool(body.get("leading_em_reset", False))
     pdf_font_reset = bool(body.get("pdf_font_reset", False))
 
     segment = _ts_module().update_translation_segment(
@@ -409,6 +411,8 @@ async def update_segment_api(
         font_style=font_style,
         font_weight_reset=font_weight_reset,
         font_style_reset=font_style_reset,
+        leading_em=leading_em,
+        leading_em_reset=leading_em_reset,
         pdf_font_reset=pdf_font_reset,
     )
 

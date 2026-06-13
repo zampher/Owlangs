@@ -6656,6 +6656,18 @@ abstract class AppLocalizations {
   /// **'Italic'**
   String get segmentPdfTypographyItalic;
 
+  /// No description provided for @segmentPdfTypographyFontSizeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Font size: {sizePt} pt'**
+  String segmentPdfTypographyFontSizeLabel(String sizePt);
+
+  /// No description provided for @segmentPdfTypographyLeadingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Line spacing: {leadingEm} em'**
+  String segmentPdfTypographyLeadingLabel(String leadingEm);
+
   /// No description provided for @segmentPdfFontSizeReset.
   ///
   /// In en, this message translates to:
