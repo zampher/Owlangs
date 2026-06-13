@@ -3600,6 +3600,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get segmentPdfTypographyTitle => 'PDF 字体';
 
   @override
+  String get segmentPdfTypographyFontTitle => 'PDF 字体';
+
+  @override
+  String get segmentPdfTypographyLeadingTitle => '行距';
+
+  @override
   String get segmentPdfTypographyPreviewLabel => '预览';
 
   @override
@@ -3622,6 +3628,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get segmentPdfFontSizeReset => '恢复自动';
 
   @override
+  String get segmentPdfTypographyResetFont => '恢复字体自动';
+
+  @override
+  String get segmentPdfTypographyResetLeading => '恢复行距自动';
+
+  @override
   String get segmentPdfFontSizeApply => '应用';
 
   @override
@@ -3637,10 +3649,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationPreviewRefreshPdf => '刷新 PDF';
 
   @override
-  String get translationPreviewBatchTypography => '批量字体';
+  String get translationPreviewBatchFont => '批量字体';
 
   @override
-  String get translationPreviewBatchTypographyTooltip => '将字体设置应用到选中的片段';
+  String get translationPreviewBatchFontTooltip => '将字号、粗体、斜体应用到选中片段';
+
+  @override
+  String get translationPreviewBatchLeading => '批量行距';
+
+  @override
+  String get translationPreviewBatchLeadingTooltip => '将行距应用到选中片段，不影响各片段字号';
 
   @override
   String get translationPreviewPdfRevisionSelectAll => '全选';

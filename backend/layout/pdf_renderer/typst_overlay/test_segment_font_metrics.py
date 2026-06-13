@@ -195,6 +195,26 @@ def test_apply_user_typography_override():
     assert styled.font_style == "italic"
     assert styled.leading_em == 1.25
     assert styled.fit_min_leading_em == 1.25
+    assert styled.leading_em_locked is True
+    assert styled.fit_to_box is False
+
+
+def test_apply_user_typography_override_leading_locks_leading_keeps_fit():
+    rb = RenderBlock(
+        block_id="t",
+        page_index=0,
+        inner_bbox=(0.0, 0.0, 100.0, 40.0),
+        plain_text="Multi line sample text for leading lock",
+        markdown_text="Multi line sample text for leading lock",
+        fit_to_box=True,
+        fit_single_line=True,
+    )
+    styled = apply_user_typography_override(rb, leading_em=1.05)
+    assert styled.leading_em == 1.05
+    assert styled.fit_min_leading_em == 1.05
+    assert styled.leading_em_locked is True
+    assert styled.fit_to_box is True
+    assert styled.fit_single_line is True
 
 
 def test_normalize_user_leading_em():

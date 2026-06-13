@@ -1420,6 +1420,52 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     return '${(count / 1000000).toStringAsFixed(1)}M';
   }
 
+  bool _isPdfSourceTask(dynamic state) {
+    final String? fileName = state.pickedFile?.name ?? widget.reeditFileName;
+    return fileName != null && fileName.toLowerCase().endsWith('.pdf');
+  }
+
+  void _switchToTranslationResultTabIfNeeded() {
+    final PreviewTabsState tabsState = widget.flowId != null
+        ? ref.read(previewTabsProviderFamily(widget.flowId!))
+        : ref.read(previewTabsProvider);
+    final int tabIndex = tabsState.tabs.indexWhere(
+      (PreviewTab tab) =>
+          tab.type == PreviewTabType.translationResult ||
+          tab.id == 'translate_tab' ||
+          tab.id == 'translate_reedit_tab',
+    );
+    if (tabIndex < 0) {
+      return;
+    }
+    if (tabIndex == tabsState.activeTabIndex) {
+      return;
+    }
+    final dynamic tabsNotifier = widget.flowId != null
+        ? ref.read(previewTabsProviderFamily(widget.flowId!).notifier)
+        : ref.read(previewTabsProvider.notifier);
+    tabsNotifier.switchToTab(tabIndex);
+  }
+
+  void _openPdfRevisionMode(dynamic state) {
+    final String? taskId = state.taskId as String?;
+    if (taskId == null || taskId.isEmpty) {
+      return;
+    }
+    final String scopeKey = widget.flowId ?? taskId;
+    _switchToTranslationResultTabIfNeeded();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          triggerPdfRevisionLaunch(ref, scopeKey);
+        }
+      });
+    });
+  }
+
   Future<void> _retranslateFailedSegments(
     state,
     notifier,
@@ -2362,6 +2408,37 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                 ),
               ),
             ),
+          if (state.taskId != null &&
+              isTaskDone &&
+              _isPdfSourceTask(state)) ...<Widget>[
+            const SizedBox(width: 8),
+            Tooltip(
+              message: l10n.translationPreviewPdfRevision,
+              waitDuration: const Duration(milliseconds: 500),
+              child: ElevatedButton.icon(
+                onPressed: isOperationInProgress
+                    ? null
+                    : () => _openPdfRevisionMode(state),
+                icon: const Icon(Icons.edit_note, size: 16),
+                label: Text(
+                  l10n.translationPreviewPdfRevision,
+                  style: const TextStyle(fontSize: 13),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade700,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  minimumSize: const Size(0, 32),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ],
           if (state.taskId != null && isTaskDone)
             Padding(
               padding: const EdgeInsets.only(right: 8),

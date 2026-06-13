@@ -307,6 +307,11 @@ class PDFGenerator:
                         LogModule.EXPORT,
                         f"[LAYOUT] User font overrides for {len(font_size_by_block_index)} block(s)",
                     )
+                if leading_em_by_block_index:
+                    logger.info(
+                        LogModule.EXPORT,
+                        f"[LAYOUT] User leading overrides for {len(leading_em_by_block_index)} block(s)",
+                    )
             
             # Get ZIP bytes for image extraction (chart/table/image embedding)
             zip_bytes = None

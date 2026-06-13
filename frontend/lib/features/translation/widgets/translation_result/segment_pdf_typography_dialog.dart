@@ -26,10 +26,18 @@ double snapPdfLeadingEm(double value) {
   return double.parse((steps * kPdfLeadingEmStep).toStringAsFixed(2));
 }
 
+/// Which fields the typography dialog edits.
+enum SegmentPdfTypographyDialogMode {
+  all,
+  fontOnly,
+  leadingOnly,
+}
+
 /// Result from the PDF typography settings dialog.
 class SegmentPdfTypographyResult {
   const SegmentPdfTypographyResult({
     required this.reset,
+    required this.mode,
     this.fontSizePt,
     this.fontWeight,
     this.fontStyle,
@@ -37,13 +45,14 @@ class SegmentPdfTypographyResult {
   });
 
   final bool reset;
+  final SegmentPdfTypographyDialogMode mode;
   final double? fontSizePt;
   final String? fontWeight;
   final String? fontStyle;
   final double? leadingEm;
 }
 
-/// Show dialog to adjust PDF font size, weight, style, and leading with preview.
+/// Show dialog to adjust PDF font size, weight, style, and/or leading with preview.
 Future<SegmentPdfTypographyResult?> showSegmentPdfTypographyDialog({
   required BuildContext context,
   required String previewText,
@@ -52,6 +61,7 @@ Future<SegmentPdfTypographyResult?> showSegmentPdfTypographyDialog({
   required String initialFontWeight,
   required String initialFontStyle,
   required double initialLeadingEm,
+  SegmentPdfTypographyDialogMode mode = SegmentPdfTypographyDialogMode.all,
 }) {
   return showDialog<SegmentPdfTypographyResult>(
     context: context,
@@ -63,6 +73,7 @@ Future<SegmentPdfTypographyResult?> showSegmentPdfTypographyDialog({
         initialFontWeight: initialFontWeight,
         initialFontStyle: initialFontStyle,
         initialLeadingEm: initialLeadingEm,
+        mode: mode,
       );
     },
   );
@@ -76,6 +87,7 @@ class _SegmentPdfTypographyDialog extends StatefulWidget {
     required this.initialFontWeight,
     required this.initialFontStyle,
     required this.initialLeadingEm,
+    required this.mode,
   });
 
   final String previewText;
@@ -84,6 +96,7 @@ class _SegmentPdfTypographyDialog extends StatefulWidget {
   final String initialFontWeight;
   final String initialFontStyle;
   final double initialLeadingEm;
+  final SegmentPdfTypographyDialogMode mode;
 
   @override
   State<_SegmentPdfTypographyDialog> createState() =>
@@ -122,10 +135,26 @@ class _SegmentPdfTypographyDialogState extends State<_SegmentPdfTypographyDialog
     final AppLocalizations l10n = AppLocalizations.of(context)!;
     final ThemeData theme = Theme.of(context);
     final ColorScheme colors = theme.colorScheme;
-    final double previewScale = (_fontSizePt / 12.0).clamp(0.45, 2.4);
+    final bool showFontControls =
+        widget.mode != SegmentPdfTypographyDialogMode.leadingOnly;
+    final bool showLeadingControls =
+        widget.mode != SegmentPdfTypographyDialogMode.fontOnly;
+    final double previewScale = showFontControls
+        ? (_fontSizePt / 12.0).clamp(0.45, 2.4)
+        : 1.0;
+
+    final String title;
+    switch (widget.mode) {
+      case SegmentPdfTypographyDialogMode.fontOnly:
+        title = l10n.segmentPdfTypographyFontTitle;
+      case SegmentPdfTypographyDialogMode.leadingOnly:
+        title = l10n.segmentPdfTypographyLeadingTitle;
+      case SegmentPdfTypographyDialogMode.all:
+        title = l10n.segmentPdfTypographyTitle;
+    }
 
     return AlertDialog(
-      title: Text(l10n.segmentPdfTypographyTitle),
+      title: Text(title),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -152,89 +181,102 @@ class _SegmentPdfTypographyDialogState extends State<_SegmentPdfTypographyDialog
                   _previewSample(),
                   style: TextStyle(
                     fontSize: 12.0 * previewScale,
-                    fontWeight: _isBold ? FontWeight.bold : FontWeight.normal,
-                    fontStyle:
-                        _isItalic ? FontStyle.italic : FontStyle.normal,
-                    height: _leadingEm,
+                    fontWeight: showFontControls && _isBold
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                    fontStyle: showFontControls && _isItalic
+                        ? FontStyle.italic
+                        : FontStyle.normal,
+                    height: showLeadingControls
+                        ? _leadingEm
+                        : widget.initialLeadingEm,
                     color: colors.onSurface,
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            Text(
-              l10n.segmentPdfTypographyFontSizeLabel(_fontSizePt.toStringAsFixed(1)),
-              style: theme.textTheme.labelMedium,
-            ),
-            Slider(
-              value: _fontSizePt,
-              min: kPdfFontSizeMin,
-              max: kPdfFontSizeMax,
-              divisions:
-                  ((kPdfFontSizeMax - kPdfFontSizeMin) / kPdfFontSizeStep)
-                      .round(),
-              label: _fontSizePt.toStringAsFixed(1),
-              onChanged: (double value) {
-                setState(() {
-                  _fontSizePt = snapPdfFontSize(value);
-                });
-              },
-            ),
-            const SizedBox(height: 4),
-            Text(
-              l10n.segmentPdfTypographyLeadingLabel(_leadingEm.toStringAsFixed(2)),
-              style: theme.textTheme.labelMedium,
-            ),
-            Slider(
-              value: _leadingEm,
-              min: kPdfLeadingEmMin,
-              max: kPdfLeadingEmMax,
-              divisions:
-                  ((kPdfLeadingEmMax - kPdfLeadingEmMin) / kPdfLeadingEmStep)
-                      .round(),
-              label: _leadingEm.toStringAsFixed(2),
-              onChanged: (double value) {
-                setState(() {
-                  _leadingEm = snapPdfLeadingEm(value);
-                });
-              },
-            ),
-            const SizedBox(height: 4),
-            ToggleButtons(
-              isSelected: <bool>[_isBold, _isItalic],
-              onPressed: (int index) {
-                setState(() {
-                  if (index == 0) {
-                    _isBold = !_isBold;
-                  } else {
-                    _isItalic = !_isItalic;
-                  }
-                });
-              },
-              borderRadius: BorderRadius.circular(8),
-              children: <Widget>[
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    l10n.segmentPdfTypographyBold,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: _isBold ? colors.onPrimary : colors.onSurface,
+            if (showFontControls) ...<Widget>[
+              const SizedBox(height: 16),
+              Text(
+                l10n.segmentPdfTypographyFontSizeLabel(
+                  _fontSizePt.toStringAsFixed(1),
+                ),
+                style: theme.textTheme.labelMedium,
+              ),
+              Slider(
+                value: _fontSizePt,
+                min: kPdfFontSizeMin,
+                max: kPdfFontSizeMax,
+                divisions:
+                    ((kPdfFontSizeMax - kPdfFontSizeMin) / kPdfFontSizeStep)
+                        .round(),
+                label: _fontSizePt.toStringAsFixed(1),
+                onChanged: (double value) {
+                  setState(() {
+                    _fontSizePt = snapPdfFontSize(value);
+                  });
+                },
+              ),
+              const SizedBox(height: 4),
+              ToggleButtons(
+                isSelected: <bool>[_isBold, _isItalic],
+                onPressed: (int index) {
+                  setState(() {
+                    if (index == 0) {
+                      _isBold = !_isBold;
+                    } else {
+                      _isItalic = !_isItalic;
+                    }
+                  });
+                },
+                borderRadius: BorderRadius.circular(8),
+                children: <Widget>[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      l10n.segmentPdfTypographyBold,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: _isBold ? colors.onPrimary : colors.onSurface,
+                      ),
                     ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    l10n.segmentPdfTypographyItalic,
-                    style: TextStyle(
-                      fontStyle: FontStyle.italic,
-                      color: _isItalic ? colors.onPrimary : colors.onSurface,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      l10n.segmentPdfTypographyItalic,
+                      style: TextStyle(
+                        fontStyle: FontStyle.italic,
+                        color: _isItalic ? colors.onPrimary : colors.onSurface,
+                      ),
                     ),
                   ),
+                ],
+              ),
+            ],
+            if (showLeadingControls) ...<Widget>[
+              SizedBox(height: showFontControls ? 16 : 16),
+              Text(
+                l10n.segmentPdfTypographyLeadingLabel(
+                  _leadingEm.toStringAsFixed(2),
                 ),
-              ],
-            ),
+                style: theme.textTheme.labelMedium,
+              ),
+              Slider(
+                value: _leadingEm,
+                min: kPdfLeadingEmMin,
+                max: kPdfLeadingEmMax,
+                divisions:
+                    ((kPdfLeadingEmMax - kPdfLeadingEmMin) / kPdfLeadingEmStep)
+                        .round(),
+                label: _leadingEm.toStringAsFixed(2),
+                onChanged: (double value) {
+                  setState(() {
+                    _leadingEm = snapPdfLeadingEm(value);
+                  });
+                },
+              ),
+            ],
           ],
         ),
       ),
@@ -243,10 +285,19 @@ class _SegmentPdfTypographyDialogState extends State<_SegmentPdfTypographyDialog
           TextButton(
             onPressed: () {
               Navigator.of(context).pop(
-                const SegmentPdfTypographyResult(reset: true),
+                SegmentPdfTypographyResult(
+                  reset: true,
+                  mode: widget.mode,
+                ),
               );
             },
-            child: Text(l10n.segmentPdfFontSizeReset),
+            child: Text(
+              widget.mode == SegmentPdfTypographyDialogMode.leadingOnly
+                  ? l10n.segmentPdfTypographyResetLeading
+                  : widget.mode == SegmentPdfTypographyDialogMode.fontOnly
+                      ? l10n.segmentPdfTypographyResetFont
+                      : l10n.segmentPdfFontSizeReset,
+            ),
           ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
@@ -257,10 +308,15 @@ class _SegmentPdfTypographyDialogState extends State<_SegmentPdfTypographyDialog
             Navigator.of(context).pop(
               SegmentPdfTypographyResult(
                 reset: false,
-                fontSizePt: _fontSizePt,
-                fontWeight: _isBold ? 'bold' : 'regular',
-                fontStyle: _isItalic ? 'italic' : 'normal',
-                leadingEm: _leadingEm,
+                mode: widget.mode,
+                fontSizePt: showFontControls ? _fontSizePt : null,
+                fontWeight: showFontControls
+                    ? (_isBold ? 'bold' : 'regular')
+                    : null,
+                fontStyle: showFontControls
+                    ? (_isItalic ? 'italic' : 'normal')
+                    : null,
+                leadingEm: showLeadingControls ? _leadingEm : null,
               ),
             );
           },

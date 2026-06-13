@@ -1098,6 +1098,13 @@ async def _typst_overlay_pdf_response(
                 f"for {len(font_size_by_block_index)} block(s): "
                 f"{sorted(font_size_by_block_index.items())[:8]}",
             )
+        if leading_em_by_block_index:
+            logger.info(
+                LogModule.EXPORT,
+                f"[TYPST_OVERLAY] Task {task_id}: applying user leading overrides "
+                f"for {len(leading_em_by_block_index)} block(s): "
+                f"{sorted(leading_em_by_block_index.items())[:8]}",
+            )
 
     # Get zip bytes from layout_source_zip (same source as DOCX / layoutimg registration)
     zip_bytes = _resolve_layout_zip_bytes(task_state)

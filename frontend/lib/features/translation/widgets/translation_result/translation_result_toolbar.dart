@@ -34,6 +34,7 @@ class TranslationResultToolbar extends ConsumerWidget {
     this.onGlobalRedo,
     this.onNavigateToFailedSegment,
     this.onViewPreview,
+    this.onEnterPdfRevisionMode,
     this.onShowDownload,
     this.onToggleFullscreen,
     this.excludedCount = 0,
@@ -70,6 +71,7 @@ class TranslationResultToolbar extends ConsumerWidget {
   final VoidCallback? onGlobalRedo;
   final void Function(int direction)? onNavigateToFailedSegment;
   final VoidCallback? onViewPreview;
+  final VoidCallback? onEnterPdfRevisionMode;
   final VoidCallback? onShowDownload;
   final VoidCallback? onToggleFullscreen;
   final int excludedCount;
@@ -127,6 +129,9 @@ class TranslationResultToolbar extends ConsumerWidget {
         statusLower == 'failed' ||
         statusLower == 'cancelled';
     final showProgressBar = isActive && !isCompleted;
+    // Block entering reading mode during translation; allow switching back to segment view.
+    final bool mergedViewEnabled =
+        onToggleMergedView != null && (!isActive || isMergedView);
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -297,6 +302,27 @@ class TranslationResultToolbar extends ConsumerWidget {
               ),
               const SizedBox(width: 3),
             ],
+            // PDF revision mode (PDF workflow only, after translation completes)
+            if (isCompletedByArtifacts &&
+                onEnterPdfRevisionMode != null) ...<Widget>[
+              IconButton(
+                icon: loadingHtmlPreview
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.edit_note, size: 16),
+                tooltip: l10n.translationPreviewPdfRevision,
+                onPressed: loadingHtmlPreview ? null : onEnterPdfRevisionMode,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 28,
+                  minHeight: 28,
+                ),
+              ),
+              const SizedBox(width: 3),
+            ],
             // AI修复公式按钮（左侧分组最右边）
             if (onRepairDocxMath != null &&
                 isCompleted &&
@@ -423,7 +449,7 @@ class TranslationResultToolbar extends ConsumerWidget {
               tooltip: isMergedView
                   ? l10n.translationToolbarSegmentView
                   : l10n.translationToolbarMergedView,
-              onPressed: onToggleMergedView,
+              onPressed: mergedViewEnabled ? onToggleMergedView : null,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(
                 minWidth: 28,
@@ -468,7 +494,7 @@ class TranslationResultToolbar extends ConsumerWidget {
               tooltip: isMergedView
                   ? l10n.translationToolbarSegmentView
                   : l10n.translationToolbarMergedView,
-              onPressed: onToggleMergedView,
+              onPressed: mergedViewEnabled ? onToggleMergedView : null,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(
                 minWidth: 28,

@@ -153,6 +153,7 @@ class TranslationSegmentItem extends StatefulWidget {
     String? fontStyle,
     double? leadingEm,
     bool reset,
+    SegmentPdfTypographyDialogMode scope,
   })? onFontSizeChanged;
   final bool pdfRevisionMode;
 
@@ -735,7 +736,11 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
       return;
     }
     if (result.reset) {
-      widget.onFontSizeChanged!(widget.index, reset: true);
+      widget.onFontSizeChanged!(
+        widget.index,
+        reset: true,
+        scope: result.mode,
+      );
       return;
     }
     widget.onFontSizeChanged!(
@@ -744,6 +749,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
       fontWeight: result.fontWeight,
       fontStyle: result.fontStyle,
       leadingEm: result.leadingEm,
+      scope: result.mode,
     );
   }
 

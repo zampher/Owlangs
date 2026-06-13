@@ -33,8 +33,10 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
     this.segmentUiRevisionListenable,
     this.translatedHtmlUrl,
     this.initialSyncScroll = false,
+    this.initialPdfRevisionMode = false,
     this.pdfRevisionSegmentPanelBuilder,
-    this.onBatchTypographyApply,
+    this.onBatchFontApply,
+    this.onBatchLeadingApply,
     this.getFilteredSelectableSegmentIndices,
     this.onPdfRevisionModeEntered,
     this.pdfPreviewJumpPageListenable,
@@ -55,8 +57,10 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
   final ValueListenable<int>? segmentUiRevisionListenable;
   final String? translatedHtmlUrl;
   final bool initialSyncScroll;
+  final bool initialPdfRevisionMode;
   final PdfRevisionSegmentPanelBuilder? pdfRevisionSegmentPanelBuilder;
-  final Future<void> Function(Set<int> selectedIndices)? onBatchTypographyApply;
+  final Future<void> Function(Set<int> selectedIndices)? onBatchFontApply;
+  final Future<void> Function(Set<int> selectedIndices)? onBatchLeadingApply;
   final Set<int> Function()? getFilteredSelectableSegmentIndices;
   final Future<void> Function()? onPdfRevisionModeEntered;
   final ValueListenable<int?>? pdfPreviewJumpPageListenable;
@@ -107,6 +111,11 @@ class _TranslationFullComparePreviewTabState
     widget.pdfRenderRevisionListenable?.addListener(_onPdfRevisionListenableChanged);
     widget.pdfPreviewJumpPageTriggerListenable
         ?.addListener(_onPdfPreviewJumpPageRequested);
+    if (widget.initialPdfRevisionMode && _supportsPdfRevision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_enterPdfRevisionMode());
+      });
+    }
   }
 
   @override
@@ -180,25 +189,29 @@ class _TranslationFullComparePreviewTabState
 
   void _togglePdfRevisionMode() {
     if (!_pdfRevisionMode) {
-      final Future<void> Function()? enterHandler =
-          widget.onPdfRevisionModeEntered;
-      if (enterHandler != null) {
-        enterHandler().then((_) {
-          if (mounted) {
-            setState(() {
-              _pdfRevisionMode = true;
-            });
-          }
-        });
-        return;
-      }
+      unawaited(_enterPdfRevisionMode());
+      return;
     }
     setState(() {
-      _pdfRevisionMode = !_pdfRevisionMode;
-      if (!_pdfRevisionMode) {
-        _selectedSegmentIndices.clear();
-      }
+      _pdfRevisionMode = false;
+      _selectedSegmentIndices.clear();
     });
+  }
+
+  Future<void> _enterPdfRevisionMode() async {
+    if (!_supportsPdfRevision || _pdfRevisionMode) {
+      return;
+    }
+    final Future<void> Function()? enterHandler =
+        widget.onPdfRevisionModeEntered;
+    if (enterHandler != null) {
+      await enterHandler();
+    }
+    if (mounted) {
+      setState(() {
+        _pdfRevisionMode = true;
+      });
+    }
   }
 
   void _toggleSegmentSelection(int index, bool selected) {
@@ -261,12 +274,19 @@ class _TranslationFullComparePreviewTabState
     });
   }
 
-  Future<void> _applyBatchTypography() async {
-    if (_selectedSegmentIndices.isEmpty ||
-        widget.onBatchTypographyApply == null) {
+  Future<void> _applyBatchFont() async {
+    if (_selectedSegmentIndices.isEmpty || widget.onBatchFontApply == null) {
       return;
     }
-    await widget.onBatchTypographyApply!(_selectedSegmentIndices);
+    await widget.onBatchFontApply!(_selectedSegmentIndices);
+  }
+
+  Future<void> _applyBatchLeading() async {
+    if (_selectedSegmentIndices.isEmpty ||
+        widget.onBatchLeadingApply == null) {
+      return;
+    }
+    await widget.onBatchLeadingApply!(_selectedSegmentIndices);
   }
 
   void _toggleFullscreen() {
@@ -489,11 +509,24 @@ class _TranslationFullComparePreviewTabState
                 onPressed: _refreshPdfManually,
               ),
               if (_selectedSegmentIndices.isNotEmpty &&
-                  widget.onBatchTypographyApply != null)
-                TextButton.icon(
-                  onPressed: _applyBatchTypography,
-                  icon: const Icon(Icons.format_size, size: 16),
-                  label: Text(l10n.translationPreviewBatchTypography),
+                  widget.onBatchFontApply != null)
+                Tooltip(
+                  message: l10n.translationPreviewBatchFontTooltip,
+                  child: TextButton.icon(
+                    onPressed: _applyBatchFont,
+                    icon: const Icon(Icons.format_size, size: 16),
+                    label: Text(l10n.translationPreviewBatchFont),
+                  ),
+                ),
+              if (_selectedSegmentIndices.isNotEmpty &&
+                  widget.onBatchLeadingApply != null)
+                Tooltip(
+                  message: l10n.translationPreviewBatchLeadingTooltip,
+                  child: TextButton.icon(
+                    onPressed: _applyBatchLeading,
+                    icon: const Icon(Icons.format_line_spacing, size: 16),
+                    label: Text(l10n.translationPreviewBatchLeading),
+                  ),
                 ),
             ],
             if (!_pdfRevisionMode &&

@@ -6638,6 +6638,18 @@ abstract class AppLocalizations {
   /// **'PDF typography'**
   String get segmentPdfTypographyTitle;
 
+  /// No description provided for @segmentPdfTypographyFontTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF font'**
+  String get segmentPdfTypographyFontTitle;
+
+  /// No description provided for @segmentPdfTypographyLeadingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Line spacing'**
+  String get segmentPdfTypographyLeadingTitle;
+
   /// No description provided for @segmentPdfTypographyPreviewLabel.
   ///
   /// In en, this message translates to:
@@ -6674,6 +6686,18 @@ abstract class AppLocalizations {
   /// **'Reset to auto'**
   String get segmentPdfFontSizeReset;
 
+  /// No description provided for @segmentPdfTypographyResetFont.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset font to auto'**
+  String get segmentPdfTypographyResetFont;
+
+  /// No description provided for @segmentPdfTypographyResetLeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset line spacing to auto'**
+  String get segmentPdfTypographyResetLeading;
+
   /// No description provided for @segmentPdfFontSizeApply.
   ///
   /// In en, this message translates to:
@@ -6704,17 +6728,29 @@ abstract class AppLocalizations {
   /// **'Refresh PDF'**
   String get translationPreviewRefreshPdf;
 
-  /// No description provided for @translationPreviewBatchTypography.
+  /// No description provided for @translationPreviewBatchFont.
   ///
   /// In en, this message translates to:
-  /// **'Batch typography'**
-  String get translationPreviewBatchTypography;
+  /// **'Batch font'**
+  String get translationPreviewBatchFont;
 
-  /// No description provided for @translationPreviewBatchTypographyTooltip.
+  /// No description provided for @translationPreviewBatchFontTooltip.
   ///
   /// In en, this message translates to:
-  /// **'Apply typography to selected segments'**
-  String get translationPreviewBatchTypographyTooltip;
+  /// **'Apply font settings to selected segments'**
+  String get translationPreviewBatchFontTooltip;
+
+  /// No description provided for @translationPreviewBatchLeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch line spacing'**
+  String get translationPreviewBatchLeading;
+
+  /// No description provided for @translationPreviewBatchLeadingTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply line spacing to selected segments'**
+  String get translationPreviewBatchLeadingTooltip;
 
   /// No description provided for @translationPreviewPdfRevisionSelectAll.
   ///

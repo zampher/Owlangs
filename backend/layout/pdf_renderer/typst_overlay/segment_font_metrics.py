@@ -511,6 +511,8 @@ def apply_user_typography_override(
     if normalized_leading is not None:
         updates["leading_em"] = normalized_leading
         updates["fit_min_leading_em"] = normalized_leading
+        # Lock user leading during fit-to-box; font size may still shrink to fit bbox.
+        updates["leading_em_locked"] = True
     if not updates:
         return rb
     return RenderBlock(**{**rb.__dict__, **updates})

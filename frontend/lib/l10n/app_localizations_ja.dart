@@ -3632,6 +3632,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get segmentPdfTypographyTitle => 'PDF typography';
 
   @override
+  String get segmentPdfTypographyFontTitle => 'PDF font';
+
+  @override
+  String get segmentPdfTypographyLeadingTitle => 'Line spacing';
+
+  @override
   String get segmentPdfTypographyPreviewLabel => 'Preview';
 
   @override
@@ -3654,6 +3660,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get segmentPdfFontSizeReset => 'Reset to auto';
 
   @override
+  String get segmentPdfTypographyResetFont => 'Reset font to auto';
+
+  @override
+  String get segmentPdfTypographyResetLeading => 'Reset line spacing to auto';
+
+  @override
   String get segmentPdfFontSizeApply => 'Apply';
 
   @override
@@ -3669,11 +3681,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationPreviewRefreshPdf => 'Refresh PDF';
 
   @override
-  String get translationPreviewBatchTypography => 'Batch typography';
+  String get translationPreviewBatchFont => 'Batch font';
 
   @override
-  String get translationPreviewBatchTypographyTooltip =>
-      'Apply typography to selected segments';
+  String get translationPreviewBatchFontTooltip =>
+      'Apply font settings to selected segments';
+
+  @override
+  String get translationPreviewBatchLeading => 'Batch line spacing';
+
+  @override
+  String get translationPreviewBatchLeadingTooltip =>
+      'Apply line spacing to selected segments';
 
   @override
   String get translationPreviewPdfRevisionSelectAll => 'Select all';

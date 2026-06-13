@@ -137,6 +137,64 @@ def _typst_markdown_fit_call(md_name: str, max_font_size_pt: float,
     )
 
 
+def _typst_markdown_fit_fixed_leading_call(
+    md_name: str,
+    max_font_size_pt: float,
+    min_font_size_pt: float,
+    leading_em: float,
+    fit_height_pt: float,
+    font_weight: str,
+    font_style: str,
+    first_line_indent_pt: float,
+    justify_text: str,
+) -> str:
+    """Generate pdftr_fit_markdown_fixed_leading(...) — font-only fit, locked leading."""
+    indent = f", first_line_indent: {first_line_indent_pt}pt" if first_line_indent_pt > 0 else ""
+    style_clause = _typst_font_style_clause(font_style)
+    style_arg = f', style: "{font_style or "normal"}"' if style_clause else ""
+    return (
+        f"pdftr_fit_markdown_fixed_leading({md_name}, max_size: {max_font_size_pt}pt, "
+        f"min_size: {min_font_size_pt}pt, leading: {leading_em}em, "
+        f"fit_height: {fit_height_pt}pt, weight: \"{font_weight}\"{style_arg}{indent}, "
+        f"justify: {justify_text})"
+    )
+
+
+def _block_markdown_fit_call(
+    block: RenderBlock,
+    md_name: str,
+    fit_height_pt: float,
+    font_style: str,
+    first_line_indent_pt: float,
+    justify_text: str,
+) -> str:
+    """Pick fit call: user-locked leading keeps line spacing, auto leading may shrink both."""
+    if getattr(block, "leading_em_locked", False):
+        return _typst_markdown_fit_fixed_leading_call(
+            md_name,
+            block.font_size_pt,
+            block.fit_min_font_size_pt,
+            block.leading_em,
+            fit_height_pt,
+            block.font_weight,
+            font_style,
+            first_line_indent_pt,
+            justify_text,
+        )
+    return _typst_markdown_fit_call(
+        md_name,
+        block.font_size_pt,
+        block.fit_min_font_size_pt,
+        block.leading_em,
+        block.fit_min_leading_em,
+        fit_height_pt,
+        block.font_weight,
+        font_style,
+        first_line_indent_pt,
+        justify_text,
+    )
+
+
 def _typst_single_line_fit_call(md_name: str, max_font_pt: float,
                                 min_font_pt: float, width_pt: float,
                                 height_pt: float, font_weight: str,
@@ -327,16 +385,13 @@ def _render_plain_block(block_id: str, block: RenderBlock,
         indent_arg = f", first_line_indent: {first_indent}pt" if first_indent > 0 else ""
 
         if block.fit_to_box and not block.font_size_locked:
-            style_arg = f', style: "{font_style}"'
-            fit_call = (
-                f"pdftr_fit_markdown({text_var}, "
-                f"max_size: {block.font_size_pt}pt, "
-                f"min_size: {block.fit_min_font_size_pt}pt, "
-                f"max_leading: {block.leading_em}em, "
-                f"min_leading: {block.fit_min_leading_em}em, "
-                f"fit_height: {min(height * 0.9, block.fit_max_height_pt or height)}pt, "
-                f"weight: \"{block.font_weight}\"{style_arg}{indent_arg}, "
-                f"justify: {justify})"
+            fit_call = _block_markdown_fit_call(
+                block,
+                text_var,
+                min(height * 0.9, block.fit_max_height_pt or height),
+                font_style,
+                first_indent,
+                justify,
             )
             body_expr = f"set text(fill: {text_fill}); {fit_call}"
         else:
@@ -524,11 +579,14 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
             return "\n".join(parts) + "\n"
 
         # Multi-line fit mode
-        fit_call = _typst_markdown_fit_call(
-            md_var, block.font_size_pt, block.fit_min_font_size_pt,
-            block.leading_em, block.fit_min_leading_em,
-            content_fit_height, block.font_weight, font_style,
-            first_indent, justify)
+        fit_call = _block_markdown_fit_call(
+            block,
+            md_var,
+            content_fit_height,
+            font_style,
+            first_indent,
+            justify,
+        )
         parts = [
             f"#let {md_var} = \"{_escape_typst_string(text)}\"",
             _typst_markdown_block(
@@ -724,6 +782,33 @@ FIT_MARKDOWN_FN = '''
 }
 '''
 
+FIT_MARKDOWN_FIXED_LEADING_FN = '''
+#let pdftr_fit_markdown_fixed_leading(markdown, max_size: 10pt, min_size: 9pt, leading: 1.25em, fit_height: none, weight: "regular", style: "normal", first_line_indent: 0pt, justify: false, eps: 0.08pt) = {
+  layout(size => {
+    let allowed-height = if fit_height == none { size.height } else { calc.min(size.height, fit_height) }
+    let render(text_size) = block(width: size.width)[#{
+      set text(size: text_size, weight: weight, style: style)
+      set par(leading: leading, justify: justify)
+      if first_line_indent > 0pt { h(first_line_indent) }
+      cmarker.render(markdown, math: mitex)
+    }]
+    let fits(text_size) = measure(width: size.width, render(text_size)).height <= allowed-height
+    let chosen_size = if fits(max_size) {
+      max_size
+    } else {
+      let fallback_min_size = min_size
+      let emergency_min_size = calc.max(4.2pt, min_size * 0.65)
+      if not fits(fallback_min_size) {
+        pdftr_fit_size(emergency_min_size, fallback_min_size, eps, fits)
+      } else {
+        pdftr_fit_size(fallback_min_size, max_size, eps, fits)
+      }
+    }
+    render(chosen_size)
+  })
+}
+'''
+
 
 def build_typst_overlay_source(
     page_specs: List[RenderPageSpec],
@@ -755,6 +840,7 @@ def build_typst_overlay_source(
     lines.append(FIT_FLOOR_LEADING_FN)
     lines.append(FIT_SINGLE_LINE_FN)
     lines.append(FIT_MARKDOWN_FN)
+    lines.append(FIT_MARKDOWN_FIXED_LEADING_FN)
     lines.append("")
 
     total_pages = len(page_specs)
@@ -818,6 +904,7 @@ def build_typst_background_source(
     lines.append(FIT_FLOOR_LEADING_FN)
     lines.append(FIT_SINGLE_LINE_FN)
     lines.append(FIT_MARKDOWN_FN)
+    lines.append(FIT_MARKDOWN_FIXED_LEADING_FN)
     lines.append("")
 
     total_pages = len(page_specs)

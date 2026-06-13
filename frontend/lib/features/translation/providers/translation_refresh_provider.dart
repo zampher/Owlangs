@@ -22,3 +22,13 @@ void triggerTranslationRefresh(WidgetRef ref) {
 void triggerSegmentsUpdate(WidgetRef ref, List<int> segmentIndices) {
   ref.read(translationSegmentsUpdateProvider.notifier).state = segmentIndices;
 }
+
+/// Increment to request opening PDF revision mode from the main translation toolbar.
+final StateProviderFamily<int, String> pdfRevisionLaunchProvider =
+    StateProvider.family<int, String>(
+  (StateProviderRef<int> ref, String scopeKey) => 0,
+);
+
+void triggerPdfRevisionLaunch(WidgetRef ref, String scopeKey) {
+  ref.read(pdfRevisionLaunchProvider(scopeKey).notifier).state++;
+}

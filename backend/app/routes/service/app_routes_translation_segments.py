@@ -643,6 +643,80 @@ async def unexclude_segment_api(
 
 
 @router.post(
+    "/translation-segments/{task_id}/typography-batch",
+    summary="Batch update PDF typography for multiple segments",
+    description=(
+        "Apply font size, weight, style, or leading overrides to multiple "
+        "translation segments in a single request."
+    ),
+    responses={
+        200: {
+            "description": "Batch typography update completed (check failed_indices for partial failures)."
+        },
+        404: {"description": "Task ID not found."},
+    },
+)
+async def batch_update_segment_typography_api(
+    task_id: str,
+    body: dict = Body(...),
+):
+    """Batch update PDF typography fields for multiple segments."""
+    segment_indices_raw = body.get("segment_indices")
+    if not isinstance(segment_indices_raw, list):
+        raise HTTPException(
+            status_code=400,
+            detail="Request body must include 'segment_indices' as a list of integers.",
+        )
+    try:
+        segment_indices = [int(idx) for idx in segment_indices_raw]
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Each entry in 'segment_indices' must be an integer.",
+        ) from exc
+
+    logger.info(
+        LogModule.ROUTE,
+        f"[TYPOGRAPHY_BATCH_API] Received typography-batch for task {task_id}, "
+        f"count={len(segment_indices)}",
+    )
+
+    if task_manager.get_task(task_id) is None:
+        logger.warning(
+            LogModule.ROUTE,
+            f"[TYPOGRAPHY_BATCH_API] Task ID '{task_id}' not found",
+        )
+        raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
+
+    font_size_pt = body.get("font_size_pt")
+    font_size_reset = bool(body.get("font_size_reset", False))
+    font_weight = body.get("font_weight")
+    font_style = body.get("font_style")
+    font_weight_reset = bool(body.get("font_weight_reset", False))
+    font_style_reset = bool(body.get("font_style_reset", False))
+    leading_em = body.get("leading_em")
+    leading_em_reset = bool(body.get("leading_em_reset", False))
+    pdf_font_reset = bool(body.get("pdf_font_reset", False))
+    modified_by = body.get("modified_by")
+
+    result = _ts_module().batch_update_translation_segment_typography(
+        task_id=task_id,
+        segment_indices=segment_indices,
+        modified_by=modified_by,
+        font_size_pt=font_size_pt,
+        font_size_reset=font_size_reset,
+        font_weight=font_weight,
+        font_style=font_style,
+        font_weight_reset=font_weight_reset,
+        font_style_reset=font_style_reset,
+        leading_em=leading_em,
+        leading_em_reset=leading_em_reset,
+        pdf_font_reset=pdf_font_reset,
+    )
+    return JSONResponse(content=result)
+
+
+@router.post(
     "/translation-segments/{task_id}/exclude-batch",
     summary="Exclude multiple segments from translation",
     description=(

@@ -73,6 +73,8 @@ class RenderBlock:
 
     # When True, render font_size_pt exactly (user override); skip fit/ceiling/width scaling.
     font_size_locked: bool = False
+    # When True, keep leading_em fixed during fit-to-box; only font size may shrink.
+    leading_em_locked: bool = False
 
     # -- embedded visual (chart/table body as image) --
     image_rel_path: str = ""                # path relative to Typst work dir

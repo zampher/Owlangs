@@ -569,7 +569,10 @@ class TranslationService {
     bool fontSizeReset = false,
     String? fontWeight,
     String? fontStyle,
+    bool fontWeightReset = false,
+    bool fontStyleReset = false,
     double? leadingEm,
+    bool leadingEmReset = false,
     bool pdfFontReset = false,
   }) async {
     final dio = _buildAuthedDio();
@@ -586,9 +589,21 @@ class TranslationService {
       } else if (fontSizePt != null) {
         body['font_size_pt'] = fontSizePt;
       }
-      if (fontWeight != null) body['font_weight'] = fontWeight;
-      if (fontStyle != null) body['font_style'] = fontStyle;
-      if (leadingEm != null) body['leading_em'] = leadingEm;
+      if (fontWeightReset) {
+        body['font_weight_reset'] = true;
+      } else if (fontWeight != null) {
+        body['font_weight'] = fontWeight;
+      }
+      if (fontStyleReset) {
+        body['font_style_reset'] = true;
+      } else if (fontStyle != null) {
+        body['font_style'] = fontStyle;
+      }
+      if (leadingEmReset) {
+        body['leading_em_reset'] = true;
+      } else if (leadingEm != null) {
+        body['leading_em'] = leadingEm;
+      }
     }
 
     final resp = await dio.post(
@@ -596,6 +611,58 @@ class TranslationService {
       data: body,
     );
     // Invalidate cached segments for this task so next read gets fresh data.
+    _segmentsCache.remove(taskId);
+    _segmentsRequests.remove(taskId);
+    return (resp.data as Map).cast<String, dynamic>();
+  }
+
+  /// Batch update PDF typography for multiple segments in one request.
+  Future<Map<String, dynamic>> batchUpdateTranslationSegmentTypography(
+    String taskId,
+    List<int> segmentIndices, {
+    double? fontSizePt,
+    bool fontSizeReset = false,
+    String? fontWeight,
+    String? fontStyle,
+    bool fontWeightReset = false,
+    bool fontStyleReset = false,
+    double? leadingEm,
+    bool leadingEmReset = false,
+    bool pdfFontReset = false,
+  }) async {
+    final dio = _buildAuthedDio();
+    final body = <String, dynamic>{
+      'segment_indices': segmentIndices,
+    };
+    if (pdfFontReset) {
+      body['pdf_font_reset'] = true;
+    } else {
+      if (fontSizeReset) {
+        body['font_size_reset'] = true;
+      } else if (fontSizePt != null) {
+        body['font_size_pt'] = fontSizePt;
+      }
+      if (fontWeightReset) {
+        body['font_weight_reset'] = true;
+      } else if (fontWeight != null) {
+        body['font_weight'] = fontWeight;
+      }
+      if (fontStyleReset) {
+        body['font_style_reset'] = true;
+      } else if (fontStyle != null) {
+        body['font_style'] = fontStyle;
+      }
+      if (leadingEmReset) {
+        body['leading_em_reset'] = true;
+      } else if (leadingEm != null) {
+        body['leading_em'] = leadingEm;
+      }
+    }
+
+    final resp = await dio.post(
+      '/service/translation-segments/$taskId/typography-batch',
+      data: body,
+    );
     _segmentsCache.remove(taskId);
     _segmentsRequests.remove(taskId);
     return (resp.data as Map).cast<String, dynamic>();

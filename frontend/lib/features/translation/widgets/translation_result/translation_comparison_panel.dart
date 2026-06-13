@@ -15,6 +15,7 @@ import '../../models/segment_pair.dart';
 import '../../utils/segment_height_cache.dart';
 import '../../utils/segment_type_utils.dart';
 import 'translation_segment_item.dart';
+import 'segment_pdf_typography_dialog.dart';
 
 /// State-based filter keys (mutually exclusive - single select)
 const Set<String> _stateFilterKeys = <String>{
@@ -123,6 +124,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
     String? fontStyle,
     double? leadingEm,
     bool reset,
+    SegmentPdfTypographyDialogMode scope,
   })? onFontSizeChanged;
   final bool batchSelectionEnabled;
   final Set<int> selectedSegmentIndices;
@@ -279,25 +281,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
       _FilterChipConfig('images', l10n.translationStatsImagesLabel, Colors.blue),
     ];
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.only(right: 3),
-          child: Text(
-            '${l10n.settingsGlossaryFilterLabel} ',
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-        Flexible(
-          child: Wrap(
-            spacing: 2,
-            runSpacing: 1,
-            children: filters.map((cfg) {
+    final chipWidgets = filters.map((cfg) {
         final count = counts[cfg.key] ?? 0;
         // Hide chips with 0 count (except "All")
         if (count == 0 && cfg.key.isNotEmpty) {
@@ -353,7 +337,43 @@ class TranslationComparisonPanel extends ConsumerWidget {
             ),
           ),
         );
-      }).toList(),
+      }).toList();
+
+    final Widget filterLabel = Padding(
+      padding: const EdgeInsets.only(right: 3),
+      child: Text(
+        '${l10n.settingsGlossaryFilterLabel} ',
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w600,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+
+    // PDF revision: use full-width Wrap so chips flow horizontally (max ~2 rows)
+    // instead of stacking one chip per row when the panel is narrow.
+    if (pdfRevisionMode) {
+      return Wrap(
+        spacing: 2,
+        runSpacing: 2,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: <Widget>[
+          filterLabel,
+          ...chipWidgets,
+        ],
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        filterLabel,
+        Flexible(
+          child: Wrap(
+            spacing: 2,
+            runSpacing: 1,
+            children: chipWidgets,
           ),
         ),
       ],
@@ -606,16 +626,68 @@ class TranslationComparisonPanel extends ConsumerWidget {
   }
 
   Widget _buildFilterSection(BuildContext context) {
+    final Widget filterBar = _buildFilterChipsBarListenable(context);
+    if (pdfRevisionMode) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Expanded(child: filterBar),
+          if (pdfPageFilterListenable != null) ...<Widget>[
+            const SizedBox(width: 6),
+            _buildPdfPageFilterDropdownListenable(context),
+          ],
+        ],
+      );
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
         Flexible(
           fit: FlexFit.loose,
-          child: _buildFilterChipsBarListenable(context),
+          child: filterBar,
         ),
-        if (pdfRevisionMode && pdfPageFilterListenable != null) ...<Widget>[
-          const SizedBox(width: 6),
-          _buildPdfPageFilterDropdownListenable(context),
+      ],
+    );
+  }
+
+  Widget _buildPageSizeSelector() {
+    if (segmentsPaginationController == null) {
+      return const SizedBox.shrink();
+    }
+    return ListenableBuilder(
+      listenable: segmentsPaginationController!,
+      builder: (context, _) => PageSizeSelector(
+        currentPageSize: segmentsPaginationController!.pageSize,
+        onPageSizeChanged: (size) {
+          segmentsPaginationController!.setPageSize(size);
+        },
+        preferenceKey: 'translation_result_segments_page_size',
+        pageSizeOptions: const <int>[50, 100, 200, 500, 1000, 2000],
+        showLabel: false,
+      ),
+    );
+  }
+
+  Widget _buildPdfRevisionPanelHeader(BuildContext context) {
+    final bool showFilters = segmentMetadata.isNotEmpty &&
+        exclusionFiltersListenable != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            if (batchSelectionEnabled) ...<Widget>[
+              _buildPdfRevisionSelectionActions(context),
+              const Spacer(),
+            ] else
+              const Spacer(),
+            _buildPageSizeSelector(),
+          ],
+        ),
+        if (showFilters) ...<Widget>[
+          const SizedBox(height: 4),
+          _buildFilterSection(context),
         ],
       ],
     );
@@ -698,7 +770,9 @@ class TranslationComparisonPanel extends ConsumerWidget {
                   bottom: BorderSide(color: theme.dividerColor),
                 ),
               ),
-              child: Row(
+              child: pdfRevisionMode
+                  ? _buildPdfRevisionPanelHeader(context)
+                  : Row(
                 children: <Widget>[
                   if (pdfRevisionMode && batchSelectionEnabled) ...<Widget>[
                     _buildPdfRevisionSelectionActions(context),
@@ -760,51 +834,13 @@ class TranslationComparisonPanel extends ConsumerWidget {
                             _buildTranslationStats(context, scheme),
                           if (segmentsPaginationController != null) ...<Widget>[
                             const SizedBox(width: 6),
-                            ListenableBuilder(
-                              listenable: segmentsPaginationController!,
-                              builder: (context, _) => PageSizeSelector(
-                                currentPageSize:
-                                    segmentsPaginationController!.pageSize,
-                                onPageSizeChanged: (size) {
-                                  segmentsPaginationController!.setPageSize(size);
-                                },
-                                preferenceKey:
-                                    'translation_result_segments_page_size',
-                                pageSizeOptions: const <int>[
-                                  50,
-                                  100,
-                                  200,
-                                  500,
-                                  1000,
-                                  2000,
-                                ],
-                                showLabel: false,
-                              ),
-                            ),
+                            _buildPageSizeSelector(),
                           ],
                         ],
                       ),
                     ),
                   if (pdfRevisionMode && segmentsPaginationController != null)
-                    ListenableBuilder(
-                      listenable: segmentsPaginationController!,
-                      builder: (context, _) => PageSizeSelector(
-                        currentPageSize: segmentsPaginationController!.pageSize,
-                        onPageSizeChanged: (size) {
-                          segmentsPaginationController!.setPageSize(size);
-                        },
-                        preferenceKey: 'translation_result_segments_page_size',
-                        pageSizeOptions: const <int>[
-                          50,
-                          100,
-                          200,
-                          500,
-                          1000,
-                          2000,
-                        ],
-                        showLabel: false,
-                      ),
-                    ),
+                    _buildPageSizeSelector(),
                 ],
               ),
             ),

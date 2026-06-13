@@ -518,6 +518,8 @@ class _TranslationResultPreviewState
   int _totalSegmentsCount = 0;
   int _pdfPreviewRevision = 0;
   final ValueNotifier<int> _pdfPreviewRevisionNotifier = ValueNotifier<int>(0);
+  // Coalesce PDF preview refresh during batch typography updates.
+  int _pdfTypographyBatchDepth = 0;
   final ValueNotifier<int> _segmentUiRevisionNotifier = ValueNotifier<int>(0);
 
   // Track modified segments (index -> new text)
@@ -4133,7 +4135,19 @@ class _TranslationResultPreviewState
     );
   }
 
+  String _pdfRevisionLaunchScopeKey() =>
+      widget.flowId ?? _apiTaskId();
+
   Widget _buildContent({bool isFullscreenView = false}) {
+    ref.listen<int>(
+      pdfRevisionLaunchProvider(_pdfRevisionLaunchScopeKey()),
+      (int? previous, int next) {
+        if (next > 0 && previous != next && mounted) {
+          unawaited(_onEnterPdfRevisionMode());
+        }
+      },
+    );
+
     // Get translation state if flowId is available
     final dynamic translationState = widget.flowId != null
         ? ref.watch(translationStateProviderFamily(widget.flowId!))
@@ -4200,6 +4214,10 @@ class _TranslationResultPreviewState
                 onNavigateToFailedSegment: (direction) =>
                     _navigateToFailedSegment(direction: direction),
                 onViewPreview: _onViewPreview,
+                onEnterPdfRevisionMode: _isPdfSourceFile() &&
+                        _translationLooksComplete(translationState)
+                    ? _onEnterPdfRevisionMode
+                    : null,
                 onShowDownload: _showDownloadDialog,
                 onToggleFullscreen: _toggleFullscreen,
                 excludedCount: _calculateExcludedCount(),
@@ -4575,6 +4593,20 @@ class _TranslationResultPreviewState
     }
   }
 
+  /// Refresh segment panel and PDF preview once after a batch typography update.
+  Future<void> _finalizePdfTypographyBatchRefresh(int segmentCount) async {
+    if (!mounted) {
+      return;
+    }
+    _notifyPdfPreviewRevisionChanged();
+    _translationResultLog(
+      '[PDF_REVISION] Batch typography applied to $segmentCount segment(s); '
+      'coalesced PDF preview refresh (rev=$_pdfPreviewRevision)',
+    );
+    setState(() {});
+    await _segmentsPaginationController?.refresh();
+  }
+
   /// Reload computed PDF typography from backend Typst dry-run enrichment.
   Future<void> _refreshPdfTypographyMetadata() async {
     try {
@@ -4706,8 +4738,8 @@ class _TranslationResultPreviewState
       selectedExclusionFilters: _selectedExclusionFilters,
       onFiltersChanged: _handleFiltersChanged,
       onFormulaFix: _handleFormulaFixForSegment,
-      showPdfFontSize: _isPdfSourceFile(),
-      onFontSizeChanged: _isPdfSourceFile() ? _handleFontSizeChanged : null,
+      showPdfFontSize: false,
+      onFontSizeChanged: null,
     );
   }
 
@@ -4791,7 +4823,10 @@ class _TranslationResultPreviewState
     );
   }
 
-  Future<void> _handleBatchPdfTypography(Set<int> indices) async {
+  Future<void> _handleBatchPdfTypography(
+    Set<int> indices,
+    SegmentPdfTypographyDialogMode mode,
+  ) async {
     if (indices.isEmpty) {
       return;
     }
@@ -4804,12 +4839,24 @@ class _TranslationResultPreviewState
             ? _targetParagraphs[firstIndex]
             : '');
 
-    bool hasUserOverride =
-        (metadata['font_size_source'] == 'user' &&
-                metadata['font_size_pt'] != null) ||
-            metadata['font_weight_source'] == 'user' ||
-            metadata['font_style_source'] == 'user' ||
-            metadata['leading_em_source'] == 'user';
+    bool hasUserOverride;
+    switch (mode) {
+      case SegmentPdfTypographyDialogMode.fontOnly:
+        hasUserOverride =
+            (metadata['font_size_source'] == 'user' &&
+                    metadata['font_size_pt'] != null) ||
+                metadata['font_weight_source'] == 'user' ||
+                metadata['font_style_source'] == 'user';
+      case SegmentPdfTypographyDialogMode.leadingOnly:
+        hasUserOverride = metadata['leading_em_source'] == 'user';
+      case SegmentPdfTypographyDialogMode.all:
+        hasUserOverride =
+            (metadata['font_size_source'] == 'user' &&
+                    metadata['font_size_pt'] != null) ||
+                metadata['font_weight_source'] == 'user' ||
+                metadata['font_style_source'] == 'user' ||
+                metadata['leading_em_source'] == 'user';
+    }
 
     double readDouble(dynamic raw, double fallback) {
       if (raw is num) {
@@ -4858,23 +4905,136 @@ class _TranslationResultPreviewState
       initialFontWeight: initialWeight,
       initialFontStyle: initialStyle,
       initialLeadingEm: snapPdfLeadingEm(initialLeading),
+      mode: mode,
     );
     if (!mounted || result == null) {
       return;
     }
 
-    for (final int index in sorted) {
-      if (result.reset) {
-        await _handleFontSizeChanged(index, reset: true);
-      } else {
-        await _handleFontSizeChanged(
+    _pdfTypographyBatchDepth++;
+    try {
+      final bool resetAll =
+          result.reset && result.mode == SegmentPdfTypographyDialogMode.all;
+      final bool resetFont = result.reset &&
+          (result.mode == SegmentPdfTypographyDialogMode.fontOnly ||
+              result.mode == SegmentPdfTypographyDialogMode.all);
+      final bool resetLeading = result.reset &&
+          (result.mode == SegmentPdfTypographyDialogMode.leadingOnly ||
+              result.mode == SegmentPdfTypographyDialogMode.all);
+      final bool applyFont =
+          result.mode != SegmentPdfTypographyDialogMode.leadingOnly &&
+              !result.reset;
+      final bool applyLeading =
+          result.mode != SegmentPdfTypographyDialogMode.fontOnly && !result.reset;
+
+      final TranslationService svc = TranslationService();
+      await svc.batchUpdateTranslationSegmentTypography(
+        _apiTaskId(),
+        sorted,
+        fontSizePt: applyFont ? result.fontSizePt : null,
+        fontSizeReset: resetFont && !resetAll,
+        fontWeight: applyFont ? result.fontWeight : null,
+        fontWeightReset: resetFont && !resetAll,
+        fontStyle: applyFont ? result.fontStyle : null,
+        fontStyleReset: resetFont && !resetAll,
+        leadingEm: applyLeading ? result.leadingEm : null,
+        leadingEmReset: resetLeading && !resetAll,
+        pdfFontReset: resetAll,
+      );
+
+      for (final int index in sorted) {
+        _applyLocalPdfTypographyMetadata(
           index,
-          fontSizePt: result.fontSizePt,
-          fontWeight: result.fontWeight,
-          fontStyle: result.fontStyle,
-          leadingEm: result.leadingEm,
+          fontSizePt: applyFont ? result.fontSizePt : null,
+          fontWeight: applyFont ? result.fontWeight : null,
+          fontStyle: applyFont ? result.fontStyle : null,
+          leadingEm: applyLeading ? result.leadingEm : null,
+          reset: result.reset,
+          scope: result.mode,
         );
       }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showError(context, 'Failed to update PDF typography: $e');
+      }
+    } finally {
+      _pdfTypographyBatchDepth--;
+      if (_pdfTypographyBatchDepth <= 0) {
+        _pdfTypographyBatchDepth = 0;
+        await _finalizePdfTypographyBatchRefresh(sorted.length);
+      }
+    }
+  }
+
+  void _applyLocalPdfTypographyMetadata(
+    int index, {
+    double? fontSizePt,
+    String? fontWeight,
+    String? fontStyle,
+    double? leadingEm,
+    bool reset = false,
+    SegmentPdfTypographyDialogMode scope = SegmentPdfTypographyDialogMode.all,
+  }) {
+    final bool resetAll =
+        reset && scope == SegmentPdfTypographyDialogMode.all;
+    final bool resetFont = reset &&
+        (scope == SegmentPdfTypographyDialogMode.fontOnly ||
+            scope == SegmentPdfTypographyDialogMode.all);
+    final bool resetLeading = reset &&
+        (scope == SegmentPdfTypographyDialogMode.leadingOnly ||
+            scope == SegmentPdfTypographyDialogMode.all);
+    final bool applyFont =
+        scope != SegmentPdfTypographyDialogMode.leadingOnly && !reset;
+    final bool applyLeading =
+        scope != SegmentPdfTypographyDialogMode.fontOnly && !reset;
+
+    final Map<String, dynamic> typographyPatch = resetAll
+        ? <String, dynamic>{
+            'font_size_pt': null,
+            'font_size_source': 'auto',
+            'font_weight': null,
+            'font_weight_source': 'auto',
+            'font_style': null,
+            'font_style_source': 'auto',
+            'leading_em': null,
+            'leading_em_source': 'auto',
+          }
+        : resetFont
+            ? <String, dynamic>{
+                'font_size_pt': null,
+                'font_size_source': 'auto',
+                'font_weight': null,
+                'font_weight_source': 'auto',
+                'font_style': null,
+                'font_style_source': 'auto',
+              }
+            : resetLeading
+                ? <String, dynamic>{
+                    'leading_em': null,
+                    'leading_em_source': 'auto',
+                  }
+                : <String, dynamic>{
+                    if (applyFont && fontSizePt != null) 'font_size_pt': fontSizePt,
+                    if (applyFont && fontSizePt != null)
+                      'font_size_source': 'user',
+                    if (applyFont && fontWeight != null) 'font_weight': fontWeight,
+                    if (applyFont && fontWeight != null)
+                      'font_weight_source': 'user',
+                    if (applyFont && fontStyle != null) 'font_style': fontStyle,
+                    if (applyFont && fontStyle != null)
+                      'font_style_source': 'user',
+                    if (applyLeading && leadingEm != null) 'leading_em': leadingEm,
+                    if (applyLeading && leadingEm != null)
+                      'leading_em_source': 'user',
+                  };
+
+    if (_allSegmentsMetadata.containsKey(index)) {
+      _allSegmentsMetadata[index] = <String, dynamic>{
+        ..._allSegmentsMetadata[index]!,
+        ...typographyPatch,
+      };
+    } else {
+      _allSegmentsMetadata[index] = typographyPatch;
     }
   }
 
@@ -4885,19 +5045,36 @@ class _TranslationResultPreviewState
     String? fontStyle,
     double? leadingEm,
     bool reset = false,
+    SegmentPdfTypographyDialogMode scope = SegmentPdfTypographyDialogMode.all,
   }) async {
+    final bool resetAll =
+        reset && scope == SegmentPdfTypographyDialogMode.all;
+    final bool resetFont = reset &&
+        (scope == SegmentPdfTypographyDialogMode.fontOnly ||
+            scope == SegmentPdfTypographyDialogMode.all);
+    final bool resetLeading = reset &&
+        (scope == SegmentPdfTypographyDialogMode.leadingOnly ||
+            scope == SegmentPdfTypographyDialogMode.all);
+    final bool applyFont =
+        scope != SegmentPdfTypographyDialogMode.leadingOnly && !reset;
+    final bool applyLeading =
+        scope != SegmentPdfTypographyDialogMode.fontOnly && !reset;
+
     try {
       final TranslationService svc = TranslationService();
       final Map<String, dynamic> response =
           await svc.updateTranslationSegment(
         _apiTaskId(),
         index,
-        fontSizePt: fontSizePt,
-        fontSizeReset: reset,
-        fontWeight: fontWeight,
-        fontStyle: fontStyle,
-        leadingEm: leadingEm,
-        pdfFontReset: reset,
+        fontSizePt: applyFont ? fontSizePt : null,
+        fontSizeReset: resetFont && !resetAll,
+        fontWeight: applyFont ? fontWeight : null,
+        fontWeightReset: resetFont && !resetAll,
+        fontStyle: applyFont ? fontStyle : null,
+        fontStyleReset: resetFont && !resetAll,
+        leadingEm: applyLeading ? leadingEm : null,
+        leadingEmReset: resetLeading && !resetAll,
+        pdfFontReset: resetAll,
       );
       final Map<String, dynamic>? updatedSegment =
           response['segment'] is Map
@@ -4909,59 +5086,28 @@ class _TranslationResultPreviewState
           ? _pdfFontSizeMetadataFields(updatedSegment)
           : <String, dynamic>{};
 
+      _applyLocalPdfTypographyMetadata(
+        index,
+        fontSizePt: applyFont ? fontSizePt : null,
+        fontWeight: applyFont ? fontWeight : null,
+        fontStyle: applyFont ? fontStyle : null,
+        leadingEm: applyLeading ? leadingEm : null,
+        reset: reset,
+        scope: scope,
+      );
       if (_allSegmentsMetadata.containsKey(index)) {
         _allSegmentsMetadata[index] = <String, dynamic>{
           ..._allSegmentsMetadata[index]!,
           ...computedFields,
-          if (reset) ...<String, dynamic>{
-            'font_size_pt': null,
-            'font_size_source': 'auto',
-            'font_weight': null,
-            'font_weight_source': 'auto',
-            'font_style': null,
-            'font_style_source': 'auto',
-            'leading_em': null,
-            'leading_em_source': 'auto',
-          } else ...<String, dynamic>{
-            if (fontSizePt != null) 'font_size_pt': fontSizePt,
-            if (fontSizePt != null) 'font_size_source': 'user',
-            if (fontWeight != null) 'font_weight': fontWeight,
-            if (fontWeight != null) 'font_weight_source': 'user',
-            if (fontStyle != null) 'font_style': fontStyle,
-            if (fontStyle != null) 'font_style_source': 'user',
-            if (leadingEm != null) 'leading_em': leadingEm,
-            if (leadingEm != null) 'leading_em_source': 'user',
-          },
         };
-      } else {
-        _allSegmentsMetadata[index] = <String, dynamic>{
-          ...computedFields,
-          if (reset) ...<String, dynamic>{
-            'font_size_pt': null,
-            'font_size_source': 'auto',
-            'font_weight': null,
-            'font_weight_source': 'auto',
-            'font_style': null,
-            'font_style_source': 'auto',
-            'leading_em': null,
-            'leading_em_source': 'auto',
-          } else ...<String, dynamic>{
-            if (fontSizePt != null) 'font_size_pt': fontSizePt,
-            if (fontSizePt != null) 'font_size_source': 'user',
-            if (fontWeight != null) 'font_weight': fontWeight,
-            if (fontWeight != null) 'font_weight_source': 'user',
-            if (fontStyle != null) 'font_style': fontStyle,
-            if (fontStyle != null) 'font_style_source': 'user',
-            if (leadingEm != null) 'leading_em': leadingEm,
-            if (leadingEm != null) 'leading_em_source': 'user',
-          },
-        };
+      } else if (computedFields.isNotEmpty) {
+        _allSegmentsMetadata[index] = computedFields;
       }
 
-      if (mounted) {
+      if (mounted && _pdfTypographyBatchDepth == 0) {
         _notifyPdfPreviewRevisionChanged();
         setState(() {});
-        _segmentsPaginationController?.refresh();
+        await _segmentsPaginationController?.refresh();
       }
     } catch (e) {
       if (mounted) {
@@ -5113,6 +5259,40 @@ class _TranslationResultPreviewState
     final PreviewSelection? selection = await _showPreviewDialogInternal();
     if (selection != null) {
       await _launchPreview(selection);
+    }
+  }
+
+  /// Open preserve-layout PDF full compare directly in revision mode.
+  Future<void> _onEnterPdfRevisionMode() async {
+    _lastPreviewMode = TranslationPreviewMode.pdfPreserve;
+    _lastFullDocumentCompare = true;
+    _lastSyncScroll = TranslationPreviewMode.pdfPreserve.defaultFullCompareSyncScroll;
+
+    if (mounted) {
+      setState(() {
+        _loadingHtmlPreview = true;
+      });
+    }
+
+    try {
+      await _openFullDocumentCompareTab(
+        baseMode: TranslationPreviewMode.pdfPreserve,
+        initialPdfRevisionMode: true,
+      );
+    } catch (e, stackTrace) {
+      _translationResultLog(
+        '[PDF_REVISION] Failed to open PDF revision mode: $e\n$stackTrace',
+        level: LogLevel.error,
+      );
+      if (mounted) {
+        MessageService.showError(context, 'Failed to open PDF revision: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingHtmlPreview = false;
+        });
+      }
     }
   }
 
@@ -5292,6 +5472,7 @@ class _TranslationResultPreviewState
 
   Future<void> _openFullDocumentCompareTab({
     required TranslationPreviewMode baseMode,
+    bool initialPdfRevisionMode = false,
   }) async {
     final dynamic translationState = widget.flowId != null
         ? ref.read(translationStateProviderFamily(widget.flowId!))
@@ -5322,8 +5503,10 @@ class _TranslationResultPreviewState
       PreviewTab(
         id: tabId,
         type: PreviewTabType.translationResult,
-        title: l10n.translationPreviewFullDocumentCompare,
-        icon: Icons.compare_arrows,
+        title: initialPdfRevisionMode
+            ? l10n.translationPreviewPdfRevision
+            : l10n.translationPreviewFullDocumentCompare,
+        icon: initialPdfRevisionMode ? Icons.edit_note : Icons.compare_arrows,
         content: TranslationFullComparePreviewTab(
           taskId: _apiTaskId(),
           baseMode: baseMode,
@@ -5337,6 +5520,7 @@ class _TranslationResultPreviewState
           translatedHtmlUrl: translatedHtmlUrl,
           initialSyncScroll:
               _lastSyncScroll ?? baseMode.defaultFullCompareSyncScroll,
+          initialPdfRevisionMode: initialPdfRevisionMode,
           onSyncScrollChanged: (bool enabled) {
             _lastSyncScroll = enabled;
           },
@@ -5346,9 +5530,19 @@ class _TranslationResultPreviewState
                   baseMode == TranslationPreviewMode.pdfPreserve
               ? _buildPdfRevisionSegmentPanel
               : null,
-          onBatchTypographyApply: _isPdfSourceFile() &&
+          onBatchFontApply: _isPdfSourceFile() &&
                   baseMode == TranslationPreviewMode.pdfPreserve
-              ? _handleBatchPdfTypography
+              ? (Set<int> indices) => _handleBatchPdfTypography(
+                    indices,
+                    SegmentPdfTypographyDialogMode.fontOnly,
+                  )
+              : null,
+          onBatchLeadingApply: _isPdfSourceFile() &&
+                  baseMode == TranslationPreviewMode.pdfPreserve
+              ? (Set<int> indices) => _handleBatchPdfTypography(
+                    indices,
+                    SegmentPdfTypographyDialogMode.leadingOnly,
+                  )
               : null,
           onPdfRevisionModeEntered: _isPdfSourceFile() &&
                   baseMode == TranslationPreviewMode.pdfPreserve
