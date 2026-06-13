@@ -1266,5 +1266,30 @@
   "loginPasswordRecoveryAdminGuide": "如果您是管理员，请按照密码恢复流程进行处理。",
 
   "commonDarkMode": "深色模式",
-  "commonLightMode": "浅色模式"
+  "commonLightMode": "浅色模式",
+
+  "segmentPdfFontSizeAuto": "自动 ({sizePt}pt)",
+  "@segmentPdfFontSizeAuto": {
+    "placeholders": {
+      "sizePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfFontSizeAutoUnknown": "自动",
+  "segmentPdfFontSizeManual": "{sizePt}pt",
+  "@segmentPdfFontSizeManual": {
+    "placeholders": {
+      "sizePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfFontSizeTitle": "PDF 字号",
+  "segmentPdfTypographyTitle": "PDF 字体",
+  "segmentPdfTypographyPreviewLabel": "预览",
+  "segmentPdfTypographyBold": "粗体",
+  "segmentPdfTypographyItalic": "斜体",
+  "segmentPdfFontSizeReset": "恢复自动",
+  "segmentPdfFontSizeApply": "应用"
 }

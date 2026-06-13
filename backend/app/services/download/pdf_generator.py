@@ -24,6 +24,159 @@ ENABLE_LAYOUT_PDF_GENERATION: bool = True
 # Default PDF renderer type: "typst_overlay" (high-fidelity, preserves original layout)
 # or "reportlab" (direct rendering, no HTML intermediate).
 DEFAULT_PDF_RENDERER_TYPE: str = "typst_overlay"
+
+# Block types that Typst overlay can render as text (non-image/table/chart).
+_RENDERABLE_TEXT_BLOCK_TYPES = frozenset(
+    {"text", "title", "header", "footer", "page_number", "ref_text", "figure", "caption"}
+)
+
+
+def _segment_export_text(segment: Dict[str, Any], text_field: str) -> str:
+    """Resolve per-segment export text (modified_text falls back to target_text)."""
+    if text_field == "source_text":
+        return (segment.get("source_text") or "").strip()
+    return (segment.get("modified_text") or segment.get("target_text") or "").strip()
+
+
+def _bbox_contains(outer: tuple, inner: tuple, *, margin: float = 1.0) -> bool:
+    ox0, oy0, ox1, oy1 = outer
+    ix0, iy0, ix1, iy1 = inner
+    return (
+        ix0 >= ox0 - margin
+        and iy0 >= oy0 - margin
+        and ix1 <= ox1 + margin
+        and iy1 <= oy1 + margin
+    )
+
+
+def _is_list_expandable_child_type(block_type: str) -> bool:
+    """Block types that can receive translated text when a list parent is expanded."""
+    return block_type in _RENDERABLE_TEXT_BLOCK_TYPES and block_type not in {
+        "list",
+        "figure",
+    }
+
+
+def _collect_list_child_indices(
+    list_index: int,
+    layout_doc,
+    block_index_to_type: Dict[int, str],
+    block_index_to_bbox: Dict[int, tuple],
+) -> List[int]:
+    """Resolve MinerU list parent blocks to their renderable child layout blocks."""
+    list_bbox = block_index_to_bbox.get(list_index)
+    if not list_bbox:
+        return []
+
+    page_index = None
+    for block in layout_doc.iter_blocks():
+        if block.index == list_index:
+            page_index = block.page_index
+            break
+    if page_index is None:
+        return []
+
+    page_blocks = sorted(
+        (
+            block
+            for block in layout_doc.iter_blocks()
+            if block.page_index == page_index and block.index is not None
+        ),
+        key=lambda block: block.index,
+    )
+
+    # MinerU IR emits list children as consecutive indices immediately after the parent.
+    sequential_children: List[int] = []
+    passed_list = False
+    for block in page_blocks:
+        if block.index == list_index:
+            passed_list = True
+            continue
+        if not passed_list:
+            continue
+        btype = block_index_to_type.get(block.index, block.type)
+        if btype == "list":
+            break
+        if btype in {"image", "table", "chart", "interline_equation"}:
+            break
+        child_bbox = block_index_to_bbox.get(block.index, block.bbox)
+        if not _bbox_contains(list_bbox, child_bbox):
+            break
+        if _is_list_expandable_child_type(btype) and (block.text or "").strip():
+            sequential_children.append(block.index)
+
+    if sequential_children:
+        return sequential_children
+
+    # Fallback: any renderable text block contained in the list bbox on the same page.
+    contained: List[int] = []
+    for block in page_blocks:
+        if block.index == list_index:
+            continue
+        btype = block_index_to_type.get(block.index, block.type)
+        if not _is_list_expandable_child_type(btype) or not (block.text or "").strip():
+            continue
+        child_bbox = block_index_to_bbox.get(block.index, block.bbox)
+        if _bbox_contains(list_bbox, child_bbox):
+            contained.append(block.index)
+    contained.sort(
+        key=lambda idx: (
+            block_index_to_bbox.get(idx, (0, 0, 0, 0))[1],
+            block_index_to_bbox.get(idx, (0, 0, 0, 0))[0],
+        )
+    )
+    return contained
+
+
+def _expand_renderable_block_indices(
+    indices: List[int],
+    layout_doc,
+    block_index_to_type: Dict[int, str],
+    block_index_to_bbox: Dict[int, tuple],
+) -> List[int]:
+    """Expand non-renderable list blocks to contained text/ref_text layout blocks."""
+    expanded: List[int] = []
+    seen: set[int] = set()
+
+    for raw_idx in indices:
+        try:
+            block_index_int = int(raw_idx)
+        except (TypeError, ValueError):
+            continue
+        if block_index_int in seen:
+            continue
+        block_type = block_index_to_type.get(block_index_int, "text")
+        if block_type != "list":
+            seen.add(block_index_int)
+            expanded.append(block_index_int)
+            continue
+
+        child_indices = _collect_list_child_indices(
+            block_index_int,
+            layout_doc,
+            block_index_to_type,
+            block_index_to_bbox,
+        )
+        if child_indices:
+            logger.info(
+                LogModule.EXPORT,
+                f"[LAYOUT] Expanded list block {block_index_int} to child blocks {child_indices}",
+            )
+            for child_idx in child_indices:
+                if child_idx not in seen:
+                    seen.add(child_idx)
+                    expanded.append(child_idx)
+        else:
+            logger.warning(
+                LogModule.EXPORT,
+                f"[LAYOUT] List block {block_index_int} has no renderable children; "
+                "translation will not overlay on Typst PDF",
+            )
+            seen.add(block_index_int)
+            expanded.append(block_index_int)
+    return expanded
+
+
 class PDFGenerator:
     """Service for generating PDF files."""
     
@@ -94,6 +247,9 @@ class PDFGenerator:
             if not segments_data or not isinstance(segments_data, dict):
                 logger.warning(LogModule.EXPORT, f"[LAYOUT] No translation segments found in task_state")
                 block_text_map: Dict[int, str] = {}
+                font_size_by_block_index: Dict[int, float] = {}
+                font_weight_by_block_index: Dict[int, str] = {}
+                font_style_by_block_index: Dict[int, str] = {}
             else:
                 segments = segments_data.get("segments") or []
                 is_deep_split_enabled = bool(task_state.get("deep_split"))
@@ -103,16 +259,14 @@ class PDFGenerator:
                     f"from task_state for PDF review generation"
                 )
                 
-                # Use modified_text or target_text (translated text from segments)
-                # These texts may already contain formatting (LaTeX formulas, Markdown tables)
-                # which will be preserved and used directly
-                text_field = "modified_text"  # Prefer modified_text (user-edited translations)
-                # Check if any segment has modified_text, otherwise use target_text
-                has_modified = any(seg.get("modified_text") for seg in segments)
-                if not has_modified:
-                    text_field = "target_text"
-                
-                logger.info(LogModule.EXPORT, f"[LAYOUT] Building block text map from segments: {len(segments)} segments, text_field={text_field}, deep_split={is_deep_split_enabled}")
+                # Per-segment text uses modified_text with target_text fallback inside
+                # build_block_text_map_from_segments (same as frontend / DOCX export).
+                text_field = "target_text"
+                logger.info(
+                    LogModule.EXPORT,
+                    f"[LAYOUT] Building block text map from segments: {len(segments)} segments, "
+                    f"deep_split={is_deep_split_enabled}",
+                )
                 # Build mapping: segments (translated text) -> layout blocks (structure)
                 # If segments contain formatting info (LaTeX, Markdown tables), it's preserved
                 # Layout blocks provide structure (formula/table/image positions, formats)
@@ -124,6 +278,29 @@ class PDFGenerator:
                     is_deep_split_enabled=is_deep_split_enabled,
                 )
                 logger.info(LogModule.EXPORT,f"[LAYOUT] Built block text map: {len(block_text_map)} blocks mapped")
+
+                from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+                    build_block_font_map_from_segments,
+                    build_block_font_style_map_from_segments,
+                    build_block_font_weight_map_from_segments,
+                )
+                font_size_by_block_index = build_block_font_map_from_segments(
+                    segments,
+                    task_state,
+                )
+                font_weight_by_block_index = build_block_font_weight_map_from_segments(
+                    segments,
+                    task_state,
+                )
+                font_style_by_block_index = build_block_font_style_map_from_segments(
+                    segments,
+                    task_state,
+                )
+                if font_size_by_block_index:
+                    logger.info(
+                        LogModule.EXPORT,
+                        f"[LAYOUT] User font overrides for {len(font_size_by_block_index)} block(s)",
+                    )
             
             # Get ZIP bytes for image extraction (chart/table/image embedding)
             zip_bytes = None
@@ -215,6 +392,21 @@ class PDFGenerator:
                             chart_body_format=chart_body_format_resolved,
                             target_language=target_language,
                             renderer_type=_rt,
+                            font_size_by_block_index=(
+                                font_size_by_block_index
+                                if font_size_by_block_index
+                                else None
+                            ),
+                            font_weight_by_block_index=(
+                                font_weight_by_block_index
+                                if font_weight_by_block_index
+                                else None
+                            ),
+                            font_style_by_block_index=(
+                                font_style_by_block_index
+                                if font_style_by_block_index
+                                else None
+                            ),
                         )
                         if _rt == "typst_overlay":
                             source_pdf = task_state.get("original_file_path")
@@ -357,6 +549,10 @@ class PDFGenerator:
         Returns:
             Dictionary mapping block index to text content (translated text from segments)
         """
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            resolve_segment_layout_block_indices,
+        )
+
         block_text_map: Dict[int, str] = {}
         block_text_sequences = defaultdict(list) if is_deep_split_enabled else None
         layout_chunk_block_texts: List[List[str]] = task_state.get("layout_chunk_block_texts") or []
@@ -365,11 +561,13 @@ class PDFGenerator:
         layout_block_original_texts: Dict[int, str] = {}
         block_index_to_type: Dict[int, str] = {}
         block_index_to_raw: Dict[int, Dict] = {}
+        block_index_to_bbox: Dict[int, tuple] = {}
         for block in layout_doc.iter_blocks():
             if block.index is not None:
                 layout_block_original_texts[block.index] = (block.text or "").strip()
                 block_index_to_type[block.index] = block.type
                 block_index_to_raw[block.index] = getattr(block, "raw", None) or {}
+                block_index_to_bbox[block.index] = block.bbox
         
         # Helper function to distribute text to multiple blocks (with whitespace boundary handling)
         def _split_by_newlines(text: str, expected: int) -> List[str]:
@@ -438,14 +636,20 @@ class PDFGenerator:
         for seg_index, seg in enumerate(segments):
             # For segments with text (even if is_image=True, e.g., image captions), participate in mapping
             # Only skip segments with no text at all
-            indices = seg.get("layout_block_indices") or []
+            indices = resolve_segment_layout_block_indices(seg, task_state)
             if not indices:
                 continue
             
-            # Extract text from specified field
-            text = seg.get(text_field) or ""
+            text = _segment_export_text(seg, text_field)
             if not text:
                 continue
+
+            indices = _expand_renderable_block_indices(
+                indices,
+                layout_doc,
+                block_index_to_type,
+                block_index_to_bbox,
+            )
             
             # Filter out image blocks from indices, BUT keep image blocks for image caption segments
             # Image captions are text segments that map to image blocks, and their text should be preserved
@@ -468,6 +672,9 @@ class PDFGenerator:
                 if block_type == "image":
                     # Keep image blocks for potential caption mapping
                     image_block_indices.append(block_index_int)
+                elif block_type == "list":
+                    # Parent list blocks are not rendered by Typst; children were expanded above.
+                    continue
                 else:
                     text_block_indices.append(block_index_int)
             
@@ -539,9 +746,12 @@ class PDFGenerator:
             block_text_map,
             segments,
             text_field,
+            task_state,
+            layout_doc,
             layout_block_original_texts,
             block_index_to_type,
             block_index_to_raw,
+            block_index_to_bbox,
         )
         
         return block_text_map
@@ -551,22 +761,34 @@ class PDFGenerator:
         block_text_map: Dict[int, str],
         segments: List[Dict],
         text_field: str,
+        task_state: Dict[str, Any],
+        layout_doc,
         layout_block_original_texts: Dict[int, str],
         block_index_to_type: Dict[int, str],
         block_index_to_raw: Dict[int, Dict],
+        block_index_to_bbox: Dict[int, tuple],
     ) -> None:
         """Recover block text when mapping used a partial segment instead of full paragraph."""
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            resolve_segment_layout_block_indices,
+        )
         from layout.pdf_renderer.typst_overlay.text_metrics import (
             is_suspiciously_short_mapped_text,
         )
 
         dedicated_texts: Dict[int, List[str]] = defaultdict(list)
         for seg in segments:
-            seg_text = (seg.get(text_field) or "").strip()
+            seg_text = _segment_export_text(seg, text_field)
             if not seg_text:
                 continue
             text_indices: List[int] = []
-            for raw_idx in seg.get("layout_block_indices") or []:
+            resolved = _expand_renderable_block_indices(
+                resolve_segment_layout_block_indices(seg, task_state),
+                layout_doc,
+                block_index_to_type,
+                block_index_to_bbox,
+            )
+            for raw_idx in resolved:
                 try:
                     block_index_int = int(raw_idx)
                 except (TypeError, ValueError):

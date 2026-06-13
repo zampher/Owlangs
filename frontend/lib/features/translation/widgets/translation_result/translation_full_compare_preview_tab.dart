@@ -22,6 +22,7 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
     required this.isPdfSource,
     required this.isPdfWorkflow,
     this.translatedPdfUrl,
+    this.pdfRenderRevision = 0,
     this.translatedHtmlUrl,
     this.initialSyncScroll = false,
     super.key,
@@ -35,6 +36,7 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
   final bool isPdfSource;
   final bool isPdfWorkflow;
   final String? translatedPdfUrl;
+  final int pdfRenderRevision;
   final String? translatedHtmlUrl;
   final bool initialSyncScroll;
   final Future<PreviewSelection?> Function()? onRequestPreviewSettings;
@@ -160,8 +162,13 @@ class _TranslationFullComparePreviewTabState
       return Center(child: Text(l10n.translationPreviewNoExtraOptions));
     }
     final String sourcePdfUrl = svc.buildSourcePdfUrl(widget.taskId);
-    final String targetPdfUrl =
-        mergePreviewUrl(widget.translatedPdfUrl!, formatParams);
+    final String targetPdfUrl = mergePreviewUrl(
+      widget.translatedPdfUrl!,
+      {
+        ...formatParams,
+        ...previewCacheBustParams(widget.pdfRenderRevision),
+      },
+    );
     return PreviewZoomableViewport(
       controller: _viewportController,
       childHandlesVerticalScroll: true,

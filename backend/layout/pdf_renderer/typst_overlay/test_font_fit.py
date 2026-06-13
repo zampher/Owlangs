@@ -6,13 +6,20 @@
 import unittest
 
 from layout.pdf_renderer.typst_overlay.font_fit import (
+    BBOX_VERTICAL_MARGIN_RATIO,
     FontFitCalculator,
     REF_TEXT_MAX_LEADING_EM,
+    estimate_preserved_stack_visual_lines,
     estimate_title_font_size_pt,
+    is_bbox_at_page_right_edge,
     is_patent_field_label,
+    overflow_tail_char_count,
+    plan_title_horizontal_extension_pt,
+    preserved_stack_render_height_pt,
     quantize_ref_font_size_pt,
     quantize_ref_leading_em,
     should_use_title_font_sizing,
+    title_wrap_would_exceed_bbox_height,
 )
 from layout.pdf_renderer.typst_overlay.models import RenderBlock
 
@@ -293,6 +300,213 @@ class TestFontFitCalculator(unittest.TestCase):
         self.assertFalse(fitted.fit_to_box)
         self.assertGreaterEqual(fitted.font_size_pt, 10.0)
 
+    def test_title_extends_horizontally_when_slightly_long_not_at_right_edge(self):
+        """Overflow tail within 4 characters prefers single-line extend."""
+        calc = FontFitCalculator()
+        page_w = 612.0
+        bbox = (105.0, 464.0, 192.0, 475.0)
+        raw = {
+            "type": "title",
+            "bbox": list(bbox),
+            "lines": [{"spans": [{"type": "text", "content": "1 Introduction"}]}],
+        }
+        text = "1 Introduction简介"
+        block = RenderBlock(
+            block_id="title_extend",
+            page_index=0,
+            inner_bbox=bbox,
+            plain_text=text,
+            markdown_text=text,
+        )
+        font_size = estimate_title_font_size_pt(bbox[3] - bbox[1], raw)
+        tail_chars = overflow_tail_char_count(
+            text, bbox[2] - bbox[0], font_size,
+        )
+        self.assertGreater(tail_chars, 0)
+        self.assertLessEqual(tail_chars, 4)
+        extend = plan_title_horizontal_extension_pt(
+            text, bbox, font_size, 1.12, page_w,
+        )
+        self.assertIsNotNone(extend)
+        self.assertGreater(extend, bbox[2] - bbox[0])
+
+        fitted = calc.calculate_fit_params(
+            block, layout_raw=raw, page_width_pt=page_w,
+        )
+        self.assertTrue(fitted.fit_single_line)
+        self.assertTrue(fitted.fit_to_box)
+        self.assertGreater(fitted.fit_target_width_pt, bbox[2] - bbox[0])
+
+    def test_title_two_char_tail_extends_without_wrap(self):
+        """Small overflow tail (<=4 chars) must extend, not wrap to a second line."""
+        calc = FontFitCalculator()
+        page_w = 612.0
+        bbox = (105.0, 464.0, 192.0, 475.0)
+        raw = {
+            "type": "title",
+            "bbox": list(bbox),
+            "lines": [{"spans": [{"type": "text", "content": "1 Introduction"}]}],
+        }
+        text = "1 Introduction" + "\u5f15\u8a00"
+        font_size = estimate_title_font_size_pt(bbox[3] - bbox[1], raw)
+        tail_chars = overflow_tail_char_count(text, bbox[2] - bbox[0], font_size)
+        self.assertGreater(tail_chars, 0)
+        self.assertLessEqual(tail_chars, 4)
+        block = RenderBlock(
+            block_id="title_two_char",
+            page_index=0,
+            inner_bbox=bbox,
+            plain_text=text,
+            markdown_text=text,
+        )
+        fitted = calc.calculate_fit_params(
+            block, layout_raw=raw, page_width_pt=page_w,
+        )
+        self.assertTrue(fitted.fit_single_line)
+        self.assertTrue(fitted.fit_to_box)
+        self.assertGreater(fitted.fit_target_width_pt, bbox[2] - bbox[0])
+
+    def test_title_skips_horizontal_extend_at_right_edge(self):
+        calc = FontFitCalculator()
+        page_w = 612.0
+        bbox = (500.0, 464.0, 585.0, 475.0)
+        self.assertTrue(is_bbox_at_page_right_edge(bbox[2], page_w))
+        raw = {"type": "title", "lines": [{"spans": [{"type": "text", "content": "Summary"}]}]}
+        text = "第一章引言简介内容"
+        block = RenderBlock(
+            block_id="title_right",
+            page_index=0,
+            inner_bbox=bbox,
+            plain_text=text,
+            markdown_text=text,
+        )
+        fitted = calc.calculate_fit_params(
+            block, layout_raw=raw, page_width_pt=page_w,
+        )
+        self.assertTrue(fitted.fit_single_line)
+
+    def test_title_shrinks_single_line_when_overflow_too_large(self):
+        calc = FontFitCalculator()
+        page_w = 612.0
+        bbox = (105.0, 464.0, 192.0, 475.0)
+        raw = {"type": "title", "lines": [{"spans": [{"type": "text", "content": "Intro"}]}]}
+        text = "第一章引言简介内容概述与背景说明"
+        block = RenderBlock(
+            block_id="title_long",
+            page_index=0,
+            inner_bbox=bbox,
+            plain_text=text,
+            markdown_text=text,
+        )
+        font_size = estimate_title_font_size_pt(bbox[3] - bbox[1], raw)
+        self.assertGreater(
+            overflow_tail_char_count(text, bbox[2] - bbox[0], font_size),
+            4,
+        )
+        extend = plan_title_horizontal_extension_pt(
+            text, bbox, font_size, 1.12, page_w,
+        )
+        self.assertIsNone(extend)
+        fitted = calc.calculate_fit_params(
+            block, layout_raw=raw, page_width_pt=page_w,
+        )
+        self.assertTrue(fitted.fit_single_line)
+        self.assertTrue(fitted.fit_to_box)
+        self.assertEqual(fitted.fit_target_width_pt, 0.0)
+
+    def test_patent_page_date_header_short_bbox(self):
+        """middle.json header index 1: Mar. 18, 2014 in ~15pt bbox."""
+        calc = FontFitCalculator()
+        raw = {
+            "type": "header",
+            "bbox": [300, 53, 374, 68],
+            "lines": [{"spans": [{"type": "text", "content": "Mar. 18, 2014"}]}],
+        }
+        bbox = (300.0, 53.0, 374.0, 68.0)
+        self.assertFalse(should_use_title_font_sizing("", raw, 15.0, block_type="header"))
+
+        for text in ("Mar. 18, 2014", "2014年3月18日"):
+            block = RenderBlock(
+                block_id="patent_date_hdr",
+                page_index=0,
+                inner_bbox=bbox,
+                plain_text=text,
+                markdown_text=text,
+            )
+            fitted = calc.calculate_fit_params(
+                block, layout_raw=raw, page_width_pt=612.0,
+            )
+            self.assertLessEqual(
+                fitted.font_size_pt,
+                10.5,
+                f"{text!r} font {fitted.font_size_pt}pt too large for 15pt header",
+            )
+            self.assertTrue(
+                fitted.fit_single_line,
+                f"{text!r} header must use Typst single-line measure to avoid spurious wraps",
+            )
+            self.assertFalse(
+                fitted.fit_to_box and not fitted.fit_single_line,
+                f"{text!r} should not use multi-line wrap fit",
+            )
+
+    def test_patent_mar_18_header_chinese_date_single_line(self):
+        """middle.json header: Mar. 18, 2014 -> 2014年3月18日 must not wrap '日' alone."""
+        calc = FontFitCalculator()
+        raw = {
+            "type": "header",
+            "bbox": [300, 53, 374, 68],
+            "lines": [{"spans": [{"type": "text", "content": "Mar. 18, 2014"}]}],
+        }
+        bbox = (300.0, 53.0, 374.0, 68.0)
+        trans = "2014\u5e743\u670818\u65e5"
+        block = RenderBlock(
+            block_id="mar18_hdr",
+            page_index=0,
+            inner_bbox=bbox,
+            plain_text=trans,
+            markdown_text=trans,
+        )
+        fitted = calc.calculate_fit_params(
+            block, layout_raw=raw, page_width_pt=612.0,
+        )
+        self.assertTrue(fitted.fit_single_line)
+        self.assertTrue(fitted.fit_to_box)
+        from layout.pdf_renderer.typst_overlay.emitter import _render_markdown_block
+        src = _render_markdown_block("mar18", fitted)
+        self.assertIn("pdftr_fit_single_line_markdown", src)
+
+    def test_header_extends_within_four_char_tail(self):
+        """Header uses the same <=4-char horizontal extend rule as title."""
+        calc = FontFitCalculator()
+        page_w = 612.0
+        bbox = (300.0, 53.0, 374.0, 68.0)
+        raw = {
+            "type": "header",
+            "bbox": list(bbox),
+            "lines": [{"spans": [{"type": "text", "content": "Mar. 18, 2014"}]}],
+        }
+        text = "Mar. 18, 2014" + "\u7248\u672c"
+        font_size = calc.estimate_font_size(
+            RenderBlock("h", 0, bbox, text, text), layout_raw=raw,
+        )
+        tail_chars = overflow_tail_char_count(text, bbox[2] - bbox[0], font_size)
+        self.assertGreater(tail_chars, 0)
+        self.assertLessEqual(tail_chars, 4)
+        block = RenderBlock(
+            block_id="header_extend",
+            page_index=0,
+            inner_bbox=bbox,
+            plain_text=text,
+            markdown_text=text,
+        )
+        fitted = calc.calculate_fit_params(
+            block, layout_raw=raw, page_width_pt=page_w,
+        )
+        self.assertTrue(fitted.fit_single_line)
+        self.assertTrue(fitted.fit_to_box)
+        self.assertGreater(fitted.fit_target_width_pt, bbox[2] - bbox[0])
+
     def test_patent_header_two_lines_smaller_font(self):
         calc = FontFitCalculator()
         raw = {
@@ -424,6 +638,48 @@ class TestFontFitCalculator(unittest.TestCase):
         fitted_raw = calc.calculate_fit_params(block, layout_raw=raw)
         self.assertTrue(fitted_raw.preserve_line_breaks)
         self.assertLessEqual(fitted_raw.font_size_pt, 11.0)
+
+    def test_field_58_three_embedded_lines_fit_inside_bbox(self):
+        """middle.json (58): 42pt bbox, two \\n, USPC line wraps → four visual lines."""
+        calc = FontFitCalculator()
+        text = (
+            "(58) Field of Classification Search\n"
+            "USPC 210/290, 348, 488, 489, 490, 501, 210/502.1; "
+            "526/321, 318, 315, 316, 304\n"
+            "See application file for complete search history."
+        )
+        raw = {
+            "type": "text",
+            "bbox": [311, 148, 528, 190],
+            "lines": [{"spans": [{"type": "text", "content": text}]}],
+        }
+        bbox = (311.0, 148.0, 528.0, 190.0)
+        block = RenderBlock(
+            block_id="field_58",
+            page_index=0,
+            inner_bbox=bbox,
+            plain_text=text,
+            markdown_text=text,
+        )
+        fitted = calc.calculate_fit_params(block, layout_raw=raw)
+        self.assertTrue(fitted.preserve_line_breaks)
+
+        bbox_height = bbox[3] - bbox[1]
+        bbox_width = bbox[2] - bbox[0]
+        available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
+        visual_lines = estimate_preserved_stack_visual_lines(
+            text, bbox_width, fitted.font_size_pt,
+        )
+        render_h = preserved_stack_render_height_pt(
+            fitted.font_size_pt, visual_lines, fitted.leading_em,
+        )
+        self.assertEqual(visual_lines, 4.0)
+        self.assertLessEqual(
+            render_h,
+            available_h + 0.5,
+            f"render {render_h:.2f}pt exceeds available {available_h:.2f}pt",
+        )
+        self.assertLess(fitted.leading_em, 1.15)
 
     def test_local_mineru_patent_title_mislabel_uses_body_font(self):
         """middle.json tags (56) References Cited as type title — must not use 23pt title sizing."""

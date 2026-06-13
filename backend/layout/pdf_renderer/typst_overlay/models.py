@@ -46,6 +46,7 @@ class RenderBlock:
     font_size_pt: float = 10.0
     leading_em: float = 1.25
     font_weight: str = "regular"           # "regular" | "bold"
+    font_style: str = "normal"             # "normal" | "italic"
     first_line_indent_pt: float = 0.0
     justify_text: bool = False
 
@@ -69,6 +70,9 @@ class RenderBlock:
     fit_target_width_pt: float = 0.0
     fit_target_height_pt: float = 0.0
     fit_shift_up_pt: float = 0.0
+
+    # When True, render font_size_pt exactly (user override); skip fit/ceiling/width scaling.
+    font_size_locked: bool = False
 
     # -- embedded visual (chart/table body as image) --
     image_rel_path: str = ""                # path relative to Typst work dir
@@ -100,6 +104,7 @@ def layout_block_to_render_block(
     font_size_pt: float = 10.0,
     leading_em: float = 1.25,
     font_weight: str = "regular",
+    font_style: str = "normal",
 ) -> RenderBlock:
     """
     Convert an Owlangs LayoutBlock to a Typst RenderBlock.
@@ -112,6 +117,7 @@ def layout_block_to_render_block(
         font_size_pt: font size in points
         leading_em: line height in em
         font_weight: "regular" or "bold"
+        font_style: "normal" or "italic"
 
     Returns:
         RenderBlock ready for Typst source generation
@@ -142,6 +148,7 @@ def layout_block_to_render_block(
     # Read font info from raw MinerU data if available
     block_font_size = font_size_pt
     block_font_weight = font_weight
+    block_font_style = font_style
     if isinstance(raw, dict):
         # Some MinerU output includes font_size in raw['orig_font_size'] or similar
         raw_font_size = (
@@ -154,6 +161,16 @@ def layout_block_to_render_block(
         raw_font_weight = raw.get('font_weight') or raw.get('weight')
         if raw_font_weight:
             block_font_weight = str(raw_font_weight)
+        raw_font_style = raw.get('font_style') or raw.get('style')
+        if raw_font_style:
+            if isinstance(raw_font_style, bool):
+                block_font_style = "italic" if raw_font_style else "normal"
+            else:
+                style_text = str(raw_font_style).lower()
+                if style_text in ("italic", "oblique"):
+                    block_font_style = "italic"
+                elif style_text in ("normal", "regular", "roman"):
+                    block_font_style = "normal"
 
     return RenderBlock(
         block_id=block_id or f"block-{block.index}" if hasattr(block, 'index') else f"block-{page_index}",
@@ -165,6 +182,7 @@ def layout_block_to_render_block(
         font_size_pt=block_font_size,
         leading_em=leading_em,
         font_weight=block_font_weight,
+        font_style=block_font_style,
         skip_reason="image" if render_kind == "skip" else "",
         use_cover_fill=False,
     )

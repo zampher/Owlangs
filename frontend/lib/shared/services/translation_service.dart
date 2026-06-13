@@ -565,6 +565,11 @@ class TranslationService {
     bool? reviewed,
     String? reviewNotes,
     String? modifiedBy,
+    double? fontSizePt,
+    bool fontSizeReset = false,
+    String? fontWeight,
+    String? fontStyle,
+    bool pdfFontReset = false,
   }) async {
     final dio = _buildAuthedDio();
     final body = <String, dynamic>{};
@@ -572,6 +577,17 @@ class TranslationService {
     if (reviewed != null) body['reviewed'] = reviewed;
     if (reviewNotes != null) body['review_notes'] = reviewNotes;
     if (modifiedBy != null) body['modified_by'] = modifiedBy;
+    if (pdfFontReset) {
+      body['pdf_font_reset'] = true;
+    } else {
+      if (fontSizeReset) {
+        body['font_size_reset'] = true;
+      } else if (fontSizePt != null) {
+        body['font_size_pt'] = fontSizePt;
+      }
+      if (fontWeight != null) body['font_weight'] = fontWeight;
+      if (fontStyle != null) body['font_style'] = fontStyle;
+    }
 
     final resp = await dio.post(
       '/service/translation-segments/$taskId/$segmentIndex/update',

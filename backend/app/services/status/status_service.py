@@ -4258,6 +4258,28 @@ class StatusService:
                     )
         
         # Build response
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            enrich_segments_font_fields,
+        )
+        font_override_by_index: Dict[int, float] = {}
+        ts_data = st.get("translation_segments")
+        if isinstance(ts_data, dict):
+            for stored in ts_data.get("segments") or []:
+                if not isinstance(stored, dict):
+                    continue
+                seg_idx = stored.get("segment_index")
+                if seg_idx is None:
+                    continue
+                if stored.get("font_size_pt") is not None:
+                    font_override_by_index[int(seg_idx)] = stored.get("font_size_pt")
+        for seg in all_segments:
+            if not isinstance(seg, dict):
+                continue
+            seg_idx = seg.get("segment_index", seg.get("chunk_index"))
+            if seg_idx is not None and int(seg_idx) in font_override_by_index:
+                seg["font_size_pt"] = font_override_by_index[int(seg_idx)]
+        enrich_segments_font_fields(layout_doc, all_segments, text_field="text")
+
         response = {
             "task_id": task_id,
             "segments": all_segments,  # Deep split segments (for left panel - Segments)

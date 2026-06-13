@@ -6607,6 +6607,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Light Mode'**
   String get commonLightMode;
+
+  /// No description provided for @segmentPdfFontSizeAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto ({sizePt}pt)'**
+  String segmentPdfFontSizeAuto(String sizePt);
+
+  /// No description provided for @segmentPdfFontSizeAutoUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto'**
+  String get segmentPdfFontSizeAutoUnknown;
+
+  /// No description provided for @segmentPdfFontSizeManual.
+  ///
+  /// In en, this message translates to:
+  /// **'{sizePt}pt'**
+  String segmentPdfFontSizeManual(String sizePt);
+
+  /// No description provided for @segmentPdfFontSizeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF font size'**
+  String get segmentPdfFontSizeTitle;
+
+  /// No description provided for @segmentPdfTypographyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF typography'**
+  String get segmentPdfTypographyTitle;
+
+  /// No description provided for @segmentPdfTypographyPreviewLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get segmentPdfTypographyPreviewLabel;
+
+  /// No description provided for @segmentPdfTypographyBold.
+  ///
+  /// In en, this message translates to:
+  /// **'Bold'**
+  String get segmentPdfTypographyBold;
+
+  /// No description provided for @segmentPdfTypographyItalic.
+  ///
+  /// In en, this message translates to:
+  /// **'Italic'**
+  String get segmentPdfTypographyItalic;
+
+  /// No description provided for @segmentPdfFontSizeReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset to auto'**
+  String get segmentPdfFontSizeReset;
+
+  /// No description provided for @segmentPdfFontSizeApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply'**
+  String get segmentPdfFontSizeApply;
 }
 
 class _AppLocalizationsDelegate

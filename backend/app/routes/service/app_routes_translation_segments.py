@@ -302,6 +302,20 @@ async def get_translation_segments_api(
             text = seg.get("modified_text") or seg.get("target_text") or seg.get("source_text") or ""
             seg["has_latex"] = has_latex_content(text)
 
+    # Enrich PDF layout segments with computed/user font size metadata.
+    layout_doc = task_state.get("layout_document")
+    if layout_doc is not None and segments_list:
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            enrich_segments_font_fields,
+        )
+        text_field = "modified_text"
+        if not any(
+            isinstance(s, dict) and s.get("modified_text")
+            for s in segments_list
+        ):
+            text_field = "target_text"
+        enrich_segments_font_fields(layout_doc, segments_list, text_field=text_field)
+
     # Include image data map if available so frontend can render placeholders as images
     # Prefer translation-specific image map (placeholder IDs generated during translation)
     task_state = task_manager.get_task(task_id) or {}
@@ -374,6 +388,13 @@ async def update_segment_api(
     reviewed = body.get("reviewed")
     review_notes = body.get("review_notes")
     modified_by = body.get("modified_by")
+    font_size_pt = body.get("font_size_pt")
+    font_size_reset = bool(body.get("font_size_reset", False))
+    font_weight = body.get("font_weight")
+    font_style = body.get("font_style")
+    font_weight_reset = bool(body.get("font_weight_reset", False))
+    font_style_reset = bool(body.get("font_style_reset", False))
+    pdf_font_reset = bool(body.get("pdf_font_reset", False))
 
     segment = _ts_module().update_translation_segment(
         task_id=task_id,
@@ -382,6 +403,13 @@ async def update_segment_api(
         reviewed=reviewed,
         review_notes=review_notes,
         modified_by=modified_by,
+        font_size_pt=font_size_pt,
+        font_size_reset=font_size_reset,
+        font_weight=font_weight,
+        font_style=font_style,
+        font_weight_reset=font_weight_reset,
+        font_style_reset=font_style_reset,
+        pdf_font_reset=pdf_font_reset,
     )
 
     if segment is None:

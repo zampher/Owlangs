@@ -31,6 +31,9 @@ class PDFRendererConfig:
         # --- Typst overlay renderer fields ---
         source_pdf_path: Optional[Union[str, Path]] = None,
         typst_font_family: Optional[str] = None,
+        font_size_by_block_index: Optional[Dict[int, float]] = None,
+        font_weight_by_block_index: Optional[Dict[int, str]] = None,
+        font_style_by_block_index: Optional[Dict[int, str]] = None,
     ):
         """
         Initialize PDF renderer configuration.
@@ -57,6 +60,9 @@ class PDFRendererConfig:
         # Typst overlay renderer fields
         self.source_pdf_path: Optional[Union[str, Path]] = source_pdf_path
         self.typst_font_family: Optional[str] = typst_font_family
+        self.font_size_by_block_index = font_size_by_block_index or {}
+        self.font_weight_by_block_index = font_weight_by_block_index or {}
+        self.font_style_by_block_index = font_style_by_block_index or {}
         
         # These will be populated during rendering
         self.type_font_baselines: Dict[str, float] = {}

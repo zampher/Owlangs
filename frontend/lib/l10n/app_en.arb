@@ -1329,5 +1329,30 @@
   "loginPasswordRecoveryAdminGuide": "If you are an administrator, please follow the password recovery process.",
 
   "commonDarkMode": "Dark Mode",
-  "commonLightMode": "Light Mode"
+  "commonLightMode": "Light Mode",
+
+  "segmentPdfFontSizeAuto": "Auto ({sizePt}pt)",
+  "@segmentPdfFontSizeAuto": {
+    "placeholders": {
+      "sizePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfFontSizeAutoUnknown": "Auto",
+  "segmentPdfFontSizeManual": "{sizePt}pt",
+  "@segmentPdfFontSizeManual": {
+    "placeholders": {
+      "sizePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfFontSizeTitle": "PDF font size",
+  "segmentPdfTypographyTitle": "PDF typography",
+  "segmentPdfTypographyPreviewLabel": "Preview",
+  "segmentPdfTypographyBold": "Bold",
+  "segmentPdfTypographyItalic": "Italic",
+  "segmentPdfFontSizeReset": "Reset to auto",
+  "segmentPdfFontSizeApply": "Apply"
 }

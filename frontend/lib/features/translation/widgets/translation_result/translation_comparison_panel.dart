@@ -64,6 +64,8 @@ class TranslationComparisonPanel extends ConsumerWidget {
     this.onExclusionUpdated,
     this.onFormulaFix,
     this.isConvertOnly = false,
+    this.showPdfFontSize = false,
+    this.onFontSizeChanged,
   });
 
   final String taskId;
@@ -102,12 +104,62 @@ class TranslationComparisonPanel extends ConsumerWidget {
   final void Function(Set<String>)? onFiltersChanged;
   final void Function(int)? onFormulaFix;
   final bool isConvertOnly;
+  final bool showPdfFontSize;
+  final void Function(
+    int index, {
+    double? fontSizePt,
+    String? fontWeight,
+    String? fontStyle,
+    bool reset,
+  })? onFontSizeChanged;
 
   /// Check if a segment is cleared based on metadata
   bool _isSegmentCleared(Map<String, dynamic> metadata) {
     final status = metadata['status'] as String?;
     final targetText = metadata['target_text'] as String?;
     return status == 'cleared' || (targetText ?? '').isEmpty;
+  }
+
+  double? _readFontSizePt(Map<String, dynamic> metadata) {
+    final dynamic raw = metadata['font_size_pt'];
+    if (raw is num) {
+      return raw.toDouble();
+    }
+    if (raw is String) {
+      return double.tryParse(raw);
+    }
+    return null;
+  }
+
+  double? _readComputedFontSizePt(Map<String, dynamic> metadata) {
+    final dynamic raw = metadata['computed_font_size_pt'];
+    if (raw is num) {
+      return raw.toDouble();
+    }
+    if (raw is String) {
+      return double.tryParse(raw);
+    }
+    return null;
+  }
+
+  String? _readFontWeight(Map<String, dynamic> metadata) {
+    final dynamic raw = metadata['font_weight'];
+    return raw is String ? raw : null;
+  }
+
+  String? _readComputedFontWeight(Map<String, dynamic> metadata) {
+    final dynamic raw = metadata['computed_font_weight'];
+    return raw is String ? raw : null;
+  }
+
+  String? _readFontStyle(Map<String, dynamic> metadata) {
+    final dynamic raw = metadata['font_style'];
+    return raw is String ? raw : null;
+  }
+
+  String? _readComputedFontStyle(Map<String, dynamic> metadata) {
+    final dynamic raw = metadata['computed_font_style'];
+    return raw is String ? raw : null;
   }
 
   /// Calculate counts for state-based filter chips
@@ -697,6 +749,17 @@ class TranslationComparisonPanel extends ConsumerWidget {
                     segmentsPaginationController?.refresh();
                   },
               onFormulaFix: onFormulaFix,
+              showPdfFontSize: showPdfFontSize && !pair.isImage,
+              fontSizePt: _readFontSizePt(metadata),
+              computedFontSizePt: _readComputedFontSizePt(metadata),
+              fontSizeSource: metadata['font_size_source'] as String?,
+              fontWeight: _readFontWeight(metadata),
+              computedFontWeight: _readComputedFontWeight(metadata),
+              fontWeightSource: metadata['font_weight_source'] as String?,
+              fontStyle: _readFontStyle(metadata),
+              computedFontStyle: _readComputedFontStyle(metadata),
+              fontStyleSource: metadata['font_style_source'] as String?,
+              onFontSizeChanged: onFontSizeChanged,
             ),
           );
 
@@ -873,6 +936,17 @@ class TranslationComparisonPanel extends ConsumerWidget {
                         // Fallback: Refresh segments to get updated exclusion reason
                         segmentsPaginationController?.refresh();
                       },
+                  showPdfFontSize: showPdfFontSize && !isImage,
+                  fontSizePt: _readFontSizePt(metadata),
+                  computedFontSizePt: _readComputedFontSizePt(metadata),
+                  fontSizeSource: metadata['font_size_source'] as String?,
+                  fontWeight: _readFontWeight(metadata),
+                  computedFontWeight: _readComputedFontWeight(metadata),
+                  fontWeightSource: metadata['font_weight_source'] as String?,
+                  fontStyle: _readFontStyle(metadata),
+                  computedFontStyle: _readComputedFontStyle(metadata),
+                  fontStyleSource: metadata['font_style_source'] as String?,
+                  onFontSizeChanged: onFontSizeChanged,
                 ),
               )
             : Container(

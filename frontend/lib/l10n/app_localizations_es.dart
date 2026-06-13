@@ -3797,4 +3797,38 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get commonLightMode => 'Modo claro';
+
+  @override
+  String segmentPdfFontSizeAuto(String sizePt) {
+    return 'Auto (${sizePt}pt)';
+  }
+
+  @override
+  String get segmentPdfFontSizeAutoUnknown => 'Auto';
+
+  @override
+  String segmentPdfFontSizeManual(String sizePt) {
+    return '${sizePt}pt';
+  }
+
+  @override
+  String get segmentPdfFontSizeTitle => 'PDF font size';
+
+  @override
+  String get segmentPdfTypographyTitle => 'PDF typography';
+
+  @override
+  String get segmentPdfTypographyPreviewLabel => 'Preview';
+
+  @override
+  String get segmentPdfTypographyBold => 'Bold';
+
+  @override
+  String get segmentPdfTypographyItalic => 'Italic';
+
+  @override
+  String get segmentPdfFontSizeReset => 'Reset to auto';
+
+  @override
+  String get segmentPdfFontSizeApply => 'Apply';
 }

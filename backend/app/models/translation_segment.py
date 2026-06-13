@@ -51,6 +51,11 @@ class TranslationSegment:
     
     # Layout mapping (for high-fidelity PDF restoration)
     layout_block_indices: list[int] = field(default_factory=list)  # Indices of layout blocks this segment maps to
+
+    # Optional user font size override for PDF overlay (pt). None = auto.
+    font_size_pt: Optional[float] = None
+    font_weight: Optional[str] = None
+    font_style: Optional[str] = None
     
     @classmethod
     def create(
@@ -107,6 +112,9 @@ class TranslationSegment:
             "exclusion_reason": self.exclusion_reason,
             "exclusion_metadata": self.exclusion_metadata,
             "layout_block_indices": self.layout_block_indices,
+            "font_size_pt": self.font_size_pt,
+            "font_weight": self.font_weight,
+            "font_style": self.font_style,
         }
     
     @classmethod
@@ -141,6 +149,9 @@ class TranslationSegment:
             exclusion_reason=data.get("exclusion_reason"),
             exclusion_metadata=data.get("exclusion_metadata"),
             layout_block_indices=data.get("layout_block_indices", []),
+            font_size_pt=data.get("font_size_pt"),
+            font_weight=data.get("font_weight"),
+            font_style=data.get("font_style"),
         )
     
     def update_target_text(self, new_text: str, modified_by: Optional[str] = None) -> None:

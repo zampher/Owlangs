@@ -58,6 +58,10 @@ from layout.pdf_renderer.typst_overlay.font_fit import (
     FontFitCalculator,
     is_ref_text_layout,
 )
+from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+    apply_user_font_override,
+    apply_user_typography_override,
+)
 from layout.pdf_renderer.typst_overlay.source_cleanup import (
     clean_source_pdf, PYMUPDF_AVAILABLE as _pymupdf_ok,
 )
@@ -598,6 +602,26 @@ class TypstOverlayRenderer(BasePDFRenderer):
             )
             return {}
 
+    @staticmethod
+    def _collect_title_extension_redaction_rects(
+        render_blocks_by_page: Dict[int, List[RenderBlock]],
+    ) -> Dict[int, List[tuple]]:
+        """Redact original text in the horizontal strip extended beyond layout bbox."""
+        extra: Dict[int, List[tuple]] = {}
+        for page_idx, blocks in render_blocks_by_page.items():
+            for rb in blocks:
+                target_w = rb.fit_target_width_pt
+                if target_w <= 0:
+                    continue
+                x0, y0, x1, y1 = rb.inner_bbox
+                base_w = x1 - x0
+                if target_w <= base_w + 0.5:
+                    continue
+                extra.setdefault(page_idx, []).append(
+                    (x1, y0, x0 + target_w, y1),
+                )
+        return extra
+
     def _append_visual_image_render_blocks(
         self,
         layout_doc: LayoutDocument,
@@ -702,6 +726,48 @@ class TypstOverlayRenderer(BasePDFRenderer):
             translated = self.config.translated_text_by_block_index.get(block_key, "")
         return translated or block.text or ""
 
+    def _block_font_override_pt(self, block_key: int) -> Optional[float]:
+        """Return user-specified font size for a layout block, if any."""
+        overrides = getattr(self.config, "font_size_by_block_index", None) or {}
+        if not overrides:
+            return None
+        value = overrides.get(block_key)
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _block_font_weight_override(self, block_key: int) -> Optional[str]:
+        overrides = getattr(self.config, "font_weight_by_block_index", None) or {}
+        if not overrides:
+            return None
+        value = overrides.get(block_key)
+        return str(value) if value is not None else None
+
+    def _block_font_style_override(self, block_key: int) -> Optional[str]:
+        overrides = getattr(self.config, "font_style_by_block_index", None) or {}
+        if not overrides:
+            return None
+        value = overrides.get(block_key)
+        return str(value) if value is not None else None
+
+    def _apply_block_typography_overrides(
+        self,
+        rb: RenderBlock,
+        block_key: int,
+    ) -> RenderBlock:
+        weight = self._block_font_weight_override(block_key)
+        style = self._block_font_style_override(block_key)
+        if weight is None and style is None:
+            return rb
+        return apply_user_typography_override(
+            rb,
+            font_weight=weight,
+            font_style=style,
+        )
+
     def _collect_unified_ref_metrics(
         self,
         layout_doc: LayoutDocument,
@@ -715,6 +781,8 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 if not block.has_text() or not self._is_ref_text_block(block):
                     continue
                 block_key = block.index if block.index is not None else -1
+                if self._block_font_override_pt(block_key) is not None:
+                    continue
                 translated = self._block_translated_text(block, block_key)
                 if not translated.strip():
                     continue
@@ -793,6 +861,9 @@ class TypstOverlayRenderer(BasePDFRenderer):
 
         for page in layout_doc.pages:
             blocks: List[RenderBlock] = []
+            page_width_pt = (
+                float(page.width) if getattr(page, "width", None) else None
+            )
             for block in page.blocks:
                 # Extract caption/footnote sub-blocks from image/table blocks
                 # (these are nested in raw["blocks"] and normally skipped)
@@ -800,7 +871,9 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     block, page.page_index,
                 )
                 for rb in caption_rbs:
-                    rb = self._font_fit.calculate_fit_params(rb)
+                    rb = self._font_fit.calculate_fit_params(
+                        rb, page_width_pt=page_width_pt,
+                    )
                     blocks.append(rb)
                     total_blocks += 1
 
@@ -876,17 +949,28 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 if main_bbox is not None:
                     rb.inner_bbox = main_bbox
                 layout_raw = getattr(block, "raw", None) or {}
-                ref_unified = (
-                    unified_ref_font_pt
-                    if self._is_ref_text_block(block)
-                    else None
-                )
-                rb = self._font_fit.calculate_fit_params(
-                    rb,
-                    layout_raw=layout_raw,
-                    ref_unified_font_pt=ref_unified,
-                    ref_unified_leading_em=unified_ref_leading_em,
-                )
+                override_pt = self._block_font_override_pt(block_key)
+                if override_pt is not None:
+                    rb = apply_user_font_override(
+                        rb,
+                        override_pt,
+                        calculator=self._font_fit,
+                    )
+                    ref_unified = None
+                else:
+                    ref_unified = (
+                        unified_ref_font_pt
+                        if self._is_ref_text_block(block)
+                        else None
+                    )
+                    rb = self._font_fit.calculate_fit_params(
+                        rb,
+                        layout_raw=layout_raw,
+                        ref_unified_font_pt=ref_unified,
+                        ref_unified_leading_em=unified_ref_leading_em,
+                        page_width_pt=page_width_pt,
+                    )
+                rb = self._apply_block_typography_overrides(rb, block_key)
                 blocks.append(rb)
                 total_blocks += 1
 
@@ -915,11 +999,18 @@ class TypstOverlayRenderer(BasePDFRenderer):
                         font_size_pt=rb.font_size_pt,
                         leading_em=rb.leading_em,
                         font_weight=rb.font_weight,
+                        font_style=getattr(rb, "font_style", "normal"),
                         use_cover_fill=False,
                         opaque_fill=True,
                         cover_fill=(1.0, 1.0, 1.0),
                     )
-                    if ref_unified is None:
+                    if override_pt is not None:
+                        cp_block = apply_user_font_override(
+                            cp_block,
+                            override_pt,
+                            calculator=self._font_fit,
+                        )
+                    elif ref_unified is None:
                         cp_estimate = self._font_fit.estimate_font_size(
                             cp_block, layout_raw=cp_layout_raw,
                         )
@@ -930,16 +1021,22 @@ class TypstOverlayRenderer(BasePDFRenderer):
                                 "font_size_pt": cp_font_size,
                             }
                         )
-                    cp_block = self._font_fit.calculate_fit_params(
-                        cp_block,
-                        preserve_font_size=ref_unified is None,
-                        layout_raw=cp_layout_raw,
-                        ref_unified_font_pt=ref_unified,
-                        ref_unified_leading_em=unified_ref_leading_em,
-                    )
+                    if override_pt is None:
+                        cp_block = self._font_fit.calculate_fit_params(
+                            cp_block,
+                            preserve_font_size=ref_unified is None,
+                            layout_raw=cp_layout_raw,
+                            ref_unified_font_pt=ref_unified,
+                            ref_unified_leading_em=unified_ref_leading_em,
+                            page_width_pt=page_width_pt,
+                        )
                     # Cross-page tails sit in a tight bbox; constrain height unless
-                    # bibliography uses the document-wide fixed font size.
-                    if ref_unified is None and not cp_block.fit_to_box:
+                    # bibliography uses the document-wide fixed font size or user override.
+                    if (
+                        override_pt is None
+                        and ref_unified is None
+                        and not cp_block.fit_to_box
+                    ):
                         cp_block = RenderBlock(
                             **{
                                 **cp_block.__dict__,
@@ -951,6 +1048,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                                 ),
                             }
                         )
+                    cp_block = self._apply_block_typography_overrides(cp_block, block_key)
                     render_blocks_by_page.setdefault(resolved_page, []).append(cp_block)
                     total_blocks += 1
 
@@ -999,6 +1097,12 @@ class TypstOverlayRenderer(BasePDFRenderer):
             work_dir=temp_dir,
             image_data_map=image_data_map,
         )
+        title_extension_rects = self._collect_title_extension_redaction_rects(
+            render_blocks_by_page,
+        )
+        if title_extension_rects:
+            for page_idx, rects in title_extension_rects.items():
+                extra_redaction_rects.setdefault(page_idx, []).extend(rects)
 
         # ---- Step 2: Clean source PDF ----
         # For image-based PDFs (scanned documents), redaction-based cleanup

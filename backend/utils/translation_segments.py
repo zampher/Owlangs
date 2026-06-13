@@ -2902,6 +2902,13 @@ def update_translation_segment(
     reviewed: Optional[bool] = None,
     review_notes: Optional[str] = None,
     modified_by: Optional[str] = None,
+    font_size_pt: Optional[float] = None,
+    font_size_reset: bool = False,
+    font_weight: Optional[str] = None,
+    font_style: Optional[str] = None,
+    font_weight_reset: bool = False,
+    font_style_reset: bool = False,
+    pdf_font_reset: bool = False,
     task_state: Optional[dict] = None,
 ) -> Optional[dict]:
     """
@@ -2980,6 +2987,117 @@ def update_translation_segment(
     
     if review_notes is not None:
         segment["review_notes"] = review_notes
+
+    if font_size_reset or pdf_font_reset:
+        segment.pop("font_size_pt", None)
+        segment["modified"] = True
+        segment["modified_by"] = modified_by or segment.get("modified_by")
+        segment["modified_at"] = time.time()
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            invalidate_pdf_export_cache,
+        )
+        invalidate_pdf_export_cache(task_state)
+        logger.info(
+            LogModule.TRANS,
+            f"Reset font_size_pt for segment {segment_index} on task {task_id}",
+        )
+    elif font_size_pt is not None:
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            normalize_user_font_size_pt,
+        )
+        normalized = normalize_user_font_size_pt(font_size_pt)
+        if normalized is None:
+            logger.warning(
+                LogModule.TRANS,
+                f"Invalid font_size_pt={font_size_pt} for segment {segment_index} task {task_id}",
+            )
+        else:
+            segment["font_size_pt"] = normalized
+            segment["modified"] = True
+            segment["modified_by"] = modified_by or segment.get("modified_by")
+            segment["modified_at"] = time.time()
+            from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+                invalidate_pdf_export_cache,
+            )
+            invalidate_pdf_export_cache(task_state)
+            logger.info(
+                LogModule.TRANS,
+                f"Set font_size_pt={normalized} for segment {segment_index} on task {task_id}",
+            )
+
+    if font_weight_reset or pdf_font_reset:
+        segment.pop("font_weight", None)
+        segment["modified"] = True
+        segment["modified_by"] = modified_by or segment.get("modified_by")
+        segment["modified_at"] = time.time()
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            invalidate_pdf_export_cache,
+        )
+        invalidate_pdf_export_cache(task_state)
+        logger.info(
+            LogModule.TRANS,
+            f"Reset font_weight for segment {segment_index} on task {task_id}",
+        )
+    elif font_weight is not None:
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            normalize_user_font_weight,
+        )
+        normalized_weight = normalize_user_font_weight(font_weight)
+        if normalized_weight is None:
+            logger.warning(
+                LogModule.TRANS,
+                f"Invalid font_weight={font_weight} for segment {segment_index} task {task_id}",
+            )
+        else:
+            segment["font_weight"] = normalized_weight
+            segment["modified"] = True
+            segment["modified_by"] = modified_by or segment.get("modified_by")
+            segment["modified_at"] = time.time()
+            from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+                invalidate_pdf_export_cache,
+            )
+            invalidate_pdf_export_cache(task_state)
+            logger.info(
+                LogModule.TRANS,
+                f"Set font_weight={normalized_weight} for segment {segment_index} on task {task_id}",
+            )
+
+    if font_style_reset or pdf_font_reset:
+        segment.pop("font_style", None)
+        segment["modified"] = True
+        segment["modified_by"] = modified_by or segment.get("modified_by")
+        segment["modified_at"] = time.time()
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            invalidate_pdf_export_cache,
+        )
+        invalidate_pdf_export_cache(task_state)
+        logger.info(
+            LogModule.TRANS,
+            f"Reset font_style for segment {segment_index} on task {task_id}",
+        )
+    elif font_style is not None:
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            normalize_user_font_style,
+        )
+        normalized_style = normalize_user_font_style(font_style)
+        if normalized_style is None:
+            logger.warning(
+                LogModule.TRANS,
+                f"Invalid font_style={font_style} for segment {segment_index} task {task_id}",
+            )
+        else:
+            segment["font_style"] = normalized_style
+            segment["modified"] = True
+            segment["modified_by"] = modified_by or segment.get("modified_by")
+            segment["modified_at"] = time.time()
+            from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+                invalidate_pdf_export_cache,
+            )
+            invalidate_pdf_export_cache(task_state)
+            logger.info(
+                LogModule.TRANS,
+                f"Set font_style={normalized_style} for segment {segment_index} on task {task_id}",
+            )
     
     logger.info(LogModule.TRANS, f"Segment {segment_index} update completed for task {task_id}: modified={segment.get('modified', False)}")
     return segment

@@ -42,6 +42,8 @@ MIN_FONT_SIZE_PT = 6.0
 MAX_FONT_SIZE_PT = 24.0
 DEFAULT_FONT_SIZE_PT = 10.0
 DEFAULT_LEADING_EM = 1.25
+# Preserved-line Typst stack: one block per line (~1em tall) plus inter-line spacing.
+PRESERVED_STACK_LINE_BODY_EM = 1.0
 
 # MinerU ref_text lines (~21pt bbox) typically use ~9pt body; cap estimate as fraction of height.
 REF_TEXT_FONT_HEIGHT_RATIO = 0.48
@@ -66,6 +68,159 @@ TITLE_LEADING_EM = 1.12
 TITLE_MIN_FONT_SIZE_PT = 10.0
 # Section headings are ~9–11pt bbox; taller single-line "title" tags are often mislabels.
 TIGHT_TITLE_BBOX_HEIGHT_PT = 16.0
+# Page headers (dates, patent numbers): one line inside a tight bbox (~9–15pt).
+SHORT_HEADER_FONT_HEIGHT_RATIO = 0.68
+
+# Title / header horizontal extension when translation is slightly wider than bbox.
+TITLE_PAGE_RIGHT_MARGIN_PT = 24.0
+TITLE_RIGHT_EDGE_TOLERANCE_PT = 18.0
+# Prefer single-line extend (no wrap) when overflow tail is at most this many characters.
+HORIZONTAL_EXTEND_MAX_CHARS = 4
+# Back-compat alias used in tests/docs.
+TITLE_HORIZONTAL_EXTEND_MAX_CHARS = HORIZONTAL_EXTEND_MAX_CHARS
+
+
+def _char_width_pt(ch: str, font_size_pt: float) -> float:
+    if ch.isspace():
+        return font_size_pt * 0.28
+    if _is_cjk_char(ch):
+        return font_size_pt * CJK_CHAR_WIDTH_RATIO
+    return font_size_pt * LATIN_CHAR_WIDTH_RATIO
+
+
+def overflow_tail_text(
+    text: str,
+    bbox_width: float,
+    font_size_pt: float,
+) -> str:
+    """Return the suffix of *text* that exceeds *bbox_width* at *font_size_pt*."""
+    if not text or font_size_pt <= 0:
+        return ""
+    width = 0.0
+    for index, ch in enumerate(text):
+        ch_w = _char_width_pt(ch, font_size_pt)
+        if width + ch_w > bbox_width + 0.5:
+            return text[index:]
+        width += ch_w
+    return ""
+
+
+def overflow_tail_char_count(
+    text: str,
+    bbox_width: float,
+    font_size_pt: float,
+) -> int:
+    """Character count of the horizontal overflow tail (includes CJK and ASCII)."""
+    return len(overflow_tail_text(text, bbox_width, font_size_pt))
+
+
+def _is_cjk_char(ch: str) -> bool:
+    """True for CJK unified / extension / compatibility ideographs."""
+    if not ch:
+        return False
+    o = ord(ch)
+    return (
+        0x4E00 <= o <= 0x9FFF
+        or 0x3400 <= o <= 0x4DBF
+        or 0xF900 <= o <= 0xFAFF
+    )
+
+
+def estimate_horizontal_text_width_pt(text: str, font_size_pt: float) -> float:
+    """Estimate rendered single-line text width in pt (CJK ≈ 1em, Latin ≈ 0.52em)."""
+    if not text or font_size_pt <= 0:
+        return 0.0
+    return sum(_char_width_pt(ch, font_size_pt) for ch in text)
+
+
+def is_bbox_at_page_right_edge(
+    x1: float,
+    page_width_pt: float,
+    *,
+    margin_pt: float = TITLE_PAGE_RIGHT_MARGIN_PT,
+    tolerance_pt: float = TITLE_RIGHT_EDGE_TOLERANCE_PT,
+) -> bool:
+    """True when the block bbox already sits at the page right margin."""
+    if page_width_pt <= 0:
+        return False
+    return x1 >= page_width_pt - margin_pt - tolerance_pt
+
+
+def title_wrap_would_exceed_bbox_height(
+    text: str,
+    bbox_width: float,
+    bbox_height: float,
+    font_size_pt: float,
+    leading_em: float,
+) -> bool:
+    """True when width-wrap at *font_size_pt* needs more vertical space than *bbox_height*."""
+    text_width = estimate_horizontal_text_width_pt(text, font_size_pt)
+    wrap_lines = max(1, int(math.ceil(text_width / max(bbox_width, 1.0))))
+    if wrap_lines <= 1:
+        return False
+    available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
+    needed_h = preserved_stack_render_height_pt(
+        float(wrap_lines), font_size_pt, leading_em,
+    )
+    return needed_h > available_h + 0.5
+
+
+def plan_title_horizontal_extension_pt(
+    text: str,
+    inner_bbox: Tuple[float, float, float, float],
+    font_size_pt: float,
+    leading_em: float,
+    page_width_pt: Optional[float],
+) -> Optional[float]:
+    """
+    Return a widened fit width (pt) for a title/header, or None.
+
+    Prefer horizontal extension over wrapping when the overflow tail is at most
+    ``HORIZONTAL_EXTEND_MAX_CHARS`` characters and the bbox is not on the page
+    right edge.
+    """
+    del leading_em  # reserved for callers; char tail count is the gate.
+    if not page_width_pt or page_width_pt <= 0 or font_size_pt <= 0:
+        return None
+
+    x0, _y0, x1, _y1 = inner_bbox
+    bbox_width = max(1.0, x1 - x0)
+
+    if is_bbox_at_page_right_edge(x1, page_width_pt):
+        return None
+
+    text_width = estimate_horizontal_text_width_pt(text, font_size_pt)
+    if text_width <= bbox_width + 0.5:
+        return None
+
+    tail_chars = overflow_tail_char_count(text, bbox_width, font_size_pt)
+    if tail_chars <= 0 or tail_chars > HORIZONTAL_EXTEND_MAX_CHARS:
+        return None
+
+    max_x1 = page_width_pt - TITLE_PAGE_RIGHT_MARGIN_PT
+    extended_x1 = min(x0 + text_width, max_x1)
+    extended_width = extended_x1 - x0
+    if extended_width <= bbox_width + 0.5:
+        return None
+
+    if text_width > extended_width + 1.0:
+        return None
+
+    return extended_width
+
+
+plan_horizontal_extension_pt = plan_title_horizontal_extension_pt
+
+
+def _block_width_overflows(
+    text: str,
+    bbox_width: float,
+    font_size_pt: float,
+) -> bool:
+    return estimate_horizontal_text_width_pt(text, font_size_pt) > bbox_width * 0.95
+
+
+_title_width_overflows = _block_width_overflows
 
 
 def _layout_block_type(layout_raw: Any) -> str:
@@ -123,6 +278,8 @@ def should_use_title_font_sizing(
     text: str,
     layout_raw: Any,
     bbox_height: float,
+    *,
+    block_type: str = "",
 ) -> bool:
     """
     Whether Typst should apply title-specific font sizing.
@@ -130,10 +287,46 @@ def should_use_title_font_sizing(
     Local MinerU (middle.json) often tags patent bibliography headers as
     ``type: "title"`` with a ~27pt bbox; treating them as section titles yields
     ~23pt font (bbox × 0.86). Route those through body-text fitting instead.
+
+    ``type: header`` page labels (dates, patent numbers) use short-header fitting.
     """
+    resolved_type = block_type or _layout_block_type(layout_raw)
+    if resolved_type == "header":
+        return False
     if is_patent_field_label(text, layout_raw):
         return False
     return True
+
+
+def is_page_header_layout(layout_raw: Any, block_type: str = "") -> bool:
+    """True for MinerU page margin headers (dates, patent ids), not section titles."""
+    return (block_type or _layout_block_type(layout_raw)) == "header"
+
+
+def estimate_short_header_font_size_pt(
+    bbox_height: float,
+    layout_raw: Any = None,
+) -> float:
+    """
+    Estimate font size for a tight single-line page header bbox.
+
+    Patent page headers (e.g. ``Mar. 18, 2014`` in a ~15pt-tall box) must stay
+    near the original ~9–10pt size; title-style ``bbox × 0.86`` overshoots.
+    """
+    if bbox_height <= 0:
+        return DEFAULT_FONT_SIZE_PT
+
+    raw_line_count = max(1, count_non_cross_page_lines(layout_raw))
+    available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
+    if raw_line_count <= 1:
+        estimated = min(
+            bbox_height * SHORT_HEADER_FONT_HEIGHT_RATIO,
+            available_h / 1.08,
+        )
+    else:
+        estimated = available_h / (raw_line_count * DEFAULT_LEADING_EM)
+
+    return round(max(MIN_FONT_SIZE_PT, min(MAX_FONT_SIZE_PT, estimated)), 1)
 
 
 def estimate_title_font_size_pt(
@@ -212,6 +405,79 @@ def quantize_ref_leading_em(
     return round(max(min_leading_em, min(max_leading_em, quantized)), 2)
 
 
+def preserved_stack_height_em(
+    line_count: float,
+    leading_em: float,
+    *,
+    body_em: float = PRESERVED_STACK_LINE_BODY_EM,
+) -> float:
+    """
+    Vertical extent in em for Typst preserved-line stack rendering.
+
+    Matches ``stack(dir: ttb, spacing: leading)`` with one single-line block per
+    visual line — not ``line_count * leading`` (which double-counts line bodies).
+    """
+    n = max(1.0, line_count)
+    if n <= 1.0:
+        return body_em
+    return n * body_em + (n - 1.0) * leading_em
+
+
+def preserved_stack_render_height_pt(
+    font_size_pt: float,
+    line_count: float,
+    leading_em: float,
+    *,
+    body_em: float = PRESERVED_STACK_LINE_BODY_EM,
+) -> float:
+    """Estimated rendered height (pt) for a preserved-line stack."""
+    return font_size_pt * preserved_stack_height_em(
+        line_count, leading_em, body_em=body_em,
+    )
+
+
+def estimate_preserved_stack_visual_lines(
+    text: str,
+    bbox_width: float,
+    font_size_pt: float,
+) -> float:
+    """
+    Visual line count for preserved-stack rendering.
+
+    Each ``\\n`` segment is placed in a width-constrained block; long segments
+    (e.g. USPC classification lists) may wrap to additional visual lines.
+    """
+    segments = [s.strip() for s in (text or "").splitlines() if s.strip()]
+    if not segments:
+        return 1.0
+    chars_per_line = bbox_width / max(font_size_pt * LATIN_CHAR_WIDTH_RATIO, 0.1)
+    total = 0.0
+    for seg in segments:
+        units = estimate_typographic_units(seg)
+        total += max(1.0, math.ceil(units / max(chars_per_line, 1.0)))
+    return max(1.0, total)
+
+
+def fit_preserved_stack_leading_em(
+    font_size_pt: float,
+    visual_lines: float,
+    available_height_pt: float,
+    preferred_leading_em: float,
+    *,
+    body_em: float = PRESERVED_STACK_LINE_BODY_EM,
+    min_leading_em: float = 0.35,
+) -> float:
+    """Tighten leading so a preserved stack fits inside *available_height_pt*."""
+    if visual_lines <= 1.0 or font_size_pt <= 0:
+        return preferred_leading_em
+    gap_count = visual_lines - 1.0
+    body_total = visual_lines * body_em
+    needed_leading = (available_height_pt / font_size_pt - body_total) / gap_count
+    if needed_leading >= preferred_leading_em:
+        return preferred_leading_em
+    return max(min_leading_em, needed_leading)
+
+
 def _estimate_line_count(
     bbox_height: float,
     typo_units: float,
@@ -276,9 +542,13 @@ class FontFitCalculator:
 
         text = block.plain_text or block.markdown_text or ""
         block_type = _layout_block_type(layout_raw)
+        if block_type == "header":
+            return estimate_short_header_font_size_pt(bbox_height, layout_raw)
         if (
             is_title_layout(layout_raw, block_type=block_type)
-            and should_use_title_font_sizing(text, layout_raw, bbox_height)
+            and should_use_title_font_sizing(
+                text, layout_raw, bbox_height, block_type=block_type,
+            )
         ):
             return estimate_title_font_size_pt(
                 bbox_height,
@@ -292,6 +562,13 @@ class FontFitCalculator:
         typo_units = estimate_typographic_units(text, layout_raw)
         if typo_units <= 0:
             return self.default_size_pt
+
+        embedded_newlines = count_embedded_newlines(text, layout_raw)
+        if embedded_newlines > 0:
+            font_pt, _leading = self.estimate_preserved_stack_metrics(
+                block, layout_raw=layout_raw,
+            )
+            return font_pt
 
         x0, _, x1, _ = block.inner_bbox
         bbox_width = max(1.0, x1 - x0)
@@ -425,6 +702,145 @@ class FontFitCalculator:
             return block.font_weight
         return "regular"
 
+    def _fit_title_or_header_block(
+        self,
+        block: RenderBlock,
+        *,
+        block_text: str,
+        font_size: float,
+        leading_em: float,
+        bbox_height: float,
+        page_width_pt: Optional[float],
+        always_single_line_measure: bool = False,
+    ) -> RenderBlock:
+        """
+        Shared title/header fit: extend up to 4 overflow chars, else single-line shrink.
+
+        When *always_single_line_measure* is True (page headers), Typst ``measure()``
+        decides fit even if Python width heuristics say the line fits — avoids spurious
+        wraps when cmarker renders CJK/date text slightly wider than estimated.
+        """
+        x0, _, x1, _ = block.inner_bbox
+        bbox_width = max(1.0, x1 - x0)
+        extend_width = plan_horizontal_extension_pt(
+            block_text,
+            block.inner_bbox,
+            font_size,
+            leading_em,
+            page_width_pt,
+        )
+        if extend_width and extend_width > bbox_width + 0.5:
+            return RenderBlock(
+                **{
+                    **block.__dict__,
+                    "font_size_pt": font_size,
+                    "leading_em": leading_em,
+                    "fit_to_box": True,
+                    "fit_single_line": True,
+                    "fit_target_width_pt": extend_width,
+                    "fit_min_font_size_pt": font_size,
+                    "fit_max_font_size_pt": font_size,
+                    "fit_min_leading_em": max(0.9, leading_em * 0.9),
+                    "fit_max_height_pt": bbox_height * 0.9,
+                }
+            )
+        if _block_width_overflows(block_text, bbox_width, font_size):
+            return RenderBlock(
+                **{
+                    **block.__dict__,
+                    "font_size_pt": font_size,
+                    "leading_em": leading_em,
+                    "fit_to_box": True,
+                    "fit_single_line": True,
+                    "fit_min_font_size_pt": self.min_size_pt,
+                    "fit_max_font_size_pt": font_size,
+                    "fit_min_leading_em": max(0.8, leading_em * 0.7),
+                    "fit_max_height_pt": bbox_height * 0.9,
+                }
+            )
+        if always_single_line_measure:
+            return RenderBlock(
+                **{
+                    **block.__dict__,
+                    "font_size_pt": font_size,
+                    "leading_em": leading_em,
+                    "fit_to_box": True,
+                    "fit_single_line": True,
+                    "fit_min_font_size_pt": self.min_size_pt,
+                    "fit_max_font_size_pt": font_size,
+                    "fit_min_leading_em": max(0.8, leading_em * 0.7),
+                    "fit_max_height_pt": bbox_height * 0.9,
+                }
+            )
+        return RenderBlock(
+            **{
+                **block.__dict__,
+                "font_size_pt": font_size,
+                "leading_em": leading_em,
+                "fit_to_box": False,
+                "fit_single_line": False,
+                "fit_min_font_size_pt": max(self.min_size_pt, font_size * 0.85),
+                "fit_max_font_size_pt": min(self.max_size_pt, font_size * 1.05),
+                "fit_min_leading_em": max(0.9, leading_em * 0.9),
+                "fit_max_height_pt": bbox_height * 0.9,
+            }
+        )
+
+    def estimate_preserved_stack_metrics(
+        self,
+        block: RenderBlock,
+        layout_raw: Any = None,
+    ) -> Tuple[float, float]:
+        """
+        Estimate font size and leading for embedded-newline preserved-stack blocks.
+
+        Accounts for width-wrap inside each ``\\n`` segment (e.g. long USPC lines).
+        """
+        _, y0, _, y1 = block.inner_bbox
+        bbox_height = max(1.0, y1 - y0)
+        available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
+        x0, _, x1, _ = block.inner_bbox
+        bbox_width = max(1.0, x1 - x0)
+        text = block.plain_text or block.markdown_text or ""
+
+        leading_em = self.default_leading_em
+        visual_lines = float(count_visual_lines_from_content(text, layout_raw))
+        for _ in range(6):
+            estimated = available_h / preserved_stack_height_em(
+                visual_lines, leading_em,
+            )
+            estimated = max(self.min_size_pt, min(self.max_size_pt, estimated))
+            leading_em = self.estimate_leading(estimated)
+            visual_lines = estimate_preserved_stack_visual_lines(
+                text, bbox_width, estimated,
+            )
+
+        estimated = available_h / preserved_stack_height_em(
+            visual_lines, leading_em,
+        )
+        estimated = max(self.min_size_pt, min(self.max_size_pt, estimated))
+        leading_em = fit_preserved_stack_leading_em(
+            estimated,
+            visual_lines,
+            available_h,
+            self.estimate_leading(estimated),
+        )
+        visual_lines = estimate_preserved_stack_visual_lines(
+            text, bbox_width, estimated,
+        )
+        if estimated * preserved_stack_height_em(visual_lines, leading_em) > available_h:
+            estimated = available_h / preserved_stack_height_em(
+                visual_lines, leading_em,
+            )
+            estimated = max(self.min_size_pt, min(self.max_size_pt, estimated))
+            leading_em = fit_preserved_stack_leading_em(
+                estimated,
+                visual_lines,
+                available_h,
+                leading_em,
+            )
+        return round(estimated, 1), round(leading_em, 2)
+
     def calculate_fit_params(
         self,
         block: RenderBlock,
@@ -433,6 +849,7 @@ class FontFitCalculator:
         layout_raw: Optional[Any] = None,
         ref_unified_font_pt: Optional[float] = None,
         ref_unified_leading_em: Optional[float] = None,
+        page_width_pt: Optional[float] = None,
     ) -> RenderBlock:
         """
         Fill in any missing fit-to-box parameters on the block.
@@ -453,8 +870,11 @@ class FontFitCalculator:
         bbox_height = max(1.0, y1 - y0)
         is_title = (
             is_title_layout(layout_raw, block_type=block_type)
-            and should_use_title_font_sizing(block_text, layout_raw, bbox_height)
+            and should_use_title_font_sizing(
+                block_text, layout_raw, bbox_height, block_type=block_type,
+            )
         )
+        is_page_header = is_page_header_layout(layout_raw, block_type=block_type)
         use_unified_ref = (
             is_ref_text
             and ref_unified_font_pt is not None
@@ -480,7 +900,12 @@ class FontFitCalculator:
         elif not preserve_font_size and (
             leading <= 0 or leading == DEFAULT_LEADING_EM
         ):
-            leading = self.estimate_leading(font_size)
+            if count_embedded_newlines(block_text, layout_raw) > 0:
+                _, leading = self.estimate_preserved_stack_metrics(
+                    block, layout_raw=layout_raw,
+                )
+            else:
+                leading = self.estimate_leading(font_size)
 
         _, _, x1, _ = block.inner_bbox
         _, y0, _, y1 = block.inner_bbox
@@ -502,19 +927,29 @@ class FontFitCalculator:
             )
 
         if is_title:
-            title_leading = leading if leading > 0 and leading != DEFAULT_LEADING_EM else TITLE_LEADING_EM
-            return RenderBlock(
-                **{
-                    **block.__dict__,
-                    "font_size_pt": font_size,
-                    "leading_em": title_leading,
-                    "fit_to_box": False,
-                    "fit_single_line": False,
-                    "fit_min_font_size_pt": max(self.min_size_pt, font_size * 0.85),
-                    "fit_max_font_size_pt": min(self.max_size_pt, font_size * 1.05),
-                    "fit_min_leading_em": max(0.9, title_leading * 0.9),
-                    "fit_max_height_pt": bbox_height * 0.9,
-                }
+            title_leading = (
+                leading if leading > 0 and leading != DEFAULT_LEADING_EM
+                else TITLE_LEADING_EM
+            )
+            return self._fit_title_or_header_block(
+                block,
+                block_text=block_text,
+                font_size=font_size,
+                leading_em=title_leading,
+                bbox_height=bbox_height,
+                page_width_pt=page_width_pt,
+            )
+
+        if is_page_header:
+            header_leading = self.estimate_leading(font_size)
+            return self._fit_title_or_header_block(
+                block,
+                block_text=block_text,
+                font_size=font_size,
+                leading_em=header_leading,
+                bbox_height=bbox_height,
+                page_width_pt=page_width_pt,
+                always_single_line_measure=True,
             )
 
         bbox_width = max(1.0, x1 - block.inner_bbox[0])

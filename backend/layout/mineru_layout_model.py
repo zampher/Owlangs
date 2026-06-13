@@ -139,6 +139,188 @@ def _extract_image_path_from_layout_block(block_data: Dict[str, Any]) -> Optiona
     return None
 
 
+_LIST_CONTAINER_TYPES = frozenset({"list", "ref_list", "references"})
+
+
+def _parse_mineru_bbox(block_data: Dict[str, Any]) -> Optional[tuple[float, float, float, float]]:
+    bbox = block_data.get("bbox")
+    if not isinstance(bbox, list) or len(bbox) != 4:
+        return None
+    try:
+        return (
+            float(bbox[0]),
+            float(bbox[1]),
+            float(bbox[2]),
+            float(bbox[3]),
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _append_mineru_block_to_pages(
+    pages_dict: Dict[int, List[LayoutBlock]],
+    page_idx: int,
+    block_data: Dict[str, Any],
+    global_index: int,
+) -> int:
+    """
+    Append one MinerU para/discarded block to pages_dict.
+
+    List containers are expanded into a parent shell block plus one LayoutBlock
+    per nested child so extract/segmentation can keep one child block = one segment.
+    """
+    bbox_tuple = _parse_mineru_bbox(block_data)
+    if bbox_tuple is None:
+        return global_index
+
+    x0, y0, x1, y1 = bbox_tuple
+    block_type = str(block_data.get("type", "unknown"))
+    nested_blocks = block_data.get("blocks") or []
+
+    if block_type in _LIST_CONTAINER_TYPES and isinstance(nested_blocks, list) and nested_blocks:
+        parent_raw = {k: v for k, v in block_data.items() if k != "blocks"}
+        parent_text = _extract_text_from_layout_block(parent_raw)
+        parent_block = LayoutBlock(
+            page_index=page_idx,
+            bbox=(x0, y0, x1, y1),
+            type=block_type,
+            index=global_index,
+            text=parent_text,
+            image_path=None,
+            raw=parent_raw,
+        )
+        pages_dict.setdefault(page_idx, []).append(parent_block)
+        global_index += 1
+
+        for sub in nested_blocks:
+            if not isinstance(sub, dict):
+                continue
+            sub_bbox_tuple = _parse_mineru_bbox(sub)
+            if sub_bbox_tuple is None:
+                continue
+            sx0, sy0, sx1, sy1 = sub_bbox_tuple
+            sub_type = str(sub.get("type", "unknown"))
+            sub_text = _extract_text_from_layout_block(sub)
+            sub_block = LayoutBlock(
+                page_index=page_idx,
+                bbox=(sx0, sy0, sx1, sy1),
+                type=sub_type,
+                index=global_index,
+                text=sub_text,
+                image_path=None,
+                raw=sub.copy(),
+            )
+            pages_dict.setdefault(page_idx, []).append(sub_block)
+            global_index += 1
+        return global_index
+
+    text = _extract_text_from_layout_block(block_data)
+    img_path = _extract_image_path_from_layout_block(block_data)
+    if block_type == "image" and not img_path:
+        img_path = _extract_image_path_from_layout_block(block_data)
+
+    block = LayoutBlock(
+        page_index=page_idx,
+        bbox=(x0, y0, x1, y1),
+        type=block_type,
+        index=global_index,
+        text=text,
+        image_path=img_path,
+        raw=block_data.copy(),
+    )
+    pages_dict.setdefault(page_idx, []).append(block)
+    return global_index + 1
+
+
+def _apply_cross_page_block_pairs(doc: LayoutDocument) -> None:
+    """Pair cross-page spans with their continuation blocks on the next page."""
+    cross_page_sources: Dict[int, Dict] = {}
+    for page in doc.pages:
+        for block in page.blocks:
+            raw = getattr(block, "raw", None) or {}
+            if not isinstance(raw, dict):
+                continue
+            for line in raw.get("lines", []):
+                if not isinstance(line, dict):
+                    continue
+                for span in line.get("spans", []):
+                    if isinstance(span, dict) and span.get("cross_page"):
+                        cp_bbox = tuple(line.get("bbox") or span.get("bbox") or [])
+                        cp_text = (span.get("content") or "").strip()
+                        if len(cp_bbox) == 4 and cp_text and block.index is not None:
+                            cross_page_sources[block.index] = {
+                                "target_page": page.page_index + 1,
+                                "cross_bbox": cp_bbox,
+                                "cross_text": cp_text,
+                            }
+
+    for page in doc.pages:
+        for block in page.blocks:
+            if block.index is None:
+                continue
+            for src_idx, src_info in list(cross_page_sources.items()):
+                if page.page_index != src_info["target_page"]:
+                    continue
+                block_text_for_match = (block.text or "").strip()
+                if not block_text_for_match and isinstance(block.raw, dict):
+                    block_text_for_match = (
+                        _extract_text_from_layout_block(block.raw) or ""
+                    ).strip()
+                lines_deleted = isinstance(block.raw, dict) and bool(
+                    block.raw.get("lines_deleted") or block.raw.get("merge_prev")
+                )
+                if (
+                    block.bbox == src_info["cross_bbox"]
+                    and (block_text_for_match == src_info["cross_text"] or lines_deleted)
+                ):
+                    block.text = None
+                    block.raw = dict(block.raw) if block.raw else {}
+                    block.raw["_cross_page_pair_of"] = src_idx
+
+                    for src_page in doc.pages:
+                        for src_block in src_page.blocks:
+                            if src_block.index == src_idx:
+                                src_block.raw = dict(src_block.raw) if src_block.raw else {}
+                                pairs = src_block.raw.get("_cross_page_pairs", [])
+                                pairs.append(
+                                    {
+                                        "index": block.index,
+                                        "bbox": block.bbox,
+                                        "page_index": page.page_index,
+                                    }
+                                )
+                                src_block.raw["_cross_page_pairs"] = pairs
+                                break
+                    del cross_page_sources[src_idx]
+                    break
+
+
+def _finalize_mineru_layout_document(
+    pages_dict: Dict[int, List[LayoutBlock]],
+    pdf_info: List[Any],
+    metadata: Optional[Dict[str, Any]] = None,
+) -> LayoutDocument:
+    pages: List[LayoutPage] = []
+    for page_idx in sorted(pages_dict.keys()):
+        page_data = pdf_info[page_idx] if page_idx < len(pdf_info) else {}
+        page_size = page_data.get("page_size", [])
+        width = float(page_size[0]) if len(page_size) >= 1 else None
+        height = float(page_size[1]) if len(page_size) >= 2 else None
+        pages.append(
+            LayoutPage(
+                page_index=page_idx,
+                blocks=pages_dict[page_idx],
+                width=width,
+                height=height,
+            )
+        )
+
+    doc = LayoutDocument(pages=pages, engine="mineru", metadata=metadata or {})
+    _infer_title_heading_levels(doc)
+    _apply_cross_page_block_pairs(doc)
+    return doc
+
+
 def _get_max_span_font_size(block_data: Dict[str, Any]) -> float:
     """
     Extract the maximum font size from MinerU span data in a block.
@@ -269,226 +451,30 @@ def parse_layout_json(layout_path: Path) -> LayoutDocument:
         for block_data in para_blocks:
             if not isinstance(block_data, dict):
                 continue
-            
-            bbox = block_data.get("bbox")
-            if not isinstance(bbox, list) or len(bbox) != 4:
-                continue
-            
-            try:
-                x0, y0, x1, y1 = float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
-            except (TypeError, ValueError):
-                continue
-            
-            block_type = str(block_data.get("type", "unknown"))
-            
-            # 特殊处理参考文献等嵌套结构：
-            # MinerU 会把一整块引用区域标记为 type="list"，内部再用 blocks[*].type="ref_text" 表示每条引文。
-            # 为了后续翻译校对和 PDF 重建时能精确按「每条引文」对齐，
-            # 我们在 IR 里把这些内层 ref_text 也提升为独立的 LayoutBlock。
-            nested_blocks = block_data.get("blocks") or []
-            if block_type == "list" and isinstance(nested_blocks, list) and nested_blocks:
-                # 先创建一个外层 list block（主要保留整体 bbox 信息，不带 blocks，避免后续重复提取文本）
-                parent_raw = {k: v for k, v in block_data.items() if k != "blocks"}
-                parent_text = _extract_text_from_layout_block(parent_raw)  # 通常为空
-                parent_block = LayoutBlock(
-                    page_index=page_idx,
-                    bbox=(x0, y0, x1, y1),
-                    type=block_type,
-                    index=global_index,
-                    text=parent_text,
-                    image_path=None,
-                    raw=parent_raw,
-                )
-                pages_dict.setdefault(page_idx, []).append(parent_block)
-                global_index += 1
-
-                # 再为每个内层 ref_text/create 子块创建独立的 LayoutBlock
-                for sub in nested_blocks:
-                    if not isinstance(sub, dict):
-                        continue
-                    sub_bbox = sub.get("bbox")
-                    if not isinstance(sub_bbox, list) or len(sub_bbox) != 4:
-                        continue
-                    try:
-                        sx0, sy0, sx1, sy1 = (
-                            float(sub_bbox[0]),
-                            float(sub_bbox[1]),
-                            float(sub_bbox[2]),
-                            float(sub_bbox[3]),
-                        )
-                    except (TypeError, ValueError):
-                        continue
-
-                    sub_type = str(sub.get("type", "unknown"))
-                    sub_text = _extract_text_from_layout_block(sub)
-
-                    sub_block = LayoutBlock(
-                        page_index=page_idx,
-                        bbox=(sx0, sy0, sx1, sy1),
-                        type=sub_type,
-                        index=global_index,
-                        text=sub_text,
-                        image_path=None,
-                        raw=sub.copy(),
-                    )
-                    pages_dict.setdefault(page_idx, []).append(sub_block)
-                    global_index += 1
-
-                # 这一 para_block 已经拆分完成，继续处理下一个
-                continue
-            
-            # 普通块按原逻辑处理
-            # Extract text content
-            text = _extract_text_from_layout_block(block_data)
-            
-            # Extract image path
-            img_path = _extract_image_path_from_layout_block(block_data)
-            
-            # If it's an image block but no image_path found, try to find it in nested structure
-            if block_type == "image" and not img_path:
-                blocks = block_data.get("blocks", [])
-                if blocks:
-                    img_path = _extract_image_path_from_layout_block(block_data)
-            
-            block = LayoutBlock(
-                page_index=page_idx,
-                bbox=(x0, y0, x1, y1),
-                type=block_type,
-                index=global_index,
-                text=text,
-                image_path=img_path,
-                raw=block_data.copy()
+            global_index = _append_mineru_block_to_pages(
+                pages_dict,
+                page_idx,
+                block_data,
+                global_index,
             )
-            
-            pages_dict.setdefault(page_idx, []).append(block)
-            global_index += 1
-        
+
         # Process discarded_blocks (headers, footers, page numbers, etc.)
         discarded_blocks = page_data.get("discarded_blocks", [])
         for block_data in discarded_blocks:
             if not isinstance(block_data, dict):
                 continue
-            
-            bbox = block_data.get("bbox")
-            if not isinstance(bbox, list) or len(bbox) != 4:
-                continue
-            
-            try:
-                x0, y0, x1, y1 = float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
-            except (TypeError, ValueError):
-                continue
-            
-            block_type = str(block_data.get("type", "unknown"))
-            
-            # Extract text content
-            text = _extract_text_from_layout_block(block_data)
-            
-            # Discarded blocks typically don't have images
-            img_path = None
-            
-            block = LayoutBlock(
-                page_index=page_idx,
-                bbox=(x0, y0, x1, y1),
-                type=block_type,
-                index=global_index,
-                text=text,
-                image_path=img_path,
-                raw=block_data.copy()
+            global_index = _append_mineru_block_to_pages(
+                pages_dict,
+                page_idx,
+                block_data,
+                global_index,
             )
-            
-            pages_dict.setdefault(page_idx, []).append(block)
-            global_index += 1
-    
-    # Build LayoutDocument
-    pages = []
-    for page_idx in sorted(pages_dict.keys()):
-        page_data = pdf_info[page_idx] if page_idx < len(pdf_info) else {}
-        page_size = page_data.get("page_size", [])
-        width = float(page_size[0]) if len(page_size) >= 1 else None
-        height = float(page_size[1]) if len(page_size) >= 2 else None
-        
-        pages.append(LayoutPage(
-            page_index=page_idx,
-            blocks=pages_dict[page_idx],
-            width=width,
-            height=height
-        ))
-    
+
     metadata = {
         "_backend": data.get("_backend"),
-        "_version_name": data.get("_version_name")
+        "_version_name": data.get("_version_name"),
     }
-    
-    doc = LayoutDocument(pages=pages, engine="mineru", metadata=metadata)
-    _infer_title_heading_levels(doc)
-
-    # --- Post-process: detect cross-page block pairs ---
-    # MinerU marks cross-page spans with "cross_page": true. The text of such spans
-    # also appears as an independent block on the next page. We pair them so that:
-    # 1. Extract: both blocks map to the same segment (chunk)
-    # 2. Translate: the paragraph is translated as a whole
-    # 3. Render: the translation is split proportionally by bbox area
-    cross_page_sources: Dict[int, Dict] = {}
-    for page in doc.pages:
-        for block in page.blocks:
-            raw = getattr(block, "raw", None) or {}
-            if not isinstance(raw, dict):
-                continue
-            for line in raw.get("lines", []):
-                if not isinstance(line, dict):
-                    continue
-                for span in line.get("spans", []):
-                    if isinstance(span, dict) and span.get("cross_page"):
-                        cp_bbox = tuple(line.get("bbox") or span.get("bbox") or [])
-                        cp_text = (span.get("content") or "").strip()
-                        if len(cp_bbox) == 4 and cp_text and block.index is not None:
-                            cross_page_sources[block.index] = {
-                                "target_page": page.page_index + 1,
-                                "cross_bbox": cp_bbox,
-                                "cross_text": cp_text,
-                            }
-
-    # Find matching standalone blocks on the target pages
-    for page in doc.pages:
-        for block in page.blocks:
-            if block.index is None:
-                continue
-            for src_idx, src_info in list(cross_page_sources.items()):
-                if page.page_index != src_info["target_page"]:
-                    continue
-                # Determine block text for matching (para_blocks may have empty lines)
-                block_text_for_match = (block.text or "").strip()
-                if not block_text_for_match and isinstance(block.raw, dict):
-                    block_text_for_match = (_extract_text_from_layout_block(block.raw) or "").strip()
-                # Also accept blocks whose lines were deleted/merged (MinerU para_blocks
-                # clears cross-page target block lines after merging into source block).
-                lines_deleted = isinstance(block.raw, dict) and bool(block.raw.get("lines_deleted") or block.raw.get("merge_prev"))
-                if (
-                    block.bbox == src_info["cross_bbox"]
-                    and (block_text_for_match == src_info["cross_text"] or lines_deleted)
-                ):
-                    # Pair found: clear standalone block's text to avoid duplicate segments
-                    block.text = None
-                    block.raw = dict(block.raw) if block.raw else {}
-                    block.raw["_cross_page_pair_of"] = src_idx
-
-                    # Record pair info on the source block
-                    for src_page in doc.pages:
-                        for src_block in src_page.blocks:
-                            if src_block.index == src_idx:
-                                src_block.raw = dict(src_block.raw) if src_block.raw else {}
-                                pairs = src_block.raw.get("_cross_page_pairs", [])
-                                pairs.append({
-                                    "index": block.index,
-                                    "bbox": block.bbox,
-                                    "page_index": page.page_index,
-                                })
-                                src_block.raw["_cross_page_pairs"] = pairs
-                                break
-                    del cross_page_sources[src_idx]
-                    break
-
-    return doc
+    return _finalize_mineru_layout_document(pages_dict, pdf_info, metadata)
 
 
 def parse_content_list_json(content_list_path: Path) -> LayoutDocument:
@@ -623,143 +609,38 @@ def parse_mineru_layout_from_zip_bytes(zip_bytes: bytes) -> Optional[LayoutDocum
                         for block_data in para_blocks:
                             if not isinstance(block_data, dict):
                                 continue
-                            
-                            bbox = block_data.get("bbox")
-                            if not isinstance(bbox, list) or len(bbox) != 4:
-                                continue
-                            
-                            try:
-                                x0, y0, x1, y1 = float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
-                            except (TypeError, ValueError):
-                                continue
-                            
-                            block_type = str(block_data.get("type", "unknown"))
-
-                            # 同样地，在 layout.json fallback 路径中也对引用 list 进行展开，
-                            # 保证布局 IR 和主路径保持一致。
-                            nested_blocks = block_data.get("blocks") or []
-                            if block_type == "list" and isinstance(nested_blocks, list) and nested_blocks:
-                                parent_raw = {k: v for k, v in block_data.items() if k != "blocks"}
-                                parent_text = _extract_text_from_layout_block(parent_raw)
-                                parent_block = LayoutBlock(
-                                    page_index=page_idx,
-                                    bbox=(x0, y0, x1, y1),
-                                    type=block_type,
-                                    index=global_index,
-                                    text=parent_text,
-                                    image_path=None,
-                                    raw=parent_raw,
-                                )
-                                pages_dict.setdefault(page_idx, []).append(parent_block)
-                                global_index += 1
-
-                                for sub in nested_blocks:
-                                    if not isinstance(sub, dict):
-                                        continue
-                                    sub_bbox = sub.get("bbox")
-                                    if not isinstance(sub_bbox, list) or len(sub_bbox) != 4:
-                                        continue
-                                    try:
-                                        sx0, sy0, sx1, sy1 = (
-                                            float(sub_bbox[0]),
-                                            float(sub_bbox[1]),
-                                            float(sub_bbox[2]),
-                                            float(sub_bbox[3]),
-                                        )
-                                    except (TypeError, ValueError):
-                                        continue
-
-                                    sub_type = str(sub.get("type", "unknown"))
-                                    sub_text = _extract_text_from_layout_block(sub)
-
-                                    sub_block = LayoutBlock(
-                                        page_index=page_idx,
-                                        bbox=(sx0, sy0, sx1, sy1),
-                                        type=sub_type,
-                                        index=global_index,
-                                        text=sub_text,
-                                        image_path=None,
-                                        raw=sub.copy(),
-                                    )
-                                    pages_dict.setdefault(page_idx, []).append(sub_block)
-                                    global_index += 1
-
-                                continue
-
-                            text = _extract_text_from_layout_block(block_data)
-                            img_path = _extract_image_path_from_layout_block(block_data)
-                            
-                            if block_type == "image" and not img_path:
-                                img_path = _extract_image_path_from_layout_block(block_data)
-                            
-                            block = LayoutBlock(
-                                page_index=page_idx,
-                                bbox=(x0, y0, x1, y1),
-                                type=block_type,
-                                index=global_index,
-                                text=text,
-                                image_path=img_path,
-                                raw=block_data.copy()
+                            global_index = _append_mineru_block_to_pages(
+                                pages_dict,
+                                page_idx,
+                                block_data,
+                                global_index,
                             )
-                            
-                            pages_dict.setdefault(page_idx, []).append(block)
-                            global_index += 1
-                        
+
                         # Process discarded_blocks
                         discarded_blocks = page_data.get("discarded_blocks", [])
                         for block_data in discarded_blocks:
                             if not isinstance(block_data, dict):
                                 continue
-                            
-                            bbox = block_data.get("bbox")
-                            if not isinstance(bbox, list) or len(bbox) != 4:
-                                continue
-                            
-                            try:
-                                x0, y0, x1, y1 = float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
-                            except (TypeError, ValueError):
-                                continue
-                            
-                            block_type = str(block_data.get("type", "unknown"))
-                            text = _extract_text_from_layout_block(block_data)
-                            
-                            block = LayoutBlock(
-                                page_index=page_idx,
-                                bbox=(x0, y0, x1, y1),
-                                type=block_type,
-                                index=global_index,
-                                text=text,
-                                image_path=None,
-                                raw=block_data.copy()
+                            global_index = _append_mineru_block_to_pages(
+                                pages_dict,
+                                page_idx,
+                                block_data,
+                                global_index,
                             )
-                            
-                            pages_dict.setdefault(page_idx, []).append(block)
-                            global_index += 1
-                    
-                    # Build LayoutDocument
-                    pages = []
-                    for page_idx in sorted(pages_dict.keys()):
-                        page_data = pdf_info[page_idx] if page_idx < len(pdf_info) else {}
-                        page_size = page_data.get("page_size", [])
-                        width = float(page_size[0]) if len(page_size) >= 1 else None
-                        height = float(page_size[1]) if len(page_size) >= 2 else None
-                        
-                        pages.append(LayoutPage(
-                            page_index=page_idx,
-                            blocks=pages_dict[page_idx],
-                            width=width,
-                            height=height
-                        ))
-                    
+
                     metadata = {
                         "_backend": data.get("_backend"),
-                        "_version_name": data.get("_version_name")
+                        "_version_name": data.get("_version_name"),
                     }
-                    
-                    logger.debug(LogModule.EXTRACT, f"Parsed MinerU layout.json: {len(pages)} pages, {global_index} blocks")
-                    doc = LayoutDocument(pages=pages, engine="mineru", metadata=metadata)
-                    _infer_title_heading_levels(doc)
-                    return doc
+                    logger.debug(
+                        LogModule.EXTRACT,
+                        f"Parsed MinerU layout.json: {len(pages_dict)} pages, {global_index} blocks",
+                    )
+                    return _finalize_mineru_layout_document(
+                        pages_dict,
+                        pdf_info,
+                        metadata,
+                    )
             except Exception as e:
                 logger.debug(LogModule.LAYOUT, f"Failed to parse layout.json, trying middle.json: {e}")
         
@@ -791,88 +672,38 @@ def parse_mineru_layout_from_zip_bytes(zip_bytes: bytes) -> Optional[LayoutDocum
                         for block_data in para_blocks:
                             if not isinstance(block_data, dict):
                                 continue
-                            
-                            bbox = block_data.get("bbox")
-                            if not isinstance(bbox, list) or len(bbox) != 4:
-                                continue
-                            
-                            try:
-                                x0, y0, x1, y1 = float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
-                            except (TypeError, ValueError):
-                                continue
-                            
-                            block_type = str(block_data.get("type", "unknown"))
-                            text = _extract_text_from_layout_block(block_data)
-                            img_path = _extract_image_path_from_layout_block(block_data)
-                            
-                            block = LayoutBlock(
-                                page_index=page_idx,
-                                bbox=(x0, y0, x1, y1),
-                                type=block_type,
-                                index=global_index,
-                                text=text,
-                                image_path=img_path,
-                                raw=block_data.copy()
+                            global_index = _append_mineru_block_to_pages(
+                                pages_dict,
+                                page_idx,
+                                block_data,
+                                global_index,
                             )
-                            
-                            pages_dict.setdefault(page_idx, []).append(block)
-                            global_index += 1
-                        
+
                         # Process discarded_blocks
                         discarded_blocks = page_data.get("discarded_blocks", [])
                         for block_data in discarded_blocks:
                             if not isinstance(block_data, dict):
                                 continue
-                            
-                            bbox = block_data.get("bbox")
-                            if not isinstance(bbox, list) or len(bbox) != 4:
-                                continue
-                            
-                            try:
-                                x0, y0, x1, y1 = float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
-                            except (TypeError, ValueError):
-                                continue
-                            
-                            block_type = str(block_data.get("type", "unknown"))
-                            text = _extract_text_from_layout_block(block_data)
-                            
-                            block = LayoutBlock(
-                                page_index=page_idx,
-                                bbox=(x0, y0, x1, y1),
-                                type=block_type,
-                                index=global_index,
-                                text=text,
-                                image_path=None,
-                                raw=block_data.copy()
+                            global_index = _append_mineru_block_to_pages(
+                                pages_dict,
+                                page_idx,
+                                block_data,
+                                global_index,
                             )
-                            
-                            pages_dict.setdefault(page_idx, []).append(block)
-                            global_index += 1
-                    
-                    # Build LayoutDocument
-                    pages = []
-                    for page_idx in sorted(pages_dict.keys()):
-                        page_data = pdf_info[page_idx] if page_idx < len(pdf_info) else {}
-                        page_size = page_data.get("page_size", [])
-                        width = float(page_size[0]) if len(page_size) >= 1 else None
-                        height = float(page_size[1]) if len(page_size) >= 2 else None
-                        
-                        pages.append(LayoutPage(
-                            page_index=page_idx,
-                            blocks=pages_dict[page_idx],
-                            width=width,
-                            height=height
-                        ))
-                    
+
                     metadata = {
                         "_backend": data.get("_backend"),
-                        "_version_name": data.get("_version_name")
+                        "_version_name": data.get("_version_name"),
                     }
-                    
-                    logger.info(LogModule.EXTRACT, f"Parsed MinerU middle.json: {len(pages)} pages, {global_index} blocks")
-                    doc = LayoutDocument(pages=pages, engine="mineru", metadata=metadata)
-                    _infer_title_heading_levels(doc)
-                    return doc
+                    logger.info(
+                        LogModule.EXTRACT,
+                        f"Parsed MinerU middle.json: {len(pages_dict)} pages, {global_index} blocks",
+                    )
+                    return _finalize_mineru_layout_document(
+                        pages_dict,
+                        pdf_info,
+                        metadata,
+                    )
             except Exception as e:
                 logger.debug(LogModule.LAYOUT, f"Failed to parse middle.json, trying content_list.json: {e}")
         

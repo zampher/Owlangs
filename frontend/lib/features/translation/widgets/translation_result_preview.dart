@@ -505,6 +505,7 @@ class _TranslationResultPreviewState
   // detected categories such as language_match, identifier, etc.
   Map<String, int>? _globalDetectedReasonCounts;
   int _totalSegmentsCount = 0;
+  int _pdfPreviewRevision = 0;
 
   // Track modified segments (index -> new text)
   final Map<int, String> _modifiedSegments = <int, String>{};
@@ -1483,6 +1484,7 @@ class _TranslationResultPreviewState
             if (exclusionMetadata != null)
               'exclusion_metadata': exclusionMetadata,
             ...segmentClassificationFieldsFromApi(segment),
+            ..._pdfFontSizeMetadataFields(segment),
           };
         }
 
@@ -1692,6 +1694,7 @@ class _TranslationResultPreviewState
               if (exclusionMetadata != null)
                 'exclusion_metadata': exclusionMetadata,
               ...segmentClassificationFieldsFromApi(segment),
+              ..._pdfFontSizeMetadataFields(segment),
             };
           }
         });
@@ -2546,6 +2549,40 @@ class _TranslationResultPreviewState
         }
       });
     });
+  }
+
+  double? _parseOptionalDouble(dynamic raw) {
+    if (raw is num) {
+      return raw.toDouble();
+    }
+    if (raw is String) {
+      return double.tryParse(raw);
+    }
+    return null;
+  }
+
+  Map<String, dynamic> _pdfFontSizeMetadataFields(Map<String, dynamic> segment) {
+    return <String, dynamic>{
+      if (segment.containsKey('font_size_pt'))
+        'font_size_pt': _parseOptionalDouble(segment['font_size_pt']),
+      if (segment.containsKey('computed_font_size_pt'))
+        'computed_font_size_pt':
+            _parseOptionalDouble(segment['computed_font_size_pt']),
+      if (segment.containsKey('font_size_source'))
+        'font_size_source': segment['font_size_source'],
+      if (segment.containsKey('font_weight'))
+        'font_weight': segment['font_weight'],
+      if (segment.containsKey('computed_font_weight'))
+        'computed_font_weight': segment['computed_font_weight'],
+      if (segment.containsKey('font_weight_source'))
+        'font_weight_source': segment['font_weight_source'],
+      if (segment.containsKey('font_style'))
+        'font_style': segment['font_style'],
+      if (segment.containsKey('computed_font_style'))
+        'computed_font_style': segment['computed_font_style'],
+      if (segment.containsKey('font_style_source'))
+        'font_style_source': segment['font_style_source'],
+    };
   }
 
   /// Update segment metadata with new target text
@@ -4466,7 +4503,79 @@ class _TranslationResultPreviewState
       selectedExclusionFilters: _selectedExclusionFilters,
       onFiltersChanged: _handleFiltersChanged,
       onFormulaFix: _handleFormulaFixForSegment,
+      showPdfFontSize: _isPdfSourceFile(),
+      onFontSizeChanged: _isPdfSourceFile() ? _handleFontSizeChanged : null,
     );
+  }
+
+  Future<void> _handleFontSizeChanged(
+    int index, {
+    double? fontSizePt,
+    String? fontWeight,
+    String? fontStyle,
+    bool reset = false,
+  }) async {
+    try {
+      final TranslationService svc = TranslationService();
+      await svc.updateTranslationSegment(
+        _apiTaskId(),
+        index,
+        fontSizePt: fontSizePt,
+        fontSizeReset: reset,
+        fontWeight: fontWeight,
+        fontStyle: fontStyle,
+        pdfFontReset: reset,
+      );
+
+      if (_allSegmentsMetadata.containsKey(index)) {
+        _allSegmentsMetadata[index] = <String, dynamic>{
+          ..._allSegmentsMetadata[index]!,
+          if (reset) ...<String, dynamic>{
+            'font_size_pt': null,
+            'font_size_source': 'auto',
+            'font_weight': null,
+            'font_weight_source': 'auto',
+            'font_style': null,
+            'font_style_source': 'auto',
+          } else ...<String, dynamic>{
+            if (fontSizePt != null) 'font_size_pt': fontSizePt,
+            if (fontSizePt != null) 'font_size_source': 'user',
+            if (fontWeight != null) 'font_weight': fontWeight,
+            if (fontWeight != null) 'font_weight_source': 'user',
+            if (fontStyle != null) 'font_style': fontStyle,
+            if (fontStyle != null) 'font_style_source': 'user',
+          },
+        };
+      } else {
+        _allSegmentsMetadata[index] = <String, dynamic>{
+          if (reset) ...<String, dynamic>{
+            'font_size_pt': null,
+            'font_size_source': 'auto',
+            'font_weight': null,
+            'font_weight_source': 'auto',
+            'font_style': null,
+            'font_style_source': 'auto',
+          } else ...<String, dynamic>{
+            if (fontSizePt != null) 'font_size_pt': fontSizePt,
+            if (fontSizePt != null) 'font_size_source': 'user',
+            if (fontWeight != null) 'font_weight': fontWeight,
+            if (fontWeight != null) 'font_weight_source': 'user',
+            if (fontStyle != null) 'font_style': fontStyle,
+            if (fontStyle != null) 'font_style_source': 'user',
+          },
+        };
+      }
+
+      if (mounted) {
+        _pdfPreviewRevision++;
+        setState(() {});
+        _segmentsPaginationController?.refresh();
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showError(context, 'Failed to update PDF typography: $e');
+      }
+    }
   }
 
   /// Handle LLM-based LaTeX/formula repair for a single segment.
@@ -4830,6 +4939,7 @@ class _TranslationResultPreviewState
           isPdfWorkflow: _resolvedWorkflowType() == 'markdown_based' ||
               _isPdfSourceFile(),
           translatedPdfUrl: effectiveDownloads?['pdf'],
+          pdfRenderRevision: _pdfPreviewRevision,
           translatedHtmlUrl: translatedHtmlUrl,
           initialSyncScroll:
               _lastSyncScroll ?? baseMode.defaultFullCompareSyncScroll,
@@ -4900,11 +5010,14 @@ class _TranslationResultPreviewState
       formatSettingsProviderFamily(_apiTaskId()),
     );
     const bool isPdfWorkflow = true;
-    final Map<String, String> queryParams = buildPreviewExportQueryParams(
-      formatSettings,
-      isPdfWorkflow: isPdfWorkflow,
-      rendererType: rendererType,
-    );
+    final Map<String, String> queryParams = {
+      ...buildPreviewExportQueryParams(
+        formatSettings,
+        isPdfWorkflow: isPdfWorkflow,
+        rendererType: rendererType,
+      ),
+      ...previewCacheBustParams(_pdfPreviewRevision),
+    };
     final String finalUrl = mergePreviewUrl(relativeUrl, queryParams);
     final String viewerUrl = finalUrl.startsWith('http')
         ? finalUrl

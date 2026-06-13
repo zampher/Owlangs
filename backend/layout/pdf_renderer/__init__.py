@@ -84,6 +84,9 @@ def render_layout_pdf(
     # Typst overlay params
     source_pdf_path: Optional[Union[str, Path]] = None,
     typst_font_family: Optional[str] = None,
+    font_size_by_block_index: Optional[Dict[int, float]] = None,
+    font_weight_by_block_index: Optional[Dict[int, str]] = None,
+    font_style_by_block_index: Optional[Dict[int, str]] = None,
 ) -> bytes:
     """
     Unified PDF rendering entry point.
@@ -128,6 +131,9 @@ def render_layout_pdf(
         output_path=output_path,
         source_pdf_path=source_pdf_path,
         typst_font_family=typst_font_family,
+        font_size_by_block_index=font_size_by_block_index,
+        font_weight_by_block_index=font_weight_by_block_index,
+        font_style_by_block_index=font_style_by_block_index,
     )
 
     # Select renderer

@@ -1053,14 +1053,14 @@ async def _typst_overlay_pdf_response(
     segments_data = task_state.get("translation_segments")
     if not segments_data or not isinstance(segments_data, dict):
         block_text_map: Dict[int, str] = {}
+        font_size_by_block_index: Dict[int, float] = {}
+        font_weight_by_block_index: Dict[int, str] = {}
+        font_style_by_block_index: Dict[int, str] = {}
     else:
         segments = segments_data.get("segments") or []
         is_deep_split_enabled = bool(task_state.get("deep_split"))
-        # Use modified_text or target_text (translated text from segments)
-        text_field = "modified_text"
-        has_modified = any(seg.get("modified_text") for seg in segments)
-        if not has_modified:
-            text_field = "target_text"
+        # Per-segment modified_text with target_text fallback (see pdf_generator).
+        text_field = "target_text"
         block_text_map = pdf_generator.build_block_text_map_from_segments(
             layout_doc,
             segments,
@@ -1068,6 +1068,30 @@ async def _typst_overlay_pdf_response(
             task_state=task_state,
             is_deep_split_enabled=is_deep_split_enabled,
         )
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            build_block_font_map_from_segments,
+            build_block_font_style_map_from_segments,
+            build_block_font_weight_map_from_segments,
+        )
+        font_size_by_block_index = build_block_font_map_from_segments(
+            segments,
+            task_state,
+        )
+        font_weight_by_block_index = build_block_font_weight_map_from_segments(
+            segments,
+            task_state,
+        )
+        font_style_by_block_index = build_block_font_style_map_from_segments(
+            segments,
+            task_state,
+        )
+        if font_size_by_block_index:
+            logger.info(
+                LogModule.EXPORT,
+                f"[TYPST_OVERLAY] Task {task_id}: applying user font overrides "
+                f"for {len(font_size_by_block_index)} block(s): "
+                f"{sorted(font_size_by_block_index.items())[:8]}",
+            )
 
     # Get zip bytes from layout_source_zip (same source as DOCX / layoutimg registration)
     zip_bytes = _resolve_layout_zip_bytes(task_state)
@@ -1116,6 +1140,15 @@ async def _typst_overlay_pdf_response(
                 target_language=target_language,
                 renderer_type="typst_overlay",
                 source_pdf_path=source_pdf_path,
+                font_size_by_block_index=(
+                    font_size_by_block_index if font_size_by_block_index else None
+                ),
+                font_weight_by_block_index=(
+                    font_weight_by_block_index if font_weight_by_block_index else None
+                ),
+                font_style_by_block_index=(
+                    font_style_by_block_index if font_style_by_block_index else None
+                ),
             ),
         )
     except Exception as e:
@@ -1141,6 +1174,7 @@ async def _typst_overlay_pdf_response(
         path=str(pdf_file),
         media_type="application/pdf",
         filename=pdf_file.name,
+        headers={"Cache-Control": "no-store"},
     )
 
 
@@ -4856,6 +4890,16 @@ class DownloadService:
         
             # Use pre-generated file if it exists and no format parameters are provided
             if file_info and os.path.exists(file_info.get("path")):
+                if file_type == "pdf" and renderer_type in (None, "typst_overlay"):
+                    return await _typst_overlay_pdf_response(
+                        task_state,
+                        task_id,
+                        file_stem,
+                        table_body_format,
+                        equation_format,
+                        self.pdf_generator,
+                        chart_body_format=chart_body_format,
+                    )
                 file_path = file_info["path"]
                 filename = file_info.get("filename") or os.path.basename(file_path)
                 media_type = MEDIA_TYPES.get(file_type, "application/octet-stream")

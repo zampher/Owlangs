@@ -45,6 +45,14 @@ Map<String, String> buildPreviewExportQueryParams(
   return params;
 }
 
+/// Append a revision token so PDF preview re-fetches after segment edits.
+Map<String, String> previewCacheBustParams(int revision) {
+  if (revision <= 0) {
+    return const <String, String>{};
+  }
+  return <String, String>{'_rev': revision.toString()};
+}
+
 String mergePreviewUrl(String baseUrl, Map<String, String> params) {
   final Uri uri = Uri.parse(baseUrl);
   return uri

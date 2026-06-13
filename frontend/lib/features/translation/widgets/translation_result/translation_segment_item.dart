@@ -4,12 +4,14 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/utils/message_service.dart';
 import '../../../../shared/utils/app_logger.dart';
 import '../../../../shared/widgets/markdown_text_with_images.dart';
 import '../../models/exclusion_reason.dart';
 import '../../../../shared/services/translation_service.dart';
 import '../common/exclusion_reason_editor.dart';
+import 'segment_pdf_typography_dialog.dart';
 
 // Intent classes for keyboard shortcuts
 class _CancelEditingIntent extends Intent {
@@ -74,6 +76,17 @@ class TranslationSegmentItem extends StatefulWidget {
     this.taskId,
     this.onExclusionUpdated,
     this.onFormulaFix,
+    this.showPdfFontSize = false,
+    this.fontSizePt,
+    this.computedFontSizePt,
+    this.fontSizeSource,
+    this.fontWeight,
+    this.computedFontWeight,
+    this.fontWeightSource,
+    this.fontStyle,
+    this.computedFontStyle,
+    this.fontStyleSource,
+    this.onFontSizeChanged,
   });
   final String text;
   final String?
@@ -116,6 +129,23 @@ class TranslationSegmentItem extends StatefulWidget {
   final Function(int index)?
       onExclusionUpdated; // Callback when exclusion reason is updated
   final Function(int index)? onFormulaFix; // Callback to trigger LLM formula repair
+  final bool showPdfFontSize;
+  final double? fontSizePt;
+  final double? computedFontSizePt;
+  final String? fontSizeSource;
+  final String? fontWeight;
+  final String? computedFontWeight;
+  final String? fontWeightSource;
+  final String? fontStyle;
+  final String? computedFontStyle;
+  final String? fontStyleSource;
+  final void Function(
+    int index, {
+    double? fontSizePt,
+    String? fontWeight,
+    String? fontStyle,
+    bool reset,
+  })? onFontSizeChanged;
 
   @override
   State<TranslationSegmentItem> createState() => _TranslationSegmentItemState();
@@ -581,6 +611,137 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
         ),
       );
 
+  String _pdfFontSizeLabel(AppLocalizations l10n) {
+    final bool isUserOverride = _hasPdfTypographyOverride();
+    final double sizePt = isUserOverride && widget.fontSizePt != null
+        ? widget.fontSizePt!
+        : (widget.computedFontSizePt ?? widget.fontSizePt ?? 12.0);
+    final String sizeLabel = isUserOverride && widget.fontSizePt != null
+        ? l10n.segmentPdfFontSizeManual(sizePt.toStringAsFixed(1))
+        : (widget.computedFontSizePt != null
+            ? l10n.segmentPdfFontSizeAuto(sizePt.toStringAsFixed(1))
+            : l10n.segmentPdfFontSizeAutoUnknown);
+    final List<String> styleParts = <String>[sizeLabel];
+    final String weight = _effectiveFontWeight();
+    final String style = _effectiveFontStyle();
+    if (weight == 'bold') {
+      styleParts.add('B');
+    }
+    if (style == 'italic') {
+      styleParts.add('I');
+    }
+    return styleParts.join(' · ');
+  }
+
+  bool _hasPdfTypographyOverride() {
+    return (widget.fontSizeSource == 'user' && widget.fontSizePt != null) ||
+        widget.fontWeightSource == 'user' ||
+        widget.fontStyleSource == 'user';
+  }
+
+  String _effectiveFontWeight() {
+    if (widget.fontWeightSource == 'user' && widget.fontWeight != null) {
+      return widget.fontWeight!;
+    }
+    return widget.computedFontWeight ?? widget.fontWeight ?? 'regular';
+  }
+
+  String _effectiveFontStyle() {
+    if (widget.fontStyleSource == 'user' && widget.fontStyle != null) {
+      return widget.fontStyle!;
+    }
+    return widget.computedFontStyle ?? widget.fontStyle ?? 'normal';
+  }
+
+  Future<void> _openFontSizeDialog() async {
+    if (widget.onFontSizeChanged == null) {
+      return;
+    }
+    final bool isUserOverride = _hasPdfTypographyOverride();
+    final double initialSize = snapPdfFontSize(
+      widget.fontSizeSource == 'user' && widget.fontSizePt != null
+          ? widget.fontSizePt!
+          : (widget.computedFontSizePt ?? 12.0),
+    );
+
+    final SegmentPdfTypographyResult? result =
+        await showSegmentPdfTypographyDialog(
+      context: context,
+      previewText: widget.text,
+      hasUserOverride: isUserOverride,
+      initialFontSizePt: initialSize,
+      initialFontWeight: _effectiveFontWeight(),
+      initialFontStyle: _effectiveFontStyle(),
+    );
+
+    if (!mounted || result == null) {
+      return;
+    }
+    if (result.reset) {
+      widget.onFontSizeChanged!(widget.index, reset: true);
+      return;
+    }
+    widget.onFontSizeChanged!(
+      widget.index,
+      fontSizePt: result.fontSizePt,
+      fontWeight: result.fontWeight,
+      fontStyle: result.fontStyle,
+    );
+  }
+
+  Widget _buildPdfFontSizeChip() {
+    final l10n = AppLocalizations.of(context)!;
+    final bool isUserOverride = _hasPdfTypographyOverride();
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _openFontSizeDialog,
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: isUserOverride
+                  ? colors.secondaryContainer
+                  : colors.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: isUserOverride
+                    ? colors.secondary
+                    : colors.outlineVariant,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(
+                  Icons.format_size,
+                  size: 12,
+                  color: isUserOverride
+                      ? colors.onSecondaryContainer
+                      : colors.onSurfaceVariant,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _pdfFontSizeLabel(l10n),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: isUserOverride
+                        ? colors.onSecondaryContainer
+                        : colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildViewMode() {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -777,6 +938,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                       widget.isExcluded ||
                       _localIsExcluded ||
                       _localIsCleared ||
+                      (widget.showPdfFontSize && widget.onFontSizeChanged != null) ||
                       (widget.onExclude != null && !_localIsExcluded) ||
                       (widget.onClear != null &&
                           widget.text.isNotEmpty &&
@@ -786,6 +948,8 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                   padding: const EdgeInsets.only(top: 4),
                   child: Row(
                     children: <Widget>[
+                      if (widget.showPdfFontSize && widget.onFontSizeChanged != null)
+                        _buildPdfFontSizeChip(),
                       // Platform badge
                       if (widget.platformUsed != null)
                         Container(

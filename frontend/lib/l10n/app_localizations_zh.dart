@@ -3579,4 +3579,38 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get commonLightMode => '浅色模式';
+
+  @override
+  String segmentPdfFontSizeAuto(String sizePt) {
+    return '自动 (${sizePt}pt)';
+  }
+
+  @override
+  String get segmentPdfFontSizeAutoUnknown => '自动';
+
+  @override
+  String segmentPdfFontSizeManual(String sizePt) {
+    return '${sizePt}pt';
+  }
+
+  @override
+  String get segmentPdfFontSizeTitle => 'PDF 字号';
+
+  @override
+  String get segmentPdfTypographyTitle => 'PDF 字体';
+
+  @override
+  String get segmentPdfTypographyPreviewLabel => '预览';
+
+  @override
+  String get segmentPdfTypographyBold => '粗体';
+
+  @override
+  String get segmentPdfTypographyItalic => '斜体';
+
+  @override
+  String get segmentPdfFontSizeReset => '恢复自动';
+
+  @override
+  String get segmentPdfFontSizeApply => '应用';
 }

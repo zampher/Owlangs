@@ -287,8 +287,18 @@ def _extract_text_from_block(block) -> str:
             )
         return merged
 
-    # 对于像参考文献这种结构，文本往往藏在 raw.blocks[*].lines[*].spans[*].content 里
-    # 例如：外层 type=list，内层 type=ref_text。
+    # List containers are expanded into child LayoutBlocks during MinerU parse.
+    # Do not merge nested blocks into one extract segment here.
+    block_type = getattr(block, "type", "")
+    if block_type in ("list", "ref_list", "references") and isinstance(raw, dict) and raw.get("blocks"):
+        logger.debug(
+            LogModule.LAYOUT,
+            "[LAYOUT] Skip nested list-container text merge for block "
+            f"index={getattr(block, 'index', None)}, page={getattr(block, 'page_index', None)}",
+        )
+        return ""
+
+    # Legacy fallback for non-list nested structures only.
     blocks = raw.get("blocks") or []
     nested_block_texts: list[str] = []
     for sub in blocks:
