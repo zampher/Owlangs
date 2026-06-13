@@ -43,6 +43,7 @@ class PdfPreview extends StatefulWidget {
 class _PdfPreviewIoState extends State<PdfPreview> {
   String? _rendererType;
   int _totalPages = 0;
+  int _currentPage = 1;
   PreviewViewportController? _viewportController;
   PreviewFullscreenOverlay? _fullscreenOverlay;
   bool _isFullscreen = false;
@@ -73,6 +74,8 @@ class _PdfPreviewIoState extends State<PdfPreview> {
     if (oldWidget.rendererType != widget.rendererType ||
         oldWidget.downloadUrl != widget.downloadUrl) {
       _rendererType = widget.rendererType;
+      _currentPage = 1;
+      _totalPages = 0;
     }
   }
 
@@ -150,6 +153,15 @@ class _PdfPreviewIoState extends State<PdfPreview> {
         }
         setState(() {
           _totalPages = document.pagesCount;
+          _currentPage = 1;
+        });
+      },
+      onPageVisible: (int pageNumber) {
+        if (!mounted || pageNumber == _currentPage) {
+          return;
+        }
+        setState(() {
+          _currentPage = pageNumber;
         });
       },
     );
@@ -198,9 +210,18 @@ class _PdfPreviewIoState extends State<PdfPreview> {
               _toolbarTitle(l10n),
               style: Theme.of(context).textTheme.bodyMedium,
             ),
-            if (!widget.compact && _totalPages > 0) ...<Widget>[
-              const SizedBox(width: 16),
-              Text('$_totalPages pages'),
+            if (_totalPages > 0) ...<Widget>[
+              const SizedBox(width: 12),
+              Text(
+                l10n?.translationPreviewPdfPageIndicator(
+                      _currentPage.toString(),
+                      _totalPages.toString(),
+                    ) ??
+                    'Page $_currentPage / $_totalPages',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
             ],
             const Spacer(),
             if (_supportsViewportControls && _viewportController != null)

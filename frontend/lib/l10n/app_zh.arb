@@ -1316,6 +1316,19 @@
   "translationPreviewPdfRevision": "PDF 修订",
   "translationPreviewPdfRevisionCompare": "对照预览",
   "translationPreviewAutoRefreshPdf": "自动刷新 PDF",
+  "translationPreviewFollowSegmentPage": "跟随片段页",
+  "translationPreviewFollowSegmentPageDesc": "启用后，点击或勾选片段时，右侧 PDF 预览自动跳转到该片段所在页",
+  "translationPreviewPdfPageIndicator": "第 {current} / {total} 页",
+  "@translationPreviewPdfPageIndicator": {
+    "placeholders": {
+      "current": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
   "translationPreviewRefreshPdf": "刷新 PDF",
   "translationPreviewBatchFont": "批量字体",
   "translationPreviewBatchFontTooltip": "将字号、粗体、斜体应用到选中片段",

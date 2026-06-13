@@ -3864,6 +3864,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationPreviewAutoRefreshPdf => 'Auto refresh PDF';
 
   @override
+  String get translationPreviewFollowSegmentPage => 'Follow segment page';
+
+  @override
+  String get translationPreviewFollowSegmentPageDesc =>
+      'When enabled, the PDF preview jumps to the page of the focused or checked segment';
+
+  @override
+  String translationPreviewPdfPageIndicator(String current, String total) {
+    return 'Page $current / $total';
+  }
+
+  @override
   String get translationPreviewRefreshPdf => 'Refresh PDF';
 
   @override

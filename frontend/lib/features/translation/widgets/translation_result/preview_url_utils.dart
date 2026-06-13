@@ -53,6 +53,15 @@ Map<String, String> previewCacheBustParams(int revision) {
   return <String, String>{'_rev': revision.toString()};
 }
 
+/// Pass dirty segment indices for incremental PDF preview refresh.
+Map<String, String> pdfPreviewDirtySegmentParams(Set<int> segmentIndices) {
+  if (segmentIndices.isEmpty) {
+    return const <String, String>{};
+  }
+  final List<int> sorted = segmentIndices.toList()..sort();
+  return <String, String>{'dirty_segments': sorted.join(',')};
+}
+
 String mergePreviewUrl(String baseUrl, Map<String, String> params) {
   final Uri uri = Uri.parse(baseUrl);
   return uri

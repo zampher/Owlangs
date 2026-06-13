@@ -43,6 +43,7 @@ class PdfPreview extends StatefulWidget {
 class _PdfPreviewWebState extends State<PdfPreview> {
   String? _rendererType;
   int _totalPages = 0;
+  int _currentPage = 1;
 
   @override
   void initState() {
@@ -56,6 +57,8 @@ class _PdfPreviewWebState extends State<PdfPreview> {
     if (oldWidget.rendererType != widget.rendererType ||
         oldWidget.downloadUrl != widget.downloadUrl) {
       _rendererType = widget.rendererType;
+      _currentPage = 1;
+      _totalPages = 0;
     }
   }
 
@@ -108,6 +111,15 @@ class _PdfPreviewWebState extends State<PdfPreview> {
               }
               setState(() {
                 _totalPages = document.pagesCount;
+                _currentPage = 1;
+              });
+            },
+            onPageVisible: (int pageNumber) {
+              if (!mounted || pageNumber == _currentPage) {
+                return;
+              }
+              setState(() {
+                _currentPage = pageNumber;
               });
             },
           ),
@@ -126,9 +138,18 @@ class _PdfPreviewWebState extends State<PdfPreview> {
       child: Row(
         children: <Widget>[
           Text(_toolbarTitle(l10n)),
-          if (!widget.compact && _totalPages > 0) ...<Widget>[
-            const SizedBox(width: 16),
-            Text('$_totalPages pages'),
+          if (_totalPages > 0) ...<Widget>[
+            const SizedBox(width: 12),
+            Text(
+              l10n?.translationPreviewPdfPageIndicator(
+                    _currentPage.toString(),
+                    _totalPages.toString(),
+                  ) ??
+                  'Page $_currentPage / $_totalPages',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
           ],
           const Spacer(),
           if (!widget.compact && widget.onRequestPreviewSettings != null)

@@ -10,10 +10,33 @@ import 'package:pdfx/pdfx.dart';
 import '../../../shared/services/translation_service.dart';
 import 'pdf_continuous_page.dart';
 
+/// Returns the 1-based page number whose body contains [anchorOffset].
+int visiblePdfPageAtScrollOffset({
+  required double scrollOffset,
+  required double viewportExtent,
+  required List<double> pageHeights,
+  required double pageGap,
+}) {
+  if (pageHeights.isEmpty) {
+    return 1;
+  }
+  final double anchor = scrollOffset + viewportExtent / 2;
+  double top = pageGap;
+  for (int index = 0; index < pageHeights.length; index++) {
+    final double bottom = top + pageHeights[index];
+    if (anchor <= bottom + pageGap / 2) {
+      return index + 1;
+    }
+    top = bottom + pageGap;
+  }
+  return pageHeights.length;
+}
+
 /// Scroll navigation for [PdfContinuousScrollView].
 class PdfContinuousScrollController {
   _PdfContinuousScrollViewState? _state;
   int? _pendingPageNumber;
+  double? _preservedScrollOffset;
 
   bool get isAttached => _state != null;
 
@@ -30,6 +53,30 @@ class PdfContinuousScrollController {
     if (_state == state) {
       _state = null;
     }
+  }
+
+  void preserveScrollPosition() {
+    final _PdfContinuousScrollViewState? state = _state;
+    if (state != null && state._scrollController.hasClients) {
+      _preservedScrollOffset = state._scrollController.offset;
+    }
+  }
+
+  void restoreScrollPosition() {
+    final _PdfContinuousScrollViewState? state = _state;
+    final double? offset = _preservedScrollOffset;
+    if (state == null || offset == null) {
+      return;
+    }
+    _preservedScrollOffset = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!state.mounted || !state._scrollController.hasClients) {
+        return;
+      }
+      state._scrollController.jumpTo(
+        offset.clamp(0.0, state._scrollController.position.maxScrollExtent),
+      );
+    });
   }
 
   Future<void> jumpToPage(int pageNumber) async {
@@ -80,6 +127,7 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
   bool _ownsScrollController = false;
   double _pageWidth = 0;
   List<double>? _pageDisplayHeights;
+  int _lastReportedPage = 0;
 
   @override
   void initState() {
@@ -90,6 +138,7 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
       _scrollController = ScrollController();
       _ownsScrollController = true;
     }
+    _scrollController.addListener(_handleScroll);
     widget.navigationController?._attach(this);
     _preloadPageHeights();
   }
@@ -103,8 +152,35 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
     }
     if (oldWidget.document.id != widget.document.id) {
       _pageDisplayHeights = null;
+      _lastReportedPage = 0;
       _preloadPageHeights();
     }
+  }
+
+  void _handleScroll() {
+    _reportVisiblePage();
+  }
+
+  void _reportVisiblePage() {
+    final void Function(int pageNumber)? callback = widget.onPageVisible;
+    if (callback == null || !_scrollController.hasClients) {
+      return;
+    }
+    final List<double>? heights = _pageDisplayHeights;
+    if (heights == null || heights.isEmpty) {
+      return;
+    }
+    final int page = visiblePdfPageAtScrollOffset(
+      scrollOffset: _scrollController.offset,
+      viewportExtent: _scrollController.position.viewportDimension,
+      pageHeights: heights,
+      pageGap: widget.pageGap,
+    );
+    if (page == _lastReportedPage) {
+      return;
+    }
+    _lastReportedPage = page;
+    callback(page);
   }
 
   Future<void> _preloadPageHeights() async {
@@ -133,6 +209,11 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
     }
     setState(() {
       _pageDisplayHeights = heights;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _reportVisiblePage();
+      }
     });
   }
 
@@ -174,6 +255,7 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
     );
+    _reportVisiblePage();
   }
 
   int? _pendingJumpPageNumber;
@@ -188,6 +270,7 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
 
   @override
   void dispose() {
+    _scrollController.removeListener(_handleScroll);
     widget.navigationController?._detach(this);
     if (_ownsScrollController) {
       _scrollController.dispose();
@@ -307,6 +390,7 @@ class _PdfContinuousPreviewLoaderState extends State<PdfContinuousPreviewLoader>
   }
 
   Future<void> _load() async {
+    widget.navigationController?.preserveScrollPosition();
     setState(() {
       _loading = true;
       _error = null;
@@ -334,6 +418,7 @@ class _PdfContinuousPreviewLoaderState extends State<PdfContinuousPreviewLoader>
         _loading = false;
       });
       widget.onDocumentLoaded?.call(document);
+      widget.navigationController?.restoreScrollPosition();
     } catch (error) {
       if (!mounted) {
         return;

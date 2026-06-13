@@ -3646,6 +3646,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationPreviewAutoRefreshPdf => '自动刷新 PDF';
 
   @override
+  String get translationPreviewFollowSegmentPage => '跟随片段页';
+
+  @override
+  String get translationPreviewFollowSegmentPageDesc =>
+      '启用后，点击或勾选片段时，右侧 PDF 预览自动跳转到该片段所在页';
+
+  @override
+  String translationPreviewPdfPageIndicator(String current, String total) {
+    return '第 $current / $total 页';
+  }
+
+  @override
   String get translationPreviewRefreshPdf => '刷新 PDF';
 
   @override

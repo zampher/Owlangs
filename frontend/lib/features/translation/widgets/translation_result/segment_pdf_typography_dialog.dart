@@ -14,6 +14,9 @@ const double kPdfLeadingEmMax = 3.0;
 const double kPdfLeadingEmStep = 0.05;
 const double kPdfLeadingEmDefault = 1.25;
 
+/// Gate PDF line-spacing UI until Typst overlay leading overrides are reliable.
+const bool kPdfLeadingTypographyUiEnabled = false;
+
 double snapPdfFontSize(double value) {
   final double clamped = value.clamp(kPdfFontSizeMin, kPdfFontSizeMax);
   final int steps = (clamped / kPdfFontSizeStep).round();
@@ -137,7 +140,7 @@ class _SegmentPdfTypographyDialogState extends State<_SegmentPdfTypographyDialog
     final ColorScheme colors = theme.colorScheme;
     final bool showFontControls =
         widget.mode != SegmentPdfTypographyDialogMode.leadingOnly;
-    final bool showLeadingControls =
+    final bool showLeadingControls = kPdfLeadingTypographyUiEnabled &&
         widget.mode != SegmentPdfTypographyDialogMode.fontOnly;
     final double previewScale = showFontControls
         ? (_fontSizePt / 12.0).clamp(0.45, 2.4)

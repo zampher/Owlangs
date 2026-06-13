@@ -638,7 +638,9 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     if (style == 'italic') {
       styleParts.add('I');
     }
-    styleParts.add('↕${_effectiveLeadingEm().toStringAsFixed(2)}');
+    if (kPdfLeadingTypographyUiEnabled) {
+      styleParts.add('↕${_effectiveLeadingEm().toStringAsFixed(2)}');
+    }
     return styleParts.join(' · ');
   }
 
@@ -659,9 +661,11 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     if (style == 'italic') {
       styleParts.add('I');
     }
-    final double? leadingEm = _effectiveLeadingEmOrNull();
-    if (leadingEm != null) {
-      styleParts.add('↕${leadingEm.toStringAsFixed(2)}');
+    if (kPdfLeadingTypographyUiEnabled) {
+      final double? leadingEm = _effectiveLeadingEmOrNull();
+      if (leadingEm != null) {
+        styleParts.add('↕${leadingEm.toStringAsFixed(2)}');
+      }
     }
     return styleParts.join(' · ');
   }
@@ -688,7 +692,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     return (widget.fontSizeSource == 'user' && widget.fontSizePt != null) ||
         widget.fontWeightSource == 'user' ||
         widget.fontStyleSource == 'user' ||
-        widget.leadingEmSource == 'user';
+        (kPdfLeadingTypographyUiEnabled && widget.leadingEmSource == 'user');
   }
 
   String _effectiveFontWeight() {

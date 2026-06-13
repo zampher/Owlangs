@@ -170,10 +170,16 @@ def _block_markdown_fit_call(
 ) -> str:
     """Pick fit call: user-locked leading keeps line spacing, auto leading may shrink both."""
     if getattr(block, "leading_em_locked", False):
+        max_font_pt = block.font_size_pt
+        if block.fit_max_font_size_pt and block.fit_max_font_size_pt > 0:
+            max_font_pt = min(max_font_pt, block.fit_max_font_size_pt)
+        min_font_pt = block.fit_min_font_size_pt
+        if not min_font_pt or min_font_pt <= 0:
+            min_font_pt = max(1.0, max_font_pt * 0.5)
         return _typst_markdown_fit_fixed_leading_call(
             md_name,
-            block.font_size_pt,
-            block.fit_min_font_size_pt,
+            max_font_pt,
+            min_font_pt,
             block.leading_em,
             fit_height_pt,
             block.font_weight,
@@ -468,7 +474,7 @@ def _render_preserved_line_boxes(block_id: str, block: RenderBlock,
         lh = max(MIN_BLOCK_SIZE_PT, ly1 - ly0)
         line_name = f"{var_prefix}_line_{index}_md"
         body_name = f"{var_prefix}_line_{index}_body"
-        if block.font_size_locked:
+        if block.font_size_locked or getattr(block, "leading_em_locked", False):
             body_expr = _typst_plain_markdown_expr(
                 line_name,
                 block.font_size_pt,

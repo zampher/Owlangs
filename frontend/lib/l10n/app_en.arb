@@ -1379,6 +1379,19 @@
   "translationPreviewPdfRevision": "PDF revision",
   "translationPreviewPdfRevisionCompare": "Compare view",
   "translationPreviewAutoRefreshPdf": "Auto refresh PDF",
+  "translationPreviewFollowSegmentPage": "Follow segment page",
+  "translationPreviewFollowSegmentPageDesc": "When enabled, the PDF preview jumps to the page of the focused or checked segment",
+  "translationPreviewPdfPageIndicator": "Page {current} / {total}",
+  "@translationPreviewPdfPageIndicator": {
+    "placeholders": {
+      "current": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
   "translationPreviewRefreshPdf": "Refresh PDF",
   "translationPreviewBatchFont": "Batch font",
   "translationPreviewBatchFontTooltip": "Apply font settings to selected segments",

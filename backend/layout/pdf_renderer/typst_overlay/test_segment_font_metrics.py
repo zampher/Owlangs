@@ -215,6 +215,43 @@ def test_apply_user_typography_override_leading_locks_leading_keeps_fit():
     assert styled.leading_em_locked is True
     assert styled.fit_to_box is True
     assert styled.fit_single_line is True
+    assert styled.fit_max_font_size_pt == rb.font_size_pt
+    assert styled.fit_min_font_size_pt == rb.font_size_pt
+
+
+def test_apply_user_typography_override_tightening_leading_locks_font_size():
+    rb = RenderBlock(
+        block_id="t",
+        page_index=0,
+        inner_bbox=(0.0, 0.0, 100.0, 40.0),
+        plain_text="Multi line sample text for leading lock",
+        markdown_text="Multi line sample text for leading lock",
+        font_size_pt=10.0,
+        leading_em=1.25,
+        fit_to_box=True,
+    )
+    styled = apply_user_typography_override(rb, leading_em=0.9)
+    assert styled.leading_em == 0.9
+    assert styled.fit_max_font_size_pt == 10.0
+    assert styled.fit_min_font_size_pt == 10.0
+
+
+def test_apply_user_typography_override_loosening_leading_keeps_font_range():
+    rb = RenderBlock(
+        block_id="t",
+        page_index=0,
+        inner_bbox=(0.0, 0.0, 100.0, 40.0),
+        plain_text="Multi line sample text for leading lock",
+        markdown_text="Multi line sample text for leading lock",
+        font_size_pt=10.0,
+        leading_em=1.0,
+        fit_min_font_size_pt=6.0,
+        fit_to_box=True,
+    )
+    styled = apply_user_typography_override(rb, leading_em=1.2)
+    assert styled.leading_em == 1.2
+    assert styled.fit_max_font_size_pt == 10.0
+    assert styled.fit_min_font_size_pt == 6.0
 
 
 def test_normalize_user_leading_em():

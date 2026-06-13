@@ -7,7 +7,7 @@ PDF renderer configuration.
 This module defines the configuration class used by all PDF renderer implementations.
 """
 
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Set, Union
 from pathlib import Path
 
 
@@ -35,6 +35,9 @@ class PDFRendererConfig:
         font_weight_by_block_index: Optional[Dict[int, str]] = None,
         font_style_by_block_index: Optional[Dict[int, str]] = None,
         leading_em_by_block_index: Optional[Dict[int, float]] = None,
+        render_page_indices: Optional[Set[int]] = None,
+        base_merged_pdf_bytes: Optional[bytes] = None,
+        cleaned_source_output_path: Optional[Path] = None,
     ):
         """
         Initialize PDF renderer configuration.
@@ -65,6 +68,9 @@ class PDFRendererConfig:
         self.font_weight_by_block_index = font_weight_by_block_index or {}
         self.font_style_by_block_index = font_style_by_block_index or {}
         self.leading_em_by_block_index = leading_em_by_block_index or {}
+        self.render_page_indices = render_page_indices
+        self.base_merged_pdf_bytes = base_merged_pdf_bytes
+        self.cleaned_source_output_path = cleaned_source_output_path
         
         # These will be populated during rendering
         self.type_font_baselines: Dict[str, float] = {}

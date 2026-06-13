@@ -278,7 +278,12 @@ class TranslationComparisonPanel extends ConsumerWidget {
       _FilterChipConfig('excluded', l10n.translationToolbarFilterExcluded, Colors.grey),
       _FilterChipConfig('retry', l10n.translationToolbarRetry, Colors.orange),
       _FilterChipConfig('cleared', l10n.translationStatsClearedLabel, Colors.purple),
-      _FilterChipConfig('images', l10n.translationStatsImagesLabel, Colors.blue),
+      if (!pdfRevisionMode)
+        _FilterChipConfig(
+          'images',
+          l10n.translationStatsImagesLabel,
+          Colors.blue,
+        ),
     ];
 
     final chipWidgets = filters.map((cfg) {
@@ -290,6 +295,11 @@ class TranslationComparisonPanel extends ConsumerWidget {
         final isSelected = cfg.key.isEmpty
             ? selected.isEmpty
             : selected.contains(cfg.key);
+        const EdgeInsets chipPadding =
+            EdgeInsets.symmetric(horizontal: 2, vertical: 0);
+        final VisualDensity chipDensity = pdfRevisionMode
+            ? const VisualDensity(horizontal: -2, vertical: -3)
+            : const VisualDensity(horizontal: -4, vertical: -4);
         return Tooltip(
           message: '${cfg.label} ($count)',
           child: ActionChip(
@@ -298,7 +308,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
               children: <Widget>[
                 if (isSelected)
                   Icon(Icons.check, size: 10, color: cfg.color.shade700),
-                if (isSelected) const SizedBox(width: 2),
+                if (isSelected) SizedBox(width: 2),
                 Text(
                   '${cfg.label} ($count)',
                   style: TextStyle(
@@ -325,13 +335,16 @@ class TranslationComparisonPanel extends ConsumerWidget {
                 : null,
             backgroundColor: isSelected ? cfg.color.shade100 : Colors.grey.shade200,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(pdfRevisionMode ? 5 : 6),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
-            visualDensity: const VisualDensity(
-              horizontal: -4,
-              vertical: -4,
-            ),
+            padding: chipPadding,
+            labelPadding: pdfRevisionMode
+                ? const EdgeInsets.symmetric(horizontal: 3)
+                : const EdgeInsets.symmetric(horizontal: 4),
+            visualDensity: chipDensity,
+            materialTapTargetSize: pdfRevisionMode
+                ? MaterialTapTargetSize.shrinkWrap
+                : MaterialTapTargetSize.padded,
             side: BorderSide(
               color: isSelected ? cfg.color.shade300 : Colors.grey.shade400,
             ),
@@ -342,7 +355,9 @@ class TranslationComparisonPanel extends ConsumerWidget {
     final Widget filterLabel = Padding(
       padding: const EdgeInsets.only(right: 3),
       child: Text(
-        '${l10n.settingsGlossaryFilterLabel} ',
+        pdfRevisionMode
+            ? '${l10n.settingsGlossaryFilterLabel}:'
+            : '${l10n.settingsGlossaryFilterLabel} ',
         style: TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w600,
@@ -355,8 +370,8 @@ class TranslationComparisonPanel extends ConsumerWidget {
     // instead of stacking one chip per row when the panel is narrow.
     if (pdfRevisionMode) {
       return Wrap(
-        spacing: 2,
-        runSpacing: 2,
+        spacing: 3,
+        runSpacing: 3,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: <Widget>[
           filterLabel,
@@ -628,16 +643,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
   Widget _buildFilterSection(BuildContext context) {
     final Widget filterBar = _buildFilterChipsBarListenable(context);
     if (pdfRevisionMode) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Expanded(child: filterBar),
-          if (pdfPageFilterListenable != null) ...<Widget>[
-            const SizedBox(width: 6),
-            _buildPdfPageFilterDropdownListenable(context),
-          ],
-        ],
-      );
+      return filterBar;
     }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -675,20 +681,23 @@ class TranslationComparisonPanel extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
+        if (showFilters) ...<Widget>[
+          _buildFilterSection(context),
+          const SizedBox(height: 4),
+        ],
         Row(
           children: <Widget>[
             if (batchSelectionEnabled) ...<Widget>[
               _buildPdfRevisionSelectionActions(context),
-              const Spacer(),
-            ] else
-              const Spacer(),
+            ],
+            const Spacer(),
+            if (pdfPageFilterListenable != null) ...<Widget>[
+              _buildPdfPageFilterDropdownListenable(context),
+              const SizedBox(width: 6),
+            ],
             _buildPageSizeSelector(),
           ],
         ),
-        if (showFilters) ...<Widget>[
-          const SizedBox(height: 4),
-          _buildFilterSection(context),
-        ],
       ],
     );
   }
@@ -760,10 +769,10 @@ class TranslationComparisonPanel extends ConsumerWidget {
           children: <Widget>[
             // Header with both labels and pagination bar
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 8,
+              padding: EdgeInsets.symmetric(
+                horizontal: pdfRevisionMode ? 7 : 8,
                 vertical: 4,
-              ), // Reduced padding: from 12 to 4 vertical, 8 horizontal
+              ),
               decoration: BoxDecoration(
                 color: scheme.surfaceContainerHighest,
                 border: Border(

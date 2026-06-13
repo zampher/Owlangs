@@ -258,6 +258,7 @@ hiddenimports = [
     'layout.base',
     'layout.mineru_layout_model',
     'layout.markdown_builder',
+    'layout.registry',
     # layout PDF renderer - Typst overlay (high-fidelity PDF export)
     'layout.pdf_renderer',
     'layout.pdf_renderer.config',
@@ -270,6 +271,10 @@ hiddenimports = [
     'layout.pdf_renderer.typst_overlay.formula_safety',
     'layout.pdf_renderer.typst_overlay.source_cleanup',
     'layout.pdf_renderer.typst_overlay.overlay_merge',
+    'layout.pdf_renderer.typst_overlay.segment_font_metrics',
+    'layout.pdf_renderer.typst_overlay.text_metrics',
+    'layout.pdf_renderer.typst_overlay.affected_pages',
+    'layout.pdf_renderer.typst_overlay.pdf_preview_cache',
     # PyMuPDF (required by typst overlay source_cleanup and overlay_merge)
     'fitz',
     # pdf_splitter, layout_merger, mineru_zip_merger: dynamic imports in converter_mineru.py

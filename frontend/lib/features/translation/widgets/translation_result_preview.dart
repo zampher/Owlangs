@@ -38,7 +38,7 @@ import '../widgets/translation_quick_settings.dart';
 import '../widgets/translation_result/preview_selection.dart';
 import '../widgets/translation_result/translation_preview_dialog.dart';
 import '../widgets/translation_result/translation_full_compare_preview_tab.dart';
-import '../widgets/translation_result/segment_pdf_typography_dialog.dart';
+import 'translation_result/segment_pdf_typography_dialog.dart';
 import '../widgets/translation_result/preview_url_utils.dart';
 import 'translation_preview_tab_widget.dart';
 import '../../../shared/utils/pagination.dart';
@@ -518,6 +518,12 @@ class _TranslationResultPreviewState
   int _totalSegmentsCount = 0;
   int _pdfPreviewRevision = 0;
   final ValueNotifier<int> _pdfPreviewRevisionNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<Set<int>> _pdfPreviewDirtySegmentsNotifier =
+      ValueNotifier<Set<int>>(<int>{});
+  Timer? _pdfPreviewRevisionDebounceTimer;
+  static const Duration _pdfPreviewRevisionDebounce =
+      Duration(milliseconds: 500);
+  final Set<int> _pendingDirtySegmentIndices = <int>{};
   // Coalesce PDF preview refresh during batch typography updates.
   int _pdfTypographyBatchDepth = 0;
   final ValueNotifier<int> _segmentUiRevisionNotifier = ValueNotifier<int>(0);
@@ -569,6 +575,8 @@ class _TranslationResultPreviewState
   late final ValueNotifier<int> _pdfPreviewJumpPageTriggerNotifier =
       ValueNotifier<int>(0);
   int _pdfPreviewJumpPageTrigger = 0;
+  late final ValueNotifier<bool> _autoFollowSegmentPdfPageNotifier =
+      ValueNotifier<bool>(false);
   bool _isRefreshingForFilter = false;
 
   // PERFORMANCE: Cache exclusion counts to avoid expensive recalculation on every rebuild
@@ -969,8 +977,11 @@ class _TranslationResultPreviewState
     _selectedPdfPageNumbersNotifier.dispose();
     _pdfPreviewJumpPageNotifier.dispose();
     _pdfPreviewJumpPageTriggerNotifier.dispose();
+    _autoFollowSegmentPdfPageNotifier.dispose();
     _highlightedIndexNotifier.dispose();
     _pdfPreviewRevisionNotifier.dispose();
+    _pdfPreviewDirtySegmentsNotifier.dispose();
+    _pdfPreviewRevisionDebounceTimer?.cancel();
     _segmentUiRevisionNotifier.dispose();
     _scrollManager?.dispose();
     _comparisonScrollController.dispose();
@@ -1240,6 +1251,23 @@ class _TranslationResultPreviewState
     }
     _pdfPreviewJumpPageNotifier.value = pageNumber;
     _pdfPreviewJumpPageTriggerNotifier.value = ++_pdfPreviewJumpPageTrigger;
+  }
+
+  void _followSegmentPdfPage(int index) {
+    final int? page = _readPdfPageNumber(_allSegmentsMetadata[index]);
+    if (page != null && page >= 1) {
+      _requestPdfPreviewJump(page);
+    }
+  }
+
+  void _setAutoFollowSegmentPdfPage(bool enabled) {
+    if (_autoFollowSegmentPdfPageNotifier.value == enabled) {
+      return;
+    }
+    _autoFollowSegmentPdfPageNotifier.value = enabled;
+    if (enabled && highlightedIndex != null) {
+      _followSegmentPdfPage(highlightedIndex!);
+    }
   }
 
   Future<void> _handlePdfPageFilterChanged(
@@ -2768,7 +2796,7 @@ class _TranslationResultPreviewState
           await _segmentsPaginationController!.refresh();
         }
         if (_isPdfSourceFile()) {
-          _notifyPdfPreviewRevisionChanged();
+          _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
         }
       }
 
@@ -3362,7 +3390,7 @@ class _TranslationResultPreviewState
           // Trigger rebuild so itemConverter uses updated _allSegmentsMetadata
         });
         if (_isPdfSourceFile()) {
-          _notifyPdfPreviewRevisionChanged();
+          _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
         }
         MessageService.showInfo(context, 'Segment translation cleared');
       }
@@ -4584,8 +4612,13 @@ class _TranslationResultPreviewState
     }
   }
 
-  /// Bump PDF preview cache revision and optionally refresh segment panel UI.
-  void _notifyPdfPreviewRevisionChanged({bool refreshSegmentPanel = true}) {
+  void _flushPdfPreviewRevisionChanged({bool refreshSegmentPanel = true}) {
+    _pdfPreviewRevisionDebounceTimer?.cancel();
+    final Set<int> dirtySegments =
+        Set<int>.from(_pendingDirtySegmentIndices);
+    _pendingDirtySegmentIndices.clear();
+    // Update dirty segments before revision so preview tab reads both together.
+    _pdfPreviewDirtySegmentsNotifier.value = dirtySegments;
     _pdfPreviewRevision++;
     _pdfPreviewRevisionNotifier.value = _pdfPreviewRevision;
     if (refreshSegmentPanel) {
@@ -4593,12 +4626,57 @@ class _TranslationResultPreviewState
     }
   }
 
+  void _schedulePdfPreviewRevisionChanged({
+    int? dirtySegmentIndex,
+    Iterable<int>? dirtySegmentIndices,
+    bool refreshSegmentPanel = true,
+  }) {
+    if (dirtySegmentIndex != null) {
+      _pendingDirtySegmentIndices.add(dirtySegmentIndex);
+    }
+    if (dirtySegmentIndices != null) {
+      _pendingDirtySegmentIndices.addAll(dirtySegmentIndices);
+    }
+    _pdfPreviewRevisionDebounceTimer?.cancel();
+    _pdfPreviewRevisionDebounceTimer = Timer(_pdfPreviewRevisionDebounce, () {
+      if (!mounted) {
+        return;
+      }
+      _flushPdfPreviewRevisionChanged(refreshSegmentPanel: refreshSegmentPanel);
+    });
+  }
+
+  /// Bump PDF preview cache revision and optionally refresh segment panel UI.
+  void _notifyPdfPreviewRevisionChanged({
+    bool refreshSegmentPanel = true,
+    bool immediate = true,
+    int? dirtySegmentIndex,
+    Iterable<int>? dirtySegmentIndices,
+  }) {
+    if (dirtySegmentIndex != null) {
+      _pendingDirtySegmentIndices.add(dirtySegmentIndex);
+    }
+    if (dirtySegmentIndices != null) {
+      _pendingDirtySegmentIndices.addAll(dirtySegmentIndices);
+    }
+    if (immediate) {
+      _flushPdfPreviewRevisionChanged(refreshSegmentPanel: refreshSegmentPanel);
+      return;
+    }
+    _schedulePdfPreviewRevisionChanged(refreshSegmentPanel: refreshSegmentPanel);
+  }
+
   /// Refresh segment panel and PDF preview once after a batch typography update.
-  Future<void> _finalizePdfTypographyBatchRefresh(int segmentCount) async {
+  Future<void> _finalizePdfTypographyBatchRefresh(
+    int segmentCount, {
+    Iterable<int>? dirtySegmentIndices,
+  }) async {
     if (!mounted) {
       return;
     }
-    _notifyPdfPreviewRevisionChanged();
+    _notifyPdfPreviewRevisionChanged(
+      dirtySegmentIndices: dirtySegmentIndices,
+    );
     _translationResultLog(
       '[PDF_REVISION] Batch typography applied to $segmentCount segment(s); '
       'coalesced PDF preview refresh (rev=$_pdfPreviewRevision)',
@@ -4608,11 +4686,27 @@ class _TranslationResultPreviewState
   }
 
   /// Reload computed PDF typography from backend Typst dry-run enrichment.
-  Future<void> _refreshPdfTypographyMetadata() async {
+  Future<void> _refreshPdfTypographyMetadata({bool forceRefresh = false}) async {
+    if (!forceRefresh && _allSegmentsMetadata.isNotEmpty) {
+      final bool hasTypography = _allSegmentsMetadata.values.any(
+        (Map<String, dynamic> metadata) =>
+            metadata.containsKey('computed_font_size_pt'),
+      );
+      if (hasTypography) {
+        _translationResultLog(
+          '[PDF_REVISION] Skipping typography refresh; metadata already loaded',
+        );
+        return;
+      }
+    }
+
     try {
       final TranslationService svc = TranslationService();
       final Map<String, dynamic> segmentsData =
-          await svc.getTranslationSegments(_apiTaskId(), forceRefresh: true);
+          await svc.getTranslationSegments(
+        _apiTaskId(),
+        forceRefresh: forceRefresh,
+      );
       final List<dynamic>? segments =
           segmentsData['segments'] as List<dynamic>?;
       if (segments == null) {
@@ -4642,7 +4736,7 @@ class _TranslationResultPreviewState
       if (mounted) {
         _segmentUiRevisionNotifier.value++;
         setState(() {});
-        await _segmentsPaginationController?.refresh();
+        unawaited(_segmentsPaginationController?.refresh());
       }
     } catch (e) {
       _translationResultLog(
@@ -4779,7 +4873,12 @@ class _TranslationResultPreviewState
       pdfRevisionMode: true,
       batchSelectionEnabled: true,
       selectedSegmentIndices: selectedSegmentIndices,
-      onSegmentSelectionToggle: onSegmentSelectionToggle,
+      onSegmentSelectionToggle: (int index, bool selected) {
+        onSegmentSelectionToggle(index, selected);
+        if (selected && _autoFollowSegmentPdfPageNotifier.value) {
+          _followSegmentPdfPage(index);
+        }
+      },
       onBulkSelectAll: onBulkSelectAll,
       onBulkInvertSelection: onBulkInvertSelection,
       getFilteredSelectableSegmentIndices: getFilteredSelectableSegmentIndices,
@@ -4800,7 +4899,12 @@ class _TranslationResultPreviewState
       segmentMetadata: _allSegmentsMetadata,
       retranslatingSegments: _retranslatingSegments,
       heightCache: null,
-      onHighlightParagraph: _highlightParagraph,
+      onHighlightParagraph: (int index) {
+        _highlightParagraph(index);
+        if (_autoFollowSegmentPdfPageNotifier.value) {
+          _followSegmentPdfPage(index);
+        }
+      },
       onSegmentEdit: _handleSegmentEdit,
       onEditingStarted: _onEditingStarted,
       onRetrySegment: _handleRetrySegment,
@@ -4961,7 +5065,10 @@ class _TranslationResultPreviewState
       _pdfTypographyBatchDepth--;
       if (_pdfTypographyBatchDepth <= 0) {
         _pdfTypographyBatchDepth = 0;
-        await _finalizePdfTypographyBatchRefresh(sorted.length);
+        await _finalizePdfTypographyBatchRefresh(
+          sorted.length,
+          dirtySegmentIndices: sorted,
+        );
       }
     }
   }
@@ -5105,7 +5212,7 @@ class _TranslationResultPreviewState
       }
 
       if (mounted && _pdfTypographyBatchDepth == 0) {
-        _notifyPdfPreviewRevisionChanged();
+        _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
         setState(() {});
         await _segmentsPaginationController?.refresh();
       }
@@ -5516,6 +5623,7 @@ class _TranslationResultPreviewState
           translatedPdfUrl: effectiveDownloads?['pdf'],
           pdfRenderRevision: _pdfPreviewRevision,
           pdfRenderRevisionListenable: _pdfPreviewRevisionNotifier,
+          pdfPreviewDirtySegmentsListenable: _pdfPreviewDirtySegmentsNotifier,
           segmentUiRevisionListenable: _segmentUiRevisionNotifier,
           translatedHtmlUrl: translatedHtmlUrl,
           initialSyncScroll:
@@ -5526,6 +5634,7 @@ class _TranslationResultPreviewState
           },
           onRequestPreviewSettings: _handlePreviewSettingsRequest,
           onDownload: widget.onDownload,
+          onShowDownload: _showDownloadDialog,
           pdfRevisionSegmentPanelBuilder: _isPdfSourceFile() &&
                   baseMode == TranslationPreviewMode.pdfPreserve
               ? _buildPdfRevisionSegmentPanel
@@ -5537,7 +5646,8 @@ class _TranslationResultPreviewState
                     SegmentPdfTypographyDialogMode.fontOnly,
                   )
               : null,
-          onBatchLeadingApply: _isPdfSourceFile() &&
+          onBatchLeadingApply: kPdfLeadingTypographyUiEnabled &&
+                  _isPdfSourceFile() &&
                   baseMode == TranslationPreviewMode.pdfPreserve
               ? (Set<int> indices) => _handleBatchPdfTypography(
                     indices,
@@ -5555,6 +5665,14 @@ class _TranslationResultPreviewState
           pdfPreviewJumpPageTriggerListenable: _isPdfSourceFile() &&
                   baseMode == TranslationPreviewMode.pdfPreserve
               ? _pdfPreviewJumpPageTriggerNotifier
+              : null,
+          autoFollowSegmentPdfPageListenable: _isPdfSourceFile() &&
+                  baseMode == TranslationPreviewMode.pdfPreserve
+              ? _autoFollowSegmentPdfPageNotifier
+              : null,
+          onAutoFollowSegmentPdfPageChanged: _isPdfSourceFile() &&
+                  baseMode == TranslationPreviewMode.pdfPreserve
+              ? _setAutoFollowSegmentPdfPage
               : null,
           getFilteredSelectableSegmentIndices: _isPdfSourceFile() &&
                   baseMode == TranslationPreviewMode.pdfPreserve

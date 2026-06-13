@@ -6722,6 +6722,24 @@ abstract class AppLocalizations {
   /// **'Auto refresh PDF'**
   String get translationPreviewAutoRefreshPdf;
 
+  /// No description provided for @translationPreviewFollowSegmentPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow segment page'**
+  String get translationPreviewFollowSegmentPage;
+
+  /// No description provided for @translationPreviewFollowSegmentPageDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, the PDF preview jumps to the page of the focused or checked segment'**
+  String get translationPreviewFollowSegmentPageDesc;
+
+  /// No description provided for @translationPreviewPdfPageIndicator.
+  ///
+  /// In en, this message translates to:
+  /// **'Page {current} / {total}'**
+  String translationPreviewPdfPageIndicator(String current, String total);
+
   /// No description provided for @translationPreviewRefreshPdf.
   ///
   /// In en, this message translates to:

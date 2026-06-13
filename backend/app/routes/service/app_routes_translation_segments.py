@@ -443,6 +443,65 @@ async def get_translation_segments_api(
     return JSONResponse(content=response_data)
 
 
+@router.get(
+    "/translation-segments/{task_id}/pdf-affected-pages",
+    summary="PDF pages affected by segment edits",
+    description=(
+        "Return one-based page numbers that must be re-rendered when the given "
+        "segments change, including cross-page overflow targets."
+    ),
+)
+async def get_pdf_affected_pages_api(
+    task_id: str,
+    indices: str = Query(..., description="Comma-separated segment indices"),
+):
+    task_state = task_manager.get_task(task_id)
+    if task_state is None:
+        raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
+
+    segment_indices: List[int] = []
+    seen: set[int] = set()
+    for part in indices.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            value = int(part)
+        except ValueError:
+            continue
+        if value < 0 or value in seen:
+            continue
+        seen.add(value)
+        segment_indices.append(value)
+
+    if not segment_indices:
+        raise HTTPException(status_code=400, detail="No valid segment indices provided.")
+
+    segments_data = _ts_module().get_translation_segments(task_id)
+    segments_list: List[Dict[str, Any]] = []
+    if isinstance(segments_data, dict):
+        raw = segments_data.get("segments") or []
+        segments_list = [s for s in raw if isinstance(s, dict)]
+
+    layout_doc = _resolve_layout_document(task_id, task_state)
+    from layout.pdf_renderer.typst_overlay.affected_pages import (
+        compute_affected_page_numbers_1based,
+    )
+
+    pages = compute_affected_page_numbers_1based(
+        layout_doc,
+        segments_list,
+        segment_indices,
+        task_state,
+    )
+    return JSONResponse(
+        content={
+            "segment_indices": segment_indices,
+            "affected_pages": pages,
+        }
+    )
+
+
 @router.post(
     "/translation-segments/{task_id}/{segment_index}/update",
     summary="Update a translation segment",

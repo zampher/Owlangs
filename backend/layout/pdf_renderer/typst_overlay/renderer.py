@@ -67,6 +67,8 @@ from layout.pdf_renderer.typst_overlay.source_cleanup import (
 )
 from layout.pdf_renderer.typst_overlay.overlay_merge import (
     merge_overlay_pdf,
+    patch_merged_pdf_pages,
+    patch_merged_pdf_pages_from_rendered,
 )
 from layout.pdf_renderer.typst_overlay.visual_images import (
     collect_visual_image_placements,
@@ -1142,6 +1144,12 @@ class TypstOverlayRenderer(BasePDFRenderer):
             diagnostics["cleanup_elapsed"] = 0.0
             diagnostics["cleanup_error"] = str(e)
 
+        cleaned_output = getattr(self.config, "cleaned_source_output_path", None)
+        if cleaned_output is not None:
+            cleaned_output = Path(cleaned_output)
+            cleaned_output.parent.mkdir(parents=True, exist_ok=True)
+            cleaned_output.write_bytes(cleaned_pdf_bytes)
+
         # ---- Step 3: Build PageSpecs ----
         specs_started = time.perf_counter()
         page_specs: List[RenderPageSpec] = []
@@ -1149,7 +1157,11 @@ class TypstOverlayRenderer(BasePDFRenderer):
         import fitz
         src_doc = fitz.open(stream=cleaned_pdf_bytes, filetype="pdf")
         try:
-            for page_idx in sorted(render_blocks_by_page.keys()):
+            page_keys = sorted(render_blocks_by_page.keys())
+            render_only = getattr(self.config, "render_page_indices", None)
+            if render_only is not None:
+                page_keys = [k for k in page_keys if k in render_only]
+            for page_idx in page_keys:
                 if 0 <= page_idx < len(src_doc):
                     page = src_doc[page_idx]
                     spec = RenderPageSpec(
@@ -1210,6 +1222,23 @@ class TypstOverlayRenderer(BasePDFRenderer):
             # Read compiled PDF directly (no merge needed — source is background)
             final_pdf_bytes = bg_pdf_path.read_bytes()
 
+            base_merged = getattr(self.config, "base_merged_pdf_bytes", None)
+            render_only = getattr(self.config, "render_page_indices", None)
+            if render_only is not None and base_merged is not None:
+                if not page_specs:
+                    unified_logger.warning(
+                        LogModule.RESTOR,
+                        "[TYPST_OVERLAY] Partial background-embed refresh has no "
+                        "page specs; keeping cached PDF unchanged.",
+                    )
+                    return base_merged
+                page_indices = [spec.page_index for spec in page_specs]
+                final_pdf_bytes = patch_merged_pdf_pages_from_rendered(
+                    base_merged,
+                    final_pdf_bytes,
+                    page_indices,
+                )
+
             if self._output_path:
                 self._output_path.parent.mkdir(parents=True, exist_ok=True)
                 self._output_path.write_bytes(final_pdf_bytes)
@@ -1266,13 +1295,31 @@ class TypstOverlayRenderer(BasePDFRenderer):
 
         # ---- Step 6: Merge overlay onto cleaned PDF ----
         merge_started = time.perf_counter()
+        base_merged = getattr(self.config, "base_merged_pdf_bytes", None)
+        render_only = getattr(self.config, "render_page_indices", None)
         try:
-            final_pdf_bytes = merge_overlay_pdf(
-                cleaned_pdf_bytes,
-                pdf_path,
-                check_page_count=True,
-                compress=True,
-            )
+            if render_only is not None and base_merged is not None:
+                if not page_specs:
+                    unified_logger.warning(
+                        LogModule.RESTOR,
+                        "[TYPST_OVERLAY] Partial overlay refresh has no page specs; "
+                        "keeping cached PDF unchanged.",
+                    )
+                    final_pdf_bytes = base_merged
+                else:
+                    final_pdf_bytes = patch_merged_pdf_pages(
+                        base_merged,
+                        cleaned_pdf_bytes,
+                        pdf_path,
+                        [spec.page_index for spec in page_specs],
+                    )
+            else:
+                final_pdf_bytes = merge_overlay_pdf(
+                    cleaned_pdf_bytes,
+                    pdf_path,
+                    check_page_count=True,
+                    compress=True,
+                )
         except Exception as e:
             unified_logger.error(
                 LogModule.RESTOR,

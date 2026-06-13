@@ -35,6 +35,7 @@ from .pdf_generator import ENABLE_LAYOUT_PDF_GENERATION, PDFGenerator, DEFAULT_P
 # Serialize pandoc PDF generation per task to avoid concurrent writes to the same path.
 _pandoc_pdf_gen_locks: Dict[str, threading.Lock] = {}
 _pandoc_pdf_gen_locks_guard = threading.Lock()
+_typst_overlay_preview_locks: Dict[str, asyncio.Lock] = {}
 
 
 def _pandoc_pdf_gen_lock(task_id: str) -> threading.Lock:
@@ -42,6 +43,26 @@ def _pandoc_pdf_gen_lock(task_id: str) -> threading.Lock:
         if task_id not in _pandoc_pdf_gen_locks:
             _pandoc_pdf_gen_locks[task_id] = threading.Lock()
         return _pandoc_pdf_gen_locks[task_id]
+
+
+def _typst_overlay_preview_lock(task_id: str) -> asyncio.Lock:
+    with _pandoc_pdf_gen_locks_guard:
+        if task_id not in _typst_overlay_preview_locks:
+            _typst_overlay_preview_locks[task_id] = asyncio.Lock()
+        return _typst_overlay_preview_locks[task_id]
+
+
+def _pdf_page_count(pdf_path: Path) -> Optional[int]:
+    try:
+        import fitz
+
+        doc = fitz.open(pdf_path)
+        try:
+            return len(doc)
+        finally:
+            doc.close()
+    except Exception:
+        return None
 
 
 # Media type mapping for different file types
@@ -1013,6 +1034,27 @@ def completed_task_download_urls(task_id: str, task_state: Dict[str, Any]) -> Di
     return out
 
 
+def _parse_dirty_segment_indices(raw: Optional[str]) -> Optional[List[int]]:
+    """Parse comma-separated segment indices from preview query param."""
+    if not raw or not str(raw).strip():
+        return None
+    indices: List[int] = []
+    seen: set[int] = set()
+    for part in str(raw).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            value = int(part)
+        except ValueError:
+            continue
+        if value < 0 or value in seen:
+            continue
+        seen.add(value)
+        indices.append(value)
+    return indices or None
+
+
 async def _typst_overlay_pdf_response(
     task_state: Dict[str, Any],
     task_id: str,
@@ -1021,13 +1063,25 @@ async def _typst_overlay_pdf_response(
     equation_format: Optional[str],
     pdf_generator: PDFGenerator,
     chart_body_format: Optional[str] = None,
+    dirty_segment_indices: Optional[List[int]] = None,
 ) -> FileResponse:
     """Generate a high-fidelity PDF using Typst overlay rendering.
 
-    This bypasses ENABLE_LAYOUT_PDF_GENERATION since Typst overlay is
-    an independent rendering path.
+    Uses content-hash cache to skip redundant renders. When dirty segment
+    indices are provided and a cache exists, only affected pages are
+    re-rendered and patched into the cached PDF.
     """
     from layout.pdf_renderer import TYPST_OVERLAY_AVAILABLE as _toa, _typst_overlay_import_error as _toe
+    from layout.pdf_renderer.typst_overlay.affected_pages import (
+        compute_affected_page_indices_0based,
+    )
+    from layout.pdf_renderer.typst_overlay.pdf_preview_cache import (
+        compute_typst_overlay_content_fingerprint,
+        get_pdf_preview_cache,
+        read_cached_cleaned_source_path,
+        read_cached_pdf_path,
+        store_pdf_preview_cache,
+    )
 
     if not _toa:
         raise HTTPException(
@@ -1049,18 +1103,19 @@ async def _typst_overlay_pdf_response(
             detail=f"Original PDF file not found for Typst overlay rendering: {source_pdf_path}",
         )
 
-    # Build block text map from translation segments
+    segments: List[Dict[str, Any]] = []
     segments_data = task_state.get("translation_segments")
-    if not segments_data or not isinstance(segments_data, dict):
-        block_text_map: Dict[int, str] = {}
-        font_size_by_block_index: Dict[int, float] = {}
-        font_weight_by_block_index: Dict[int, str] = {}
-        font_style_by_block_index: Dict[int, str] = {}
-        leading_em_by_block_index: Dict[int, float] = {}
-    else:
-        segments = segments_data.get("segments") or []
+    if segments_data and isinstance(segments_data, dict):
+        raw_segments = segments_data.get("segments") or []
+        segments = [s for s in raw_segments if isinstance(s, dict)]
+
+    block_text_map: Dict[int, str] = {}
+    font_size_by_block_index: Dict[int, float] = {}
+    font_weight_by_block_index: Dict[int, str] = {}
+    font_style_by_block_index: Dict[int, str] = {}
+    leading_em_by_block_index: Dict[int, float] = {}
+    if segments:
         is_deep_split_enabled = bool(task_state.get("deep_split"))
-        # Per-segment modified_text with target_text fallback (see pdf_generator).
         text_field = "target_text"
         block_text_map = pdf_generator.build_block_text_map_from_segments(
             layout_doc,
@@ -1106,7 +1161,6 @@ async def _typst_overlay_pdf_response(
                 f"{sorted(leading_em_by_block_index.items())[:8]}",
             )
 
-    # Get zip bytes from layout_source_zip (same source as DOCX / layoutimg registration)
     zip_bytes = _resolve_layout_zip_bytes(task_state)
     if not zip_bytes:
         logger.warning(
@@ -1124,6 +1178,44 @@ async def _typst_overlay_pdf_response(
         chart_body_format,
     )
 
+    content_hash = compute_typst_overlay_content_fingerprint(
+        segments,
+        equation_format=eq_fmt,
+        table_body_format=tbl_fmt,
+        chart_body_format=chart_fmt,
+        font_size_by_block_index=font_size_by_block_index or None,
+        font_weight_by_block_index=font_weight_by_block_index or None,
+        font_style_by_block_index=font_style_by_block_index or None,
+        leading_em_by_block_index=leading_em_by_block_index or None,
+    )
+
+    output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
+    output_dir.mkdir(exist_ok=True)
+    sfx = _get_output_suffix(task_state)
+    pdf_file = output_dir / f"{file_stem}{sfx}.pdf"
+    cleaned_source_file = output_dir / f"{file_stem}{sfx}_cleaned_source.pdf"
+
+    cache = get_pdf_preview_cache(task_state)
+    cached_hash = cache.get("content_hash")
+    cached_pdf = read_cached_pdf_path(task_state)
+    cached_cleaned = read_cached_cleaned_source_path(task_state)
+
+    if cached_hash == content_hash and cached_pdf is not None:
+        logger.info(
+            LogModule.EXPORT,
+            f"[TYPST_OVERLAY] Task {task_id}: serving cached PDF preview "
+            f"(hash={content_hash[:12]})",
+        )
+        task_state.setdefault("downloadable_files", {})["pdf"] = {
+            "path": str(cached_pdf),
+        }
+        return FileResponse(
+            path=str(cached_pdf),
+            media_type="application/pdf",
+            filename=cached_pdf.name,
+            headers={"Cache-Control": "no-store"},
+        )
+
     from layout.pdf_renderer import render_layout_pdf
 
     loop = asyncio.get_event_loop()
@@ -1133,58 +1225,207 @@ async def _typst_overlay_pdf_response(
     elif hasattr(payload_obj, "to_lang"):
         target_language = getattr(payload_obj, "to_lang", None) or getattr(payload_obj, "target_language", None)
 
-    # Save PDF
-    output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
-    output_dir.mkdir(exist_ok=True)
-    sfx = _get_output_suffix(task_state)
-    pdf_file = output_dir / f"{file_stem}{sfx}.pdf"
-
-    try:
-        await loop.run_in_executor(
-            None,
-            lambda: render_layout_pdf(
-                layout_doc,
-                translated_text_by_block_index=block_text_map if block_text_map else None,
-                zip_bytes=zip_bytes,
-                output_path=pdf_file,
-                table_body_format=tbl_fmt,
-                equation_format=eq_fmt,
-                chart_body_format=chart_fmt,
-                target_language=target_language,
-                renderer_type="typst_overlay",
-                source_pdf_path=source_pdf_path,
-                font_size_by_block_index=(
-                    font_size_by_block_index if font_size_by_block_index else None
-                ),
-                font_weight_by_block_index=(
-                    font_weight_by_block_index if font_weight_by_block_index else None
-                ),
-                font_style_by_block_index=(
-                    font_style_by_block_index if font_style_by_block_index else None
-                ),
-                leading_em_by_block_index=(
-                    leading_em_by_block_index if leading_em_by_block_index else None
-                ),
-            ),
-        )
-    except Exception as e:
-        error_msg = str(e)
-        logger.error(
+    if dirty_segment_indices:
+        logger.info(
             LogModule.EXPORT,
-            f"[TYPST_OVERLAY] Render failed: {error_msg}",
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=f"High-fidelity PDF generation failed: {error_msg}",
+            f"[TYPST_OVERLAY] Task {task_id}: preview dirty segments "
+            f"from client: {dirty_segment_indices}",
         )
 
-    # Store in task_state for caching
-    task_state.setdefault("downloadable_files", {})["pdf"] = {"path": str(pdf_file)}
+    render_page_indices = None
+    base_merged_pdf_bytes = None
+    expected_page_count = max(1, int(getattr(layout_doc, "page_count", 0) or 0))
+    if dirty_segment_indices and cached_pdf is not None and cache.get("has_full_render"):
+        cached_page_count = _pdf_page_count(cached_pdf)
+        if cached_page_count is not None and cached_page_count != expected_page_count:
+            logger.warning(
+                LogModule.EXPORT,
+                f"[TYPST_OVERLAY] Task {task_id}: cached PDF page count "
+                f"{cached_page_count} != layout {expected_page_count}; "
+                "falling back to full preview render",
+            )
+        else:
+            affected = compute_affected_page_indices_0based(
+                layout_doc,
+                segments,
+                dirty_segment_indices,
+                task_state,
+            )
+            if affected:
+                render_page_indices = set(affected)
+                base_merged_pdf_bytes = cached_pdf.read_bytes()
+                logger.info(
+                    LogModule.EXPORT,
+                    f"[TYPST_OVERLAY] Task {task_id}: partial PDF preview refresh "
+                    f"for pages {[p + 1 for p in affected]} "
+                    f"(0-based {affected}, segments={dirty_segment_indices})",
+                )
+    elif dirty_segment_indices and cached_pdf is not None and not cache.get("has_full_render"):
+        logger.info(
+            LogModule.EXPORT,
+            f"[TYPST_OVERLAY] Task {task_id}: skipping partial preview until a "
+            "full PDF preview has been cached",
+        )
 
-    logger.info(
-        LogModule.EXPORT,
-        f"[TYPST_OVERLAY] High-fidelity PDF generated: {pdf_file.stat().st_size} bytes",
-    )
+    async with _typst_overlay_preview_lock(task_id):
+        try:
+            await loop.run_in_executor(
+                None,
+                lambda: render_layout_pdf(
+                    layout_doc,
+                    translated_text_by_block_index=block_text_map if block_text_map else None,
+                    zip_bytes=zip_bytes,
+                    output_path=pdf_file,
+                    table_body_format=tbl_fmt,
+                    equation_format=eq_fmt,
+                    chart_body_format=chart_fmt,
+                    target_language=target_language,
+                    renderer_type="typst_overlay",
+                    source_pdf_path=source_pdf_path,
+                    font_size_by_block_index=(
+                        font_size_by_block_index if font_size_by_block_index else None
+                    ),
+                    font_weight_by_block_index=(
+                        font_weight_by_block_index if font_weight_by_block_index else None
+                    ),
+                    font_style_by_block_index=(
+                        font_style_by_block_index if font_style_by_block_index else None
+                    ),
+                    leading_em_by_block_index=(
+                        leading_em_by_block_index if leading_em_by_block_index else None
+                    ),
+                    render_page_indices=render_page_indices,
+                    base_merged_pdf_bytes=base_merged_pdf_bytes,
+                    cleaned_source_output_path=cleaned_source_file,
+                ),
+            )
+        except Exception as e:
+            if render_page_indices is not None and base_merged_pdf_bytes is not None:
+                logger.warning(
+                    LogModule.EXPORT,
+                    f"[TYPST_OVERLAY] Partial PDF preview failed for task {task_id}: {e}; "
+                    "falling back to full render",
+                )
+                render_page_indices = None
+                base_merged_pdf_bytes = None
+                try:
+                    await loop.run_in_executor(
+                        None,
+                        lambda: render_layout_pdf(
+                            layout_doc,
+                            translated_text_by_block_index=block_text_map if block_text_map else None,
+                            zip_bytes=zip_bytes,
+                            output_path=pdf_file,
+                            table_body_format=tbl_fmt,
+                            equation_format=eq_fmt,
+                            chart_body_format=chart_fmt,
+                            target_language=target_language,
+                            renderer_type="typst_overlay",
+                            source_pdf_path=source_pdf_path,
+                            font_size_by_block_index=(
+                                font_size_by_block_index if font_size_by_block_index else None
+                            ),
+                            font_weight_by_block_index=(
+                                font_weight_by_block_index if font_weight_by_block_index else None
+                            ),
+                            font_style_by_block_index=(
+                                font_style_by_block_index if font_style_by_block_index else None
+                            ),
+                            leading_em_by_block_index=(
+                                leading_em_by_block_index if leading_em_by_block_index else None
+                            ),
+                            cleaned_source_output_path=cleaned_source_file,
+                        ),
+                    )
+                except Exception as retry_error:
+                    error_msg = str(retry_error)
+                    logger.error(
+                        LogModule.EXPORT,
+                        f"[TYPST_OVERLAY] Render failed: {error_msg}",
+                    )
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"High-fidelity PDF generation failed: {error_msg}",
+                    )
+            else:
+                error_msg = str(e)
+                logger.error(
+                    LogModule.EXPORT,
+                    f"[TYPST_OVERLAY] Render failed: {error_msg}",
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"High-fidelity PDF generation failed: {error_msg}",
+                )
+
+        output_page_count = _pdf_page_count(pdf_file)
+        if (
+            render_page_indices is not None
+            and output_page_count is not None
+            and output_page_count != expected_page_count
+        ):
+            logger.warning(
+                LogModule.EXPORT,
+                f"[TYPST_OVERLAY] Task {task_id}: partial preview produced "
+                f"{output_page_count} page(s), expected {expected_page_count}; "
+                "retrying with full render",
+            )
+            render_page_indices = None
+            base_merged_pdf_bytes = None
+            try:
+                await loop.run_in_executor(
+                    None,
+                    lambda: render_layout_pdf(
+                        layout_doc,
+                        translated_text_by_block_index=block_text_map if block_text_map else None,
+                        zip_bytes=zip_bytes,
+                        output_path=pdf_file,
+                        table_body_format=tbl_fmt,
+                        equation_format=eq_fmt,
+                        chart_body_format=chart_fmt,
+                        target_language=target_language,
+                        renderer_type="typst_overlay",
+                        source_pdf_path=source_pdf_path,
+                        font_size_by_block_index=(
+                            font_size_by_block_index if font_size_by_block_index else None
+                        ),
+                        font_weight_by_block_index=(
+                            font_weight_by_block_index if font_weight_by_block_index else None
+                        ),
+                        font_style_by_block_index=(
+                            font_style_by_block_index if font_style_by_block_index else None
+                        ),
+                        leading_em_by_block_index=(
+                            leading_em_by_block_index if leading_em_by_block_index else None
+                        ),
+                        cleaned_source_output_path=cleaned_source_file,
+                    ),
+                )
+            except Exception as retry_error:
+                error_msg = str(retry_error)
+                logger.error(
+                    LogModule.EXPORT,
+                    f"[TYPST_OVERLAY] Full render retry failed: {error_msg}",
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"High-fidelity PDF generation failed: {error_msg}",
+                )
+
+        store_pdf_preview_cache(
+            task_state,
+            content_hash=content_hash,
+            pdf_path=pdf_file,
+            cleaned_source_path=cleaned_source_file if cleaned_source_file.is_file() else None,
+            partial_render=render_page_indices is not None,
+        )
+        task_state.setdefault("downloadable_files", {})["pdf"] = {"path": str(pdf_file)}
+
+        logger.info(
+            LogModule.EXPORT,
+            f"[TYPST_OVERLAY] High-fidelity PDF generated: {pdf_file.stat().st_size} bytes "
+            f"(partial={'yes' if render_page_indices else 'no'})",
+        )
 
     return FileResponse(
         path=str(pdf_file),
@@ -1515,6 +1756,7 @@ class DownloadService:
         target_text_italic: Optional[bool] = None,
         target_text_color: Optional[str] = None,
         renderer_type: Optional[str] = None,
+        dirty_segments: Optional[str] = None,
     ) -> FileResponse:
         """
         Download translation result file.
@@ -1557,6 +1799,8 @@ class DownloadService:
             raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
 
         sfx = _get_output_suffix(task_state)
+
+        dirty_segment_indices = _parse_dirty_segment_indices(dirty_segments)
 
         # Serve uploaded source PDF for bilingual PDF compare preview (PDF tasks only).
         if file_type == "source-pdf":
@@ -3354,6 +3598,7 @@ class DownloadService:
                                     table_body_format, equation_format,
                                     self.pdf_generator,
                                     chart_body_format=chart_body_format,
+                                    dirty_segment_indices=dirty_segment_indices,
                                 )
 
                             if renderer_type == "pandoc":
@@ -3676,6 +3921,7 @@ class DownloadService:
                                             table_body_format, equation_format,
                                             self.pdf_generator,
                                             chart_body_format=chart_body_format,
+                                            dirty_segment_indices=dirty_segment_indices,
                                         )
 
                                     if renderer_type == "pandoc":
@@ -4012,6 +4258,7 @@ class DownloadService:
                         table_body_format, equation_format,
                         self.pdf_generator,
                         chart_body_format=chart_body_format,
+                        dirty_segment_indices=dirty_segment_indices,
                     )
 
                 # For PDF files, only use layout-based generation (high-fidelity, no fallback to HTML-to-PDF)
@@ -4915,6 +5162,7 @@ class DownloadService:
                         equation_format,
                         self.pdf_generator,
                         chart_body_format=chart_body_format,
+                        dirty_segment_indices=dirty_segment_indices,
                     )
                 file_path = file_info["path"]
                 filename = file_info.get("filename") or os.path.basename(file_path)

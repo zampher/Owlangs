@@ -14,6 +14,7 @@ import '../../providers/format_settings_provider.dart';
 import '../pdf_continuous_scroll_view.dart';
 import '../pdf_compare_continuous_view.dart';
 import '../pdf_preview.dart';
+import 'segment_pdf_typography_dialog.dart';
 import 'html_compare_reader_view.dart';
 import 'pdf_revision_segment_panel_builder.dart';
 import 'preview_selection.dart';
@@ -30,6 +31,7 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
     this.translatedPdfUrl,
     this.pdfRenderRevision = 0,
     this.pdfRenderRevisionListenable,
+    this.pdfPreviewDirtySegmentsListenable,
     this.segmentUiRevisionListenable,
     this.translatedHtmlUrl,
     this.initialSyncScroll = false,
@@ -41,9 +43,12 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
     this.onPdfRevisionModeEntered,
     this.pdfPreviewJumpPageListenable,
     this.pdfPreviewJumpPageTriggerListenable,
+    this.autoFollowSegmentPdfPageListenable,
+    this.onAutoFollowSegmentPdfPageChanged,
     super.key,
     this.onRequestPreviewSettings,
     this.onDownload,
+    this.onShowDownload,
     this.onSyncScrollChanged,
   });
 
@@ -54,6 +59,7 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
   final String? translatedPdfUrl;
   final int pdfRenderRevision;
   final ValueListenable<int>? pdfRenderRevisionListenable;
+  final ValueListenable<Set<int>>? pdfPreviewDirtySegmentsListenable;
   final ValueListenable<int>? segmentUiRevisionListenable;
   final String? translatedHtmlUrl;
   final bool initialSyncScroll;
@@ -65,8 +71,11 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
   final Future<void> Function()? onPdfRevisionModeEntered;
   final ValueListenable<int?>? pdfPreviewJumpPageListenable;
   final ValueListenable<int>? pdfPreviewJumpPageTriggerListenable;
+  final ValueListenable<bool>? autoFollowSegmentPdfPageListenable;
+  final ValueChanged<bool>? onAutoFollowSegmentPdfPageChanged;
   final Future<PreviewSelection?> Function()? onRequestPreviewSettings;
   final void Function(String format, String url)? onDownload;
+  final Future<void> Function()? onShowDownload;
   final ValueChanged<bool>? onSyncScrollChanged;
 
   @override
@@ -83,9 +92,12 @@ class _TranslationFullComparePreviewTabState
   bool _pdfRevisionMode = false;
   bool _autoRefreshPdf = true;
   int _displayPdfRevision = 0;
+  Set<int> _displayDirtySegmentIndices = <int>{};
   final Set<int> _selectedSegmentIndices = <int>{};
   final PdfContinuousScrollController _pdfNavigationController =
       PdfContinuousScrollController();
+  int _comparePdfCurrentPage = 1;
+  int _comparePdfTotalPages = 0;
 
   bool get _supportsPdfRevision =>
       widget.baseMode == TranslationPreviewMode.pdfPreserve &&
@@ -112,6 +124,9 @@ class _TranslationFullComparePreviewTabState
     widget.pdfPreviewJumpPageTriggerListenable
         ?.addListener(_onPdfPreviewJumpPageRequested);
     if (widget.initialPdfRevisionMode && _supportsPdfRevision) {
+      // Enter revision layout on the first frame so we do not briefly mount
+      // PdfCompareContinuousView (source + target downloads) before revision mode.
+      _pdfRevisionMode = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(_enterPdfRevisionMode());
       });
@@ -175,6 +190,9 @@ class _TranslationFullComparePreviewTabState
     if (_autoRefreshPdf && revision != _displayPdfRevision) {
       setState(() {
         _displayPdfRevision = revision;
+        _displayDirtySegmentIndices = Set<int>.from(
+          widget.pdfPreviewDirtySegmentsListenable?.value ?? const <int>{},
+        );
       });
     }
   }
@@ -184,6 +202,9 @@ class _TranslationFullComparePreviewTabState
         widget.pdfRenderRevisionListenable?.value ?? widget.pdfRenderRevision;
     setState(() {
       _displayPdfRevision = revision;
+      _displayDirtySegmentIndices = Set<int>.from(
+        widget.pdfPreviewDirtySegmentsListenable?.value ?? const <int>{},
+      );
     });
   }
 
@@ -195,22 +216,24 @@ class _TranslationFullComparePreviewTabState
     setState(() {
       _pdfRevisionMode = false;
       _selectedSegmentIndices.clear();
+      _comparePdfCurrentPage = 1;
+      _comparePdfTotalPages = 0;
     });
   }
 
   Future<void> _enterPdfRevisionMode() async {
-    if (!_supportsPdfRevision || _pdfRevisionMode) {
+    if (!_supportsPdfRevision) {
       return;
+    }
+    if (!_pdfRevisionMode && mounted) {
+      setState(() {
+        _pdfRevisionMode = true;
+      });
     }
     final Future<void> Function()? enterHandler =
         widget.onPdfRevisionModeEntered;
     if (enterHandler != null) {
-      await enterHandler();
-    }
-    if (mounted) {
-      setState(() {
-        _pdfRevisionMode = true;
-      });
+      unawaited(enterHandler());
     }
   }
 
@@ -270,6 +293,9 @@ class _TranslationFullComparePreviewTabState
       if (enabled) {
         _displayPdfRevision = widget.pdfRenderRevisionListenable?.value ??
             widget.pdfRenderRevision;
+        _displayDirtySegmentIndices = Set<int>.from(
+          widget.pdfPreviewDirtySegmentsListenable?.value ?? const <int>{},
+        );
       }
     });
   }
@@ -332,6 +358,7 @@ class _TranslationFullComparePreviewTabState
       {
         ...formatParams,
         ...previewCacheBustParams(_displayPdfRevision),
+        ...pdfPreviewDirtySegmentParams(_displayDirtySegmentIndices),
       },
     );
   }
@@ -426,6 +453,17 @@ class _TranslationFullComparePreviewTabState
         targetDownloadUrl: targetPdfUrl,
         targetRendererType: widget.baseMode.rendererType,
         linkedScroll: _syncScrollEnabled,
+        onVisiblePageChanged: (int page, int totalPages) {
+          if (!mounted ||
+              (page == _comparePdfCurrentPage &&
+                  totalPages == _comparePdfTotalPages)) {
+            return;
+          }
+          setState(() {
+            _comparePdfCurrentPage = page;
+            _comparePdfTotalPages = totalPages;
+          });
+        },
       ),
     );
   }
@@ -508,6 +546,34 @@ class _TranslationFullComparePreviewTabState
                 tooltip: l10n.translationPreviewRefreshPdf,
                 onPressed: _refreshPdfManually,
               ),
+              if (widget.autoFollowSegmentPdfPageListenable != null &&
+                  widget.onAutoFollowSegmentPdfPageChanged != null)
+                ValueListenableBuilder<bool>(
+                  valueListenable: widget.autoFollowSegmentPdfPageListenable!,
+                  builder: (BuildContext context, bool enabled, Widget? _) {
+                    return Tooltip(
+                      message: l10n.translationPreviewFollowSegmentPageDesc,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Checkbox(
+                            value: enabled,
+                            onChanged: (bool? value) {
+                              widget.onAutoFollowSegmentPdfPageChanged!(
+                                value ?? false,
+                              );
+                            },
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          Text(
+                            l10n.translationPreviewFollowSegmentPage,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               if (_selectedSegmentIndices.isNotEmpty &&
                   widget.onBatchFontApply != null)
                 Tooltip(
@@ -518,7 +584,8 @@ class _TranslationFullComparePreviewTabState
                     label: Text(l10n.translationPreviewBatchFont),
                   ),
                 ),
-              if (_selectedSegmentIndices.isNotEmpty &&
+              if (kPdfLeadingTypographyUiEnabled &&
+                  _selectedSegmentIndices.isNotEmpty &&
                   widget.onBatchLeadingApply != null)
                 Tooltip(
                   message: l10n.translationPreviewBatchLeadingTooltip,
@@ -552,10 +619,33 @@ class _TranslationFullComparePreviewTabState
                 ),
               ),
             ],
+            if (!_pdfRevisionMode &&
+                _isPdfCompare &&
+                _comparePdfTotalPages > 0) ...<Widget>[
+              const SizedBox(width: 12),
+              Text(
+                l10n.translationPreviewPdfPageIndicator(
+                  _comparePdfCurrentPage.toString(),
+                  _comparePdfTotalPages.toString(),
+                ),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ],
             const Spacer(),
             PreviewZoomToolbarActions(
               viewportController: _viewportController,
             ),
+            if (widget.onShowDownload != null)
+              IconButton(
+                icon: const Icon(Icons.download, size: 18),
+                tooltip: l10n.translationToolbarExportTooltip,
+                onPressed: () {
+                  unawaited(widget.onShowDownload!());
+                },
+              ),
             if (widget.onRequestPreviewSettings != null)
               IconButton(
                 icon: const Icon(Icons.settings, size: 18),

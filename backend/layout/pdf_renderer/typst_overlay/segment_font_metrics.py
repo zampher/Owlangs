@@ -465,6 +465,11 @@ def invalidate_pdf_export_cache(task_state: Dict[str, Any]) -> None:
         files.pop("pdf", None)
 
 
+def invalidate_pdf_preview_cache(task_state: Dict[str, Any]) -> None:
+    """Drop in-memory PDF preview cache after typography or segment edits."""
+    task_state.pop("_pdf_preview_cache", None)
+
+
 def apply_user_font_override(
     rb: RenderBlock,
     font_size_pt: float,
@@ -513,6 +518,15 @@ def apply_user_typography_override(
         updates["fit_min_leading_em"] = normalized_leading
         # Lock user leading during fit-to-box; font size may still shrink to fit bbox.
         updates["leading_em_locked"] = True
+        # Keep font size fixed for leading-only edits so line spacing changes are visible.
+        # Auto fit-to-box often already uses ~0.875em leading; shrinking font there can
+        # mask a user change to 0.9em when only max font was capped before.
+        if rb.font_size_pt > 0 and not rb.font_size_locked:
+            pt = rb.font_size_pt
+            updates["fit_max_font_size_pt"] = pt
+            # When tightening line spacing, keep font size fixed so the change is visible.
+            if normalized_leading < rb.leading_em:
+                updates["fit_min_font_size_pt"] = pt
     if not updates:
         return rb
     return RenderBlock(**{**rb.__dict__, **updates})

@@ -10,7 +10,7 @@ supporting multiple rendering backends (ReportLab, Typst Overlay, etc.).
 
 from layout.pdf_renderer.config import PDFRendererConfig
 from layout.base import LayoutDocument
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Set, Union
 from pathlib import Path
 
 
@@ -88,6 +88,9 @@ def render_layout_pdf(
     font_weight_by_block_index: Optional[Dict[int, str]] = None,
     font_style_by_block_index: Optional[Dict[int, str]] = None,
     leading_em_by_block_index: Optional[Dict[int, float]] = None,
+    render_page_indices: Optional[Set[int]] = None,
+    base_merged_pdf_bytes: Optional[bytes] = None,
+    cleaned_source_output_path: Optional[Path] = None,
 ) -> bytes:
     """
     Unified PDF rendering entry point.
@@ -136,6 +139,9 @@ def render_layout_pdf(
         font_weight_by_block_index=font_weight_by_block_index,
         font_style_by_block_index=font_style_by_block_index,
         leading_em_by_block_index=leading_em_by_block_index,
+        render_page_indices=render_page_indices,
+        base_merged_pdf_bytes=base_merged_pdf_bytes,
+        cleaned_source_output_path=cleaned_source_output_path,
     )
 
     # Select renderer
