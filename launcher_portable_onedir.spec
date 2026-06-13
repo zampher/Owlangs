@@ -23,7 +23,27 @@ if _project_backend_str not in sys.path:
 if _project_root_str not in sys.path:
     sys.path.insert(0, _project_root_str)
 
-_version = "1.4.0.0"
+# Try to get version from environment variable first (set by build script)
+# Then try to import backend, then try pyproject.toml
+_version = os.environ.get('OWLANGS_VERSION', None)
+if not _version:
+    try:
+        import backend
+        _version = backend.__version__
+    except (ImportError, AttributeError):
+        try:
+            import tomllib
+            pyproject_path = _project_root / "pyproject.toml"
+            if pyproject_path.exists():
+                data = tomllib.loads(pyproject_path.read_text("utf-8"))
+                _version = data.get("project", {}).get("version", "0.0.0")
+            else:
+                _version = "0.0.0"
+        except Exception:
+            _version = "0.0.0"
+else:
+    if not isinstance(_version, str):
+        _version = str(_version)
 
 # ── datas / binaries / hiddenimports (copied from launcher_portable.spec) ──
 datas = []
