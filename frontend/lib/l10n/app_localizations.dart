@@ -6679,6 +6679,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Apply'**
   String get segmentPdfFontSizeApply;
+
+  /// No description provided for @translationPreviewPdfRevision.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF revision'**
+  String get translationPreviewPdfRevision;
+
+  /// No description provided for @translationPreviewPdfRevisionCompare.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare view'**
+  String get translationPreviewPdfRevisionCompare;
+
+  /// No description provided for @translationPreviewAutoRefreshPdf.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto refresh PDF'**
+  String get translationPreviewAutoRefreshPdf;
+
+  /// No description provided for @translationPreviewRefreshPdf.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh PDF'**
+  String get translationPreviewRefreshPdf;
+
+  /// No description provided for @translationPreviewBatchTypography.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch typography'**
+  String get translationPreviewBatchTypography;
+
+  /// No description provided for @translationPreviewBatchTypographyTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply typography to selected segments'**
+  String get translationPreviewBatchTypographyTooltip;
+
+  /// No description provided for @translationPreviewPdfRevisionSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get translationPreviewPdfRevisionSelectAll;
+
+  /// No description provided for @translationPreviewPdfRevisionInvertSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Invert selection'**
+  String get translationPreviewPdfRevisionInvertSelection;
+
+  /// No description provided for @translationPreviewPdfRevisionPageFilterLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Page'**
+  String get translationPreviewPdfRevisionPageFilterLabel;
+
+  /// No description provided for @translationPreviewPdfRevisionPageFilterAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All pages'**
+  String get translationPreviewPdfRevisionPageFilterAll;
+
+  /// No description provided for @translationPreviewPdfRevisionPageFilterSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all pages'**
+  String get translationPreviewPdfRevisionPageFilterSelectAll;
+
+  /// No description provided for @segmentPdfRevisionFontLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Font'**
+  String get segmentPdfRevisionFontLabel;
+
+  /// No description provided for @segmentPdfRevisionEditLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get segmentPdfRevisionEditLabel;
+
+  /// No description provided for @segmentPdfRevisionClearLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get segmentPdfRevisionClearLabel;
 }
 
 class _AppLocalizationsDelegate

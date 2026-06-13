@@ -157,20 +157,10 @@ def is_font_size_editable_block_type(block_type: str) -> bool:
 def primary_layout_block_index(
     segment: Dict[str, Any],
     block_index_to_type: Optional[Dict[int, str]] = None,
+    task_state: Optional[Dict[str, Any]] = None,
 ) -> Optional[int]:
     """Pick the main text block for font metrics within a segment."""
-    indices: List[int] = []
-    for raw in segment.get("layout_block_indices") or []:
-        try:
-            indices.append(int(raw))
-        except (TypeError, ValueError):
-            continue
-    if not indices and segment.get("block_index") is not None:
-        try:
-            indices = [int(segment["block_index"])]
-        except (TypeError, ValueError):
-            indices = []
-
+    indices = resolve_segment_layout_block_indices(segment, task_state)
     if not indices:
         return None
 
@@ -226,6 +216,7 @@ def enrich_segment_font_fields(
     *,
     text: Optional[str] = None,
     calculator: Optional[FontFitCalculator] = None,
+    task_state: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Add computed font fields to a segment dict (mutates in place)."""
     segment["font_size_source"] = segment_font_size_source(segment)
@@ -238,6 +229,7 @@ def enrich_segment_font_fields(
         segment.pop("computed_font_weight", None)
         segment.pop("computed_font_style", None)
         segment.pop("computed_leading_em", None)
+        segment.pop("pdf_page_number", None)
         return
 
     block_map: Dict[int, LayoutBlock] = {}
@@ -248,15 +240,25 @@ def enrich_segment_font_fields(
         block_map[int(block.index)] = block
         type_map[int(block.index)] = getattr(block, "type", "") or "text"
 
-    block_idx = primary_layout_block_index(segment, type_map)
+    block_idx = primary_layout_block_index(segment, type_map, task_state)
     if block_idx is None or block_idx not in block_map:
         segment.pop("computed_font_size_pt", None)
         segment.pop("computed_font_weight", None)
         segment.pop("computed_font_style", None)
         segment.pop("computed_leading_em", None)
+        segment.pop("pdf_page_number", None)
         return
 
     block = block_map[block_idx]
+    page_index = getattr(block, "page_index", None)
+    if page_index is not None:
+        try:
+            segment["pdf_page_number"] = int(page_index) + 1
+        except (TypeError, ValueError):
+            segment.pop("pdf_page_number", None)
+    else:
+        segment.pop("pdf_page_number", None)
+
     if not is_font_size_editable_block_type(type_map.get(block_idx, "text")):
         segment.pop("computed_font_size_pt", None)
         segment.pop("computed_font_weight", None)
@@ -294,6 +296,7 @@ def enrich_segments_font_fields(
     segments: List[Dict[str, Any]],
     *,
     text_field: str = "target_text",
+    task_state: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Enrich all segments with computed font metadata."""
     if not segments:
@@ -305,7 +308,13 @@ def enrich_segments_font_fields(
         text = seg.get(text_field) or seg.get("modified_text") or seg.get("target_text")
         if not text:
             text = seg.get("text") or seg.get("source_text")
-        enrich_segment_font_fields(seg, layout_doc, text=str(text or ""), calculator=calc)
+        enrich_segment_font_fields(
+            seg,
+            layout_doc,
+            text=str(text or ""),
+            calculator=calc,
+            task_state=task_state,
+        )
 
 
 def resolve_segment_layout_block_indices(

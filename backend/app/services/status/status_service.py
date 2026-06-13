@@ -4278,7 +4278,9 @@ class StatusService:
             seg_idx = seg.get("segment_index", seg.get("chunk_index"))
             if seg_idx is not None and int(seg_idx) in font_override_by_index:
                 seg["font_size_pt"] = font_override_by_index[int(seg_idx)]
-        enrich_segments_font_fields(layout_doc, all_segments, text_field="text")
+        enrich_segments_font_fields(
+            layout_doc, all_segments, text_field="text", task_state=st,
+        )
 
         response = {
             "task_id": task_id,

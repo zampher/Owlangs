@@ -38,6 +38,7 @@ import '../widgets/translation_quick_settings.dart';
 import '../widgets/translation_result/preview_selection.dart';
 import '../widgets/translation_result/translation_preview_dialog.dart';
 import '../widgets/translation_result/translation_full_compare_preview_tab.dart';
+import '../widgets/translation_result/segment_pdf_typography_dialog.dart';
 import '../widgets/translation_result/preview_url_utils.dart';
 import 'translation_preview_tab_widget.dart';
 import '../../../shared/utils/pagination.dart';
@@ -107,6 +108,8 @@ class _TranslationResultPreviewState
       ValueNotifier<int?>(null);
   // Single scroll controller for the unified comparison panel
   final ScrollController _comparisonScrollController = ScrollController();
+  // Dedicated scroll controller for PDF revision side panel (avoids duplicate attachment)
+  final ScrollController _pdfRevisionScrollController = ScrollController();
 
   // Scroll manager for maintaining scroll position during pagination
   PaginatedScrollManager? _scrollManager;
@@ -124,6 +127,14 @@ class _TranslationResultPreviewState
   // Keys for each segment pair (Container containing both source and target)
   // This is the most reliable key for scrolling since it represents the unified height
   final Map<int, GlobalKey> segmentPairKeys =
+      <int, GlobalKey<State<StatefulWidget>>>{};
+
+  // Keys dedicated to PDF revision panel (must not overlap with main comparison panel)
+  final Map<int, GlobalKey> _pdfRevisionSegmentPairKeys =
+      <int, GlobalKey<State<StatefulWidget>>>{};
+  final Map<int, GlobalKey> _pdfRevisionSourceItemKeys =
+      <int, GlobalKey<State<StatefulWidget>>>{};
+  final Map<int, GlobalKey> _pdfRevisionTargetItemKeys =
       <int, GlobalKey<State<StatefulWidget>>>{};
 
   /// Last preview mode chosen in the unified preview dialog (null = use workflow default).
@@ -506,6 +517,8 @@ class _TranslationResultPreviewState
   Map<String, int>? _globalDetectedReasonCounts;
   int _totalSegmentsCount = 0;
   int _pdfPreviewRevision = 0;
+  final ValueNotifier<int> _pdfPreviewRevisionNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<int> _segmentUiRevisionNotifier = ValueNotifier<int>(0);
 
   // Track modified segments (index -> new text)
   final Map<int, String> _modifiedSegments = <int, String>{};
@@ -543,8 +556,17 @@ class _TranslationResultPreviewState
   List<int>? _cachedFilteredIndices;
   Set<String>? _cachedFilteredIndicesFilters;
   int? _cachedFilteredIndicesTotalCount;
+  Set<int>? _cachedFilteredIndicesPdfPages;
 
-  // PERFORMANCE: Prevent duplicate refresh calls during filter changes
+  // PDF revision page filter (empty = all pages)
+  Set<int> _selectedPdfPageNumbers = <int>{};
+  late final ValueNotifier<Set<int>> _selectedPdfPageNumbersNotifier =
+      ValueNotifier<Set<int>>(<int>{});
+  late final ValueNotifier<int?> _pdfPreviewJumpPageNotifier =
+      ValueNotifier<int?>(null);
+  late final ValueNotifier<int> _pdfPreviewJumpPageTriggerNotifier =
+      ValueNotifier<int>(0);
+  int _pdfPreviewJumpPageTrigger = 0;
   bool _isRefreshingForFilter = false;
 
   // PERFORMANCE: Cache exclusion counts to avoid expensive recalculation on every rebuild
@@ -616,7 +638,10 @@ class _TranslationResultPreviewState
     _isRefreshingForFilter = true;
     try {
       await _segmentsPaginationController?.loadFirstPage();
-      if (mounted) setState(() {});
+      if (mounted) {
+        _segmentUiRevisionNotifier.value++;
+        setState(() {});
+      }
     } finally {
       if (mounted) {
         _isRefreshingForFilter = false;
@@ -939,9 +964,15 @@ class _TranslationResultPreviewState
   @override
   void dispose() {
     _selectedExclusionFiltersNotifier.dispose();
+    _selectedPdfPageNumbersNotifier.dispose();
+    _pdfPreviewJumpPageNotifier.dispose();
+    _pdfPreviewJumpPageTriggerNotifier.dispose();
     _highlightedIndexNotifier.dispose();
+    _pdfPreviewRevisionNotifier.dispose();
+    _segmentUiRevisionNotifier.dispose();
     _scrollManager?.dispose();
     _comparisonScrollController.dispose();
+    _pdfRevisionScrollController.dispose();
     if (_segmentsPaginationController != null) {
       _segmentsPaginationController!.removeListener(_onPaginationChanged);
       _segmentsPaginationController!.dispose();
@@ -1043,68 +1074,49 @@ class _TranslationResultPreviewState
 
   /// Get filtered segment indices based on selected filters (for rebuild mode)
   List<int> _getFilteredSegmentIndices() {
-    // If no filters are selected, return all indices
-    if (_selectedExclusionFilters.isEmpty) {
-      // Clear cache when filters are cleared
-      _cachedFilteredIndices = null;
-      _cachedFilteredIndicesFilters = null;
-      _cachedFilteredIndicesTotalCount = null;
-      return List.generate(_totalSegmentsCount, (i) => i);
-    }
-
     final bool cacheValid = _cachedFilteredIndices != null &&
         _cachedFilteredIndicesFilters != null &&
+        _cachedFilteredIndicesPdfPages != null &&
         _cachedFilteredIndicesTotalCount != null &&
         _cachedFilteredIndicesTotalCount == _totalSegmentsCount &&
         _cachedFilteredIndicesFilters!.length ==
             _selectedExclusionFilters.length &&
         _cachedFilteredIndicesFilters!.containsAll(_selectedExclusionFilters) &&
-        _selectedExclusionFilters.containsAll(_cachedFilteredIndicesFilters!);
+        _selectedExclusionFilters.containsAll(_cachedFilteredIndicesFilters!) &&
+        _cachedFilteredIndicesPdfPages!.length ==
+            _selectedPdfPageNumbers.length &&
+        _cachedFilteredIndicesPdfPages!.containsAll(_selectedPdfPageNumbers) &&
+        _selectedPdfPageNumbers.containsAll(_cachedFilteredIndicesPdfPages!);
 
     if (cacheValid) {
       return _cachedFilteredIndices!;
     }
 
-    // Cache miss或无效，重新计算
-    // failed 过滤：直接使用 _failedSegments
-    if (_selectedExclusionFilters.contains('failed')) {
-      final List<int> filteredIndices = _failedSegments.keys.toList()..sort();
-      // Update cache
-      _cachedFilteredIndices = filteredIndices;
-      _cachedFilteredIndicesFilters =
-          Set<String>.from(_selectedExclusionFilters);
-      _cachedFilteredIndicesTotalCount = _totalSegmentsCount;
-      return filteredIndices;
+    return _finalizeFilteredSegmentIndices(_getStateFilteredSegmentIndices());
+  }
+
+  List<int> _getStateFilteredSegmentIndices() {
+    if (_selectedExclusionFilters.isEmpty) {
+      return List.generate(_totalSegmentsCount, (int i) => i);
     }
 
-    // included 过滤：生成全部索引后去掉已排除的
+    if (_selectedExclusionFilters.contains('failed')) {
+      return _failedSegments.keys.toList()..sort();
+    }
+
     if (_selectedExclusionFilters.contains('included')) {
       final Set<int> excludedSet = _excludedSegments.keys.toSet();
-      final List<int> filteredIndices = List.generate(
+      return List.generate(
         _totalSegmentsCount,
-        (index) => index,
+        (int index) => index,
         growable: false,
-      ).where((index) => !excludedSet.contains(index)).toList();
-      // Update cache
-      _cachedFilteredIndices = filteredIndices;
-      _cachedFilteredIndicesFilters =
-          Set<String>.from(_selectedExclusionFilters);
-      _cachedFilteredIndicesTotalCount = _totalSegmentsCount;
-      return filteredIndices;
+      ).where((int index) => !excludedSet.contains(index)).toList();
     }
 
-    // all_excluded 过滤：直接使用 _excludedSegments
     if (_selectedExclusionFilters.contains('all_excluded')) {
-      final List<int> filteredIndices = _excludedSegments.keys.toList()..sort();
-      // Update cache
-      _cachedFilteredIndices = filteredIndices;
-      _cachedFilteredIndicesFilters =
-          Set<String>.from(_selectedExclusionFilters);
-      _cachedFilteredIndicesTotalCount = _totalSegmentsCount;
-      return filteredIndices;
+      return _excludedSegments.keys.toList()..sort();
     }
 
-    // State-based filters (translated, pending, excluded, retry, cleared, images)
     const Set<String> stateKeys = <String>{
       'translated', 'pending', 'excluded', 'retry', 'cleared', 'images',
     };
@@ -1142,17 +1154,9 @@ class _TranslationResultPreviewState
         }
         if (match) filteredIndices.add(index);
       }
-      // Update cache
-      _cachedFilteredIndices = filteredIndices;
-      _cachedFilteredIndicesFilters =
-          Set<String>.from(_selectedExclusionFilters);
-      _cachedFilteredIndicesTotalCount = _totalSegmentsCount;
       return filteredIndices;
     }
 
-    // Normal filter: show segments matching selected categories (detected type).
-    // CRITICAL: Do NOT require segment to be excluded; Translate phase needs
-    // filters to work for default-not-excluded categories too.
     final List<int> filteredIndices = <int>[];
     for (int index = 0; index < _totalSegmentsCount; index++) {
       final Map<String, dynamic> metadata =
@@ -1162,13 +1166,112 @@ class _TranslationResultPreviewState
         filteredIndices.add(index);
       }
     }
-
-    // Update cache
-    _cachedFilteredIndices = filteredIndices;
-    _cachedFilteredIndicesFilters = Set<String>.from(_selectedExclusionFilters);
-    _cachedFilteredIndicesTotalCount = _totalSegmentsCount;
-
     return filteredIndices;
+  }
+
+  Set<int> _availablePdfPageNumbers() {
+    final Set<int> pages = <int>{};
+    for (final Map<String, dynamic> metadata in _allSegmentsMetadata.values) {
+      final int? page = _readPdfPageNumber(metadata);
+      if (page != null) {
+        pages.add(page);
+      }
+    }
+    return pages;
+  }
+
+  int? _readPdfPageNumber(Map<String, dynamic>? metadata) {
+    final dynamic raw = metadata?['pdf_page_number'];
+    if (raw is int) {
+      return raw;
+    }
+    if (raw is num) {
+      return raw.toInt();
+    }
+    if (raw is String) {
+      return int.tryParse(raw);
+    }
+    return null;
+  }
+
+  bool _isAllPdfPagesSelected() {
+    if (_selectedPdfPageNumbers.isEmpty) {
+      return true;
+    }
+    final Set<int> available = _availablePdfPageNumbers();
+    return available.isNotEmpty &&
+        available.every(_selectedPdfPageNumbers.contains);
+  }
+
+  List<int> _applyPdfPageNumberFilter(List<int> indices) {
+    if (_selectedPdfPageNumbers.isEmpty || _isAllPdfPagesSelected()) {
+      return indices;
+    }
+    return indices
+        .where((int index) {
+          final int? page = _readPdfPageNumber(_allSegmentsMetadata[index]);
+          return page != null && _selectedPdfPageNumbers.contains(page);
+        })
+        .toList();
+  }
+
+  List<int> _finalizeFilteredSegmentIndices(List<int> stateFiltered) {
+    final List<int> result = _applyPdfPageNumberFilter(stateFiltered);
+    _cachedFilteredIndices = result;
+    _cachedFilteredIndicesFilters =
+        Set<String>.from(_selectedExclusionFilters);
+    _cachedFilteredIndicesPdfPages =
+        Set<int>.from(_selectedPdfPageNumbers);
+    _cachedFilteredIndicesTotalCount = _totalSegmentsCount;
+    return result;
+  }
+
+  void _setSelectedPdfPageNumbers(Set<int> pages) {
+    _selectedPdfPageNumbers = Set<int>.from(pages);
+    _selectedPdfPageNumbersNotifier.value =
+        Set<int>.from(_selectedPdfPageNumbers);
+  }
+
+  void _requestPdfPreviewJump(int pageNumber) {
+    if (pageNumber < 1) {
+      return;
+    }
+    _pdfPreviewJumpPageNotifier.value = pageNumber;
+    _pdfPreviewJumpPageTriggerNotifier.value = ++_pdfPreviewJumpPageTrigger;
+  }
+
+  Future<void> _handlePdfPageFilterChanged(
+    Set<int> pages, {
+    int? jumpToPage,
+  }) async {
+    if (_isRefreshingForFilter) {
+      return;
+    }
+    _setSelectedPdfPageNumbers(pages);
+    _clearFilteredIndicesCache();
+    if (jumpToPage != null) {
+      _requestPdfPreviewJump(jumpToPage);
+    }
+    _isRefreshingForFilter = true;
+    try {
+      await _segmentsPaginationController?.loadFirstPage();
+      if (mounted) {
+        _segmentUiRevisionNotifier.value++;
+        setState(() {});
+      }
+    } finally {
+      if (mounted) {
+        _isRefreshingForFilter = false;
+      }
+    }
+  }
+
+  Set<int> _getFilteredSelectableSegmentIndices() {
+    return _getFilteredSegmentIndices()
+        .where(
+          (int index) => _allSegmentsMetadata[index]?['is_image'] != true,
+        )
+        .toSet();
   }
 
   /// Clear cached filtered indices (call when filters, segments count, or metadata changes)
@@ -1176,6 +1279,7 @@ class _TranslationResultPreviewState
     _cachedFilteredIndices = null;
     _cachedFilteredIndicesFilters = null;
     _cachedFilteredIndicesTotalCount = null;
+    _cachedFilteredIndicesPdfPages = null;
   }
 
   /// Clear cached exclusion counts (call when metadata or excluded segments change)
@@ -1192,8 +1296,11 @@ class _TranslationResultPreviewState
       await _loadAllSegmentsMetadata();
     }
 
-    // rebuild 模式下并且有过滤时，先按过滤结果分页
-    if (_filterMode == 'rebuild' && _selectedExclusionFilters.isNotEmpty) {
+    // rebuild mode with active filters: paginate filtered indices
+    final bool hasActivePdfPageFilter = _selectedPdfPageNumbers.isNotEmpty &&
+        !_isAllPdfPagesSelected();
+    if (_filterMode == 'rebuild' &&
+        (_selectedExclusionFilters.isNotEmpty || hasActivePdfPageFilter)) {
       // Get filtered segment indices based on selected filters
       final List<int> filteredIndices = _getFilteredSegmentIndices();
 
@@ -2589,7 +2696,22 @@ class _TranslationResultPreviewState
             _parseOptionalDouble(segment['computed_leading_em']),
       if (segment.containsKey('leading_em_source'))
         'leading_em_source': segment['leading_em_source'],
+      if (segment.containsKey('pdf_page_number'))
+        'pdf_page_number': _parseOptionalInt(segment['pdf_page_number']),
     };
+  }
+
+  int? _parseOptionalInt(dynamic raw) {
+    if (raw is int) {
+      return raw;
+    }
+    if (raw is num) {
+      return raw.toInt();
+    }
+    if (raw is String) {
+      return int.tryParse(raw);
+    }
+    return null;
   }
 
   /// Update segment metadata with new target text
@@ -2642,6 +2764,9 @@ class _TranslationResultPreviewState
         // This ensures the UI immediately reflects the saved changes
         if (_segmentsPaginationController != null) {
           await _segmentsPaginationController!.refresh();
+        }
+        if (_isPdfSourceFile()) {
+          _notifyPdfPreviewRevisionChanged();
         }
       }
 
@@ -3234,6 +3359,9 @@ class _TranslationResultPreviewState
         setState(() {
           // Trigger rebuild so itemConverter uses updated _allSegmentsMetadata
         });
+        if (_isPdfSourceFile()) {
+          _notifyPdfPreviewRevisionChanged();
+        }
         MessageService.showInfo(context, 'Segment translation cleared');
       }
     } catch (e) {
@@ -4438,6 +4566,74 @@ class _TranslationResultPreviewState
     }
   }
 
+  /// Bump PDF preview cache revision and optionally refresh segment panel UI.
+  void _notifyPdfPreviewRevisionChanged({bool refreshSegmentPanel = true}) {
+    _pdfPreviewRevision++;
+    _pdfPreviewRevisionNotifier.value = _pdfPreviewRevision;
+    if (refreshSegmentPanel) {
+      _segmentUiRevisionNotifier.value++;
+    }
+  }
+
+  /// Reload computed PDF typography from backend Typst dry-run enrichment.
+  Future<void> _refreshPdfTypographyMetadata() async {
+    try {
+      final TranslationService svc = TranslationService();
+      final Map<String, dynamic> segmentsData =
+          await svc.getTranslationSegments(_apiTaskId(), forceRefresh: true);
+      final List<dynamic>? segments =
+          segmentsData['segments'] as List<dynamic>?;
+      if (segments == null) {
+        return;
+      }
+
+      for (final dynamic raw in segments) {
+        if (raw is! Map) {
+          continue;
+        }
+        final Map<String, dynamic> segment =
+            Map<String, dynamic>.from(raw);
+        final int index = segment['segment_index'] as int? ?? 0;
+        final Map<String, dynamic> fontFields =
+            _pdfFontSizeMetadataFields(segment);
+        if (_allSegmentsMetadata.containsKey(index)) {
+          _allSegmentsMetadata[index] = <String, dynamic>{
+            ..._allSegmentsMetadata[index]!,
+            ...fontFields,
+          };
+        } else {
+          _allSegmentsMetadata[index] = fontFields;
+        }
+      }
+
+      _clearFilteredIndicesCache();
+      if (mounted) {
+        _segmentUiRevisionNotifier.value++;
+        setState(() {});
+        await _segmentsPaginationController?.refresh();
+      }
+    } catch (e) {
+      _translationResultLog(
+        '[PDF_REVISION] Failed to refresh computed typography: $e',
+        level: LogLevel.warn,
+      );
+    }
+  }
+
+  void _ensurePdfRevisionKeys(int count) {
+    while (_pdfRevisionSourceItemKeys.length < count) {
+      final int index = _pdfRevisionSourceItemKeys.length;
+      _pdfRevisionSourceItemKeys[index] = GlobalKey();
+    }
+    while (_pdfRevisionTargetItemKeys.length < count) {
+      final int index = _pdfRevisionTargetItemKeys.length;
+      _pdfRevisionTargetItemKeys[index] = GlobalKey();
+    }
+    for (int i = 0; i < count; i++) {
+      _pdfRevisionSegmentPairKeys.putIfAbsent(i, GlobalKey.new);
+    }
+  }
+
   /// Build unified comparison panel with source and target side by side
   /// This replaces the previous separate _buildSourcePanel and _buildTargetPanel
   Widget _buildComparisonPanel() {
@@ -4515,6 +4711,173 @@ class _TranslationResultPreviewState
     );
   }
 
+  Widget _buildPdfRevisionSegmentPanel({
+    required Set<int> selectedSegmentIndices,
+    required void Function(int index, bool selected) onSegmentSelectionToggle,
+    required Set<int> Function() getFilteredSelectableSegmentIndices,
+    required void Function(Set<int> indices) onBulkSelectAll,
+    required void Function(Set<int> indices) onBulkInvertSelection,
+  }) {
+    if (_isMergedView) {
+      return const Center(
+        child: Text('PDF revision requires segment list view'),
+      );
+    }
+
+    final dynamic translationState = widget.flowId != null
+        ? ref.watch(translationStateProviderFamily(widget.flowId!))
+        : null;
+    final Map<String, int>? tokenUsage =
+        _tokenUsage ?? translationState?.tokenUsage;
+    final String resolvedWorkflowType = widget.workflowType ??
+        (widget.flowId != null
+            ? ref
+                .read(translationQuickSettingsProviderFamily(widget.flowId!))
+                .workflowType
+            : ref.read(translationQuickSettingsProvider).workflowType);
+    final bool isDocxWorkflow = resolvedWorkflowType == 'docx';
+    _ensurePdfRevisionKeys(_totalSegmentsCount);
+
+    return TranslationComparisonPanel(
+      key: const ValueKey('pdf_revision_segment_panel'),
+      taskId: _apiTaskId(),
+      isLoading: _isLoading,
+      loadingError: _loadingError,
+      isConvertOnly: true,
+      pdfRevisionMode: true,
+      batchSelectionEnabled: true,
+      selectedSegmentIndices: selectedSegmentIndices,
+      onSegmentSelectionToggle: onSegmentSelectionToggle,
+      onBulkSelectAll: onBulkSelectAll,
+      onBulkInvertSelection: onBulkInvertSelection,
+      getFilteredSelectableSegmentIndices: getFilteredSelectableSegmentIndices,
+      exclusionFiltersListenable: _selectedExclusionFiltersNotifier,
+      pdfPageFilterListenable: _selectedPdfPageNumbersNotifier,
+      onPdfPageFilterChanged: _handlePdfPageFilterChanged,
+      sourceParagraphs: _sourceParagraphs,
+      targetParagraphs: _targetParagraphs,
+      highlightedIndexNotifier: _highlightedIndexNotifier,
+      scrollController: _pdfRevisionScrollController,
+      segmentsPaginationController: _segmentsPaginationController,
+      totalSegmentsCount: _totalSegmentsCount,
+      segmentPairKeys: _pdfRevisionSegmentPairKeys,
+      sourceItemKeys: _pdfRevisionSourceItemKeys,
+      targetItemKeys: _pdfRevisionTargetItemKeys,
+      modifiedSegments: _modifiedSegments,
+      imageDataMap: _imageDataMap,
+      segmentMetadata: _allSegmentsMetadata,
+      retranslatingSegments: _retranslatingSegments,
+      heightCache: null,
+      onHighlightParagraph: _highlightParagraph,
+      onSegmentEdit: _handleSegmentEdit,
+      onEditingStarted: _onEditingStarted,
+      onRetrySegment: _handleRetrySegment,
+      onMarkForRetry: _handleMarkForRetry,
+      onUnmarkForRetry: _handleUnmarkForRetry,
+      onExcludeSegment: _handleExcludeSegment,
+      onUnexcludeSegment: _handleUnexcludeSegment,
+      onClearSegment: isDocxWorkflow ? null : _handleClearSegment,
+      onUnclearSegment: isDocxWorkflow ? null : _handleUnclearSegment,
+      onUndo: _handleUndo,
+      onRedo: _handleRedo,
+      onExclusionUpdated: _handleExclusionUpdated,
+      translationState: translationState,
+      tokenUsage: tokenUsage,
+      selectedExclusionFilters: _selectedExclusionFilters,
+      onFiltersChanged: _handleFiltersChanged,
+      onFormulaFix: _handleFormulaFixForSegment,
+      showPdfFontSize: true,
+      onFontSizeChanged: _handleFontSizeChanged,
+    );
+  }
+
+  Future<void> _handleBatchPdfTypography(Set<int> indices) async {
+    if (indices.isEmpty) {
+      return;
+    }
+    final List<int> sorted = indices.toList()..sort();
+    final int firstIndex = sorted.first;
+    final Map<String, dynamic> metadata =
+        _allSegmentsMetadata[firstIndex] ?? <String, dynamic>{};
+    final String previewText = metadata['target_text'] as String? ??
+        (firstIndex < _targetParagraphs.length
+            ? _targetParagraphs[firstIndex]
+            : '');
+
+    bool hasUserOverride =
+        (metadata['font_size_source'] == 'user' &&
+                metadata['font_size_pt'] != null) ||
+            metadata['font_weight_source'] == 'user' ||
+            metadata['font_style_source'] == 'user' ||
+            metadata['leading_em_source'] == 'user';
+
+    double readDouble(dynamic raw, double fallback) {
+      if (raw is num) {
+        return raw.toDouble();
+      }
+      if (raw is String) {
+        return double.tryParse(raw) ?? fallback;
+      }
+      return fallback;
+    }
+
+    String readString(dynamic raw, String fallback) {
+      return raw is String ? raw : fallback;
+    }
+
+    final double initialSize = snapPdfFontSize(
+      metadata['font_size_source'] == 'user' && metadata['font_size_pt'] != null
+          ? readDouble(metadata['font_size_pt'], 12.0)
+          : readDouble(
+              metadata['computed_font_size_pt'],
+              readDouble(metadata['font_size_pt'], 12.0),
+            ),
+    );
+    final String initialWeight = metadata['font_weight_source'] == 'user' &&
+            metadata['font_weight'] != null
+        ? readString(metadata['font_weight'], 'regular')
+        : readString(metadata['computed_font_weight'],
+            readString(metadata['font_weight'], 'regular'));
+    final String initialStyle = metadata['font_style_source'] == 'user' &&
+            metadata['font_style'] != null
+        ? readString(metadata['font_style'], 'normal')
+        : readString(metadata['computed_font_style'],
+            readString(metadata['font_style'], 'normal'));
+    final double initialLeading = metadata['leading_em_source'] == 'user' &&
+            metadata['leading_em'] != null
+        ? readDouble(metadata['leading_em'], kPdfLeadingEmDefault)
+        : readDouble(metadata['computed_leading_em'],
+            readDouble(metadata['leading_em'], kPdfLeadingEmDefault));
+
+    final SegmentPdfTypographyResult? result =
+        await showSegmentPdfTypographyDialog(
+      context: context,
+      previewText: previewText,
+      hasUserOverride: hasUserOverride,
+      initialFontSizePt: initialSize,
+      initialFontWeight: initialWeight,
+      initialFontStyle: initialStyle,
+      initialLeadingEm: snapPdfLeadingEm(initialLeading),
+    );
+    if (!mounted || result == null) {
+      return;
+    }
+
+    for (final int index in sorted) {
+      if (result.reset) {
+        await _handleFontSizeChanged(index, reset: true);
+      } else {
+        await _handleFontSizeChanged(
+          index,
+          fontSizePt: result.fontSizePt,
+          fontWeight: result.fontWeight,
+          fontStyle: result.fontStyle,
+          leadingEm: result.leadingEm,
+        );
+      }
+    }
+  }
+
   Future<void> _handleFontSizeChanged(
     int index, {
     double? fontSizePt,
@@ -4525,7 +4888,8 @@ class _TranslationResultPreviewState
   }) async {
     try {
       final TranslationService svc = TranslationService();
-      await svc.updateTranslationSegment(
+      final Map<String, dynamic> response =
+          await svc.updateTranslationSegment(
         _apiTaskId(),
         index,
         fontSizePt: fontSizePt,
@@ -4535,10 +4899,20 @@ class _TranslationResultPreviewState
         leadingEm: leadingEm,
         pdfFontReset: reset,
       );
+      final Map<String, dynamic>? updatedSegment =
+          response['segment'] is Map
+              ? Map<String, dynamic>.from(
+                  response['segment'] as Map<dynamic, dynamic>,
+                )
+              : null;
+      final Map<String, dynamic> computedFields = updatedSegment != null
+          ? _pdfFontSizeMetadataFields(updatedSegment)
+          : <String, dynamic>{};
 
       if (_allSegmentsMetadata.containsKey(index)) {
         _allSegmentsMetadata[index] = <String, dynamic>{
           ..._allSegmentsMetadata[index]!,
+          ...computedFields,
           if (reset) ...<String, dynamic>{
             'font_size_pt': null,
             'font_size_source': 'auto',
@@ -4561,6 +4935,7 @@ class _TranslationResultPreviewState
         };
       } else {
         _allSegmentsMetadata[index] = <String, dynamic>{
+          ...computedFields,
           if (reset) ...<String, dynamic>{
             'font_size_pt': null,
             'font_size_source': 'auto',
@@ -4584,7 +4959,7 @@ class _TranslationResultPreviewState
       }
 
       if (mounted) {
-        _pdfPreviewRevision++;
+        _notifyPdfPreviewRevisionChanged();
         setState(() {});
         _segmentsPaginationController?.refresh();
       }
@@ -4957,6 +5332,8 @@ class _TranslationResultPreviewState
               _isPdfSourceFile(),
           translatedPdfUrl: effectiveDownloads?['pdf'],
           pdfRenderRevision: _pdfPreviewRevision,
+          pdfRenderRevisionListenable: _pdfPreviewRevisionNotifier,
+          segmentUiRevisionListenable: _segmentUiRevisionNotifier,
           translatedHtmlUrl: translatedHtmlUrl,
           initialSyncScroll:
               _lastSyncScroll ?? baseMode.defaultFullCompareSyncScroll,
@@ -4965,6 +5342,30 @@ class _TranslationResultPreviewState
           },
           onRequestPreviewSettings: _handlePreviewSettingsRequest,
           onDownload: widget.onDownload,
+          pdfRevisionSegmentPanelBuilder: _isPdfSourceFile() &&
+                  baseMode == TranslationPreviewMode.pdfPreserve
+              ? _buildPdfRevisionSegmentPanel
+              : null,
+          onBatchTypographyApply: _isPdfSourceFile() &&
+                  baseMode == TranslationPreviewMode.pdfPreserve
+              ? _handleBatchPdfTypography
+              : null,
+          onPdfRevisionModeEntered: _isPdfSourceFile() &&
+                  baseMode == TranslationPreviewMode.pdfPreserve
+              ? _refreshPdfTypographyMetadata
+              : null,
+          pdfPreviewJumpPageListenable: _isPdfSourceFile() &&
+                  baseMode == TranslationPreviewMode.pdfPreserve
+              ? _pdfPreviewJumpPageNotifier
+              : null,
+          pdfPreviewJumpPageTriggerListenable: _isPdfSourceFile() &&
+                  baseMode == TranslationPreviewMode.pdfPreserve
+              ? _pdfPreviewJumpPageTriggerNotifier
+              : null,
+          getFilteredSelectableSegmentIndices: _isPdfSourceFile() &&
+                  baseMode == TranslationPreviewMode.pdfPreserve
+              ? _getFilteredSelectableSegmentIndices
+              : null,
         ),
         dataRef: <String, dynamic>{
           'taskId': _apiTaskId(),

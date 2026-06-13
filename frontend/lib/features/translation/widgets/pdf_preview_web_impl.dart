@@ -22,6 +22,7 @@ class PdfPreview extends StatefulWidget {
     this.onRequestPreviewSettings,
     this.scrollSyncGroup,
     this.scrollSyncPaneId,
+    this.navigationController,
   });
 
   final String downloadUrl;
@@ -33,6 +34,7 @@ class PdfPreview extends StatefulWidget {
   final Future<PreviewSelection?> Function()? onRequestPreviewSettings;
   final CompareScrollSyncGroup? scrollSyncGroup;
   final String? scrollSyncPaneId;
+  final PdfContinuousScrollController? navigationController;
 
   @override
   State<PdfPreview> createState() => _PdfPreviewWebState();
@@ -99,6 +101,7 @@ class _PdfPreviewWebState extends State<PdfPreview> {
             key: ValueKey<String>('$_rendererType:${widget.downloadUrl}'),
             downloadUrl: widget.downloadUrl,
             rendererType: _rendererType,
+            navigationController: widget.navigationController,
             onDocumentLoaded: (PdfDocument document) {
               if (!mounted) {
                 return;

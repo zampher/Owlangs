@@ -3623,4 +3623,46 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get segmentPdfFontSizeApply => '应用';
+
+  @override
+  String get translationPreviewPdfRevision => 'PDF 修订';
+
+  @override
+  String get translationPreviewPdfRevisionCompare => '对照预览';
+
+  @override
+  String get translationPreviewAutoRefreshPdf => '自动刷新 PDF';
+
+  @override
+  String get translationPreviewRefreshPdf => '刷新 PDF';
+
+  @override
+  String get translationPreviewBatchTypography => '批量字体';
+
+  @override
+  String get translationPreviewBatchTypographyTooltip => '将字体设置应用到选中的片段';
+
+  @override
+  String get translationPreviewPdfRevisionSelectAll => '全选';
+
+  @override
+  String get translationPreviewPdfRevisionInvertSelection => '反选';
+
+  @override
+  String get translationPreviewPdfRevisionPageFilterLabel => '页码';
+
+  @override
+  String get translationPreviewPdfRevisionPageFilterAll => '全部页';
+
+  @override
+  String get translationPreviewPdfRevisionPageFilterSelectAll => '全选页';
+
+  @override
+  String get segmentPdfRevisionFontLabel => '字体';
+
+  @override
+  String get segmentPdfRevisionEditLabel => '编辑';
+
+  @override
+  String get segmentPdfRevisionClearLabel => '清除';
 }

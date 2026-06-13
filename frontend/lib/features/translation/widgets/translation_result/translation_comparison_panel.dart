@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../l10n/app_localizations.dart';
@@ -66,6 +67,16 @@ class TranslationComparisonPanel extends ConsumerWidget {
     this.isConvertOnly = false,
     this.showPdfFontSize = false,
     this.onFontSizeChanged,
+    this.batchSelectionEnabled = false,
+    this.selectedSegmentIndices = const <int>{},
+    this.onSegmentSelectionToggle,
+    this.onBulkSelectAll,
+    this.onBulkInvertSelection,
+    this.getFilteredSelectableSegmentIndices,
+    this.exclusionFiltersListenable,
+    this.pdfRevisionMode = false,
+    this.pdfPageFilterListenable,
+    this.onPdfPageFilterChanged,
   });
 
   final String taskId;
@@ -113,6 +124,16 @@ class TranslationComparisonPanel extends ConsumerWidget {
     double? leadingEm,
     bool reset,
   })? onFontSizeChanged;
+  final bool batchSelectionEnabled;
+  final Set<int> selectedSegmentIndices;
+  final void Function(int index, bool selected)? onSegmentSelectionToggle;
+  final void Function(Set<int> indices)? onBulkSelectAll;
+  final void Function(Set<int> indices)? onBulkInvertSelection;
+  final Set<int> Function()? getFilteredSelectableSegmentIndices;
+  final ValueListenable<Set<String>>? exclusionFiltersListenable;
+  final bool pdfRevisionMode;
+  final ValueListenable<Set<int>>? pdfPageFilterListenable;
+  final void Function(Set<int> pages, {int? jumpToPage})? onPdfPageFilterChanged;
 
   /// Check if a segment is cleared based on metadata
   bool _isSegmentCleared(Map<String, dynamic> metadata) {
@@ -242,10 +263,9 @@ class TranslationComparisonPanel extends ConsumerWidget {
   }
 
   /// Build filter chips bar (replaces the old statistics widget)
-  Widget _buildFilterChipsBar(BuildContext context) {
+  Widget _buildFilterChipsBar(BuildContext context, Set<String> selected) {
     final l10n = AppLocalizations.of(context)!;
     final counts = _calculateFilterCounts(segmentMetadata);
-    final selected = selectedExclusionFilters ?? <String>{};
 
     // Define filter chip configs: key, label, color
     final filters = <_FilterChipConfig>[
@@ -340,6 +360,317 @@ class TranslationComparisonPanel extends ConsumerWidget {
     );
   }
 
+  Widget _buildFilterChipsBarListenable(BuildContext context) {
+    if (exclusionFiltersListenable != null) {
+      return ValueListenableBuilder<Set<String>>(
+        valueListenable: exclusionFiltersListenable!,
+        builder: (BuildContext context, Set<String> selected, Widget? _) {
+          return _buildFilterChipsBar(context, selected);
+        },
+      );
+    }
+    return _buildFilterChipsBar(context, selectedExclusionFilters ?? <String>{});
+  }
+
+  int? _readPdfPageNumber(Map<String, dynamic>? metadata) {
+    final dynamic raw = metadata?['pdf_page_number'];
+    if (raw is int) {
+      return raw;
+    }
+    if (raw is num) {
+      return raw.toInt();
+    }
+    if (raw is String) {
+      return int.tryParse(raw);
+    }
+    return null;
+  }
+
+  List<int> _availablePdfPageNumbers() {
+    final Set<int> pages = <int>{};
+    for (final Map<String, dynamic> metadata in segmentMetadata.values) {
+      final int? page = _readPdfPageNumber(metadata);
+      if (page != null) {
+        pages.add(page);
+      }
+    }
+    final List<int> sorted = pages.toList()..sort();
+    return sorted;
+  }
+
+  Map<int, int> _calculatePdfPageCounts() {
+    final Map<int, int> counts = <int, int>{};
+    for (final Map<String, dynamic> metadata in segmentMetadata.values) {
+      final int? page = _readPdfPageNumber(metadata);
+      if (page != null) {
+        counts[page] = (counts[page] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }
+
+  bool _isAllPdfPagesSelected(Set<int> selected, List<int> availablePages) {
+    if (selected.isEmpty) {
+      return true;
+    }
+    return availablePages.isNotEmpty &&
+        availablePages.every(selected.contains);
+  }
+
+  String _pdfPageFilterSummaryLabel(
+    Set<int> selected,
+    List<int> availablePages,
+    AppLocalizations l10n,
+  ) {
+    if (_isAllPdfPagesSelected(selected, availablePages)) {
+      return l10n.translationPreviewPdfRevisionPageFilterAll;
+    }
+    final List<int> sorted = selected.toList()..sort();
+    if (sorted.length == 1) {
+      return 'P${sorted.first}';
+    }
+    if (sorted.length <= 3) {
+      return sorted.map((int page) => 'P$page').join(', ');
+    }
+    return 'P${sorted.first}, +${sorted.length - 1}';
+  }
+
+  Widget _pdfPageMenuRow({required String label, required bool checked}) {
+    return Row(
+      children: <Widget>[
+        SizedBox(
+          width: 18,
+          child: checked
+              ? const Icon(Icons.check, size: 14)
+              : const SizedBox.shrink(),
+        ),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _togglePdfPageSelection({
+    required Set<int> selected,
+    required List<int> availablePages,
+    required int page,
+  }) {
+    if (onPdfPageFilterChanged == null) {
+      return;
+    }
+    final bool allSelected = _isAllPdfPagesSelected(selected, availablePages);
+    final Set<int> next = Set<int>.from(selected);
+    if (allSelected) {
+      next
+        ..clear()
+        ..add(page);
+    } else if (next.contains(page)) {
+      next.remove(page);
+    } else {
+      next.add(page);
+    }
+    final bool pageRemoved =
+        !allSelected && selected.contains(page) && !next.contains(page);
+    onPdfPageFilterChanged!(
+      next,
+      jumpToPage: pageRemoved ? null : page,
+    );
+  }
+
+  Widget _buildPdfPageFilterDropdown(BuildContext context, Set<int> selected) {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final List<int> availablePages = _availablePdfPageNumbers();
+    if (availablePages.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final Map<int, int> counts = _calculatePdfPageCounts();
+    final bool allSelected = _isAllPdfPagesSelected(selected, availablePages);
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+
+    return MenuAnchor(
+      style: MenuStyle(
+        visualDensity: VisualDensity.compact,
+        minimumSize: const WidgetStatePropertyAll<Size>(Size(160, 0)),
+      ),
+      builder: (
+        BuildContext context,
+        MenuController controller,
+        Widget? child,
+      ) {
+        return InkWell(
+          onTap: () {
+            if (controller.isOpen) {
+              controller.close();
+            } else {
+              controller.open();
+            }
+          },
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              border: Border.all(color: scheme.outlineVariant),
+              borderRadius: BorderRadius.circular(6),
+              color: scheme.surface,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  '${l10n.translationPreviewPdfRevisionPageFilterLabel}: ',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                Text(
+                  _pdfPageFilterSummaryLabel(selected, availablePages, l10n),
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: scheme.onSurface,
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_drop_down,
+                  size: 16,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      menuChildren: <Widget>[
+        MenuItemButton(
+          closeOnActivate: false,
+          onPressed: onPdfPageFilterChanged == null
+              ? null
+              : () => onPdfPageFilterChanged!(<int>{}),
+          child: _pdfPageMenuRow(
+            label: l10n.translationPreviewPdfRevisionPageFilterAll,
+            checked: allSelected,
+          ),
+        ),
+        MenuItemButton(
+          closeOnActivate: false,
+          onPressed: onPdfPageFilterChanged == null
+              ? null
+              : () => onPdfPageFilterChanged!(
+                    Set<int>.from(availablePages),
+                    jumpToPage: availablePages.first,
+                  ),
+          child: _pdfPageMenuRow(
+            label: l10n.translationPreviewPdfRevisionPageFilterSelectAll,
+            checked: !allSelected &&
+                selected.length == availablePages.length &&
+                selected.isNotEmpty,
+          ),
+        ),
+        ...availablePages.map((int page) {
+          final bool pageChecked = !allSelected && selected.contains(page);
+          return MenuItemButton(
+            closeOnActivate: false,
+            onPressed: onPdfPageFilterChanged == null
+                ? null
+                : () => _togglePdfPageSelection(
+                      selected: selected,
+                      availablePages: availablePages,
+                      page: page,
+                    ),
+            child: _pdfPageMenuRow(
+              label: 'P$page (${counts[page] ?? 0})',
+              checked: pageChecked,
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildPdfPageFilterDropdownListenable(BuildContext context) {
+    if (pdfPageFilterListenable != null) {
+      return ValueListenableBuilder<Set<int>>(
+        valueListenable: pdfPageFilterListenable!,
+        builder: (BuildContext context, Set<int> selected, Widget? _) {
+          return _buildPdfPageFilterDropdown(context, selected);
+        },
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildFilterSection(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        Flexible(
+          fit: FlexFit.loose,
+          child: _buildFilterChipsBarListenable(context),
+        ),
+        if (pdfRevisionMode && pdfPageFilterListenable != null) ...<Widget>[
+          const SizedBox(width: 6),
+          _buildPdfPageFilterDropdownListenable(context),
+        ],
+      ],
+    );
+  }
+
+  Set<int> _currentVisibleSelectableIndices() {
+    if (getFilteredSelectableSegmentIndices != null) {
+      return getFilteredSelectableSegmentIndices!();
+    }
+    if (segmentsPaginationController == null) {
+      return <int>{};
+    }
+    final Set<int> indices = <int>{};
+    for (final SegmentPair pair in segmentsPaginationController!.items) {
+      if (!pair.isImage) {
+        indices.add(pair.index);
+      }
+    }
+    return indices;
+  }
+
+  Widget _buildPdfRevisionSelectionActions(BuildContext context) {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final ButtonStyle compactStyle = TextButton.styleFrom(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      minimumSize: Size.zero,
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+      textStyle: const TextStyle(fontSize: 10),
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        TextButton(
+          style: compactStyle,
+          onPressed: onBulkSelectAll == null
+              ? null
+              : () {
+                  onBulkSelectAll!(_currentVisibleSelectableIndices());
+                },
+          child: Text(l10n.translationPreviewPdfRevisionSelectAll),
+        ),
+        TextButton(
+          style: compactStyle,
+          onPressed: onBulkInvertSelection == null
+              ? null
+              : () {
+                  onBulkInvertSelection!(_currentVisibleSelectableIndices());
+                },
+          child: Text(l10n.translationPreviewPdfRevisionInvertSelection),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -369,83 +700,111 @@ class TranslationComparisonPanel extends ConsumerWidget {
               ),
               child: Row(
                 children: <Widget>[
-                  // Filter chips bar (left-aligned)
-                  if (segmentMetadata.isNotEmpty)
+                  if (pdfRevisionMode && batchSelectionEnabled) ...<Widget>[
+                    _buildPdfRevisionSelectionActions(context),
+                    const SizedBox(width: 8),
+                  ],
+                  // Filter chips bar (left-aligned, after bulk selection in PDF revision)
+                  if (segmentMetadata.isNotEmpty &&
+                      (!pdfRevisionMode || exclusionFiltersListenable != null))
                     Expanded(
-                      child: _buildFilterChipsBar(context),
+                      child: _buildFilterSection(context),
                     ),
-                  const SizedBox(width: 8),
-                  // Segment info and stats (right-aligned)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      ValueListenableBuilder<int?>(
-                        valueListenable: highlightedIndexNotifier,
-                        builder: (context, highlightedIndex, _) {
-                          if (highlightedIndex != null && effectiveTotal > 0) {
-                            return Padding(
-                              padding: const EdgeInsets.only(
-                                right: 4,
-                              ), // Reduced padding
-                              child: Text(
-                                AppLocalizations.of(context)!
-                                    .translationStatsSegment(
-                                  (highlightedIndex + 1).toString(),
-                                  effectiveTotal.toString(),
-                                ),
-                                style: TextStyle(
-                                  fontSize: 10, // Reduced from 12 to 10
-                                  color: scheme.onSurfaceVariant,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            );
-                          }
-                          return const SizedBox.shrink();
-                        },
-                      ),
-                      const SizedBox(width: 6), // Reduced spacing
-                      Text(
-                        AppLocalizations.of(context)!
-                            .translationStatsDoubleClickToEdit,
-                        style: TextStyle(
-                          fontSize: 10, // Reduced from 12 to 10
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(width: 4), // Reduced spacing
-                      // Translation completion stats
-                      if (translationState != null)
-                        _buildTranslationStats(context, scheme),
-                      // Page size selector (right of stats)
-                      if (segmentsPaginationController != null) ...<Widget>[
-                        const SizedBox(width: 6),
-                        ListenableBuilder(
-                          listenable: segmentsPaginationController!,
-                          builder: (context, _) => PageSizeSelector(
-                            currentPageSize:
-                                segmentsPaginationController!.pageSize,
-                            onPageSizeChanged: (size) {
-                              segmentsPaginationController!.setPageSize(size);
+                  if (segmentMetadata.isNotEmpty &&
+                      (!pdfRevisionMode || exclusionFiltersListenable != null) &&
+                      !pdfRevisionMode)
+                    const SizedBox(width: 8),
+                  // Segment info and stats (right-aligned; PDF revision keeps only pagination)
+                  if (!pdfRevisionMode)
+                    Expanded(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: <Widget>[
+                          ValueListenableBuilder<int?>(
+                            valueListenable: highlightedIndexNotifier,
+                            builder: (context, highlightedIndex, _) {
+                              if (highlightedIndex != null && effectiveTotal > 0) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(
+                                    right: 4,
+                                  ),
+                                  child: Text(
+                                    AppLocalizations.of(context)!
+                                        .translationStatsSegment(
+                                      (highlightedIndex + 1).toString(),
+                                      effectiveTotal.toString(),
+                                    ),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: scheme.onSurfaceVariant,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              }
+                              return const SizedBox.shrink();
                             },
-                            preferenceKey:
-                                'translation_result_segments_page_size',
-                            pageSizeOptions: const <int>[
-                              50,
-                              100,
-                              200,
-                              500,
-                              1000,
-                              2000,
-                            ],
-                            showLabel: false,
                           ),
-                        ),
-                      ],
-                    ],
-                  ),
+                          const SizedBox(width: 6),
+                          Text(
+                            AppLocalizations.of(context)!
+                                .translationStatsDoubleClickToEdit,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          if (translationState != null)
+                            _buildTranslationStats(context, scheme),
+                          if (segmentsPaginationController != null) ...<Widget>[
+                            const SizedBox(width: 6),
+                            ListenableBuilder(
+                              listenable: segmentsPaginationController!,
+                              builder: (context, _) => PageSizeSelector(
+                                currentPageSize:
+                                    segmentsPaginationController!.pageSize,
+                                onPageSizeChanged: (size) {
+                                  segmentsPaginationController!.setPageSize(size);
+                                },
+                                preferenceKey:
+                                    'translation_result_segments_page_size',
+                                pageSizeOptions: const <int>[
+                                  50,
+                                  100,
+                                  200,
+                                  500,
+                                  1000,
+                                  2000,
+                                ],
+                                showLabel: false,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  if (pdfRevisionMode && segmentsPaginationController != null)
+                    ListenableBuilder(
+                      listenable: segmentsPaginationController!,
+                      builder: (context, _) => PageSizeSelector(
+                        currentPageSize: segmentsPaginationController!.pageSize,
+                        onPageSizeChanged: (size) {
+                          segmentsPaginationController!.setPageSize(size);
+                        },
+                        preferenceKey: 'translation_result_segments_page_size',
+                        pageSizeOptions: const <int>[
+                          50,
+                          100,
+                          200,
+                          500,
+                          1000,
+                          2000,
+                        ],
+                        showLabel: false,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -716,8 +1075,10 @@ class TranslationComparisonPanel extends ConsumerWidget {
           }
 
           // Build target segment widget (reused for both single-column and dual-column modes)
+          final String segmentKeyPrefix =
+              pdfRevisionMode ? 'pdf_revision_' : '';
           final Widget targetSegment = RepaintBoundary(
-            key: ValueKey('target_${pair.index}'),
+            key: ValueKey('${segmentKeyPrefix}target_${pair.index}'),
             child: TranslationSegmentItem(
               itemKey: targetItemKeys[pair.index],
               text: pair.targetText,
@@ -782,23 +1143,19 @@ class TranslationComparisonPanel extends ConsumerWidget {
               computedLeadingEm: _readComputedLeadingEm(metadata),
               leadingEmSource: metadata['leading_em_source'] as String?,
               onFontSizeChanged: onFontSizeChanged,
+              pdfRevisionMode: pdfRevisionMode,
             ),
           );
 
-          return Container(
-            key: segmentPairKeys[pair.index],
-            margin: const EdgeInsets.only(
-              bottom: 1,
-            ), // Further reduced from 2 to 1 for more compact display
-            child: isConvertOnly
-                ? targetSegment
-                : Row(
+          final Widget segmentRow = isConvertOnly
+              ? targetSegment
+              : Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       // Source segment (left)
                       Expanded(
                         child: RepaintBoundary(
-                          key: ValueKey('source_${pair.index}'),
+                          key: ValueKey('${segmentKeyPrefix}source_${pair.index}'),
                           child: TranslationSegmentItem(
                             itemKey: sourceItemKeys[pair.index],
                             text: pair.sourceText,
@@ -821,7 +1178,36 @@ class TranslationComparisonPanel extends ConsumerWidget {
                       // Target segment (right)
                       Expanded(child: targetSegment),
                     ],
-                  ),
+                  );
+
+          final Widget rowContent = batchSelectionEnabled &&
+                  onSegmentSelectionToggle != null &&
+                  !pair.isImage
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Checkbox(
+                        value: selectedSegmentIndices.contains(pair.index),
+                        onChanged: (bool? value) {
+                          onSegmentSelectionToggle!(
+                            pair.index,
+                            value ?? false,
+                          );
+                        },
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                    Expanded(child: segmentRow),
+                  ],
+                )
+              : segmentRow;
+
+          return Container(
+            key: segmentPairKeys[pair.index],
+            margin: const EdgeInsets.only(bottom: 1),
+            child: rowContent,
           );
         },
       );

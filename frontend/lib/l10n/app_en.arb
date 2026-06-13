@@ -1370,5 +1370,20 @@
     }
   },
   "segmentPdfFontSizeReset": "Reset to auto",
-  "segmentPdfFontSizeApply": "Apply"
+  "segmentPdfFontSizeApply": "Apply",
+
+  "translationPreviewPdfRevision": "PDF revision",
+  "translationPreviewPdfRevisionCompare": "Compare view",
+  "translationPreviewAutoRefreshPdf": "Auto refresh PDF",
+  "translationPreviewRefreshPdf": "Refresh PDF",
+  "translationPreviewBatchTypography": "Batch typography",
+  "translationPreviewBatchTypographyTooltip": "Apply typography to selected segments",
+  "translationPreviewPdfRevisionSelectAll": "Select all",
+  "translationPreviewPdfRevisionInvertSelection": "Invert selection",
+  "translationPreviewPdfRevisionPageFilterLabel": "Page",
+  "translationPreviewPdfRevisionPageFilterAll": "All pages",
+  "translationPreviewPdfRevisionPageFilterSelectAll": "Select all pages",
+  "segmentPdfRevisionFontLabel": "Font",
+  "segmentPdfRevisionEditLabel": "Edit",
+  "segmentPdfRevisionClearLabel": "Clear"
 }

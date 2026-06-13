@@ -3786,4 +3786,48 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get segmentPdfFontSizeApply => 'Apply';
+
+  @override
+  String get translationPreviewPdfRevision => 'PDF revision';
+
+  @override
+  String get translationPreviewPdfRevisionCompare => 'Compare view';
+
+  @override
+  String get translationPreviewAutoRefreshPdf => 'Auto refresh PDF';
+
+  @override
+  String get translationPreviewRefreshPdf => 'Refresh PDF';
+
+  @override
+  String get translationPreviewBatchTypography => 'Batch typography';
+
+  @override
+  String get translationPreviewBatchTypographyTooltip =>
+      'Apply typography to selected segments';
+
+  @override
+  String get translationPreviewPdfRevisionSelectAll => 'Select all';
+
+  @override
+  String get translationPreviewPdfRevisionInvertSelection => 'Invert selection';
+
+  @override
+  String get translationPreviewPdfRevisionPageFilterLabel => 'Page';
+
+  @override
+  String get translationPreviewPdfRevisionPageFilterAll => 'All pages';
+
+  @override
+  String get translationPreviewPdfRevisionPageFilterSelectAll =>
+      'Select all pages';
+
+  @override
+  String get segmentPdfRevisionFontLabel => 'Font';
+
+  @override
+  String get segmentPdfRevisionEditLabel => 'Edit';
+
+  @override
+  String get segmentPdfRevisionClearLabel => 'Clear';
 }

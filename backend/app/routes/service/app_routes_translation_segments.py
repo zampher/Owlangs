@@ -152,6 +152,112 @@ def _enrich_translation_segments_with_detected_reasons(
         )
 
 
+def _resolve_layout_document(task_id: str, task_state: Dict[str, Any]):
+    """Return layout_document from task state, reloading from MinerU ZIP when needed."""
+    layout_doc = task_state.get("layout_document")
+    if layout_doc is not None:
+        return layout_doc
+
+    original_filename = str(task_state.get("original_filename") or "")
+    if not original_filename.lower().endswith(".pdf"):
+        return None
+
+    zip_bytes = task_state.get("layout_source_zip")
+    if zip_bytes is None:
+        workflow_inst = task_state.get("workflow_instance")
+        if workflow_inst is not None and hasattr(workflow_inst, "attachment"):
+            try:
+                attachments = workflow_inst.attachment.get_documents()
+                if isinstance(attachments, dict) and "mineru" in attachments:
+                    zip_bytes = attachments["mineru"]
+            except Exception:
+                zip_bytes = None
+
+    if not zip_bytes:
+        return None
+
+    try:
+        from layout.registry import load_layout_from_engine_zip
+        from utils.format_convert_utils import get_layout_block_bbox
+
+        layout_doc = load_layout_from_engine_zip("mineru", zip_bytes)
+        if layout_doc is not None:
+            task_state["layout_document"] = layout_doc
+            task_state["layout_block_bbox"] = get_layout_block_bbox(layout_doc)
+            logger.info(
+                LogModule.ROUTE,
+                f"[TRANSLATION-SEGMENTS-API] Reloaded layout_document from ZIP for task {task_id}: "
+                f"{layout_doc.page_count} pages",
+            )
+    except Exception as reload_err:
+        logger.warning(
+            LogModule.ROUTE,
+            f"[TRANSLATION-SEGMENTS-API] Failed to reload layout_document for task {task_id}: "
+            f"{reload_err}",
+        )
+        return None
+
+    return layout_doc
+
+
+def _ensure_segment_layout_block_indices(
+    segments_list: List[Dict[str, Any]],
+    task_state: Dict[str, Any],
+) -> None:
+    """Attach layout_block_indices from task maps when segments lack them."""
+    if not segments_list:
+        return
+    ts_mod = _ts_module()
+    seg_map = task_state.get("segment_layout_block_map")
+    if isinstance(seg_map, list) and seg_map:
+        ts_mod._apply_layout_block_indices_to_segments(segments_list, seg_map)
+        return
+    chunk_map = task_state.get("layout_chunk_block_map")
+    if isinstance(chunk_map, list) and chunk_map:
+        ts_mod._apply_layout_block_indices_to_segments(segments_list, chunk_map)
+
+
+def _enrich_segments_pdf_typography(
+    task_id: str,
+    task_state: Dict[str, Any],
+    segments_list: List[Dict[str, Any]],
+) -> None:
+    """Dry-run Typst font fit and attach computed typography fields to segments."""
+    if not segments_list:
+        return
+
+    layout_doc = _resolve_layout_document(task_id, task_state)
+    if layout_doc is None:
+        return
+
+    for seg in segments_list:
+        if isinstance(seg, dict):
+            seg.pop("computed_font_size_pt", None)
+            seg.pop("computed_font_weight", None)
+            seg.pop("computed_font_style", None)
+            seg.pop("computed_leading_em", None)
+
+    _ensure_segment_layout_block_indices(segments_list, task_state)
+
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        enrich_segments_font_fields,
+    )
+
+    text_field = "modified_text"
+    if not any(
+        isinstance(s, dict) and s.get("modified_text")
+        for s in segments_list
+    ):
+        text_field = "target_text"
+
+    enrich_segments_font_fields(
+        layout_doc,
+        segments_list,
+        text_field=text_field,
+        task_state=task_state,
+    )
+
+
 @router.get(
     "/translation-segments/{task_id}",
     summary="Get translation segments",
@@ -303,18 +409,10 @@ async def get_translation_segments_api(
             seg["has_latex"] = has_latex_content(text)
 
     # Enrich PDF layout segments with computed/user font size metadata.
-    layout_doc = task_state.get("layout_document")
-    if layout_doc is not None and segments_list:
-        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
-            enrich_segments_font_fields,
-        )
-        text_field = "modified_text"
-        if not any(
-            isinstance(s, dict) and s.get("modified_text")
-            for s in segments_list
-        ):
-            text_field = "target_text"
-        enrich_segments_font_fields(layout_doc, segments_list, text_field=text_field)
+    if isinstance(response_data, dict):
+        segments_list = response_data.get("segments", [])
+        if isinstance(segments_list, list) and segments_list:
+            _enrich_segments_pdf_typography(task_id, task_state, segments_list)
 
     # Include image data map if available so frontend can render placeholders as images
     # Prefer translation-specific image map (placeholder IDs generated during translation)
@@ -430,6 +528,11 @@ async def update_segment_api(
         LogModule.ROUTE,
         f"[UPDATE-SEGMENT-API] Successfully updated segment {segment_index} for task {task_id}"
     )
+
+    task_state = task_manager.get_task(task_id) or {}
+    if isinstance(segment, dict):
+        _enrich_segments_pdf_typography(task_id, task_state, [segment])
+
     return JSONResponse(content={
         "success": True,
         "segment": segment

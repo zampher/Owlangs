@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Zampher
 // SPDX-License-Identifier: MPL-2.0
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -9,12 +10,52 @@ import 'package:pdfx/pdfx.dart';
 import '../../../shared/services/translation_service.dart';
 import 'pdf_continuous_page.dart';
 
+/// Scroll navigation for [PdfContinuousScrollView].
+class PdfContinuousScrollController {
+  _PdfContinuousScrollViewState? _state;
+  int? _pendingPageNumber;
+
+  bool get isAttached => _state != null;
+
+  void _attach(_PdfContinuousScrollViewState state) {
+    _state = state;
+    final int? pending = _pendingPageNumber;
+    if (pending != null) {
+      _pendingPageNumber = null;
+      jumpToPage(pending);
+    }
+  }
+
+  void _detach(_PdfContinuousScrollViewState state) {
+    if (_state == state) {
+      _state = null;
+    }
+  }
+
+  Future<void> jumpToPage(int pageNumber) async {
+    if (pageNumber < 1) {
+      return;
+    }
+    if (_state != null) {
+      await _state!.jumpToPage(pageNumber);
+      return;
+    }
+    _pendingPageNumber = pageNumber;
+  }
+
+  void dispose() {
+    _state = null;
+    _pendingPageNumber = null;
+  }
+}
+
 /// Word-style continuous vertical scroll through all PDF pages (pixel rendering).
 class PdfContinuousScrollView extends StatefulWidget {
   const PdfContinuousScrollView({
     required this.document,
     super.key,
     this.scrollController,
+    this.navigationController,
     this.pageGap = 16,
     this.horizontalPadding = 12,
     this.backgroundColor = const Color(0xFFD6D6D6),
@@ -23,6 +64,7 @@ class PdfContinuousScrollView extends StatefulWidget {
 
   final PdfDocument document;
   final ScrollController? scrollController;
+  final PdfContinuousScrollController? navigationController;
   final double pageGap;
   final double horizontalPadding;
   final Color backgroundColor;
@@ -36,6 +78,8 @@ class PdfContinuousScrollView extends StatefulWidget {
 class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
   late ScrollController _scrollController;
   bool _ownsScrollController = false;
+  double _pageWidth = 0;
+  List<double>? _pageDisplayHeights;
 
   @override
   void initState() {
@@ -46,10 +90,105 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
       _scrollController = ScrollController();
       _ownsScrollController = true;
     }
+    widget.navigationController?._attach(this);
+    _preloadPageHeights();
+  }
+
+  @override
+  void didUpdateWidget(covariant PdfContinuousScrollView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.navigationController != widget.navigationController) {
+      oldWidget.navigationController?._detach(this);
+      widget.navigationController?._attach(this);
+    }
+    if (oldWidget.document.id != widget.document.id) {
+      _pageDisplayHeights = null;
+      _preloadPageHeights();
+    }
+  }
+
+  Future<void> _preloadPageHeights() async {
+    if (_pageWidth <= 0) {
+      return;
+    }
+    final List<double> heights = <double>[];
+    for (int pageNumber = 1;
+        pageNumber <= widget.document.pagesCount;
+        pageNumber++) {
+      PdfPage? page;
+      try {
+        page = await widget.document.getPage(pageNumber);
+        heights.add(_pageWidth * page.height / page.width);
+      } catch (_) {
+        heights.add(_pageWidth * 1.414);
+      } finally {
+        await page?.close();
+      }
+      if (!mounted) {
+        return;
+      }
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _pageDisplayHeights = heights;
+    });
+  }
+
+  Future<void> jumpToPage(int pageNumber) async {
+    if (!mounted || pageNumber < 1) {
+      return;
+    }
+    if (_pageWidth <= 0) {
+      _pendingJumpPageNumber = pageNumber;
+      return;
+    }
+    if (_pageDisplayHeights == null) {
+      _pendingJumpPageNumber = pageNumber;
+      await _preloadPageHeights();
+    }
+    if (!mounted || _pageDisplayHeights == null) {
+      return;
+    }
+    final int index = pageNumber - 1;
+    if (index >= _pageDisplayHeights!.length) {
+      return;
+    }
+    double offset = widget.pageGap;
+    for (int i = 0; i < index; i++) {
+      offset += _pageDisplayHeights![i] + widget.pageGap;
+    }
+    if (!_scrollController.hasClients) {
+      _pendingJumpPageNumber = pageNumber;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(jumpToPage(pageNumber));
+        }
+      });
+      return;
+    }
+    _pendingJumpPageNumber = null;
+    await _scrollController.animateTo(
+      offset.clamp(0.0, _scrollController.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  int? _pendingJumpPageNumber;
+
+  void _maybeApplyPendingJump() {
+    final int? pending = _pendingJumpPageNumber;
+    if (pending == null) {
+      return;
+    }
+    unawaited(jumpToPage(pending));
   }
 
   @override
   void dispose() {
+    widget.navigationController?._detach(this);
     if (_ownsScrollController) {
       _scrollController.dispose();
     }
@@ -66,6 +205,17 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
           final double pageWidth =
               (constraints.maxWidth - widget.horizontalPadding * 2)
                   .clamp(120.0, constraints.maxWidth);
+          if (_pageWidth != pageWidth) {
+            _pageWidth = pageWidth;
+            _pageDisplayHeights = null;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                unawaited(_preloadPageHeights().then((_) {
+                  _maybeApplyPendingJump();
+                }));
+              }
+            });
+          }
           return Scrollbar(
             controller: _scrollController,
             thumbVisibility: true,
@@ -107,6 +257,7 @@ class PdfContinuousPreviewLoader extends StatefulWidget {
     super.key,
     this.rendererType,
     this.scrollController,
+    this.navigationController,
     this.onDocumentLoaded,
     this.onPageVisible,
   });
@@ -114,6 +265,7 @@ class PdfContinuousPreviewLoader extends StatefulWidget {
   final String downloadUrl;
   final String? rendererType;
   final ScrollController? scrollController;
+  final PdfContinuousScrollController? navigationController;
   final void Function(PdfDocument document)? onDocumentLoaded;
   final void Function(int pageNumber)? onPageVisible;
 
@@ -241,6 +393,7 @@ class _PdfContinuousPreviewLoaderState extends State<PdfContinuousPreviewLoader>
     return PdfContinuousScrollView(
       document: document,
       scrollController: widget.scrollController,
+      navigationController: widget.navigationController,
       onPageVisible: widget.onPageVisible,
     );
   }

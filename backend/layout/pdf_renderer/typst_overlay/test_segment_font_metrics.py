@@ -22,6 +22,7 @@ from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
     normalize_user_font_style,
     normalize_user_font_weight,
     normalize_user_leading_em,
+    primary_layout_block_index,
     segment_font_size_source,
     segment_font_style_source,
     segment_font_weight_source,
@@ -106,6 +107,49 @@ def test_enrich_segment_font_fields_without_layout_doc():
     enrich_segment_font_fields(seg, None)
     assert seg["font_size_source"] == "user"
     assert "computed_font_size_pt" not in seg
+    assert "pdf_page_number" not in seg
+
+
+def test_enrich_segment_pdf_page_number_from_layout():
+    from layout.base import LayoutBlock, LayoutDocument, LayoutPage
+
+    layout_doc = LayoutDocument(
+        pages=[
+            LayoutPage(
+                page_index=0,
+                blocks=[
+                    LayoutBlock(
+                        page_index=0,
+                        bbox=(0.0, 0.0, 100.0, 20.0),
+                        type="text",
+                        index=0,
+                        text="Hello",
+                    ),
+                ],
+            ),
+            LayoutPage(
+                page_index=2,
+                blocks=[
+                    LayoutBlock(
+                        page_index=2,
+                        bbox=(0.0, 0.0, 100.0, 20.0),
+                        type="image",
+                        index=1,
+                        image_path="img.png",
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    text_seg = {"segment_index": 0, "layout_block_indices": [0]}
+    enrich_segment_font_fields(text_seg, layout_doc, text="Hello")
+    assert text_seg["pdf_page_number"] == 1
+
+    image_seg = {"segment_index": 1, "block_index": 1}
+    enrich_segment_font_fields(image_seg, layout_doc)
+    assert image_seg["pdf_page_number"] == 3
+    assert "computed_font_size_pt" not in image_seg
 
 
 def test_font_size_constants():
@@ -180,3 +224,10 @@ def test_segment_font_weight_and_style_source():
     assert segment_font_weight_source({}) == "auto"
     assert segment_font_weight_source({"font_weight": "bold"}) == "user"
     assert segment_font_style_source({"font_style": "italic"}) == "user"
+
+
+def test_primary_layout_block_index_from_task_state_map():
+    segment = {"segment_index": 2}
+    task_state = {"layout_chunk_block_map": [[], [5], [10, 11]]}
+    type_map = {10: "text", 11: "image"}
+    assert primary_layout_block_index(segment, type_map, task_state) == 10

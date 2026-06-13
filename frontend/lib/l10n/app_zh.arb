@@ -1307,5 +1307,20 @@
     }
   },
   "segmentPdfFontSizeReset": "恢复自动",
-  "segmentPdfFontSizeApply": "应用"
+  "segmentPdfFontSizeApply": "应用",
+
+  "translationPreviewPdfRevision": "PDF 修订",
+  "translationPreviewPdfRevisionCompare": "对照预览",
+  "translationPreviewAutoRefreshPdf": "自动刷新 PDF",
+  "translationPreviewRefreshPdf": "刷新 PDF",
+  "translationPreviewBatchTypography": "批量字体",
+  "translationPreviewBatchTypographyTooltip": "将字体设置应用到选中的片段",
+  "translationPreviewPdfRevisionSelectAll": "全选",
+  "translationPreviewPdfRevisionInvertSelection": "反选",
+  "translationPreviewPdfRevisionPageFilterLabel": "页码",
+  "translationPreviewPdfRevisionPageFilterAll": "全部页",
+  "translationPreviewPdfRevisionPageFilterSelectAll": "全选页",
+  "segmentPdfRevisionFontLabel": "字体",
+  "segmentPdfRevisionEditLabel": "编辑",
+  "segmentPdfRevisionClearLabel": "清除"
 }

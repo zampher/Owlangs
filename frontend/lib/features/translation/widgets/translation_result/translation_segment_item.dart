@@ -90,6 +90,7 @@ class TranslationSegmentItem extends StatefulWidget {
     this.computedLeadingEm,
     this.leadingEmSource,
     this.onFontSizeChanged,
+    this.pdfRevisionMode = false,
   });
   final String text;
   final String?
@@ -153,6 +154,7 @@ class TranslationSegmentItem extends StatefulWidget {
     double? leadingEm,
     bool reset,
   })? onFontSizeChanged;
+  final bool pdfRevisionMode;
 
   @override
   State<TranslationSegmentItem> createState() => _TranslationSegmentItemState();
@@ -620,9 +622,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
 
   String _pdfFontSizeLabel(AppLocalizations l10n) {
     final bool isUserOverride = _hasPdfTypographyOverride();
-    final double sizePt = isUserOverride && widget.fontSizePt != null
-        ? widget.fontSizePt!
-        : (widget.computedFontSizePt ?? widget.fontSizePt ?? 12.0);
+    final double sizePt = _effectiveFontSizePt();
     final String sizeLabel = isUserOverride && widget.fontSizePt != null
         ? l10n.segmentPdfFontSizeManual(sizePt.toStringAsFixed(1))
         : (widget.computedFontSizePt != null
@@ -639,6 +639,48 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     }
     styleParts.add('↕${_effectiveLeadingEm().toStringAsFixed(2)}');
     return styleParts.join(' · ');
+  }
+
+  /// PDF revision panel: always show effective (computed or user) typography values.
+  String _pdfRevisionFontLabel(AppLocalizations l10n) {
+    final List<String> styleParts = <String>[l10n.segmentPdfRevisionFontLabel];
+    final double? sizePt = _effectiveFontSizePtOrNull();
+    if (sizePt != null) {
+      styleParts.add(l10n.segmentPdfFontSizeManual(sizePt.toStringAsFixed(1)));
+    } else {
+      styleParts.add(l10n.segmentPdfFontSizeAutoUnknown);
+    }
+    final String weight = _effectiveFontWeight();
+    final String style = _effectiveFontStyle();
+    if (weight == 'bold') {
+      styleParts.add('B');
+    }
+    if (style == 'italic') {
+      styleParts.add('I');
+    }
+    final double? leadingEm = _effectiveLeadingEmOrNull();
+    if (leadingEm != null) {
+      styleParts.add('↕${leadingEm.toStringAsFixed(2)}');
+    }
+    return styleParts.join(' · ');
+  }
+
+  double? _effectiveFontSizePtOrNull() {
+    if (widget.fontSizeSource == 'user' && widget.fontSizePt != null) {
+      return widget.fontSizePt;
+    }
+    return widget.computedFontSizePt ?? widget.fontSizePt;
+  }
+
+  double _effectiveFontSizePt() {
+    return _effectiveFontSizePtOrNull() ?? 12.0;
+  }
+
+  double? _effectiveLeadingEmOrNull() {
+    if (widget.leadingEmSource == 'user' && widget.leadingEm != null) {
+      return widget.leadingEm;
+    }
+    return widget.computedLeadingEm ?? widget.leadingEm;
   }
 
   bool _hasPdfTypographyOverride() {
@@ -676,11 +718,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
       return;
     }
     final bool isUserOverride = _hasPdfTypographyOverride();
-    final double initialSize = snapPdfFontSize(
-      widget.fontSizeSource == 'user' && widget.fontSizePt != null
-          ? widget.fontSizePt!
-          : (widget.computedFontSizePt ?? 12.0),
-    );
+    final double initialSize = snapPdfFontSize(_effectiveFontSizePt());
 
     final SegmentPdfTypographyResult? result =
         await showSegmentPdfTypographyDialog(
@@ -745,7 +783,9 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  _pdfFontSizeLabel(l10n),
+                  widget.pdfRevisionMode
+                      ? _pdfRevisionFontLabel(l10n)
+                      : _pdfFontSizeLabel(l10n),
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w500,
@@ -966,12 +1006,14 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                       (widget.onEdit != null && !_isEditing)))
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: Row(
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
                     children: <Widget>[
                       if (widget.showPdfFontSize && widget.onFontSizeChanged != null)
                         _buildPdfFontSizeChip(),
                       // Platform badge
-                      if (widget.platformUsed != null)
+                      if (!widget.pdfRevisionMode && widget.platformUsed != null)
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 6,
@@ -1064,7 +1106,10 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                                     ),
                                     const SizedBox(width: 2),
                                     Text(
-                                      'Edit',
+                                      widget.pdfRevisionMode
+                                          ? AppLocalizations.of(context)!
+                                              .segmentPdfRevisionEditLabel
+                                          : 'Edit',
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w500,
@@ -1079,7 +1124,8 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                         ),
                       // Mark for retry button (if not already marked for retry and not excluded)
                       // Can be shown even if failed (failed segments can also be marked for retry)
-                      if (!_localNeedsRetry &&
+                      if (!widget.pdfRevisionMode &&
+                          !_localNeedsRetry &&
                           !_localIsExcluded &&
                           widget.onMarkForRetry != null)
                         Padding(
@@ -1133,7 +1179,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                         ),
                       // Unmark retry button (icon + text button to unmark for retry)
                       // Only show if needsRetry is true (not for failed segments)
-                      if (_localNeedsRetry)
+                      if (!widget.pdfRevisionMode && _localNeedsRetry)
                         Padding(
                           padding: const EdgeInsets.only(left: 4),
                           child: Material(
@@ -1186,13 +1232,14 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                           ),
                         ),
                       // Excluded badge (clickable to edit, with quick unexclude x button)
-                      if (_localIsExcluded)
+                      if (!widget.pdfRevisionMode && _localIsExcluded)
                         Padding(
                           padding: const EdgeInsets.only(left: 4),
                           child: _buildExclusionBadge(context),
                         ),
                       // Exclude button (if not excluded and not source)
-                      if (!_localIsExcluded &&
+                      if (!widget.pdfRevisionMode &&
+                          !_localIsExcluded &&
                           !widget.isSource &&
                           widget.onExclude != null)
                         Padding(
@@ -1351,7 +1398,10 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                                     ),
                                     const SizedBox(width: 2),
                                     Text(
-                                      'Clear',
+                                      widget.pdfRevisionMode
+                                          ? AppLocalizations.of(context)!
+                                              .segmentPdfRevisionClearLabel
+                                          : 'Clear',
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w500,
@@ -1365,7 +1415,8 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                           ),
                         ),
                       // Formula fix button (LLM repair for this segment)
-                      if (!_localIsCleared &&
+                      if (!widget.pdfRevisionMode &&
+                          !_localIsCleared &&
                           !widget.isSource &&
                           widget.text.isNotEmpty &&
                           widget.onFormulaFix != null)
