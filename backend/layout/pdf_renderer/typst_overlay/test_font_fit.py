@@ -9,8 +9,10 @@ from layout.pdf_renderer.typst_overlay.font_fit import (
     FontFitCalculator,
     REF_TEXT_MAX_LEADING_EM,
     estimate_title_font_size_pt,
+    is_patent_field_label,
     quantize_ref_font_size_pt,
     quantize_ref_leading_em,
+    should_use_title_font_sizing,
 )
 from layout.pdf_renderer.typst_overlay.models import RenderBlock
 
@@ -388,6 +390,72 @@ class TestFontFitCalculator(unittest.TestCase):
         fitted_nl = calc.calculate_fit_params(block_nl, layout_raw=raw)
         self.assertTrue(fitted_nl.preserve_line_breaks)
         self.assertLessEqual(fitted_nl.font_size_pt, 12.0)
+
+    def test_references_cited_two_line_patent_header(self):
+        """layout-1.json (56) References Cited: 27pt bbox, two visual lines."""
+        calc = FontFitCalculator()
+        raw = {
+            "type": "text",
+            "lines": [
+                {
+                    "spans": [
+                        {
+                            "type": "text",
+                            "content": "(56) References Cited\nU.S. PATENT DOCUMENTS",
+                        }
+                    ]
+                }
+            ],
+        }
+        bbox = (311.0, 195.0, 474.0, 222.0)
+        # Translation may collapse the embedded newline; bbox height still implies 2 lines.
+        text = "(56) References Cited U.S. PATENT DOCUMENTS"
+        block = RenderBlock(
+            block_id="ref_cited",
+            page_index=0,
+            inner_bbox=bbox,
+            plain_text=text,
+            markdown_text=text,
+        )
+        fitted = calc.calculate_fit_params(block, layout_raw={})
+        self.assertLessEqual(fitted.font_size_pt, 11.0)
+        self.assertGreaterEqual(fitted.font_size_pt, 7.5)
+
+        fitted_raw = calc.calculate_fit_params(block, layout_raw=raw)
+        self.assertTrue(fitted_raw.preserve_line_breaks)
+        self.assertLessEqual(fitted_raw.font_size_pt, 11.0)
+
+    def test_local_mineru_patent_title_mislabel_uses_body_font(self):
+        """middle.json tags (56) References Cited as type title — must not use 23pt title sizing."""
+        calc = FontFitCalculator()
+        raw = {
+            "type": "title",
+            "bbox": [310, 194, 474, 221],
+            "lines": [
+                {
+                    "spans": [
+                        {
+                            "type": "text",
+                            "content": "(56) References Cited U.S. PATENT DOCUMENTS",
+                        }
+                    ]
+                }
+            ],
+        }
+        text = "(56) References Cited U.S. PATENT DOCUMENTS"
+        self.assertTrue(is_patent_field_label(text, raw))
+        self.assertFalse(should_use_title_font_sizing(text, raw, 27.0))
+        block = RenderBlock(
+            block_id="patent_ref_title",
+            page_index=0,
+            inner_bbox=(310.0, 194.0, 474.0, 221.0),
+            plain_text=text,
+            markdown_text=text,
+        )
+        fitted = calc.calculate_fit_params(block, layout_raw=raw)
+        self.assertLessEqual(fitted.font_size_pt, 11.0)
+        self.assertGreaterEqual(fitted.font_size_pt, 7.5)
+        self.assertTrue(fitted.fit_to_box)
 
 
 if __name__ == "__main__":

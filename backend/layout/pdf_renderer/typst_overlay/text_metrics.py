@@ -128,8 +128,9 @@ def estimate_visual_line_count(
     if bbox_height_pt <= SINGLE_LINE_BBOX_HEIGHT_PT:
         if embedded_lines > 1.0:
             return max(embedded_lines, from_height)
-        if from_height >= 2.0:
-            return max(from_height, from_raw if from_raw > 1.0 else from_height)
+        # ~26pt+ bbox fits two ~9–10pt lines (27/14 ≈ 1.93 was misclassified as one line).
+        if from_height >= 1.85:
+            return max(2.0, from_height, from_raw if from_raw > 1.0 else from_height)
         return 1.0
 
     lines = max(from_height, from_raw if from_raw > 1.0 else from_height)

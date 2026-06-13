@@ -9,6 +9,7 @@ based on the bounding box dimensions of each layout block.
 """
 
 import math
+import re
 import statistics
 from typing import Any, List, Optional, Tuple
 
@@ -63,6 +64,8 @@ TITLE_SINGLE_LINE_FONT_HEIGHT_RATIO = 0.86
 TITLE_TYPICAL_LINE_HEIGHT_PT = 18.0
 TITLE_LEADING_EM = 1.12
 TITLE_MIN_FONT_SIZE_PT = 10.0
+# Section headings are ~9–11pt bbox; taller single-line "title" tags are often mislabels.
+TIGHT_TITLE_BBOX_HEIGHT_PT = 16.0
 
 
 def _layout_block_type(layout_raw: Any) -> str:
@@ -87,6 +90,52 @@ def is_title_layout(layout_raw: Any, block_type: str = "", heading_level: int = 
     return _layout_block_type(layout_raw) in ("title", "header")
 
 
+_PATENT_FIELD_LABEL_RE = re.compile(r"^\(\d{2}\)\s")
+
+
+def _layout_text_content(text: str = "", layout_raw: Any = None) -> str:
+    """Best-effort plain text from render text or MinerU raw spans."""
+    if text and text.strip():
+        return text.strip()
+    if isinstance(layout_raw, dict):
+        parts: List[str] = []
+        for line in layout_raw.get("lines") or []:
+            if not isinstance(line, dict):
+                continue
+            for span in line.get("spans") or []:
+                if not isinstance(span, dict):
+                    continue
+                content = span.get("content")
+                if content:
+                    parts.append(str(content))
+        if parts:
+            return " ".join(parts).strip()
+    return ""
+
+
+def is_patent_field_label(text: str = "", layout_raw: Any = None) -> bool:
+    """US patent form lines like ``(56) References Cited ...``."""
+    content = _layout_text_content(text, layout_raw)
+    return bool(_PATENT_FIELD_LABEL_RE.match(content))
+
+
+def should_use_title_font_sizing(
+    text: str,
+    layout_raw: Any,
+    bbox_height: float,
+) -> bool:
+    """
+    Whether Typst should apply title-specific font sizing.
+
+    Local MinerU (middle.json) often tags patent bibliography headers as
+    ``type: "title"`` with a ~27pt bbox; treating them as section titles yields
+    ~23pt font (bbox × 0.86). Route those through body-text fitting instead.
+    """
+    if is_patent_field_label(text, layout_raw):
+        return False
+    return True
+
+
 def estimate_title_font_size_pt(
     bbox_height: float,
     layout_raw: Any = None,
@@ -109,10 +158,19 @@ def estimate_title_font_size_pt(
     available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
 
     if (
-        bbox_height <= SINGLE_LINE_BBOX_HEIGHT_PT
+        bbox_height <= TIGHT_TITLE_BBOX_HEIGHT_PT
         and raw_line_count == 1
     ):
         estimated = bbox_height * TITLE_SINGLE_LINE_FONT_HEIGHT_RATIO
+    elif (
+        bbox_height <= SINGLE_LINE_BBOX_HEIGHT_PT
+        and raw_line_count == 1
+    ):
+        visual_lines = max(
+            2.0,
+            bbox_height / TITLE_TYPICAL_LINE_HEIGHT_PT,
+        )
+        estimated = available_h / (visual_lines * TITLE_LEADING_EM)
     else:
         visual_lines = max(
             float(raw_line_count),
@@ -216,8 +274,12 @@ class FontFitCalculator:
         _, y0, _, y1 = block.inner_bbox
         bbox_height = max(1.0, y1 - y0)
 
+        text = block.plain_text or block.markdown_text or ""
         block_type = _layout_block_type(layout_raw)
-        if is_title_layout(layout_raw, block_type=block_type):
+        if (
+            is_title_layout(layout_raw, block_type=block_type)
+            and should_use_title_font_sizing(text, layout_raw, bbox_height)
+        ):
             return estimate_title_font_size_pt(
                 bbox_height,
                 layout_raw,
@@ -227,7 +289,6 @@ class FontFitCalculator:
 
         available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
 
-        text = block.plain_text or block.markdown_text or ""
         typo_units = estimate_typographic_units(text, layout_raw)
         if typo_units <= 0:
             return self.default_size_pt
@@ -387,7 +448,13 @@ class FontFitCalculator:
         """
         block_type = _layout_block_type(layout_raw)
         is_ref_text = is_ref_text_layout(layout_raw, block_type=block_type)
-        is_title = is_title_layout(layout_raw, block_type=block_type)
+        block_text = block.plain_text or block.markdown_text or ""
+        _, y0, _, y1 = block.inner_bbox
+        bbox_height = max(1.0, y1 - y0)
+        is_title = (
+            is_title_layout(layout_raw, block_type=block_type)
+            and should_use_title_font_sizing(block_text, layout_raw, bbox_height)
+        )
         use_unified_ref = (
             is_ref_text
             and ref_unified_font_pt is not None

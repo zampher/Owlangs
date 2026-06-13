@@ -203,25 +203,32 @@ def _infer_title_heading_levels(doc: LayoutDocument) -> None:
     the hierarchy level. When span ``size`` is missing, estimates from bbox height.
     Non-title blocks are left unchanged.
     """
-    from layout.pdf_renderer.typst_overlay.font_fit import estimate_title_font_size_pt
+    from layout.pdf_renderer.typst_overlay.font_fit import (
+        estimate_title_font_size_pt,
+        should_use_title_font_sizing,
+    )
 
     for page in doc.pages:
         for block in page.blocks:
             if block.type != "title" or not isinstance(block.raw, dict):
                 continue
+            bbox = block.raw.get("bbox") or block.bbox
+            bbox_height = 0.0
+            if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+                try:
+                    bbox_height = max(0.0, float(bbox[3]) - float(bbox[1]))
+                except (TypeError, ValueError):
+                    bbox_height = 0.0
+            if not should_use_title_font_sizing(block.text or "", block.raw, bbox_height):
+                block.heading_level = 0
+                continue
             font_size = _get_max_span_font_size(block.raw)
             if font_size <= 0:
-                bbox = block.raw.get("bbox") or block.bbox
-                if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
-                    try:
-                        bbox_height = max(0.0, float(bbox[3]) - float(bbox[1]))
-                    except (TypeError, ValueError):
-                        bbox_height = 0.0
-                else:
-                    bbox_height = 0.0
                 if bbox_height > 0:
                     font_size = estimate_title_font_size_pt(bbox_height, block.raw)
                     block.raw["inferred_font_size"] = font_size
+                else:
+                    bbox_height = 0.0
             if font_size > 0:
                 block.heading_level = _infer_heading_level_from_font_size(font_size)
 

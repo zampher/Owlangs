@@ -130,6 +130,14 @@ class TestTextMetrics(unittest.TestCase):
 
     def test_tight_bbox_single_line_stays_one_line(self):
         self.assertEqual(estimate_visual_line_count(14.0, None, text="US 8,672,145 B2"), 1.0)
+        self.assertEqual(estimate_visual_line_count(23.0, None), 1.0)
+
+    def test_short_two_line_bbox_from_height_rounding(self):
+        """27pt patent field: two lines even without embedded \\n in translated text."""
+        self.assertGreaterEqual(
+            estimate_visual_line_count(27.0, None, text="(56) References Cited U.S. PATENT DOCUMENTS"),
+            2.0,
+        )
 
 
 if __name__ == "__main__":
