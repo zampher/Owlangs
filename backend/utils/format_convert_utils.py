@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -2243,6 +2244,209 @@ def group_consecutive_images_for_markdown(
 # NOTE: Legacy HTML->PDF backend has been removed.
 # If HTML-to-PDF is needed (e.g. MOBI/EPUB workflows), use Pandoc → XeLaTeX.
 
+_CJK_LANG_CODES = (
+    "zh",
+    "chinese",
+    "zh-cn",
+    "zh-tw",
+    "ja",
+    "japanese",
+    "jp",
+    "ko",
+    "korean",
+    "kr",
+)
+_CJK_CHAR_RE = re.compile(
+    r"[\u3000-\u303f\u3040-\u30ff\u31f0-\u31ff\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff]"
+)
+
+
+def _content_has_cjk(text: str) -> bool:
+    return bool(text and _CJK_CHAR_RE.search(text))
+
+
+def _should_use_xecjk_for_pdf(to_lang: Optional[str], content: Optional[str] = None) -> bool:
+    to_lang_lower = (to_lang or "").strip().lower()
+    if any(to_lang_lower.startswith(code) or to_lang_lower == code for code in _CJK_LANG_CODES):
+        return True
+    return _content_has_cjk(content or "")
+
+
+def _cjk_mainfont_fallback(lang_code: str) -> str:
+    lang = (lang_code or "zh").strip().lower()
+    if sys.platform == "darwin":
+        if lang.startswith("ja"):
+            return "Hiragino Sans"
+        if lang.startswith("ko"):
+            return "Apple SD Gothic Neo"
+        return "PingFang SC"
+    if sys.platform == "win32":
+        if lang.startswith("ja"):
+            return "Yu Gothic"
+        if lang.startswith("ko"):
+            return "Malgun Gothic"
+        if lang.startswith("zh") and ("tw" in lang or "hant" in lang):
+            return "Microsoft JhengHei"
+        return "Microsoft YaHei"
+    if lang.startswith("ja"):
+        return "Noto Sans CJK JP"
+    if lang.startswith("ko"):
+        return "Noto Sans CJK KR"
+    return "Noto Sans CJK SC"
+
+
+def _resolve_mainfont_for_pdf(to_lang: Optional[str], content: Optional[str] = None) -> str:
+    lang_code = (to_lang or "").strip().lower()
+    if not lang_code and content and _content_has_cjk(content):
+        if re.search(r"[\u3040-\u30ff\u31f0-\u31ff]", content):
+            lang_code = "ja"
+        elif re.search(r"[\uac00-\ud7af]", content):
+            lang_code = "ko"
+        else:
+            lang_code = "zh"
+    try:
+        from translator.ai_translator.docx_translator import get_font_for_language
+
+        if lang_code:
+            return get_font_for_language(lang_code)
+    except Exception:
+        if lang_code and any(
+            lang_code.startswith(code) or lang_code == code for code in _CJK_LANG_CODES
+        ):
+            return _cjk_mainfont_fallback(lang_code)
+        if not lang_code and content and _content_has_cjk(content):
+            return _cjk_mainfont_fallback(lang_code or "zh")
+    return "Helvetica Neue" if sys.platform == "darwin" else "Calibri"
+
+
+def _resolve_pandoc_lang_for_pdf(to_lang: Optional[str], content: Optional[str] = None) -> str:
+    """IETF lang tag for Pandoc PDF metadata.
+
+    HTML workflow wraps exports with ``lang=\"en\"``, which makes Pandoc load babel
+    ``english``/``american`` on bundled TeX and fail. Override with a supported tag,
+    or return empty to skip babel language setup.
+    """
+    lang_code = (to_lang or "").strip().lower()
+    if not lang_code and content and _content_has_cjk(content):
+        if re.search(r"[\u3040-\u30ff\u31f0-\u31ff]", content):
+            lang_code = "ja"
+        elif re.search(r"[\uac00-\ud7af]", content):
+            lang_code = "ko"
+        else:
+            lang_code = "zh"
+    if lang_code.startswith("zh"):
+        if "tw" in lang_code or "hant" in lang_code:
+            return "zh-TW"
+        return "zh-CN"
+    if lang_code.startswith("ja"):
+        return "ja-JP"
+    if lang_code.startswith("ko"):
+        return "ko-KR"
+    if lang_code.startswith("fr"):
+        return "fr-FR"
+    if lang_code.startswith("de"):
+        return "de-DE"
+    if lang_code.startswith("es"):
+        return "es-ES"
+    # Avoid babel english/american on bundled TeX (also overrides HTML lang="en").
+    return ""
+
+
+def _resolve_cjk_mainfont_for_pdf(to_lang: Optional[str], content: Optional[str] = None) -> str:
+    """CJK font for xeCJK; independent of Latin mainfont (e.g. Calibri when to_lang=en)."""
+    lang_code = (to_lang or "").strip().lower()
+    if content:
+        if re.search(r"[\u3040-\u30ff\u31f0-\u31ff]", content):
+            lang_code = "ja"
+        elif re.search(r"[\uac00-\ud7af]", content):
+            lang_code = "ko"
+        elif _content_has_cjk(content) and not any(
+            lang_code.startswith(code) or lang_code == code for code in _CJK_LANG_CODES
+        ):
+            lang_code = "zh"
+    if "tw" in lang_code or "hant" in lang_code:
+        return _cjk_mainfont_fallback("zh-tw")
+    if lang_code.startswith("ja"):
+        return _cjk_mainfont_fallback("ja")
+    if lang_code.startswith("ko"):
+        return _cjk_mainfont_fallback("ko")
+    return _cjk_mainfont_fallback("zh")
+
+
+def _pandoc_pdf_header_includes(
+    mainfont: str,
+    use_xecjk: bool,
+    cjk_mainfont: Optional[str] = None,
+) -> Tuple[str, str]:
+    cjk_preamble = ""
+    if use_xecjk:
+        cjk_font_name = (cjk_mainfont or mainfont).replace("\\", "").replace("}", "\\}").replace("{", "\\{")
+        cjk_preamble = f"\\usepackage{{xeCJK}}\\setCJKmainfont{{{cjk_font_name}}}"
+    shared = (
+        "\\usepackage{ragged2e}\\AtBeginDocument{\\RaggedRight}"
+        "\\PassOptionsToPackage{hyphens}{url}\\usepackage{hyperref}\\hypersetup{breaklinks=true}"
+        "\\usepackage{titlesec}"
+        "\\usepackage{graphicx}"
+        "\\usepackage{etoolbox}"
+        "\\makeatletter"
+        "\\renewcommand{\\@maketitle}{\\begin{center}\\LARGE\\bfseries\\@title\\par\\vskip 0.5em\\large\\@author\\par\\vskip 0.3em\\normalsize\\@date\\end{center}\\par\\vskip 1em}"
+        "\\makeatother"
+        "\\AtEndPreamble{"
+        "\\titleformat*{\\section}{\\LARGE\\bfseries}"
+        "\\titleformat*{\\subsection}{\\Large\\bfseries}"
+        "\\titleformat*{\\subsubsection}{\\large\\bfseries}"
+        "}"
+        "\\AtBeginDocument{"
+        "\\sloppy\\setlength{\\emergencystretch}{5em}"
+        "}"
+    )
+    return cjk_preamble + shared, shared
+
+
+def _xelatex_subprocess_env(
+    xelatex_path: Optional[Path],
+    pdflatex_root_use: Optional[Path],
+    temp_work_dir: Path,
+) -> Dict[str, str]:
+    env = os.environ.copy()
+    if not xelatex_path or pdflatex_root_use is None:
+        return env
+    env["PATH"] = str(xelatex_path.parent) + os.pathsep + env.get("PATH", "")
+    env["TEXMFCNF"] = str(pdflatex_root_use) + os.pathsep + str(
+        pdflatex_root_use / "texmf-dist" / "web2c"
+    )
+    env["TEXMFROOT"] = str(pdflatex_root_use)
+    user_texmfvar = _get_user_texmfvar_dir()
+    user_texmfvar.mkdir(parents=True, exist_ok=True)
+    texmfvar = str(user_texmfvar)
+    env["TEXMFVAR"] = texmfvar
+    env["TEXMFSYSVAR"] = texmfvar
+    env["TEXMFOUTPUT"] = str(temp_work_dir)
+    fontconfig_file = pdflatex_root_use / "texmf-var" / "fonts" / "conf" / "fonts.conf"
+    if fontconfig_file.exists():
+        env["FONTCONFIG_FILE"] = str(fontconfig_file)
+        fc_cache_dir = user_texmfvar / "fontconfig-cache"
+        fc_cache_dir.mkdir(parents=True, exist_ok=True)
+        env["FC_CACHEDIR"] = str(fc_cache_dir)
+    _ensure_xelatex_fmt(pdflatex_root_use, env)
+    return env
+
+
+def _ensure_html_utf8_meta(html_content: str) -> str:
+    """Ensure Pandoc/XeLaTeX sees UTF-8 when converting HTML to PDF."""
+    lower = html_content.lower()
+    if "charset" in lower or "encoding=" in lower:
+        return html_content
+    if re.search(r"<head\b", html_content, re.IGNORECASE):
+        return re.sub(
+            r"(<head\b[^>]*>)",
+            r'\1<meta charset="utf-8" />',
+            html_content,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+    return f'<!DOCTYPE html><html><head><meta charset="utf-8" /></head><body>{html_content}</body></html>'
+
 
 async def convert_html_to_pdf(
     html_content: str,
@@ -2284,12 +2488,14 @@ async def convert_html_to_pdf(
 
     xelatex_path_orig = _get_xelatex_path()
     xelatex_path = None
+    pdflatex_root_use = None
     if xelatex_path_orig:
         pdflatex_root = xelatex_path_orig.parent.parent.parent
         pdflatex_root_use = _ensure_ascii_path_for_tex(pdflatex_root)
         xelatex_path = pdflatex_root_use / "bin" / "windows" / "xelatex.exe"
         if not xelatex_path.exists():
             xelatex_path = _to_short_path_if_needed(xelatex_path_orig)
+            pdflatex_root_use = xelatex_path.parent.parent.parent
     
     # 检查 xelatex 是否在 PATH 中
     xelatex_in_path = shutil.which("xelatex")
@@ -2336,13 +2542,24 @@ async def convert_html_to_pdf(
         raise RuntimeError(install_msg)
 
     pdf_engine = str(xelatex_path) if xelatex_path else (xelatex_in_path if xelatex_in_path else "xelatex")
-    import tempfile
-    try:
-        from translator.ai_translator.docx_translator import get_font_for_language
+    if sys.platform == "darwin":
+        _check_latex_packages_macos()
 
-        mainfont = get_font_for_language(to_lang) if to_lang else ("Helvetica Neue" if sys.platform == "darwin" else "Calibri")
-    except Exception:
-        mainfont = "Helvetica Neue" if sys.platform == "darwin" else "Calibri"
+    html_content = _ensure_html_utf8_meta(html_content)
+    mainfont = _resolve_mainfont_for_pdf(to_lang, html_content)
+    use_xecjk = _should_use_xecjk_for_pdf(to_lang, html_content)
+    cjk_mainfont = _resolve_cjk_mainfont_for_pdf(to_lang, html_content) if use_xecjk else None
+    pandoc_lang = _resolve_pandoc_lang_for_pdf(to_lang, html_content)
+    header_with_cjk, header_without_cjk = _pandoc_pdf_header_includes(
+        mainfont, use_xecjk, cjk_mainfont=cjk_mainfont
+    )
+    logger.info(
+        LogModule.RESTOR,
+        f"[PDF-EXPORT] convert_html_to_pdf fonts: to_lang={to_lang!r}, mainfont={mainfont!r}, "
+        f"cjk_mainfont={cjk_mainfont!r}, use_xecjk={use_xecjk}, pandoc_lang={pandoc_lang!r}",
+    )
+    geometry_opts = "margin=2.5cm"
+    env = _xelatex_subprocess_env(xelatex_path, pdflatex_root_use, temp_work_dir)
     import asyncio
 
     tmp_html = None
@@ -2351,34 +2568,60 @@ async def convert_html_to_pdf(
         os.close(fd)
         Path(tmp_html).write_text(html_content, encoding="utf-8", errors="ignore")
 
-        # Use resource-path so relative images can be resolved from output_dir.
-        # Also keep the working directory stable (pandoc reads resources relative to CWD).
+        attempts: List[Tuple[str, str]] = [(header_with_cjk, "with xeCJK" if use_xecjk else "default")]
+        if use_xecjk:
+            attempts.append((header_without_cjk, "without xeCJK (fallback)"))
+
         def _run_pandoc() -> None:
             import subprocess
 
-            cmd = [
-                str(pandoc_path),
-                tmp_html,
-                "-f",
-                "html",
-                "-o",
-                output_path,
-                "--pdf-engine",
-                pdf_engine,
-                "--resource-path",
-                str(out_dir),
-                "-V",
-                f"mainfont={mainfont}",
-            ]
-            proc = subprocess.run(
-                cmd,
-                cwd=str(temp_work_dir),
-                capture_output=True,
-                text=True,
+            last_error = ""
+            for current_header, attempt_name in attempts:
+                cmd = [
+                    str(pandoc_path),
+                    tmp_html,
+                    "-f",
+                    "html",
+                    "-o",
+                    output_path,
+                    "--pdf-engine",
+                    pdf_engine,
+                    "--resource-path",
+                    str(out_dir),
+                    "-V",
+                    f"mainfont={mainfont}",
+                    "-V",
+                    f"lang={pandoc_lang}",
+                    "-V",
+                    f"geometry={geometry_opts}",
+                    "-V",
+                    "papersize=a4",
+                    "-V",
+                    f"header-includes={current_header}",
+                ]
+                proc = subprocess.run(
+                    cmd,
+                    cwd=str(temp_work_dir),
+                    capture_output=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    env=env,
+                )
+                if proc.returncode == 0:
+                    if attempt_name.startswith("without xeCJK"):
+                        logger.info(
+                            LogModule.RESTOR,
+                            "[PDF-EXPORT] convert_html_to_pdf succeeded without xeCJK (fallback)",
+                        )
+                    return
+                last_error = (proc.stderr or proc.stdout or "")[:800]
+                logger.warning(
+                    LogModule.RESTOR,
+                    f"[PDF-EXPORT] convert_html_to_pdf pandoc failed ({attempt_name}): {last_error}",
+                )
+            raise RuntimeError(
+                f"Pandoc HTML->PDF failed after {len(attempts)} attempt(s): {last_error}"
             )
-            if proc.returncode != 0:
-                stderr = (proc.stderr or "")[:800]
-                raise RuntimeError(f"Pandoc HTML->PDF failed (code={proc.returncode}): {stderr}")
 
         await asyncio.to_thread(_run_pandoc)
 

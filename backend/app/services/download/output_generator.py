@@ -205,7 +205,7 @@ class OutputGenerator:
         # Generate PDF (for markdown_based workflow and MOBI/EPUB, only after translation)
         # NOTE: PDF generation for MOBI/EPUB uses HTML-to-PDF conversion which may take time
         # It's generated here so it's available when user requests download
-        if workflow_type in ("markdown_based", "mobi", "epub") and hasattr(workflow, 'export_to_html') and not is_format_conversion:
+        if workflow_type in ("markdown_based", "mobi", "epub", "html") and hasattr(workflow, 'export_to_html') and not is_format_conversion:
             logger.info(LogModule.EXPORT, f"[OUTPUT-GENERATOR] Task {task_id}: Generating PDF output...")
             try:
                 await self.generate_pdf(task_id, workflow, payload, task_state, output_dir, file_stem)
@@ -2288,6 +2288,48 @@ class OutputGenerator:
                     # For MOBI/EPUB, don't fallback to layout-based PDF (no layout available)
                     logger.error(LogModule.EXPORT, f"[PDF-EXPORT] HTML-to-PDF conversion failed for MOBI/EPUB workflow: {e}", exc_info=True)
                     raise
+            elif workflow_type == "html":
+                logger.info(LogModule.EXPORT, "[PDF-EXPORT] HTML workflow: converting translated HTML to PDF via Pandoc")
+                self.task_manager.add_log(task_id, "info", "[PDF-EXPORT] HTML workflow: HTML-to-PDF export...")
+                if not hasattr(workflow, "export_to_html"):
+                    raise ValueError("HTML workflow missing export_to_html; cannot generate PDF")
+                html_content = workflow.export_to_html()
+                if not html_content or not str(html_content).strip():
+                    raise ValueError("HTML content is empty; cannot generate PDF for HTML workflow")
+                from utils.format_convert_utils import convert_html_to_pdf
+
+                to_lang = None
+                if payload:
+                    to_lang = (
+                        (payload.get("to_lang") or payload.get("target_language"))
+                        if isinstance(payload, dict)
+                        else (
+                            getattr(payload, "to_lang", None)
+                            or getattr(payload, "target_language", None)
+                        )
+                    )
+                if not to_lang and task_state:
+                    to_lang = task_state.get("to_lang") or task_state.get("target_language")
+
+                pdf_file = output_dir / f"{file_stem}_translated.pdf"
+                await convert_html_to_pdf(
+                    html_content,
+                    str(pdf_file),
+                    output_dir=output_dir,
+                    to_lang=to_lang,
+                )
+                if pdf_file.exists():
+                    task_state.setdefault("downloadable_files", {})["pdf"] = {
+                        "path": str(pdf_file),
+                        "filename": f"{file_stem}_translated.pdf",
+                    }
+                    self.task_manager.add_log(
+                        task_id,
+                        "success",
+                        f"[PDF-EXPORT] HTML workflow PDF generated: {pdf_file}",
+                    )
+                    return
+                raise FileNotFoundError(f"PDF file was not created at: {pdf_file}")
             else:
                 logger.info(
                     LogModule.EXPORT,

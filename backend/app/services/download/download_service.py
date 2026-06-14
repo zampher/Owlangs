@@ -680,6 +680,52 @@ def _docx_stash_download_kwargs(task_state: Dict[str, Any]) -> Dict[str, Any]:
     return kwargs
 
 
+def _is_html_convert_only_task(task_state: Dict[str, Any]) -> bool:
+    return bool(task_state.get("is_format_conversion") or task_state.get("convert_only"))
+
+
+def _export_html_from_original(task_state: Dict[str, Any]) -> Optional[str]:
+    """Source HTML for convert-only HTML tasks."""
+    workflow = task_state.get("workflow_instance")
+    if workflow is None or not getattr(workflow, "document_original", None):
+        return None
+    doc_original = workflow.document_original
+    if not doc_original or not doc_original.content:
+        return None
+    html_content = (
+        doc_original.content.decode("utf-8")
+        if isinstance(doc_original.content, bytes)
+        else str(doc_original.content)
+    )
+    if not html_content.strip():
+        return None
+    if hasattr(workflow, "_wrap_html_with_css"):
+        return workflow._wrap_html_with_css(html_content)
+    return html_content
+
+
+def _sync_html_translated_texts_from_segments(task_state: Dict[str, Any]) -> None:
+    """Align html_translated_texts with latest segment target_text (edits / batch retry)."""
+    segments_data = task_state.get("translation_segments")
+    if not isinstance(segments_data, dict):
+        return
+    segments = segments_data.get("segments") or []
+    html_translated_texts = task_state.get("html_translated_texts")
+    if not isinstance(html_translated_texts, list):
+        return
+    for segment in segments:
+        if not isinstance(segment, dict):
+            continue
+        segment_index = segment.get("segment_index")
+        if not isinstance(segment_index, int) or not (0 <= segment_index < len(html_translated_texts)):
+            continue
+        target_text = segment.get("target_text") or ""
+        if segment.get("modified") and segment.get("modified_text") is not None:
+            target_text = segment.get("modified_text")
+        html_translated_texts[segment_index] = target_text
+    task_state["html_translated_texts"] = html_translated_texts
+
+
 def _rebuild_html_from_task_state(task_state: Dict[str, Any]) -> Optional[str]:
     """
     Rebuild translated HTML for html workflow using updated html_translated_texts.
@@ -978,10 +1024,12 @@ def _build_stash_export_plan(task_state: Dict[str, Any]) -> List[Tuple[str, str,
             plan.append((ft, ft, {}))
         plan.append(("md_zip", "md", {"embed_images": False}))
     elif wt in ("docx", "html"):
-        # Same on-demand surface as markdown_based minus PDF branch (non-PDF sources).
+        # Same on-demand surface as markdown_based minus layout PDF (typst_overlay).
         for ft in ("docx", "html", "md"):
-            plan.append((ft, ft, {}))
+            plan.append((ft, ft, docx_kwargs if ft == "docx" else {}))
         plan.append(("md_zip", "md", {"embed_images": False}))
+        if wt == "html":
+            plan.append(("pdf", "pdf", {"renderer_type": "html"}))
     elif wt == "json":
         for ft in ("json", "html"):
             plan.append((ft, ft, {}))
@@ -1020,6 +1068,8 @@ def _build_stash_export_plan(task_state: Dict[str, Any]) -> List[Tuple[str, str,
 def _stash_export_format_label(stash_key: str, kwargs: Dict[str, Any]) -> str:
     """Human-readable export label for queue progress messages."""
     if stash_key == "pdf":
+        if kwargs.get("renderer_type") == "html":
+            return "PDF (from HTML)"
         return "PDF (original layout)"
     if stash_key == "pdf_reflow":
         return "PDF (reflow)"
@@ -1650,6 +1700,212 @@ def _pandoc_pdf_file_response_from_md(
         )
 
 
+def _is_html_source_task(task_state: Dict[str, Any]) -> bool:
+    """True when the original file or workflow is HTML-based."""
+    orig_l = (task_state.get("original_filename") or "").lower()
+    if orig_l.endswith((".html", ".htm")):
+        return True
+    return resolve_task_export_workflow_type(task_state) == "html"
+
+
+def _resolve_translated_html_for_export(task_state: Dict[str, Any]) -> Optional[str]:
+    """Best-effort HTML for HTML-workflow PDF export (translated or source for convert-only)."""
+    if _is_html_convert_only_task(task_state):
+        source_html = _export_html_from_original(task_state)
+        if source_html and source_html.strip():
+            logger.info(
+                LogModule.EXPORT,
+                "[DOWNLOAD] HTML PDF export using source HTML (convert-only)",
+            )
+            return source_html
+
+    workflow = task_state.get("workflow_instance")
+    if workflow is not None and getattr(workflow, "document_translated", None) is not None:
+        if hasattr(workflow, "export_to_html"):
+            try:
+                html_content = workflow.export_to_html()
+                if html_content and str(html_content).strip():
+                    logger.info(
+                        LogModule.EXPORT,
+                        "[DOWNLOAD] HTML PDF export using workflow.export_to_html (translated document)",
+                    )
+                    return str(html_content)
+            except Exception as e:
+                logger.warning(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] workflow.export_to_html failed: {e}",
+                    exc_info=True,
+                )
+
+    _sync_html_translated_texts_from_segments(task_state)
+    rebuilt = _rebuild_html_from_task_state(task_state)
+    if rebuilt and rebuilt.strip():
+        logger.info(
+            LogModule.EXPORT,
+            "[DOWNLOAD] HTML PDF export using rebuild_html_from_task_state fallback",
+        )
+        rebuilt_lower = rebuilt.lstrip().lower()
+        if rebuilt_lower.startswith("<!doctype") or rebuilt_lower.startswith("<html"):
+            return rebuilt
+        workflow = task_state.get("workflow_instance")
+        if workflow is not None and hasattr(workflow, "_wrap_html_with_css"):
+            return workflow._wrap_html_with_css(rebuilt)
+        return rebuilt
+
+    html_info = task_state.get("downloadable_files", {}).get("html")
+    if html_info:
+        html_path = (
+            html_info.get("path", "")
+            if isinstance(html_info, dict)
+            else str(html_info)
+        )
+        if html_path and os.path.exists(html_path):
+            try:
+                with open(html_path, encoding="utf-8", errors="replace") as f:
+                    cached = f.read()
+                if cached.strip():
+                    logger.info(
+                        LogModule.EXPORT,
+                        f"[DOWNLOAD] HTML PDF export using cached HTML file: {html_path}",
+                    )
+                    return cached
+            except OSError as e:
+                logger.warning(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] Failed to read cached HTML at {html_path}: {e}",
+                )
+    return None
+
+
+async def _pandoc_pdf_file_response_from_html(
+    task_state: Dict[str, Any],
+    task_id: str,
+    html_content: str,
+) -> Response:
+    """Export translated HTML to PDF via Pandoc + XeLaTeX."""
+    sfx = _get_output_suffix(task_state)
+    if not html_content or not str(html_content).strip():
+        raise HTTPException(
+            status_code=500,
+            detail="HTML content is empty; cannot export PDF.",
+        )
+    output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
+    output_dir.mkdir(exist_ok=True)
+    file_stem = task_state.get("original_filename_stem", "translated")
+    pdf_file_path = output_dir / f"{file_stem}{sfx}.pdf"
+    to_lang, _ = _get_to_lang_and_docx_font(task_state)
+    try:
+        from utils.format_convert_utils import convert_html_to_pdf
+
+        with _pandoc_pdf_gen_lock(task_id):
+            await convert_html_to_pdf(
+                html_content,
+                str(pdf_file_path),
+                output_dir=output_dir,
+                to_lang=to_lang,
+            )
+        if not pdf_file_path.exists() or pdf_file_path.stat().st_size == 0:
+            raise HTTPException(
+                status_code=500,
+                detail="PDF generation via Pandoc produced an empty file.",
+            )
+        pdf_bytes = pdf_file_path.read_bytes()
+        logger.info(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] PDF generated via pandoc (HTML → XeLaTeX → PDF) task_id={task_id} "
+            f"bytes={len(pdf_bytes)}",
+        )
+        filename = pdf_file_path.name
+        media_type = MEDIA_TYPES.get("pdf", "application/pdf")
+        response = Response(
+            content=pdf_bytes,
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+        response.owlangs_stash_path = str(pdf_file_path)  # type: ignore[attr-defined]
+        return response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Pandoc HTML→PDF path failed: {e}",
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=str(e) or "PDF generation via Pandoc failed (see server logs for details).",
+        )
+
+
+async def _html_workflow_pdf_response(
+    task_state: Dict[str, Any],
+    task_id: str,
+    *,
+    renderer_type: Optional[str],
+    equation_format: Optional[str],
+    table_body_format: Optional[str],
+    bilingual_enabled: bool,
+    target_first: bool,
+) -> Response:
+    """PDF export for HTML source tasks: HTML→PDF or MD→PDF (reflow)."""
+    if renderer_type == "pandoc":
+        md_raw: Optional[str] = None
+        workflow = task_state.get("workflow_instance")
+        if workflow is not None and hasattr(workflow, "export_to_markdown"):
+            try:
+                md_raw = workflow.export_to_markdown()
+                if isinstance(md_raw, bytes):
+                    md_raw = md_raw.decode("utf-8", errors="replace")
+            except Exception as e:
+                logger.warning(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] HTML workflow export_to_markdown failed: {e}",
+                    exc_info=True,
+                )
+        if not md_raw or not str(md_raw).strip():
+            from utils.document_rebuild import rebuild_markdown_document_from_segments
+
+            try:
+                rebuilt_doc = rebuild_markdown_document_from_segments(
+                    task_state,
+                    file_stem=task_state.get("original_filename_stem"),
+                    equation_format=equation_format,
+                    table_body_format=table_body_format,
+                    bilingual_export=bilingual_enabled,
+                    target_first=target_first,
+                )
+                if rebuilt_doc and getattr(rebuilt_doc, "content", None):
+                    raw = rebuilt_doc.content
+                    md_raw = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+            except Exception as e:
+                logger.error(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] HTML workflow MD rebuild for PDF failed: {e}",
+                    exc_info=True,
+                )
+        if not md_raw or not str(md_raw).strip():
+            raise HTTPException(
+                status_code=500,
+                detail="Markdown content is empty; cannot export reflow PDF for HTML task.",
+            )
+        return _pandoc_pdf_file_response_from_md(
+            task_state,
+            task_id,
+            md_raw,
+            equation_format,
+            table_body_format,
+        )
+
+    html_content = _resolve_translated_html_for_export(task_state)
+    if not html_content or not html_content.strip():
+        raise HTTPException(
+            status_code=404,
+            detail="Translated HTML not available; cannot export PDF from HTML.",
+        )
+    return await _pandoc_pdf_file_response_from_html(task_state, task_id, html_content)
+
+
 def _source_html_file_response_from_segments(
     task_state: Dict[str, Any],
     task_id: str,
@@ -1895,11 +2151,16 @@ class DownloadService:
                 filename=filename,
             )
 
-        # Default to typst_overlay for PDF downloads so that the high-fidelity
-        # rendering path (_typst_overlay_pdf_response) is used instead of
-        # falling through to the Pandoc MD→PDF rebuild.
+        # Default PDF renderer by source type (must stay aligned with _build_stash_export_plan).
         if file_type == "pdf" and renderer_type is None:
-            renderer_type = "typst_overlay"
+            if _is_html_source_task(task_state):
+                renderer_type = "html"
+            elif (task_state.get("original_filename") or "").lower().endswith(".pdf"):
+                renderer_type = "typst_overlay"
+            else:
+                renderer_type = "pandoc"
+        if file_type == "pdf" and renderer_type == "typst_overlay" and _is_html_source_task(task_state):
+            renderer_type = "html"
 
         # Check if task has failed
         task_status = task_state.get("status")
@@ -1949,6 +2210,22 @@ class DownloadService:
                 f"[DOWNLOAD] Task {task_id}: Serving source HTML for compare preview",
             )
             return resp
+
+        # HTML source PDF: single native HTML→Pandoc path (skip markdown rebuild + layout PDF).
+        if file_type == "pdf" and _is_html_source_task(task_state):
+            logger.info(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Task {task_id}: HTML workflow PDF fast path",
+            )
+            return await _html_workflow_pdf_response(
+                task_state,
+                task_id,
+                renderer_type=renderer_type,
+                equation_format=equation_format,
+                table_body_format=table_body_format,
+                bilingual_enabled=bilingual_enabled,
+                target_first=target_first,
+            )
 
         # Generate missing file on-demand if not in downloadable_files
         downloadable_files = task_state.get("downloadable_files", {})
@@ -3611,6 +3888,16 @@ class DownloadService:
                             workflow_type = getattr(payload, "workflow_type", None) if payload else None
                             if workflow_type is None:
                                 workflow_type = task_state.get("workflow_type") or task_state.get("payload", {}).get("workflow_type")
+                            if _is_html_source_task(task_state) or workflow_type == "html":
+                                return await _html_workflow_pdf_response(
+                                    task_state,
+                                    task_id,
+                                    renderer_type=renderer_type,
+                                    equation_format=equation_format,
+                                    table_body_format=table_body_format,
+                                    bilingual_enabled=bilingual_enabled,
+                                    target_first=target_first,
+                                )
                             if workflow_type in ("mobi", "epub"):
                                 # For MOBI/EPUB, PDF should already be generated in generate_all_outputs
                                 existing_pdf = task_state.get("downloadable_files", {}).get("pdf")
@@ -4320,6 +4607,16 @@ class DownloadService:
         if not has_revisions:
             # Special handling for PDF files - only use layout-based generation (high-fidelity)
             if file_type == "pdf":
+                if _is_html_source_task(task_state):
+                    return await _html_workflow_pdf_response(
+                        task_state,
+                        task_id,
+                        renderer_type=renderer_type,
+                        equation_format=equation_format,
+                        table_body_format=table_body_format,
+                        bilingual_enabled=bilingual_enabled,
+                        target_first=target_first,
+                    )
                 if renderer_type == "typst_overlay":
                     return await _typst_overlay_pdf_response(
                         task_state, task_id, file_stem,
@@ -4414,6 +4711,17 @@ class DownloadService:
                         raise HTTPException(
                             status_code=404,
                             detail="Generated PDF not found for MOBI/EPUB workflow. It should have been generated earlier."
+                        )
+
+                    if _is_html_source_task(task_state):
+                        return await _html_workflow_pdf_response(
+                            task_state,
+                            task_id,
+                            renderer_type=renderer_type,
+                            equation_format=equation_format,
+                            table_body_format=table_body_format,
+                            bilingual_enabled=bilingual_enabled,
+                            target_first=target_first,
                         )
                     
                     # For other original file types, PDF download is not supported
@@ -5300,7 +5608,9 @@ class DownloadService:
                 )
             try:
                 resp = await self.download_file(task_id, download_ft, **kwargs)
-                path = getattr(resp, "path", None)
+                path = getattr(resp, "path", None) or getattr(
+                    resp, "owlangs_stash_path", None
+                )
                 ts = self.task_manager.get_task(task_id)
                 if path and ts and os.path.isfile(str(path)):
                     record_generated_result(

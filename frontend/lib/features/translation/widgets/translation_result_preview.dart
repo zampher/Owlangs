@@ -5859,8 +5859,7 @@ class _TranslationResultPreviewState
         availableFormats = <String>['html', 'json'];
       }
     } else if (resolvedWorkflowType == 'html') {
-      // HTML workflow: docx, md, html (PDF not supported)
-      availableFormats = <String>['docx', 'md', 'html'];
+      availableFormats = <String>['docx', 'md', 'html', 'pdf'];
     } else {
       // PDF / markdown_based / txt: docx, md, html; add pdf when not hidden (e.g. PDF source)
       availableFormats = <String>['docx', 'md', 'html'];
@@ -5904,20 +5903,29 @@ class _TranslationResultPreviewState
           'ebookEngine': 'pandoc',
         });
       } else if (format == 'pdf') {
-        downloadOptions.add(<String, dynamic>{
-          'type': 'pdf',
-          'label': l10n.translationExportPdfPreserveLayout,
-          'description': l10n.translationExportPdfPreserveLayoutDesc,
-          'embedImages': null,
-          'rendererType': 'typst_overlay',
-        });
-        downloadOptions.add(<String, dynamic>{
-          'type': 'pdf',
-          'label': l10n.translationExportPdfReflow,
-          'description': l10n.translationExportPdfReflowDesc,
-          'embedImages': null,
-          'rendererType': 'pandoc',
-        });
+        if (resolvedWorkflowType == 'html') {
+          downloadOptions.add(<String, dynamic>{
+            'type': 'pdf',
+            'label': 'PDF',
+            'embedImages': null,
+            'rendererType': 'html',
+          });
+        } else {
+          downloadOptions.add(<String, dynamic>{
+            'type': 'pdf',
+            'label': l10n.translationExportPdfPreserveLayout,
+            'description': l10n.translationExportPdfPreserveLayoutDesc,
+            'embedImages': null,
+            'rendererType': 'typst_overlay',
+          });
+          downloadOptions.add(<String, dynamic>{
+            'type': 'pdf',
+            'label': l10n.translationExportPdfReflow,
+            'description': l10n.translationExportPdfReflowDesc,
+            'embedImages': null,
+            'rendererType': 'pandoc',
+          });
+        }
       } else {
         downloadOptions.add(<String, dynamic>{
           'type': format,

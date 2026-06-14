@@ -64,7 +64,7 @@ class HtmlWorkflow(Workflow[HtmlWorkflowConfig, Document, Document], HTMLExporta
         This adds lightweight defaults to ensure reasonable rendering offline.
         """
         return f"""<!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
