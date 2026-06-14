@@ -211,8 +211,8 @@ if sys.platform.startswith('win'):
     for _src, _dst in _redis_files:
         if os.path.exists(_src):
             datas.append((_src, _dst))
-# Pandoc is staged externally by the build script (build_win_portable_onedir.ps1 copies
-# 3rdParty/ to the package root). _get_pandoc_path() resolves to that copy first,
+# Pandoc/Typst are staged externally by the build script (build_win_portable_onedir.ps1 copies
+# 3rdParty/ to the package root). _get_pandoc_path() and typst compiler resolution use that copy first,
 # so bundling inside _internal/ is redundant for onedir builds.
 
 for data in custom_datas:

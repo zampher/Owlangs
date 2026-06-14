@@ -1055,6 +1055,41 @@ def _parse_dirty_segment_indices(raw: Optional[str]) -> Optional[List[int]]:
     return indices or None
 
 
+def _pre_generated_pdf_file_response(
+    task_state: Dict[str, Any],
+    file_stem: str,
+    suffix: str = "",
+) -> Optional[FileResponse]:
+    """Return the task's pre-generated PDF when live Typst rendering is unavailable."""
+    downloadable_files = task_state.get("downloadable_files") or {}
+    pdf_info = downloadable_files.get("pdf")
+    if pdf_info:
+        pdf_path = (
+            pdf_info.get("path", "") if isinstance(pdf_info, dict) else str(pdf_info)
+        )
+        if pdf_path and os.path.exists(pdf_path):
+            filename = (
+                pdf_info.get("filename")
+                if isinstance(pdf_info, dict)
+                else None
+            ) or os.path.basename(pdf_path) or f"{file_stem}{suffix}.pdf"
+            return FileResponse(
+                path=pdf_path,
+                media_type=MEDIA_TYPES.get("pdf", "application/pdf"),
+                filename=filename,
+            )
+
+    output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
+    candidate = output_dir / f"{file_stem}{suffix}.pdf"
+    if candidate.exists():
+        return FileResponse(
+            path=str(candidate),
+            media_type=MEDIA_TYPES.get("pdf", "application/pdf"),
+            filename=candidate.name,
+        )
+    return None
+
+
 async def _typst_overlay_pdf_response(
     task_state: Dict[str, Any],
     task_id: str,
@@ -1071,7 +1106,11 @@ async def _typst_overlay_pdf_response(
     indices are provided and a cache exists, only affected pages are
     re-rendered and patched into the cached PDF.
     """
-    from layout.pdf_renderer import TYPST_OVERLAY_AVAILABLE as _toa, _typst_overlay_import_error as _toe
+    from layout.pdf_renderer.typst_overlay.compiler import is_typst_available
+    from layout.pdf_renderer.typst_overlay.renderer import (
+        _pymupdf_ok,
+        _typst_overlay_import_error as _toe,
+    )
     from layout.pdf_renderer.typst_overlay.affected_pages import (
         compute_affected_page_indices_0based,
     )
@@ -1083,7 +1122,15 @@ async def _typst_overlay_pdf_response(
         store_pdf_preview_cache,
     )
 
-    if not _toa:
+    if not (is_typst_available() and _pymupdf_ok):
+        fallback = _pre_generated_pdf_file_response(task_state, file_stem)
+        if fallback is not None:
+            logger.warning(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Typst overlay unavailable ({_toe}); "
+                f"serving pre-generated PDF for task {task_id}",
+            )
+            return fallback
         raise HTTPException(
             status_code=400,
             detail=f"Typst overlay renderer is not available: {_toe}",

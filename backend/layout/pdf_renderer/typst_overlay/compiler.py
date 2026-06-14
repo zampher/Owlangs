@@ -11,44 +11,163 @@ for compiling .typ source files into PDF overlays.
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import List, Optional
 from tempfile import mkdtemp
 
+_typst_bin_cache: Optional[str] = None
+_typst_search_logged = False
 
-def _resolve_typst_bin() -> str:
-    """Find the typst binary, preferring environment override."""
-    explicit = os.environ.get("TYPST_BIN", "").strip()
-    if explicit:
-        return explicit
-    discovered = shutil.which("typst")
-    if discovered:
-        return discovered
 
-    # Search bundled Typst in project 3rdParty directory
+def _typst_binary_name() -> str:
+    return "typst.exe" if os.name == "nt" else "typst"
+
+
+def _is_typst_executable(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    if os.name == "nt":
+        return True
+    return os.access(path, os.X_OK)
+
+
+def _search_typst_in_third_party(base: Path) -> Optional[str]:
+    """Search a 3rdParty root for a Typst CLI binary."""
+    if not base.exists():
+        return None
+
+    bin_name = _typst_binary_name()
+    direct_candidates = (
+        base / bin_name,
+        base / "typst" / bin_name,
+        base / "bin" / bin_name,
+    )
+    for candidate in direct_candidates:
+        if _is_typst_executable(candidate):
+            return str(candidate)
+
+    platform_base = base / "windows" if sys.platform == "win32" else base
+    if platform_base.exists():
+        for typst_dir in sorted(platform_base.glob("typst*")):
+            candidate = typst_dir / bin_name
+            if _is_typst_executable(candidate):
+                return str(candidate)
+        for candidate in platform_base.rglob(bin_name):
+            if _is_typst_executable(candidate):
+                return str(candidate)
+
+    for candidate in base.rglob(bin_name):
+        if _is_typst_executable(candidate):
+            return str(candidate)
+    return None
+
+
+def _third_party_search_roots() -> List[Path]:
+    roots: List[Path] = []
+    seen: set[str] = set()
+
+    def _add(path: Path) -> None:
+        key = str(path)
+        if key not in seen:
+            seen.add(key)
+            roots.append(path)
+
+    if getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS"):
+        exe_path = Path(sys.executable)
+        _add(exe_path.parent / "3rdParty")
+        _add(exe_path.parent.parent / "3rdParty")
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            _add(Path(meipass) / "3rdParty")
+
     try:
-        project_root = Path(__file__).resolve().parents[4]
-        third_party = project_root / "3rdParty"
-        if third_party.exists():
-            bin_name = "typst.exe" if os.name == "nt" else "typst"
-            for candidate in third_party.rglob(bin_name):
-                if candidate.is_file():
-                    return str(candidate)
+        from utils.format_convert_utils import _get_owlangs_install_dir
+
+        install_dir = _get_owlangs_install_dir()
+        if install_dir is not None:
+            _add(install_dir / "3rdParty")
     except Exception:
         pass
 
-    return "typst"  # let subprocess raise FileNotFoundError
+    try:
+        _add(Path(__file__).resolve().parents[4] / "3rdParty")
+    except Exception:
+        pass
+
+    _add(Path.cwd() / "3rdParty")
+    return roots
 
 
-TYPST_BIN = _resolve_typst_bin()
+def _get_typst_bin_path() -> Optional[str]:
+    """Resolve Typst CLI path for dev, PyInstaller, and production installs."""
+    global _typst_bin_cache, _typst_search_logged
+
+    if _typst_bin_cache is not None:
+        return _typst_bin_cache or None
+
+    explicit = os.environ.get("TYPST_BIN", "").strip()
+    if explicit:
+        explicit_path = Path(explicit)
+        if _is_typst_executable(explicit_path):
+            _typst_bin_cache = str(explicit_path)
+            return _typst_bin_cache
+
+    discovered = shutil.which("typst")
+    if discovered:
+        _typst_bin_cache = discovered
+        return discovered
+
+    for root in _third_party_search_roots():
+        resolved = _search_typst_in_third_party(root)
+        if resolved:
+            _typst_bin_cache = resolved
+            if not _typst_search_logged:
+                from logger.logger import unified_logger, LogModule as _lm
+
+                unified_logger.info(
+                    _lm.RESTOR,
+                    f"[TYPST_OVERLAY] Resolved Typst CLI: {resolved}",
+                )
+                _typst_search_logged = True
+            return resolved
+
+    if not _typst_search_logged:
+        from logger.logger import unified_logger, LogModule as _lm
+
+        searched = ", ".join(str(p) for p in _third_party_search_roots())
+        unified_logger.warning(
+            _lm.RESTOR,
+            "[TYPST_OVERLAY] Typst CLI not found. "
+            f"Searched PATH, TYPST_BIN, and 3rdParty roots: {searched}",
+        )
+        _typst_search_logged = True
+
+    _typst_bin_cache = ""
+    return None
+
+
+def get_typst_bin() -> str:
+    """Return resolved Typst CLI path, or bare 'typst' for subprocess errors."""
+    return _get_typst_bin_path() or "typst"
+
+
+# Backwards-compatible module constant; resolved lazily on first use.
+TYPST_BIN = get_typst_bin()
 
 
 def is_typst_available() -> bool:
     """Check if Typst CLI is installed and usable."""
+    bin_path = _get_typst_bin_path()
+    if not bin_path:
+        return False
     try:
         result = subprocess.run(
-            [TYPST_BIN, "--version"],
-            capture_output=True, encoding="utf-8", errors="replace", timeout=10,
+            [bin_path, "--version"],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
         )
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
@@ -57,8 +176,16 @@ def is_typst_available() -> bool:
 
 class TypstCompileError(RuntimeError):
     """Raised when typst compile fails."""
-    def __init__(self, phase: str, stem: str, typ_path: Path, return_code: int,
-                 stdout: str = "", stderr: str = ""):
+
+    def __init__(
+        self,
+        phase: str,
+        stem: str,
+        typ_path: Path,
+        return_code: int,
+        stdout: str = "",
+        stderr: str = "",
+    ):
         self.phase = phase
         self.stem = stem
         self.typ_path = typ_path
@@ -99,13 +226,17 @@ class TypstCompiler:
         # Add project fonts directory (NotoSansSC, NotoSansJP, NotoSansKR, etc.)
         project_fonts = (
             Path(__file__).resolve().parents[4]
-            / "static" / "flutter-web" / "assets" / "fonts"
+            / "static"
+            / "flutter-web"
+            / "assets"
+            / "fonts"
         )
         if project_fonts.exists():
             self._font_paths.append(project_fonts)
 
         # Add system font directories for the current platform
         import platform as _platform
+
         _system = _platform.system()
         if _system == "Windows":
             _sys_fonts = Path("C:/Windows/Fonts")
@@ -128,9 +259,14 @@ class TypstCompiler:
                 if _d.exists() and _d not in self._font_paths:
                     self._font_paths.append(_d)
 
-    def compile(self, typ_path: Path, pdf_path: Path, *,
-                phase: str = "overlay",
-                root: Optional[Path] = None) -> Path:
+    def compile(
+        self,
+        typ_path: Path,
+        pdf_path: Path,
+        *,
+        phase: str = "overlay",
+        root: Optional[Path] = None,
+    ) -> Path:
         """
         Compile a .typ source file to PDF.
 
@@ -150,7 +286,8 @@ class TypstCompiler:
         stem = typ_path.stem
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
 
-        command = [TYPST_BIN, "compile"]
+        typst_bin = get_typst_bin()
+        command = [typst_bin, "compile"]
 
         if root and root.exists():
             command.extend(["--root", str(root)])
@@ -165,19 +302,21 @@ class TypstCompiler:
 
         unified_logger.info(
             _lm.RESTOR,
-            f"[TYPST_OVERLAY] Running: {' '.join(command)}"
+            f"[TYPST_OVERLAY] Running: {' '.join(command)}",
         )
         unified_logger.info(
             _lm.RESTOR,
-            f"[TYPST_OVERLAY] source size: {typ_path.stat().st_size} bytes"
+            f"[TYPST_OVERLAY] source size: {typ_path.stat().st_size} bytes",
         )
 
-        proc = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace")
+        proc = subprocess.run(
+            command, capture_output=True, encoding="utf-8", errors="replace"
+        )
         if proc.returncode != 0:
             unified_logger.error(
                 _lm.RESTOR,
                 f"[TYPST_OVERLAY] Compile failed: returncode={proc.returncode}, "
-                f"stdout_len={len(proc.stdout)}, stderr_len={len(proc.stderr)}"
+                f"stdout_len={len(proc.stdout)}, stderr_len={len(proc.stderr)}",
             )
             if proc.stdout:
                 unified_logger.error(_lm.RESTOR, f"[TYPST_OVERLAY] stdout:\n{proc.stdout}")
@@ -186,20 +325,28 @@ class TypstCompiler:
             if not proc.stdout and not proc.stderr:
                 unified_logger.error(
                     _lm.RESTOR,
-                    f"[TYPST_OVERLAY] No stdout or stderr captured — "
-                    f"binary may have crashed silently or failed to start"
+                    "[TYPST_OVERLAY] No stdout or stderr captured — "
+                    "binary may have crashed silently or failed to start",
                 )
             raise TypstCompileError(
-                phase=phase, stem=stem, typ_path=typ_path,
+                phase=phase,
+                stem=stem,
+                typ_path=typ_path,
                 return_code=proc.returncode,
-                stdout=proc.stdout, stderr=proc.stderr,
+                stdout=proc.stdout,
+                stderr=proc.stderr,
             )
         return pdf_path
 
-    def compile_source(self, source: str, stem: str, *,
-                       work_dir: Optional[Path] = None,
-                       phase: str = "overlay",
-                       root: Optional[Path] = None) -> Path:
+    def compile_source(
+        self,
+        source: str,
+        stem: str,
+        *,
+        work_dir: Optional[Path] = None,
+        phase: str = "overlay",
+        root: Optional[Path] = None,
+    ) -> Path:
         """
         Compile a Typst source string to PDF.
 
@@ -236,7 +383,8 @@ def get_compiler() -> TypstCompiler:
     return _default_compiler
 
 
-def compile_overlay_pdf(source: str, stem: str = "overlay",
-                        work_dir: Optional[Path] = None) -> Path:
+def compile_overlay_pdf(
+    source: str, stem: str = "overlay", work_dir: Optional[Path] = None
+) -> Path:
     """Quick one-off compilation of Typst source to overlay PDF."""
     return get_compiler().compile_source(source, stem, work_dir=work_dir)
