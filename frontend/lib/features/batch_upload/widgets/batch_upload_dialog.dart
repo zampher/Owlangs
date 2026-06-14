@@ -525,6 +525,12 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
       final qs = ref.read(translationQuickSettingsProvider);
       final aiSettings = ref.read(aiPlatformSettingsProvider);
       final gs = ref.read(globalSettingsProvider);
+      final String defaultToLang = gs.targetLanguage.isNotEmpty
+          ? gs.targetLanguage
+          : qs.toLang;
+      ref
+          .read(translationQuickSettingsProvider.notifier)
+          .applyDefaultTargetLanguage(defaultToLang);
 
       final withPath = files.where((f) => f.relativePath != null && f.relativePath!.isNotEmpty).length;
       debugPrint('[BatchUpload] Discovered ${files.length} files, $withPath with relative paths');
@@ -541,7 +547,8 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
         _legacyFileNames
           ..clear()
           ..addAll(legacyNames);
-        _batchToLang = qs.toLang;
+        _batchToLang = defaultToLang;
+        _batchToLangUserModified = false;
         _batchPlatformKey = aiSettings.defaultPlatform;
         _batchTemperature = qs.temperature;
         _batchPromptMode = qs.promptMode;

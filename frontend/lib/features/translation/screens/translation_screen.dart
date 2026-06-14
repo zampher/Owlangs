@@ -4057,6 +4057,21 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
 
     notifier.setPickedFile(file);
 
+    // Queued mode: align Quick Settings target language with Settings default on import.
+    if (widget.executionMode == 'queued' && !_isReeditMode) {
+      final GlobalSettings globalSettings = ref.read(globalSettingsProvider);
+      if (globalSettings.targetLanguage.isNotEmpty) {
+        final TranslationQuickSettingsNotifier qsNotifier =
+            widget.flowId != null
+                ? ref.read(
+                    translationQuickSettingsProviderFamily(widget.flowId!)
+                        .notifier,
+                  )
+                : ref.read(translationQuickSettingsProvider.notifier);
+        qsNotifier.applyDefaultTargetLanguage(globalSettings.targetLanguage);
+      }
+    }
+
     // Save state to persistence after file is picked
     if (widget.flowId != null) {
       try {

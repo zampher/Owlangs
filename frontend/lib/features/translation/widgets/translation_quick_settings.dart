@@ -255,6 +255,15 @@ class TranslationQuickSettingsNotifier
     }
   }
 
+  /// Apply Settings default target language when starting a new queued import.
+  void applyDefaultTargetLanguage(String targetLanguageCode) {
+    if (targetLanguageCode.isEmpty || state.toLang == targetLanguageCode) {
+      return;
+    }
+    state = state.copyWith(toLang: targetLanguageCode);
+    _saveSettings();
+  }
+
   void updateToLang(String toLang, {String? taskId}) {
     final String oldLang = state.toLang;
 
