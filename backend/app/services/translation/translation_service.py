@@ -483,6 +483,59 @@ class TranslationService:
                     task_state["message"] = f"Task error: {error_with_hint}"
                 self.task_manager.add_log(task_id, "error", f"Uncaught exception: {error_text}")
     
+    async def _auto_export_queued_task_outputs(
+        self,
+        task_id: str,
+        task_state: Dict[str, Any],
+    ) -> None:
+        """Generate and stash all export formats for queued tasks (incl. both PDF variants)."""
+        segs = task_state.get("translation_segments")
+        if not isinstance(segs, dict) or not segs.get("segments"):
+            logger.info(
+                LogModule.WORKFLOW,
+                f"[TRANSLATION-SERVICE] Task {task_id}: skip queued auto-export (no segments)",
+            )
+            return
+        try:
+            from backend.app.services.download.download_service import DownloadService
+
+            download_service = DownloadService(self.task_manager)
+            result = await download_service.persist_completed_task_outputs_to_stash(
+                task_id,
+                allow_processing_status=True,
+                update_progress=True,
+            )
+            task_state["download_ready"] = True
+            stashed = result.get("stashed") or []
+            errors = result.get("errors") or []
+            logger.info(
+                LogModule.WORKFLOW,
+                f"[TRANSLATION-SERVICE] Task {task_id}: queued auto-export stashed={stashed} "
+                f"errors={len(errors)}",
+            )
+            if errors:
+                self.task_manager.add_log(
+                    task_id,
+                    "warning",
+                    f"Some export formats failed: {'; '.join(errors[:3])}",
+                )
+        except HTTPException as http_exc:
+            logger.warning(
+                LogModule.WORKFLOW,
+                f"[TRANSLATION-SERVICE] Task {task_id}: queued auto-export skipped: {http_exc.detail}",
+            )
+        except Exception as exc:
+            logger.warning(
+                LogModule.WORKFLOW,
+                f"[TRANSLATION-SERVICE] Task {task_id}: queued auto-export failed: {exc}",
+                exc_info=True,
+            )
+            self.task_manager.add_log(
+                task_id,
+                "warning",
+                f"Auto export failed: {exc}",
+            )
+
     async def start_translation_task(
         self,
         task_id: str,
@@ -1584,18 +1637,28 @@ class TranslationService:
                         exc_info=True,
                     )
 
-                # Mark translation as completed after post-processing steps.
-                task_state["status"] = "completed"
-                task_state["progress"] = 100
-                # Don't overwrite LLM platform error messages (e.g., insufficient balance)
-                if not task_state.get("llm_error"):
-                    task_state["message"] = "Translation completed successfully"
+                # Mark translation phase done; queued tasks defer "completed" until exports finish.
+                is_queued = task_state.get("execution_mode") == "queued"
+                if is_queued:
+                    task_state["status"] = "processing"
+                    task_state["progress"] = 90
+                    if not task_state.get("llm_error"):
+                        task_state["message"] = "Translation finished, generating export files..."
+                    else:
+                        task_state["message"] = (
+                            f"Translation finished with errors, generating export files..."
+                        )
                 else:
-                    # Keep the LLM error message but still mark as completed
-                    task_state["message"] = f"Translation failed: {task_state['llm_error']}"
+                    task_state["status"] = "completed"
+                    task_state["progress"] = 100
+                    if not task_state.get("llm_error"):
+                        task_state["message"] = "Translation completed successfully"
+                    else:
+                        task_state["message"] = f"Translation failed: {task_state['llm_error']}"
                 logger.info(
                     LogModule.WORKFLOW,
-                    f"[TRANSLATION-SERVICE] Task {task_id}: Translation marked as completed (progress=100, status=completed) after post-processing",
+                    f"[TRANSLATION-SERVICE] Task {task_id}: Translation phase finished "
+                    f"(status={task_state['status']}, queued={is_queued}) after post-processing",
                 )
 
         # Ensure export has a document when translate() was skipped (format conversion or all-excluded translation)
@@ -1660,8 +1723,14 @@ class TranslationService:
                     f"(preview_segments={preview_segments_count}, cache_segments={cache_segments_count}, workflow_type={workflow_type})"
                 )
         
-        # Update final status and message (status was already set to "completed" after execute_translate for translation tasks)
-        # Only update message and task_end_time here
+        # Queued tasks: pre-generate all export formats (both PDF variants) into stash before completion.
+        if (
+            task_state.get("execution_mode") == "queued"
+            and (task_state.get("status") or "").lower() not in ("failed",)
+        ):
+            await self._auto_export_queued_task_outputs(task_id, task_state)
+
+        # Update final status and message (status may already be completed for immediate mode)
         if task_state.get("status") != "completed":
             task_state["status"] = "completed"
         task_state["progress"] = 100

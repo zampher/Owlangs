@@ -142,6 +142,7 @@ hiddenimports = [
     'backend.app.routes.export',
     'backend.app.routes.service',
     'backend.app.routes.service.app_routes_translation',
+    'backend.app.routes.service.app_routes_batches',
     'backend.app.routes.service.app_routes_download',
     'backend.app.routes.service.app_routes_status',
     'backend.app.routes.service.app_routes_format_conversion',
@@ -162,6 +163,7 @@ hiddenimports = [
     'backend.app.utils.app_utils',
     # backend.app.services (task, translation, download, status, platform, etc.)
     'backend.app.services.task',
+    'backend.app.services.task.batch_manager',
     'backend.app.services.translation',
     'backend.app.services.translation.workflow_factory',
     'backend.app.services.translation.workflow_config_builder',

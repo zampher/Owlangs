@@ -72,13 +72,16 @@ def record_generated_result(
     file_type: str,
     source_path: str,
     task_state: Dict[str, Any],
+    *,
+    skip_status_check: bool = False,
 ) -> None:
     """
     Copy a generated result file into the stash tree and update meta.json.
 
-    Only runs for ``status == completed`` and existing regular files.
+    Only runs for ``status == completed`` and existing regular files, unless
+    ``skip_status_check`` is set during queued auto-export persistence.
     """
-    if task_state.get("status") != "completed":
+    if not skip_status_check and task_state.get("status") != "completed":
         return
     if not source_path or not os.path.isfile(source_path):
         logger.debug(
@@ -106,6 +109,8 @@ def record_generated_result(
         meta.setdefault("task_id", task_id)
         meta.setdefault("owner_username", task_state.get("owner_username"))
         meta.setdefault("original_filename", task_state.get("original_filename"))
+        if task_state.get("batch_id"):
+            meta["batch_id"] = task_state.get("batch_id")
         _qa = float(task_state.get("queued_at") or 0)
         _ta = float(task_state.get("task_start_time") or 0)
         meta.setdefault("started_at", _qa if _qa > 0 else _ta)

@@ -4849,11 +4849,8 @@ class _TranslationResultPreviewState
     ScrollController? segmentScrollController,
     bool showSegmentScrollbar = true,
   }) {
-    if (_isMergedView) {
-      return const Center(
-        child: Text('PDF revision requires segment list view'),
-      );
-    }
+    // PDF revision always uses the segment list panel, even when the main tab
+    // is in merged/clean reading view (queue "阅读编辑模式" / view_mode=clean).
 
     final dynamic translationState = widget.flowId != null
         ? ref.watch(translationStateProviderFamily(widget.flowId!))
@@ -5396,6 +5393,18 @@ class _TranslationResultPreviewState
     }
 
     try {
+      if (_totalSegmentsCount == 0 && !_isLoading) {
+        await _loadTranslationContent(forceRefreshSegments: true);
+      }
+      if (_segmentsPaginationController != null &&
+          _totalSegmentsCount > 0 &&
+          _segmentsPaginationController!.items.isEmpty) {
+        await _segmentsPaginationController!.loadFirstPage();
+        if (mounted) {
+          _segmentUiRevisionNotifier.value++;
+          setState(() {});
+        }
+      }
       await _openFullDocumentCompareTab(
         baseMode: TranslationPreviewMode.pdfPreserve,
         initialLayoutMode: PdfCompareLayoutMode.compareRevision,

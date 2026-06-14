@@ -491,6 +491,10 @@ class TranslateServiceRequest(BaseModel):
                     "E.g., 'subdir/chapter1'. Null/empty means root level.",
         examples=[None, "subdir/chapter1"],
     )
+    batch_id: Optional[str] = Field(
+        default=None,
+        description="Upload batch ID when submitting as part of a multi-file batch.",
+    )
 
     class Config:
         json_schema_extra = {

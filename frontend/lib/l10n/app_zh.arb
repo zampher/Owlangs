@@ -1227,6 +1227,21 @@
   "translationQueueSelectFormatsTitle": "选择下载格式",
   "translationQueueSelectFormatsFormatLabel": "格式",
   "translationQueueSelectFormatsDownload": "下载",
+  "translationQueueBatchLabelHint": "批次备注（用于任务队列分组）",
+  "translationQueueBatchCreateFailed": "创建上传批次失败",
+  "translationQueueUngroupedSection": "未分组",
+  "translationQueueBatchProgress": "已完成 {completed}/{total}",
+  "@translationQueueBatchProgress": {
+    "placeholders": {
+      "completed": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "translationQueueBatchSelectAll": "选中批次",
+  "translationQueueBatchDownload": "下载批次",
+  "translationQueueBatchDelete": "删除批次",
+  "translationQueueBatchDeleteTitle": "删除此批次？",
+  "translationQueueBatchDeleteMessage": "将移除该批次下的全部任务，并删除已缓存的结果。",
   "reeditTitle": "编辑译文",
   "reeditSaveExport": "保存并导出",
   "reeditFetchError": "加载翻译片段失败。",

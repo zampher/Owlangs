@@ -9,6 +9,7 @@ This package contains all service API routes organized by functionality.
 
 from fastapi import APIRouter
 from .app_routes_translation import router as translation_router
+from .app_routes_batches import router as batches_router
 from .app_routes_download import router as download_router
 from .app_routes_status import router as status_router
 from .app_routes_format_conversion import router as format_router
@@ -18,6 +19,7 @@ from .app_routes_formula_check import router as formula_check_router
 
 router = APIRouter()
 router.include_router(translation_router, tags=["Translation"])
+router.include_router(batches_router, tags=["Upload Batches"])
 router.include_router(download_router, tags=["Download"])
 router.include_router(status_router, tags=["Status"])
 router.include_router(format_router, tags=["Format Conversion"])

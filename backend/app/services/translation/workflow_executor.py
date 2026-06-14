@@ -254,11 +254,16 @@ class WorkflowExecutor:
         logger.debug(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Task {task_id}: Workflow attachments synced")
         
         # Update progress
-        logger.debug(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Task {task_id}: Updating progress to 100% and setting message")
-        self.task_manager.add_log(task_id, "info", "Translation completed, generating outputs...")
-        if task_state["progress"] < 100:
-            task_state["progress"] = 100
-        task_state["message"] = "Generating output files..."
+        logger.debug(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Task {task_id}: Updating progress after translation phase")
+        is_queued = task_state.get("execution_mode") == "queued"
+        if is_queued:
+            task_state["progress"] = min(int(task_state.get("progress") or 0), 89)
+            task_state["message"] = "Post-processing translation..."
+        else:
+            self.task_manager.add_log(task_id, "info", "Translation completed, generating outputs...")
+            if task_state["progress"] < 100:
+                task_state["progress"] = 100
+            task_state["message"] = "Generating output files..."
         logger.info(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Task {task_id}: execute_translate completed successfully, returning to process_translation_task")
     
     def _restore_mineru_attachment(

@@ -6398,6 +6398,60 @@ abstract class AppLocalizations {
   /// **'Download'**
   String get translationQueueSelectFormatsDownload;
 
+  /// No description provided for @translationQueueBatchLabelHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Batch label (for task queue grouping)'**
+  String get translationQueueBatchLabelHint;
+
+  /// No description provided for @translationQueueBatchCreateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create upload batch'**
+  String get translationQueueBatchCreateFailed;
+
+  /// No description provided for @translationQueueUngroupedSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Ungrouped'**
+  String get translationQueueUngroupedSection;
+
+  /// No description provided for @translationQueueBatchProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{completed}/{total} completed'**
+  String translationQueueBatchProgress(int completed, int total);
+
+  /// No description provided for @translationQueueBatchSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select batch'**
+  String get translationQueueBatchSelectAll;
+
+  /// No description provided for @translationQueueBatchDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download batch'**
+  String get translationQueueBatchDownload;
+
+  /// No description provided for @translationQueueBatchDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete batch'**
+  String get translationQueueBatchDelete;
+
+  /// No description provided for @translationQueueBatchDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this batch?'**
+  String get translationQueueBatchDeleteTitle;
+
+  /// No description provided for @translationQueueBatchDeleteMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'All tasks in this batch will be removed from the queue and their cached results deleted.'**
+  String get translationQueueBatchDeleteMessage;
+
   /// No description provided for @reeditTitle.
   ///
   /// In en, this message translates to:

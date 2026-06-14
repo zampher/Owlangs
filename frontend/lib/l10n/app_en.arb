@@ -1279,6 +1279,21 @@
   "translationQueueSelectFormatsTitle": "Select Download Formats",
   "translationQueueSelectFormatsFormatLabel": "Format",
   "translationQueueSelectFormatsDownload": "Download",
+  "translationQueueBatchLabelHint": "Batch label (for task queue grouping)",
+  "translationQueueBatchCreateFailed": "Failed to create upload batch",
+  "translationQueueUngroupedSection": "Ungrouped",
+  "translationQueueBatchProgress": "{completed}/{total} completed",
+  "@translationQueueBatchProgress": {
+    "placeholders": {
+      "completed": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "translationQueueBatchSelectAll": "Select batch",
+  "translationQueueBatchDownload": "Download batch",
+  "translationQueueBatchDelete": "Delete batch",
+  "translationQueueBatchDeleteTitle": "Delete this batch?",
+  "translationQueueBatchDeleteMessage": "All tasks in this batch will be removed from the queue and their cached results deleted.",
   "reeditTitle": "Edit Translation",
   "reeditSaveExport": "Save && Export",
   "reeditFetchError": "Failed to load translation segments.",

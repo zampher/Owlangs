@@ -73,6 +73,7 @@ class BatchSubmissionService {
   Stream<BatchSubmissionProgress> submitBatch({
     required List<DiscoveredFile> files,
     required Map<String, dynamic> basePayload,
+    required String batchId,
   }) {
     _cancelled = false;
     _controller = StreamController<BatchSubmissionProgress>.broadcast();
@@ -86,6 +87,7 @@ class BatchSubmissionService {
       files: files,
       index: 0,
       basePayload: basePayload,
+      batchId: batchId,
       completed: completed,
       total: total,
       successfulTaskIds: successfulTaskIds,
@@ -100,6 +102,7 @@ class BatchSubmissionService {
     required List<DiscoveredFile> files,
     required int index,
     required Map<String, dynamic> basePayload,
+    required String batchId,
     required int completed,
     required int total,
     required List<String> successfulTaskIds,
@@ -122,14 +125,17 @@ class BatchSubmissionService {
     try {
       // Read bytes lazily from disk if needed.
       List<int> bytes;
-      if (file.fileBytes != null) {
+      if (file.fileBytes != null && file.fileBytes!.isNotEmpty) {
         bytes = file.fileBytes!;
-      } else if (file.filePath != null) {
+      } else if (file.filePath != null && file.filePath!.isNotEmpty) {
         bytes = await io.File(file.filePath!).readAsBytes();
         // Cache for potential retries.
         file.fileBytes = bytes;
       } else {
-        throw Exception('No file data available for ${file.fileName}');
+        throw Exception(
+          'No file data available for ${file.fileName} '
+          '(missing bytes and path)',
+        );
       }
 
       final response = await _translationService.submitTask(
@@ -137,7 +143,11 @@ class BatchSubmissionService {
         fileName: file.fileName,
         payload: payload,
         executionMode: 'queued',
-        relativePath: file.relativePath,
+        relativePath: (file.relativePath != null &&
+                file.relativePath!.trim().isNotEmpty)
+            ? file.relativePath
+            : null,
+        batchId: batchId,
       );
 
       final taskId = response['task_id'] as String? ?? 'unknown';
@@ -168,6 +178,7 @@ class BatchSubmissionService {
       files: files,
       index: index + 1,
       basePayload: basePayload,
+      batchId: batchId,
       completed: completed,
       total: total,
       successfulTaskIds: successfulTaskIds,

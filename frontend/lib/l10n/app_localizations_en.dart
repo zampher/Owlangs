@@ -3631,6 +3631,38 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationQueueSelectFormatsDownload => 'Download';
 
   @override
+  String get translationQueueBatchLabelHint =>
+      'Batch label (for task queue grouping)';
+
+  @override
+  String get translationQueueBatchCreateFailed =>
+      'Failed to create upload batch';
+
+  @override
+  String get translationQueueUngroupedSection => 'Ungrouped';
+
+  @override
+  String translationQueueBatchProgress(int completed, int total) {
+    return '$completed/$total completed';
+  }
+
+  @override
+  String get translationQueueBatchSelectAll => 'Select batch';
+
+  @override
+  String get translationQueueBatchDownload => 'Download batch';
+
+  @override
+  String get translationQueueBatchDelete => 'Delete batch';
+
+  @override
+  String get translationQueueBatchDeleteTitle => 'Delete this batch?';
+
+  @override
+  String get translationQueueBatchDeleteMessage =>
+      'All tasks in this batch will be removed from the queue and their cached results deleted.';
+
+  @override
   String get reeditTitle => 'Edit Translation';
 
   @override

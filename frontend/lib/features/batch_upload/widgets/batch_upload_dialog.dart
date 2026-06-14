@@ -16,6 +16,7 @@ import '../../../app/app_router.dart';
 import '../../../core/utils/file_picker_helper.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/services/file_format_service.dart';
+import '../../../shared/services/translation_service.dart';
 import '../../../features/settings/screens/ai_platform_settings.dart'
     show aiPlatformSettingsProvider;
 import '../../translation/widgets/translation_quick_settings.dart'
@@ -62,6 +63,7 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
   String _batchPromptMode = 'off';
   String? _batchPromptStyle;
   String? _batchTaskNote;
+  String _batchLabel = '';
   List<String> _batchSelectedGlossaries = <String>[];
   String _batchParsingEngine = 'mineru';
   bool _batchToLangUserModified = false;
@@ -81,17 +83,26 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
       // Skip the source-selection phase entirely when auto-picking
       _sourceType = widget.initialSource;
       _phase = _DialogPhase.reviewFiles;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduleInitialSourcePick();
+    }
+  }
+
+  /// Native file/directory dialogs must not run inside a frame callback on
+  /// Windows — defer until the scheduler is idle after the first frame.
+  void _scheduleInitialSourcePick() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future<void>.delayed(Duration.zero, () async {
         if (!mounted) return;
-        if (widget.initialSource == 'folder') {
-          _pickFolder();
-        } else if (widget.initialSource == 'zip') {
-          _pickZip();
-        } else if (widget.initialSource == 'single') {
-          _pickSingleFile();
+        switch (widget.initialSource) {
+          case 'folder':
+            await _pickFolder();
+          case 'zip':
+            await _pickZip();
+          case 'single':
+            await _pickSingleFile();
         }
       });
-    }
+    });
   }
 
   @override
@@ -294,7 +305,10 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
   }
 
   Future<void> _pickSingleFile() async {
-    _sourceType = 'single';
+    final bool appending = _isAppending;
+    if (!appending) {
+      _sourceType = 'single';
+    }
     final l10n = AppLocalizations.of(context)!;
     final result = await FilePickerHelper.pickFiles(
       dialogTitle: l10n.batchUploadSelectSingleFile,
@@ -324,10 +338,29 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
         fileName: pf.name,
         fileSizeBytes: pf.size,
         fileBytes: pf.bytes,
+        filePath: pf.path,
+        // Single-file imports always sit at the batch relative-path root.
+        relativePath: null,
         isSelected: true,
       ),
     ];
     _onFilesDiscovered(files, legacyNames);
+  }
+
+  /// Batch source type when the list mixes nested (zip/folder) and root-level files.
+  String _resolveBatchSourceType(List<DiscoveredFile> selected) {
+    final bool hasNested = selected.any(
+      (DiscoveredFile f) =>
+          f.relativePath != null && f.relativePath!.trim().isNotEmpty,
+    );
+    final bool hasRoot = selected.any(
+      (DiscoveredFile f) =>
+          f.relativePath == null || f.relativePath!.trim().isEmpty,
+    );
+    if (hasNested && hasRoot) {
+      return 'multi';
+    }
+    return _sourceType ?? 'multi';
   }
 
   void _scanZip(List<int> zipBytes) {
@@ -471,11 +504,18 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
     final bool append = _isAppending;
     _isAppending = false;
 
-    // Dedup when appending: skip files already in the list.
+    // Dedup when appending: skip files with the same name and relative path.
     final List<DiscoveredFile> toAdd;
     if (append) {
-      final existingNames = _files.map((f) => f.fileName).toSet();
-      toAdd = files.where((f) => !existingNames.contains(f.fileName)).toList();
+      final Set<String> existingKeys = _files
+          .map((DiscoveredFile f) => '${f.relativePath ?? ''}/${f.fileName}')
+          .toSet();
+      toAdd = files
+          .where(
+            (DiscoveredFile f) =>
+                !existingKeys.contains('${f.relativePath ?? ''}/${f.fileName}'),
+          )
+          .toList();
     } else {
       toAdd = files;
     }
@@ -579,10 +619,11 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
   Future<void> _startSubmission() async {
     final selected = _files.where((f) => f.isSelected).toList();
     if (selected.isEmpty) return;
+    if (!mounted) return;
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     // If user hasn't explicitly changed the target language, ask for confirmation.
     if (!_batchToLangUserModified && mounted) {
-      final l10n = AppLocalizations.of(context)!;
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -640,6 +681,28 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
       basePayload['glossary_ids'] = _batchSelectedGlossaries;
     }
 
+    final TranslationService translationService = TranslationService();
+    final String resolvedSourceType = _resolveBatchSourceType(selected);
+    final String batchLabel = _batchLabel.trim().isNotEmpty
+        ? _batchLabel.trim()
+        : '$resolvedSourceType · ${selected.length} files';
+    final Map<String, dynamic> batchResp = await translationService.createUploadBatch(
+      label: batchLabel,
+      sourceType: resolvedSourceType,
+    );
+    final String? batchId =
+        (batchResp['batch'] as Map?)?['batch_id']?.toString();
+    if (batchId == null || batchId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.translationQueueBatchCreateFailed)),
+      );
+      setState(() {
+        _phase = _DialogPhase.reviewFiles;
+      });
+      return;
+    }
+
     setState(() {
       _phase = _DialogPhase.submitting;
       _total = selected.length;
@@ -652,7 +715,11 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
     });
 
     _progressSub = _submissionService
-        .submitBatch(files: selected, basePayload: basePayload)
+        .submitBatch(
+          files: selected,
+          basePayload: basePayload,
+          batchId: batchId,
+        )
         .listen((progress) {
       if (!mounted) return;
       setState(() {
@@ -745,6 +812,8 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
   Future<void> _startConversion() async {
     final selected = _files.where((f) => f.isSelected).toList();
     if (selected.isEmpty) return;
+    if (!mounted) return;
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
 
     // Build payload for conversion-only tasks.
     final Map<String, dynamic> basePayload = <String, dynamic>{
@@ -752,6 +821,25 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
       'to_lang': _batchToLang,
       'convert_engine': _batchParsingEngine,
     };
+
+    final TranslationService translationService = TranslationService();
+    final String resolvedSourceType = _resolveBatchSourceType(selected);
+    final String batchLabel = _batchLabel.trim().isNotEmpty
+        ? _batchLabel.trim()
+        : '$resolvedSourceType · ${selected.length} files';
+    final Map<String, dynamic> batchResp = await translationService.createUploadBatch(
+      label: batchLabel,
+      sourceType: resolvedSourceType,
+    );
+    final String? batchId =
+        (batchResp['batch'] as Map?)?['batch_id']?.toString();
+    if (batchId == null || batchId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.translationQueueBatchCreateFailed)),
+      );
+      return;
+    }
 
     setState(() {
       _phase = _DialogPhase.submitting;
@@ -765,7 +853,11 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
     });
 
     _progressSub = _submissionService
-        .submitBatch(files: selected, basePayload: basePayload)
+        .submitBatch(
+          files: selected,
+          basePayload: basePayload,
+          batchId: batchId,
+        )
         .listen((progress) {
       if (!mounted) return;
       setState(() {
@@ -1008,6 +1100,17 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
       children: [
         // Toolbar (full width, top)
         _buildBatchToolbar(l10n, theme),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: TextField(
+            decoration: InputDecoration(
+              labelText: l10n.translationQueueBatchLabelHint,
+              border: const OutlineInputBorder(),
+              isDense: true,
+            ),
+            onChanged: (String value) => _batchLabel = value,
+          ),
+        ),
         // Settings (left) | File list (right)
         Expanded(
           child: Row(

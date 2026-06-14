@@ -37,6 +37,9 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
   final TranslationService _svc = TranslationService();
   Timer? _pollTimer;
   List<Map<String, dynamic>> _tasks = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _batches = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _ungroupedTasks = <Map<String, dynamic>>[];
+  final Set<String> _collapsedBatchIds = <String>{};
   bool _loading = false;
   String? _loadError;
   final Set<String> _selectedTaskIds = <String>{};
@@ -100,6 +103,50 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     }
   }
 
+  Future<Map<String, dynamic>> _enrichTaskRow(Map<String, dynamic> row) async {
+    _mergeDownloadsFromStashMeta(row);
+    final String id = row['task_id']?.toString() ?? '';
+    if (id.isEmpty) {
+      return row;
+    }
+    try {
+      final Map<String, dynamic> st = await _svc.getStatus(id);
+      row['status'] = st['status'] ?? row['status'];
+      row['progress'] = st['progress'] ?? row['progress'];
+      if (row['status']?.toString().toLowerCase() == 'completed') {
+        row['progress'] = 100;
+      }
+      row['message'] = st['message'] ?? row['message'];
+      row['message_level'] = st['message_level'] ?? row['message_level'];
+      row['error'] = st['error'] ?? row['error'];
+      if (st['translation_stats'] is Map) {
+        row['translation_stats'] = Map<String, dynamic>.from(
+          st['translation_stats'] as Map<dynamic, dynamic>,
+        );
+      }
+      if (st['token_usage'] is Map) {
+        row['token_usage'] = Map<String, dynamic>.from(
+          st['token_usage'] as Map<dynamic, dynamic>,
+        );
+      }
+      final dynamic sd = st['downloads'];
+      if (sd is Map && sd.isNotEmpty) {
+        row['downloads'] = Map<String, dynamic>.from(sd);
+      } else {
+        _mergeDownloadsFromStashMeta(row);
+      }
+    } catch (_) {
+      _mergeDownloadsFromStashMeta(row);
+    }
+    return row;
+  }
+
+  Future<List<Map<String, dynamic>>> _enrichTasks(
+    Iterable<Map<String, dynamic>> raw,
+  ) async {
+    return Future.wait(raw.map(_enrichTaskRow));
+  }
+
   Future<void> _refresh() async {
     if (!mounted) return;
     // Skip refresh when app is in background or this screen is not the current route
@@ -111,53 +158,93 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
       _loadError = null;
     });
     try {
-      final Map<String, dynamic> listResp =
-          await _svc.listTranslationTasks();
-      final List<dynamic> raw =
-          (listResp['tasks'] as List<dynamic>?) ?? <dynamic>[];
-      final List<Map<String, dynamic>> enriched =
-          await Future.wait(raw.map((t) async {
-        final Map<String, dynamic> row =
-            Map<String, dynamic>.from(t as Map<dynamic, dynamic>);
-        _mergeDownloadsFromStashMeta(row);
-        final String id = row['task_id']?.toString() ?? '';
-        if (id.isEmpty) return row;
-        try {
-          final Map<String, dynamic> st = await _svc.getStatus(id);
-          row['status'] = st['status'] ?? row['status'];
-          row['progress'] = st['progress'] ?? row['progress'];
-          // Ensure completed tasks always show 100% progress
-          if (row['status']?.toString().toLowerCase() == 'completed') {
-            row['progress'] = 100;
-          }
-          row['message'] = st['message'] ?? row['message'];
-          row['message_level'] = st['message_level'] ?? row['message_level'];
-          row['error'] = st['error'] ?? row['error'];
-          // Merge translation stats and token usage for completed tasks
-          if (st['translation_stats'] is Map) {
-            row['translation_stats'] = Map<String, dynamic>.from(
-              st['translation_stats'] as Map<dynamic, dynamic>,
-            );
-          }
-          if (st['token_usage'] is Map) {
-            row['token_usage'] = Map<String, dynamic>.from(
-              st['token_usage'] as Map<dynamic, dynamic>,
-            );
-          }
-          final dynamic sd = st['downloads'];
-          if (sd is Map && sd.isNotEmpty) {
-            row['downloads'] = Map<String, dynamic>.from(sd);
-          } else {
-            _mergeDownloadsFromStashMeta(row);
-          }
-        } catch (_) {
-          // Keep list row; retain stash-derived download URLs when GET /status fails
-          _mergeDownloadsFromStashMeta(row);
+      final Map<String, dynamic> batchResp =
+          await _svc.listUploadBatches();
+      final List<dynamic> batchesRaw =
+          (batchResp['batches'] as List<dynamic>?) ?? <dynamic>[];
+      final List<dynamic> ungroupedRaw =
+          (batchResp['ungrouped_tasks'] as List<dynamic>?) ?? <dynamic>[];
+
+      final List<Map<String, dynamic>> allRaw = <Map<String, dynamic>>[];
+      for (final dynamic batch in batchesRaw) {
+        if (batch is! Map) {
+          continue;
         }
-        return row;
-      }),);
+        final List<dynamic> nested =
+            (batch['tasks'] as List<dynamic>?) ?? <dynamic>[];
+        for (final dynamic task in nested) {
+          if (task is Map) {
+            allRaw.add(Map<String, dynamic>.from(task));
+          }
+        }
+      }
+      for (final dynamic task in ungroupedRaw) {
+        if (task is Map) {
+          allRaw.add(Map<String, dynamic>.from(task));
+        }
+      }
+
+      final Set<String> seenIds = <String>{};
+      final List<Map<String, dynamic>> uniqueRaw = <Map<String, dynamic>>[];
+      for (final Map<String, dynamic> row in allRaw) {
+        final String id = row['task_id']?.toString() ?? '';
+        if (id.isEmpty || seenIds.contains(id)) {
+          continue;
+        }
+        seenIds.add(id);
+        uniqueRaw.add(row);
+      }
+
+      final List<Map<String, dynamic>> enriched =
+          await _enrichTasks(uniqueRaw);
+      final Map<String, Map<String, dynamic>> enrichedById =
+          <String, Map<String, dynamic>>{
+        for (final Map<String, dynamic> row in enriched)
+          row['task_id']?.toString() ?? '': row,
+      };
+
+      final List<Map<String, dynamic>> batches = batchesRaw
+          .whereType<Map<dynamic, dynamic>>()
+          .map((Map<dynamic, dynamic> batch) {
+        final Map<String, dynamic> copy =
+            Map<String, dynamic>.from(batch);
+        final List<dynamic> taskIds =
+            (copy['task_ids'] as List<dynamic>?) ?? <dynamic>[];
+        final List<Map<String, dynamic>> tasks = taskIds
+            .map((dynamic tid) => enrichedById[tid.toString()])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+        copy['tasks'] = tasks;
+        int completed = 0;
+        int failed = 0;
+        for (final Map<String, dynamic> row in tasks) {
+          final String status =
+              row['status']?.toString().toLowerCase() ?? '';
+          if (status == 'completed') {
+            completed++;
+          } else if (status == 'failed' || status == 'cancelled') {
+            failed++;
+          }
+        }
+        copy['task_count'] = tasks.length;
+        copy['completed_count'] = completed;
+        copy['failed_count'] = failed;
+        return copy;
+      }).toList();
+
+      final List<Map<String, dynamic>> ungrouped = ungroupedRaw
+          .whereType<Map<dynamic, dynamic>>()
+          .map((Map<dynamic, dynamic> row) =>
+              enrichedById[row['task_id']?.toString() ?? ''] ??
+              Map<String, dynamic>.from(row),)
+          .where((Map<String, dynamic> row) =>
+              (row['task_id']?.toString() ?? '').isNotEmpty,)
+          .toList();
+
       if (!mounted) return;
       setState(() {
+        _batches = batches;
+        _ungroupedTasks = ungrouped;
         _tasks = enriched;
         _loading = false;
       });
@@ -273,6 +360,623 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     }
   }
 
+  void _toggleBatchExpanded(String batchId) {
+    setState(() {
+      if (_collapsedBatchIds.contains(batchId)) {
+        _collapsedBatchIds.remove(batchId);
+      } else {
+        _collapsedBatchIds.add(batchId);
+      }
+    });
+  }
+
+  void _toggleBatchSelection(Set<String> taskIds) {
+    setState(() {
+      final bool allSelected =
+          taskIds.every(_selectedTaskIds.contains);
+      if (allSelected) {
+        _selectedTaskIds.removeAll(taskIds);
+      } else {
+        _selectedTaskIds.addAll(taskIds);
+      }
+    });
+  }
+
+  Future<void> _confirmDeleteBatch(String batchId, String label) async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(l10n.translationQueueBatchDeleteTitle),
+        content: Text(
+          '${l10n.translationQueueBatchDeleteMessage}\n\n$label',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.translationQueueBatchDelete),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) {
+      return;
+    }
+    try {
+      await _svc.deleteUploadBatch(batchId);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        for (final Map<String, dynamic> batch in _batches) {
+          if (batch['batch_id']?.toString() != batchId) {
+            continue;
+          }
+          final List<dynamic> tasks =
+              (batch['tasks'] as List<dynamic>?) ?? <dynamic>[];
+          for (final dynamic task in tasks) {
+            if (task is Map) {
+              _selectedTaskIds.remove(task['task_id']?.toString());
+            }
+          }
+          break;
+        }
+        _collapsedBatchIds.remove(batchId);
+      });
+      await _refresh();
+    } catch (e) {
+      if (mounted) {
+        MessageService.showWarning(
+          context,
+          l10n.translationQueueActionFailed(e),
+        );
+      }
+    }
+  }
+
+  Future<void> _downloadBatch(String batchId, String fileType) async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    try {
+      final List<int> bytes =
+          await _svc.batchDownloadByBatch(batchId, fileType);
+      if (bytes.isEmpty) {
+        if (mounted) {
+          MessageService.showWarning(
+            context,
+            l10n.translationQueueBatchDownloadFailed('empty result'),
+          );
+        }
+        return;
+      }
+      final String timestamp =
+          DateTime.now().millisecondsSinceEpoch.toString();
+      const String ext = 'zip';
+      final String filename =
+          'batch_${batchId}_${fileType}_$timestamp.$ext';
+      await _saveDownloadedBytes(
+        bytes: bytes,
+        filename: filename,
+        ext: ext,
+      );
+      if (mounted) {
+        MessageService.showInfo(
+          context,
+          l10n.translationQueueBatchDownloadSuccess(fileType),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showWarning(
+          context,
+          l10n.translationQueueBatchDownloadFailed(e.toString()),
+        );
+      }
+    }
+  }
+
+  Future<void> _showBatchDownloadMenu(
+    String batchId,
+    List<Map<String, dynamic>> tasks,
+  ) async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final List<Map<String, dynamic>> completedTasks = tasks
+        .where(
+          (Map<String, dynamic> row) =>
+              row['status']?.toString().toLowerCase() == 'completed',
+        )
+        .toList();
+    final Map<String, int> formatCounts = _computeFormatCounts(
+      completedTasks
+          .map((Map<String, dynamic> row) => row['task_id']?.toString() ?? '')
+          .where((String id) => id.isNotEmpty)
+          .toSet(),
+      completedTasks,
+    );
+    if (formatCounts.isEmpty) {
+      MessageService.showWarning(
+        context,
+        l10n.translationQueueBatchDownloadFailed('no completed downloads'),
+      );
+      return;
+    }
+
+    const List<(String, IconData)> formats = <(String, IconData)>[
+      ('docx', Icons.description),
+      ('html', Icons.language),
+      ('md', Icons.article),
+      ('md_zip', Icons.folder_zip_outlined),
+      ('pdf', Icons.picture_as_pdf),
+      ('pdf_reflow', Icons.picture_as_pdf_outlined),
+      ('txt', Icons.text_snippet),
+    ];
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Text(
+                  l10n.translationQueueBatchDownload,
+                  style: Theme.of(ctx).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: formats
+                      .where((f) => (formatCounts[f.$1] ?? 0) > 0)
+                      .map(
+                        (f) => ActionChip(
+                          avatar: Icon(f.$2, size: 16),
+                          label: Text(
+                            '${_downloadFormatButtonLabel(f.$1, l10n)} '
+                            '(${formatCounts[f.$1]})',
+                          ),
+                          onPressed: () {
+                            Navigator.of(ctx).pop();
+                            _downloadBatch(batchId, f.$1);
+                          },
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGroupedTaskList(
+    AppLocalizations l10n,
+    ThemeData theme,
+    ColorScheme cs,
+  ) {
+    if (_tasks.isEmpty && _loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_tasks.isEmpty) {
+      return Center(child: Text(l10n.translationQueueEmpty));
+    }
+
+    final List<Widget> children = <Widget>[];
+    for (final Map<String, dynamic> batch in _batches) {
+      children.add(_buildBatchSection(batch, l10n, theme, cs));
+    }
+    if (_ungroupedTasks.isNotEmpty) {
+      children.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Text(
+            l10n.translationQueueUngroupedSection,
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: cs.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      );
+      for (final Map<String, dynamic> row in _ungroupedTasks) {
+        children.add(_buildTaskCard(row, l10n, theme, cs));
+      }
+    }
+
+    // Tooltip + OverlayPortal hit-tests fail while the list scrolls; keep
+    // list rows free of Tooltip widgets (show status text inline instead).
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 8),
+      children: children,
+    );
+  }
+
+  /// Progress/status line for in-flight tasks (replaces hover Tooltip on filename).
+  String? _inlineTaskStatusMessage(Map<String, dynamic> row) {
+    final String status = (row['status']?.toString() ?? '').toLowerCase();
+    if (status == 'failed' ||
+        status == 'completed' ||
+        status == 'cancelled') {
+      return null;
+    }
+    final String message = row['message']?.toString().trim() ?? '';
+    if (message.isEmpty) {
+      return null;
+    }
+    final String name = row['original_filename']?.toString() ?? '';
+    if (message == name) {
+      return null;
+    }
+    return message;
+  }
+
+  Widget _buildBatchSection(
+    Map<String, dynamic> batch,
+    AppLocalizations l10n,
+    ThemeData theme,
+    ColorScheme cs,
+  ) {
+    final String batchId = batch['batch_id']?.toString() ?? '';
+    final String label = batch['label']?.toString() ?? batchId;
+    final List<Map<String, dynamic>> tasks =
+        (batch['tasks'] as List<dynamic>?)
+                ?.whereType<Map<dynamic, dynamic>>()
+                .map(Map<String, dynamic>.from)
+                .toList() ??
+            <Map<String, dynamic>>[];
+    final int completed =
+        (batch['completed_count'] as num?)?.toInt() ?? 0;
+    final int total = (batch['task_count'] as num?)?.toInt() ?? tasks.length;
+    final bool expanded = !_collapsedBatchIds.contains(batchId);
+    final Set<String> taskIds = tasks
+        .map((Map<String, dynamic> row) => row['task_id']?.toString() ?? '')
+        .where((String id) => id.isNotEmpty)
+        .toSet();
+    final bool allSelected = taskIds.isNotEmpty &&
+        taskIds.every(_selectedTaskIds.contains);
+    final bool someSelected =
+        taskIds.any(_selectedTaskIds.contains) && !allSelected;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Material(
+            color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+            child: InkWell(
+              onTap: () => _toggleBatchExpanded(batchId),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 6, 8, 6),
+                child: Row(
+                  children: <Widget>[
+                    Checkbox(
+                      value: allSelected
+                          ? true
+                          : (someSelected ? null : false),
+                      tristate: true,
+                      onChanged: (_) => _toggleBatchSelection(taskIds),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            label,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            l10n.translationQueueBatchProgress(
+                              completed,
+                              total,
+                            ),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _QueueListIconButton(
+                      icon: Icons.download_outlined,
+                      semanticLabel: l10n.translationQueueBatchDownload,
+                      minSize: 32,
+                      onPressed: completed == 0
+                          ? null
+                          : () => _showBatchDownloadMenu(batchId, tasks),
+                    ),
+                    _QueueListIconButton(
+                      icon: Icons.delete_outline,
+                      semanticLabel: l10n.translationQueueBatchDelete,
+                      iconColor: cs.error,
+                      minSize: 32,
+                      onPressed: () => _confirmDeleteBatch(batchId, label),
+                    ),
+                    Icon(
+                      expanded ? Icons.expand_less : Icons.expand_more,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (expanded)
+            ...tasks.map(
+              (Map<String, dynamic> row) =>
+                  _buildTaskCard(row, l10n, theme, cs, nested: true),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTaskCard(
+    Map<String, dynamic> row,
+    AppLocalizations l10n,
+    ThemeData theme,
+    ColorScheme cs, {
+    bool nested = false,
+  }) {
+    final String taskId = row['task_id']?.toString() ?? '';
+    final String name =
+        row['original_filename']?.toString() ?? taskId;
+    final String relativePath =
+        row['original_relative_path']?.toString() ?? '';
+    final String status = row['status']?.toString() ?? '';
+    final dynamic progressRaw = row['progress'];
+    final int progress = progressRaw is num
+        ? progressRaw.toInt().clamp(0, 100)
+        : 0;
+    final String? mode = row['execution_mode']?.toString();
+    final dynamic qp = row['queue_position'];
+    final Map<String, dynamic>? downloads = row['downloads'] is Map
+        ? Map<String, dynamic>.from(
+            row['downloads'] as Map<dynamic, dynamic>,
+          )
+        : null;
+    final List<MapEntry<String, dynamic>> downloadEntries =
+        downloads == null || downloads.isEmpty
+            ? <MapEntry<String, dynamic>>[]
+            : (downloads.entries.toList()
+              ..sort(
+                (MapEntry<String, dynamic> a, MapEntry<String, dynamic> b) =>
+                    _downloadFormatSortOrder(a.key)
+                        .compareTo(_downloadFormatSortOrder(b.key)),
+              ));
+
+    final bool inMemory = row['in_memory'] != false;
+    final String? ownerRaw = row['owner_username']?.toString();
+    final String ownerShow = (ownerRaw != null && ownerRaw.isNotEmpty)
+        ? ownerRaw
+        : l10n.translationQueueGuestUser;
+    final double? startedSec = _coerceUnix(row['started_at']) ??
+        _coerceUnix(row['queued_at']) ??
+        _coerceUnix(row['task_start_time']);
+
+    return Card(
+      margin: EdgeInsets.fromLTRB(nested ? 20 : 12, nested ? 2 : 3, 12, nested ? 2 : 3),
+      elevation: nested ? 0 : null,
+      color: nested ? cs.surfaceContainerLowest : null,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            if (_selectedTaskIds.contains(taskId)) {
+              _selectedTaskIds.remove(taskId);
+            } else {
+              _selectedTaskIds.add(taskId);
+            }
+          });
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Checkbox(
+                    value: _selectedTaskIds.contains(taskId),
+                    onChanged: (_) {
+                      setState(() {
+                        if (_selectedTaskIds.contains(taskId)) {
+                          _selectedTaskIds.remove(taskId);
+                        } else {
+                          _selectedTaskIds.add(taskId);
+                        }
+                      });
+                    },
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  Icon(_fileIcon(name), size: 18, color: cs.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        if (relativePath.isNotEmpty)
+                          Text(
+                            relativePath,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: cs.onSurfaceVariant,
+                              height: 1.2,
+                            ),
+                          ),
+                        Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            height: 1.3,
+                          ),
+                        ),
+                        if (_inlineTaskStatusMessage(row) case final String statusMsg)
+                          Text(
+                            statusMsg,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: cs.primary,
+                              fontSize: 11,
+                              height: 1.2,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (status == 'completed') _buildInlineStats(row, cs),
+                  const SizedBox(width: 8),
+                  _StatusBadge(status, progress, cs),
+                  if (row['is_format_conversion'] == true)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: _TinyBadge(
+                        label: l10n.translationQueueTaskTypeConversion,
+                        cs: cs,
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: _TinyBadge(
+                        label: l10n.translationQueueTaskTypeTranslation,
+                        cs: cs,
+                      ),
+                    ),
+                  if (mode == 'queued')
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: _TinyBadge(
+                        label: l10n.translationQueueExecutionModeQueued,
+                        cs: cs,
+                      ),
+                    ),
+                  if (qp != null && qp is num && qp > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: _TinyBadge(
+                        label: '#${qp.toInt()}',
+                        cs: cs,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              if (status.toLowerCase() == 'failed')
+                _buildFailedMessage(row, cs, theme),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      '$ownerShow · ${_formatCompactTime(context, startedSec)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  if (downloadEntries.isNotEmpty)
+                    ...downloadEntries.map(
+                      (MapEntry<String, dynamic> e) => _DownloadFormatButton(
+                        taskId: taskId,
+                        name: name,
+                        ft: e.key,
+                        url: e.value.toString(),
+                        isFormatConversion:
+                            row['is_format_conversion'] == true,
+                        onDownload: _download,
+                      ),
+                    ),
+                  const SizedBox(width: 28),
+                  SizedBox(
+                    width: 84,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: <Widget>[
+                        if (_canCancel(status) && inMemory)
+                          _QueueListIconButton(
+                            icon: Icons.cancel_outlined,
+                            semanticLabel: l10n.translationQueueCancel,
+                            onPressed: () => _cancel(taskId),
+                          ),
+                        if (status == 'completed' &&
+                            row['is_format_conversion'] != true &&
+                            inMemory)
+                          _QueueListIconButton(
+                            icon: Icons.label_outlined,
+                            semanticLabel: l10n.translationQueueEdit,
+                            onPressed: () {
+                              final String? wf =
+                                  row['workflow_type']?.toString();
+                              final String reeditUri =
+                                  '${AppRouter.translationRoute}'
+                                  '?execution_mode=queued'
+                                  '&reedit_task_id=$taskId'
+                                  '&reedit_workflow_type=${Uri.encodeComponent(wf ?? '')}'
+                                  '&reedit_file_name=${Uri.encodeComponent(name)}';
+                              context.push(reeditUri);
+                            },
+                          ),
+                        if (status == 'completed' && inMemory)
+                          _QueueListIconButton(
+                            icon: Icons.chrome_reader_mode,
+                            semanticLabel: l10n.translationQueueView,
+                            onPressed: () {
+                              final String? wf =
+                                  row['workflow_type']?.toString();
+                              final String viewUri =
+                                  '${AppRouter.translationRoute}'
+                                  '?execution_mode=queued'
+                                  '&reedit_task_id=$taskId'
+                                  '&reedit_workflow_type=${Uri.encodeComponent(wf ?? '')}'
+                                  '&reedit_file_name=${Uri.encodeComponent(name)}'
+                                  '&view_mode=clean';
+                              context.push(viewUri);
+                            },
+                          ),
+                        _QueueListIconButton(
+                          icon: Icons.remove_circle_outline,
+                          semanticLabel: l10n.translationQueueRelease,
+                          onPressed: () => _release(taskId),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Backend exposes two Markdown downloads: `md` (default embed_images) and `md_zip` (?embed_images=false).
   static int _downloadFormatSortOrder(String formatKey) {
     const List<String> preferred = <String>[
@@ -281,6 +985,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
       'md',
       'md_zip',
       'pdf',
+      'pdf_reflow',
       'epub',
       'mobi',
       'txt',
@@ -293,6 +998,9 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
   static String _fileExtensionForDownloadFormat(String formatKey) {
     if (formatKey == 'md_zip') {
       return 'zip';
+    }
+    if (formatKey == 'pdf_reflow') {
+      return 'pdf';
     }
     return formatKey;
   }
@@ -409,20 +1117,6 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
       return null;
     }
     return n;
-  }
-
-  String _formatUnixOrDash(
-    AppLocalizations l10n,
-    BuildContext context,
-    double? seconds,
-  ) {
-    if (seconds == null) {
-      return l10n.translationQueueTimeUnknown;
-    }
-    final DateTime dt =
-        DateTime.fromMillisecondsSinceEpoch((seconds * 1000).round());
-    final Locale loc = Localizations.localeOf(context);
-    return DateFormat.yMMMd(loc.toLanguageTag()).add_Hm().format(dt);
   }
 
   /// Compact time display: "05-22 14:00" or dash.
@@ -786,320 +1480,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                 ),
               ),
             Expanded(
-              child: _tasks.isEmpty && _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _tasks.isEmpty
-                      ? Center(child: Text(l10n.translationQueueEmpty))
-                      : ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      itemCount: _tasks.length,
-                      itemBuilder: (BuildContext context, int index) {
-                        final Map<String, dynamic> row = _tasks[index];
-                        final String taskId =
-                            row['task_id']?.toString() ?? '';
-                        final String name =
-                            row['original_filename']?.toString() ??
-                                taskId;
-                        final String relativePath =
-                            row['original_relative_path']?.toString() ?? '';
-                        final String status =
-                            row['status']?.toString() ?? '';
-                        final dynamic progressRaw = row['progress'];
-                        final int progress = progressRaw is num
-                            ? progressRaw.toInt().clamp(0, 100)
-                            : 0;
-                        final String? mode =
-                            row['execution_mode']?.toString();
-                        final dynamic qp = row['queue_position'];
-                        final Map<String, dynamic>? downloads = row['downloads']
-                                is Map
-                            ? Map<String, dynamic>.from(
-                                row['downloads'] as Map<dynamic, dynamic>,
-                              )
-                            : null;
-                        final List<MapEntry<String, dynamic>> downloadEntries =
-                            downloads == null || downloads.isEmpty
-                                ? <MapEntry<String, dynamic>>[]
-                                : (downloads.entries.toList()
-                                  ..sort(
-                                    (MapEntry<String, dynamic> a,
-                                            MapEntry<String, dynamic> b,) =>
-                                        _downloadFormatSortOrder(a.key).compareTo(
-                                          _downloadFormatSortOrder(b.key),
-                                        ),
-                                  ));
-
-                        final bool inMemory = row['in_memory'] != false;
-
-                        final String? ownerRaw =
-                            row['owner_username']?.toString();
-                        final String ownerShow =
-                            (ownerRaw != null && ownerRaw.isNotEmpty)
-                                ? ownerRaw
-                                : l10n.translationQueueGuestUser;
-                        final double? startedSec = _coerceUnix(
-                              row['started_at'],
-                            ) ??
-                            _coerceUnix(row['queued_at']) ??
-                            _coerceUnix(row['task_start_time']);
-                        final double? completedSec = _coerceUnix(
-                              row['completed_at'],
-                            ) ??
-                            _coerceUnix(row['task_end_time']);
-
-                        return Card(
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 3,
-                          ),
-                          child: InkWell(
-                            onTap: () {
-                              setState(() {
-                                if (_selectedTaskIds.contains(taskId)) {
-                                  _selectedTaskIds.remove(taskId);
-                                } else {
-                                  _selectedTaskIds.add(taskId);
-                                }
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(12),
-                            child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: <Widget>[
-                                // ── Line 1: Filename + Status ──
-                                Row(
-                                  children: <Widget>[
-                                    Checkbox(
-                                        value: _selectedTaskIds.contains(taskId),
-                                        onChanged: (_) {
-                                          setState(() {
-                                            if (_selectedTaskIds.contains(taskId)) {
-                                              _selectedTaskIds.remove(taskId);
-                                            } else {
-                                              _selectedTaskIds.add(taskId);
-                                            }
-                                          });
-                                        },
-                                        visualDensity: VisualDensity.compact,
-                                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                    Icon(
-                                      _fileIcon(name),
-                                      size: 18,
-                                      color: cs.onSurfaceVariant,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Tooltip(
-                                        message: row['message']?.toString() ?? name,
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            if (relativePath.isNotEmpty)
-                                              Text(
-                                                relativePath,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: cs.onSurfaceVariant,
-                                                  height: 1.2,
-                                                ),
-                                              ),
-                                            Text(
-                                              name,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: theme.textTheme.titleSmall?.copyWith(
-                                                fontWeight: FontWeight.w600,
-                                                height: 1.3,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    if (status == 'completed')
-                                      _buildInlineStats(row, cs),
-                                    const SizedBox(width: 8),
-                                    _StatusBadge(status, progress, cs),
-                                    if (row['is_format_conversion'] == true)
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 4),
-                                        child: _TinyBadge(
-                                          label: l10n.translationQueueTaskTypeConversion,
-                                          cs: cs,
-                                        ),
-                                      )
-                                    else
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 4),
-                                        child: _TinyBadge(
-                                          label: l10n.translationQueueTaskTypeTranslation,
-                                          cs: cs,
-                                        ),
-                                      ),
-                                    if (mode == 'queued')
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 4),
-                                        child: _TinyBadge(
-                                          label: l10n.translationQueueExecutionModeQueued,
-                                          cs: cs,
-                                        ),
-                                      ),
-                                    if (qp != null && qp is num && qp > 0)
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 4),
-                                        child: _TinyBadge(
-                                          label: '#${qp.toInt()}',
-                                          cs: cs,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                // Show error message inline when task failed
-                                if (status.toLowerCase() == 'failed')
-                                  _buildFailedMessage(row, cs, theme),
-                                // ── Line 2: Meta + Actions ──
-                                Row(
-                                  children: <Widget>[
-                                    Expanded(
-                                      child: Text(
-                                        '$ownerShow · ${_formatCompactTime(context, startedSec)}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                          color: cs.onSurfaceVariant,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                    // Download format icons
-                                    if (downloadEntries.isNotEmpty)
-                                      ...downloadEntries.map(
-                                        (e) => _DownloadFormatButton(
-                                          taskId: taskId,
-                                          name: name,
-                                          ft: e.key,
-                                          url: e.value.toString(),
-                                          isFormatConversion: row['is_format_conversion'] == true,
-                                          onDownload: _download,
-                                        ),
-                                      ),
-                                    const SizedBox(width: 28),
-                                    // Action buttons (fixed width: up to 3 buttons)
-                                    SizedBox(
-                                      width: 84,
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
-                                        children: <Widget>[
-                                          // Cancel
-                                          if (_canCancel(status) && inMemory)
-                                            IconButton(
-                                              icon: const Icon(
-                                                  Icons.cancel_outlined,
-                                                  size: 20),
-                                              tooltip:
-                                                  l10n.translationQueueCancel,
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              padding: const EdgeInsets.all(4),
-                                              constraints: const BoxConstraints(
-                                                  minWidth: 28, minHeight: 28),
-                                              onPressed:
-                                                  () => _cancel(taskId),
-                                            ),
-                                          // Edit
-                                          if (status == 'completed' &&
-                                              row['is_format_conversion'] !=
-                                                  true &&
-                                              inMemory)
-                                            IconButton(
-                                              icon: const Icon(
-                                                  Icons.label_outlined,
-                                                  size: 20),
-                                              tooltip:
-                                                  l10n.translationQueueEdit,
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              padding: const EdgeInsets.all(4),
-                                              constraints: const BoxConstraints(
-                                                  minWidth: 28, minHeight: 28),
-                                              onPressed: () {
-                                                final String? wf = row[
-                                                        'workflow_type']
-                                                    ?.toString();
-                                                final String reeditUri =
-                                                    '${AppRouter.translationRoute}'
-                                                    '?execution_mode=queued'
-                                                    '&reedit_task_id=$taskId'
-                                                    '&reedit_workflow_type=${Uri.encodeComponent(wf ?? '')}'
-                                                    '&reedit_file_name=${Uri.encodeComponent(name)}';
-                                                context.push(reeditUri);
-                                              },
-                                            ),
-                                          // View
-                                          if (status == 'completed' && inMemory)
-                                            IconButton(
-                                              icon: const Icon(
-                                                  Icons.chrome_reader_mode,
-                                                  size: 20),
-                                              tooltip:
-                                                  l10n.translationQueueView,
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              padding: const EdgeInsets.all(4),
-                                              constraints: const BoxConstraints(
-                                                  minWidth: 28, minHeight: 28),
-                                              onPressed: () {
-                                                final String? wf = row[
-                                                        'workflow_type']
-                                                    ?.toString();
-                                                final String viewUri =
-                                                    '${AppRouter.translationRoute}'
-                                                    '?execution_mode=queued'
-                                                    '&reedit_task_id=$taskId'
-                                                    '&reedit_workflow_type=${Uri.encodeComponent(wf ?? '')}'
-                                                    '&reedit_file_name=${Uri.encodeComponent(name)}'
-                                                    '&view_mode=clean';
-                                                context.push(viewUri);
-                                              },
-                                            ),
-                                          // Release
-                                          IconButton(
-                                            icon: const Icon(
-                                                Icons.remove_circle_outline,
-                                                size: 20),
-                                            tooltip:
-                                                l10n.translationQueueRelease,
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            padding: const EdgeInsets.all(4),
-                                            constraints: const BoxConstraints(
-                                                minWidth: 28, minHeight: 28),
-                                            onPressed:
-                                                () => _release(taskId),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                      },
-                    ),
+              child: _buildGroupedTaskList(l10n, theme, cs),
             ),
           ],
         ),
@@ -1649,37 +2030,10 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
 
     if (spans.isEmpty) return const SizedBox.shrink();
 
-    // Build tooltip message with detailed labels
-    final List<String> tooltipParts = <String>[];
-    if (stats != null) {
-      final int total = (stats['total_segments'] as num?)?.toInt() ?? 0;
-      final int success = (stats['success_count'] as num?)?.toInt() ?? 0;
-      final int failed = (stats['fail_count'] as num?)?.toInt() ?? 0;
-      if (total > 0) {
-        final String failedPart = failed > 0 ? ', $failed failed' : '';
-        tooltipParts.add('Segments: $success succeeded${failedPart}, $total total');
-      }
-    }
-    if (tokens != null) {
-      final int input = (tokens['input_tokens'] as num?)?.toInt() ?? 0;
-      final int output = (tokens['output_tokens'] as num?)?.toInt() ?? 0;
-      if (input > 0) tooltipParts.add('Input tokens:  $input');
-      if (output > 0) tooltipParts.add('Output tokens: $output');
-    }
-
-    return Tooltip(
-      message: tooltipParts.join('\n'),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      textStyle: TextStyle(
-        fontSize: 12,
-        color: cs.onInverseSurface,
-        height: 1.4,
-      ),
-      child: RichText(
-        text: TextSpan(children: spans),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+    return RichText(
+      text: TextSpan(children: spans),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 
@@ -1787,6 +2141,7 @@ class _BatchDownloadBottomBar extends StatelessWidget {
       ('md', Icons.article),
       ('md_zip', Icons.folder_zip_outlined),
       ('pdf', Icons.picture_as_pdf),
+      ('pdf_reflow', Icons.picture_as_pdf_outlined),
       ('txt', Icons.text_snippet),
     ];
     for (final f in formats) {
@@ -1926,7 +2281,8 @@ String _extensionForFormat(String formatKey) {
     case 'html': return 'html';
     case 'md': return 'md';
     case 'md_zip': return 'zip';
-    case 'pdf': return 'pdf';
+    case 'pdf':
+    case 'pdf_reflow': return 'pdf';
     case 'txt': return 'txt';
     default: return formatKey;
   }
@@ -1938,6 +2294,10 @@ String _downloadFormatButtonLabel(String formatKey, AppLocalizations l10n) {
       return l10n.translationQueueDownloadMdEmbedded;
     case 'md_zip':
       return l10n.translationQueueDownloadMdZip;
+    case 'pdf':
+      return l10n.translationExportPdfPreserveLayout;
+    case 'pdf_reflow':
+      return l10n.translationExportPdfReflow;
     default:
       return formatKey.toUpperCase();
   }
@@ -1947,6 +2307,7 @@ String _downloadFormatButtonLabel(String formatKey, AppLocalizations l10n) {
 IconData _downloadFormatIcon(String ft) {
   switch (ft) {
     case 'pdf':
+    case 'pdf_reflow':
       return Icons.picture_as_pdf;
     case 'docx':
     case 'doc':
@@ -1979,6 +2340,39 @@ IconData _downloadFormatIcon(String ft) {
   }
 }
 
+/// Icon button for scrollable queue rows — avoids Tooltip OverlayPortal hit-test
+/// crashes while the task list is scrolling.
+class _QueueListIconButton extends StatelessWidget {
+  const _QueueListIconButton({
+    required this.icon,
+    required this.semanticLabel,
+    required this.onPressed,
+    this.iconColor,
+    this.minSize = 28,
+  });
+
+  final IconData icon;
+  final String semanticLabel;
+  final VoidCallback? onPressed;
+  final Color? iconColor;
+  final double minSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: semanticLabel,
+      button: true,
+      child: IconButton(
+        icon: Icon(icon, size: 20, color: iconColor),
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.all(4),
+        constraints: BoxConstraints(minWidth: minSize, minHeight: minSize),
+        onPressed: onPressed,
+      ),
+    );
+  }
+}
+
 /// An icon button for a single download format.
 class _DownloadFormatButton extends StatelessWidget {
   final String taskId;
@@ -2000,15 +2394,21 @@ class _DownloadFormatButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context)!;
-    return IconButton(
-      icon: Icon(_downloadFormatIcon(ft), size: 20),
-      tooltip: _downloadFormatButtonLabel(ft, l10n),
-      visualDensity: VisualDensity.compact,
-      padding: const EdgeInsets.all(4),
-      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-      onPressed: url.isNotEmpty
-          ? () => onDownload(taskId, ft, url, name, isFormatConversion)
-          : null,
+    final String label = _downloadFormatButtonLabel(ft, l10n);
+    // No IconButton tooltip inside scrollable queue rows — Tooltip OverlayPortal
+    // triggers hit-test assertions while the list is scrolling.
+    return Semantics(
+      label: label,
+      button: true,
+      child: IconButton(
+        icon: Icon(_downloadFormatIcon(ft), size: 20),
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.all(4),
+        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+        onPressed: url.isNotEmpty
+            ? () => onDownload(taskId, ft, url, name, isFormatConversion)
+            : null,
+      ),
     );
   }
 }

@@ -3477,6 +3477,35 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationQueueSelectFormatsDownload => '下载';
 
   @override
+  String get translationQueueBatchLabelHint => '批次备注（用于任务队列分组）';
+
+  @override
+  String get translationQueueBatchCreateFailed => '创建上传批次失败';
+
+  @override
+  String get translationQueueUngroupedSection => '未分组';
+
+  @override
+  String translationQueueBatchProgress(int completed, int total) {
+    return '已完成 $completed/$total';
+  }
+
+  @override
+  String get translationQueueBatchSelectAll => '选中批次';
+
+  @override
+  String get translationQueueBatchDownload => '下载批次';
+
+  @override
+  String get translationQueueBatchDelete => '删除批次';
+
+  @override
+  String get translationQueueBatchDeleteTitle => '删除此批次？';
+
+  @override
+  String get translationQueueBatchDeleteMessage => '将移除该批次下的全部任务，并删除已缓存的结果。';
+
+  @override
   String get reeditTitle => '编辑译文';
 
   @override

@@ -970,7 +970,8 @@ def _build_stash_export_plan(task_state: Dict[str, Any]) -> List[Tuple[str, str,
         for ft in ("docx", "html", "md"):
             plan.append((ft, ft, docx_kwargs if ft == "docx" else {}))
         if allow_pdf:
-            plan.append(("pdf", "pdf", {}))
+            plan.append(("pdf", "pdf", {"renderer_type": "typst_overlay"}))
+            plan.append(("pdf_reflow", "pdf", {"renderer_type": "pandoc"}))
         plan.append(("md_zip", "md", {"embed_images": False}))
     elif wt == "txt":
         for ft in ("html", "txt", "md"):
@@ -1014,6 +1015,26 @@ def _build_stash_export_plan(task_state: Dict[str, Any]) -> List[Tuple[str, str,
                 if isinstance(k, str) and k:
                     plan.append((k, k, {}))
     return plan
+
+
+def _stash_export_format_label(stash_key: str, kwargs: Dict[str, Any]) -> str:
+    """Human-readable export label for queue progress messages."""
+    if stash_key == "pdf":
+        return "PDF (original layout)"
+    if stash_key == "pdf_reflow":
+        return "PDF (reflow)"
+    if stash_key == "md_zip":
+        return "Markdown (ZIP)"
+    if stash_key == "md":
+        return "Markdown"
+    return stash_key.upper()
+
+
+def _pdf_stash_key_for_download(renderer_type: Optional[str]) -> str:
+    """Map PDF download renderer to distinct stash storage keys."""
+    if renderer_type == "pandoc":
+        return "pdf_reflow"
+    return "pdf"
 
 
 def completed_task_download_urls(task_id: str, task_state: Dict[str, Any]) -> Dict[str, str]:
@@ -5221,7 +5242,13 @@ class DownloadService:
         raise HTTPException(status_code=404,
                             detail=f"Task '{task_id}' does not support downloading '{file_type}' type files, or files have been lost.")
     
-    async def persist_completed_task_outputs_to_stash(self, task_id: str) -> Dict[str, Any]:
+    async def persist_completed_task_outputs_to_stash(
+        self,
+        task_id: str,
+        *,
+        allow_processing_status: bool = False,
+        update_progress: bool = False,
+    ) -> Dict[str, Any]:
         """
         Rebuild export files from current in-memory task state and copy them into translation_result_stash
         (same as a successful download would record). Used so the queue can serve latest content after
@@ -5232,10 +5259,14 @@ class DownloadService:
         task_state = self.task_manager.get_task(task_id)
         if not task_state:
             raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
-        if (task_state.get("status") or "").lower() != "completed":
+        status_lower = (task_state.get("status") or "").lower()
+        allowed_statuses = {"completed"}
+        if allow_processing_status:
+            allowed_statuses.add("processing")
+        if status_lower not in allowed_statuses:
             raise HTTPException(
                 status_code=400,
-                detail="Task is not completed; cannot persist results.",
+                detail="Task is not ready for export persistence.",
             )
         segs = task_state.get("translation_segments")
         if not isinstance(segs, dict) or not segs.get("segments"):
@@ -5253,14 +5284,32 @@ class DownloadService:
 
         stashed: List[str] = []
         errors: List[str] = []
+        total = len(plan)
 
-        for stash_key, download_ft, kwargs in plan:
+        for index, (stash_key, download_ft, kwargs) in enumerate(plan):
+            if update_progress:
+                label = _stash_export_format_label(stash_key, kwargs)
+                progress = 90 + int((index / max(total, 1)) * 9)
+                self.task_manager.update_task(
+                    task_id,
+                    {
+                        "status": "processing",
+                        "progress": min(99, progress),
+                        "message": f"Generating {label}...",
+                    },
+                )
             try:
                 resp = await self.download_file(task_id, download_ft, **kwargs)
                 path = getattr(resp, "path", None)
                 ts = self.task_manager.get_task(task_id)
                 if path and ts and os.path.isfile(str(path)):
-                    record_generated_result(task_id, stash_key, str(path), ts)
+                    record_generated_result(
+                        task_id,
+                        stash_key,
+                        str(path),
+                        ts,
+                        skip_status_check=allow_processing_status,
+                    )
                     stashed.append(stash_key)
                 else:
                     errors.append(f"{stash_key}: missing or invalid output file")
@@ -5272,6 +5321,16 @@ class DownloadService:
                     f"[PERSIST-STASH] task_id={task_id} {err}",
                     exc_info=True,
                 )
+
+        if update_progress and status_lower == "completed":
+            self.task_manager.update_task(
+                task_id,
+                {
+                    "status": "completed",
+                    "progress": 100,
+                    "message": "Translated outputs available for download.",
+                },
+            )
 
         ok = len(stashed) > 0
         result: Dict[str, Any] = {

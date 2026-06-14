@@ -86,7 +86,10 @@ class FilePickerHelper {
   /// picking is not supported by the [file_picker] plugin.
   static Future<String?> pickDirectory({String? dialogTitle}) async {
     if (kIsWeb) return null;
-    return FilePicker.platform.getDirectoryPath(dialogTitle: dialogTitle);
+    return FilePicker.platform.getDirectoryPath(
+      dialogTitle: dialogTitle,
+      lockParentWindow: true,
+    );
   }
 
   /// Pick a directory on web and return its files.

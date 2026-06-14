@@ -53,6 +53,7 @@ class TranslationService {
     required Map<String, dynamic> payload,
     String executionMode = 'immediate',
     String? relativePath,
+    String? batchId,
   }) async {
     // Use long timeout for file upload and translation task submission
     final dio = _buildAuthedDio(useLongTimeout: true);
@@ -63,6 +64,7 @@ class TranslationService {
       'execution_mode': executionMode,
       if (relativePath != null && relativePath.isNotEmpty)
         'relative_path': relativePath,
+      if (batchId != null && batchId.isNotEmpty) 'batch_id': batchId,
     };
     final resp = await dio.post(
       '/service/translate',
@@ -87,6 +89,67 @@ class TranslationService {
       return <String, dynamic>{'tasks': <dynamic>[], 'limit': limit};
     }
     return data;
+  }
+
+  /// Create an upload batch before submitting multiple files.
+  Future<Map<String, dynamic>> createUploadBatch({
+    required String label,
+    String sourceType = 'multi',
+  }) async {
+    final Dio dio = _buildAuthedDio();
+    final Response<Map<String, dynamic>> resp = await dio.post<Map<String, dynamic>>(
+      '/service/batches',
+      data: <String, dynamic>{
+        'label': label,
+        'source_type': sourceType,
+      },
+    );
+    return resp.data ?? <String, dynamic>{'success': false};
+  }
+
+  /// List upload batches with nested tasks and legacy ungrouped tasks.
+  Future<Map<String, dynamic>> listUploadBatches({int limit = 100}) async {
+    final Dio dio = _buildAuthedDio();
+    final Response<Map<String, dynamic>> resp = await dio.get<Map<String, dynamic>>(
+      '/service/batches',
+      queryParameters: <String, dynamic>{'limit': limit},
+    );
+    return resp.data ??
+        <String, dynamic>{
+          'batches': <dynamic>[],
+          'ungrouped_tasks': <dynamic>[],
+          'limit': limit,
+        };
+  }
+
+  /// Delete a batch and release all associated tasks.
+  Future<Map<String, dynamic>> deleteUploadBatch(String batchId) async {
+    final Dio dio = _buildAuthedDio(useLongTimeout: true);
+    final Response<Map<String, dynamic>> resp = await dio.delete<Map<String, dynamic>>(
+      '/service/batches/$batchId',
+      options: Options(
+        receiveTimeout: AppConfig.longRequestTimeout,
+        sendTimeout: AppConfig.longRequestTimeout,
+      ),
+    );
+    return resp.data ?? <String, dynamic>{'success': false};
+  }
+
+  /// Download all completed tasks in a batch as ZIP.
+  Future<List<int>> batchDownloadByBatch(
+    String batchId,
+    String fileType,
+  ) async {
+    final Dio dio = _buildAuthedDio(useLongTimeout: true);
+    final Response<List<int>> resp = await dio.post<List<int>>(
+      '/service/batches/$batchId/download',
+      data: <String, dynamic>{'file_type': fileType},
+      options: Options(
+        responseType: ResponseType.bytes,
+        receiveTimeout: AppConfig.longRequestTimeout,
+      ),
+    );
+    return resp.data ?? <int>[];
   }
 
   /// Admin-only: cancel queued/in-flight work, drop memory tasks, wipe result stash.

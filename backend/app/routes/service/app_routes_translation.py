@@ -125,6 +125,35 @@ async def service_translate(
             owner_username=owner_username,
             relative_path=request.relative_path,
         )
+
+        from backend.app.services.task import batch_manager
+
+        task_state = task_manager.get_task(task_id)
+        batch_id: str | None = None
+        if task_state is not None:
+            if request.batch_id:
+                try:
+                    batch_manager.add_task_to_batch(request.batch_id, task_id)
+                    task_state["batch_id"] = request.batch_id
+                    batch_id = request.batch_id
+                except KeyError:
+                    created = batch_manager.create_single_file_batch(
+                        task_id,
+                        request.file_name,
+                        owner_username=owner_username,
+                    )
+                    task_state["batch_id"] = created["batch_id"]
+                    batch_id = created["batch_id"]
+            else:
+                created = batch_manager.create_single_file_batch(
+                    task_id,
+                    request.file_name,
+                    owner_username=owner_username,
+                )
+                task_state["batch_id"] = created["batch_id"]
+                batch_id = created["batch_id"]
+        if batch_id:
+            response_data["batch_id"] = batch_id
         
         logger.info(LogModule.ROUTE, f"[IMPORT] Translation task started successfully: task_id={task_id}, response={response_data}")
         # Attach flag to response and record in task state if available
@@ -202,6 +231,7 @@ async def list_translation_tasks(
             "is_format_conversion": st.get("convert_only", False) or st.get("is_format_conversion", False),
             "started_at": qa if qa > 0 else ta,
             "completed_at": te,
+            "batch_id": st.get("batch_id"),
         }
         qp = queue_position_for_task(all_tasks, tid)
         if qp is not None:
@@ -280,9 +310,14 @@ async def admin_clear_translation_queue(user: User = Depends(get_current_user)):
                 except Exception as e:
                     errors.append(f"stash:{child.name}:{e}")
 
+    from backend.app.services.task import batch_manager
+
+    cleared_batches = batch_manager.clear_all_batches()
+
     logger.info(
         LogModule.ROUTE,
-        f"[ADMIN-CLEAR-QUEUE] admin={user.username!r} drained={len(drained)} released_loop={released}",
+        f"[ADMIN-CLEAR-QUEUE] admin={user.username!r} drained={len(drained)} "
+        f"released_loop={released} cleared_batches={cleared_batches}",
     )
     return JSONResponse(
         content={
@@ -310,7 +345,10 @@ async def persist_translation_result_to_stash(
     """Copy latest exports to result stash for queue/offline download consistency."""
     _ = user  # auth gate only
     try:
-        result = await _download_service.persist_completed_task_outputs_to_stash(task_id)
+        result = await _download_service.persist_completed_task_outputs_to_stash(
+            task_id,
+            update_progress=True,
+        )
         return JSONResponse(content=result)
     except HTTPException:
         raise

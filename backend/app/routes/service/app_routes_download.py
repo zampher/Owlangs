@@ -126,8 +126,16 @@ async def service_download_file_route(
                 from backend.app.services.translation.translation_result_stash import (
                     record_generated_result,
                 )
+                from backend.app.services.download.download_service import (
+                    _pdf_stash_key_for_download,
+                )
 
-                record_generated_result(task_id, file_type, path, ts)
+                stash_key = (
+                    _pdf_stash_key_for_download(renderer_type)
+                    if file_type == "pdf"
+                    else file_type
+                )
+                record_generated_result(task_id, stash_key, path, ts)
     except Exception as e:
         logger.warning(LogModule.ROUTE, f"[DOWNLOAD-STASH] Record stash failed task_id={task_id}: {e}", exc_info=True)
     return resp
@@ -207,17 +215,22 @@ async def service_batch_download_route(body: BatchDownloadRequest):
                     original_filename = ts.get("original_filename") or ""
                     relative_path = ts.get("original_relative_path") or ""
 
-                # Map md_zip → md with embed_images=False
+                # Map md_zip → md with embed_images=False; pdf_reflow → pdf with pandoc renderer
                 dl_file_type = body.file_type
                 dl_embed_images: Optional[bool] = None
+                dl_renderer_type: Optional[str] = None
                 if body.file_type == "md_zip":
                     dl_file_type = "md"
                     dl_embed_images = False
+                elif body.file_type == "pdf_reflow":
+                    dl_file_type = "pdf"
+                    dl_renderer_type = "pandoc"
 
                 resp = await download_service.download_file(
                     task_id=task_id,
                     file_type=dl_file_type,
                     embed_images=dl_embed_images,
+                    renderer_type=dl_renderer_type,
                 )
                 file_bytes = await _read_response_bytes(resp)
                 if file_bytes is None:
@@ -235,6 +248,8 @@ async def service_batch_download_route(body: BatchDownloadRequest):
                 ext = body.file_type
                 if body.file_type == "md_zip":
                     ext = "zip"
+                elif body.file_type == "pdf_reflow":
+                    ext = "pdf"
                 base_name = task_id
                 if original_filename:
                     base_name = original_filename.rsplit(".", 1)[0] if "." in original_filename else original_filename
