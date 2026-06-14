@@ -16,6 +16,7 @@ import '../pdf_compare_continuous_view.dart';
 import '../pdf_preview.dart';
 import 'segment_pdf_typography_dialog.dart';
 import 'html_compare_reader_view.dart';
+import 'pdf_compare_layout_mode.dart';
 import 'pdf_revision_segment_panel_builder.dart';
 import 'preview_selection.dart';
 import 'preview_url_utils.dart';
@@ -35,7 +36,7 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
     this.segmentUiRevisionListenable,
     this.translatedHtmlUrl,
     this.initialSyncScroll = false,
-    this.initialPdfRevisionMode = false,
+    this.initialLayoutMode = PdfCompareLayoutMode.comparePreview,
     this.pdfRevisionSegmentPanelBuilder,
     this.onBatchFontApply,
     this.onBatchLeadingApply,
@@ -45,6 +46,7 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
     this.pdfPreviewJumpPageTriggerListenable,
     this.autoFollowSegmentPdfPageListenable,
     this.onAutoFollowSegmentPdfPageChanged,
+    this.segmentScrollController,
     super.key,
     this.onRequestPreviewSettings,
     this.onDownload,
@@ -63,7 +65,7 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
   final ValueListenable<int>? segmentUiRevisionListenable;
   final String? translatedHtmlUrl;
   final bool initialSyncScroll;
-  final bool initialPdfRevisionMode;
+  final PdfCompareLayoutMode initialLayoutMode;
   final PdfRevisionSegmentPanelBuilder? pdfRevisionSegmentPanelBuilder;
   final Future<void> Function(Set<int> selectedIndices)? onBatchFontApply;
   final Future<void> Function(Set<int> selectedIndices)? onBatchLeadingApply;
@@ -73,6 +75,7 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
   final ValueListenable<int>? pdfPreviewJumpPageTriggerListenable;
   final ValueListenable<bool>? autoFollowSegmentPdfPageListenable;
   final ValueChanged<bool>? onAutoFollowSegmentPdfPageChanged;
+  final ScrollController? segmentScrollController;
   final Future<PreviewSelection?> Function()? onRequestPreviewSettings;
   final void Function(String format, String url)? onDownload;
   final Future<void> Function()? onShowDownload;
@@ -89,15 +92,23 @@ class _TranslationFullComparePreviewTabState
   late final PreviewFullscreenOverlay _fullscreenOverlay;
   late bool _syncScrollEnabled;
   bool _isFullscreen = false;
-  bool _pdfRevisionMode = false;
+  PdfCompareLayoutMode _layoutMode = PdfCompareLayoutMode.comparePreview;
   bool _autoRefreshPdf = true;
   int _displayPdfRevision = 0;
   Set<int> _displayDirtySegmentIndices = <int>{};
-  final Set<int> _selectedSegmentIndices = <int>{};
+  final ValueNotifier<Set<int>> _selectedSegmentIndicesNotifier =
+      ValueNotifier<Set<int>>(<int>{});
   final PdfContinuousScrollController _pdfNavigationController =
       PdfContinuousScrollController();
+  final PdfCompareContinuousScrollController _pdfCompareNavigationController =
+      PdfCompareContinuousScrollController();
   int _comparePdfCurrentPage = 1;
   int _comparePdfTotalPages = 0;
+  bool _revisionLinkedScrollEnabled = true;
+
+  bool get _showsRevisionLinkedScroll =>
+      _layoutMode == PdfCompareLayoutMode.compareRevision &&
+      _supportsPdfRevision;
 
   bool get _supportsPdfRevision =>
       widget.baseMode == TranslationPreviewMode.pdfPreserve &&
@@ -123,12 +134,13 @@ class _TranslationFullComparePreviewTabState
     widget.pdfRenderRevisionListenable?.addListener(_onPdfRevisionListenableChanged);
     widget.pdfPreviewJumpPageTriggerListenable
         ?.addListener(_onPdfPreviewJumpPageRequested);
-    if (widget.initialPdfRevisionMode && _supportsPdfRevision) {
+    if (widget.initialLayoutMode != PdfCompareLayoutMode.comparePreview &&
+        _supportsPdfRevision) {
+      _layoutMode = widget.initialLayoutMode;
       // Enter revision layout on the first frame so we do not briefly mount
       // PdfCompareContinuousView (source + target downloads) before revision mode.
-      _pdfRevisionMode = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_enterPdfRevisionMode());
+        unawaited(_enterRevisionLayoutMode(widget.initialLayoutMode));
       });
     }
   }
@@ -161,12 +173,22 @@ class _TranslationFullComparePreviewTabState
   }
 
   @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    if (_isFullscreen) {
+      _fullscreenOverlay.markNeedsBuild();
+    }
+  }
+
+  @override
   void dispose() {
     widget.pdfRenderRevisionListenable
         ?.removeListener(_onPdfRevisionListenableChanged);
     widget.pdfPreviewJumpPageTriggerListenable
         ?.removeListener(_onPdfPreviewJumpPageRequested);
     _pdfNavigationController.dispose();
+    _pdfCompareNavigationController.dispose();
+    _selectedSegmentIndicesNotifier.dispose();
     _fullscreenOverlay.dispose();
     _viewportController.dispose();
     super.dispose();
@@ -183,7 +205,11 @@ class _TranslationFullComparePreviewTabState
     if (pageNumber == null || pageNumber < 1) {
       return;
     }
-    unawaited(_pdfNavigationController.jumpToPage(pageNumber));
+    if (_layoutMode == PdfCompareLayoutMode.compareRevision) {
+      unawaited(_pdfCompareNavigationController.jumpToPage(pageNumber));
+    } else {
+      unawaited(_pdfNavigationController.jumpToPage(pageNumber));
+    }
   }
 
   void _maybeApplyPdfRevision(int revision) {
@@ -208,26 +234,37 @@ class _TranslationFullComparePreviewTabState
     });
   }
 
-  void _togglePdfRevisionMode() {
-    if (!_pdfRevisionMode) {
-      unawaited(_enterPdfRevisionMode());
+  void _setLayoutMode(PdfCompareLayoutMode mode) {
+    if (mode == _layoutMode) {
+      return;
+    }
+    if (mode == PdfCompareLayoutMode.comparePreview) {
+      setState(() {
+        _layoutMode = mode;
+        _selectedSegmentIndicesNotifier.value = <int>{};
+        _comparePdfCurrentPage = 1;
+        _comparePdfTotalPages = 0;
+      });
+      return;
+    }
+    if (_layoutMode == PdfCompareLayoutMode.comparePreview) {
+      unawaited(_enterRevisionLayoutMode(mode));
       return;
     }
     setState(() {
-      _pdfRevisionMode = false;
-      _selectedSegmentIndices.clear();
-      _comparePdfCurrentPage = 1;
-      _comparePdfTotalPages = 0;
+      _layoutMode = mode;
     });
   }
 
-  Future<void> _enterPdfRevisionMode() async {
+  Future<void> _enterRevisionLayoutMode([
+    PdfCompareLayoutMode mode = PdfCompareLayoutMode.translationRevision,
+  ]) async {
     if (!_supportsPdfRevision) {
       return;
     }
-    if (!_pdfRevisionMode && mounted) {
+    if (_layoutMode == PdfCompareLayoutMode.comparePreview && mounted) {
       setState(() {
-        _pdfRevisionMode = true;
+        _layoutMode = mode;
       });
     }
     final Future<void> Function()? enterHandler =
@@ -238,52 +275,65 @@ class _TranslationFullComparePreviewTabState
   }
 
   void _toggleSegmentSelection(int index, bool selected) {
-    setState(() {
-      if (selected) {
-        _selectedSegmentIndices.add(index);
-      } else {
-        _selectedSegmentIndices.remove(index);
-      }
-    });
+    final Set<int> next =
+        Set<int>.from(_selectedSegmentIndicesNotifier.value);
+    if (selected) {
+      next.add(index);
+    } else {
+      next.remove(index);
+    }
+    _selectedSegmentIndicesNotifier.value = next;
   }
 
   void _bulkSelectAll(Set<int> indices) {
     if (indices.isEmpty) {
       return;
     }
-    setState(() {
-      _selectedSegmentIndices.addAll(indices);
-    });
+    final Set<int> next =
+        Set<int>.from(_selectedSegmentIndicesNotifier.value);
+    next.addAll(indices);
+    _selectedSegmentIndicesNotifier.value = next;
   }
 
   void _bulkInvertSelection(Set<int> indices) {
     if (indices.isEmpty) {
       return;
     }
-    setState(() {
-      for (final int index in indices) {
-        if (_selectedSegmentIndices.contains(index)) {
-          _selectedSegmentIndices.remove(index);
-        } else {
-          _selectedSegmentIndices.add(index);
-        }
+    final Set<int> next =
+        Set<int>.from(_selectedSegmentIndicesNotifier.value);
+    for (final int index in indices) {
+      if (next.contains(index)) {
+        next.remove(index);
+      } else {
+        next.add(index);
       }
-    });
+    }
+    _selectedSegmentIndicesNotifier.value = next;
   }
 
-  Widget _buildRevisionSegmentPanel() {
+  Widget _buildRevisionSegmentPanelWidget({bool showSegmentScrollbar = true}) {
     final PdfRevisionSegmentPanelBuilder? builder =
         widget.pdfRevisionSegmentPanelBuilder;
     if (builder == null) {
       return const SizedBox.shrink();
     }
-    return builder(
-      selectedSegmentIndices: _selectedSegmentIndices,
-      onSegmentSelectionToggle: _toggleSegmentSelection,
-      getFilteredSelectableSegmentIndices:
-          widget.getFilteredSelectableSegmentIndices ?? () => <int>{},
-      onBulkSelectAll: _bulkSelectAll,
-      onBulkInvertSelection: _bulkInvertSelection,
+    return ValueListenableBuilder<Set<int>>(
+      valueListenable: _selectedSegmentIndicesNotifier,
+      builder: (BuildContext context, Set<int> selectedSegmentIndices, _) {
+        return builder(
+          selectedSegmentIndices: selectedSegmentIndices,
+          selectedSegmentIndicesListenable: _selectedSegmentIndicesNotifier,
+          onSegmentSelectionToggle: _toggleSegmentSelection,
+          getFilteredSelectableSegmentIndices:
+              widget.getFilteredSelectableSegmentIndices ?? () => <int>{},
+          onBulkSelectAll: _bulkSelectAll,
+          onBulkInvertSelection: _bulkInvertSelection,
+          onBatchFontApply:
+              widget.onBatchFontApply != null ? _applyBatchFont : null,
+          segmentScrollController: widget.segmentScrollController,
+          showSegmentScrollbar: showSegmentScrollbar,
+        );
+      },
     );
   }
 
@@ -301,18 +351,19 @@ class _TranslationFullComparePreviewTabState
   }
 
   Future<void> _applyBatchFont() async {
-    if (_selectedSegmentIndices.isEmpty || widget.onBatchFontApply == null) {
+    final Set<int> selected = _selectedSegmentIndicesNotifier.value;
+    if (selected.isEmpty || widget.onBatchFontApply == null) {
       return;
     }
-    await widget.onBatchFontApply!(_selectedSegmentIndices);
+    await widget.onBatchFontApply!(selected);
   }
 
   Future<void> _applyBatchLeading() async {
-    if (_selectedSegmentIndices.isEmpty ||
-        widget.onBatchLeadingApply == null) {
+    final Set<int> selected = _selectedSegmentIndicesNotifier.value;
+    if (selected.isEmpty || widget.onBatchLeadingApply == null) {
       return;
     }
-    await widget.onBatchLeadingApply!(_selectedSegmentIndices);
+    await widget.onBatchLeadingApply!(selected);
   }
 
   void _toggleFullscreen() {
@@ -342,6 +393,15 @@ class _TranslationFullComparePreviewTabState
     widget.onSyncScrollChanged?.call(enabled);
   }
 
+  void _setRevisionLinkedScrollEnabled(bool enabled) {
+    if (_revisionLinkedScrollEnabled == enabled) {
+      return;
+    }
+    setState(() {
+      _revisionLinkedScrollEnabled = enabled;
+    });
+  }
+
   Map<String, String> _buildFormatParams() {
     final FormatSettings formatSettings =
         ref.watch(formatSettingsProviderFamily(widget.taskId));
@@ -363,47 +423,126 @@ class _TranslationFullComparePreviewTabState
     );
   }
 
-  Widget _buildPdfRevisionPanel(AppLocalizations l10n) {
+  String _resolveViewerUrl(String downloadUrl) {
+    return downloadUrl.startsWith('http')
+        ? downloadUrl
+        : '${AppConfig.baseUrl}$downloadUrl';
+  }
+
+  Widget _buildTargetPdfPreview(
+    AppLocalizations l10n, {
+    required String targetPdfUrl,
+    bool enableNavigation = true,
+    ScrollController? scrollController,
+    bool showScrollbar = true,
+  }) {
+    return PdfPreview(
+      downloadUrl: targetPdfUrl,
+      viewerUrl: _resolveViewerUrl(targetPdfUrl),
+      rendererType: widget.baseMode.rendererType,
+      compact: true,
+      panelLabel: l10n.translationPreviewPanelTarget,
+      navigationController:
+          enableNavigation ? _pdfNavigationController : null,
+      scrollController: scrollController,
+      showScrollbar: showScrollbar,
+      onDownload: widget.onDownload,
+      onRequestPreviewSettings: widget.onRequestPreviewSettings,
+    );
+  }
+
+  Widget _buildTranslationRevisionPanel(AppLocalizations l10n) {
     final Map<String, String> formatParams = _buildFormatParams();
     final String targetPdfUrl = _buildTargetPdfUrl(formatParams);
-    final String viewerUrl = targetPdfUrl.startsWith('http')
-        ? targetPdfUrl
-        : '${AppConfig.baseUrl}$targetPdfUrl';
-
     final Widget segmentPanel = widget.segmentUiRevisionListenable == null
-        ? _buildRevisionSegmentPanel()
+        ? _buildRevisionSegmentPanelWidget()
         : ValueListenableBuilder<int>(
             valueListenable: widget.segmentUiRevisionListenable!,
             builder: (BuildContext context, int _, Widget? __) {
-              return _buildRevisionSegmentPanel();
+              return _buildRevisionSegmentPanelWidget();
             },
           );
 
     return Row(
       children: <Widget>[
         Expanded(
-          flex: 2,
-          child: segmentPanel,
-        ),
-        const VerticalDivider(width: 1),
-        Expanded(
           flex: 3,
           child: PreviewZoomableViewport(
             controller: _viewportController,
             childHandlesVerticalScroll: true,
-            child: PdfPreview(
-              downloadUrl: targetPdfUrl,
-              viewerUrl: viewerUrl,
-              rendererType: widget.baseMode.rendererType,
-              compact: true,
-              navigationController: _pdfNavigationController,
-              onDownload: widget.onDownload,
-              onRequestPreviewSettings: widget.onRequestPreviewSettings,
-            ),
+            child: _buildTargetPdfPreview(l10n, targetPdfUrl: targetPdfUrl),
           ),
+        ),
+        const VerticalDivider(width: 1),
+        Expanded(
+          flex: 2,
+          child: segmentPanel,
         ),
       ],
     );
+  }
+
+  Widget _buildCompareRevisionPanel(AppLocalizations l10n) {
+    final Map<String, String> formatParams = _buildFormatParams();
+    final TranslationService svc = TranslationService();
+    final String sourcePdfUrl = svc.buildSourcePdfUrl(widget.taskId);
+    final String targetPdfUrl = _buildTargetPdfUrl(formatParams);
+
+    final Widget segmentPanel = widget.segmentUiRevisionListenable == null
+        ? _buildRevisionSegmentPanelWidget()
+        : ValueListenableBuilder<int>(
+            valueListenable: widget.segmentUiRevisionListenable!,
+            builder: (BuildContext context, int _, Widget? __) {
+              return _buildRevisionSegmentPanelWidget();
+            },
+          );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Expanded(
+          flex: 4,
+          child: PreviewZoomableViewport(
+            controller: _viewportController,
+            childHandlesVerticalScroll: true,
+            child: PdfCompareContinuousView(
+              sourceDownloadUrl: sourcePdfUrl,
+              targetDownloadUrl: targetPdfUrl,
+              targetRendererType: widget.baseMode.rendererType,
+              linkedScroll: _revisionLinkedScrollEnabled,
+              navigationController: _pdfCompareNavigationController,
+              onVisiblePageChanged: (int page, int totalPages) {
+                if (!mounted ||
+                    (page == _comparePdfCurrentPage &&
+                        totalPages == _comparePdfTotalPages)) {
+                  return;
+                }
+                setState(() {
+                  _comparePdfCurrentPage = page;
+                  _comparePdfTotalPages = totalPages;
+                });
+              },
+            ),
+          ),
+        ),
+        const VerticalDivider(width: 1),
+        Expanded(
+          flex: 2,
+          child: segmentPanel,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPdfRevisionPanel(AppLocalizations l10n) {
+    switch (_layoutMode) {
+      case PdfCompareLayoutMode.translationRevision:
+        return _buildTranslationRevisionPanel(l10n);
+      case PdfCompareLayoutMode.compareRevision:
+        return _buildCompareRevisionPanel(l10n);
+      case PdfCompareLayoutMode.comparePreview:
+        return _buildComparePreviewBody(l10n);
+    }
   }
 
   Widget _buildComparePreviewBody(AppLocalizations l10n) {
@@ -469,10 +608,55 @@ class _TranslationFullComparePreviewTabState
   }
 
   Widget _buildPreviewBody(AppLocalizations l10n) {
-    if (_pdfRevisionMode && _supportsPdfRevision) {
+    if (_layoutMode.showsRevisionControls && _supportsPdfRevision) {
       return _buildPdfRevisionPanel(l10n);
     }
     return _buildComparePreviewBody(l10n);
+  }
+
+  Widget _buildLayoutModeSelector(AppLocalizations l10n) {
+    return PopupMenuButton<PdfCompareLayoutMode>(
+      tooltip: l10n.translationPreviewLayoutComparePreview,
+      initialValue: _layoutMode,
+      onSelected: _setLayoutMode,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(_layoutMode.icon, size: 18),
+            const SizedBox(width: 6),
+            Text(
+              _layoutMode.label(l10n),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const Icon(Icons.arrow_drop_down, size: 20),
+          ],
+        ),
+      ),
+      itemBuilder: (BuildContext context) {
+        return PdfCompareLayoutMode.values
+            .map((PdfCompareLayoutMode mode) {
+              return PopupMenuItem<PdfCompareLayoutMode>(
+                value: mode,
+                child: Row(
+                  children: <Widget>[
+                    Icon(
+                      mode.icon,
+                      size: 18,
+                      color: mode == _layoutMode
+                          ? Theme.of(context).colorScheme.primary
+                          : null,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(mode.label(l10n)),
+                  ],
+                ),
+              );
+            })
+            .toList(growable: false);
+      },
+    );
   }
 
   bool get _isPdfCompare =>
@@ -485,39 +669,26 @@ class _TranslationFullComparePreviewTabState
     required bool isFullscreenView,
   }) {
     final bool showPdfRevisionControls =
-        _pdfRevisionMode && _supportsPdfRevision;
+        _layoutMode.showsRevisionControls && _supportsPdfRevision;
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Row(
           children: <Widget>[
-            Icon(
-              isFullscreenView
-                  ? Icons.fullscreen_exit
-                  : (_pdfRevisionMode ? Icons.edit_note : Icons.compare_arrows),
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              _pdfRevisionMode
-                  ? l10n.translationPreviewPdfRevision
-                  : l10n.translationPreviewFullDocumentCompare,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            if (_supportsPdfRevision) ...<Widget>[
+            if (_supportsPdfRevision)
+              _buildLayoutModeSelector(l10n)
+            else ...<Widget>[
+              Icon(
+                isFullscreenView
+                    ? Icons.fullscreen_exit
+                    : _layoutMode.icon,
+                size: 18,
+              ),
               const SizedBox(width: 8),
-              TextButton.icon(
-                onPressed: _togglePdfRevisionMode,
-                icon: Icon(
-                  _pdfRevisionMode ? Icons.compare_arrows : Icons.edit_note,
-                  size: 16,
-                ),
-                label: Text(
-                  _pdfRevisionMode
-                      ? l10n.translationPreviewPdfRevisionCompare
-                      : l10n.translationPreviewPdfRevision,
-                ),
+              Text(
+                _layoutMode.label(l10n),
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ],
             if (showPdfRevisionControls) ...<Widget>[
@@ -574,29 +745,33 @@ class _TranslationFullComparePreviewTabState
                     );
                   },
                 ),
-              if (_selectedSegmentIndices.isNotEmpty &&
-                  widget.onBatchFontApply != null)
-                Tooltip(
-                  message: l10n.translationPreviewBatchFontTooltip,
-                  child: TextButton.icon(
-                    onPressed: _applyBatchFont,
-                    icon: const Icon(Icons.format_size, size: 16),
-                    label: Text(l10n.translationPreviewBatchFont),
-                  ),
-                ),
               if (kPdfLeadingTypographyUiEnabled &&
-                  _selectedSegmentIndices.isNotEmpty &&
                   widget.onBatchLeadingApply != null)
-                Tooltip(
-                  message: l10n.translationPreviewBatchLeadingTooltip,
-                  child: TextButton.icon(
-                    onPressed: _applyBatchLeading,
-                    icon: const Icon(Icons.format_line_spacing, size: 16),
-                    label: Text(l10n.translationPreviewBatchLeading),
-                  ),
+                ValueListenableBuilder<Set<int>>(
+                  valueListenable: _selectedSegmentIndicesNotifier,
+                  builder: (
+                    BuildContext context,
+                    Set<int> selectedSegmentIndices,
+                    Widget? _,
+                  ) {
+                    if (selectedSegmentIndices.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    return Tooltip(
+                      message: l10n.translationPreviewBatchLeadingTooltip,
+                      child: TextButton.icon(
+                        onPressed: _applyBatchLeading,
+                        icon: const Icon(
+                          Icons.format_line_spacing,
+                          size: 16,
+                        ),
+                        label: Text(l10n.translationPreviewBatchLeading),
+                      ),
+                    );
+                  },
                 ),
             ],
-            if (!_pdfRevisionMode &&
+            if (_layoutMode == PdfCompareLayoutMode.comparePreview &&
                 (_isPdfCompare || widget.baseMode.usesHtmlPreview)) ...<Widget>[
               const SizedBox(width: 16),
               Tooltip(
@@ -619,7 +794,29 @@ class _TranslationFullComparePreviewTabState
                 ),
               ),
             ],
-            if (!_pdfRevisionMode &&
+            if (_showsRevisionLinkedScroll) ...<Widget>[
+              const SizedBox(width: 16),
+              Tooltip(
+                message: l10n.translationPreviewRevisionSyncScrollDesc,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Checkbox(
+                      value: _revisionLinkedScrollEnabled,
+                      onChanged: (bool? value) {
+                        _setRevisionLinkedScrollEnabled(value ?? false);
+                      },
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    Text(
+                      l10n.translationPreviewSyncScroll,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (_layoutMode == PdfCompareLayoutMode.comparePreview &&
                 _isPdfCompare &&
                 _comparePdfTotalPages > 0) ...<Widget>[
               const SizedBox(width: 12),

@@ -580,57 +580,58 @@ class AppLocalizationsKo extends AppLocalizations {
       '번역 Markdown으로 재조판. 원문과 레이아웃이 다를 수 있음';
 
   @override
-  String get translationPreviewDialogTitle => 'Preview Settings';
+  String get translationPreviewDialogTitle => '미리보기 설정';
 
   @override
-  String get translationPreviewStart => 'Start Preview';
+  String get translationPreviewStart => '미리보기 시작';
 
   @override
-  String get translationPreviewModeSectionTitle => 'Translation preview';
+  String get translationPreviewModeSectionTitle => '번역 미리보기';
 
   @override
   String get translationPreviewModeHtml => 'HTML / Markdown';
 
   @override
-  String get translationPreviewModeHtmlDesc =>
-      'View rendered translation in the browser (default)';
+  String get translationPreviewModeHtmlDesc => '브라우저에서 렌더링된 번역문 보기(기본값)';
 
   @override
-  String get translationPreviewFullDocumentCompare =>
-      'Full document comparison';
+  String get translationPreviewFullDocumentCompare => '전문 대조 미리보기';
 
   @override
   String get translationPreviewFullDocumentCompareDesc =>
-      'View source and translation side by side (export format; works with any preview mode above)';
+      '원문과 번역문을 좌우로 나란히 표시(내보내기 형식, 위의 모든 미리보기 방식 지원)';
 
   @override
-  String get translationPreviewSyncScroll => 'Link scrollbars';
+  String get translationPreviewSyncScroll => '스크롤바 연동';
 
   @override
   String get translationPreviewSyncScrollDesc =>
-      'When enabled, link PDF compare panes with a shared scroll bar (PDF compare only)';
+      '활성화하면 좌우 패널 스크롤바를 숨기고 오른쪽 공통 스크롤바로 원문과 번역문을 함께 스크롤(PDF 대조만)';
 
   @override
-  String get translationPreviewPanelSource => 'Source';
+  String get translationPreviewRevisionSyncScrollDesc =>
+      '활성화하면 원문과 번역문 미리보기의 개별 스크롤바를 숨기고, 사이에 공통 스크롤바를 표시하여 연동 스크롤합니다';
 
   @override
-  String get translationPreviewPanelTarget => 'Translation';
+  String get translationPreviewPanelSource => '원문';
 
   @override
-  String get translationPreviewNoExtraOptions =>
-      'No extra options for this preview mode';
+  String get translationPreviewPanelTarget => '번역문';
 
   @override
-  String get translationPreviewReopenSettings => 'Preview settings';
+  String get translationPreviewNoExtraOptions => '이 미리보기 방식에는 추가 옵션이 없습니다';
 
   @override
-  String get translationPreviewZoomIn => 'Zoom in';
+  String get translationPreviewReopenSettings => '미리보기 설정';
 
   @override
-  String get translationPreviewZoomOut => 'Zoom out';
+  String get translationPreviewZoomIn => '확대';
 
   @override
-  String get translationPreviewZoomReset => 'Reset zoom';
+  String get translationPreviewZoomOut => '축소';
+
+  @override
+  String get translationPreviewZoomReset => '확대/축소 초기화';
 
   @override
   String get translationLeftPanelExpandTooltip => '왼쪽 패널 확장';
@@ -3622,11 +3623,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String segmentPdfFontSizeAuto(String sizePt) {
-    return 'Auto (${sizePt}pt)';
+    return '자동 (${sizePt}pt)';
   }
 
   @override
-  String get segmentPdfFontSizeAutoUnknown => 'Auto';
+  String get segmentPdfFontSizeAutoUnknown => '자동';
 
   @override
   String segmentPdfFontSizeManual(String sizePt) {
@@ -3634,108 +3635,114 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get segmentPdfFontSizeTitle => 'PDF font size';
+  String get segmentPdfFontSizeTitle => 'PDF 글꼴 크기';
 
   @override
-  String get segmentPdfTypographyTitle => 'PDF typography';
+  String get segmentPdfTypographyTitle => 'PDF 서체';
 
   @override
-  String get segmentPdfTypographyFontTitle => 'PDF font';
+  String get segmentPdfTypographyFontTitle => 'PDF 글꼴';
 
   @override
-  String get segmentPdfTypographyLeadingTitle => 'Line spacing';
+  String get segmentPdfTypographyLeadingTitle => '줄 간격';
 
   @override
-  String get segmentPdfTypographyPreviewLabel => 'Preview';
+  String get segmentPdfTypographyPreviewLabel => '미리보기';
 
   @override
-  String get segmentPdfTypographyBold => 'Bold';
+  String get segmentPdfTypographyBold => '굵게';
 
   @override
-  String get segmentPdfTypographyItalic => 'Italic';
+  String get segmentPdfTypographyItalic => '기울임';
 
   @override
   String segmentPdfTypographyFontSizeLabel(String sizePt) {
-    return 'Font size: $sizePt pt';
+    return '글꼴 크기: $sizePt pt';
   }
 
   @override
   String segmentPdfTypographyLeadingLabel(String leadingEm) {
-    return 'Line spacing: $leadingEm em';
+    return '줄 간격: $leadingEm em';
   }
 
   @override
-  String get segmentPdfFontSizeReset => 'Reset to auto';
+  String get segmentPdfFontSizeReset => '자동으로 재설정';
 
   @override
-  String get segmentPdfTypographyResetFont => 'Reset font to auto';
+  String get segmentPdfTypographyResetFont => '글꼴 자동으로 재설정';
 
   @override
-  String get segmentPdfTypographyResetLeading => 'Reset line spacing to auto';
+  String get segmentPdfTypographyResetLeading => '줄 간격 자동으로 재설정';
 
   @override
-  String get segmentPdfFontSizeApply => 'Apply';
+  String get segmentPdfFontSizeApply => '적용';
 
   @override
-  String get translationPreviewPdfRevision => 'PDF revision';
+  String get translationPreviewPdfRevision => '미리보기 수정';
 
   @override
-  String get translationPreviewPdfRevisionCompare => 'Compare view';
+  String get translationPreviewPdfRevisionCompare => '대조 미리보기';
 
   @override
-  String get translationPreviewAutoRefreshPdf => 'Auto refresh PDF';
+  String get translationPreviewLayoutComparePreview => '대조 미리보기';
 
   @override
-  String get translationPreviewFollowSegmentPage => 'Follow segment page';
+  String get translationPreviewLayoutTranslationRevision => '번역문 수정';
+
+  @override
+  String get translationPreviewLayoutCompareRevision => '대조 수정';
+
+  @override
+  String get translationPreviewAutoRefreshPdf => 'PDF 자동 새로고침';
+
+  @override
+  String get translationPreviewFollowSegmentPage => '세그먼트 페이지 따라가기';
 
   @override
   String get translationPreviewFollowSegmentPageDesc =>
-      'When enabled, the PDF preview jumps to the page of the focused or checked segment';
+      '활성화하면 세그먼트를 클릭하거나 선택할 때 번역 PDF 미리보기가 해당 페이지로 이동합니다';
 
   @override
   String translationPreviewPdfPageIndicator(String current, String total) {
-    return 'Page $current / $total';
+    return '$current / $total 페이지';
   }
 
   @override
-  String get translationPreviewRefreshPdf => 'Refresh PDF';
+  String get translationPreviewRefreshPdf => 'PDF 새로고침';
 
   @override
-  String get translationPreviewBatchFont => 'Batch font';
+  String get translationPreviewBatchFont => '글꼴';
 
   @override
-  String get translationPreviewBatchFontTooltip =>
-      'Apply font settings to selected segments';
+  String get translationPreviewBatchFontTooltip => '선택한 세그먼트에 글꼴 설정 적용';
 
   @override
-  String get translationPreviewBatchLeading => 'Batch line spacing';
+  String get translationPreviewBatchLeading => '줄 간격 일괄 적용';
 
   @override
-  String get translationPreviewBatchLeadingTooltip =>
-      'Apply line spacing to selected segments';
+  String get translationPreviewBatchLeadingTooltip => '선택한 세그먼트에 줄 간격 적용';
 
   @override
-  String get translationPreviewPdfRevisionSelectAll => 'Select all';
+  String get translationPreviewPdfRevisionSelectAll => '전체 선택';
 
   @override
-  String get translationPreviewPdfRevisionInvertSelection => 'Invert selection';
+  String get translationPreviewPdfRevisionInvertSelection => '선택 반전';
 
   @override
-  String get translationPreviewPdfRevisionPageFilterLabel => 'Page';
+  String get translationPreviewPdfRevisionPageFilterLabel => '페이지';
 
   @override
-  String get translationPreviewPdfRevisionPageFilterAll => 'All pages';
+  String get translationPreviewPdfRevisionPageFilterAll => '전체 페이지';
 
   @override
-  String get translationPreviewPdfRevisionPageFilterSelectAll =>
-      'Select all pages';
+  String get translationPreviewPdfRevisionPageFilterSelectAll => '페이지 전체 선택';
 
   @override
-  String get segmentPdfRevisionFontLabel => 'Font';
+  String get segmentPdfRevisionFontLabel => '글꼴';
 
   @override
-  String get segmentPdfRevisionEditLabel => 'Edit';
+  String get segmentPdfRevisionEditLabel => '편집';
 
   @override
-  String get segmentPdfRevisionClearLabel => 'Clear';
+  String get segmentPdfRevisionClearLabel => '지우기';
 }

@@ -607,57 +607,63 @@ class AppLocalizationsEs extends AppLocalizations {
       'Recompuesto desde Markdown traducido; el diseño puede diferir del original';
 
   @override
-  String get translationPreviewDialogTitle => 'Preview Settings';
+  String get translationPreviewDialogTitle => 'Configuración de vista previa';
 
   @override
-  String get translationPreviewStart => 'Start Preview';
+  String get translationPreviewStart => 'Iniciar vista previa';
 
   @override
-  String get translationPreviewModeSectionTitle => 'Translation preview';
+  String get translationPreviewModeSectionTitle => 'Vista previa de traducción';
 
   @override
   String get translationPreviewModeHtml => 'HTML / Markdown';
 
   @override
   String get translationPreviewModeHtmlDesc =>
-      'View rendered translation in the browser (default)';
+      'Ver la traducción renderizada en el navegador (predeterminado)';
 
   @override
   String get translationPreviewFullDocumentCompare =>
-      'Full document comparison';
+      'Comparación de documento completo';
 
   @override
   String get translationPreviewFullDocumentCompareDesc =>
-      'View source and translation side by side (export format; works with any preview mode above)';
+      'Ver original y traducción lado a lado (formato de exportación; compatible con cualquier modo de vista previa anterior)';
 
   @override
-  String get translationPreviewSyncScroll => 'Link scrollbars';
+  String get translationPreviewSyncScroll =>
+      'Vincular barras de desplazamiento';
 
   @override
   String get translationPreviewSyncScrollDesc =>
-      'When enabled, link PDF compare panes with a shared scroll bar (PDF compare only)';
+      'Al activarlo, oculta las barras de desplazamiento de ambos paneles y usa una barra compartida a la derecha para controlar original y traducción (solo comparación PDF)';
 
   @override
-  String get translationPreviewPanelSource => 'Source';
+  String get translationPreviewRevisionSyncScrollDesc =>
+      'Al activarlo, oculta las barras de desplazamiento separadas de las vistas previas de original y traducción; muestra una barra compartida entre ambas con desplazamiento vinculado';
 
   @override
-  String get translationPreviewPanelTarget => 'Translation';
+  String get translationPreviewPanelSource => 'Original';
+
+  @override
+  String get translationPreviewPanelTarget => 'Traducción';
 
   @override
   String get translationPreviewNoExtraOptions =>
-      'No extra options for this preview mode';
+      'No hay opciones adicionales para este modo de vista previa';
 
   @override
-  String get translationPreviewReopenSettings => 'Preview settings';
+  String get translationPreviewReopenSettings =>
+      'Configuración de vista previa';
 
   @override
-  String get translationPreviewZoomIn => 'Zoom in';
+  String get translationPreviewZoomIn => 'Acercar';
 
   @override
-  String get translationPreviewZoomOut => 'Zoom out';
+  String get translationPreviewZoomOut => 'Alejar';
 
   @override
-  String get translationPreviewZoomReset => 'Reset zoom';
+  String get translationPreviewZoomReset => 'Restablecer zoom';
 
   @override
   String get translationLeftPanelExpandTooltip => 'Expandir panel izquierdo';
@@ -3800,7 +3806,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String segmentPdfFontSizeAuto(String sizePt) {
-    return 'Auto (${sizePt}pt)';
+    return 'Auto ($sizePt pt)';
   }
 
   @override
@@ -3808,112 +3814,127 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String segmentPdfFontSizeManual(String sizePt) {
-    return '${sizePt}pt';
+    return '$sizePt pt';
   }
 
   @override
-  String get segmentPdfFontSizeTitle => 'PDF font size';
+  String get segmentPdfFontSizeTitle => 'Tamaño de fuente PDF';
 
   @override
-  String get segmentPdfTypographyTitle => 'PDF typography';
+  String get segmentPdfTypographyTitle => 'Tipografía PDF';
 
   @override
-  String get segmentPdfTypographyFontTitle => 'PDF font';
+  String get segmentPdfTypographyFontTitle => 'Fuente PDF';
 
   @override
-  String get segmentPdfTypographyLeadingTitle => 'Line spacing';
+  String get segmentPdfTypographyLeadingTitle => 'Interlineado';
 
   @override
-  String get segmentPdfTypographyPreviewLabel => 'Preview';
+  String get segmentPdfTypographyPreviewLabel => 'Vista previa';
 
   @override
-  String get segmentPdfTypographyBold => 'Bold';
+  String get segmentPdfTypographyBold => 'Negrita';
 
   @override
-  String get segmentPdfTypographyItalic => 'Italic';
+  String get segmentPdfTypographyItalic => 'Cursiva';
 
   @override
   String segmentPdfTypographyFontSizeLabel(String sizePt) {
-    return 'Font size: $sizePt pt';
+    return 'Tamaño de fuente: $sizePt pt';
   }
 
   @override
   String segmentPdfTypographyLeadingLabel(String leadingEm) {
-    return 'Line spacing: $leadingEm em';
+    return 'Interlineado: $leadingEm em';
   }
 
   @override
-  String get segmentPdfFontSizeReset => 'Reset to auto';
+  String get segmentPdfFontSizeReset => 'Restablecer a automático';
 
   @override
-  String get segmentPdfTypographyResetFont => 'Reset font to auto';
+  String get segmentPdfTypographyResetFont => 'Restablecer fuente a automático';
 
   @override
-  String get segmentPdfTypographyResetLeading => 'Reset line spacing to auto';
+  String get segmentPdfTypographyResetLeading =>
+      'Restablecer interlineado a automático';
 
   @override
-  String get segmentPdfFontSizeApply => 'Apply';
+  String get segmentPdfFontSizeApply => 'Aplicar';
 
   @override
-  String get translationPreviewPdfRevision => 'PDF revision';
+  String get translationPreviewPdfRevision => 'Revisión en vista previa';
 
   @override
-  String get translationPreviewPdfRevisionCompare => 'Compare view';
+  String get translationPreviewPdfRevisionCompare => 'Vista comparativa';
 
   @override
-  String get translationPreviewAutoRefreshPdf => 'Auto refresh PDF';
+  String get translationPreviewLayoutComparePreview =>
+      'Vista previa comparativa';
 
   @override
-  String get translationPreviewFollowSegmentPage => 'Follow segment page';
+  String get translationPreviewLayoutTranslationRevision =>
+      'Revisión de traducción';
+
+  @override
+  String get translationPreviewLayoutCompareRevision => 'Revisión comparativa';
+
+  @override
+  String get translationPreviewAutoRefreshPdf =>
+      'Actualizar PDF automáticamente';
+
+  @override
+  String get translationPreviewFollowSegmentPage =>
+      'Seguir página del segmento';
 
   @override
   String get translationPreviewFollowSegmentPageDesc =>
-      'When enabled, the PDF preview jumps to the page of the focused or checked segment';
+      'Al activarlo, la vista previa del PDF de traducción salta a la página del segmento seleccionado o marcado';
 
   @override
   String translationPreviewPdfPageIndicator(String current, String total) {
-    return 'Page $current / $total';
+    return 'Página $current / $total';
   }
 
   @override
-  String get translationPreviewRefreshPdf => 'Refresh PDF';
+  String get translationPreviewRefreshPdf => 'Actualizar PDF';
 
   @override
-  String get translationPreviewBatchFont => 'Batch font';
+  String get translationPreviewBatchFont => 'Fuente';
 
   @override
   String get translationPreviewBatchFontTooltip =>
-      'Apply font settings to selected segments';
+      'Aplicar configuración de fuente a los segmentos seleccionados';
 
   @override
-  String get translationPreviewBatchLeading => 'Batch line spacing';
+  String get translationPreviewBatchLeading => 'Interlineado en lote';
 
   @override
   String get translationPreviewBatchLeadingTooltip =>
-      'Apply line spacing to selected segments';
+      'Aplicar interlineado a los segmentos seleccionados';
 
   @override
-  String get translationPreviewPdfRevisionSelectAll => 'Select all';
+  String get translationPreviewPdfRevisionSelectAll => 'Seleccionar todo';
 
   @override
-  String get translationPreviewPdfRevisionInvertSelection => 'Invert selection';
+  String get translationPreviewPdfRevisionInvertSelection =>
+      'Invertir selección';
 
   @override
-  String get translationPreviewPdfRevisionPageFilterLabel => 'Page';
+  String get translationPreviewPdfRevisionPageFilterLabel => 'Página';
 
   @override
-  String get translationPreviewPdfRevisionPageFilterAll => 'All pages';
+  String get translationPreviewPdfRevisionPageFilterAll => 'Todas las páginas';
 
   @override
   String get translationPreviewPdfRevisionPageFilterSelectAll =>
-      'Select all pages';
+      'Seleccionar todas las páginas';
 
   @override
-  String get segmentPdfRevisionFontLabel => 'Font';
+  String get segmentPdfRevisionFontLabel => 'Fuente';
 
   @override
-  String get segmentPdfRevisionEditLabel => 'Edit';
+  String get segmentPdfRevisionEditLabel => 'Editar';
 
   @override
-  String get segmentPdfRevisionClearLabel => 'Clear';
+  String get segmentPdfRevisionClearLabel => 'Borrar';
 }

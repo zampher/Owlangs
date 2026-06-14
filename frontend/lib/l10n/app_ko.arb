@@ -1248,5 +1248,99 @@
   "translationExportPdfPreserveLayout": "원版식 PDF",
   "translationExportPdfPreserveLayoutDesc": "원본 PDF 레이아웃에 번역을 겹쳐 구성과 차트 위치 유지",
   "translationExportPdfReflow": "재排版 PDF",
-  "translationExportPdfReflowDesc": "번역 Markdown으로 재조판. 원문과 레이아웃이 다를 수 있음"
+  "translationExportPdfReflowDesc": "번역 Markdown으로 재조판. 원문과 레이아웃이 다를 수 있음",
+
+  "translationPreviewDialogTitle": "미리보기 설정",
+  "translationPreviewStart": "미리보기 시작",
+  "translationPreviewModeSectionTitle": "번역 미리보기",
+  "translationPreviewModeHtml": "HTML / Markdown",
+  "translationPreviewModeHtmlDesc": "브라우저에서 렌더링된 번역문 보기(기본값)",
+  "translationPreviewFullDocumentCompare": "전문 대조 미리보기",
+  "translationPreviewFullDocumentCompareDesc": "원문과 번역문을 좌우로 나란히 표시(내보내기 형식, 위의 모든 미리보기 방식 지원)",
+  "translationPreviewSyncScroll": "스크롤바 연동",
+  "translationPreviewSyncScrollDesc": "활성화하면 좌우 패널 스크롤바를 숨기고 오른쪽 공통 스크롤바로 원문과 번역문을 함께 스크롤(PDF 대조만)",
+  "translationPreviewPanelSource": "원문",
+  "translationPreviewPanelTarget": "번역문",
+  "translationPreviewNoExtraOptions": "이 미리보기 방식에는 추가 옵션이 없습니다",
+  "translationPreviewReopenSettings": "미리보기 설정",
+  "translationPreviewZoomIn": "확대",
+  "translationPreviewZoomOut": "축소",
+  "translationPreviewZoomReset": "확대/축소 초기화",
+  "segmentPdfFontSizeAuto": "자동 ({sizePt}pt)",
+  "@segmentPdfFontSizeAuto": {
+    "placeholders": {
+      "sizePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfFontSizeAutoUnknown": "자동",
+  "segmentPdfFontSizeManual": "{sizePt}pt",
+  "@segmentPdfFontSizeManual": {
+    "placeholders": {
+      "sizePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfFontSizeTitle": "PDF 글꼴 크기",
+  "segmentPdfTypographyTitle": "PDF 서체",
+  "segmentPdfTypographyFontTitle": "PDF 글꼴",
+  "segmentPdfTypographyLeadingTitle": "줄 간격",
+  "segmentPdfTypographyPreviewLabel": "미리보기",
+  "segmentPdfTypographyBold": "굵게",
+  "segmentPdfTypographyItalic": "기울임",
+  "segmentPdfTypographyFontSizeLabel": "글꼴 크기: {sizePt} pt",
+  "@segmentPdfTypographyFontSizeLabel": {
+    "placeholders": {
+      "sizePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfTypographyLeadingLabel": "줄 간격: {leadingEm} em",
+  "@segmentPdfTypographyLeadingLabel": {
+    "placeholders": {
+      "leadingEm": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfFontSizeReset": "자동으로 재설정",
+  "segmentPdfTypographyResetFont": "글꼴 자동으로 재설정",
+  "segmentPdfTypographyResetLeading": "줄 간격 자동으로 재설정",
+  "segmentPdfFontSizeApply": "적용",
+  "translationPreviewRevisionSyncScrollDesc": "활성화하면 원문과 번역문 미리보기의 개별 스크롤바를 숨기고, 사이에 공통 스크롤바를 표시하여 연동 스크롤합니다",
+  "translationPreviewPdfRevision": "미리보기 수정",
+  "translationPreviewPdfRevisionCompare": "대조 미리보기",
+  "translationPreviewLayoutComparePreview": "대조 미리보기",
+  "translationPreviewLayoutTranslationRevision": "번역문 수정",
+  "translationPreviewLayoutCompareRevision": "대조 수정",
+  "translationPreviewAutoRefreshPdf": "PDF 자동 새로고침",
+  "translationPreviewFollowSegmentPage": "세그먼트 페이지 따라가기",
+  "translationPreviewFollowSegmentPageDesc": "활성화하면 세그먼트를 클릭하거나 선택할 때 번역 PDF 미리보기가 해당 페이지로 이동합니다",
+  "translationPreviewPdfPageIndicator": "{current} / {total} 페이지",
+  "@translationPreviewPdfPageIndicator": {
+    "placeholders": {
+      "current": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "translationPreviewRefreshPdf": "PDF 새로고침",
+  "translationPreviewBatchFont": "글꼴",
+  "translationPreviewBatchFontTooltip": "선택한 세그먼트에 글꼴 설정 적용",
+  "translationPreviewBatchLeading": "줄 간격 일괄 적용",
+  "translationPreviewBatchLeadingTooltip": "선택한 세그먼트에 줄 간격 적용",
+  "translationPreviewPdfRevisionSelectAll": "전체 선택",
+  "translationPreviewPdfRevisionInvertSelection": "선택 반전",
+  "translationPreviewPdfRevisionPageFilterLabel": "페이지",
+  "translationPreviewPdfRevisionPageFilterAll": "전체 페이지",
+  "translationPreviewPdfRevisionPageFilterSelectAll": "페이지 전체 선택",
+  "segmentPdfRevisionFontLabel": "글꼴",
+  "segmentPdfRevisionEditLabel": "편집",
+  "segmentPdfRevisionClearLabel": "지우기"
 }

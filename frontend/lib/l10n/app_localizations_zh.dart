@@ -605,6 +605,10 @@ class AppLocalizationsZh extends AppLocalizations {
       '勾选后隐藏左右面板滚动条，仅保留右侧统一滚动条同时控制原文与译文（PDF 对照）';
 
   @override
+  String get translationPreviewRevisionSyncScrollDesc =>
+      '勾选后隐藏原文与译文预览各自滚动条，在两者之间显示统一滚动条并联动滚动';
+
+  @override
   String get translationPreviewPanelSource => '原文';
 
   @override
@@ -3637,10 +3641,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get segmentPdfFontSizeApply => '应用';
 
   @override
-  String get translationPreviewPdfRevision => 'PDF 修订';
+  String get translationPreviewPdfRevision => '预览修订';
 
   @override
   String get translationPreviewPdfRevisionCompare => '对照预览';
+
+  @override
+  String get translationPreviewLayoutComparePreview => '对照预览';
+
+  @override
+  String get translationPreviewLayoutTranslationRevision => '译文修订';
+
+  @override
+  String get translationPreviewLayoutCompareRevision => '对照修订';
 
   @override
   String get translationPreviewAutoRefreshPdf => '自动刷新 PDF';
@@ -3650,7 +3663,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get translationPreviewFollowSegmentPageDesc =>
-      '启用后，点击或勾选片段时，右侧 PDF 预览自动跳转到该片段所在页';
+      '启用后，点击或勾选片段时，译文 PDF 预览自动跳转到该片段所在页';
 
   @override
   String translationPreviewPdfPageIndicator(String current, String total) {
@@ -3661,7 +3674,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationPreviewRefreshPdf => '刷新 PDF';
 
   @override
-  String get translationPreviewBatchFont => '批量字体';
+  String get translationPreviewBatchFont => '字体';
 
   @override
   String get translationPreviewBatchFontTooltip => '将字号、粗体、斜体应用到选中片段';

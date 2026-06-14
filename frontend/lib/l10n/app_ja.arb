@@ -1248,5 +1248,99 @@
   "translationExportPdfPreserveLayout": "原版式 PDF",
   "translationExportPdfPreserveLayoutDesc": "元の PDF 版式に訳文を重ね、レイアウトと図表位置を維持",
   "translationExportPdfReflow": "再排版 PDF",
-  "translationExportPdfReflowDesc": "訳文 Markdown から再排版。版式は原文と異なる場合があります"
+  "translationExportPdfReflowDesc": "訳文 Markdown から再排版。版式は原文と異なる場合があります",
+
+  "translationPreviewDialogTitle": "プレビュー設定",
+  "translationPreviewStart": "プレビューを開始",
+  "translationPreviewModeSectionTitle": "訳文プレビュー",
+  "translationPreviewModeHtml": "HTML / Markdown",
+  "translationPreviewModeHtmlDesc": "ブラウザでレンダリング済み訳文を表示（デフォルト）",
+  "translationPreviewFullDocumentCompare": "全文対照プレビュー",
+  "translationPreviewFullDocumentCompareDesc": "原文と訳文を左右に並べて表示（エクスポート形式。上記のプレビュー方式すべてに対応）",
+  "translationPreviewSyncScroll": "スクロールバーを連動",
+  "translationPreviewSyncScrollDesc": "有効にすると左右パネルのスクロールバーを非表示にし、右側の共通スクロールバーで原文と訳文を同時にスクロール（PDF 対照のみ）",
+  "translationPreviewPanelSource": "原文",
+  "translationPreviewPanelTarget": "訳文",
+  "translationPreviewNoExtraOptions": "このプレビュー方式には追加オプションがありません",
+  "translationPreviewReopenSettings": "プレビュー設定",
+  "translationPreviewZoomIn": "拡大",
+  "translationPreviewZoomOut": "縮小",
+  "translationPreviewZoomReset": "ズームをリセット",
+  "segmentPdfFontSizeAuto": "自動 ({sizePt}pt)",
+  "@segmentPdfFontSizeAuto": {
+    "placeholders": {
+      "sizePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfFontSizeAutoUnknown": "自動",
+  "segmentPdfFontSizeManual": "{sizePt}pt",
+  "@segmentPdfFontSizeManual": {
+    "placeholders": {
+      "sizePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfFontSizeTitle": "PDF フォントサイズ",
+  "segmentPdfTypographyTitle": "PDF 字体",
+  "segmentPdfTypographyFontTitle": "PDF フォント",
+  "segmentPdfTypographyLeadingTitle": "行間",
+  "segmentPdfTypographyPreviewLabel": "プレビュー",
+  "segmentPdfTypographyBold": "太字",
+  "segmentPdfTypographyItalic": "斜体",
+  "segmentPdfTypographyFontSizeLabel": "フォントサイズ：{sizePt} pt",
+  "@segmentPdfTypographyFontSizeLabel": {
+    "placeholders": {
+      "sizePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfTypographyLeadingLabel": "行間：{leadingEm} em",
+  "@segmentPdfTypographyLeadingLabel": {
+    "placeholders": {
+      "leadingEm": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfFontSizeReset": "自動に戻す",
+  "segmentPdfTypographyResetFont": "フォントを自動に戻す",
+  "segmentPdfTypographyResetLeading": "行間を自動に戻す",
+  "segmentPdfFontSizeApply": "適用",
+  "translationPreviewRevisionSyncScrollDesc": "有効にすると、原文と訳文プレビューの個別スクロールバーを非表示にし、間に共通スクロールバーを表示して連動スクロールします",
+  "translationPreviewPdfRevision": "プレビュー修正",
+  "translationPreviewPdfRevisionCompare": "対照プレビュー",
+  "translationPreviewLayoutComparePreview": "対照プレビュー",
+  "translationPreviewLayoutTranslationRevision": "訳文修正",
+  "translationPreviewLayoutCompareRevision": "対照修正",
+  "translationPreviewAutoRefreshPdf": "PDF 自動更新",
+  "translationPreviewFollowSegmentPage": "セグメントページに追従",
+  "translationPreviewFollowSegmentPageDesc": "有効にすると、セグメントをクリックまたは選択したときに訳文 PDF プレビューが該当ページにジャンプします",
+  "translationPreviewPdfPageIndicator": "{current} / {total} ページ",
+  "@translationPreviewPdfPageIndicator": {
+    "placeholders": {
+      "current": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "translationPreviewRefreshPdf": "PDF を更新",
+  "translationPreviewBatchFont": "フォント",
+  "translationPreviewBatchFontTooltip": "選択したセグメントにフォント設定を適用",
+  "translationPreviewBatchLeading": "行間一括",
+  "translationPreviewBatchLeadingTooltip": "選択したセグメントに行間を適用",
+  "translationPreviewPdfRevisionSelectAll": "すべて選択",
+  "translationPreviewPdfRevisionInvertSelection": "選択反転",
+  "translationPreviewPdfRevisionPageFilterLabel": "ページ",
+  "translationPreviewPdfRevisionPageFilterAll": "すべてのページ",
+  "translationPreviewPdfRevisionPageFilterSelectAll": "ページをすべて選択",
+  "segmentPdfRevisionFontLabel": "フォント",
+  "segmentPdfRevisionEditLabel": "編集",
+  "segmentPdfRevisionClearLabel": "クリア"
 }

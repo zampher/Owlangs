@@ -578,57 +578,58 @@ class AppLocalizationsJa extends AppLocalizations {
       '訳文 Markdown から再排版。版式は原文と異なる場合があります';
 
   @override
-  String get translationPreviewDialogTitle => 'Preview Settings';
+  String get translationPreviewDialogTitle => 'プレビュー設定';
 
   @override
-  String get translationPreviewStart => 'Start Preview';
+  String get translationPreviewStart => 'プレビューを開始';
 
   @override
-  String get translationPreviewModeSectionTitle => 'Translation preview';
+  String get translationPreviewModeSectionTitle => '訳文プレビュー';
 
   @override
   String get translationPreviewModeHtml => 'HTML / Markdown';
 
   @override
-  String get translationPreviewModeHtmlDesc =>
-      'View rendered translation in the browser (default)';
+  String get translationPreviewModeHtmlDesc => 'ブラウザでレンダリング済み訳文を表示（デフォルト）';
 
   @override
-  String get translationPreviewFullDocumentCompare =>
-      'Full document comparison';
+  String get translationPreviewFullDocumentCompare => '全文対照プレビュー';
 
   @override
   String get translationPreviewFullDocumentCompareDesc =>
-      'View source and translation side by side (export format; works with any preview mode above)';
+      '原文と訳文を左右に並べて表示（エクスポート形式。上記のプレビュー方式すべてに対応）';
 
   @override
-  String get translationPreviewSyncScroll => 'Link scrollbars';
+  String get translationPreviewSyncScroll => 'スクロールバーを連動';
 
   @override
   String get translationPreviewSyncScrollDesc =>
-      'When enabled, link PDF compare panes with a shared scroll bar (PDF compare only)';
+      '有効にすると左右パネルのスクロールバーを非表示にし、右側の共通スクロールバーで原文と訳文を同時にスクロール（PDF 対照のみ）';
 
   @override
-  String get translationPreviewPanelSource => 'Source';
+  String get translationPreviewRevisionSyncScrollDesc =>
+      '有効にすると、原文と訳文プレビューの個別スクロールバーを非表示にし、間に共通スクロールバーを表示して連動スクロールします';
 
   @override
-  String get translationPreviewPanelTarget => 'Translation';
+  String get translationPreviewPanelSource => '原文';
 
   @override
-  String get translationPreviewNoExtraOptions =>
-      'No extra options for this preview mode';
+  String get translationPreviewPanelTarget => '訳文';
 
   @override
-  String get translationPreviewReopenSettings => 'Preview settings';
+  String get translationPreviewNoExtraOptions => 'このプレビュー方式には追加オプションがありません';
 
   @override
-  String get translationPreviewZoomIn => 'Zoom in';
+  String get translationPreviewReopenSettings => 'プレビュー設定';
 
   @override
-  String get translationPreviewZoomOut => 'Zoom out';
+  String get translationPreviewZoomIn => '拡大';
 
   @override
-  String get translationPreviewZoomReset => 'Reset zoom';
+  String get translationPreviewZoomOut => '縮小';
+
+  @override
+  String get translationPreviewZoomReset => 'ズームをリセット';
 
   @override
   String get translationLeftPanelExpandTooltip => '左パネルを展開';
@@ -3614,11 +3615,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String segmentPdfFontSizeAuto(String sizePt) {
-    return 'Auto (${sizePt}pt)';
+    return '自動 (${sizePt}pt)';
   }
 
   @override
-  String get segmentPdfFontSizeAutoUnknown => 'Auto';
+  String get segmentPdfFontSizeAutoUnknown => '自動';
 
   @override
   String segmentPdfFontSizeManual(String sizePt) {
@@ -3626,108 +3627,114 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get segmentPdfFontSizeTitle => 'PDF font size';
+  String get segmentPdfFontSizeTitle => 'PDF フォントサイズ';
 
   @override
-  String get segmentPdfTypographyTitle => 'PDF typography';
+  String get segmentPdfTypographyTitle => 'PDF 字体';
 
   @override
-  String get segmentPdfTypographyFontTitle => 'PDF font';
+  String get segmentPdfTypographyFontTitle => 'PDF フォント';
 
   @override
-  String get segmentPdfTypographyLeadingTitle => 'Line spacing';
+  String get segmentPdfTypographyLeadingTitle => '行間';
 
   @override
-  String get segmentPdfTypographyPreviewLabel => 'Preview';
+  String get segmentPdfTypographyPreviewLabel => 'プレビュー';
 
   @override
-  String get segmentPdfTypographyBold => 'Bold';
+  String get segmentPdfTypographyBold => '太字';
 
   @override
-  String get segmentPdfTypographyItalic => 'Italic';
+  String get segmentPdfTypographyItalic => '斜体';
 
   @override
   String segmentPdfTypographyFontSizeLabel(String sizePt) {
-    return 'Font size: $sizePt pt';
+    return 'フォントサイズ：$sizePt pt';
   }
 
   @override
   String segmentPdfTypographyLeadingLabel(String leadingEm) {
-    return 'Line spacing: $leadingEm em';
+    return '行間：$leadingEm em';
   }
 
   @override
-  String get segmentPdfFontSizeReset => 'Reset to auto';
+  String get segmentPdfFontSizeReset => '自動に戻す';
 
   @override
-  String get segmentPdfTypographyResetFont => 'Reset font to auto';
+  String get segmentPdfTypographyResetFont => 'フォントを自動に戻す';
 
   @override
-  String get segmentPdfTypographyResetLeading => 'Reset line spacing to auto';
+  String get segmentPdfTypographyResetLeading => '行間を自動に戻す';
 
   @override
-  String get segmentPdfFontSizeApply => 'Apply';
+  String get segmentPdfFontSizeApply => '適用';
 
   @override
-  String get translationPreviewPdfRevision => 'PDF revision';
+  String get translationPreviewPdfRevision => 'プレビュー修正';
 
   @override
-  String get translationPreviewPdfRevisionCompare => 'Compare view';
+  String get translationPreviewPdfRevisionCompare => '対照プレビュー';
 
   @override
-  String get translationPreviewAutoRefreshPdf => 'Auto refresh PDF';
+  String get translationPreviewLayoutComparePreview => '対照プレビュー';
 
   @override
-  String get translationPreviewFollowSegmentPage => 'Follow segment page';
+  String get translationPreviewLayoutTranslationRevision => '訳文修正';
+
+  @override
+  String get translationPreviewLayoutCompareRevision => '対照修正';
+
+  @override
+  String get translationPreviewAutoRefreshPdf => 'PDF 自動更新';
+
+  @override
+  String get translationPreviewFollowSegmentPage => 'セグメントページに追従';
 
   @override
   String get translationPreviewFollowSegmentPageDesc =>
-      'When enabled, the PDF preview jumps to the page of the focused or checked segment';
+      '有効にすると、セグメントをクリックまたは選択したときに訳文 PDF プレビューが該当ページにジャンプします';
 
   @override
   String translationPreviewPdfPageIndicator(String current, String total) {
-    return 'Page $current / $total';
+    return '$current / $total ページ';
   }
 
   @override
-  String get translationPreviewRefreshPdf => 'Refresh PDF';
+  String get translationPreviewRefreshPdf => 'PDF を更新';
 
   @override
-  String get translationPreviewBatchFont => 'Batch font';
+  String get translationPreviewBatchFont => 'フォント';
 
   @override
-  String get translationPreviewBatchFontTooltip =>
-      'Apply font settings to selected segments';
+  String get translationPreviewBatchFontTooltip => '選択したセグメントにフォント設定を適用';
 
   @override
-  String get translationPreviewBatchLeading => 'Batch line spacing';
+  String get translationPreviewBatchLeading => '行間一括';
 
   @override
-  String get translationPreviewBatchLeadingTooltip =>
-      'Apply line spacing to selected segments';
+  String get translationPreviewBatchLeadingTooltip => '選択したセグメントに行間を適用';
 
   @override
-  String get translationPreviewPdfRevisionSelectAll => 'Select all';
+  String get translationPreviewPdfRevisionSelectAll => 'すべて選択';
 
   @override
-  String get translationPreviewPdfRevisionInvertSelection => 'Invert selection';
+  String get translationPreviewPdfRevisionInvertSelection => '選択反転';
 
   @override
-  String get translationPreviewPdfRevisionPageFilterLabel => 'Page';
+  String get translationPreviewPdfRevisionPageFilterLabel => 'ページ';
 
   @override
-  String get translationPreviewPdfRevisionPageFilterAll => 'All pages';
+  String get translationPreviewPdfRevisionPageFilterAll => 'すべてのページ';
 
   @override
-  String get translationPreviewPdfRevisionPageFilterSelectAll =>
-      'Select all pages';
+  String get translationPreviewPdfRevisionPageFilterSelectAll => 'ページをすべて選択';
 
   @override
-  String get segmentPdfRevisionFontLabel => 'Font';
+  String get segmentPdfRevisionFontLabel => 'フォント';
 
   @override
-  String get segmentPdfRevisionEditLabel => 'Edit';
+  String get segmentPdfRevisionEditLabel => '編集';
 
   @override
-  String get segmentPdfRevisionClearLabel => 'Clear';
+  String get segmentPdfRevisionClearLabel => 'クリア';
 }

@@ -36,6 +36,7 @@ import '../widgets/pdf_preview.dart';
 import '../../../shared/config/pagination_config.dart';
 import '../widgets/translation_quick_settings.dart';
 import '../widgets/translation_result/preview_selection.dart';
+import '../widgets/translation_result/pdf_compare_layout_mode.dart';
 import '../widgets/translation_result/translation_preview_dialog.dart';
 import '../widgets/translation_result/translation_full_compare_preview_tab.dart';
 import 'translation_result/segment_pdf_typography_dialog.dart';
@@ -576,7 +577,7 @@ class _TranslationResultPreviewState
       ValueNotifier<int>(0);
   int _pdfPreviewJumpPageTrigger = 0;
   late final ValueNotifier<bool> _autoFollowSegmentPdfPageNotifier =
-      ValueNotifier<bool>(false);
+      ValueNotifier<bool>(true);
   bool _isRefreshingForFilter = false;
 
   // PERFORMANCE: Cache exclusion counts to avoid expensive recalculation on every rebuild
@@ -4839,10 +4840,14 @@ class _TranslationResultPreviewState
 
   Widget _buildPdfRevisionSegmentPanel({
     required Set<int> selectedSegmentIndices,
+    ValueListenable<Set<int>>? selectedSegmentIndicesListenable,
     required void Function(int index, bool selected) onSegmentSelectionToggle,
     required Set<int> Function() getFilteredSelectableSegmentIndices,
     required void Function(Set<int> indices) onBulkSelectAll,
     required void Function(Set<int> indices) onBulkInvertSelection,
+    Future<void> Function()? onBatchFontApply,
+    ScrollController? segmentScrollController,
+    bool showSegmentScrollbar = true,
   }) {
     if (_isMergedView) {
       return const Center(
@@ -4873,14 +4878,21 @@ class _TranslationResultPreviewState
       pdfRevisionMode: true,
       batchSelectionEnabled: true,
       selectedSegmentIndices: selectedSegmentIndices,
+      selectedSegmentIndicesListenable: selectedSegmentIndicesListenable,
       onSegmentSelectionToggle: (int index, bool selected) {
         onSegmentSelectionToggle(index, selected);
         if (selected && _autoFollowSegmentPdfPageNotifier.value) {
-          _followSegmentPdfPage(index);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) {
+              return;
+            }
+            _followSegmentPdfPage(index);
+          });
         }
       },
       onBulkSelectAll: onBulkSelectAll,
       onBulkInvertSelection: onBulkInvertSelection,
+      onBatchFontApply: onBatchFontApply,
       getFilteredSelectableSegmentIndices: getFilteredSelectableSegmentIndices,
       exclusionFiltersListenable: _selectedExclusionFiltersNotifier,
       pdfPageFilterListenable: _selectedPdfPageNumbersNotifier,
@@ -4888,7 +4900,8 @@ class _TranslationResultPreviewState
       sourceParagraphs: _sourceParagraphs,
       targetParagraphs: _targetParagraphs,
       highlightedIndexNotifier: _highlightedIndexNotifier,
-      scrollController: _pdfRevisionScrollController,
+      scrollController:
+          segmentScrollController ?? _pdfRevisionScrollController,
       segmentsPaginationController: _segmentsPaginationController,
       totalSegmentsCount: _totalSegmentsCount,
       segmentPairKeys: _pdfRevisionSegmentPairKeys,
@@ -4924,6 +4937,7 @@ class _TranslationResultPreviewState
       onFormulaFix: _handleFormulaFixForSegment,
       showPdfFontSize: true,
       onFontSizeChanged: _handleFontSizeChanged,
+      showSegmentScrollbar: showSegmentScrollbar,
     );
   }
 
@@ -5384,7 +5398,7 @@ class _TranslationResultPreviewState
     try {
       await _openFullDocumentCompareTab(
         baseMode: TranslationPreviewMode.pdfPreserve,
-        initialPdfRevisionMode: true,
+        initialLayoutMode: PdfCompareLayoutMode.compareRevision,
       );
     } catch (e, stackTrace) {
       _translationResultLog(
@@ -5579,7 +5593,8 @@ class _TranslationResultPreviewState
 
   Future<void> _openFullDocumentCompareTab({
     required TranslationPreviewMode baseMode,
-    bool initialPdfRevisionMode = false,
+    PdfCompareLayoutMode initialLayoutMode =
+        PdfCompareLayoutMode.comparePreview,
   }) async {
     final dynamic translationState = widget.flowId != null
         ? ref.read(translationStateProviderFamily(widget.flowId!))
@@ -5610,10 +5625,12 @@ class _TranslationResultPreviewState
       PreviewTab(
         id: tabId,
         type: PreviewTabType.translationResult,
-        title: initialPdfRevisionMode
+        title: initialLayoutMode.showsRevisionControls
             ? l10n.translationPreviewPdfRevision
             : l10n.translationPreviewFullDocumentCompare,
-        icon: initialPdfRevisionMode ? Icons.edit_note : Icons.compare_arrows,
+        icon: initialLayoutMode.showsRevisionControls
+            ? Icons.edit_note
+            : Icons.compare_arrows,
         content: TranslationFullComparePreviewTab(
           taskId: _apiTaskId(),
           baseMode: baseMode,
@@ -5628,13 +5645,17 @@ class _TranslationResultPreviewState
           translatedHtmlUrl: translatedHtmlUrl,
           initialSyncScroll:
               _lastSyncScroll ?? baseMode.defaultFullCompareSyncScroll,
-          initialPdfRevisionMode: initialPdfRevisionMode,
+          initialLayoutMode: initialLayoutMode,
           onSyncScrollChanged: (bool enabled) {
             _lastSyncScroll = enabled;
           },
           onRequestPreviewSettings: _handlePreviewSettingsRequest,
           onDownload: widget.onDownload,
           onShowDownload: _showDownloadDialog,
+          segmentScrollController: _isPdfSourceFile() &&
+                  baseMode == TranslationPreviewMode.pdfPreserve
+              ? _pdfRevisionScrollController
+              : null,
           pdfRevisionSegmentPanelBuilder: _isPdfSourceFile() &&
                   baseMode == TranslationPreviewMode.pdfPreserve
               ? _buildPdfRevisionSegmentPanel

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2025 QinHan
 // SPDX-License-Identifier: MPL-2.0
 
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -70,14 +71,17 @@ class TranslationComparisonPanel extends ConsumerWidget {
     this.onFontSizeChanged,
     this.batchSelectionEnabled = false,
     this.selectedSegmentIndices = const <int>{},
+    this.selectedSegmentIndicesListenable,
     this.onSegmentSelectionToggle,
     this.onBulkSelectAll,
     this.onBulkInvertSelection,
+    this.onBatchFontApply,
     this.getFilteredSelectableSegmentIndices,
     this.exclusionFiltersListenable,
     this.pdfRevisionMode = false,
     this.pdfPageFilterListenable,
     this.onPdfPageFilterChanged,
+    this.showSegmentScrollbar = true,
   });
 
   final String taskId;
@@ -128,14 +132,17 @@ class TranslationComparisonPanel extends ConsumerWidget {
   })? onFontSizeChanged;
   final bool batchSelectionEnabled;
   final Set<int> selectedSegmentIndices;
+  final ValueListenable<Set<int>>? selectedSegmentIndicesListenable;
   final void Function(int index, bool selected)? onSegmentSelectionToggle;
   final void Function(Set<int> indices)? onBulkSelectAll;
   final void Function(Set<int> indices)? onBulkInvertSelection;
+  final Future<void> Function()? onBatchFontApply;
   final Set<int> Function()? getFilteredSelectableSegmentIndices;
   final ValueListenable<Set<String>>? exclusionFiltersListenable;
   final bool pdfRevisionMode;
   final ValueListenable<Set<int>>? pdfPageFilterListenable;
   final void Function(Set<int> pages, {int? jumpToPage})? onPdfPageFilterChanged;
+  final bool showSegmentScrollbar;
 
   /// Check if a segment is cleared based on metadata
   bool _isSegmentCleared(Map<String, dynamic> metadata) {
@@ -276,7 +283,8 @@ class TranslationComparisonPanel extends ConsumerWidget {
       _FilterChipConfig('pending', l10n.translationStatsPendingLabel, Colors.orange),
       _FilterChipConfig('failed', l10n.translationToolbarFilterFailed, Colors.red),
       _FilterChipConfig('excluded', l10n.translationToolbarFilterExcluded, Colors.grey),
-      _FilterChipConfig('retry', l10n.translationToolbarRetry, Colors.orange),
+      if (!pdfRevisionMode)
+        _FilterChipConfig('retry', l10n.translationToolbarRetry, Colors.orange),
       _FilterChipConfig('cleared', l10n.translationStatsClearedLabel, Colors.purple),
       if (!pdfRevisionMode)
         _FilterChipConfig(
@@ -748,7 +756,55 @@ class TranslationComparisonPanel extends ConsumerWidget {
                 },
           child: Text(l10n.translationPreviewPdfRevisionInvertSelection),
         ),
+        if (onBatchFontApply != null)
+          _buildBatchFontButton(context, compactStyle, l10n),
       ],
+    );
+  }
+
+  Widget _buildBatchFontButton(
+    BuildContext context,
+    ButtonStyle compactStyle,
+    AppLocalizations l10n,
+  ) {
+    Widget buildButton(Set<int> selected) {
+      return Tooltip(
+        message: l10n.translationPreviewBatchFontTooltip,
+        child: TextButton(
+          style: compactStyle,
+          onPressed: selected.isEmpty
+              ? null
+              : () {
+                  unawaited(onBatchFontApply!());
+                },
+          child: Text(l10n.translationPreviewBatchFont),
+        ),
+      );
+    }
+
+    final ValueListenable<Set<int>>? listenable =
+        selectedSegmentIndicesListenable;
+    if (listenable != null) {
+      return ValueListenableBuilder<Set<int>>(
+        valueListenable: listenable,
+        builder: (BuildContext context, Set<int> selected, Widget? _) {
+          return buildButton(selected);
+        },
+      );
+    }
+    return buildButton(selectedSegmentIndices);
+  }
+
+  Widget _wrapSegmentScrollView(Widget child) {
+    if (!showSegmentScrollbar) {
+      return child;
+    }
+    return Scrollbar(
+      controller: scrollController,
+      thickness: 8,
+      radius: const Radius.circular(4),
+      thumbVisibility: true,
+      child: child,
     );
   }
 
@@ -918,13 +974,8 @@ class TranslationComparisonPanel extends ConsumerWidget {
                                                         ),
                                                       ),
                                               )
-                                            : Scrollbar(
-                                                controller: scrollController,
-                                                thickness: 8,
-                                                radius:
-                                                    const Radius.circular(4),
-                                                thumbVisibility: true,
-                                                child: heightCache != null &&
+                                            : _wrapSegmentScrollView(
+                                                heightCache != null &&
                                                         segmentsPaginationController !=
                                                             null
                                                     ? PaginatedSliverList<
@@ -1000,12 +1051,8 @@ class TranslationComparisonPanel extends ConsumerWidget {
                                 sourceParagraphs.length,
                                 targetParagraphs.length,
                               );
-                              return Scrollbar(
-                                controller: scrollController,
-                                thickness: 8,
-                                radius: const Radius.circular(4),
-                                thumbVisibility: true,
-                                child: ListView.builder(
+                              return _wrapSegmentScrollView(
+                                ListView.builder(
                                   controller: scrollController,
                                   padding: const EdgeInsets.all(8),
                                   itemCount: itemCount,

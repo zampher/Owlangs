@@ -13,6 +13,44 @@ import '../../../shared/services/translation_service.dart';
 import 'pdf_continuous_page.dart';
 import 'pdf_continuous_scroll_view.dart';
 
+/// Scroll navigation for [PdfCompareContinuousView].
+class PdfCompareContinuousScrollController {
+  _PdfCompareContinuousViewState? _state;
+  int? _pendingPageNumber;
+
+  Future<void> jumpToPage(int pageNumber) async {
+    if (pageNumber < 1) {
+      return;
+    }
+    final _PdfCompareContinuousViewState? state = _state;
+    if (state != null) {
+      await state.jumpToPage(pageNumber);
+      return;
+    }
+    _pendingPageNumber = pageNumber;
+  }
+
+  void _attach(_PdfCompareContinuousViewState state) {
+    _state = state;
+    final int? pending = _pendingPageNumber;
+    if (pending != null) {
+      _pendingPageNumber = null;
+      jumpToPage(pending);
+    }
+  }
+
+  void _detach(_PdfCompareContinuousViewState state) {
+    if (_state == state) {
+      _state = null;
+    }
+  }
+
+  void dispose() {
+    _state = null;
+    _pendingPageNumber = null;
+  }
+}
+
 /// Side-by-side PDF compare with linked (single) or independent scrollbars.
 class PdfCompareContinuousView extends StatefulWidget {
   const PdfCompareContinuousView({
@@ -24,6 +62,7 @@ class PdfCompareContinuousView extends StatefulWidget {
     this.pageGap = 16,
     this.columnGap = 1,
     this.onVisiblePageChanged,
+    this.navigationController,
   });
 
   final String sourceDownloadUrl;
@@ -33,6 +72,7 @@ class PdfCompareContinuousView extends StatefulWidget {
   final double pageGap;
   final double columnGap;
   final void Function(int page, int totalPages)? onVisiblePageChanged;
+  final PdfCompareContinuousScrollController? navigationController;
 
   @override
   State<PdfCompareContinuousView> createState() =>
@@ -52,31 +92,46 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
   List<double>? _targetRowHeights;
   int _lastReportedPage = 0;
   int _totalPages = 0;
+  int? _pendingJumpPageNumber;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_handleLinkedScroll);
     _targetScrollController.addListener(_handleTargetScroll);
+    widget.navigationController?._attach(this);
     _loadDocuments();
   }
 
   @override
   void didUpdateWidget(covariant PdfCompareContinuousView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.navigationController != widget.navigationController) {
+      oldWidget.navigationController?._detach(this);
+      widget.navigationController?._attach(this);
+    }
     if (oldWidget.sourceDownloadUrl != widget.sourceDownloadUrl ||
         oldWidget.targetDownloadUrl != widget.targetDownloadUrl ||
-        oldWidget.targetRendererType != widget.targetRendererType ||
-        oldWidget.linkedScroll != widget.linkedScroll) {
+        oldWidget.targetRendererType != widget.targetRendererType) {
       _linkedRowHeights = null;
       _targetRowHeights = null;
       _lastReportedPage = 0;
       _loadDocuments();
+      return;
+    }
+    if (oldWidget.linkedScroll != widget.linkedScroll) {
+      _linkedRowHeights = null;
+      _targetRowHeights = null;
+      _lastReportedPage = 0;
+      if (_contentWidth > 0) {
+        unawaited(_preloadRowHeights(_contentWidth));
+      }
     }
   }
 
   @override
   void dispose() {
+    widget.navigationController?._detach(this);
     _scrollController.removeListener(_handleLinkedScroll);
     _targetScrollController.removeListener(_handleTargetScroll);
     _scrollController.dispose();
@@ -151,6 +206,7 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
         _totalPages = rowCount;
       });
       _reportVisiblePage(_scrollController, heights);
+      _maybeApplyPendingJump();
       return;
     }
 
@@ -171,6 +227,53 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
       _totalPages = target.pagesCount;
     });
     _reportVisiblePage(_targetScrollController, targetHeights);
+    _maybeApplyPendingJump();
+  }
+
+  Future<void> jumpToPage(int pageNumber) async {
+    if (!mounted || pageNumber < 1) {
+      return;
+    }
+    final List<double>? pageHeights =
+        widget.linkedScroll ? _linkedRowHeights : _targetRowHeights;
+    final ScrollController controller =
+        widget.linkedScroll ? _scrollController : _targetScrollController;
+    if (pageHeights == null || pageHeights.isEmpty) {
+      _pendingJumpPageNumber = pageNumber;
+      return;
+    }
+    final int index = pageNumber - 1;
+    if (index >= pageHeights.length) {
+      return;
+    }
+    double offset = widget.pageGap;
+    for (int i = 0; i < index; i++) {
+      offset += pageHeights[i] + widget.pageGap;
+    }
+    if (!controller.hasClients) {
+      _pendingJumpPageNumber = pageNumber;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(jumpToPage(pageNumber));
+        }
+      });
+      return;
+    }
+    _pendingJumpPageNumber = null;
+    await controller.animateTo(
+      offset.clamp(0.0, controller.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+    _reportVisiblePage(controller, pageHeights);
+  }
+
+  void _maybeApplyPendingJump() {
+    final int? pending = _pendingJumpPageNumber;
+    if (pending == null) {
+      return;
+    }
+    unawaited(jumpToPage(pending));
   }
 
   void _handleLinkedScroll() {

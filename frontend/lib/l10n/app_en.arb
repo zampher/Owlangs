@@ -203,6 +203,7 @@
   "translationPreviewFullDocumentCompareDesc": "View source and translation side by side (export format; works with any preview mode above)",
   "translationPreviewSyncScroll": "Link scrollbars",
   "translationPreviewSyncScrollDesc": "When enabled, link PDF compare panes with a shared scroll bar (PDF compare only)",
+  "translationPreviewRevisionSyncScrollDesc": "When enabled, hide separate scroll bars on source and translation previews; show one shared scroll bar between them with linked scrolling",
   "translationPreviewPanelSource": "Source",
   "translationPreviewPanelTarget": "Translation",
   "translationPreviewNoExtraOptions": "No extra options for this preview mode",
@@ -1376,11 +1377,14 @@
   "segmentPdfTypographyResetLeading": "Reset line spacing to auto",
   "segmentPdfFontSizeApply": "Apply",
 
-  "translationPreviewPdfRevision": "PDF revision",
+  "translationPreviewPdfRevision": "Preview revision",
   "translationPreviewPdfRevisionCompare": "Compare view",
+  "translationPreviewLayoutComparePreview": "Compare preview",
+  "translationPreviewLayoutTranslationRevision": "Translation revision",
+  "translationPreviewLayoutCompareRevision": "Compare revision",
   "translationPreviewAutoRefreshPdf": "Auto refresh PDF",
   "translationPreviewFollowSegmentPage": "Follow segment page",
-  "translationPreviewFollowSegmentPageDesc": "When enabled, the PDF preview jumps to the page of the focused or checked segment",
+  "translationPreviewFollowSegmentPageDesc": "When enabled, the translation PDF preview jumps to the page of the focused or checked segment",
   "translationPreviewPdfPageIndicator": "Page {current} / {total}",
   "@translationPreviewPdfPageIndicator": {
     "placeholders": {
@@ -1393,7 +1397,7 @@
     }
   },
   "translationPreviewRefreshPdf": "Refresh PDF",
-  "translationPreviewBatchFont": "Batch font",
+  "translationPreviewBatchFont": "Font",
   "translationPreviewBatchFontTooltip": "Apply font settings to selected segments",
   "translationPreviewBatchLeading": "Batch line spacing",
   "translationPreviewBatchLeadingTooltip": "Apply line spacing to selected segments",

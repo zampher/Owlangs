@@ -651,6 +651,10 @@ class PreviewFullscreenOverlay {
     _visible = true;
   }
 
+  void markNeedsBuild() {
+    _entry?.markNeedsBuild();
+  }
+
   void exit() {
     if (!_visible) {
       return;

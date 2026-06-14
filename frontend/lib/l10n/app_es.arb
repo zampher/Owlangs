@@ -1324,5 +1324,99 @@
   "translationExportPdfPreserveLayout": "PDF diseño original",
   "translationExportPdfPreserveLayoutDesc": "Superpone la traducción sobre el diseño PDF original",
   "translationExportPdfReflow": "PDF recompuesto",
-  "translationExportPdfReflowDesc": "Recompuesto desde Markdown traducido; el diseño puede diferir del original"
+  "translationExportPdfReflowDesc": "Recompuesto desde Markdown traducido; el diseño puede diferir del original",
+
+  "translationPreviewDialogTitle": "Configuración de vista previa",
+  "translationPreviewStart": "Iniciar vista previa",
+  "translationPreviewModeSectionTitle": "Vista previa de traducción",
+  "translationPreviewModeHtml": "HTML / Markdown",
+  "translationPreviewModeHtmlDesc": "Ver la traducción renderizada en el navegador (predeterminado)",
+  "translationPreviewFullDocumentCompare": "Comparación de documento completo",
+  "translationPreviewFullDocumentCompareDesc": "Ver original y traducción lado a lado (formato de exportación; compatible con cualquier modo de vista previa anterior)",
+  "translationPreviewSyncScroll": "Vincular barras de desplazamiento",
+  "translationPreviewSyncScrollDesc": "Al activarlo, oculta las barras de desplazamiento de ambos paneles y usa una barra compartida a la derecha para controlar original y traducción (solo comparación PDF)",
+  "translationPreviewPanelSource": "Original",
+  "translationPreviewPanelTarget": "Traducción",
+  "translationPreviewNoExtraOptions": "No hay opciones adicionales para este modo de vista previa",
+  "translationPreviewReopenSettings": "Configuración de vista previa",
+  "translationPreviewZoomIn": "Acercar",
+  "translationPreviewZoomOut": "Alejar",
+  "translationPreviewZoomReset": "Restablecer zoom",
+  "segmentPdfFontSizeAuto": "Auto ({sizePt} pt)",
+  "@segmentPdfFontSizeAuto": {
+    "placeholders": {
+      "sizePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfFontSizeAutoUnknown": "Auto",
+  "segmentPdfFontSizeManual": "{sizePt} pt",
+  "@segmentPdfFontSizeManual": {
+    "placeholders": {
+      "sizePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfFontSizeTitle": "Tamaño de fuente PDF",
+  "segmentPdfTypographyTitle": "Tipografía PDF",
+  "segmentPdfTypographyFontTitle": "Fuente PDF",
+  "segmentPdfTypographyLeadingTitle": "Interlineado",
+  "segmentPdfTypographyPreviewLabel": "Vista previa",
+  "segmentPdfTypographyBold": "Negrita",
+  "segmentPdfTypographyItalic": "Cursiva",
+  "segmentPdfTypographyFontSizeLabel": "Tamaño de fuente: {sizePt} pt",
+  "@segmentPdfTypographyFontSizeLabel": {
+    "placeholders": {
+      "sizePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfTypographyLeadingLabel": "Interlineado: {leadingEm} em",
+  "@segmentPdfTypographyLeadingLabel": {
+    "placeholders": {
+      "leadingEm": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfFontSizeReset": "Restablecer a automático",
+  "segmentPdfTypographyResetFont": "Restablecer fuente a automático",
+  "segmentPdfTypographyResetLeading": "Restablecer interlineado a automático",
+  "segmentPdfFontSizeApply": "Aplicar",
+  "translationPreviewRevisionSyncScrollDesc": "Al activarlo, oculta las barras de desplazamiento separadas de las vistas previas de original y traducción; muestra una barra compartida entre ambas con desplazamiento vinculado",
+  "translationPreviewPdfRevision": "Revisión en vista previa",
+  "translationPreviewPdfRevisionCompare": "Vista comparativa",
+  "translationPreviewLayoutComparePreview": "Vista previa comparativa",
+  "translationPreviewLayoutTranslationRevision": "Revisión de traducción",
+  "translationPreviewLayoutCompareRevision": "Revisión comparativa",
+  "translationPreviewAutoRefreshPdf": "Actualizar PDF automáticamente",
+  "translationPreviewFollowSegmentPage": "Seguir página del segmento",
+  "translationPreviewFollowSegmentPageDesc": "Al activarlo, la vista previa del PDF de traducción salta a la página del segmento seleccionado o marcado",
+  "translationPreviewPdfPageIndicator": "Página {current} / {total}",
+  "@translationPreviewPdfPageIndicator": {
+    "placeholders": {
+      "current": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "translationPreviewRefreshPdf": "Actualizar PDF",
+  "translationPreviewBatchFont": "Fuente",
+  "translationPreviewBatchFontTooltip": "Aplicar configuración de fuente a los segmentos seleccionados",
+  "translationPreviewBatchLeading": "Interlineado en lote",
+  "translationPreviewBatchLeadingTooltip": "Aplicar interlineado a los segmentos seleccionados",
+  "translationPreviewPdfRevisionSelectAll": "Seleccionar todo",
+  "translationPreviewPdfRevisionInvertSelection": "Invertir selección",
+  "translationPreviewPdfRevisionPageFilterLabel": "Página",
+  "translationPreviewPdfRevisionPageFilterAll": "Todas las páginas",
+  "translationPreviewPdfRevisionPageFilterSelectAll": "Seleccionar todas las páginas",
+  "segmentPdfRevisionFontLabel": "Fuente",
+  "segmentPdfRevisionEditLabel": "Editar",
+  "segmentPdfRevisionClearLabel": "Borrar"
 }

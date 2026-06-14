@@ -107,6 +107,7 @@ class PdfContinuousScrollView extends StatefulWidget {
     this.horizontalPadding = 12,
     this.backgroundColor = const Color(0xFFD6D6D6),
     this.onPageVisible,
+    this.showScrollbar = true,
   });
 
   final PdfDocument document;
@@ -116,6 +117,7 @@ class PdfContinuousScrollView extends StatefulWidget {
   final double horizontalPadding;
   final Color backgroundColor;
   final void Function(int pageNumber)? onPageVisible;
+  final bool showScrollbar;
 
   @override
   State<PdfContinuousScrollView> createState() =>
@@ -299,33 +301,37 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
               }
             });
           }
+          final Widget listView = ListView.builder(
+            controller: _scrollController,
+            physics: const ClampingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            padding: EdgeInsets.symmetric(
+              vertical: widget.pageGap,
+              horizontal: widget.horizontalPadding,
+            ),
+            itemCount: pageCount,
+            itemBuilder: (BuildContext context, int index) {
+              final int pageNumber = index + 1;
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: index == pageCount - 1 ? 0 : widget.pageGap,
+                ),
+                child: PdfContinuousPage(
+                  document: widget.document,
+                  pageNumber: pageNumber,
+                  maxWidth: pageWidth,
+                ),
+              );
+            },
+          );
+          if (!widget.showScrollbar) {
+            return listView;
+          }
           return Scrollbar(
             controller: _scrollController,
             thumbVisibility: true,
-            child: ListView.builder(
-              controller: _scrollController,
-              physics: const ClampingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
-              ),
-              padding: EdgeInsets.symmetric(
-                vertical: widget.pageGap,
-                horizontal: widget.horizontalPadding,
-              ),
-              itemCount: pageCount,
-              itemBuilder: (BuildContext context, int index) {
-                final int pageNumber = index + 1;
-                return Padding(
-                  padding: EdgeInsets.only(
-                    bottom: index == pageCount - 1 ? 0 : widget.pageGap,
-                  ),
-                  child: PdfContinuousPage(
-                    document: widget.document,
-                    pageNumber: pageNumber,
-                    maxWidth: pageWidth,
-                  ),
-                );
-              },
-            ),
+            child: listView,
           );
         },
       ),
@@ -343,6 +349,7 @@ class PdfContinuousPreviewLoader extends StatefulWidget {
     this.navigationController,
     this.onDocumentLoaded,
     this.onPageVisible,
+    this.showScrollbar = true,
   });
 
   final String downloadUrl;
@@ -351,6 +358,7 @@ class PdfContinuousPreviewLoader extends StatefulWidget {
   final PdfContinuousScrollController? navigationController;
   final void Function(PdfDocument document)? onDocumentLoaded;
   final void Function(int pageNumber)? onPageVisible;
+  final bool showScrollbar;
 
   @override
   State<PdfContinuousPreviewLoader> createState() =>
@@ -480,6 +488,7 @@ class _PdfContinuousPreviewLoaderState extends State<PdfContinuousPreviewLoader>
       scrollController: widget.scrollController,
       navigationController: widget.navigationController,
       onPageVisible: widget.onPageVisible,
+      showScrollbar: widget.showScrollbar,
     );
   }
 }

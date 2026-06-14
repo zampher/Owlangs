@@ -1215,6 +1215,12 @@ abstract class AppLocalizations {
   /// **'When enabled, link PDF compare panes with a shared scroll bar (PDF compare only)'**
   String get translationPreviewSyncScrollDesc;
 
+  /// No description provided for @translationPreviewRevisionSyncScrollDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, hide separate scroll bars on source and translation previews; show one shared scroll bar between them with linked scrolling'**
+  String get translationPreviewRevisionSyncScrollDesc;
+
   /// No description provided for @translationPreviewPanelSource.
   ///
   /// In en, this message translates to:
@@ -6707,7 +6713,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationPreviewPdfRevision.
   ///
   /// In en, this message translates to:
-  /// **'PDF revision'**
+  /// **'Preview revision'**
   String get translationPreviewPdfRevision;
 
   /// No description provided for @translationPreviewPdfRevisionCompare.
@@ -6715,6 +6721,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Compare view'**
   String get translationPreviewPdfRevisionCompare;
+
+  /// No description provided for @translationPreviewLayoutComparePreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare preview'**
+  String get translationPreviewLayoutComparePreview;
+
+  /// No description provided for @translationPreviewLayoutTranslationRevision.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation revision'**
+  String get translationPreviewLayoutTranslationRevision;
+
+  /// No description provided for @translationPreviewLayoutCompareRevision.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare revision'**
+  String get translationPreviewLayoutCompareRevision;
 
   /// No description provided for @translationPreviewAutoRefreshPdf.
   ///
@@ -6731,7 +6755,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationPreviewFollowSegmentPageDesc.
   ///
   /// In en, this message translates to:
-  /// **'When enabled, the PDF preview jumps to the page of the focused or checked segment'**
+  /// **'When enabled, the translation PDF preview jumps to the page of the focused or checked segment'**
   String get translationPreviewFollowSegmentPageDesc;
 
   /// No description provided for @translationPreviewPdfPageIndicator.
@@ -6749,7 +6773,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationPreviewBatchFont.
   ///
   /// In en, this message translates to:
-  /// **'Batch font'**
+  /// **'Font'**
   String get translationPreviewBatchFont;
 
   /// No description provided for @translationPreviewBatchFontTooltip.

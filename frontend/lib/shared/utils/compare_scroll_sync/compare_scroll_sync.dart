@@ -3,3 +3,4 @@
 
 export 'compare_scroll_sync_base.dart';
 export 'compare_master_scroll_bar.dart';
+export 'proportional_linked_pane_scroll.dart';

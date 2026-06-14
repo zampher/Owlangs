@@ -624,6 +624,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'When enabled, link PDF compare panes with a shared scroll bar (PDF compare only)';
 
   @override
+  String get translationPreviewRevisionSyncScrollDesc =>
+      'When enabled, hide separate scroll bars on source and translation previews; show one shared scroll bar between them with linked scrolling';
+
+  @override
   String get translationPreviewPanelSource => 'Source';
 
   @override
@@ -3800,10 +3804,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get segmentPdfFontSizeApply => 'Apply';
 
   @override
-  String get translationPreviewPdfRevision => 'PDF revision';
+  String get translationPreviewPdfRevision => 'Preview revision';
 
   @override
   String get translationPreviewPdfRevisionCompare => 'Compare view';
+
+  @override
+  String get translationPreviewLayoutComparePreview => 'Compare preview';
+
+  @override
+  String get translationPreviewLayoutTranslationRevision =>
+      'Translation revision';
+
+  @override
+  String get translationPreviewLayoutCompareRevision => 'Compare revision';
 
   @override
   String get translationPreviewAutoRefreshPdf => 'Auto refresh PDF';
@@ -3813,7 +3827,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get translationPreviewFollowSegmentPageDesc =>
-      'When enabled, the PDF preview jumps to the page of the focused or checked segment';
+      'When enabled, the translation PDF preview jumps to the page of the focused or checked segment';
 
   @override
   String translationPreviewPdfPageIndicator(String current, String total) {
@@ -3824,7 +3838,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationPreviewRefreshPdf => 'Refresh PDF';
 
   @override
-  String get translationPreviewBatchFont => 'Batch font';
+  String get translationPreviewBatchFont => 'Font';
 
   @override
   String get translationPreviewBatchFontTooltip =>

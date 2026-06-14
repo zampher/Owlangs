@@ -23,6 +23,8 @@ class PdfPreview extends StatefulWidget {
     this.scrollSyncGroup,
     this.scrollSyncPaneId,
     this.navigationController,
+    this.scrollController,
+    this.showScrollbar = true,
   });
 
   final String downloadUrl;
@@ -35,6 +37,8 @@ class PdfPreview extends StatefulWidget {
   final CompareScrollSyncGroup? scrollSyncGroup;
   final String? scrollSyncPaneId;
   final PdfContinuousScrollController? navigationController;
+  final ScrollController? scrollController;
+  final bool showScrollbar;
 
   @override
   State<PdfPreview> createState() => _PdfPreviewWebState();
