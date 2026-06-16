@@ -24,7 +24,8 @@ API Differences:
         - GET /tasks/{task_id} - Get task status
         - GET /tasks/{task_id}/result - Get task result
         - Returns: Direct ZIP file content or JSON
-        - Fields: formula_enable, table_enable, lang_list[], backend, response_format_zip
+        - Fields: formula_enable, table_enable, lang_list[], backend, effort, image_analysis,
+          response_format_zip
         - GPU/device is server-side only (mineru-api host); no client device field in multipart.
 """
 
@@ -680,12 +681,13 @@ class MinerULocalBackend(MinerUBackend):
             body_parts.append('\r\n'.encode('utf-8'))
             body_parts.append(f"{lang}\r\n".encode('utf-8'))
         
-        # Add form fields (v3.1+ style). Older mineru-api builds may reject optional keys;
-        # if local parse fails with 422, try disabling parse_method / return_middle_json in config later.
+        # Add form fields (v3.1+ style). effort/image_analysis require mineru-api 3.3+ (hybrid backend).
         form_fields = {
             'formula_enable': str(self.formula).lower(),
             'table_enable': str(self.table).lower(),
             'backend': backend,
+            'effort': 'high',  # hybrid: enable image/chart analysis (medium disables it)
+            'image_analysis': 'true',
             'parse_method': 'auto',
             'return_md': 'true',
             'return_images': 'true',  # Include images in ZIP
