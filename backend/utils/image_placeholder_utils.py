@@ -286,3 +286,87 @@ def _replace_placeholders_with_images(
     modified_content = markdown_image_pattern.sub(_replace_markdown_image, modified_content)
     
     return modified_content, saved_image_paths
+
+
+def materialize_markdown_images_from_zip(
+    markdown_content: str,
+    zip_bytes: bytes,
+    output_dir: Path,
+) -> Tuple[str, List[Path]]:
+    """
+    Extract ![alt](path) images from a MinerU layout ZIP into output_dir/images.
+
+    Used when image_data_map lacks entries but markdown already references layout image paths
+    (common for PNG/JPG OCR where ZIP paths include hybrid_auto/ prefixes).
+    """
+    if not markdown_content or not zip_bytes:
+        return markdown_content, []
+
+    import io
+    import os
+    import zipfile
+
+    image_folder_name = "images"
+    images_dir = output_dir / image_folder_name
+    images_dir.mkdir(parents=True, exist_ok=True)
+    saved_image_paths: List[Path] = []
+    save_counter = 0
+    markdown_image_pattern = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zip_file:
+        entry_map = {name.replace("\\", "/"): name for name in zip_file.namelist()}
+
+        def _find_zip_entry(image_ref: str) -> Optional[str]:
+            ref = (image_ref or "").strip()
+            if not ref or ref.startswith("data:") or ref.startswith("http"):
+                return None
+            normalized = ref.replace("\\", "/").lstrip("./")
+            if normalized in entry_map:
+                return entry_map[normalized]
+            basename = os.path.basename(normalized)
+            for norm_name, orig_name in entry_map.items():
+                if (
+                    norm_name == basename
+                    or norm_name.endswith("/" + basename)
+                    or norm_name.endswith("/images/" + basename)
+                ):
+                    return orig_name
+            return None
+
+        def _replace_with_file(match: re.Match) -> str:
+            nonlocal save_counter
+            alt_text = match.group(1) or ""
+            image_ref = match.group(2)
+            zip_entry = _find_zip_entry(image_ref)
+            if not zip_entry:
+                return match.group(0)
+            basename = os.path.basename(image_ref.replace("\\", "/").rstrip("/"))
+            target_path = images_dir / basename
+            if not target_path.exists():
+                try:
+                    target_path.write_bytes(zip_file.read(zip_entry))
+                    saved_image_paths.append(target_path)
+                    save_counter += 1
+                    logger.debug(
+                        LogModule.RESTOR,
+                        f"Materialized markdown image from ZIP: {image_ref} -> {target_path}",
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        LogModule.RESTOR,
+                        f"Failed to materialize image {image_ref} from ZIP: {exc}",
+                    )
+                    return match.group(0)
+            elif target_path not in saved_image_paths:
+                saved_image_paths.append(target_path)
+            relative_path = f"./{image_folder_name}/{basename}"
+            return f"![{alt_text}]({relative_path})"
+
+        modified_content = markdown_image_pattern.sub(_replace_with_file, markdown_content)
+
+    if saved_image_paths:
+        logger.info(
+            LogModule.RESTOR,
+            f"Materialized {len(saved_image_paths)} image(s) from layout_source_zip into {images_dir}",
+        )
+    return modified_content, saved_image_paths

@@ -995,6 +995,17 @@ class TranslationService:
                     if "layout_markdown_source" in convert_state:
                         task_state["layout_markdown_source"] = convert_state["layout_markdown_source"]
                         copied_keys.append("layout_markdown_source")
+                    for layout_key in (
+                        "layout_source_zip",
+                        "layout_document",
+                        "mineru_zip_path",
+                        "mineru_extract_dir",
+                        "source_input_type",
+                    ):
+                        if layout_key in convert_state and convert_state.get(layout_key) is not None:
+                            if layout_key not in task_state or task_state.get(layout_key) is None:
+                                task_state[layout_key] = convert_state[layout_key]
+                                copied_keys.append(layout_key)
                     # Copy ebook_metadata (title, author) so export uses it when generating MOBI/EPUB
                     if "ebook_metadata" in convert_state and convert_state["ebook_metadata"]:
                         task_state["ebook_metadata"] = convert_state["ebook_metadata"].copy()
@@ -1263,6 +1274,9 @@ class TranslationService:
             
             # Sync workflow attachments after conversion
             self._sync_workflow_attachments(task_id, workflow, task_state, reason="post_convert")
+            self._persist_layout_document(
+                task_id, workflow, task_state, original_filename, is_format_conversion=True
+            )
             
             # For PDF/Markdown-based workflows, generate preview from converted markdown
             if workflow_type == "markdown_based":
@@ -1770,7 +1784,28 @@ class TranslationService:
             reason: Reason for syncing (for logging)
         """
         try:
-            if workflow is None or not hasattr(workflow, "attachment"):
+            if workflow is None:
+                return
+
+            layout_doc = getattr(workflow, "layout_document", None)
+            if layout_doc is not None:
+                try:
+                    from layout.base import LayoutDocument as _LD
+
+                    if isinstance(layout_doc, _LD):
+                        task_state["layout_document"] = layout_doc
+                        logger.debug(
+                            LogModule.EXTRACT,
+                            f"[ATTACHMENT] Stored layout_document for task {task_id} "
+                            f"({layout_doc.page_count} pages, reason={reason})",
+                        )
+                except Exception as layout_error:
+                    logger.debug(
+                        LogModule.EXTRACT,
+                        f"[ATTACHMENT] Failed to persist layout_document: {layout_error}",
+                    )
+
+            if not hasattr(workflow, "attachment"):
                 return
             attachment_manager = getattr(workflow, "attachment", None)
             if not attachment_manager:

@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional, Callable
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from backend.app.services.task import TaskManager
+from utils.mineru_layout_utils import needs_mineru_zip_restore
 
 
 class WorkflowExecutor:
@@ -48,9 +49,9 @@ class WorkflowExecutor:
         workflow_type = getattr(payload, 'workflow_type', None)
         logger.info(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Starting format conversion: task_id={task_id}, workflow_type={workflow_type}")
         
-        # Restore MinerU attachment if needed (for PDF files)
-        is_pdf_file = task_state.get("original_filename", "").lower().endswith('.pdf')
-        if is_pdf_file:
+        # Restore MinerU attachment if needed (PDF and MinerU OCR images)
+        original_name = task_state.get("original_filename", "")
+        if needs_mineru_zip_restore(original_name):
             self._restore_mineru_attachment(workflow, task_state, task_id)
         
         # Check if workflow supports convert_without_translation_async (only markdown_based workflows have this)
@@ -128,9 +129,8 @@ class WorkflowExecutor:
         workflow_type = getattr(payload, 'workflow_type', None)
         logger.info(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Starting translation: task_id={task_id}, workflow_type={workflow_type}")
         
-        # Restore MinerU attachment if needed (for PDF files)
-        is_pdf_file = original_filename.lower().endswith('.pdf')
-        if is_pdf_file:
+        # Restore MinerU attachment if needed (PDF and MinerU OCR images)
+        if needs_mineru_zip_restore(original_filename):
             self._restore_mineru_attachment(workflow, task_state, task_id)
         
         # Create progress callback for translation - map translation progress to 10%-90%
@@ -320,7 +320,28 @@ class WorkflowExecutor:
         Persist workflow attachments (e.g., MinerU ZIP) into task_state.
         """
         try:
-            if workflow is None or not hasattr(workflow, "attachment"):
+            if workflow is None:
+                return
+
+            layout_doc = getattr(workflow, "layout_document", None)
+            if layout_doc is not None:
+                try:
+                    from layout.base import LayoutDocument as _LD
+
+                    if isinstance(layout_doc, _LD):
+                        task_state["layout_document"] = layout_doc
+                        logger.debug(
+                            LogModule.EXTRACT,
+                            f"[WORKFLOW-EXECUTOR] Stored layout_document for task {task_id} "
+                            f"({layout_doc.page_count} pages, reason={reason})",
+                        )
+                except Exception as layout_error:
+                    logger.debug(
+                        LogModule.EXTRACT,
+                        f"[WORKFLOW-EXECUTOR] Failed to persist layout_document: {layout_error}",
+                    )
+
+            if not hasattr(workflow, "attachment"):
                 return
             attachment_manager = getattr(workflow, "attachment", None)
             if not attachment_manager:

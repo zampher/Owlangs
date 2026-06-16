@@ -491,12 +491,30 @@ def _build_image_data_map_for_format_export(
     chart_body_format: str = "image",
 ) -> Dict[str, Dict[str, str]]:
     """Build image_data_map for equation/table/chart image export from layout ZIP and task cache."""
+    from utils.mineru_layout_utils import is_mineru_layout_image, is_mineru_layout_source
+
     image_data_map = _image_data_map_from_task_state(task_state)
     layout_doc = task_state.get("layout_document")
     orig_l = (task_state.get("original_filename") or "").lower()
-    if not orig_l.endswith(".pdf") or layout_doc is None:
+    if not is_mineru_layout_source(orig_l):
         return image_data_map
+
     zip_bytes = task_state.get("layout_source_zip")
+    if layout_doc is None and zip_bytes:
+        try:
+            from layout.registry import load_layout_from_engine_zip
+
+            layout_doc = load_layout_from_engine_zip("mineru", zip_bytes)
+            if layout_doc:
+                task_state["layout_document"] = layout_doc
+        except Exception as load_error:
+            logger.debug(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Failed to load layout_document from layout_source_zip: {load_error}",
+            )
+
+    if layout_doc is None:
+        return image_data_map
     if not zip_bytes:
         return image_data_map
 
@@ -511,7 +529,11 @@ def _build_image_data_map_for_format_export(
         chart_body_format=chart_body_format,
     )
 
-    if not _format_requires_md2docx(equation_format, table_body_format):
+    should_extract_layout_images = (
+        _format_requires_md2docx(equation_format, table_body_format)
+        or is_mineru_layout_image(orig_l)
+    )
+    if not should_extract_layout_images:
         return image_data_map
 
     zip_file = None
@@ -785,8 +807,15 @@ def _file_response_for_md_download(
     from utils.format_convert_utils import group_consecutive_images_for_markdown
 
     should_embed = embed_images if embed_images is not None else True
+    image_data_map = _build_image_data_map_for_format_export(
+        task_state,
+        md_content,
+        equation_format or "text",
+        table_body_format or "html",
+        "image",
+    )
     image_data_map = _merge_image_data_maps(
-        _image_data_map_from_task_state(task_state),
+        image_data_map,
         image_data_map_override,
     )
 
@@ -827,6 +856,13 @@ def _file_response_for_md_download(
         md_with_image_paths, saved_image_paths = _replace_placeholders_with_images(
             md_content, image_data_map, output_dir=zip_output_dir
         )
+        zip_bytes = task_state.get("layout_source_zip")
+        if zip_bytes and not saved_image_paths:
+            from utils.image_placeholder_utils import materialize_markdown_images_from_zip
+
+            md_with_image_paths, saved_image_paths = materialize_markdown_images_from_zip(
+                md_with_image_paths, zip_bytes, zip_output_dir
+            )
         # Download online images for workflows that use external URLs (e.g., HTML workflow)
         md_with_image_paths, online_paths = _download_online_images_for_markdown(
             md_with_image_paths, zip_output_dir
@@ -3636,17 +3672,20 @@ class DownloadService:
                             # Determine embed_images parameter (default: True for backward compatibility)
                             should_embed = embed_images if embed_images is not None else True
                         
-                            # Get image_data_map from task_state
-                            image_data_map_rebuild: dict[str, dict[str, str]] = {}
-                            existing_image_map = task_state.get("image_data_map")
-                            if isinstance(existing_image_map, dict):
-                                image_data_map_rebuild.update({
-                                    str(k): {
-                                        "data": (v or {}).get("data", ""),
-                                        "alt": (v or {}).get("alt", ""),
-                                    }
-                                    for k, v in existing_image_map.items()
-                                })
+                            # Build image_data_map from task cache + MinerU layout ZIP
+                            image_data_map_rebuild = _build_image_data_map_for_format_export(
+                                task_state,
+                                md_content,
+                                equation_format or "text",
+                                table_body_format or "html",
+                                chart_body_format or "image",
+                            )
+                            task_state["image_data_map"] = image_data_map_rebuild
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] MD rebuild image_data_map size={len(image_data_map_rebuild)} "
+                                f"(embed_images={should_embed})",
+                            )
                         
                             if should_embed:
                                 # Embed images as data URIs (single MD file)
@@ -3691,6 +3730,17 @@ class DownloadService:
                                     md_with_image_paths, saved_image_paths = _replace_placeholders_with_images(
                                         md_content, image_data_map_rebuild, output_dir=zip_output_dir
                                     )
+                                    zip_bytes = task_state.get("layout_source_zip")
+                                    if zip_bytes and not saved_image_paths:
+                                        from utils.image_placeholder_utils import (
+                                            materialize_markdown_images_from_zip,
+                                        )
+
+                                        md_with_image_paths, saved_image_paths = (
+                                            materialize_markdown_images_from_zip(
+                                                md_with_image_paths, zip_bytes, zip_output_dir
+                                            )
+                                        )
                                     _img_bidx, _path_to_bidx, _layout = _get_image_layout_for_grouping(
                                         task_state, equation_format=equation_format, table_body_format=table_body_format
                                     )

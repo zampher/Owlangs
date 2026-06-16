@@ -375,19 +375,38 @@ class BlockProcessor:
         """
         if not image_path:
             return None
-        
+
+        import os
+
         zip_file_list = zip_file.namelist()
+        zip_entry_map = {name.replace("\\", "/"): name for name in zip_file_list}
+        normalized = str(image_path).replace("\\", "/").lstrip("./")
+        basename = os.path.basename(normalized)
         possible_paths = [
             image_path,
-            image_path.lstrip('/'),
-            f"images/{image_path}",
-            f"images/{image_path.lstrip('/')}",
+            image_path.lstrip("/"),
+            normalized,
+            f"images/{normalized}",
+            f"images/{basename}",
         ]
-        
+
         for path in possible_paths:
-            if path in zip_file_list:
+            norm = str(path).replace("\\", "/")
+            candidate = zip_entry_map.get(norm)
+            if candidate:
                 try:
-                    return zip_file.read(path)
+                    return zip_file.read(candidate)
+                except Exception:
+                    continue
+
+        for norm_name, orig_name in zip_entry_map.items():
+            if (
+                norm_name == basename
+                or norm_name.endswith("/" + basename)
+                or norm_name.endswith("/images/" + basename)
+            ):
+                try:
+                    return zip_file.read(orig_name)
                 except Exception:
                     continue
         return None

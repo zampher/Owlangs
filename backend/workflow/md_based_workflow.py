@@ -26,6 +26,7 @@ from exporter.md.md2mdzip_exporter import MD2MDZipExporter
 from exporter.md.md2docx_exporter import MD2DOCXExporterConfig, MD2DOCXExporter
 from exporter.md.types import ConvertEngineType
 from logger.logger import LogModule
+from utils.mineru_layout_utils import is_mineru_layout_source
 from workflow.base import Workflow, WorkflowConfig
 from workflow.interfaces import MDFormatsExportable, HTMLExportable, DocxExportable
 from translator.ai_translator.md_translator import MDTranslatorConfig, MDTranslator
@@ -675,11 +676,11 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
             except Exception:
                 task_state_ref = None
 
-        # For PDF inputs with layout information, rebuild markdown text directly
+        # For PDF/image inputs with layout information, rebuild markdown text directly
         # from the layout document so that translation chunks align with layout blocks.
         if (
             original_filename
-            and original_filename.lower().endswith(".pdf")
+            and is_mineru_layout_source(original_filename)
             and self.layout_document is not None
             and self.config.translator_config
         ):

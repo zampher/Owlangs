@@ -1368,6 +1368,27 @@ class FormatConversionService:
                 }
                 from utils.translation_segments import build_segment_layout_block_map
                 st["segment_layout_block_map"] = build_segment_layout_block_map(all_segments)
+                prepared_chunks = [
+                    {
+                        "text": chunk.text,
+                        "chunk_type": chunk.chunk_type,
+                        "block_indices": chunk.block_indices,
+                        "image_path": chunk.image_path,
+                        "placeholder_id": chunk.image_placeholder
+                        if chunk.chunk_type == "image"
+                        else None,
+                        "is_image": chunk.chunk_type == "image",
+                    }
+                    for chunk in layout_result.chunks
+                ]
+                st["layout_prepared_chunks"] = prepared_chunks
+                st["layout_chunk_block_map"] = [
+                    chunk.get("block_indices") or [] for chunk in prepared_chunks
+                ]
+                st["layout_markdown_source"] = layout_result.markdown_text
+                st["source_input_type"] = "layout"
+                if layout_doc is not None:
+                    st["layout_document"] = layout_doc
                 st["segments_metadata"] = {
                     "source": workflow_type,
                     "workflow_type": workflow_type,

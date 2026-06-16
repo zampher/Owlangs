@@ -1058,12 +1058,13 @@ def rebuild_markdown_document_from_segments(
     # (e.g. equation_format=image / table_body_format=image have no effect).
     if layout_doc is not None and source_input_type != "layout":
         _has_layout_map = bool(task_state.get("layout_chunk_block_map")) if task_state else False
-        if _has_layout_map:
+        _has_segment_layout_map = bool(task_state.get("segment_layout_block_map")) if task_state else False
+        if _has_layout_map or _has_segment_layout_map:
             source_input_type = "layout"
             logger.info(
                 LogModule.RESTOR,
                 "[REBUILD] Auto-promoted source_input_type to 'layout' "
-                "(layout_document + layout_chunk_block_map present)",
+                "(layout_document + layout block map present)",
             )
 
     is_pdf_with_layout = layout_doc is not None and source_input_type == "layout"
