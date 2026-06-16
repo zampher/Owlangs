@@ -6,6 +6,14 @@ Supports both Cloud (mineru.net) and Local (v3.1+) deployments.
 from typing import Dict, Any, Optional
 import httpx
 
+from backend.auth.mineru_test_utils import (
+    build_health_probe_urls,
+    enrich_mineru_test_result,
+    extract_version_from_health_payload,
+    extract_version_from_payload,
+    infer_cloud_api_version,
+)
+
 from backend.config.config_loader import get_unified_config
 from backend.logger import unified_logger as logger
 from backend.logger.logger import LogModule
@@ -89,8 +97,13 @@ async def test_mineru_connectivity(
 
     base_url = base_url.rstrip('/')
 
-    # Detect backend type: prefer parser_subtype, fallback to URL detection
-    is_cloud = parser_subtype == "cloud" or base_url.startswith('https://mineru.net')
+    # Detect backend type: platform_key and parser_subtype take priority over URL heuristics.
+    is_cloud = platform_key == "mineru" or (
+        parser_subtype == "cloud" and platform_key != "mineru_local"
+    ) or (
+        platform_key != "mineru_local"
+        and base_url.startswith("https://mineru.net")
+    )
 
     logger.info(
         LogModule.AUTH,
@@ -100,9 +113,74 @@ async def test_mineru_connectivity(
     )
 
     if is_cloud:
-        return await _test_cloud_connectivity(base_url, mineru_token)
-    else:
-        return await _test_local_connectivity(base_url, mineru_token, platform_key)
+        result = await _test_cloud_connectivity(base_url, mineru_token)
+        if not result.get("mineru_version"):
+            probed = await _probe_mineru_version(base_url, mineru_token)
+            if probed:
+                result["mineru_version"] = probed
+        return enrich_mineru_test_result(
+            result,
+            api_version=infer_cloud_api_version(base_url),
+            model_version=model_version,
+        )
+    result = await _test_local_connectivity(base_url, mineru_token, platform_key)
+    if result.get("success") and not result.get("mineru_version"):
+        probed = await _probe_mineru_version(base_url, mineru_token)
+        if probed:
+            result["mineru_version"] = probed
+    return enrich_mineru_test_result(result, model_version=model_version)
+
+
+async def _probe_mineru_version(
+    base_url: str,
+    api_key: Optional[str] = None,
+) -> Optional[str]:
+    """Best-effort MinerU software version lookup via /health on likely base URLs."""
+    headers: Dict[str, str] = {}
+    if api_key and api_key.strip():
+        headers["Authorization"] = f"Bearer {api_key.strip()}"
+
+    async with httpx.AsyncClient(
+        timeout=10.0,
+        verify=False,
+        proxy=None,
+        mounts={"http://": None, "https://": None},
+    ) as client:
+        for health_url in build_health_probe_urls(base_url):
+            try:
+                response = await client.get(health_url, headers=headers)
+            except httpx.RequestError:
+                continue
+            if response.status_code != 200:
+                continue
+            header_version = (
+                response.headers.get("x-mineru-version")
+                or response.headers.get("X-MinerU-Version")
+            )
+            if isinstance(header_version, str) and header_version.strip():
+                return header_version.strip()
+            try:
+                payload = response.json()
+            except Exception:
+                payload = None
+            version = extract_version_from_health_payload(payload)
+            if version:
+                logger.info(
+                    LogModule.AUTH,
+                    f"[MINERU_TEST] Resolved MinerU version={version} from {health_url}",
+                )
+                return version
+    return None
+
+
+def _attach_version_to_result(result: Dict[str, Any], version: Optional[str]) -> Dict[str, Any]:
+    if not version or not result.get("success"):
+        return result
+    result["mineru_version"] = version
+    message = result.get("message")
+    if isinstance(message, str) and version not in message:
+        result["message"] = f"{message} (version: {version})"
+    return result
 
 
 async def _test_cloud_connectivity(base_url: str, mineru_token: Optional[str]) -> Dict[str, Any]:
@@ -132,14 +210,14 @@ async def _test_cloud_connectivity(base_url: str, mineru_token: Optional[str]) -
                 quota_data = quota_resp.json()
                 if quota_data.get('code') == 0:
                     # Quota query successful - connection is working
-                    # Note: user_left_quota=0 doesn't necessarily mean no quota,
-                    # it's just what the API returns
                     left_quota = quota_data.get('data', {}).get('user_left_quota', 'unknown')
-                    return {
-                        "success": True, 
+                    version = extract_version_from_payload(quota_data)
+                    result: Dict[str, Any] = {
+                        "success": True,
                         "message": f"Cloud MinerU connection successful (quota: {left_quota})",
-                        "quota": quota_data.get('data')
+                        "quota": quota_data.get('data'),
                     }
+                    return _attach_version_to_result(result, version)
             
             # Quota endpoint returned error but connection is working
             if quota_resp.status_code in (401, 403):
@@ -245,20 +323,26 @@ async def _test_local_connectivity(
         headers['Authorization'] = f'Bearer {api_key.strip()}'
 
     async with httpx.AsyncClient(timeout=15.0, verify=False, proxy=None, mounts={'http://': None, 'https://': None}) as client:
-        # First try /health endpoint (new in v3.1+)
-        try:
-            health_url = f"{base_url}/health"
-            response = await client.get(health_url, headers=headers)
-            
-            if response.status_code == 200:
-                return {
+        # First try /health endpoint (new in v3.1+) on all likely URLs
+        for health_url in build_health_probe_urls(base_url):
+            try:
+                response = await client.get(health_url, headers=headers)
+                if response.status_code != 200:
+                    continue
+                try:
+                    health_payload = response.json()
+                except Exception:
+                    health_payload = None
+                version = extract_version_from_health_payload(health_payload)
+                result = {
                     "success": True,
                     "message": f"Local MinerU server is running at {base_url}",
                     "status_code": 200,
-                    "endpoint": "/health"
+                    "endpoint": health_url.replace(base_url.rstrip('/'), '').lstrip('/') or "/health",
                 }
-        except httpx.RequestError:
-            pass  # Fall back to other endpoints
+                return _attach_version_to_result(result, version)
+            except httpx.RequestError:
+                continue
         
         # Try main API endpoints
         endpoints_to_try = [
@@ -272,21 +356,25 @@ async def _test_local_connectivity(
                 response = await client.get(test_url, headers=headers)
                 
                 if response.status_code == 405:
-                    return {
+                    result = {
                         "success": True, 
                         "message": f"Local MinerU server is running at {base_url}",
                         "status_code": 405,
                         "endpoint": test_url,
                         "detail": "Server responded with 405 Method Not Allowed (expected for GET on POST endpoints)"
                     }
+                    version = await _probe_mineru_version(base_url, api_key)
+                    return _attach_version_to_result(result, version)
                 
                 if response.status_code == 422:
-                    return {
+                    result = {
                         "success": True,
                         "message": f"Local MinerU server is running at {base_url}",
                         "status_code": 422,
                         "endpoint": test_url
                     }
+                    version = await _probe_mineru_version(base_url, api_key)
+                    return _attach_version_to_result(result, version)
                 
                 if response.status_code == 401:
                     return {"success": False, "message": "MinerU API Key invalid or expired"}
@@ -306,13 +394,15 @@ async def _test_local_connectivity(
                 response = await client.post(test_url, headers=headers, content=b"")
                 
                 if response.status_code == 422:
-                    return {
+                    result = {
                         "success": True,
                         "message": f"Local MinerU server is running at {base_url}",
                         "status_code": 422,
                         "endpoint": test_url,
                         "detail": "Server accepted POST request (422 = missing required fields, which is expected)"
                     }
+                    version = await _probe_mineru_version(base_url, api_key)
+                    return _attach_version_to_result(result, version)
                     
             except httpx.RequestError:
                 continue

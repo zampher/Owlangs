@@ -19,6 +19,7 @@ import '../models/preview_tab.dart';
 import '../providers/translation_state_provider_family.dart';
 import '../providers/preview_tabs_provider.dart';
 import '../../../shared/utils/mineru_language_data.dart';
+import '../../../shared/utils/mineru_test_result_utils.dart';
 
 // 翻译快速设置状态管理
 final StateNotifierProvider<TranslationQuickSettingsNotifier,
@@ -1024,10 +1025,10 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                       if (!context.mounted) return;
                       final success = result?['success'] == true;
                       final l10nSnack = AppLocalizations.of(context)!;
-                      final message = result?['message']?.toString() ??
-                          (success
-                              ? l10nSnack.quickSettingsConnectionSuccessful
-                              : l10nSnack.quickSettingsMineruConnectionFailed);
+                      final String message = success
+                          ? buildMinerUTestSuccessMessage(l10nSnack, result)
+                          : (result?['message']?.toString() ??
+                              l10nSnack.quickSettingsMineruConnectionFailed);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(

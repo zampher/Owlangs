@@ -10,6 +10,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../shared/utils/language_mapper.dart';
 import '../../../shared/services/glossary_api_service.dart';
 import '../../../shared/services/config_service.dart' show AIPlatformInfo, ConfigService;
+import '../../../shared/utils/mineru_test_result_utils.dart';
 import '../../../shared/providers/settings_provider.dart'
     show globalSettingsProvider;
 import '../../../features/settings/screens/ai_platform_settings.dart'
@@ -516,12 +517,16 @@ class _BatchQuickSettingsPanelState
                     final testLabel = selectedParser == 'mineru_local'
                         ? l10n.batchUploadMineruLocal
                         : l10n.batchUploadMineru;
+                    final String detailMessage = success
+                        ? buildMinerUTestSuccessMessage(l10n, result)
+                        : (result?['message']?.toString() ??
+                            l10n.quickSettingsMineruConnectionFailed);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
                           l10n.quickSettingsPlatformMessage(
                             testLabel,
-                            result?['message']?.toString() ?? (success ? l10n.quickSettingsConnectionSuccessful : l10n.quickSettingsMineruConnectionFailed),
+                            detailMessage,
                           ),
                         ),
                         duration: const Duration(seconds: 3),

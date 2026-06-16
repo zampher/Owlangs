@@ -13,6 +13,7 @@ import '../../../shared/providers/settings_provider.dart'
     show GlobalSettings, GlobalSettingsNotifier, globalSettingsProvider;
 import '../../../shared/services/config_service.dart'
     show AIPlatformInfo, ConfigService;
+import '../../../shared/utils/mineru_test_result_utils.dart';
 import 'ai_platform_settings.dart'
     show
         AIPlatformSettings,
@@ -1073,7 +1074,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       setState(() {
         _mineruLastTestSuccess = success;
         _mineruTestResult = success
-            ? loc.aiPlatformConnectionTestSucceeded
+            ? buildPlatformTestSuccessMessage(l10n, 'mineru', result)
             : loc.aiPlatformConnectionTestFailed(
                 result['message']?.toString() ?? '',
               );
@@ -1137,7 +1138,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       setState(() {
         _mineruLocalLastTestSuccess = success;
         _mineruLocalTestResult = success
-            ? loc.aiPlatformConnectionTestSucceeded
+            ? buildPlatformTestSuccessMessage(l10n, 'mineru_local', result)
             : loc.aiPlatformConnectionTestFailed(
                 result['message']?.toString() ?? '',
               );

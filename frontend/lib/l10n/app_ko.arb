@@ -917,6 +917,38 @@
   "aiPlatformApiKeyOptionalHint": "필요 없으면 비워두세요",
   "optional": "선택",
   "aiPlatformConnectionTestSucceeded": "연결 테스트 성공",
+  "mineruConnectionSuccessWithVersion": "연결 테스트 성공. MinerU 버전: {version}",
+  "@mineruConnectionSuccessWithVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "mineruConnectionSuccessWithApiVersion": "연결 테스트 성공. MinerU API {version}",
+  "@mineruConnectionSuccessWithApiVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "mineruConnectionSuccessWithModelVersion": "연결 테스트 성공. MinerU 엔진: {modelVersion}",
+  "@mineruConnectionSuccessWithModelVersion": {
+    "placeholders": {
+      "modelVersion": {
+        "type": "String"
+      }
+    }
+  },
+  "mineruConnectionSuccessCloudWithApi": "연결 테스트 성공. 클라우드 MinerU(API {apiVersion}; 클라우드 API는 서버 버전을 제공하지 않음)",
+  "@mineruConnectionSuccessCloudWithApi": {
+    "placeholders": {
+      "apiVersion": {
+        "type": "String"
+      }
+    }
+  },
   "aiPlatformConnectionTestFailed": "연결 테스트 실패: {message}",
   "aiPlatformPleaseEnterApiUrlFirst": "먼저 API URL을 입력하세요",
   "aiPlatformNoModelsFound": "모델을 찾을 수 없습니다",

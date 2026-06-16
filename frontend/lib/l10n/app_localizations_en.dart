@@ -2883,6 +2883,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiPlatformConnectionTestSucceeded => 'Connection test succeeded';
 
   @override
+  String mineruConnectionSuccessWithVersion(String version) {
+    return 'Connection test succeeded. MinerU version: $version';
+  }
+
+  @override
+  String mineruConnectionSuccessWithApiVersion(String version) {
+    return 'Connection test succeeded. MinerU API $version';
+  }
+
+  @override
+  String mineruConnectionSuccessWithModelVersion(String modelVersion) {
+    return 'Connection test succeeded. MinerU engine: $modelVersion';
+  }
+
+  @override
+  String mineruConnectionSuccessCloudWithApi(String apiVersion) {
+    return 'Connection test succeeded. Cloud MinerU (API $apiVersion; server version is not exposed by the cloud API)';
+  }
+
+  @override
   String aiPlatformConnectionTestFailed(Object message) {
     return 'Connection test failed: $message';
   }

@@ -997,6 +997,38 @@
   "aiPlatformApiKeyOptionalHint": "Leave empty if not required",
   "optional": "optional",
   "aiPlatformConnectionTestSucceeded": "Connection test succeeded",
+  "mineruConnectionSuccessWithVersion": "Connection test succeeded. MinerU version: {version}",
+  "@mineruConnectionSuccessWithVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "mineruConnectionSuccessWithApiVersion": "Connection test succeeded. MinerU API {version}",
+  "@mineruConnectionSuccessWithApiVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "mineruConnectionSuccessWithModelVersion": "Connection test succeeded. MinerU engine: {modelVersion}",
+  "@mineruConnectionSuccessWithModelVersion": {
+    "placeholders": {
+      "modelVersion": {
+        "type": "String"
+      }
+    }
+  },
+  "mineruConnectionSuccessCloudWithApi": "Connection test succeeded. Cloud MinerU (API {apiVersion}; server version is not exposed by the cloud API)",
+  "@mineruConnectionSuccessCloudWithApi": {
+    "placeholders": {
+      "apiVersion": {
+        "type": "String"
+      }
+    }
+  },
   "aiPlatformConnectionTestFailed": "Connection test failed: {message}",
   "aiPlatformPleaseEnterApiUrlFirst": "Please enter API URL first",
   "aiPlatformNoModelsFound": "No models found",

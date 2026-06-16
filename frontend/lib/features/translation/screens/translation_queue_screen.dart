@@ -104,41 +104,41 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
   }
 
   Future<Map<String, dynamic>> _enrichTaskRow(Map<String, dynamic> row) async {
-    _mergeDownloadsFromStashMeta(row);
-    final String id = row['task_id']?.toString() ?? '';
+        _mergeDownloadsFromStashMeta(row);
+        final String id = row['task_id']?.toString() ?? '';
     if (id.isEmpty) {
       return row;
     }
-    try {
-      final Map<String, dynamic> st = await _svc.getStatus(id);
-      row['status'] = st['status'] ?? row['status'];
-      row['progress'] = st['progress'] ?? row['progress'];
-      if (row['status']?.toString().toLowerCase() == 'completed') {
-        row['progress'] = 100;
-      }
-      row['message'] = st['message'] ?? row['message'];
-      row['message_level'] = st['message_level'] ?? row['message_level'];
-      row['error'] = st['error'] ?? row['error'];
-      if (st['translation_stats'] is Map) {
-        row['translation_stats'] = Map<String, dynamic>.from(
-          st['translation_stats'] as Map<dynamic, dynamic>,
-        );
-      }
-      if (st['token_usage'] is Map) {
-        row['token_usage'] = Map<String, dynamic>.from(
-          st['token_usage'] as Map<dynamic, dynamic>,
-        );
-      }
-      final dynamic sd = st['downloads'];
-      if (sd is Map && sd.isNotEmpty) {
-        row['downloads'] = Map<String, dynamic>.from(sd);
-      } else {
-        _mergeDownloadsFromStashMeta(row);
-      }
-    } catch (_) {
-      _mergeDownloadsFromStashMeta(row);
-    }
-    return row;
+        try {
+          final Map<String, dynamic> st = await _svc.getStatus(id);
+          row['status'] = st['status'] ?? row['status'];
+          row['progress'] = st['progress'] ?? row['progress'];
+          if (row['status']?.toString().toLowerCase() == 'completed') {
+            row['progress'] = 100;
+          }
+          row['message'] = st['message'] ?? row['message'];
+          row['message_level'] = st['message_level'] ?? row['message_level'];
+          row['error'] = st['error'] ?? row['error'];
+          if (st['translation_stats'] is Map) {
+            row['translation_stats'] = Map<String, dynamic>.from(
+              st['translation_stats'] as Map<dynamic, dynamic>,
+            );
+          }
+          if (st['token_usage'] is Map) {
+            row['token_usage'] = Map<String, dynamic>.from(
+              st['token_usage'] as Map<dynamic, dynamic>,
+            );
+          }
+          final dynamic sd = st['downloads'];
+          if (sd is Map && sd.isNotEmpty) {
+            row['downloads'] = Map<String, dynamic>.from(sd);
+          } else {
+            _mergeDownloadsFromStashMeta(row);
+          }
+        } catch (_) {
+          _mergeDownloadsFromStashMeta(row);
+        }
+        return row;
   }
 
   Future<List<Map<String, dynamic>>> _enrichTasks(
@@ -148,12 +148,12 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
   }
 
   Future<void> _refresh() async {
-    if (!mounted) return;
+      if (!mounted) return;
     // Skip refresh when app is in background or this screen is not the current route
     if (!_appInForeground) return;
     final route = ModalRoute.of(context);
     if (route != null && !route.isCurrent) return;
-    setState(() {
+      setState(() {
       _loading = true;
       _loadError = null;
     });
@@ -2031,9 +2031,9 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     if (spans.isEmpty) return const SizedBox.shrink();
 
     return RichText(
-      text: TextSpan(children: spans),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
+        text: TextSpan(children: spans),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
     );
   }
 
@@ -2401,13 +2401,13 @@ class _DownloadFormatButton extends StatelessWidget {
       label: label,
       button: true,
       child: IconButton(
-        icon: Icon(_downloadFormatIcon(ft), size: 20),
-        visualDensity: VisualDensity.compact,
-        padding: const EdgeInsets.all(4),
-        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-        onPressed: url.isNotEmpty
-            ? () => onDownload(taskId, ft, url, name, isFormatConversion)
-            : null,
+      icon: Icon(_downloadFormatIcon(ft), size: 20),
+      visualDensity: VisualDensity.compact,
+      padding: const EdgeInsets.all(4),
+      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+      onPressed: url.isNotEmpty
+          ? () => onDownload(taskId, ft, url, name, isFormatConversion)
+          : null,
       ),
     );
   }

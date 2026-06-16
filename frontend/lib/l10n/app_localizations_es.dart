@@ -2923,6 +2923,26 @@ class AppLocalizationsEs extends AppLocalizations {
   String get aiPlatformConnectionTestSucceeded => 'Prueba de conexión exitosa';
 
   @override
+  String mineruConnectionSuccessWithVersion(String version) {
+    return 'Prueba de conexión exitosa. Versión de MinerU: $version';
+  }
+
+  @override
+  String mineruConnectionSuccessWithApiVersion(String version) {
+    return 'Prueba de conexión exitosa. MinerU API $version';
+  }
+
+  @override
+  String mineruConnectionSuccessWithModelVersion(String modelVersion) {
+    return 'Prueba de conexión exitosa. Motor MinerU: $modelVersion';
+  }
+
+  @override
+  String mineruConnectionSuccessCloudWithApi(String apiVersion) {
+    return 'Prueba de conexión exitosa. MinerU en la nube (API $apiVersion; la API en la nube no expone la versión del servidor)';
+  }
+
+  @override
   String aiPlatformConnectionTestFailed(Object message) {
     return 'Prueba de conexión fallida: $message';
   }

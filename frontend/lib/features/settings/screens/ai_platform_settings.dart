@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../shared/services/config_service.dart';
 import '../../../shared/services/settings_service.dart';
+import '../../../shared/utils/mineru_test_result_utils.dart';
 import '../../../l10n/app_localizations.dart';
 
 /// AI Platform Settings Screen
@@ -1593,7 +1594,11 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
       setState(() {
         _lastTestSuccess = success;
         _testResult = success
-            ? l10n.aiPlatformConnectionTestSucceeded
+            ? buildPlatformTestSuccessMessage(
+                l10n,
+                widget.platformInfo.key,
+                result,
+              )
             : l10n.aiPlatformConnectionTestFailed(result['message']?.toString() ?? '');
       });
     } catch (e) {
@@ -2233,7 +2238,16 @@ class AIPlatformSettingsNotifier extends StateNotifier<AIPlatformSettings> {
       final message = result?['error']?.toString() ??
           result?['message']?.toString() ??
           'Unknown error';
-      return <String, dynamic>{'success': success, 'message': message};
+      return <String, dynamic>{
+        'success': success,
+        'message': message,
+        if (result?['mineru_version'] != null)
+          'mineru_version': result!['mineru_version'],
+        if (result?['api_version'] != null)
+          'api_version': result!['api_version'],
+        if (result?['model_version'] != null)
+          'model_version': result!['model_version'],
+      };
     } catch (e) {
       // Even if test fails, update status to unavailable
       final updatedPlatforms =
@@ -2537,7 +2551,11 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
       setState(() {
         _lastTestSuccess = success;
         _testResult = success
-            ? l10n.aiPlatformConnectionTestSucceeded
+            ? buildPlatformTestSuccessMessage(
+                l10n,
+                widget.platformInfo.key,
+                result,
+              )
             : l10n.aiPlatformConnectionTestFailed(result['message']?.toString() ?? '');
       });
     } catch (e) {
@@ -3022,7 +3040,11 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
       setState(() {
         _lastTestSuccess = success;
         _testResult = success
-            ? l10n.aiPlatformConnectionTestSucceeded
+            ? buildPlatformTestSuccessMessage(
+                l10n,
+                widget.platformInfo.key,
+                result,
+              )
             : l10n.aiPlatformConnectionTestFailed(result['message']?.toString() ?? '');
       });
     } catch (e) {

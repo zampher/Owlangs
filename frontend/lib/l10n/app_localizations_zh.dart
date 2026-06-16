@@ -2770,6 +2770,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiPlatformConnectionTestSucceeded => '连接测试成功';
 
   @override
+  String mineruConnectionSuccessWithVersion(String version) {
+    return '连接测试成功。MinerU 版本：$version';
+  }
+
+  @override
+  String mineruConnectionSuccessWithApiVersion(String version) {
+    return '连接测试成功。MinerU API $version';
+  }
+
+  @override
+  String mineruConnectionSuccessWithModelVersion(String modelVersion) {
+    return '连接测试成功。MinerU 引擎：$modelVersion';
+  }
+
+  @override
+  String mineruConnectionSuccessCloudWithApi(String apiVersion) {
+    return '连接测试成功。云端 MinerU（API $apiVersion；云端 API 不返回服务端软件版本）';
+  }
+
+  @override
   String aiPlatformConnectionTestFailed(Object message) {
     return '连接测试失败：$message';
   }

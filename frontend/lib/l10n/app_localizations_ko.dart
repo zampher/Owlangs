@@ -2793,6 +2793,26 @@ class AppLocalizationsKo extends AppLocalizations {
   String get aiPlatformConnectionTestSucceeded => '연결 테스트 성공';
 
   @override
+  String mineruConnectionSuccessWithVersion(String version) {
+    return '연결 테스트 성공. MinerU 버전: $version';
+  }
+
+  @override
+  String mineruConnectionSuccessWithApiVersion(String version) {
+    return '연결 테스트 성공. MinerU API $version';
+  }
+
+  @override
+  String mineruConnectionSuccessWithModelVersion(String modelVersion) {
+    return '연결 테스트 성공. MinerU 엔진: $modelVersion';
+  }
+
+  @override
+  String mineruConnectionSuccessCloudWithApi(String apiVersion) {
+    return '연결 테스트 성공. 클라우드 MinerU(API $apiVersion; 클라우드 API는 서버 버전을 제공하지 않음)';
+  }
+
+  @override
   String aiPlatformConnectionTestFailed(Object message) {
     return '연결 테스트 실패: $message';
   }

@@ -2788,6 +2788,26 @@ class AppLocalizationsJa extends AppLocalizations {
   String get aiPlatformConnectionTestSucceeded => '接続テスト成功';
 
   @override
+  String mineruConnectionSuccessWithVersion(String version) {
+    return '接続テスト成功。MinerU バージョン：$version';
+  }
+
+  @override
+  String mineruConnectionSuccessWithApiVersion(String version) {
+    return '接続テスト成功。MinerU API $version';
+  }
+
+  @override
+  String mineruConnectionSuccessWithModelVersion(String modelVersion) {
+    return '接続テスト成功。MinerU エンジン：$modelVersion';
+  }
+
+  @override
+  String mineruConnectionSuccessCloudWithApi(String apiVersion) {
+    return '接続テスト成功。クラウド MinerU（API $apiVersion；クラウド API はサーバー版を返しません）';
+  }
+
+  @override
   String aiPlatformConnectionTestFailed(Object message) {
     return '接続テスト失敗：$message';
   }

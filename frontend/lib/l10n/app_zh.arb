@@ -961,6 +961,38 @@
   "aiPlatformApiKeyOptionalHint": "如无需验证可留空",
   "optional": "可选",
   "aiPlatformConnectionTestSucceeded": "连接测试成功",
+  "mineruConnectionSuccessWithVersion": "连接测试成功。MinerU 版本：{version}",
+  "@mineruConnectionSuccessWithVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "mineruConnectionSuccessWithApiVersion": "连接测试成功。MinerU API {version}",
+  "@mineruConnectionSuccessWithApiVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "mineruConnectionSuccessWithModelVersion": "连接测试成功。MinerU 引擎：{modelVersion}",
+  "@mineruConnectionSuccessWithModelVersion": {
+    "placeholders": {
+      "modelVersion": {
+        "type": "String"
+      }
+    }
+  },
+  "mineruConnectionSuccessCloudWithApi": "连接测试成功。云端 MinerU（API {apiVersion}；云端 API 不返回服务端软件版本）",
+  "@mineruConnectionSuccessCloudWithApi": {
+    "placeholders": {
+      "apiVersion": {
+        "type": "String"
+      }
+    }
+  },
   "aiPlatformConnectionTestFailed": "连接测试失败：{message}",
   "aiPlatformPleaseEnterApiUrlFirst": "请先输入API URL",
   "aiPlatformNoModelsFound": "未找到模型",

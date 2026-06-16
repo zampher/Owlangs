@@ -5108,6 +5108,30 @@ abstract class AppLocalizations {
   /// **'Connection test succeeded'**
   String get aiPlatformConnectionTestSucceeded;
 
+  /// No description provided for @mineruConnectionSuccessWithVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection test succeeded. MinerU version: {version}'**
+  String mineruConnectionSuccessWithVersion(String version);
+
+  /// No description provided for @mineruConnectionSuccessWithApiVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection test succeeded. MinerU API {version}'**
+  String mineruConnectionSuccessWithApiVersion(String version);
+
+  /// No description provided for @mineruConnectionSuccessWithModelVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection test succeeded. MinerU engine: {modelVersion}'**
+  String mineruConnectionSuccessWithModelVersion(String modelVersion);
+
+  /// No description provided for @mineruConnectionSuccessCloudWithApi.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection test succeeded. Cloud MinerU (API {apiVersion}; server version is not exposed by the cloud API)'**
+  String mineruConnectionSuccessCloudWithApi(String apiVersion);
+
   /// No description provided for @aiPlatformConnectionTestFailed.
   ///
   /// In en, this message translates to:

@@ -60,6 +60,12 @@ class AIPlatformTestService {
         'success': ok,
         'message': message,
         if (error != null) 'error': error,
+        if (resp.data?['mineru_version'] != null)
+          'mineru_version': resp.data['mineru_version'],
+        if (resp.data?['api_version'] != null)
+          'api_version': resp.data['api_version'],
+        if (resp.data?['model_version'] != null)
+          'model_version': resp.data['model_version'],
         'platform': platformType,
         'response_time': DateTime.now().millisecondsSinceEpoch,
       };
@@ -129,6 +135,12 @@ class AIPlatformTestService {
       return <String, dynamic>{
         'success': ok,
         'message': message,
+        if (resp.data?['mineru_version'] != null)
+          'mineru_version': resp.data['mineru_version'],
+        if (resp.data?['api_version'] != null)
+          'api_version': resp.data['api_version'],
+        if (resp.data?['model_version'] != null)
+          'model_version': resp.data['model_version'],
         'platform': platformType,
         'response_time': DateTime.now().millisecondsSinceEpoch,
       };

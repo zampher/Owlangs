@@ -996,6 +996,38 @@
   "aiPlatformApiKeyOptionalHint": "Dejar vacío si no es requerido",
   "optional": "opcional",
   "aiPlatformConnectionTestSucceeded": "Prueba de conexión exitosa",
+  "mineruConnectionSuccessWithVersion": "Prueba de conexión exitosa. Versión de MinerU: {version}",
+  "@mineruConnectionSuccessWithVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "mineruConnectionSuccessWithApiVersion": "Prueba de conexión exitosa. MinerU API {version}",
+  "@mineruConnectionSuccessWithApiVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "mineruConnectionSuccessWithModelVersion": "Prueba de conexión exitosa. Motor MinerU: {modelVersion}",
+  "@mineruConnectionSuccessWithModelVersion": {
+    "placeholders": {
+      "modelVersion": {
+        "type": "String"
+      }
+    }
+  },
+  "mineruConnectionSuccessCloudWithApi": "Prueba de conexión exitosa. MinerU en la nube (API {apiVersion}; la API en la nube no expone la versión del servidor)",
+  "@mineruConnectionSuccessCloudWithApi": {
+    "placeholders": {
+      "apiVersion": {
+        "type": "String"
+      }
+    }
+  },
   "aiPlatformConnectionTestFailed": "Prueba de conexión fallida: {message}",
   "aiPlatformNoModelsFound": "No se encontraron modelos",
   "aiPlatformFailedToLoadModels": "Error al cargar modelos",
