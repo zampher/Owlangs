@@ -507,6 +507,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationExportChartFormatHtml => 'HTML';
 
   @override
+  String get translationImageCoverColorModeLabel => '背景消去:';
+
+  @override
+  String get translationImageCoverColorModeMax => '最も明るいピクセル（最大）';
+
+  @override
+  String get translationImageCoverColorModeMin => '最も暗いピクセル（最小）';
+
+  @override
+  String get translationImageCoverColorModeAvg => '平均ピクセル';
+
+  @override
   String get translationExportBilingualExport => 'バイリンガル書き出し';
 
   @override
@@ -569,6 +581,13 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get translationExportPdfPreserveLayoutDesc =>
       '元の PDF 版式に訳文を重ね、レイアウトと図表位置を維持';
+
+  @override
+  String get translationExportImageOriginalLayout => 'Original layout image';
+
+  @override
+  String get translationExportImageOriginalLayoutDesc =>
+      'Erase OCR text and write translation on the source image';
 
   @override
   String get translationExportPdfReflow => '再排版 PDF';
@@ -3759,6 +3778,14 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get translationPreviewBatchFontTooltip => '選択したセグメントにフォント設定を適用';
+
+  @override
+  String get translationPreviewBatchFontSizeDecreaseTooltip =>
+      '選択したセグメントのフォントサイズを 0.1 pt 縮小';
+
+  @override
+  String get translationPreviewBatchFontSizeIncreaseTooltip =>
+      '選択したセグメントのフォントサイズを 0.1 pt 拡大';
 
   @override
   String get translationPreviewBatchLeading => '行間一括';

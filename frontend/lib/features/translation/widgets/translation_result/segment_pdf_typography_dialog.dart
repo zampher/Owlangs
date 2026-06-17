@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../l10n/app_localizations.dart';
 
-const double kPdfFontSizeMin = 5.0;
+const double kPdfFontSizeMin = 0.5;
 const double kPdfFontSizeMax = 72.0;
 const double kPdfFontSizeStep = 0.1;
 
@@ -21,6 +21,58 @@ double snapPdfFontSize(double value) {
   final double clamped = value.clamp(kPdfFontSizeMin, kPdfFontSizeMax);
   final int steps = (clamped / kPdfFontSizeStep).round();
   return double.parse((steps * kPdfFontSizeStep).toStringAsFixed(1));
+}
+
+/// Resolved segment font size for UI labels and batch ± steps (single source of truth).
+double? effectivePdfSegmentFontSizePtOrNull({
+  String? fontSizeSource,
+  double? fontSizePt,
+  double? computedFontSizePt,
+}) {
+  // User override: show persisted pt (strict render target). Auto: use computed dry-run.
+  if (fontSizeSource == 'user' && fontSizePt != null) {
+    return snapPdfFontSize(fontSizePt);
+  }
+  if (computedFontSizePt != null) {
+    return snapPdfFontSize(computedFontSizePt);
+  }
+  if (fontSizePt != null) {
+    return snapPdfFontSize(fontSizePt);
+  }
+  return null;
+}
+
+double effectivePdfSegmentFontSizePt({
+  String? fontSizeSource,
+  double? fontSizePt,
+  double? computedFontSizePt,
+}) {
+  return effectivePdfSegmentFontSizePtOrNull(
+        fontSizeSource: fontSizeSource,
+        fontSizePt: fontSizePt,
+        computedFontSizePt: computedFontSizePt,
+      ) ??
+      kPdfFontSizeMin;
+}
+
+double effectivePdfSegmentFontSizePtFromMetadata(
+  Map<String, dynamic> metadata,
+) {
+  double? readDouble(dynamic raw) {
+    if (raw is num) {
+      return raw.toDouble();
+    }
+    if (raw is String) {
+      return double.tryParse(raw);
+    }
+    return null;
+  }
+
+  return effectivePdfSegmentFontSizePt(
+    fontSizeSource: metadata['font_size_source'] as String?,
+    fontSizePt: readDouble(metadata['font_size_pt']),
+    computedFontSizePt: readDouble(metadata['computed_font_size_pt']),
+  );
 }
 
 double snapPdfLeadingEm(double value) {

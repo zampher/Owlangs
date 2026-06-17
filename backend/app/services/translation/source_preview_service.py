@@ -1992,6 +1992,14 @@ class SourcePreviewService:
                     }
                     for k, v in existing_image_map.items()
                 })
+
+            from utils.mineru_image_data_map import populate_image_data_map_from_mineru_zip
+
+            populate_image_data_map_from_mineru_zip(
+                image_data_map,
+                task_state,
+                layout_doc=layout_doc,
+            )
             
             zip_bytes = task_state.get("layout_source_zip")
             zip_file = None
@@ -2091,20 +2099,20 @@ class SourcePreviewService:
                         chunk_text = chunk_text or f"<ph-{placeholder_id}>"
                     data_uri = _read_image_data_uri(chunk.image_path) if chunk.image_path else None
                     if placeholder_id and data_uri:
+                        from utils.mineru_image_data_map import register_image_data_uri
+
                         alt_text = chunk.image_alt or (chunk.image_path or "Image")
                         image_data_map[placeholder_id] = {
                             "data": data_uri or "",
                             "alt": alt_text or "Image",
                         }
                         if chunk.image_path:
-                            filename_key = os.path.basename(
-                                chunk.image_path.replace("\\", "/")
+                            register_image_data_uri(
+                                image_data_map,
+                                chunk.image_path,
+                                data_uri,
+                                alt=alt_text,
                             )
-                            if filename_key and filename_key not in image_data_map:
-                                image_data_map[filename_key] = {
-                                    "data": data_uri,
-                                    "alt": chunk.image_path,
-                                }
                     if is_image or (is_chart_body and placeholder_id):
                         image_segment_indices.append(idx)
                 else:

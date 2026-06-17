@@ -519,6 +519,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationExportChartFormatHtml => 'HTML';
 
   @override
+  String get translationImageCoverColorModeLabel => 'Erase background:';
+
+  @override
+  String get translationImageCoverColorModeMax => 'Brightest pixel (max)';
+
+  @override
+  String get translationImageCoverColorModeMin => 'Darkest pixel (min)';
+
+  @override
+  String get translationImageCoverColorModeAvg => 'Average pixel (mean)';
+
+  @override
   String get translationExportBilingualExport => 'Bilingual Export';
 
   @override
@@ -584,6 +596,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get translationExportPdfPreserveLayoutDesc =>
       'Overlay translation on the original PDF layout';
+
+  @override
+  String get translationExportImageOriginalLayout => 'Original layout image';
+
+  @override
+  String get translationExportImageOriginalLayoutDesc =>
+      'Erase OCR text and write translation on the source image';
 
   @override
   String get translationExportPdfReflow => 'Reflow PDF';
@@ -3895,6 +3914,14 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get translationPreviewBatchFontTooltip =>
       'Apply font settings to selected segments';
+
+  @override
+  String get translationPreviewBatchFontSizeDecreaseTooltip =>
+      'Decrease font size by 0.1 pt for selected segments';
+
+  @override
+  String get translationPreviewBatchFontSizeIncreaseTooltip =>
+      'Increase font size by 0.1 pt for selected segments';
 
   @override
   String get translationPreviewBatchLeading => 'Batch line spacing';

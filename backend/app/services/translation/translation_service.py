@@ -2444,6 +2444,22 @@ class TranslationService:
                             }
                             for k, v in existing_image_map.items()
                         })
+
+                    from utils.mineru_image_data_map import (
+                        lookup_image_data_entry,
+                        populate_image_data_map_from_mineru_zip,
+                    )
+                    mineru_images_added = populate_image_data_map_from_mineru_zip(
+                        image_data_map,
+                        task_state,
+                        layout_doc=task_state.get("layout_document"),
+                    )
+                    if mineru_images_added:
+                        logger.info(
+                            LogModule.EXTRACT,
+                            f"[PREVIEW] Task {task_id}: Populated {mineru_images_added} MinerU ZIP "
+                            f"image_data_map entries for markdown preview",
+                        )
                     
                     # Extract image data from markdown segments
                     import re
@@ -2638,7 +2654,17 @@ class TranslationService:
                                     alt_text = markdown_match.group(1) or "Image"
                                     image_path = markdown_match.group(2)
                                     placeholder_id = placeholder_id or f"img-{idx}"
-                                    
+
+                                    zip_entry = lookup_image_data_entry(image_data_map, image_path)
+                                    if zip_entry and zip_entry.get("data"):
+                                        image_data_uri = zip_entry["data"]
+                                        alt_text = zip_entry.get("alt") or alt_text
+                                        logger.debug(
+                                            LogModule.EXTRACT,
+                                            f"[PREVIEW] Task {task_id}: Resolved markdown image from "
+                                            f"image_data_map: {image_path}",
+                                        )
+
                                     # Try to read image from file system (if path is absolute or relative to temp_dir)
                                     temp_dir = task_state.get("temp_dir")
                                     if temp_dir and os.path.isdir(temp_dir):

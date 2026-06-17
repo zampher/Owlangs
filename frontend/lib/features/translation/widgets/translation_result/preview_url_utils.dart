@@ -7,6 +7,7 @@ import '../../providers/format_settings_provider.dart';
 Map<String, String> buildPreviewExportQueryParams(
   FormatSettings formatSettings, {
   required bool isPdfWorkflow,
+  bool isImageWorkflow = false,
   String? rendererType,
 }) {
   final Map<String, String> params = <String, String>{
@@ -17,6 +18,9 @@ Map<String, String> buildPreviewExportQueryParams(
     'chart_body_format':
         formatSettings.getChartFormat(isPdfWorkflow: isPdfWorkflow),
   };
+  if (isImageWorkflow) {
+    params['cover_color_mode'] = formatSettings.getCoverColorMode();
+  }
   if (rendererType != null && rendererType.isNotEmpty) {
     params['renderer_type'] = rendererType;
   }

@@ -671,14 +671,19 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
   }
 
   double? _effectiveFontSizePtOrNull() {
-    if (widget.fontSizeSource == 'user' && widget.fontSizePt != null) {
-      return widget.fontSizePt;
-    }
-    return widget.computedFontSizePt ?? widget.fontSizePt;
+    return effectivePdfSegmentFontSizePtOrNull(
+      fontSizeSource: widget.fontSizeSource,
+      fontSizePt: widget.fontSizePt,
+      computedFontSizePt: widget.computedFontSizePt,
+    );
   }
 
   double _effectiveFontSizePt() {
-    return _effectiveFontSizePtOrNull() ?? 12.0;
+    return effectivePdfSegmentFontSizePt(
+      fontSizeSource: widget.fontSizeSource,
+      fontSizePt: widget.fontSizePt,
+      computedFontSizePt: widget.computedFontSizePt,
+    );
   }
 
   double? _effectiveLeadingEmOrNull() {

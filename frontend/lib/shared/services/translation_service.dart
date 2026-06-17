@@ -234,6 +234,7 @@ class TranslationService {
     String? sourceTextColor,
     bool? targetTextItalic,
     String? targetTextColor,
+    String? coverColorMode,
   }) async {
     final dio = _buildAuthedDio();
     final queryParams = <String, dynamic>{};
@@ -264,6 +265,9 @@ class TranslationService {
     if (targetTextColor != null) {
       queryParams['target_text_color'] = targetTextColor;
     }
+    if (coverColorMode != null) {
+      queryParams['cover_color_mode'] = coverColorMode;
+    }
     final resp = await dio.put(
       '/service/format-settings/$taskId',
       queryParameters: queryParams,
@@ -286,10 +290,17 @@ class TranslationService {
   }
 
   /// Writes rebuilt exports to server-side stash so [listTranslationTasks] / queue downloads match current segments.
-  Future<Map<String, dynamic>> persistQueueSnapshot(String taskId) async {
+  ///
+  /// [exportScope]: `full` (default) generates every format; `primary_only` stashes only the
+  /// native image format for immersive png/jpg tasks (other formats on download or manual save).
+  Future<Map<String, dynamic>> persistQueueSnapshot(
+    String taskId, {
+    String exportScope = 'full',
+  }) async {
     final dio = _buildAuthedDio(useLongTimeout: true);
     final resp = await dio.post<Map<String, dynamic>>(
       '/service/persist-result/$taskId',
+      queryParameters: <String, dynamic>{'export_scope': exportScope},
       options: Options(
         receiveTimeout: AppConfig.longRequestTimeout,
         sendTimeout: AppConfig.longRequestTimeout,
@@ -322,6 +333,7 @@ class TranslationService {
     String? tableBodyFormat,
     String? equationFormat,
     String? chartBodyFormat,
+    String? coverColorMode,
     String? rendererType,
   }) {
     // 与后端保持相对路径，复用当前域名与端口
@@ -334,6 +346,9 @@ class TranslationService {
     }
     if (chartBodyFormat != null) {
       queryParams['chart_body_format'] = chartBodyFormat;
+    }
+    if (coverColorMode != null) {
+      queryParams['cover_color_mode'] = coverColorMode;
     }
     if (rendererType != null) {
       queryParams['renderer_type'] = rendererType;
@@ -352,6 +367,11 @@ class TranslationService {
   /// Source (original) PDF URL for full-document compare preview.
   String buildSourcePdfUrl(String taskId) {
     return '/service/download/$taskId/source-pdf';
+  }
+
+  /// Source (original) raster image URL for image compare preview.
+  String buildSourceImageUrl(String taskId) {
+    return '/service/download/$taskId/source-image';
   }
 
   /// Source-only HTML URL for full-document compare preview.
@@ -684,6 +704,7 @@ class TranslationService {
     String taskId,
     List<int> segmentIndices, {
     double? fontSizePt,
+    double? fontSizeDeltaPt,
     bool fontSizeReset = false,
     String? fontWeight,
     String? fontStyle,
@@ -702,6 +723,8 @@ class TranslationService {
     } else {
       if (fontSizeReset) {
         body['font_size_reset'] = true;
+      } else if (fontSizeDeltaPt != null) {
+        body['font_size_delta_pt'] = fontSizeDeltaPt;
       } else if (fontSizePt != null) {
         body['font_size_pt'] = fontSizePt;
       }

@@ -27,6 +27,8 @@ List<PreviewModeOption> buildPreviewModeOptions({
   required AppLocalizations l10n,
   required bool isPdfFile,
   required bool hasPdfDownload,
+  bool isImageFile = false,
+  bool hasImageDownload = false,
 }) {
   final List<PreviewModeOption> options = <PreviewModeOption>[
     PreviewModeOption(
@@ -35,6 +37,15 @@ List<PreviewModeOption> buildPreviewModeOptions({
       description: l10n.translationPreviewModeHtmlDesc,
     ),
   ];
+  if (isImageFile && hasImageDownload) {
+    options.add(
+      PreviewModeOption(
+        mode: TranslationPreviewMode.imageOriginalLayout,
+        label: l10n.translationExportImageOriginalLayout,
+        description: l10n.translationExportImageOriginalLayoutDesc,
+      ),
+    );
+  }
   if (isPdfFile && hasPdfDownload) {
     options.add(
       PreviewModeOption(
@@ -62,6 +73,8 @@ Future<PreviewSelection?> showTranslationPreviewDialog({
   required bool isPdfFile,
   required bool hasPdfDownload,
   required String resolvedWorkflowType,
+  bool isImageFile = false,
+  bool hasImageDownload = false,
   TranslationPreviewMode initialMode = TranslationPreviewMode.html,
   bool initialFullDocumentCompare = false,
   bool initialSyncScroll = false,
@@ -71,6 +84,8 @@ Future<PreviewSelection?> showTranslationPreviewDialog({
     l10n: l10n,
     isPdfFile: isPdfFile,
     hasPdfDownload: hasPdfDownload,
+    isImageFile: isImageFile,
+    hasImageDownload: hasImageDownload,
   );
   if (modeOptions.isEmpty) {
     return null;
@@ -105,8 +120,10 @@ Future<PreviewSelection?> showTranslationPreviewDialog({
 
   final bool isPdfWorkflow =
       resolvedWorkflowType == 'markdown_based' || isPdfFile;
-  final bool showFormatOptions =
-      isPdfWorkflow && (hasTables || hasInterlineEquations || hasCharts);
+  final bool isImageWorkflow =
+      isImageFile && resolvedWorkflowType == 'markdown_based';
+  final bool showFormatOptions = (isPdfWorkflow || isImageWorkflow) &&
+      (hasTables || hasInterlineEquations || hasCharts);
   final bool supportsBilingual = <String>{
     'markdown_based',
     'txt',
@@ -177,6 +194,7 @@ Future<PreviewSelection?> showTranslationPreviewDialog({
             formatSettings.getEquationFormat(isPdfWorkflow: isPdfWorkflow);
         String chartFormat =
             formatSettings.getChartFormat(isPdfWorkflow: isPdfWorkflow);
+        String coverColorMode = formatSettings.getCoverColorMode();
         String bilingualOrder =
             formatSettings.bilingualOrder ?? 'target_after_source';
         bool sourceTextItalic = formatSettings.sourceTextItalic ?? false;
@@ -430,6 +448,34 @@ Future<PreviewSelection?> showTranslationPreviewDialog({
                                           .setChartFormat(value);
                                     },
                                   ),
+                                const Divider(height: 24),
+                              ],
+                              if (isImageWorkflow) ...<Widget>[
+                                Text(
+                                  l10n.translationExportFormatOptionsTitle,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                _FormatRadioRow(
+                                  label: l10n.translationImageCoverColorModeLabel,
+                                  value: coverColorMode,
+                                  options: <String, String>{
+                                    'max': l10n.translationImageCoverColorModeMax,
+                                    'min': l10n.translationImageCoverColorModeMin,
+                                    'avg': l10n.translationImageCoverColorModeAvg,
+                                  },
+                                  onChanged: (String value) {
+                                    setDialogState(() => coverColorMode = value);
+                                    ref
+                                        .read(formatSettingsProviderFamily(
+                                                taskId)
+                                            .notifier)
+                                        .setCoverColorMode(value);
+                                  },
+                                ),
                                 const Divider(height: 24),
                               ],
                               if (supportsBilingual) ...<Widget>[

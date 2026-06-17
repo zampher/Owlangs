@@ -39,6 +39,8 @@ BBOX_HORIZONTAL_MARGIN_PT = 4.0
 
 # Font size ranges
 MIN_FONT_SIZE_PT = 6.0
+# User-adjustable / segment display floor (may be below PDF fit minimum)
+USER_FONT_SIZE_PT_MIN = 0.5
 MAX_FONT_SIZE_PT = 24.0
 DEFAULT_FONT_SIZE_PT = 10.0
 DEFAULT_LEADING_EM = 1.25

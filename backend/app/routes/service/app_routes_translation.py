@@ -12,13 +12,13 @@ from typing import Any, Dict, List
 
 from auth.models import User
 from auth.routes import get_current_user
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from backend.app.models.service import TranslateServiceRequest
 from backend.app.services.task import task_manager
 from backend.app.services.translation import TranslationService
-from backend.app.services.download.download_service import DownloadService
+from backend.app.services.download.download_service import DownloadService, EXPORT_SCOPE_FULL
 from backend.app.services.translation.translation_queue_utils import queue_position_for_task
 from logger import unified_logger as logger
 from logger.logger import LogModule
@@ -336,10 +336,18 @@ async def admin_clear_translation_queue(user: User = Depends(get_current_user)):
 Rebuilds export files from the current in-memory translation segments and writes them to
 ``translation_result_stash`` (same as recording a successful download). Call after edits or
 retry so queued/offline downloads match the latest content.
+
+Use ``export_scope=primary_only`` for immersive layout-image tasks to stash only the native
+image format (png/jpg); other formats are generated on download or a full persist.
 """,
 )
 async def persist_translation_result_to_stash(
     task_id: str,
+    export_scope: str = Query(
+        EXPORT_SCOPE_FULL,
+        alias="export_scope",
+        description="full: all formats; primary_only: native image only (immersive png/jpg)",
+    ),
     user: User = Depends(get_current_user),
 ):
     """Copy latest exports to result stash for queue/offline download consistency."""
@@ -348,6 +356,7 @@ async def persist_translation_result_to_stash(
         result = await _download_service.persist_completed_task_outputs_to_stash(
             task_id,
             update_progress=True,
+            export_scope=export_scope,
         )
         return JSONResponse(content=result)
     except HTTPException:

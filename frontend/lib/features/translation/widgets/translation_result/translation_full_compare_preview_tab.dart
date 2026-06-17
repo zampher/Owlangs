@@ -16,6 +16,7 @@ import '../pdf_compare_continuous_view.dart';
 import '../pdf_preview.dart';
 import 'segment_pdf_typography_dialog.dart';
 import 'html_compare_reader_view.dart';
+import 'image_overlay_preview.dart';
 import 'pdf_compare_layout_mode.dart';
 import 'pdf_revision_segment_panel_builder.dart';
 import 'preview_selection.dart';
@@ -28,8 +29,10 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
     required this.taskId,
     required this.baseMode,
     required this.isPdfSource,
+    this.isImageSource = false,
     required this.isPdfWorkflow,
     this.translatedPdfUrl,
+    this.translatedImageUrl,
     this.pdfRenderRevision = 0,
     this.pdfRenderRevisionListenable,
     this.pdfPreviewDirtySegmentsListenable,
@@ -39,6 +42,7 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
     this.initialLayoutMode = PdfCompareLayoutMode.comparePreview,
     this.pdfRevisionSegmentPanelBuilder,
     this.onBatchFontApply,
+    this.onBatchFontSizeStep,
     this.onBatchLeadingApply,
     this.getFilteredSelectableSegmentIndices,
     this.onPdfRevisionModeEntered,
@@ -57,8 +61,10 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
   final String taskId;
   final TranslationPreviewMode baseMode;
   final bool isPdfSource;
+  final bool isImageSource;
   final bool isPdfWorkflow;
   final String? translatedPdfUrl;
+  final String? translatedImageUrl;
   final int pdfRenderRevision;
   final ValueListenable<int>? pdfRenderRevisionListenable;
   final ValueListenable<Set<int>>? pdfPreviewDirtySegmentsListenable;
@@ -68,6 +74,8 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
   final PdfCompareLayoutMode initialLayoutMode;
   final PdfRevisionSegmentPanelBuilder? pdfRevisionSegmentPanelBuilder;
   final Future<void> Function(Set<int> selectedIndices)? onBatchFontApply;
+  final Future<void> Function(Set<int> selectedIndices, double delta)?
+      onBatchFontSizeStep;
   final Future<void> Function(Set<int> selectedIndices)? onBatchLeadingApply;
   final Set<int> Function()? getFilteredSelectableSegmentIndices;
   final Future<void> Function()? onPdfRevisionModeEntered;
@@ -108,13 +116,20 @@ class _TranslationFullComparePreviewTabState
 
   bool get _showsRevisionLinkedScroll =>
       _layoutMode == PdfCompareLayoutMode.compareRevision &&
-      _supportsPdfRevision;
+      _supportsRevisionPreview;
 
-  bool get _supportsPdfRevision =>
+  bool get _supportsRevisionPreview =>
+      widget.pdfRevisionSegmentPanelBuilder != null &&
+      ((_isPdfRevisionSource && widget.translatedPdfUrl != null) ||
+          (_isImageRevisionSource && widget.translatedImageUrl != null));
+
+  bool get _isPdfRevisionSource =>
       widget.baseMode == TranslationPreviewMode.pdfPreserve &&
-      widget.isPdfSource &&
-      widget.translatedPdfUrl != null &&
-      widget.pdfRevisionSegmentPanelBuilder != null;
+      widget.isPdfSource;
+
+  bool get _isImageRevisionSource =>
+      widget.baseMode == TranslationPreviewMode.imageOriginalLayout &&
+      widget.isImageSource;
 
   @override
   void initState() {
@@ -135,7 +150,7 @@ class _TranslationFullComparePreviewTabState
     widget.pdfPreviewJumpPageTriggerListenable
         ?.addListener(_onPdfPreviewJumpPageRequested);
     if (widget.initialLayoutMode != PdfCompareLayoutMode.comparePreview &&
-        _supportsPdfRevision) {
+        _supportsRevisionPreview) {
       _layoutMode = widget.initialLayoutMode;
       // Enter revision layout on the first frame so we do not briefly mount
       // PdfCompareContinuousView (source + target downloads) before revision mode.
@@ -259,7 +274,7 @@ class _TranslationFullComparePreviewTabState
   Future<void> _enterRevisionLayoutMode([
     PdfCompareLayoutMode mode = PdfCompareLayoutMode.translationRevision,
   ]) async {
-    if (!_supportsPdfRevision) {
+    if (!_supportsRevisionPreview) {
       return;
     }
     if (_layoutMode == PdfCompareLayoutMode.comparePreview && mounted) {
@@ -289,10 +304,7 @@ class _TranslationFullComparePreviewTabState
     if (indices.isEmpty) {
       return;
     }
-    final Set<int> next =
-        Set<int>.from(_selectedSegmentIndicesNotifier.value);
-    next.addAll(indices);
-    _selectedSegmentIndicesNotifier.value = next;
+    _selectedSegmentIndicesNotifier.value = Set<int>.from(indices);
   }
 
   void _bulkInvertSelection(Set<int> indices) {
@@ -325,11 +337,13 @@ class _TranslationFullComparePreviewTabState
           selectedSegmentIndicesListenable: _selectedSegmentIndicesNotifier,
           onSegmentSelectionToggle: _toggleSegmentSelection,
           getFilteredSelectableSegmentIndices:
-              widget.getFilteredSelectableSegmentIndices ?? () => <int>{},
+              widget.getFilteredSelectableSegmentIndices,
           onBulkSelectAll: _bulkSelectAll,
           onBulkInvertSelection: _bulkInvertSelection,
           onBatchFontApply:
               widget.onBatchFontApply != null ? _applyBatchFont : null,
+          onBatchFontSizeStep:
+              widget.onBatchFontSizeStep != null ? _applyBatchFontSizeStep : null,
           segmentScrollController: widget.segmentScrollController,
           showSegmentScrollbar: showSegmentScrollbar,
         );
@@ -356,6 +370,14 @@ class _TranslationFullComparePreviewTabState
       return;
     }
     await widget.onBatchFontApply!(selected);
+  }
+
+  Future<void> _applyBatchFontSizeStep(double delta) async {
+    final Set<int> selected = _selectedSegmentIndicesNotifier.value;
+    if (selected.isEmpty || widget.onBatchFontSizeStep == null) {
+      return;
+    }
+    await widget.onBatchFontSizeStep!(selected, delta);
   }
 
   Future<void> _applyBatchLeading() async {
@@ -408,7 +430,19 @@ class _TranslationFullComparePreviewTabState
     return buildPreviewExportQueryParams(
       formatSettings,
       isPdfWorkflow: widget.isPdfWorkflow,
+      isImageWorkflow: widget.isImageSource &&
+          widget.baseMode == TranslationPreviewMode.imageOriginalLayout,
       rendererType: widget.baseMode.rendererType,
+    );
+  }
+
+  String _buildTargetImageUrl(Map<String, String> formatParams) {
+    return mergePreviewUrl(
+      widget.translatedImageUrl!,
+      {
+        ...formatParams,
+        ...previewCacheBustParams(_displayPdfRevision),
+      },
     );
   }
 
@@ -427,6 +461,17 @@ class _TranslationFullComparePreviewTabState
     return downloadUrl.startsWith('http')
         ? downloadUrl
         : '${AppConfig.baseUrl}$downloadUrl';
+  }
+
+  Widget _buildTargetImagePreview(
+    AppLocalizations l10n, {
+    required String targetImageUrl,
+  }) {
+    return ImageOverlayPreviewView(
+      imageUrl: targetImageUrl,
+      panelLabel: l10n.translationPreviewPanelTarget,
+      viewportController: _viewportController,
+    );
   }
 
   Widget _buildTargetPdfPreview(
@@ -453,7 +498,6 @@ class _TranslationFullComparePreviewTabState
 
   Widget _buildTranslationRevisionPanel(AppLocalizations l10n) {
     final Map<String, String> formatParams = _buildFormatParams();
-    final String targetPdfUrl = _buildTargetPdfUrl(formatParams);
     final Widget segmentPanel = widget.segmentUiRevisionListenable == null
         ? _buildRevisionSegmentPanelWidget()
         : ValueListenableBuilder<int>(
@@ -463,6 +507,27 @@ class _TranslationFullComparePreviewTabState
             },
           );
 
+    if (_isImageRevisionSource) {
+      final String targetImageUrl = _buildTargetImageUrl(formatParams);
+      return Row(
+        children: <Widget>[
+          Expanded(
+            flex: 3,
+            child: _buildTargetImagePreview(
+              l10n,
+              targetImageUrl: targetImageUrl,
+            ),
+          ),
+          const VerticalDivider(width: 1),
+          Expanded(
+            flex: 2,
+            child: segmentPanel,
+          ),
+        ],
+      );
+    }
+
+    final String targetPdfUrl = _buildTargetPdfUrl(formatParams);
     return Row(
       children: <Widget>[
         Expanded(
@@ -485,8 +550,6 @@ class _TranslationFullComparePreviewTabState
   Widget _buildCompareRevisionPanel(AppLocalizations l10n) {
     final Map<String, String> formatParams = _buildFormatParams();
     final TranslationService svc = TranslationService();
-    final String sourcePdfUrl = svc.buildSourcePdfUrl(widget.taskId);
-    final String targetPdfUrl = _buildTargetPdfUrl(formatParams);
 
     final Widget segmentPanel = widget.segmentUiRevisionListenable == null
         ? _buildRevisionSegmentPanelWidget()
@@ -496,6 +559,35 @@ class _TranslationFullComparePreviewTabState
               return _buildRevisionSegmentPanelWidget();
             },
           );
+
+    if (_isImageRevisionSource) {
+      final String targetImageUrl = _buildTargetImageUrl(formatParams);
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Expanded(
+            flex: 4,
+            child: PreviewZoomableViewport(
+              controller: _viewportController,
+              childHandlesVerticalScroll: true,
+              child: ImageOverlayCompareView(
+                sourceImageUrl: svc.buildSourceImageUrl(widget.taskId),
+                targetImageUrl: targetImageUrl,
+                linkedScroll: _revisionLinkedScrollEnabled,
+              ),
+            ),
+          ),
+          const VerticalDivider(width: 1),
+          Expanded(
+            flex: 2,
+            child: segmentPanel,
+          ),
+        ],
+      );
+    }
+
+    final String sourcePdfUrl = svc.buildSourcePdfUrl(widget.taskId);
+    final String targetPdfUrl = _buildTargetPdfUrl(formatParams);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -579,6 +671,22 @@ class _TranslationFullComparePreviewTabState
       );
     }
 
+    if (widget.baseMode == TranslationPreviewMode.imageOriginalLayout) {
+      if (!widget.isImageSource || widget.translatedImageUrl == null) {
+        return Center(child: Text(l10n.translationPreviewNoExtraOptions));
+      }
+      final String targetImageUrl = _buildTargetImageUrl(formatParams);
+      return PreviewZoomableViewport(
+        controller: _viewportController,
+        childHandlesVerticalScroll: true,
+        child: ImageOverlayCompareView(
+          sourceImageUrl: svc.buildSourceImageUrl(widget.taskId),
+          targetImageUrl: targetImageUrl,
+          linkedScroll: _syncScrollEnabled,
+        ),
+      );
+    }
+
     if (!widget.isPdfSource || widget.translatedPdfUrl == null) {
       return Center(child: Text(l10n.translationPreviewNoExtraOptions));
     }
@@ -608,7 +716,7 @@ class _TranslationFullComparePreviewTabState
   }
 
   Widget _buildPreviewBody(AppLocalizations l10n) {
-    if (_layoutMode.showsRevisionControls && _supportsPdfRevision) {
+    if (_layoutMode.showsRevisionControls && _supportsRevisionPreview) {
       return _buildPdfRevisionPanel(l10n);
     }
     return _buildComparePreviewBody(l10n);
@@ -663,20 +771,24 @@ class _TranslationFullComparePreviewTabState
       widget.baseMode == TranslationPreviewMode.pdfPreserve ||
       widget.baseMode == TranslationPreviewMode.pdfReflow;
 
+  bool get _isImageCompare =>
+      widget.baseMode == TranslationPreviewMode.imageOriginalLayout &&
+      widget.isImageSource;
+
   Widget _buildPreviewToolbar(
     BuildContext context,
     AppLocalizations l10n, {
     required bool isFullscreenView,
   }) {
-    final bool showPdfRevisionControls =
-        _layoutMode.showsRevisionControls && _supportsPdfRevision;
+    final bool showRevisionControls =
+        _layoutMode.showsRevisionControls && _supportsRevisionPreview;
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Row(
           children: <Widget>[
-            if (_supportsPdfRevision)
+            if (_supportsRevisionPreview)
               _buildLayoutModeSelector(l10n)
             else ...<Widget>[
               Icon(
@@ -691,7 +803,7 @@ class _TranslationFullComparePreviewTabState
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ],
-            if (showPdfRevisionControls) ...<Widget>[
+            if (showRevisionControls) ...<Widget>[
               const SizedBox(width: 8),
               Tooltip(
                 message: l10n.translationPreviewAutoRefreshPdf,
@@ -772,7 +884,9 @@ class _TranslationFullComparePreviewTabState
                 ),
             ],
             if (_layoutMode == PdfCompareLayoutMode.comparePreview &&
-                (_isPdfCompare || widget.baseMode.usesHtmlPreview)) ...<Widget>[
+                (_isPdfCompare ||
+                    widget.baseMode.usesHtmlPreview ||
+                    _isImageCompare)) ...<Widget>[
               const SizedBox(width: 16),
               Tooltip(
                 message: l10n.translationPreviewSyncScrollDesc,

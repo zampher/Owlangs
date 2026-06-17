@@ -506,6 +506,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationExportChartFormatHtml => 'HTML';
 
   @override
+  String get translationImageCoverColorModeLabel => '擦除底色：';
+
+  @override
+  String get translationImageCoverColorModeMax => '取最亮像素（最大值）';
+
+  @override
+  String get translationImageCoverColorModeMin => '取最暗像素（最小值）';
+
+  @override
+  String get translationImageCoverColorModeAvg => '取平均像素';
+
+  @override
   String get translationExportBilingualExport => '双语导出';
 
   @override
@@ -568,6 +580,13 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get translationExportPdfPreserveLayoutDesc =>
       '在原 PDF 版式上叠加译文，保留布局与图表位置';
+
+  @override
+  String get translationExportImageOriginalLayout => '原格式图片';
+
+  @override
+  String get translationExportImageOriginalLayoutDesc =>
+      '擦除 OCR 文字区域并写入译文，保留原图画布与版式';
 
   @override
   String get translationExportPdfReflow => '重新排版 PDF';
@@ -3727,6 +3746,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get translationPreviewBatchFontTooltip => '将字号、粗体、斜体应用到选中片段';
+
+  @override
+  String get translationPreviewBatchFontSizeDecreaseTooltip =>
+      '将选中片段字号减小 0.1 pt';
+
+  @override
+  String get translationPreviewBatchFontSizeIncreaseTooltip =>
+      '将选中片段字号增大 0.1 pt';
 
   @override
   String get translationPreviewBatchLeading => '批量行距';

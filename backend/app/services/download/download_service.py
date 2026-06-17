@@ -83,6 +83,14 @@ MEDIA_TYPES = {
     "ts": "application/xml; charset=utf-8",  # Qt translation source file
     "zip": "application/zip",
     "pdf": "application/pdf",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "webp": "image/webp",
+    "bmp": "image/bmp",
+    "gif": "image/gif",
+    "tif": "image/tiff",
+    "tiff": "image/tiff",
 }
 
 
@@ -175,25 +183,9 @@ def _populate_image_data_map_from_extracted(
     images_bytes_map: Dict[str, bytes],
 ) -> None:
     """Register every layout ZIP image under filename and common path key variants."""
-    for img_path, img_bytes in (images_bytes_map or {}).items():
-        if not img_bytes:
-            continue
-        norm_path = str(img_path).replace("\\", "/")
-        mime = mimetypes.guess_type(norm_path)[0] or "image/png"
-        data_uri = f"data:{mime};base64,{base64.b64encode(img_bytes).decode('ascii')}"
-        filename = norm_path.split("/")[-1]
-        entry = {"data": data_uri, "alt": filename}
-        keys = {
-            filename,
-            norm_path,
-            norm_path.lstrip("./"),
-            f"./{norm_path.lstrip('./')}",
-            f"images/{filename}",
-            f"./images/{filename}",
-        }
-        for key in keys:
-            if key and key not in image_data_map:
-                image_data_map[key] = dict(entry)
+    from utils.mineru_image_data_map import populate_image_data_map_from_bytes_map
+
+    populate_image_data_map_from_bytes_map(image_data_map, images_bytes_map)
 
 
 def _populate_layout_placeholder_image_map(
@@ -477,6 +469,29 @@ def _resolve_bilingual_settings(
         bool(target_italic),
         resolved_target_color,
     )
+
+
+def _resolve_cover_color_mode(
+    task_state: Dict[str, Any],
+    payload: Any = None,
+    cover_color_mode: Optional[str] = None,
+) -> str:
+    """Return image overlay erase fill mode: 'max', 'min', or 'avg'."""
+    valid = ("max", "min", "avg")
+    if cover_color_mode is not None:
+        mode = str(cover_color_mode).strip().lower()
+        if mode in valid:
+            return mode
+
+    stored = task_state.get("cover_color_mode")
+    if stored is None and payload is not None:
+        if isinstance(payload, dict):
+            stored = payload.get("cover_color_mode")
+        else:
+            stored = getattr(payload, "cover_color_mode", None)
+
+    mode = str(stored or "max").strip().lower()
+    return mode if mode in valid else "max"
 
 
 def _format_requires_md2docx(equation_format: str, table_body_format: str) -> bool:
@@ -1032,16 +1047,81 @@ def resolve_task_export_workflow_type(task_state: Dict[str, Any]) -> Optional[st
     return wt
 
 
-def _build_stash_export_plan(task_state: Dict[str, Any]) -> List[Tuple[str, str, Dict[str, Any]]]:
+EXPORT_SCOPE_FULL = "full"
+EXPORT_SCOPE_PRIMARY_ONLY = "primary_only"
+
+
+def _layout_image_primary_stash_keys(task_state: Dict[str, Any]) -> Optional[set[str]]:
+    """Stash keys for original-format image export (png/jpg/...) when layout is available."""
+    from utils.mineru_layout_utils import original_image_download_extension
+
+    orig_l = (task_state.get("original_filename") or "").lower()
+    has_layout = task_state.get("layout_document") is not None or bool(
+        _resolve_layout_zip_bytes(task_state)
+    )
+    is_fmt_conv = bool(task_state.get("is_format_conversion") or task_state.get("convert_only"))
+    wt = resolve_task_export_workflow_type(task_state)
+    if wt != "markdown_based" or not has_layout or is_fmt_conv:
+        return None
+
+    image_ext = original_image_download_extension(orig_l)
+    if not image_ext:
+        return None
+
+    keys = {image_ext}
+    if image_ext in {"jpg", "jpeg"}:
+        keys.update({"jpg", "jpeg"})
+    return keys
+
+
+def _filter_stash_export_plan_for_scope(
+    task_state: Dict[str, Any],
+    plan: List[Tuple[str, str, Dict[str, Any]]],
+    export_scope: str,
+) -> List[Tuple[str, str, Dict[str, Any]]]:
+    """Narrow persist plan for immersive layout-image tasks (generate native format only)."""
+    if export_scope != EXPORT_SCOPE_PRIMARY_ONLY:
+        return plan
+
+    execution_mode = (task_state.get("execution_mode") or "immediate").lower()
+    if execution_mode == "queued":
+        return plan
+
+    primary_keys = _layout_image_primary_stash_keys(task_state)
+    if not primary_keys:
+        return plan
+
+    filtered = [entry for entry in plan if entry[0] in primary_keys]
+    if not filtered:
+        return plan
+
+    logger.info(
+        LogModule.EXPORT,
+        "[PERSIST-STASH] export_scope=primary_only: keeping "
+        f"{len(filtered)} format(s) {[e[0] for e in filtered]} of {len(plan)}",
+    )
+    return filtered
+
+
+def _build_stash_export_plan(
+    task_state: Dict[str, Any],
+    *,
+    export_scope: str = EXPORT_SCOPE_FULL,
+) -> List[Tuple[str, str, Dict[str, Any]]]:
     """
     Build (stash_key, download_file_type, kwargs for download_file).
 
     Must stay aligned with ``completed_task_download_urls`` / GET /service/status so the
     translation queue lists every format the download route can serve on-demand.
+
+    ``export_scope=primary_only`` (immersive layout-image persist) keeps only the native
+    image format; other formats are generated on download or full persist.
     """
     orig_l = (task_state.get("original_filename") or "").lower()
     is_pdf = orig_l.endswith(".pdf")
-    has_layout = task_state.get("layout_document") is not None
+    has_layout = task_state.get("layout_document") is not None or bool(
+        _resolve_layout_zip_bytes(task_state)
+    )
     is_fmt_conv = bool(task_state.get("is_format_conversion") or task_state.get("convert_only"))
     wt = resolve_task_export_workflow_type(task_state)
 
@@ -1049,11 +1129,16 @@ def _build_stash_export_plan(task_state: Dict[str, Any]) -> List[Tuple[str, str,
     docx_kwargs = _docx_stash_download_kwargs(task_state)
     if wt == "markdown_based":
         allow_pdf = is_pdf and has_layout and not is_fmt_conv
+        from utils.mineru_layout_utils import is_mineru_layout_image, original_image_download_extension
+
         for ft in ("docx", "html", "md"):
             plan.append((ft, ft, docx_kwargs if ft == "docx" else {}))
         if allow_pdf:
             plan.append(("pdf", "pdf", {"renderer_type": "typst_overlay"}))
             plan.append(("pdf_reflow", "pdf", {"renderer_type": "pandoc"}))
+        image_ext = original_image_download_extension(orig_l)
+        if image_ext and has_layout and not is_fmt_conv:
+            plan.append((image_ext, image_ext, {}))
         plan.append(("md_zip", "md", {"embed_images": False}))
     elif wt == "txt":
         for ft in ("html", "txt", "md"):
@@ -1098,7 +1183,7 @@ def _build_stash_export_plan(task_state: Dict[str, Any]) -> List[Tuple[str, str,
             for k in df.keys():
                 if isinstance(k, str) and k:
                     plan.append((k, k, {}))
-    return plan
+    return _filter_stash_export_plan_for_scope(task_state, plan, export_scope)
 
 
 def _stash_export_format_label(stash_key: str, kwargs: Dict[str, Any]) -> str:
@@ -1109,6 +1194,8 @@ def _stash_export_format_label(stash_key: str, kwargs: Dict[str, Any]) -> str:
         return "PDF (original layout)"
     if stash_key == "pdf_reflow":
         return "PDF (reflow)"
+    if stash_key in {"png", "jpg", "jpeg", "webp", "bmp", "gif", "tif", "tiff"}:
+        return f"{stash_key.upper()} (original layout)"
     if stash_key == "md_zip":
         return "Markdown (ZIP)"
     if stash_key == "md":
@@ -1195,6 +1282,119 @@ def _pre_generated_pdf_file_response(
             filename=candidate.name,
         )
     return None
+
+
+async def _image_overlay_file_response(
+    task_state: Dict[str, Any],
+    task_id: str,
+    file_stem: str,
+    file_type: str,
+    table_body_format: Optional[str],
+    equation_format: Optional[str],
+    chart_body_format: Optional[str] = None,
+    cover_color_mode: Optional[str] = None,
+) -> FileResponse:
+    """Generate translated raster image by erasing OCR text and painting target text."""
+    from layout.image_overlay.models import ImageOverlayConfig, ImageOverlayInput
+    from layout.image_overlay.pipeline import ImageOverlayPipeline
+    from utils.mineru_layout_utils import original_image_download_extension
+
+    layout_doc = task_state.get("layout_document")
+    if layout_doc is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Layout document is not available for image overlay rendering.",
+        )
+
+    source_path = task_state.get("original_file_path")
+    if not source_path or not Path(source_path).exists():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Original image file not found for overlay rendering: {source_path}",
+        )
+
+    segments: List[Dict[str, Any]] = []
+    segments_data = task_state.get("translation_segments")
+    if segments_data and isinstance(segments_data, dict):
+        raw_segments = segments_data.get("segments") or []
+        segments = [s for s in raw_segments if isinstance(s, dict)]
+
+    payload_obj = task_state.get("payload")
+    eq_fmt, tbl_fmt, chart_fmt = _resolve_export_format_settings(
+        task_state,
+        payload_obj,
+        equation_format,
+        table_body_format,
+        chart_body_format,
+    )
+    target_language = None
+    if isinstance(payload_obj, dict):
+        target_language = payload_obj.get("to_lang") or payload_obj.get("target_language")
+    elif payload_obj is not None:
+        target_language = getattr(payload_obj, "to_lang", None) or getattr(
+            payload_obj, "target_language", None
+        )
+    if not target_language:
+        target_language = task_state.get("to_lang") or task_state.get("target_language")
+
+    font_size_by_block_index: Dict[int, float] = {}
+    font_weight_by_block_index: Dict[int, str] = {}
+    # Typography block indices are resolved inside ImageOverlayPipeline from overlay meta.
+
+    orig_ext = original_image_download_extension(task_state.get("original_filename") or "")
+    output_format = file_type or orig_ext
+    resolved_cover_mode = _resolve_cover_color_mode(
+        task_state,
+        payload_obj,
+        cover_color_mode,
+    )
+    config = ImageOverlayConfig(
+        erase_original_text=True,
+        text_field="target_text",
+        target_language=target_language,
+        equation_format=eq_fmt,
+        table_body_format=tbl_fmt,
+        chart_body_format=chart_fmt,
+        cover_color_mode=resolved_cover_mode,
+        output_format=output_format,
+    )
+    overlay_input = ImageOverlayInput(
+        source_image_path=str(source_path),
+        layout_document=layout_doc,
+        segments=segments,
+        layout_zip_bytes=_resolve_layout_zip_bytes(task_state),
+        task_state=task_state,
+    )
+    logger.info(
+        LogModule.EXPORT,
+        f"[IMAGE_OVERLAY] Task {task_id}: rendering {output_format} overlay export",
+    )
+    pipeline = ImageOverlayPipeline()
+    result = pipeline.render(
+        overlay_input,
+        config,
+        font_size_by_block_index=font_size_by_block_index or None,
+        font_weight_by_block_index=font_weight_by_block_index or None,
+        task_id=task_id,
+    )
+
+    output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
+    output_dir.mkdir(exist_ok=True)
+    sfx = _get_output_suffix(task_state)
+    stash_key = (orig_ext or result.file_extension or file_type).lower()
+    out_name = f"{file_stem}{sfx}.{result.file_extension}"
+    out_path = output_dir / out_name
+    out_path.write_bytes(result.image_bytes)
+    task_state.setdefault("downloadable_files", {})[stash_key] = {
+        "path": str(out_path),
+        "filename": out_name,
+    }
+    return FileResponse(
+        path=str(out_path),
+        media_type=result.media_type,
+        filename=out_name,
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 async def _typst_overlay_pdf_response(
@@ -2117,6 +2317,7 @@ class DownloadService:
         target_text_color: Optional[str] = None,
         renderer_type: Optional[str] = None,
         dirty_segments: Optional[str] = None,
+        cover_color_mode: Optional[str] = None,
     ) -> FileResponse:
         """
         Download translation result file.
@@ -2187,6 +2388,33 @@ class DownloadService:
                 filename=filename,
             )
 
+        if file_type == "source-image":
+            from utils.mineru_layout_utils import is_mineru_layout_image
+
+            original_filename = task_state.get("original_filename") or ""
+            if not is_mineru_layout_image(original_filename):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Source image preview is only available for image uploads.",
+                )
+            source_path = task_state.get("original_file_path")
+            if not source_path or not Path(source_path).exists():
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Original image file not found for task '{task_id}'.",
+                )
+            filename = Path(original_filename).name
+            ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "png"
+            logger.info(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Task {task_id}: Serving source image for compare preview",
+            )
+            return FileResponse(
+                path=source_path,
+                media_type=MEDIA_TYPES.get(ext, "application/octet-stream"),
+                filename=filename,
+            )
+
         # Default PDF renderer by source type (must stay aligned with _build_stash_export_plan).
         if file_type == "pdf" and renderer_type is None:
             if _is_html_source_task(task_state):
@@ -2246,6 +2474,26 @@ class DownloadService:
                 f"[DOWNLOAD] Task {task_id}: Serving source HTML for compare preview",
             )
             return resp
+
+        from utils.mineru_layout_utils import is_original_image_format_request
+
+        original_filename = task_state.get("original_filename") or ""
+        if is_original_image_format_request(file_type, original_filename):
+            file_stem = task_state.get("original_filename_stem") or Path(original_filename).stem
+            logger.info(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Task {task_id}: image overlay export ({file_type})",
+            )
+            return await _image_overlay_file_response(
+                task_state,
+                task_id,
+                file_stem,
+                file_type,
+                table_body_format,
+                equation_format,
+                chart_body_format=chart_body_format,
+                cover_color_mode=cover_color_mode,
+            )
 
         # HTML source PDF: single native HTML→Pandoc path (skip markdown rebuild + layout PDF).
         if file_type == "pdf" and _is_html_source_task(task_state):
@@ -5606,6 +5854,7 @@ class DownloadService:
         *,
         allow_processing_status: bool = False,
         update_progress: bool = False,
+        export_scope: str = EXPORT_SCOPE_FULL,
     ) -> Dict[str, Any]:
         """
         Rebuild export files from current in-memory task state and copy them into translation_result_stash
@@ -5633,7 +5882,13 @@ class DownloadService:
                 detail="No translation segments available to export.",
             )
 
-        plan = _build_stash_export_plan(task_state)
+        if export_scope not in {EXPORT_SCOPE_FULL, EXPORT_SCOPE_PRIMARY_ONLY}:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid export_scope '{export_scope}'.",
+            )
+
+        plan = _build_stash_export_plan(task_state, export_scope=export_scope)
         if not plan:
             raise HTTPException(
                 status_code=400,
@@ -5648,14 +5903,15 @@ class DownloadService:
             if update_progress:
                 label = _stash_export_format_label(stash_key, kwargs)
                 progress = 90 + int((index / max(total, 1)) * 9)
-                self.task_manager.update_task(
-                    task_id,
-                    {
-                        "status": "processing",
-                        "progress": min(99, progress),
-                        "message": f"Generating {label}...",
-                    },
-                )
+                # Keep terminal status during stash rebuild so frontend poll loops and
+                # language-detection workers do not treat the task as active again.
+                progress_update: Dict[str, Any] = {
+                    "progress": min(99, progress),
+                    "message": f"Generating {label}...",
+                }
+                if status_lower != "completed":
+                    progress_update["status"] = "processing"
+                self.task_manager.update_task(task_id, progress_update)
             try:
                 resp = await self.download_file(task_id, download_ft, **kwargs)
                 path = getattr(resp, "path", None) or getattr(
@@ -5697,6 +5953,7 @@ class DownloadService:
             "ok": ok,
             "stashed": stashed,
             "errors": errors,
+            "export_scope": export_scope,
         }
         if not ok:
             raise HTTPException(

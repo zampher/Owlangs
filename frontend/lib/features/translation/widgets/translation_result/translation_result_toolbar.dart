@@ -105,8 +105,12 @@ class TranslationResultToolbar extends ConsumerWidget {
     final statusLower = statusText.toLowerCase();
     final hasDownloads = downloads != null && downloads!.isNotEmpty;
     // Treat status='processing' with 100% progress as a completed state.
+    // Also treat completion messages (statusText often mirrors backend message, not status field).
     final isCompletedLike = statusLower == 'completed' ||
-        (statusLower == 'processing' && progress >= 100);
+        (statusLower == 'processing' && progress >= 100) ||
+        statusLower.startsWith('translation completed') ||
+        statusLower.startsWith('retranslation completed') ||
+        statusLower.startsWith('translated outputs available');
     // Consider task completed when:
     // - backend explicitly reports completed/processing+100, OR
     // - translation is no longer running, no active operation, and progress>=100, OR
@@ -302,7 +306,7 @@ class TranslationResultToolbar extends ConsumerWidget {
               ),
               const SizedBox(width: 3),
             ],
-            // PDF revision mode (PDF workflow only, after translation completes)
+            // Revision preview (PDF / image overlay, after translation completes)
             if (isCompletedByArtifacts &&
                 onEnterPdfRevisionMode != null) ...<Widget>[
               IconButton(

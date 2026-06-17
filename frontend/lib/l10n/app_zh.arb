@@ -162,6 +162,11 @@
   "translationExportChartFormatImage": "图片",
   "translationExportChartFormatHtml": "HTML",
 
+  "translationImageCoverColorModeLabel": "擦除底色：",
+  "translationImageCoverColorModeMax": "取最亮像素（最大值）",
+  "translationImageCoverColorModeMin": "取最暗像素（最小值）",
+  "translationImageCoverColorModeAvg": "取平均像素",
+
   "translationExportBilingualExport": "双语导出",
   "translationExportBilingualOrderTargetAfter": "原文在前",
   "translationExportBilingualOrderTargetAfterSub": "原文在前，译文在后",
@@ -184,6 +189,8 @@
   "translationExportMdWithImagesFolder": "MD（图片文件夹）",
   "translationExportPdfPreserveLayout": "原版式 PDF",
   "translationExportPdfPreserveLayoutDesc": "在原 PDF 版式上叠加译文，保留布局与图表位置",
+  "translationExportImageOriginalLayout": "原格式图片",
+  "translationExportImageOriginalLayoutDesc": "擦除 OCR 文字区域并写入译文，保留原图画布与版式",
   "translationExportPdfReflow": "重新排版 PDF",
   "translationExportPdfReflowDesc": "由译文 Markdown 重新排版，版式可能与原文不同",
 
@@ -1383,6 +1390,8 @@
   "translationPreviewRefreshPdf": "刷新 PDF",
   "translationPreviewBatchFont": "字体",
   "translationPreviewBatchFontTooltip": "将字号、粗体、斜体应用到选中片段",
+  "translationPreviewBatchFontSizeDecreaseTooltip": "将选中片段字号减小 0.1 pt",
+  "translationPreviewBatchFontSizeIncreaseTooltip": "将选中片段字号增大 0.1 pt",
   "translationPreviewBatchLeading": "批量行距",
   "translationPreviewBatchLeadingTooltip": "将行距应用到选中片段，不影响各片段字号",
   "translationPreviewPdfRevisionSelectAll": "全选",

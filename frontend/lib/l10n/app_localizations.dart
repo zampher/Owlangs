@@ -1023,6 +1023,30 @@ abstract class AppLocalizations {
   /// **'HTML'**
   String get translationExportChartFormatHtml;
 
+  /// No description provided for @translationImageCoverColorModeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Erase background:'**
+  String get translationImageCoverColorModeLabel;
+
+  /// No description provided for @translationImageCoverColorModeMax.
+  ///
+  /// In en, this message translates to:
+  /// **'Brightest pixel (max)'**
+  String get translationImageCoverColorModeMax;
+
+  /// No description provided for @translationImageCoverColorModeMin.
+  ///
+  /// In en, this message translates to:
+  /// **'Darkest pixel (min)'**
+  String get translationImageCoverColorModeMin;
+
+  /// No description provided for @translationImageCoverColorModeAvg.
+  ///
+  /// In en, this message translates to:
+  /// **'Average pixel (mean)'**
+  String get translationImageCoverColorModeAvg;
+
   /// No description provided for @translationExportBilingualExport.
   ///
   /// In en, this message translates to:
@@ -1148,6 +1172,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Overlay translation on the original PDF layout'**
   String get translationExportPdfPreserveLayoutDesc;
+
+  /// No description provided for @translationExportImageOriginalLayout.
+  ///
+  /// In en, this message translates to:
+  /// **'Original layout image'**
+  String get translationExportImageOriginalLayout;
+
+  /// No description provided for @translationExportImageOriginalLayoutDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Erase OCR text and write translation on the source image'**
+  String get translationExportImageOriginalLayoutDesc;
 
   /// No description provided for @translationExportPdfReflow.
   ///
@@ -6859,6 +6895,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Apply font settings to selected segments'**
   String get translationPreviewBatchFontTooltip;
+
+  /// No description provided for @translationPreviewBatchFontSizeDecreaseTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Decrease font size by 0.1 pt for selected segments'**
+  String get translationPreviewBatchFontSizeDecreaseTooltip;
+
+  /// No description provided for @translationPreviewBatchFontSizeIncreaseTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Increase font size by 0.1 pt for selected segments'**
+  String get translationPreviewBatchFontSizeIncreaseTooltip;
 
   /// No description provided for @translationPreviewBatchLeading.
   ///

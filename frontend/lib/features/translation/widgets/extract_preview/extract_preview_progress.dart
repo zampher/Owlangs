@@ -771,10 +771,16 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
           if (flowId != null) {
             final translationNotifier =
                 ref.read(translationStateProviderFamily(flowId).notifier);
-            translationNotifier.setTranslating(true);
-            translationNotifier.setProgress(progress.clamp(0, 100));
-            if (message.isNotEmpty) {
-              translationNotifier.setStatusText(message);
+            // Do not re-enable the progress bar for post-completion stash rebuild or
+            // background language detection (backend may briefly report processing).
+            final bool isBackgroundPostWork = message.startsWith('Generating ') ||
+                message.startsWith('Detect Language:');
+            if (!isBackgroundPostWork) {
+              translationNotifier.setTranslating(true);
+              translationNotifier.setProgress(progress.clamp(0, 100));
+              if (message.isNotEmpty) {
+                translationNotifier.setStatusText(message);
+              }
             }
           }
 
@@ -792,7 +798,12 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
         // Do NOT treat (status=processing, progress=100) as terminal because
         // backend may still run post-processing (e.g. auto formula repair) after
         // the main translation steps, and we need to keep polling for updates.
-        final isCompletedState = statusLower == 'completed';
+        // Exception: processing+100 with a translation-completed message is terminal.
+        final bool isCompletionMessage = message.startsWith('Translation completed') ||
+            message.startsWith('Retranslation completed') ||
+            message.startsWith('Translated outputs available');
+        final isCompletedState = statusLower == 'completed' ||
+            (statusLower == 'processing' && progress >= 100 && isCompletionMessage);
         final isFailedState = statusLower == 'failed';
         final isCancelledState = statusLower == 'cancelled';
 

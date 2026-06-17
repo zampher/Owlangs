@@ -169,6 +169,11 @@
   "translationExportChartFormatImage": "Image",
   "translationExportChartFormatHtml": "HTML",
 
+  "translationImageCoverColorModeLabel": "Erase background:",
+  "translationImageCoverColorModeMax": "Brightest pixel (max)",
+  "translationImageCoverColorModeMin": "Darkest pixel (min)",
+  "translationImageCoverColorModeAvg": "Average pixel (mean)",
+
   "translationExportBilingualExport": "Bilingual Export",
   "translationExportBilingualOrderTargetAfter": "Source First",
   "translationExportBilingualOrderTargetAfterSub": "Source first, target after",
@@ -191,6 +196,8 @@
   "translationExportMdWithImagesFolder": "MD (With Images Folder)",
   "translationExportPdfPreserveLayout": "Original Layout PDF",
   "translationExportPdfPreserveLayoutDesc": "Overlay translation on the original PDF layout",
+  "translationExportImageOriginalLayout": "Original layout image",
+  "translationExportImageOriginalLayoutDesc": "Erase OCR text and write translation on the source image",
   "translationExportPdfReflow": "Reflow PDF",
   "translationExportPdfReflowDesc": "Re-typeset from translation Markdown; layout may differ from the source",
 
@@ -1446,6 +1453,8 @@
   "translationPreviewRefreshPdf": "Refresh PDF",
   "translationPreviewBatchFont": "Font",
   "translationPreviewBatchFontTooltip": "Apply font settings to selected segments",
+  "translationPreviewBatchFontSizeDecreaseTooltip": "Decrease font size by 0.1 pt for selected segments",
+  "translationPreviewBatchFontSizeIncreaseTooltip": "Increase font size by 0.1 pt for selected segments",
   "translationPreviewBatchLeading": "Batch line spacing",
   "translationPreviewBatchLeadingTooltip": "Apply line spacing to selected segments",
   "translationPreviewPdfRevisionSelectAll": "Select all",

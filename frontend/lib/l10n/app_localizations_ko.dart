@@ -508,6 +508,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationExportChartFormatHtml => 'HTML';
 
   @override
+  String get translationImageCoverColorModeLabel => '배경 지우기:';
+
+  @override
+  String get translationImageCoverColorModeMax => '가장 밝은 픽셀 (최대)';
+
+  @override
+  String get translationImageCoverColorModeMin => '가장 어두운 픽셀 (최소)';
+
+  @override
+  String get translationImageCoverColorModeAvg => '평균 픽셀';
+
+  @override
   String get translationExportBilingualExport => '이중 언어 내보내기';
 
   @override
@@ -571,6 +583,13 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get translationExportPdfPreserveLayoutDesc =>
       '원본 PDF 레이아웃에 번역을 겹쳐 구성과 차트 위치 유지';
+
+  @override
+  String get translationExportImageOriginalLayout => 'Original layout image';
+
+  @override
+  String get translationExportImageOriginalLayoutDesc =>
+      'Erase OCR text and write translation on the source image';
 
   @override
   String get translationExportPdfReflow => '재排版 PDF';
@@ -3767,6 +3786,14 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get translationPreviewBatchFontTooltip => '선택한 세그먼트에 글꼴 설정 적용';
+
+  @override
+  String get translationPreviewBatchFontSizeDecreaseTooltip =>
+      '선택한 세그먼트 글꼴 크기를 0.1 pt 줄이기';
+
+  @override
+  String get translationPreviewBatchFontSizeIncreaseTooltip =>
+      '선택한 세그먼트 글꼴 크기를 0.1 pt 늘리기';
 
   @override
   String get translationPreviewBatchLeading => '줄 간격 일괄 적용';

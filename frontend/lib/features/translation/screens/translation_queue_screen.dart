@@ -979,6 +979,9 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
 
   /// Backend exposes two Markdown downloads: `md` (default embed_images) and `md_zip` (?embed_images=false).
   static int _downloadFormatSortOrder(String formatKey) {
+    if (_isOriginalImageDownloadFormat(formatKey)) {
+      return -1;
+    }
     const List<String> preferred = <String>[
       'docx',
       'html',
@@ -2274,6 +2277,20 @@ class _TinyBadge extends StatelessWidget {
 
 // ─── Download popup menu button ──────────────────────────────────────────────
 
+bool _isOriginalImageDownloadFormat(String formatKey) {
+  const Set<String> imageFormats = <String>{
+    'png',
+    'jpg',
+    'jpeg',
+    'webp',
+    'bmp',
+    'gif',
+    'tif',
+    'tiff',
+  };
+  return imageFormats.contains(formatKey.toLowerCase());
+}
+
 /// Map download format key to a localized button label.
 String _extensionForFormat(String formatKey) {
   switch (formatKey) {
@@ -2299,6 +2316,9 @@ String _downloadFormatButtonLabel(String formatKey, AppLocalizations l10n) {
     case 'pdf_reflow':
       return l10n.translationExportPdfReflow;
     default:
+      if (_isOriginalImageDownloadFormat(formatKey)) {
+        return l10n.translationExportImageOriginalLayout;
+      }
       return formatKey.toUpperCase();
   }
 }
@@ -2335,6 +2355,15 @@ IconData _downloadFormatIcon(String ft) {
       return Icons.data_object;
     case 'srt':
       return Icons.subtitles;
+    case 'png':
+    case 'jpg':
+    case 'jpeg':
+    case 'webp':
+    case 'bmp':
+    case 'gif':
+    case 'tif':
+    case 'tiff':
+      return Icons.image_outlined;
     default:
       return Icons.download;
   }

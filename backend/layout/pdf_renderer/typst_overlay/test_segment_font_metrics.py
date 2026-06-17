@@ -33,13 +33,16 @@ from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
 def test_clamp_font_size_pt_rounds_to_step():
     assert clamp_font_size_pt(9.24) == 9.2
     assert clamp_font_size_pt(72.05) == 72.0
-    assert clamp_font_size_pt(4.9) == FONT_SIZE_PT_MIN
+    assert clamp_font_size_pt(0.4) == FONT_SIZE_PT_MIN
 
 
 def test_normalize_user_font_size_pt_rejects_out_of_range():
     assert normalize_user_font_size_pt(None) is None
-    assert normalize_user_font_size_pt(4.9) is None
+    assert normalize_user_font_size_pt(0.4) is None
+    assert normalize_user_font_size_pt(0.5) == 0.5
     assert normalize_user_font_size_pt(80.0) is None
+    assert normalize_user_font_size_pt(1.9) == 1.9
+    assert normalize_user_font_size_pt(2.9) == 2.9
     assert normalize_user_font_size_pt(12.0) == 12.0
 
 
@@ -83,6 +86,25 @@ def test_build_block_font_map_uses_segment_layout_block_map():
     }
     block_map = build_block_font_map_from_segments(segments, task_state)
     assert block_map == {12: 14.0, 13: 14.0}
+
+
+def test_build_block_font_map_skips_auto_font_size_source():
+    segments = [
+        {
+            "segment_index": 0,
+            "font_size_pt": 12.0,
+            "font_size_source": "auto",
+            "layout_block_indices": [1],
+        },
+        {
+            "segment_index": 1,
+            "font_size_pt": 11.0,
+            "font_size_source": "user",
+            "layout_block_indices": [2],
+        },
+    ]
+    block_map = build_block_font_map_from_segments(segments)
+    assert block_map == {2: 11.0}
 
 
 def test_apply_user_font_override_locks_fit_params():
@@ -152,8 +174,117 @@ def test_enrich_segment_pdf_page_number_from_layout():
     assert "computed_font_size_pt" not in image_seg
 
 
+def test_reconcile_overlay_preserves_user_font_size_pt():
+    from layout.base import LayoutBlock, LayoutDocument, LayoutPage
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        _reconcile_overlay_user_font_size_pt,
+    )
+
+    layout_doc = LayoutDocument(
+        pages=[
+            LayoutPage(
+                page_index=0,
+                width=309.0,
+                height=910.0,
+                blocks=[
+                    LayoutBlock(
+                        page_index=0,
+                        bbox=(10.0, 20.0, 90.0, 28.0),
+                        type="text",
+                        index=4,
+                        text="建筑师：",
+                    ),
+                ],
+            ),
+        ],
+    )
+    block = layout_doc.pages[0].blocks[0]
+    segment = {
+        "font_size_pt": 5.9,
+        "font_size_source": "user",
+        "target_text": "建筑师：",
+    }
+    _reconcile_overlay_user_font_size_pt(
+        segment,
+        block,
+        "建筑师：",
+        layout_doc,
+        layout_doc.pages[0],
+        (309, 910),
+    )
+    assert segment["font_size_pt"] == 5.9
+    assert segment.get("computed_font_size_pt") is not None
+    assert abs(segment["computed_font_size_pt"] - 5.9) < 0.2
+
+
+def test_enrich_segment_image_block_with_overlay_text():
+    from layout.base import LayoutBlock, LayoutDocument, LayoutPage
+
+    layout_doc = LayoutDocument(
+        pages=[
+            LayoutPage(
+                page_index=0,
+                width=200.0,
+                height=300.0,
+                blocks=[
+                    LayoutBlock(
+                        page_index=0,
+                        bbox=(10.0, 20.0, 90.0, 35.0),
+                        type="image",
+                        index=2,
+                        image_path="chart.png",
+                        text="Revenue",
+                    ),
+                ],
+            ),
+        ],
+    )
+    seg = {
+        "segment_index": 0,
+        "layout_block_indices": [2],
+        "target_text": "收入",
+    }
+    enrich_segment_font_fields(seg, layout_doc, text="收入")
+    computed = seg.get("computed_font_size_pt")
+    assert computed is not None
+    assert computed >= FONT_SIZE_PT_MIN
+    # Effective overlay size is bbox-capped, not raw Typst estimate alone.
+    _, y0, _, y1 = layout_doc.pages[0].blocks[0].bbox
+    bbox_cap = ((float(y1) - float(y0)) * 0.90)
+    assert computed <= bbox_cap + 0.05
+
+
+def test_enrich_segment_font_fields_small_bbox_below_legacy_min():
+    from layout.base import LayoutBlock, LayoutDocument, LayoutPage
+
+    layout_doc = LayoutDocument(
+        pages=[
+            LayoutPage(
+                page_index=0,
+                width=111.0,
+                height=327.0,
+                blocks=[
+                    LayoutBlock(
+                        page_index=0,
+                        bbox=(3.0, 61.0, 18.0, 64.0),
+                        type="text",
+                        index=4,
+                        text="ARCHITECT :",
+                    ),
+                ],
+            ),
+        ],
+    )
+    seg = {"segment_index": 4, "layout_block_indices": [4]}
+    enrich_segment_font_fields(seg, layout_doc, text="建筑师：")
+    computed = seg.get("computed_font_size_pt")
+    assert computed is not None
+    assert computed < 6.0
+    assert computed >= FONT_SIZE_PT_MIN
+
+
 def test_font_size_constants():
-    assert FONT_SIZE_PT_MIN == 5.0
+    assert FONT_SIZE_PT_MIN == 0.5
     assert FONT_SIZE_PT_MAX == 72.0
     assert FONT_SIZE_PT_STEP == 0.1
 

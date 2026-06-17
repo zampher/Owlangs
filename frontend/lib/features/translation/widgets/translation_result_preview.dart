@@ -41,6 +41,8 @@ import '../widgets/translation_result/translation_preview_dialog.dart';
 import '../widgets/translation_result/translation_full_compare_preview_tab.dart';
 import 'translation_result/segment_pdf_typography_dialog.dart';
 import '../widgets/translation_result/preview_url_utils.dart';
+import '../widgets/translation_result/image_format_utils.dart';
+import '../widgets/translation_result/image_overlay_preview.dart';
 import 'translation_preview_tab_widget.dart';
 import '../../../shared/utils/pagination.dart';
 import '../../../shared/utils/paginated_scroll_manager.dart';
@@ -189,6 +191,34 @@ class _TranslationResultPreviewState
     return fileNameLower.endsWith('.pdf');
   }
 
+  bool _isImageSourceFile() {
+    return isMineruLayoutImageFileName(widget.fileName);
+  }
+
+  bool get _shouldRefreshOverlayPreviewRevision =>
+      _isPdfSourceFile() || _isImageSourceFile();
+
+  String? _originalImageDownloadKey() {
+    return originalImageDownloadExtension(widget.fileName);
+  }
+
+  bool _hasImageDownload(Map<String, String>? downloads) {
+    final String? key = _originalImageDownloadKey();
+    if (key == null) {
+      return false;
+    }
+    if (downloads == null) {
+      return false;
+    }
+    if (downloads.containsKey(key)) {
+      return true;
+    }
+    if (key == 'jpg' || key == 'jpeg') {
+      return downloads.containsKey('jpg') || downloads.containsKey('jpeg');
+    }
+    return false;
+  }
+
   bool _translationLooksComplete(dynamic translationState) {
     if (translationState == null) {
       return false;
@@ -252,6 +282,16 @@ class _TranslationResultPreviewState
       merged['pdf'] = TranslationService().buildDownloadUrl(_apiTaskId(), 'pdf');
     }
 
+    final String? imageKey = _originalImageDownloadKey();
+    if (imageKey != null &&
+        _apiTaskId() != 'pending' &&
+        _translationLooksComplete(translationState) &&
+        !_hasImageDownload(merged)) {
+      merged ??= <String, String>{};
+      merged[imageKey] =
+          TranslationService().buildDownloadUrl(_apiTaskId(), imageKey);
+    }
+
     return merged;
   }
 
@@ -270,6 +310,12 @@ class _TranslationResultPreviewState
     }
     if (_isPdfSourceFile() &&
         !effectiveDownloads.containsKey('pdf') &&
+        _translationLooksComplete(translationState)) {
+      return true;
+    }
+    final String? imageKey = _originalImageDownloadKey();
+    if (imageKey != null &&
+        !_hasImageDownload(effectiveDownloads) &&
         _translationLooksComplete(translationState)) {
       return true;
     }
@@ -2796,7 +2842,7 @@ class _TranslationResultPreviewState
         if (_segmentsPaginationController != null) {
           await _segmentsPaginationController!.refresh();
         }
-        if (_isPdfSourceFile()) {
+        if (_shouldRefreshOverlayPreviewRevision) {
           _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
         }
       }
@@ -3390,7 +3436,7 @@ class _TranslationResultPreviewState
         setState(() {
           // Trigger rebuild so itemConverter uses updated _allSegmentsMetadata
         });
-        if (_isPdfSourceFile()) {
+        if (_shouldRefreshOverlayPreviewRevision) {
           _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
         }
         MessageService.showInfo(context, 'Segment translation cleared');
@@ -4172,7 +4218,11 @@ class _TranslationResultPreviewState
       pdfRevisionLaunchProvider(_pdfRevisionLaunchScopeKey()),
       (int? previous, int next) {
         if (next > 0 && previous != next && mounted) {
-          unawaited(_onEnterPdfRevisionMode());
+          if (_isImageSourceFile()) {
+            unawaited(_onEnterImageRevisionMode());
+          } else {
+            unawaited(_onEnterPdfRevisionMode());
+          }
         }
       },
     );
@@ -4243,9 +4293,16 @@ class _TranslationResultPreviewState
                 onNavigateToFailedSegment: (direction) =>
                     _navigateToFailedSegment(direction: direction),
                 onViewPreview: _onViewPreview,
-                onEnterPdfRevisionMode: _isPdfSourceFile() &&
-                        _translationLooksComplete(translationState)
-                    ? _onEnterPdfRevisionMode
+                onEnterPdfRevisionMode: (_isPdfSourceFile() ||
+                        _isImageSourceFile()) &&
+                    _translationLooksComplete(translationState)
+                    ? () {
+                        if (_isImageSourceFile()) {
+                          unawaited(_onEnterImageRevisionMode());
+                        } else {
+                          unawaited(_onEnterPdfRevisionMode());
+                        }
+                      }
                     : null,
                 onShowDownload: _showDownloadDialog,
                 onToggleFullscreen: _toggleFullscreen,
@@ -4689,13 +4746,15 @@ class _TranslationResultPreviewState
   /// Reload computed PDF typography from backend Typst dry-run enrichment.
   Future<void> _refreshPdfTypographyMetadata({bool forceRefresh = false}) async {
     if (!forceRefresh && _allSegmentsMetadata.isNotEmpty) {
-      final bool hasTypography = _allSegmentsMetadata.values.any(
+      final bool allResolved = _allSegmentsMetadata.values.every(
         (Map<String, dynamic> metadata) =>
-            metadata.containsKey('computed_font_size_pt'),
+            metadata['computed_font_size_pt'] != null ||
+            (metadata['font_size_source'] == 'user' &&
+                metadata['font_size_pt'] != null),
       );
-      if (hasTypography) {
+      if (allResolved) {
         _translationResultLog(
-          '[PDF_REVISION] Skipping typography refresh; metadata already loaded',
+          '[PDF_REVISION] Skipping typography refresh; all segments resolved',
         );
         return;
       }
@@ -4842,12 +4901,14 @@ class _TranslationResultPreviewState
     required Set<int> selectedSegmentIndices,
     ValueListenable<Set<int>>? selectedSegmentIndicesListenable,
     required void Function(int index, bool selected) onSegmentSelectionToggle,
-    required Set<int> Function() getFilteredSelectableSegmentIndices,
+    Set<int> Function()? getFilteredSelectableSegmentIndices,
     required void Function(Set<int> indices) onBulkSelectAll,
     required void Function(Set<int> indices) onBulkInvertSelection,
     Future<void> Function()? onBatchFontApply,
+    Future<void> Function(double delta)? onBatchFontSizeStep,
     ScrollController? segmentScrollController,
     bool showSegmentScrollbar = true,
+    bool enablePdfPageFilter = true,
   }) {
     // PDF revision always uses the segment list panel, even when the main tab
     // is in merged/clean reading view (queue "阅读编辑模式" / view_mode=clean).
@@ -4890,10 +4951,13 @@ class _TranslationResultPreviewState
       onBulkSelectAll: onBulkSelectAll,
       onBulkInvertSelection: onBulkInvertSelection,
       onBatchFontApply: onBatchFontApply,
+      onBatchFontSizeStep: onBatchFontSizeStep,
       getFilteredSelectableSegmentIndices: getFilteredSelectableSegmentIndices,
       exclusionFiltersListenable: _selectedExclusionFiltersNotifier,
-      pdfPageFilterListenable: _selectedPdfPageNumbersNotifier,
-      onPdfPageFilterChanged: _handlePdfPageFilterChanged,
+      pdfPageFilterListenable:
+          enablePdfPageFilter ? _selectedPdfPageNumbersNotifier : null,
+      onPdfPageFilterChanged:
+          enablePdfPageFilter ? _handlePdfPageFilterChanged : null,
       sourceParagraphs: _sourceParagraphs,
       targetParagraphs: _targetParagraphs,
       highlightedIndexNotifier: _highlightedIndexNotifier,
@@ -4936,6 +5000,106 @@ class _TranslationResultPreviewState
       onFontSizeChanged: _handleFontSizeChanged,
       showSegmentScrollbar: showSegmentScrollbar,
     );
+  }
+
+  double _effectiveSegmentFontSizePt(Map<String, dynamic> metadata) {
+    return effectivePdfSegmentFontSizePtFromMetadata(metadata);
+  }
+
+  Future<void> _handleBatchFontSizeStep(
+    Set<int> indices,
+    double delta,
+  ) async {
+    if (indices.isEmpty || delta == 0) {
+      return;
+    }
+    final List<int> sorted = indices.toList()..sort();
+    final List<int> changedIndices = <int>[];
+    _pdfTypographyBatchDepth++;
+    try {
+      final TranslationService svc = TranslationService();
+      final Map<String, dynamic> response =
+          await svc.batchUpdateTranslationSegmentTypography(
+        _apiTaskId(),
+        sorted,
+        fontSizeDeltaPt: delta,
+      );
+      final List<dynamic>? changedRaw =
+          response['changed_indices'] as List<dynamic>?;
+      if (changedRaw != null) {
+        changedIndices.addAll(
+          changedRaw.map((dynamic v) => (v as num).toInt()),
+        );
+      }
+
+      final List<dynamic>? segments =
+          response['segments'] as List<dynamic>?;
+      if (segments != null) {
+        for (final dynamic raw in segments) {
+          if (raw is! Map) {
+            continue;
+          }
+          final Map<String, dynamic> segment = Map<String, dynamic>.from(raw);
+          final int? index = segment['segment_index'] as int?;
+          if (index == null || !changedIndices.contains(index)) {
+            continue;
+          }
+          final Map<String, dynamic> computedFields =
+              _pdfFontSizeMetadataFields(segment);
+          final double appliedPt = computedFields['font_size_pt'] is num
+              ? (computedFields['font_size_pt'] as num).toDouble()
+              : _effectiveSegmentFontSizePt(
+                  _allSegmentsMetadata[index] ?? <String, dynamic>{},
+                );
+          _applyLocalPdfTypographyMetadata(
+            index,
+            fontSizePt: appliedPt,
+            scope: SegmentPdfTypographyDialogMode.fontOnly,
+          );
+          if (_allSegmentsMetadata.containsKey(index)) {
+            _allSegmentsMetadata[index] = <String, dynamic>{
+              ..._allSegmentsMetadata[index]!,
+              ...computedFields,
+              'font_size_pt': appliedPt,
+              'font_size_source': 'user',
+            };
+          } else {
+            _allSegmentsMetadata[index] = <String, dynamic>{
+              ...computedFields,
+              'font_size_pt': appliedPt,
+              'font_size_source': 'user',
+            };
+          }
+        }
+      }
+
+      final List<dynamic>? failedRaw =
+          response['failed_indices'] as List<dynamic>?;
+      if (failedRaw != null && failedRaw.isNotEmpty && mounted) {
+        MessageService.showError(
+          context,
+          'Some segments failed to update font size: $failedRaw',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showError(
+          context,
+          'Failed to update segment font size: $e',
+        );
+      }
+    } finally {
+      _pdfTypographyBatchDepth--;
+      if (_pdfTypographyBatchDepth <= 0) {
+        _pdfTypographyBatchDepth = 0;
+        if (changedIndices.isNotEmpty) {
+          await _finalizePdfTypographyBatchRefresh(
+            changedIndices.length,
+            dirtySegmentIndices: changedIndices,
+          );
+        }
+      }
+    }
   }
 
   Future<void> _handleBatchPdfTypography(
@@ -4987,14 +5151,8 @@ class _TranslationResultPreviewState
       return raw is String ? raw : fallback;
     }
 
-    final double initialSize = snapPdfFontSize(
-      metadata['font_size_source'] == 'user' && metadata['font_size_pt'] != null
-          ? readDouble(metadata['font_size_pt'], 12.0)
-          : readDouble(
-              metadata['computed_font_size_pt'],
-              readDouble(metadata['font_size_pt'], 12.0),
-            ),
-    );
+    final double initialSize =
+        effectivePdfSegmentFontSizePtFromMetadata(metadata);
     final String initialWeight = metadata['font_weight_source'] == 'user' &&
             metadata['font_weight'] != null
         ? readString(metadata['font_weight'], 'regular')
@@ -5222,7 +5380,8 @@ class _TranslationResultPreviewState
         _allSegmentsMetadata[index] = computedFields;
       }
 
-      if (mounted && _pdfTypographyBatchDepth == 0) {
+      if (mounted && _pdfTypographyBatchDepth == 0 &&
+          _shouldRefreshOverlayPreviewRevision) {
         _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
         setState(() {});
         await _segmentsPaginationController?.refresh();
@@ -5380,11 +5539,13 @@ class _TranslationResultPreviewState
     }
   }
 
-  /// Open preserve-layout PDF full compare directly in revision mode.
-  Future<void> _onEnterPdfRevisionMode() async {
-    _lastPreviewMode = TranslationPreviewMode.pdfPreserve;
+  /// Open full-compare preview directly in revision mode (PDF or image overlay).
+  Future<void> _onEnterRevisionPreviewMode({
+    required TranslationPreviewMode baseMode,
+  }) async {
+    _lastPreviewMode = baseMode;
     _lastFullDocumentCompare = true;
-    _lastSyncScroll = TranslationPreviewMode.pdfPreserve.defaultFullCompareSyncScroll;
+    _lastSyncScroll = baseMode.defaultFullCompareSyncScroll;
 
     if (mounted) {
       setState(() {
@@ -5406,16 +5567,16 @@ class _TranslationResultPreviewState
         }
       }
       await _openFullDocumentCompareTab(
-        baseMode: TranslationPreviewMode.pdfPreserve,
+        baseMode: baseMode,
         initialLayoutMode: PdfCompareLayoutMode.compareRevision,
       );
     } catch (e, stackTrace) {
       _translationResultLog(
-        '[PDF_REVISION] Failed to open PDF revision mode: $e\n$stackTrace',
+        '[REVISION_PREVIEW] Failed to open revision mode ($baseMode): $e\n$stackTrace',
         level: LogLevel.error,
       );
       if (mounted) {
-        MessageService.showError(context, 'Failed to open PDF revision: $e');
+        MessageService.showError(context, 'Failed to open revision preview: $e');
       }
     } finally {
       if (mounted) {
@@ -5424,6 +5585,24 @@ class _TranslationResultPreviewState
         });
       }
     }
+  }
+
+  Future<void> _onEnterPdfRevisionMode() => _onEnterRevisionPreviewMode(
+        baseMode: TranslationPreviewMode.pdfPreserve,
+      );
+
+  Future<void> _onEnterImageRevisionMode() => _onEnterRevisionPreviewMode(
+        baseMode: TranslationPreviewMode.imageOriginalLayout,
+      );
+
+  bool _supportsRevisionForMode(TranslationPreviewMode baseMode) {
+    if (baseMode == TranslationPreviewMode.pdfPreserve) {
+      return _isPdfSourceFile();
+    }
+    if (baseMode == TranslationPreviewMode.imageOriginalLayout) {
+      return _isImageSourceFile();
+    }
+    return false;
   }
 
   Future<PreviewSelection?> _showPreviewDialogInternal({
@@ -5441,6 +5620,8 @@ class _TranslationResultPreviewState
           isPdfFile: _isPdfSourceFile(),
           hasPdfDownload: effectiveDownloads?.containsKey('pdf') ?? false,
           resolvedWorkflowType: _resolvedWorkflowType(),
+          isImageFile: _isImageSourceFile(),
+          hasImageDownload: _hasImageDownload(effectiveDownloads),
         );
     final bool resolvedFullCompare = _lastFullDocumentCompare ??
         resolvedMode.defaultFullDocumentCompare;
@@ -5453,6 +5634,8 @@ class _TranslationResultPreviewState
       taskId: _apiTaskId(),
       isPdfFile: _isPdfSourceFile(),
       hasPdfDownload: effectiveDownloads?.containsKey('pdf') ?? false,
+      isImageFile: _isImageSourceFile(),
+      hasImageDownload: _hasImageDownload(effectiveDownloads),
       resolvedWorkflowType: _resolvedWorkflowType(),
       initialMode: resolvedMode,
       initialFullDocumentCompare: resolvedFullCompare,
@@ -5543,6 +5726,8 @@ class _TranslationResultPreviewState
           await _openPdfPreviewTab(rendererType: 'typst_overlay');
         case TranslationPreviewMode.pdfReflow:
           await _openPdfPreviewTab(rendererType: 'pandoc');
+        case TranslationPreviewMode.imageOriginalLayout:
+          await _openImageOriginalLayoutPreviewTab();
       }
     } catch (e, stackTrace) {
       _translationResultLog(
@@ -5600,6 +5785,63 @@ class _TranslationResultPreviewState
     _switchToPreviewTab(tabId);
   }
 
+  String? _imageOverlayDownloadUrl(Map<String, String>? downloads) {
+    final String? key = _originalImageDownloadKey();
+    if (key == null || downloads == null) {
+      return null;
+    }
+    return downloads[key] ?? downloads['jpeg'] ?? downloads['jpg'];
+  }
+
+  String _buildImageOverlayPreviewUrl(Map<String, String>? downloads) {
+    final TranslationService svc = TranslationService();
+    final String taskId = _apiTaskId();
+    final String key = _originalImageDownloadKey() ?? 'png';
+    String relative = _imageOverlayDownloadUrl(downloads) ??
+        svc.buildDownloadUrl(taskId, key);
+    final formatSettings = ref.read(formatSettingsProviderFamily(taskId));
+    final Map<String, String> queryParams = buildPreviewExportQueryParams(
+      formatSettings,
+      isPdfWorkflow: true,
+      isImageWorkflow: true,
+    );
+    return mergePreviewUrl(relative, queryParams);
+  }
+
+  Future<void> _openImageOriginalLayoutPreviewTab() async {
+    final dynamic translationState = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!))
+        : null;
+    final Map<String, String>? effectiveDownloads =
+        _resolveEffectiveDownloads(translationState);
+    if (!_isImageSourceFile() || !_hasImageDownload(effectiveDownloads)) {
+      MessageService.showWarning(
+        context,
+        'Original layout image preview not available.',
+      );
+      return;
+    }
+
+    final String imageUrl = _buildImageOverlayPreviewUrl(effectiveDownloads);
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    const String tabId = 'translation_preview_tab';
+    _previewTabsNotifier().updateOrAddTab(
+      PreviewTab(
+        id: tabId,
+        type: PreviewTabType.translationResult,
+        title: l10n.translationExportImageOriginalLayout,
+        icon: Icons.image_outlined,
+        content: ImageOverlayPreviewView(imageUrl: imageUrl),
+        dataRef: <String, dynamic>{
+          'taskId': _apiTaskId(),
+          'flowId': widget.flowId,
+          'downloads': effectiveDownloads,
+        },
+      ),
+    );
+    _switchToPreviewTab(tabId);
+  }
+
   Future<void> _openFullDocumentCompareTab({
     required TranslationPreviewMode baseMode,
     PdfCompareLayoutMode initialLayoutMode =
@@ -5619,6 +5861,21 @@ class _TranslationResultPreviewState
         (!_isPdfSourceFile() || effectiveDownloads?.containsKey('pdf') != true)) {
       MessageService.showWarning(context, 'PDF comparison preview not available');
       return;
+    }
+
+    if (baseMode == TranslationPreviewMode.imageOriginalLayout &&
+        (!_isImageSourceFile() ||
+            !_hasImageDownload(effectiveDownloads))) {
+      MessageService.showWarning(
+        context,
+        'Image comparison preview not available',
+      );
+      return;
+    }
+
+    String? translatedImageUrl;
+    if (baseMode == TranslationPreviewMode.imageOriginalLayout) {
+      translatedImageUrl = _buildImageOverlayPreviewUrl(effectiveDownloads);
     }
 
     String? translatedHtmlUrl = downloads?['html'];
@@ -5644,9 +5901,11 @@ class _TranslationResultPreviewState
           taskId: _apiTaskId(),
           baseMode: baseMode,
           isPdfSource: _isPdfSourceFile(),
+          isImageSource: _isImageSourceFile(),
           isPdfWorkflow: _resolvedWorkflowType() == 'markdown_based' ||
               _isPdfSourceFile(),
           translatedPdfUrl: effectiveDownloads?['pdf'],
+          translatedImageUrl: translatedImageUrl,
           pdfRenderRevision: _pdfPreviewRevision,
           pdfRenderRevisionListenable: _pdfPreviewRevisionNotifier,
           pdfPreviewDirtySegmentsListenable: _pdfPreviewDirtySegmentsNotifier,
@@ -5661,53 +5920,83 @@ class _TranslationResultPreviewState
           onRequestPreviewSettings: _handlePreviewSettingsRequest,
           onDownload: widget.onDownload,
           onShowDownload: _showDownloadDialog,
-          segmentScrollController: _isPdfSourceFile() &&
-                  baseMode == TranslationPreviewMode.pdfPreserve
+          segmentScrollController: _supportsRevisionForMode(baseMode)
               ? _pdfRevisionScrollController
               : null,
-          pdfRevisionSegmentPanelBuilder: _isPdfSourceFile() &&
-                  baseMode == TranslationPreviewMode.pdfPreserve
-              ? _buildPdfRevisionSegmentPanel
+          pdfRevisionSegmentPanelBuilder: _supportsRevisionForMode(baseMode)
+              ? ({
+                  required Set<int> selectedSegmentIndices,
+                  ValueListenable<Set<int>>? selectedSegmentIndicesListenable,
+                  required void Function(int index, bool selected)
+                      onSegmentSelectionToggle,
+                  Set<int> Function()? getFilteredSelectableSegmentIndices,
+                  required void Function(Set<int> indices) onBulkSelectAll,
+                  required void Function(Set<int> indices) onBulkInvertSelection,
+                  Future<void> Function()? onBatchFontApply,
+                  Future<void> Function(double delta)? onBatchFontSizeStep,
+                  ScrollController? segmentScrollController,
+                  bool showSegmentScrollbar = true,
+                }) =>
+                  _buildPdfRevisionSegmentPanel(
+                    selectedSegmentIndices: selectedSegmentIndices,
+                    selectedSegmentIndicesListenable:
+                        selectedSegmentIndicesListenable,
+                    onSegmentSelectionToggle: onSegmentSelectionToggle,
+                    getFilteredSelectableSegmentIndices:
+                        getFilteredSelectableSegmentIndices,
+                    onBulkSelectAll: onBulkSelectAll,
+                    onBulkInvertSelection: onBulkInvertSelection,
+                    onBatchFontApply: onBatchFontApply,
+                    onBatchFontSizeStep: onBatchFontSizeStep,
+                    segmentScrollController: segmentScrollController,
+                    showSegmentScrollbar: showSegmentScrollbar,
+                    enablePdfPageFilter: baseMode ==
+                        TranslationPreviewMode.pdfPreserve,
+                  )
               : null,
-          onBatchFontApply: _isPdfSourceFile() &&
-                  baseMode == TranslationPreviewMode.pdfPreserve
+          onBatchFontApply: _supportsRevisionForMode(baseMode)
               ? (Set<int> indices) => _handleBatchPdfTypography(
                     indices,
                     SegmentPdfTypographyDialogMode.fontOnly,
                   )
               : null,
+          onBatchFontSizeStep: _supportsRevisionForMode(baseMode)
+              ? _handleBatchFontSizeStep
+              : null,
           onBatchLeadingApply: kPdfLeadingTypographyUiEnabled &&
-                  _isPdfSourceFile() &&
+                  _supportsRevisionForMode(baseMode) &&
                   baseMode == TranslationPreviewMode.pdfPreserve
               ? (Set<int> indices) => _handleBatchPdfTypography(
                     indices,
                     SegmentPdfTypographyDialogMode.leadingOnly,
                   )
               : null,
-          onPdfRevisionModeEntered: _isPdfSourceFile() &&
-                  baseMode == TranslationPreviewMode.pdfPreserve
-              ? _refreshPdfTypographyMetadata
+          onPdfRevisionModeEntered: _supportsRevisionForMode(baseMode)
+              ? () => _refreshPdfTypographyMetadata(forceRefresh: true)
               : null,
-          pdfPreviewJumpPageListenable: _isPdfSourceFile() &&
+          pdfPreviewJumpPageListenable: _supportsRevisionForMode(baseMode) &&
                   baseMode == TranslationPreviewMode.pdfPreserve
               ? _pdfPreviewJumpPageNotifier
               : null,
-          pdfPreviewJumpPageTriggerListenable: _isPdfSourceFile() &&
-                  baseMode == TranslationPreviewMode.pdfPreserve
-              ? _pdfPreviewJumpPageTriggerNotifier
-              : null,
-          autoFollowSegmentPdfPageListenable: _isPdfSourceFile() &&
-                  baseMode == TranslationPreviewMode.pdfPreserve
-              ? _autoFollowSegmentPdfPageNotifier
-              : null,
-          onAutoFollowSegmentPdfPageChanged: _isPdfSourceFile() &&
-                  baseMode == TranslationPreviewMode.pdfPreserve
-              ? _setAutoFollowSegmentPdfPage
-              : null,
-          getFilteredSelectableSegmentIndices: _isPdfSourceFile() &&
-                  baseMode == TranslationPreviewMode.pdfPreserve
-              ? _getFilteredSelectableSegmentIndices
-              : null,
+          pdfPreviewJumpPageTriggerListenable:
+              _supportsRevisionForMode(baseMode) &&
+                      baseMode == TranslationPreviewMode.pdfPreserve
+                  ? _pdfPreviewJumpPageTriggerNotifier
+                  : null,
+          autoFollowSegmentPdfPageListenable:
+              _supportsRevisionForMode(baseMode) &&
+                      baseMode == TranslationPreviewMode.pdfPreserve
+                  ? _autoFollowSegmentPdfPageNotifier
+                  : null,
+          onAutoFollowSegmentPdfPageChanged:
+              _supportsRevisionForMode(baseMode) &&
+                      baseMode == TranslationPreviewMode.pdfPreserve
+                  ? _setAutoFollowSegmentPdfPage
+                  : null,
+          getFilteredSelectableSegmentIndices:
+              _supportsRevisionForMode(baseMode)
+                  ? _getFilteredSelectableSegmentIndices
+                  : null,
         ),
         dataRef: <String, dynamic>{
           'taskId': _apiTaskId(),
@@ -5805,6 +6094,8 @@ class _TranslationResultPreviewState
 
     final String fileNameLower = widget.fileName?.toLowerCase() ?? '';
     final bool isPdfFile = fileNameLower.endsWith('.pdf');
+    final bool isImageFile = isMineruLayoutImageFileName(widget.fileName);
+    final String? imageExt = originalImageDownloadExtension(widget.fileName);
     final bool isArbFile = fileNameLower.endsWith('.arb');
 
     // Get status to check for tables and equations (for PDF workflow format options)
@@ -5871,6 +6162,11 @@ class _TranslationResultPreviewState
       }
     }
 
+    if (isImageFile && imageExt != null) {
+      availableFormats.remove(imageExt);
+      availableFormats.insert(0, imageExt);
+    }
+
     if (availableFormats.isEmpty) {
       final l10n = AppLocalizations.of(context)!;
       MessageService.showWarning(context, l10n.translationExportNoFormats);
@@ -5926,6 +6222,13 @@ class _TranslationResultPreviewState
             'rendererType': 'pandoc',
           });
         }
+      } else if (isOriginalImageDownloadFormat(format)) {
+        downloadOptions.add(<String, dynamic>{
+          'type': format,
+          'label': l10n.translationExportImageOriginalLayout,
+          'description': l10n.translationExportImageOriginalLayoutDesc,
+          'embedImages': null,
+        });
       } else {
         downloadOptions.add(<String, dynamic>{
           'type': format,
@@ -5935,15 +6238,19 @@ class _TranslationResultPreviewState
       }
     }
 
-    // Check if this is a PDF workflow (markdown_based) to show format options
+    // Check if this is a PDF or image layout workflow to show format options
     final bool isPdfWorkflow =
         resolvedWorkflowType == 'markdown_based' || isPdfFile;
+    final bool isImageLayoutWorkflow =
+        isImageFile && resolvedWorkflowType == 'markdown_based';
     final bool hasTables = status?['has_tables'] as bool? ?? false;
     final bool hasInterlineEquations =
         status?['has_interline_equations'] as bool? ?? false;
     final bool hasCharts = status?['has_charts'] as bool? ?? false;
     final bool showFormatOptions =
-        isPdfWorkflow && (hasTables || hasInterlineEquations || hasCharts);
+        (isPdfWorkflow || isImageLayoutWorkflow) &&
+        (hasTables || hasInterlineEquations || hasCharts);
+    final bool showImageOverlayOptions = isImageLayoutWorkflow;
 
     // Determine whether bilingual export option should be shown
     final bool supportsBilingual = <String>{
@@ -5992,6 +6299,7 @@ class _TranslationResultPreviewState
               formatSettings.getEquationFormat(isPdfWorkflow: isPdfWorkflow);
           String chartFormat =
               formatSettings.getChartFormat(isPdfWorkflow: isPdfWorkflow);
+          String coverColorMode = formatSettings.getCoverColorMode();
           String bilingualOrder =
               formatSettings.bilingualOrder ?? 'target_after_source';
           bool sourceTextItalic = formatSettings.sourceTextItalic ?? false;
@@ -6244,6 +6552,110 @@ class _TranslationResultPreviewState
                             ],
                           ),
                         ],
+                        const Divider(height: 24),
+                      ],
+                      if (showImageOverlayOptions) ...<Widget>[
+                        Text(
+                          l10n.translationExportFormatOptionsTitle,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            SizedBox(
+                              width: 120,
+                              child: Text(
+                                l10n.translationImageCoverColorModeLabel,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  RadioListTile<String>(
+                                    value: 'max',
+                                    groupValue: coverColorMode,
+                                    onChanged: (String? value) {
+                                      if (value == null) {
+                                        return;
+                                      }
+                                      setDialogState(() {
+                                        coverColorMode = value;
+                                      });
+                                      ref
+                                          .read(
+                                            formatSettingsProviderFamily(
+                                              _apiTaskId(),
+                                            ).notifier,
+                                          )
+                                          .setCoverColorMode(value);
+                                    },
+                                    title: Text(
+                                      l10n.translationImageCoverColorModeMax,
+                                    ),
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  RadioListTile<String>(
+                                    value: 'min',
+                                    groupValue: coverColorMode,
+                                    onChanged: (String? value) {
+                                      if (value == null) {
+                                        return;
+                                      }
+                                      setDialogState(() {
+                                        coverColorMode = value;
+                                      });
+                                      ref
+                                          .read(
+                                            formatSettingsProviderFamily(
+                                              _apiTaskId(),
+                                            ).notifier,
+                                          )
+                                          .setCoverColorMode(value);
+                                    },
+                                    title: Text(
+                                      l10n.translationImageCoverColorModeMin,
+                                    ),
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  RadioListTile<String>(
+                                    value: 'avg',
+                                    groupValue: coverColorMode,
+                                    onChanged: (String? value) {
+                                      if (value == null) {
+                                        return;
+                                      }
+                                      setDialogState(() {
+                                        coverColorMode = value;
+                                      });
+                                      ref
+                                          .read(
+                                            formatSettingsProviderFamily(
+                                              _apiTaskId(),
+                                            ).notifier,
+                                          )
+                                          .setCoverColorMode(value);
+                                    },
+                                    title: Text(
+                                      l10n.translationImageCoverColorModeAvg,
+                                    ),
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                         const Divider(height: 24),
                       ],
                       // Bilingual export options
@@ -6686,6 +7098,13 @@ class _TranslationResultPreviewState
       // Add renderer_type for PDF export (typst_overlay | pandoc)
       if (rendererType != null && rendererType.isNotEmpty) {
         queryParams['renderer_type'] = rendererType;
+      }
+
+      if (isOriginalImageDownloadFormat(fileType)) {
+        final formatSettings = ref.read(
+          formatSettingsProviderFamily(_apiTaskId()),
+        );
+        queryParams['cover_color_mode'] = formatSettings.getCoverColorMode();
       }
 
       // Add bilingual parameters if enabled (not supported for preserve-layout PDF)

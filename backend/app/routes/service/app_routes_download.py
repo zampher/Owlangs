@@ -89,6 +89,7 @@ async def service_download_file_route(
         source_text_color: Optional[str] = FastApiQuery(None, description="Source text color for bilingual export: 'gray', 'blue', 'red', 'green', 'orange', 'black'.", examples=["gray", "blue", "red"]),
         target_text_italic: Optional[bool] = FastApiQuery(None, description="Render target text in italic for bilingual export.", examples=[True, False]),
         target_text_color: Optional[str] = FastApiQuery(None, description="Target text color for bilingual export: 'gray', 'blue', 'red', 'green', 'orange', 'black'.", examples=["gray", "blue", "red"]),
+        cover_color_mode: Optional[str] = FastApiQuery(None, description="Image overlay erase fill: 'max' (brightest strip pixel), 'min' (darkest), or 'avg' (mean).", examples=["max", "min", "avg"]),
         renderer_type: Optional[str] = FastApiQuery(None, description="PDF renderer: 'typst_overlay' = preserve original layout (default when omitted); 'pandoc' = reflow from Markdown via Pandoc+XeLaTeX. PDF downloads only.", examples=["typst_overlay", "pandoc"]),
         preview: Optional[bool] = FastApiQuery(None, description="When true, serve HTML/MD with Content-Disposition inline for iframe preview.", examples=[True]),
         dirty_segments: Optional[str] = FastApiQuery(None, description="Comma-separated segment indices for incremental PDF preview refresh (PDF revision).", examples=["12,13"]),
@@ -108,6 +109,7 @@ async def service_download_file_route(
         source_text_color=source_text_color,
         target_text_italic=target_text_italic,
         target_text_color=target_text_color,
+        cover_color_mode=cover_color_mode,
         renderer_type=renderer_type,
         dirty_segments=dirty_segments,
     )

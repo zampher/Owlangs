@@ -15,6 +15,7 @@ from pathlib import Path
 
 from logger import unified_logger as logger
 from logger.logger import LogModule
+from layout.renderable_block_indices import expand_renderable_block_indices
 
 # Temporary feature flag: high-fidelity layout-based PDF (ReportLab/HTML fallback).
 # When False, this generator will short-circuit and not create additional PDFs,
@@ -25,11 +26,6 @@ ENABLE_LAYOUT_PDF_GENERATION: bool = True
 # or "reportlab" (direct rendering, no HTML intermediate).
 DEFAULT_PDF_RENDERER_TYPE: str = "typst_overlay"
 
-# Block types that Typst overlay can render as text (non-image/table/chart).
-_RENDERABLE_TEXT_BLOCK_TYPES = frozenset(
-    {"text", "title", "header", "footer", "page_number", "ref_text", "figure", "caption"}
-)
-
 
 def _segment_export_text(segment: Dict[str, Any], text_field: str) -> str:
     """Resolve per-segment export text (modified_text falls back to target_text)."""
@@ -38,143 +34,7 @@ def _segment_export_text(segment: Dict[str, Any], text_field: str) -> str:
     return (segment.get("modified_text") or segment.get("target_text") or "").strip()
 
 
-def _bbox_contains(outer: tuple, inner: tuple, *, margin: float = 1.0) -> bool:
-    ox0, oy0, ox1, oy1 = outer
-    ix0, iy0, ix1, iy1 = inner
-    return (
-        ix0 >= ox0 - margin
-        and iy0 >= oy0 - margin
-        and ix1 <= ox1 + margin
-        and iy1 <= oy1 + margin
-    )
-
-
-def _is_list_expandable_child_type(block_type: str) -> bool:
-    """Block types that can receive translated text when a list parent is expanded."""
-    return block_type in _RENDERABLE_TEXT_BLOCK_TYPES and block_type not in {
-        "list",
-        "figure",
-    }
-
-
-def _collect_list_child_indices(
-    list_index: int,
-    layout_doc,
-    block_index_to_type: Dict[int, str],
-    block_index_to_bbox: Dict[int, tuple],
-) -> List[int]:
-    """Resolve MinerU list parent blocks to their renderable child layout blocks."""
-    list_bbox = block_index_to_bbox.get(list_index)
-    if not list_bbox:
-        return []
-
-    page_index = None
-    for block in layout_doc.iter_blocks():
-        if block.index == list_index:
-            page_index = block.page_index
-            break
-    if page_index is None:
-        return []
-
-    page_blocks = sorted(
-        (
-            block
-            for block in layout_doc.iter_blocks()
-            if block.page_index == page_index and block.index is not None
-        ),
-        key=lambda block: block.index,
-    )
-
-    # MinerU IR emits list children as consecutive indices immediately after the parent.
-    sequential_children: List[int] = []
-    passed_list = False
-    for block in page_blocks:
-        if block.index == list_index:
-            passed_list = True
-            continue
-        if not passed_list:
-            continue
-        btype = block_index_to_type.get(block.index, block.type)
-        if btype == "list":
-            break
-        if btype in {"image", "table", "chart", "interline_equation"}:
-            break
-        child_bbox = block_index_to_bbox.get(block.index, block.bbox)
-        if not _bbox_contains(list_bbox, child_bbox):
-            break
-        if _is_list_expandable_child_type(btype) and (block.text or "").strip():
-            sequential_children.append(block.index)
-
-    if sequential_children:
-        return sequential_children
-
-    # Fallback: any renderable text block contained in the list bbox on the same page.
-    contained: List[int] = []
-    for block in page_blocks:
-        if block.index == list_index:
-            continue
-        btype = block_index_to_type.get(block.index, block.type)
-        if not _is_list_expandable_child_type(btype) or not (block.text or "").strip():
-            continue
-        child_bbox = block_index_to_bbox.get(block.index, block.bbox)
-        if _bbox_contains(list_bbox, child_bbox):
-            contained.append(block.index)
-    contained.sort(
-        key=lambda idx: (
-            block_index_to_bbox.get(idx, (0, 0, 0, 0))[1],
-            block_index_to_bbox.get(idx, (0, 0, 0, 0))[0],
-        )
-    )
-    return contained
-
-
-def _expand_renderable_block_indices(
-    indices: List[int],
-    layout_doc,
-    block_index_to_type: Dict[int, str],
-    block_index_to_bbox: Dict[int, tuple],
-) -> List[int]:
-    """Expand non-renderable list blocks to contained text/ref_text layout blocks."""
-    expanded: List[int] = []
-    seen: set[int] = set()
-
-    for raw_idx in indices:
-        try:
-            block_index_int = int(raw_idx)
-        except (TypeError, ValueError):
-            continue
-        if block_index_int in seen:
-            continue
-        block_type = block_index_to_type.get(block_index_int, "text")
-        if block_type != "list":
-            seen.add(block_index_int)
-            expanded.append(block_index_int)
-            continue
-
-        child_indices = _collect_list_child_indices(
-            block_index_int,
-            layout_doc,
-            block_index_to_type,
-            block_index_to_bbox,
-        )
-        if child_indices:
-            logger.info(
-                LogModule.EXPORT,
-                f"[LAYOUT] Expanded list block {block_index_int} to child blocks {child_indices}",
-            )
-            for child_idx in child_indices:
-                if child_idx not in seen:
-                    seen.add(child_idx)
-                    expanded.append(child_idx)
-        else:
-            logger.warning(
-                LogModule.EXPORT,
-                f"[LAYOUT] List block {block_index_int} has no renderable children; "
-                "translation will not overlay on Typst PDF",
-            )
-            seen.add(block_index_int)
-            expanded.append(block_index_int)
-    return expanded
+_expand_renderable_block_indices = expand_renderable_block_indices
 
 
 class PDFGenerator:

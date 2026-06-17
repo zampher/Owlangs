@@ -748,6 +748,7 @@ async def batch_update_segment_typography_api(
         raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
 
     font_size_pt = body.get("font_size_pt")
+    font_size_delta_pt = body.get("font_size_delta_pt")
     font_size_reset = bool(body.get("font_size_reset", False))
     font_weight = body.get("font_weight")
     font_style = body.get("font_style")
@@ -763,6 +764,7 @@ async def batch_update_segment_typography_api(
         segment_indices=segment_indices,
         modified_by=modified_by,
         font_size_pt=font_size_pt,
+        font_size_delta_pt=font_size_delta_pt,
         font_size_reset=font_size_reset,
         font_weight=font_weight,
         font_style=font_style,
@@ -772,6 +774,14 @@ async def batch_update_segment_typography_api(
         leading_em_reset=leading_em_reset,
         pdf_font_reset=pdf_font_reset,
     )
+
+    task_state = task_manager.get_task(task_id) or {}
+    segments_out = result.get("segments") or []
+    if isinstance(segments_out, list) and segments_out:
+        segment_dicts = [s for s in segments_out if isinstance(s, dict)]
+        if segment_dicts:
+            _enrich_segments_pdf_typography(task_id, task_state, segment_dicts)
+
     return JSONResponse(content=result)
 
 

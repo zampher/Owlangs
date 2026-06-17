@@ -5,16 +5,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
-from layout.base import LayoutBlock, LayoutDocument
+from layout.base import LayoutBlock, LayoutDocument, LayoutPage
 from layout.pdf_renderer.typst_overlay.font_fit import (
     DEFAULT_LEADING_EM,
     FontFitCalculator,
+    USER_FONT_SIZE_PT_MIN,
 )
 from layout.pdf_renderer.typst_overlay.models import RenderBlock, layout_block_to_render_block
 
-FONT_SIZE_PT_MIN = 5.0
+FONT_SIZE_PT_MIN = USER_FONT_SIZE_PT_MIN
 FONT_SIZE_PT_MAX = 72.0
 FONT_SIZE_PT_STEP = 0.1
 
@@ -33,6 +35,46 @@ _NON_TEXT_BLOCK_TYPES = frozenset({
     "chart",
     "list",
 })
+
+_IMAGE_OVERLAY_EXTENSIONS = frozenset({
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".bmp",
+    ".tif",
+    ".tiff",
+    ".gif",
+})
+
+
+def is_image_overlay_task(task_state: Optional[Dict[str, Any]]) -> bool:
+    """True when task renders translated text via raster image overlay."""
+    if not task_state:
+        return False
+    if task_state.get("layout_document") is None:
+        return False
+    raw_path = task_state.get("original_file_path")
+    if not raw_path or not isinstance(raw_path, str):
+        return False
+    suffix = Path(raw_path).suffix.lower()
+    return suffix in _IMAGE_OVERLAY_EXTENSIONS and Path(raw_path).is_file()
+
+
+def resolve_image_overlay_image_size(
+    task_state: Optional[Dict[str, Any]],
+) -> Optional[Tuple[int, int]]:
+    """Read source raster dimensions for overlay dry-run font metrics."""
+    if not is_image_overlay_task(task_state):
+        return None
+    raw_path = str(task_state.get("original_file_path"))
+    try:
+        from PIL import Image
+
+        with Image.open(raw_path) as img:
+            return int(img.width), int(img.height)
+    except OSError:
+        return None
 
 
 def clamp_font_size_pt(value: float) -> float:
@@ -57,9 +99,44 @@ def normalize_user_font_size_pt(value: Any) -> Optional[float]:
 
 def segment_font_size_source(segment: Dict[str, Any]) -> str:
     """Return ``user`` when segment has a persisted override, else ``auto``."""
-    if normalize_user_font_size_pt(segment.get("font_size_pt")) is not None:
+    if segment_has_user_font_size_override(segment):
         return "user"
     return "auto"
+
+
+def segment_has_user_font_size_override(segment: Dict[str, Any]) -> bool:
+    """True when segment stores an explicit user font size override."""
+    source = segment.get("font_size_source")
+    if source is not None and str(source).strip().lower() == "auto":
+        return False
+    return normalize_user_font_size_pt(segment.get("font_size_pt")) is not None
+
+
+def effective_segment_font_size_pt_for_ui(segment: Dict[str, Any]) -> float:
+    """
+    Resolved font size for batch ± steps (matches frontend effectivePdfSegmentFontSizePt).
+    """
+    font_size_source = segment.get("font_size_source")
+    font_size_pt = segment.get("font_size_pt")
+    computed_font_size_pt = segment.get("computed_font_size_pt")
+
+    if font_size_source == "user" and font_size_pt is not None:
+        normalized = normalize_user_font_size_pt(font_size_pt)
+        if normalized is not None:
+            return normalized
+
+    if computed_font_size_pt is not None:
+        try:
+            return clamp_font_size_pt(float(computed_font_size_pt))
+        except (TypeError, ValueError):
+            pass
+
+    if font_size_pt is not None:
+        normalized = normalize_user_font_size_pt(font_size_pt)
+        if normalized is not None:
+            return normalized
+
+    return FONT_SIZE_PT_MIN
 
 
 def normalize_user_font_weight(value: Any) -> Optional[str]:
@@ -89,9 +166,16 @@ def normalize_user_font_style(value: Any) -> Optional[str]:
 
 
 def segment_font_weight_source(segment: Dict[str, Any]) -> str:
-    if normalize_user_font_weight(segment.get("font_weight")) is not None:
+    if segment_has_user_font_weight_override(segment):
         return "user"
     return "auto"
+
+
+def segment_has_user_font_weight_override(segment: Dict[str, Any]) -> bool:
+    source = segment.get("font_weight_source")
+    if source is not None and str(source).strip().lower() == "auto":
+        return False
+    return normalize_user_font_weight(segment.get("font_weight")) is not None
 
 
 def segment_font_style_source(segment: Dict[str, Any]) -> str:
@@ -184,6 +268,72 @@ def compute_block_render_font_size_pt(
     return metrics[0] if metrics else None
 
 
+def compute_image_overlay_font_size_pt(
+    block: LayoutBlock,
+    text: str,
+    *,
+    calculator: Optional[FontFitCalculator] = None,
+) -> Optional[float]:
+    """Typst dry-run estimate for overlay text (before bbox cap)."""
+    if not text or not text.strip():
+        return None
+    calc = calculator or FontFitCalculator(min_size_pt=FONT_SIZE_PT_MIN)
+    layout_raw = getattr(block, "raw", None) or {}
+    if not isinstance(layout_raw, dict):
+        layout_raw = {}
+    rb = layout_block_to_render_block(
+        block,
+        page_index=getattr(block, "page_index", 0) or 0,
+        translated_text=text,
+    )
+    try:
+        fitted = calc.calculate_fit_params(rb, layout_raw=layout_raw)
+        if fitted.font_size_pt > 0:
+            return round(float(fitted.font_size_pt), 1)
+    except Exception:
+        pass
+    try:
+        estimated = float(calc.estimate_font_size(rb, layout_raw=layout_raw))
+        if estimated > 0:
+            return round(estimated, 1)
+    except Exception:
+        pass
+    return None
+
+
+def compute_image_overlay_effective_font_size_pt(
+    block: LayoutBlock,
+    text: str,
+    *,
+    calculator: Optional[FontFitCalculator] = None,
+) -> Optional[float]:
+    """Effective auto overlay font size (matches renderer min-candidate logic in pt)."""
+    if not text or not text.strip():
+        return None
+    from layout.image_overlay.renderer import (
+        _estimate_overlay_font_size_pt,
+        _mineru_layout_font_size_pt,
+        _overlay_line_count,
+    )
+
+    line_count = _overlay_line_count(text)
+    _, y0, _, y1 = block.bbox
+    bbox_h = max(0.1, float(y1) - float(y0))
+    bbox_cap_pt = (bbox_h / line_count) * 0.90
+    layout_line_pt = (bbox_h / line_count) * 0.88
+
+    candidates: List[float] = [bbox_cap_pt, layout_line_pt]
+    layout_pt = _mineru_layout_font_size_pt(block)
+    if layout_pt is not None and layout_pt > 0:
+        candidates.append(float(layout_pt))
+    estimated_pt = _estimate_overlay_font_size_pt(block, text)
+    if estimated_pt is not None and estimated_pt > 0:
+        candidates.append(float(estimated_pt))
+
+    effective = max(FONT_SIZE_PT_MIN, min(FONT_SIZE_PT_MAX, min(candidates)))
+    return round(effective, 1)
+
+
 def compute_block_render_fit_metrics(
     block: LayoutBlock,
     text: str,
@@ -196,7 +346,7 @@ def compute_block_render_fit_metrics(
     if not is_font_size_editable_block_type(getattr(block, "type", "") or "text"):
         return None
 
-    calc = calculator or FontFitCalculator()
+    calc = calculator or FontFitCalculator(min_size_pt=FONT_SIZE_PT_MIN)
     layout_raw = getattr(block, "raw", None) or {}
     rb = layout_block_to_render_block(
         block,
@@ -240,7 +390,19 @@ def enrich_segment_font_fields(
         block_map[int(block.index)] = block
         type_map[int(block.index)] = getattr(block, "type", "") or "text"
 
-    block_idx = primary_layout_block_index(segment, type_map, task_state)
+    block_idx: Optional[int] = None
+    if is_image_overlay_task(task_state):
+        from layout.image_overlay.block_text_map import (
+            resolve_overlay_primary_text_block_index,
+        )
+
+        block_idx = resolve_overlay_primary_text_block_index(
+            segment,
+            layout_doc,
+            task_state,
+        )
+    if block_idx is None:
+        block_idx = primary_layout_block_index(segment, type_map, task_state)
     if block_idx is None or block_idx not in block_map:
         segment.pop("computed_font_size_pt", None)
         segment.pop("computed_font_weight", None)
@@ -259,16 +421,6 @@ def enrich_segment_font_fields(
     else:
         segment.pop("pdf_page_number", None)
 
-    if not is_font_size_editable_block_type(type_map.get(block_idx, "text")):
-        segment.pop("computed_font_size_pt", None)
-        segment.pop("computed_font_weight", None)
-        segment.pop("computed_font_style", None)
-        segment.pop("computed_leading_em", None)
-        return
-
-    segment["computed_font_weight"] = compute_block_font_weight_from_layout(block)
-    segment["computed_font_style"] = compute_block_font_style_from_layout(block)
-
     content = text
     if content is None:
         content = (
@@ -278,17 +430,113 @@ def enrich_segment_font_fields(
             or segment.get("source_text")
             or ""
         )
-    computed = compute_block_render_fit_metrics(
-        block,
-        str(content),
-        calculator=calculator,
+
+    block_type = type_map.get(block_idx, "text")
+    overlay_image_size = (
+        resolve_image_overlay_image_size(task_state)
+        if is_image_overlay_task(task_state)
+        else None
     )
+    overlay_page = layout_doc.get_page(getattr(block, "page_index", 0) or 0)
+
+    if not is_font_size_editable_block_type(block_type):
+        if block_type == "image" and str(content).strip():
+            overlay_pt: Optional[float] = None
+            if overlay_image_size is not None:
+                from layout.image_overlay.renderer import dry_run_overlay_font_size_pt
+
+                overlay_pt = dry_run_overlay_font_size_pt(
+                    block,
+                    str(content),
+                    overlay_page,
+                    overlay_image_size,
+                )
+            if overlay_pt is None:
+                overlay_pt = compute_image_overlay_effective_font_size_pt(
+                    block,
+                    str(content),
+                    calculator=calculator,
+                )
+            if overlay_pt is not None:
+                segment["computed_font_size_pt"] = overlay_pt
+                segment["computed_leading_em"] = DEFAULT_LEADING_EM
+            else:
+                segment.pop("computed_font_size_pt", None)
+                segment.pop("computed_leading_em", None)
+        else:
+            segment.pop("computed_font_size_pt", None)
+            segment.pop("computed_leading_em", None)
+        segment.pop("computed_font_weight", None)
+        segment.pop("computed_font_style", None)
+        return
+
+    segment["computed_font_weight"] = compute_block_font_weight_from_layout(block)
+    segment["computed_font_style"] = compute_block_font_style_from_layout(block)
+
+    computed: Optional[tuple[float, float]] = None
+    if overlay_image_size is not None and str(content).strip():
+        from layout.image_overlay.renderer import dry_run_overlay_font_size_pt
+
+        user_pt: Optional[float] = None
+        if segment_has_user_font_size_override(segment):
+            user_pt = normalize_user_font_size_pt(segment.get("font_size_pt"))
+        render_pt = dry_run_overlay_font_size_pt(
+            block,
+            str(content),
+            overlay_page,
+            overlay_image_size,
+            user_pt=user_pt,
+        )
+        if render_pt is not None:
+            computed = (render_pt, DEFAULT_LEADING_EM)
+
+    if computed is None:
+        computed = compute_block_render_fit_metrics(
+            block,
+            str(content),
+            calculator=calculator,
+        )
     if computed is not None:
         segment["computed_font_size_pt"] = computed[0]
         segment["computed_leading_em"] = computed[1]
     else:
         segment.pop("computed_font_size_pt", None)
         segment.pop("computed_leading_em", None)
+
+    _reconcile_overlay_user_font_size_pt(
+        segment,
+        block,
+        str(content),
+        layout_doc,
+        overlay_page,
+        overlay_image_size,
+    )
+
+
+def _reconcile_overlay_user_font_size_pt(
+    segment: Dict[str, Any],
+    block: LayoutBlock,
+    text: str,
+    layout_doc: LayoutDocument,
+    overlay_page: Optional[LayoutPage],
+    overlay_image_size: Optional[Tuple[int, int]],
+) -> None:
+    """Attach overlay render pt to computed fields; keep user request in font_size_pt."""
+    if overlay_image_size is None or not text.strip():
+        return
+    requested = normalize_user_font_size_pt(segment.get("font_size_pt"))
+    user_pt = requested if segment_has_user_font_size_override(segment) else None
+    from layout.image_overlay.renderer import dry_run_overlay_font_size_pt
+
+    effective = dry_run_overlay_font_size_pt(
+        block,
+        text,
+        overlay_page,
+        overlay_image_size,
+        user_pt=user_pt,
+    )
+    if effective is not None:
+        segment["computed_font_size_pt"] = effective
 
 
 def enrich_segments_font_fields(
@@ -301,7 +549,7 @@ def enrich_segments_font_fields(
     """Enrich all segments with computed font metadata."""
     if not segments:
         return
-    calc = FontFitCalculator()
+    calc = FontFitCalculator(min_size_pt=FONT_SIZE_PT_MIN)
     for seg in segments:
         if not isinstance(seg, dict):
             continue
@@ -381,6 +629,8 @@ def build_block_font_map_from_segments(
     for seg in segments:
         if not isinstance(seg, dict):
             continue
+        if not segment_has_user_font_size_override(seg):
+            continue
         font_pt = normalize_user_font_size_pt(seg.get("font_size_pt"))
         if font_pt is None:
             continue
@@ -397,6 +647,8 @@ def build_block_font_weight_map_from_segments(
     block_map: Dict[int, str] = {}
     for seg in segments:
         if not isinstance(seg, dict):
+            continue
+        if not segment_has_user_font_weight_override(seg):
             continue
         weight = normalize_user_font_weight(seg.get("font_weight"))
         if weight is None:
@@ -447,9 +699,9 @@ def segments_have_user_font_overrides(
     for seg in segments:
         if not isinstance(seg, dict):
             continue
-        if normalize_user_font_size_pt(seg.get("font_size_pt")) is not None:
+        if segment_has_user_font_size_override(seg):
             return True
-        if normalize_user_font_weight(seg.get("font_weight")) is not None:
+        if segment_has_user_font_weight_override(seg):
             return True
         if normalize_user_font_style(seg.get("font_style")) is not None:
             return True

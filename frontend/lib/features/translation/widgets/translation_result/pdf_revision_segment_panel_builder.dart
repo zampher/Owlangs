@@ -9,10 +9,11 @@ typedef PdfRevisionSegmentPanelBuilder = Widget Function({
   required Set<int> selectedSegmentIndices,
   ValueListenable<Set<int>>? selectedSegmentIndicesListenable,
   required void Function(int index, bool selected) onSegmentSelectionToggle,
-  required Set<int> Function() getFilteredSelectableSegmentIndices,
+  Set<int> Function()? getFilteredSelectableSegmentIndices,
   required void Function(Set<int> indices) onBulkSelectAll,
   required void Function(Set<int> indices) onBulkInvertSelection,
   Future<void> Function()? onBatchFontApply,
+  Future<void> Function(double delta)? onBatchFontSizeStep,
   ScrollController? segmentScrollController,
   bool showSegmentScrollbar,
 });

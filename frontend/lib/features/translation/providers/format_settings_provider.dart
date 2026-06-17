@@ -18,6 +18,7 @@ class FormatSettings {
     this.sourceTextColor,
     this.targetTextItalic,
     this.targetTextColor,
+    this.coverColorMode,
   });
 
   /// Table format: 'html' or 'image'
@@ -53,6 +54,9 @@ class FormatSettings {
   /// Target text color: preset name ('gray', 'blue', 'red', 'green', 'orange', 'black')
   final String? targetTextColor;
 
+  /// Image overlay erase fill: 'max' (brightest strip pixel) or 'min' (darkest)
+  final String? coverColorMode;
+
   /// Get table format with default fallback
   String getTableFormat({bool isPdfWorkflow = false}) =>
       tableFormat ?? (isPdfWorkflow ? 'image' : 'html');
@@ -74,6 +78,9 @@ class FormatSettings {
   String getChartFormat({bool isPdfWorkflow = false}) =>
       chartFormat ?? (isPdfWorkflow ? 'image' : 'image');
 
+  /// Image overlay erase background color pick mode.
+  String getCoverColorMode() => coverColorMode ?? 'max';
+
   FormatSettings copyWith({
     String? tableFormat,
     String? equationFormat,
@@ -84,6 +91,7 @@ class FormatSettings {
     String? sourceTextColor,
     bool? targetTextItalic,
     String? targetTextColor,
+    String? coverColorMode,
     bool clearTableFormat = false,
     bool clearEquationFormat = false,
     bool clearChartFormat = false,
@@ -93,6 +101,7 @@ class FormatSettings {
     bool clearSourceTextColor = false,
     bool clearTargetTextItalic = false,
     bool clearTargetTextColor = false,
+    bool clearCoverColorMode = false,
   }) =>
       FormatSettings(
         tableFormat:
@@ -121,6 +130,9 @@ class FormatSettings {
         targetTextColor: clearTargetTextColor
             ? null
             : (targetTextColor ?? this.targetTextColor),
+        coverColorMode: clearCoverColorMode
+            ? null
+            : (coverColorMode ?? this.coverColorMode),
       );
 
   @override
@@ -136,7 +148,8 @@ class FormatSettings {
           sourceTextItalic == other.sourceTextItalic &&
           sourceTextColor == other.sourceTextColor &&
           targetTextItalic == other.targetTextItalic &&
-          targetTextColor == other.targetTextColor;
+          targetTextColor == other.targetTextColor &&
+          coverColorMode == other.coverColorMode;
 
   @override
   int get hashCode =>
@@ -148,7 +161,8 @@ class FormatSettings {
       sourceTextItalic.hashCode ^
       sourceTextColor.hashCode ^
       targetTextItalic.hashCode ^
-      targetTextColor.hashCode;
+      targetTextColor.hashCode ^
+      coverColorMode.hashCode;
 }
 
 /// Notifier for managing format settings per task
@@ -183,8 +197,9 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
       final String? sourceTextColor = flowSettings['source_text_color'] as String?;
       final bool? targetTextItalic = flowSettings['target_text_italic'] as bool?;
       final String? targetTextColor = flowSettings['target_text_color'] as String?;
+      final String? coverColorMode = flowSettings['cover_color_mode'] as String?;
 
-      if (tableFormat != null || equationFormat != null || chartFormat != null || bilingualExport != null || bilingualOrder != null || sourceTextItalic != null || sourceTextColor != null || targetTextItalic != null || targetTextColor != null) {
+      if (tableFormat != null || equationFormat != null || chartFormat != null || bilingualExport != null || bilingualOrder != null || sourceTextItalic != null || sourceTextColor != null || targetTextItalic != null || targetTextColor != null || coverColorMode != null) {
         state = FormatSettings(
           tableFormat: tableFormat,
           equationFormat: equationFormat,
@@ -195,6 +210,7 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
           sourceTextColor: sourceTextColor,
           targetTextItalic: targetTextItalic,
           targetTextColor: targetTextColor,
+          coverColorMode: coverColorMode,
         );
         return; // Use Flow state settings
       }
@@ -235,8 +251,10 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
           prefs.getBool('format_settings_target_text_italic_default');
       final String? targetTextColor =
           prefs.getString('format_settings_target_text_color_default');
+      final String? coverColorMode =
+          prefs.getString('format_settings_cover_color_mode_default');
 
-      if (tableFormat != null || equationFormat != null || chartFormat != null || bilingualExport != null || bilingualOrder != null || sourceTextItalic != null || sourceTextColor != null || targetTextItalic != null || targetTextColor != null) {
+      if (tableFormat != null || equationFormat != null || chartFormat != null || bilingualExport != null || bilingualOrder != null || sourceTextItalic != null || sourceTextColor != null || targetTextItalic != null || targetTextColor != null || coverColorMode != null) {
         state = FormatSettings(
           tableFormat: tableFormat,
           equationFormat: equationFormat,
@@ -247,6 +265,7 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
           sourceTextColor: sourceTextColor,
           targetTextItalic: targetTextItalic,
           targetTextColor: targetTextColor,
+          coverColorMode: coverColorMode,
         );
       }
       // If no user defaults, use code defaults (already set in super constructor)
@@ -335,6 +354,14 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
       } else {
         await prefs.remove('format_settings_target_text_color_default');
       }
+      if (state.coverColorMode != null) {
+        await prefs.setString(
+          'format_settings_cover_color_mode_default',
+          state.coverColorMode!,
+        );
+      } else {
+        await prefs.remove('format_settings_cover_color_mode_default');
+      }
     } catch (e) {
       // Silently fail to avoid disrupting user experience
     }
@@ -406,6 +433,28 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
     state = state.copyWith(targetTextColor: color);
   }
 
+  /// Set image overlay erase background color mode
+  void setCoverColorMode(String mode) {
+    if (mode != 'max' && mode != 'min' && mode != 'avg') {
+      return;
+    }
+    state = state.copyWith(coverColorMode: mode);
+    if (taskId != null) {
+      _saveToFlowState(
+        state.tableFormat,
+        state.equationFormat,
+        state.chartFormat,
+        state.bilingualExport,
+        state.bilingualOrder,
+        state.sourceTextItalic,
+        state.sourceTextColor,
+        state.targetTextItalic,
+        state.targetTextColor,
+        mode,
+      );
+    }
+  }
+
   /// Set both formats
   void setFormats({
     String? tableFormat,
@@ -417,6 +466,7 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
     String? sourceTextColor,
     bool? targetTextItalic,
     String? targetTextColor,
+    String? coverColorMode,
   }) {
     state = state.copyWith(
       tableFormat: tableFormat,
@@ -428,10 +478,11 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
       sourceTextColor: sourceTextColor,
       targetTextItalic: targetTextItalic,
       targetTextColor: targetTextColor,
+      coverColorMode: coverColorMode,
     );
     // Save to Flow state if taskId is available
     if (taskId != null) {
-      _saveToFlowState(tableFormat, equationFormat, chartFormat, bilingualExport, bilingualOrder, sourceTextItalic, sourceTextColor, targetTextItalic, targetTextColor);
+      _saveToFlowState(tableFormat, equationFormat, chartFormat, bilingualExport, bilingualOrder, sourceTextItalic, sourceTextColor, targetTextItalic, targetTextColor, coverColorMode);
     }
   }
 
@@ -446,6 +497,7 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
     String? sourceTextColor,
     bool? targetTextItalic,
     String? targetTextColor,
+    String? coverColorMode,
   ) async {
     if (taskId == null) {
       return; // No taskId, cannot save to Flow state
@@ -464,6 +516,7 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
         sourceTextColor: sourceTextColor,
         targetTextItalic: targetTextItalic,
         targetTextColor: targetTextColor,
+        coverColorMode: coverColorMode,
       );
     } catch (e) {
       // Silently fail to avoid disrupting user experience

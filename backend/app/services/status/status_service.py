@@ -49,12 +49,16 @@ _TRANSLATION_PHASE_PREFIXES = (
     "Retranslating",
     "Sending translation",
     "Generating output",
+    "Generating ",
     "Translation completed",
     "Retranslation completed",
+    "Translated outputs available",
     "Translation initialized",
     "Preparing retranslation",
     "Batch retry",
 )
+
+_TERMINAL_TASK_STATUSES = frozenset({"completed", "failed", "cancelled"})
 
 # Minimal lang code normalization for frozen fallback (no anonymize/spacy/torch)
 _LANG_NORMALIZE = {"zh-cn": "zh", "zh-tw": "zh", "no": "nb"}
@@ -79,7 +83,15 @@ def _strip_lang_detect_status_downgrade(
     new_status = str(updates.get("status") or "").lower()
     if new_status != "processing":
         return updates
-    out = {k: v for k, v in updates.items() if k != "status"}
+    msg = str(updates.get("message") or "")
+    if msg.startswith("Detect Language:"):
+        out = {
+            k: v
+            for k, v in updates.items()
+            if k not in ("status", "progress", "message", "message_level")
+        }
+    else:
+        out = {k: v for k, v in updates.items() if k != "status"}
     logger.debug(
         LogModule.WORKFLOW,
         f"[STATUS] Task {task_id}: preserving terminal status={cur}; omitted lang-detect "
@@ -939,9 +951,10 @@ class StatusService:
                     # "Detect Language: …%". Translation tasks reuse segment caches and would otherwise hit 100%
                     # before chunk callbacks, breaking the progress bar (see workflow_executor translation phase).
                     fresh_live = self.task_manager.get_task(task_id) or {}
-                    skip_detect_start = str(fresh_live.get("message") or "").startswith(
-                        _TRANSLATION_PHASE_PREFIXES
-                    )
+                    fresh_status = str(fresh_live.get("status") or "").lower()
+                    skip_detect_start = fresh_status in _TERMINAL_TASK_STATUSES or str(
+                        fresh_live.get("message") or ""
+                    ).startswith(_TRANSLATION_PHASE_PREFIXES)
                     with _language_detection_lock:
                         already_running = task_id in _language_detection_tasks
                     if skip_detect_start and not already_running:
@@ -971,12 +984,18 @@ class StatusService:
                         # Start language detection in a subprocess so main process event loop is not blocked (no GIL contention)
                         with _language_detection_lock:
                             _language_detection_tasks.add(task_id)
-                        self.task_manager.update_task(task_id, {
+                        detect_start = {
                             "message": f"Detect Language: 0/{total_segments} segments (0%)",
                             "message_level": MSG_LEVEL_WARNING,
                             "progress": 0,
-                            "status": task_state.get("status", "processing")
-                        })
+                            "status": task_state.get("status", "processing"),
+                        }
+                        self.task_manager.update_task(
+                            task_id,
+                            _strip_lang_detect_status_downgrade(
+                                self.task_manager, task_id, detect_start
+                            ),
+                        )
                         task_manager_ref = self.task_manager
 
                         # Write segments to temp file for worker process (avoid large pickle over Process args)
@@ -4163,6 +4182,9 @@ class StatusService:
         
         # Build image_data_map in format expected by frontend: {placeholder_id: {"data": "...", "alt": "..."}}
         image_data_map_for_frontend: dict[str, dict[str, str]] = {}
+        from utils.mineru_image_data_map import populate_image_data_map_from_data_uri_map
+
+        populate_image_data_map_from_data_uri_map(image_data_map_for_frontend, image_data_by_path)
         
         # Step 1: Add regular image segments (tables, images, etc.)
         for seg in all_segments:
@@ -5528,9 +5550,10 @@ class StatusService:
             equation_format = task_state["equation_format"]
         if "chart_body_format" in task_state:
             chart_body_format = task_state["chart_body_format"]
+        cover_color_mode = task_state.get("cover_color_mode")
         
         # Fallback to payload if not in task_state
-        if table_body_format is None or equation_format is None or chart_body_format is None:
+        if table_body_format is None or equation_format is None or chart_body_format is None or cover_color_mode is None:
             payload = task_state.get("payload")
             if payload:
                 if isinstance(payload, dict):
@@ -5540,6 +5563,8 @@ class StatusService:
                         equation_format = payload.get("equation_format")
                     if chart_body_format is None:
                         chart_body_format = payload.get("chart_body_format")
+                    if cover_color_mode is None:
+                        cover_color_mode = payload.get("cover_color_mode")
                 elif hasattr(payload, 'table_body_format'):
                     if table_body_format is None:
                         table_body_format = getattr(payload, 'table_body_format', None)
@@ -5547,12 +5572,15 @@ class StatusService:
                         equation_format = getattr(payload, 'equation_format', None)
                     if chart_body_format is None:
                         chart_body_format = getattr(payload, 'chart_body_format', None)
+                    if cover_color_mode is None:
+                        cover_color_mode = getattr(payload, 'cover_color_mode', None)
         
         return {
             "task_id": task_id,
             "table_body_format": table_body_format,
             "equation_format": equation_format,
             "chart_body_format": chart_body_format,
+            "cover_color_mode": cover_color_mode or "max",
         }
     
     def update_format_settings(
@@ -5567,6 +5595,7 @@ class StatusService:
         source_text_color: Optional[str] = None,
         target_text_italic: Optional[bool] = None,
         target_text_color: Optional[str] = None,
+        cover_color_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Update format settings in task state.
@@ -5606,6 +5635,8 @@ class StatusService:
             raise HTTPException(status_code=400, detail=f"Invalid source_text_color: {source_text_color}. Must be 'gray', 'blue', 'red', 'green', 'orange', or 'black'.")
         if target_text_color is not None and target_text_color not in ("gray", "blue", "red", "green", "orange", "black"):
             raise HTTPException(status_code=400, detail=f"Invalid target_text_color: {target_text_color}. Must be 'gray', 'blue', 'red', 'green', 'orange', or 'black'.")
+        if cover_color_mode is not None and cover_color_mode not in ("max", "min", "avg"):
+            raise HTTPException(status_code=400, detail=f"Invalid cover_color_mode: {cover_color_mode}. Must be 'max', 'min', or 'avg'.")
         
         # Update task_state directly
         updates = {}
@@ -5627,6 +5658,8 @@ class StatusService:
             updates["target_text_italic"] = target_text_italic
         if target_text_color is not None:
             updates["target_text_color"] = target_text_color
+        if cover_color_mode is not None:
+            updates["cover_color_mode"] = cover_color_mode
         
         if updates:
             self.task_manager.update_task(task_id, updates)
@@ -5654,6 +5687,8 @@ class StatusService:
                     payload["target_text_italic"] = target_text_italic
                 if target_text_color is not None:
                     payload["target_text_color"] = target_text_color
+                if cover_color_mode is not None:
+                    payload["cover_color_mode"] = cover_color_mode
             elif hasattr(payload, 'table_body_format') or hasattr(payload, 'equation_format'):
                 # For object payload, update attributes if possible
                 try:
@@ -5675,6 +5710,8 @@ class StatusService:
                         setattr(payload, 'target_text_color', target_text_color)
                     if chart_body_format is not None:
                         setattr(payload, 'chart_body_format', chart_body_format)
+                    if cover_color_mode is not None:
+                        setattr(payload, 'cover_color_mode', cover_color_mode)
                 except Exception as e:
                     logger.debug(LogModule.WORKFLOW, f"[STATUS] Failed to update payload format settings: {e}")
         
@@ -5689,6 +5726,7 @@ class StatusService:
             "source_text_color": source_text_color or task_state.get("source_text_color"),
             "target_text_italic": target_text_italic if target_text_italic is not None else task_state.get("target_text_italic"),
             "target_text_color": target_text_color or task_state.get("target_text_color"),
+            "cover_color_mode": cover_color_mode or task_state.get("cover_color_mode") or "max",
             "message": "Format settings updated successfully"
         }
 

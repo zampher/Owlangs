@@ -11,6 +11,9 @@ enum TranslationPreviewMode {
 
   /// Reflow PDF (Pandoc).
   pdfReflow,
+
+  /// Original raster layout (erase OCR + write translation on source image).
+  imageOriginalLayout,
 }
 
 extension TranslationPreviewModeX on TranslationPreviewMode {
@@ -21,11 +24,14 @@ extension TranslationPreviewModeX on TranslationPreviewMode {
       case TranslationPreviewMode.pdfReflow:
         return 'pandoc';
       case TranslationPreviewMode.html:
+      case TranslationPreviewMode.imageOriginalLayout:
         return null;
     }
   }
 
   bool get usesHtmlPreview => this == TranslationPreviewMode.html;
+
+  bool get usesImagePreview => this == TranslationPreviewMode.imageOriginalLayout;
 
   bool get usesPdfPreview =>
       this == TranslationPreviewMode.pdfPreserve ||
@@ -37,13 +43,15 @@ extension TranslationPreviewModeX on TranslationPreviewMode {
       this == TranslationPreviewMode.html ||
       this == TranslationPreviewMode.pdfReflow;
 
-  /// Default full-document compare for this preview mode (preserve PDF only).
+  /// Default full-document compare for this preview mode (preserve PDF / image).
   bool get defaultFullDocumentCompare =>
-      this == TranslationPreviewMode.pdfPreserve;
+      this == TranslationPreviewMode.pdfPreserve ||
+      this == TranslationPreviewMode.imageOriginalLayout;
 
-  /// Default linked-scroll for full-document compare (preserve PDF only).
+  /// Default linked-scroll for full-document compare (preserve PDF / image).
   bool get defaultFullCompareSyncScroll =>
-      this == TranslationPreviewMode.pdfPreserve;
+      this == TranslationPreviewMode.pdfPreserve ||
+      this == TranslationPreviewMode.imageOriginalLayout;
 }
 
 /// Default preview mode for the settings dialog.
@@ -51,7 +59,12 @@ TranslationPreviewMode defaultPreviewModeForDialog({
   required bool isPdfFile,
   required bool hasPdfDownload,
   required String resolvedWorkflowType,
+  bool isImageFile = false,
+  bool hasImageDownload = false,
 }) {
+  if (isImageFile && hasImageDownload) {
+    return TranslationPreviewMode.imageOriginalLayout;
+  }
   final bool isPdfWorkflow =
       resolvedWorkflowType == 'markdown_based' || isPdfFile;
   if (isPdfWorkflow && isPdfFile && hasPdfDownload) {

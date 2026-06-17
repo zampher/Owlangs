@@ -10,6 +10,19 @@ from unittest.mock import MagicMock
 from app.services.status.status_service import _strip_lang_detect_status_downgrade
 
 
+def test_strip_removes_detect_language_progress_when_task_completed():
+    tm = MagicMock()
+    tm.get_task.return_value = {"status": "completed", "progress": 100}
+    upd = {
+        "status": "processing",
+        "progress": 0,
+        "message": "Detect Language: 0/61 segments (0%)",
+        "message_level": "warning",
+    }
+    out = _strip_lang_detect_status_downgrade(tm, "t1", upd)
+    assert out == {}
+
+
 def test_strip_removes_processing_when_task_completed():
     tm = MagicMock()
     tm.get_task.return_value = {"status": "completed"}
@@ -20,7 +33,22 @@ def test_strip_removes_processing_when_task_completed():
     }
     out = _strip_lang_detect_status_downgrade(tm, "t1", upd)
     assert "status" not in out
-    assert out["progress"] == 100
+    assert "progress" not in out
+    assert "message" not in out
+
+
+def test_strip_keeps_non_detect_fields_when_task_completed():
+    tm = MagicMock()
+    tm.get_task.return_value = {"status": "completed"}
+    upd = {
+        "status": "processing",
+        "progress": 95,
+        "message": "Generating DOCX...",
+    }
+    out = _strip_lang_detect_status_downgrade(tm, "t1", upd)
+    assert "status" not in out
+    assert out["progress"] == 95
+    assert out["message"] == "Generating DOCX..."
 
 
 def test_strip_keeps_processing_for_non_terminal_task():

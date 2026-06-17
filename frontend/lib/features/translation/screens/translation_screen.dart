@@ -47,6 +47,7 @@ import '../providers/excluded_segments_provider.dart';
 import '../providers/queue_persist_dirty_provider.dart';
 import '../providers/chunk_tokens_provider.dart';
 import '../providers/format_settings_provider.dart';
+import '../widgets/translation_result/image_format_utils.dart';
 import '../widgets/translation_result_preview.dart';
 import '../widgets/glossary_preview.dart';
 import '../widgets/extract_preview.dart';
@@ -1202,7 +1203,16 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
   Future<void> _persistQueueSnapshotAuto(String taskId) async {
     try {
       final TranslationService svc = TranslationService();
-      await svc.persistQueueSnapshot(taskId);
+      final dynamic st = _getCurrentTranslationState();
+      final String? fileName = _isReeditMode
+          ? widget.reeditFileName
+          : st.pickedFile?.name as String?;
+      final bool primaryOnly = widget.executionMode != 'queued' &&
+          isMineruLayoutImageFileName(fileName);
+      await svc.persistQueueSnapshot(
+        taskId,
+        exportScope: primaryOnly ? 'primary_only' : 'full',
+      );
       if (mounted) {
         _clearQueuePersistDirty();
       }
@@ -1420,9 +1430,15 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     return '${(count / 1000000).toStringAsFixed(1)}M';
   }
 
-  bool _isPdfSourceTask(dynamic state) {
+  bool _supportsRevisionPreviewTask(dynamic state) {
     final String? fileName = state.pickedFile?.name ?? widget.reeditFileName;
-    return fileName != null && fileName.toLowerCase().endsWith('.pdf');
+    if (fileName == null || fileName.isEmpty) {
+      return false;
+    }
+    if (fileName.toLowerCase().endsWith('.pdf')) {
+      return true;
+    }
+    return isMineruLayoutImageFileName(fileName);
   }
 
   void _switchToTranslationResultTabIfNeeded() {
@@ -2410,7 +2426,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
             ),
           if (state.taskId != null &&
               isTaskDone &&
-              _isPdfSourceTask(state)) ...<Widget>[
+              _supportsRevisionPreviewTask(state)) ...<Widget>[
             const SizedBox(width: 8),
             Tooltip(
               message: l10n.translationPreviewPdfRevision,

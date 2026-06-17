@@ -76,6 +76,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
     this.onBulkSelectAll,
     this.onBulkInvertSelection,
     this.onBatchFontApply,
+    this.onBatchFontSizeStep,
     this.getFilteredSelectableSegmentIndices,
     this.exclusionFiltersListenable,
     this.pdfRevisionMode = false,
@@ -137,6 +138,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
   final void Function(Set<int> indices)? onBulkSelectAll;
   final void Function(Set<int> indices)? onBulkInvertSelection;
   final Future<void> Function()? onBatchFontApply;
+  final Future<void> Function(double delta)? onBatchFontSizeStep;
   final Set<int> Function()? getFilteredSelectableSegmentIndices;
   final ValueListenable<Set<String>>? exclusionFiltersListenable;
   final bool pdfRevisionMode;
@@ -758,8 +760,66 @@ class TranslationComparisonPanel extends ConsumerWidget {
         ),
         if (onBatchFontApply != null)
           _buildBatchFontButton(context, compactStyle, l10n),
+        if (onBatchFontSizeStep != null)
+          _buildBatchFontSizeStepButtons(context, l10n),
       ],
     );
+  }
+
+  Widget _buildBatchFontSizeStepButtons(
+    BuildContext context,
+    AppLocalizations l10n,
+  ) {
+    Widget buildButtons(Set<int> selected) {
+      final bool enabled = selected.isNotEmpty;
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          IconButton(
+            icon: const Icon(Icons.text_decrease, size: 16),
+            tooltip: l10n.translationPreviewBatchFontSizeDecreaseTooltip,
+            onPressed: enabled
+                ? () {
+                    unawaited(onBatchFontSizeStep!(-kPdfFontSizeStep));
+                  }
+                : null,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(
+              minWidth: 28,
+              minHeight: 28,
+            ),
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            icon: const Icon(Icons.text_increase, size: 16),
+            tooltip: l10n.translationPreviewBatchFontSizeIncreaseTooltip,
+            onPressed: enabled
+                ? () {
+                    unawaited(onBatchFontSizeStep!(kPdfFontSizeStep));
+                  }
+                : null,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(
+              minWidth: 28,
+              minHeight: 28,
+            ),
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      );
+    }
+
+    final ValueListenable<Set<int>>? listenable =
+        selectedSegmentIndicesListenable;
+    if (listenable != null) {
+      return ValueListenableBuilder<Set<int>>(
+        valueListenable: listenable,
+        builder: (BuildContext context, Set<int> selected, Widget? _) {
+          return buildButtons(selected);
+        },
+      );
+    }
+    return buildButtons(selectedSegmentIndices);
   }
 
   Widget _buildBatchFontButton(

@@ -15,7 +15,9 @@ for p in (str(_root), str(_backend)):
 from utils.mineru_layout_utils import (
     is_mineru_layout_image,
     is_mineru_layout_source,
+    is_original_image_format_request,
     needs_mineru_zip_restore,
+    original_image_download_extension,
 )
 
 
@@ -34,6 +36,15 @@ class MineruLayoutUtilsTest(unittest.TestCase):
         self.assertTrue(needs_mineru_zip_restore("doc.pdf"))
         self.assertTrue(needs_mineru_zip_restore("chart.png"))
         self.assertFalse(needs_mineru_zip_restore("article.html"))
+
+    def test_original_image_download_extension(self):
+        self.assertEqual(original_image_download_extension("scan.PNG"), "png")
+        self.assertIsNone(original_image_download_extension("notes.md"))
+
+    def test_is_original_image_format_request(self):
+        self.assertTrue(is_original_image_format_request("png", "figure.png"))
+        self.assertTrue(is_original_image_format_request("jpeg", "photo.jpg"))
+        self.assertFalse(is_original_image_format_request("pdf", "figure.png"))
 
 
 if __name__ == "__main__":

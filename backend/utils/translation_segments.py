@@ -2926,6 +2926,7 @@ def _apply_pdf_typography_to_segment(
 
     if font_size_reset or pdf_font_reset:
         segment.pop("font_size_pt", None)
+        segment["font_size_source"] = "auto"
         _mark_modified()
         if log_changes:
             logger.info(
@@ -2944,6 +2945,7 @@ def _apply_pdf_typography_to_segment(
             )
         else:
             segment["font_size_pt"] = normalized
+            segment["font_size_source"] = "user"
             _mark_modified()
             if log_changes:
                 logger.info(
@@ -3041,6 +3043,7 @@ def batch_update_translation_segment_typography(
     *,
     modified_by: Optional[str] = None,
     font_size_pt: Optional[float] = None,
+    font_size_delta_pt: Optional[float] = None,
     font_size_reset: bool = False,
     font_weight: Optional[str] = None,
     font_style: Optional[str] = None,
@@ -3054,7 +3057,11 @@ def batch_update_translation_segment_typography(
     """
     Apply PDF typography overrides to multiple segments in one task_state pass.
 
-    Returns dict with success flag, updated segment dicts, and failed indices.
+    When ``font_size_delta_pt`` is set, each segment gets
+    ``effective_size + delta`` (per-segment, clamped/snapped). Mutually exclusive
+    with absolute ``font_size_pt``.
+
+    Returns dict with success flag, updated segment dicts, failed/changed indices.
     """
     if task_state is None:
         from backend.app.services.task import task_manager
@@ -3065,6 +3072,7 @@ def batch_update_translation_segment_typography(
             "success": False,
             "segments": [],
             "failed_indices": list(segment_indices),
+            "changed_indices": [],
             "updated_count": 0,
         }
 
@@ -3075,6 +3083,7 @@ def batch_update_translation_segment_typography(
             "success": False,
             "segments": [],
             "failed_indices": list(segment_indices),
+            "changed_indices": [],
             "updated_count": 0,
         }
 
@@ -3093,8 +3102,16 @@ def batch_update_translation_segment_typography(
 
     segments_out: List[dict] = []
     failed_indices: List[int] = []
+    changed_indices: List[int] = []
     seen: set[int] = set()
     any_changed = False
+
+    use_font_delta = font_size_delta_pt is not None and not font_size_reset and not pdf_font_reset
+    if use_font_delta and font_size_pt is not None:
+        logger.warning(
+            LogModule.TRANS,
+            f"[TYPOGRAPHY_BATCH] Task {task_id}: font_size_delta_pt ignores absolute font_size_pt",
+        )
 
     for raw_index in segment_indices:
         try:
@@ -3110,12 +3127,26 @@ def batch_update_translation_segment_typography(
             failed_indices.append(segment_index)
             continue
 
+        per_segment_font_size = font_size_pt
+        if use_font_delta:
+            from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+                clamp_font_size_pt,
+                effective_segment_font_size_pt_for_ui,
+            )
+
+            current_pt = effective_segment_font_size_pt_for_ui(segment)
+            next_pt = clamp_font_size_pt(current_pt + float(font_size_delta_pt))
+            if next_pt == current_pt:
+                segments_out.append(segment)
+                continue
+            per_segment_font_size = next_pt
+
         if _apply_pdf_typography_to_segment(
             segment,
             segment_index=segment_index,
             task_id=task_id,
             modified_by=modified_by,
-            font_size_pt=font_size_pt,
+            font_size_pt=per_segment_font_size,
             font_size_reset=font_size_reset,
             font_weight=font_weight,
             font_style=font_style,
@@ -3127,6 +3158,7 @@ def batch_update_translation_segment_typography(
             log_changes=False,
         ):
             any_changed = True
+            changed_indices.append(segment_index)
         segments_out.append(segment)
 
     if any_changed:
@@ -3139,14 +3171,15 @@ def batch_update_translation_segment_typography(
 
     logger.info(
         LogModule.TRANS,
-        f"[TYPOGRAPHY_BATCH] Task {task_id}: updated {len(segments_out)}/{len(seen)} segments"
+        f"[TYPOGRAPHY_BATCH] Task {task_id}: updated {len(changed_indices)}/{len(seen)} segments"
         + (f", failed={failed_indices}" if failed_indices else ""),
     )
     return {
         "success": len(failed_indices) == 0,
         "segments": segments_out,
         "failed_indices": failed_indices,
-        "updated_count": len(segments_out),
+        "changed_indices": changed_indices,
+        "updated_count": len(changed_indices),
     }
 
 

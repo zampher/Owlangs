@@ -110,6 +110,8 @@ hiddenimports = [
     'pymdownx.superfences',
     'pymdownx.highlight',
     'pygments',
+    # Ensure Python stdlib encodings are bundled for filesystem encoding init (Python 3.12+)
+    'encodings',
     # DOCX formula OMML (LaTeX -> MathML -> OMML); mathml2omml_as fallback when mathml2omml output fails to parse
     'latex2mathml', 'latex2mathml.converter', 'mathml2omml', 'mathml2omml_as',
     # JSON repair for LLM output (md_translator, segments_agent, glossary_agent)
@@ -278,12 +280,21 @@ hiddenimports = [
     'layout.pdf_renderer.typst_overlay.text_metrics',
     'layout.pdf_renderer.typst_overlay.affected_pages',
     'layout.pdf_renderer.typst_overlay.pdf_preview_cache',
+    'layout.image_overlay',
+    'layout.image_overlay.pipeline',
+    'layout.image_overlay.renderer',
+    'layout.image_overlay.models',
+    'layout.image_overlay.font_resolver',
+    'layout.image_overlay.block_text_map',
+    'layout.image_overlay.debug_output',
+    'layout.renderable_block_indices',
     # PyMuPDF (required by typst overlay source_cleanup and overlay_merge)
     'fitz',
     # pdf_splitter, layout_merger, mineru_zip_merger: dynamic imports in converter_mineru.py
     'backend.utils.pdf_splitter',
     'backend.utils.layout_merger',
     'backend.utils.mineru_zip_merger',
+    'backend.utils.mineru_image_data_map',
     # mobi dependencies (ensure loguru and imghdr are included in frozen build)
     'loguru',
     'imghdr',
