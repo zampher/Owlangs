@@ -643,18 +643,20 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
             ),
             const SizedBox(height: 8), // Reduced from 16 to 8
 
-            // Group 1: MinerU OCR — Source Language + Parsing Platform
+            // Group 1: Target Language
+            _buildLanguageSelector(
+                context, settings, notifier, isTranslatePhase, ref,),
+            const SizedBox(height: 8),
+
+            // Group 2: MinerU OCR — Parsing Platform + Source Language + OCR toggles
             // Shown only for markdown_based workflow (PDF, images, markdown)
             if (settings.workflowType == 'markdown_based') ...<Widget>[
               _buildMineruOcrSection(
                   context, settings, notifier, isTranslatePhase, ref),
-              const SizedBox(height: 8), // Reduced from 16 to 8
+              const SizedBox(height: 8),
             ],
 
-            // Group 2: Target Language + LLM Platform (Translation)
-            _buildLanguageSelector(
-                context, settings, notifier, isTranslatePhase, ref,),
-            const SizedBox(height: 8), // Reduced from 16 to 8
+            // Group 3: LLM Platform + Temperature
             _buildLLMAndTemperatureSection(context, ref, settings, notifier),
             const SizedBox(height: 8),
 

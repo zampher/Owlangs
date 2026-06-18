@@ -7,7 +7,7 @@
   "parsing_engine": {
     "default_engine": "mineru",
     "default_engine_settings": {
-      "formula_ocr": false,
+      "formula_ocr": true,
       "skip_translate": false,
       "table_ocr": true
     }
