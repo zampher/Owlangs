@@ -61,18 +61,84 @@ def is_image_overlay_task(task_state: Optional[Dict[str, Any]]) -> bool:
     return suffix in _IMAGE_OVERLAY_EXTENSIONS and Path(raw_path).is_file()
 
 
+def cache_overlay_source_image_size(
+    task_state: Dict[str, Any],
+    image_path: str,
+) -> None:
+    """Persist raster dimensions on task_state for overlay typography dry-run."""
+    from utils.mineru_layout_utils import is_mineru_layout_image
+
+    if not is_mineru_layout_image(image_path):
+        return
+    try:
+        from PIL import Image, ImageOps
+
+        with Image.open(image_path) as opened:
+            oriented = ImageOps.exif_transpose(opened)
+            task_state["overlay_source_image_size"] = [
+                int(oriented.width),
+                int(oriented.height),
+            ]
+    except OSError:
+        return
+
+
+def resolve_overlay_font_family(task_state: Optional[Dict[str, Any]]) -> str:
+    """Match production image overlay font selection (target language)."""
+    to_lang: Any = None
+    if task_state:
+        to_lang = task_state.get("to_lang") or task_state.get("target_language")
+        if not to_lang:
+            payload = task_state.get("payload")
+            if isinstance(payload, dict):
+                to_lang = payload.get("to_lang") or payload.get("target_language")
+            elif payload is not None:
+                to_lang = getattr(payload, "to_lang", None) or getattr(
+                    payload, "target_language", None,
+                )
+    lang = str(to_lang or "en").strip().lower()
+    try:
+        from translator.ai_translator.docx_translator import get_font_for_language
+
+        return get_font_for_language(lang)
+    except Exception:
+        if lang.startswith(("zh", "ja", "ko")):
+            from utils.format_convert_utils import _cjk_mainfont_fallback
+
+            return _cjk_mainfont_fallback(lang)
+        return "Calibri"
+
+
 def resolve_image_overlay_image_size(
     task_state: Optional[Dict[str, Any]],
+    *,
+    layout_doc: Optional[LayoutDocument] = None,
 ) -> Optional[Tuple[int, int]]:
     """Read source raster dimensions for overlay dry-run font metrics."""
-    if not is_image_overlay_task(task_state):
+    if task_state:
+        cached = task_state.get("overlay_source_image_size")
+        if isinstance(cached, (list, tuple)) and len(cached) == 2:
+            try:
+                return int(cached[0]), int(cached[1])
+            except (TypeError, ValueError):
+                pass
+    if not is_layout_image_typography_task(task_state, layout_doc=layout_doc):
         return None
-    raw_path = str(task_state.get("original_file_path"))
+    if not task_state:
+        return None
+    raw_path = task_state.get("original_file_path")
+    if not raw_path or not isinstance(raw_path, str):
+        return None
+    if not Path(raw_path).is_file():
+        return None
     try:
-        from PIL import Image
+        from PIL import Image, ImageOps
 
-        with Image.open(raw_path) as img:
-            return int(img.width), int(img.height)
+        with Image.open(raw_path) as opened:
+            oriented = ImageOps.exif_transpose(opened)
+            size = (int(oriented.width), int(oriented.height))
+            task_state["overlay_source_image_size"] = list(size)
+            return size
     except OSError:
         return None
 
@@ -112,18 +178,43 @@ def segment_has_user_font_size_override(segment: Dict[str, Any]) -> bool:
     return normalize_user_font_size_pt(segment.get("font_size_pt")) is not None
 
 
+def is_layout_image_typography_task(
+    task_state: Optional[Dict[str, Any]],
+    *,
+    layout_doc: Optional[LayoutDocument] = None,
+) -> bool:
+    """True for MinerU layout image workflows that use raster overlay typography."""
+    if not task_state:
+        return False
+    has_layout = (
+        layout_doc is not None or task_state.get("layout_document") is not None
+    )
+    if not has_layout:
+        return False
+    from utils.mineru_layout_utils import is_mineru_layout_image
+
+    return is_mineru_layout_image(str(task_state.get("original_filename") or ""))
+
+
 def effective_segment_font_size_pt_for_ui(segment: Dict[str, Any]) -> float:
     """
     Resolved font size for batch ± steps (matches frontend effectivePdfSegmentFontSizePt).
     """
     font_size_source = segment.get("font_size_source")
     font_size_pt = segment.get("font_size_pt")
+    overlay_render = segment.get("overlay_render_font_size_pt")
     computed_font_size_pt = segment.get("computed_font_size_pt")
 
     if font_size_source == "user" and font_size_pt is not None:
         normalized = normalize_user_font_size_pt(font_size_pt)
         if normalized is not None:
             return normalized
+
+    if overlay_render is not None:
+        try:
+            return clamp_font_size_pt(float(overlay_render))
+        except (TypeError, ValueError):
+            pass
 
     if computed_font_size_pt is not None:
         try:
@@ -360,6 +451,30 @@ def compute_block_render_fit_metrics(
     )
 
 
+def _overlay_dry_run_render_pt(
+    block: LayoutBlock,
+    text: str,
+    overlay_page: Optional[LayoutPage],
+    overlay_image_size: Tuple[int, int],
+    task_state: Optional[Dict[str, Any]],
+    *,
+    user_pt: Optional[float] = None,
+    font_weight: str = "regular",
+) -> Optional[float]:
+    """Dry-run overlay render pt using the same font family as production render."""
+    from layout.image_overlay.renderer import dry_run_overlay_font_size_pt
+
+    return dry_run_overlay_font_size_pt(
+        block,
+        text,
+        overlay_page,
+        overlay_image_size,
+        user_pt=user_pt,
+        font_family=resolve_overlay_font_family(task_state),
+        bold=font_weight == "bold",
+    )
+
+
 def enrich_segment_font_fields(
     segment: Dict[str, Any],
     layout_doc: Optional[LayoutDocument],
@@ -391,7 +506,9 @@ def enrich_segment_font_fields(
         type_map[int(block.index)] = getattr(block, "type", "") or "text"
 
     block_idx: Optional[int] = None
-    if is_image_overlay_task(task_state):
+    if task_state is not None and is_layout_image_typography_task(
+        task_state, layout_doc=layout_doc,
+    ):
         from layout.image_overlay.block_text_map import (
             resolve_overlay_primary_text_block_index,
         )
@@ -432,24 +549,29 @@ def enrich_segment_font_fields(
         )
 
     block_type = type_map.get(block_idx, "text")
-    overlay_image_size = (
-        resolve_image_overlay_image_size(task_state)
-        if is_image_overlay_task(task_state)
-        else None
+    overlay_image_size = None
+    layout_image_typography = (
+        task_state is not None
+        and is_layout_image_typography_task(task_state, layout_doc=layout_doc)
     )
+    if layout_image_typography:
+        overlay_image_size = resolve_image_overlay_image_size(
+            task_state, layout_doc=layout_doc,
+        )
     overlay_page = layout_doc.get_page(getattr(block, "page_index", 0) or 0)
+    block_font_weight = compute_block_font_weight_from_layout(block)
 
     if not is_font_size_editable_block_type(block_type):
         if block_type == "image" and str(content).strip():
             overlay_pt: Optional[float] = None
             if overlay_image_size is not None:
-                from layout.image_overlay.renderer import dry_run_overlay_font_size_pt
-
-                overlay_pt = dry_run_overlay_font_size_pt(
+                overlay_pt = _overlay_dry_run_render_pt(
                     block,
                     str(content),
                     overlay_page,
                     overlay_image_size,
+                    task_state,
+                    font_weight=block_font_weight,
                 )
             if overlay_pt is None:
                 overlay_pt = compute_image_overlay_effective_font_size_pt(
@@ -475,22 +597,33 @@ def enrich_segment_font_fields(
 
     computed: Optional[tuple[float, float]] = None
     if overlay_image_size is not None and str(content).strip():
-        from layout.image_overlay.renderer import dry_run_overlay_font_size_pt
-
         user_pt: Optional[float] = None
         if segment_has_user_font_size_override(segment):
             user_pt = normalize_user_font_size_pt(segment.get("font_size_pt"))
-        render_pt = dry_run_overlay_font_size_pt(
+        render_pt = _overlay_dry_run_render_pt(
             block,
             str(content),
             overlay_page,
             overlay_image_size,
+            task_state,
             user_pt=user_pt,
+            font_weight=block_font_weight,
         )
         if render_pt is not None:
             computed = (render_pt, DEFAULT_LEADING_EM)
+            segment["overlay_render_font_size_pt"] = render_pt
+            try:
+                from layout.image_overlay.renderer import _estimate_overlay_font_size_pt
 
-    if computed is None:
+                estimated_pt = _estimate_overlay_font_size_pt(block, str(content))
+                if estimated_pt is not None:
+                    segment["overlay_estimated_font_size_pt"] = round(
+                        float(estimated_pt), 1,
+                    )
+            except Exception:
+                segment.pop("overlay_estimated_font_size_pt", None)
+
+    if computed is None and not layout_image_typography:
         computed = compute_block_render_fit_metrics(
             block,
             str(content),
@@ -502,6 +635,8 @@ def enrich_segment_font_fields(
     else:
         segment.pop("computed_font_size_pt", None)
         segment.pop("computed_leading_em", None)
+        segment.pop("overlay_render_font_size_pt", None)
+        segment.pop("overlay_estimated_font_size_pt", None)
 
     _reconcile_overlay_user_font_size_pt(
         segment,
@@ -510,6 +645,8 @@ def enrich_segment_font_fields(
         layout_doc,
         overlay_page,
         overlay_image_size,
+        task_state=task_state,
+        font_weight=block_font_weight,
     )
 
 
@@ -520,23 +657,28 @@ def _reconcile_overlay_user_font_size_pt(
     layout_doc: LayoutDocument,
     overlay_page: Optional[LayoutPage],
     overlay_image_size: Optional[Tuple[int, int]],
+    *,
+    task_state: Optional[Dict[str, Any]] = None,
+    font_weight: str = "regular",
 ) -> None:
     """Attach overlay render pt to computed fields; keep user request in font_size_pt."""
     if overlay_image_size is None or not text.strip():
         return
     requested = normalize_user_font_size_pt(segment.get("font_size_pt"))
     user_pt = requested if segment_has_user_font_size_override(segment) else None
-    from layout.image_overlay.renderer import dry_run_overlay_font_size_pt
 
-    effective = dry_run_overlay_font_size_pt(
+    effective = _overlay_dry_run_render_pt(
         block,
         text,
         overlay_page,
         overlay_image_size,
+        task_state,
         user_pt=user_pt,
+        font_weight=font_weight,
     )
     if effective is not None:
         segment["computed_font_size_pt"] = effective
+        segment["overlay_render_font_size_pt"] = effective
 
 
 def enrich_segments_font_fields(

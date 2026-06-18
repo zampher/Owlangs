@@ -503,11 +503,13 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
             if convert_engine in ("mineru", "mineru_local"):
                 from converter.x2md.converter_mineru import ConverterMineruConfig
                 from backend.config.config_loader import get_unified_config
-                pdf_cfg = get_unified_config().system.pdf
-                # Use default values if not provided in config
+                unified = get_unified_config()
+                pdf_cfg = unified.system.pdf
+                pe = unified.parsing_engine
                 convert_config = ConverterMineruConfig(
                     mineru_token="",  # Will be injected from local config
-                    formula_ocr=True,
+                    formula_ocr=pe.get('formula_ocr', True),
+                    table_ocr=pe.get('table_ocr', True),
                     model_version="hybrid-auto-engine",
                     pdf_split_enabled=pdf_cfg.pdf_split_enabled,
                     pdf_split_max_pages=pdf_cfg.pdf_split_max_pages,

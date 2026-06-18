@@ -29,6 +29,7 @@ import '../providers/preview_tabs_provider.dart';
 import '../providers/translation_refresh_provider.dart';
 import '../providers/segment_undo_redo_provider.dart';
 import '../providers/translation_state_provider_family.dart';
+import '../providers/translation_state_provider.dart';
 import '../providers/format_settings_provider.dart';
 import '../models/preview_tab.dart';
 import '../models/segment_pair.dart';
@@ -2752,6 +2753,12 @@ class _TranslationResultPreviewState
       if (segment.containsKey('computed_font_size_pt'))
         'computed_font_size_pt':
             _parseOptionalDouble(segment['computed_font_size_pt']),
+      if (segment.containsKey('overlay_render_font_size_pt'))
+        'overlay_render_font_size_pt':
+            _parseOptionalDouble(segment['overlay_render_font_size_pt']),
+      if (segment.containsKey('overlay_estimated_font_size_pt'))
+        'overlay_estimated_font_size_pt':
+            _parseOptionalDouble(segment['overlay_estimated_font_size_pt']),
       if (segment.containsKey('font_size_source'))
         'font_size_source': segment['font_size_source'],
       if (segment.containsKey('font_weight'))
@@ -4743,11 +4750,15 @@ class _TranslationResultPreviewState
     await _segmentsPaginationController?.refresh();
   }
 
-  /// Reload computed PDF typography from backend Typst dry-run enrichment.
+  /// Reload computed PDF typography from backend overlay/Typst dry-run enrichment.
   Future<void> _refreshPdfTypographyMetadata({bool forceRefresh = false}) async {
-    if (!forceRefresh && _allSegmentsMetadata.isNotEmpty) {
+    final bool imageLayoutTask = _isImageSourceFile();
+    if (!forceRefresh &&
+        !imageLayoutTask &&
+        _allSegmentsMetadata.isNotEmpty) {
       final bool allResolved = _allSegmentsMetadata.values.every(
         (Map<String, dynamic> metadata) =>
+            metadata['overlay_render_font_size_pt'] != null ||
             metadata['computed_font_size_pt'] != null ||
             (metadata['font_size_source'] == 'user' &&
                 metadata['font_size_pt'] != null),
@@ -5587,6 +5598,34 @@ class _TranslationResultPreviewState
     }
   }
 
+  Future<void> _onRevisionModeEntered(TranslationPreviewMode baseMode) async {
+    if (baseMode == TranslationPreviewMode.imageOriginalLayout) {
+      await _warmImageOverlayTypographyCache();
+    }
+    await _refreshPdfTypographyMetadata(forceRefresh: true);
+  }
+
+  Future<void> _warmImageOverlayTypographyCache() async {
+    try {
+      final dynamic translationState = widget.flowId != null
+          ? ref.read(translationStateProviderFamily(widget.flowId!))
+          : ref.read(translationStateProvider);
+      final Map<String, String>? effectiveDownloads =
+          _resolveEffectiveDownloads(translationState);
+      if (!_hasImageDownload(effectiveDownloads)) {
+        return;
+      }
+      final String url = _buildImageOverlayPreviewUrl(effectiveDownloads);
+      final TranslationService svc = TranslationService();
+      await svc.downloadFile(url);
+    } catch (e) {
+      _translationResultLog(
+        '[PDF_REVISION] Image overlay warm-up for typography failed: $e',
+        level: LogLevel.warn,
+      );
+    }
+  }
+
   Future<void> _onEnterPdfRevisionMode() => _onEnterRevisionPreviewMode(
         baseMode: TranslationPreviewMode.pdfPreserve,
       );
@@ -5972,7 +6011,7 @@ class _TranslationResultPreviewState
                   )
               : null,
           onPdfRevisionModeEntered: _supportsRevisionForMode(baseMode)
-              ? () => _refreshPdfTypographyMetadata(forceRefresh: true)
+              ? () => _onRevisionModeEntered(baseMode)
               : null,
           pdfPreviewJumpPageListenable: _supportsRevisionForMode(baseMode) &&
                   baseMode == TranslationPreviewMode.pdfPreserve

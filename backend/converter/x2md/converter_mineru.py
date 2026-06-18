@@ -392,7 +392,21 @@ class MinerUCloudBackend(MinerUBackend):
         """Upload document to cloud MinerU."""
         url = self._get_upload_url_endpoint()
         payload = self._build_upload_payload(document)
-        
+
+        logger.info(
+            LogModule.CONVERT,
+            "[MINERU Cloud] Upload params: "
+            "enable_table=%s, enable_formula=%s, language=%s, "
+            "model_version=%s, file=%s"
+            % (
+                payload.get("enable_table"),
+                payload.get("enable_formula"),
+                payload.get("language"),
+                payload.get("model_version"),
+                payload.get("files", [{}])[0].get("name"),
+            ),
+        )
+
         response = self._make_request_with_retry('POST', url, json=payload)
         result = response.json()
         
@@ -424,7 +438,21 @@ class MinerUCloudBackend(MinerUBackend):
         """Async upload document to cloud MinerU."""
         url = self._get_upload_url_endpoint()
         payload = self._build_upload_payload(document)
-        
+
+        logger.info(
+            LogModule.CONVERT,
+            "[MINERU Cloud] Async upload params: "
+            "enable_table=%s, enable_formula=%s, language=%s, "
+            "model_version=%s, file=%s"
+            % (
+                payload.get("enable_table"),
+                payload.get("enable_formula"),
+                payload.get("language"),
+                payload.get("model_version"),
+                payload.get("files", [{}])[0].get("name"),
+            ),
+        )
+
         response = await self._make_request_with_retry_async('POST', url, json=payload)
         result = response.json()
         
@@ -720,8 +748,28 @@ class MinerULocalBackend(MinerUBackend):
         """Upload document to local MinerU using sync parsing."""
         url = self._get_upload_sync_endpoint()
         headers, body_bytes, _ = self._build_multipart_request(document, return_zip=True)
-        
-        logger.debug(LogModule.CONVERT, f"[MINERU Local] Uploading to {url}")
+
+        logger.info(
+            LogModule.CONVERT,
+            "[MINERU Local] Upload params: "
+            "table_enable=%s, formula_enable=%s, lang_list=%s, "
+            "backend=%s, effort=%s, image_analysis=%s, "
+            "parse_method=%s, return_md=%s, return_images=%s, return_middle_json=%s, "
+            "file=%s"
+            % (
+                str(self.table).lower(),
+                str(self.formula).lower(),
+                self._convert_language(),
+                self._convert_backend(),
+                "high",
+                "true",
+                "auto",
+                "true",
+                "true",
+                "true",
+                document.name,
+            ),
+        )
         
         with httpx.Client(trust_env=False, timeout=timeout, verify=False, limits=limits, proxy=None, mounts={'http://': None, 'https://': None}) as client:
             response = client.post(url, headers=headers, content=body_bytes)
@@ -802,8 +850,28 @@ class MinerULocalBackend(MinerUBackend):
         """Async upload document to local MinerU."""
         url = self._get_upload_sync_endpoint()
         headers, body_bytes, _ = self._build_multipart_request(document, return_zip=True)
-        
-        logger.debug(LogModule.CONVERT, f"[MINERU Local] Async uploading to {url}")
+
+        logger.info(
+            LogModule.CONVERT,
+            "[MINERU Local] Async upload params: "
+            "table_enable=%s, formula_enable=%s, lang_list=%s, "
+            "backend=%s, effort=%s, image_analysis=%s, "
+            "parse_method=%s, return_md=%s, return_images=%s, return_middle_json=%s, "
+            "file=%s"
+            % (
+                str(self.table).lower(),
+                str(self.formula).lower(),
+                self._convert_language(),
+                self._convert_backend(),
+                "high",
+                "true",
+                "auto",
+                "true",
+                "true",
+                "true",
+                document.name,
+            ),
+        )
         
         async with httpx.AsyncClient(trust_env=False, timeout=timeout, verify=False, limits=limits, proxy=None, mounts={'http://': None, 'https://': None}) as client:
             response = await client.post(url, headers=headers, content=body_bytes)

@@ -571,6 +571,7 @@ def dry_run_overlay_font_size_pt(
     *,
     user_pt: Optional[float] = None,
     font_family: str = "Calibri",
+    bold: bool = False,
 ) -> Optional[float]:
     """Return overlay render pt (px_to_pt of fitted size) matching production render."""
     plain = _plain_overlay_text(text)
@@ -582,7 +583,7 @@ def dry_run_overlay_font_size_pt(
     x0, y0, x1, y1 = bbox
     dummy = Image.new("RGB", image_size, "white")
     draw = ImageDraw.Draw(dummy)
-    font_loader = font_loader_for_family(font_family)
+    font_loader = font_loader_for_family(font_family, bold=bold)
     mineru_pt = _mineru_layout_font_size_pt(block)
     estimated_pt = _estimate_overlay_font_size_pt(block, text)
     preferred_px, _ = _preferred_font_size_px(

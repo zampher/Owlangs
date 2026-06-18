@@ -54,6 +54,10 @@ class ImageOverlayPipeline:
             oriented = ImageOps.exif_transpose(opened)
             canvas = oriented.convert("RGBA")
 
+        task_state = overlay_input.task_state
+        if isinstance(task_state, dict):
+            task_state["overlay_source_image_size"] = [canvas.width, canvas.height]
+
         image_data_map = self._build_image_bytes_map(
             layout_doc,
             overlay_input.layout_zip_bytes,

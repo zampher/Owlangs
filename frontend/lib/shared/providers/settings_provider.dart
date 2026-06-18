@@ -392,6 +392,8 @@ class GlobalSettings {
         'platformConfigs': platformConfigs,
         'parsingEngine': parsingEngine,
         'ocrLanguage': ocrLanguage,
+        'formulaOcr': formulaOcr,
+        'tableOcr': tableOcr,
         'parsingChunkSize': parsingChunkSize,
         'parsingConcurrent': parsingConcurrent,
         'parsingTimeout': parsingTimeout,

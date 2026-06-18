@@ -165,6 +165,16 @@ class TranslationComparisonPanel extends ConsumerWidget {
   }
 
   double? _readComputedFontSizePt(Map<String, dynamic> metadata) {
+    final dynamic overlayRender = metadata['overlay_render_font_size_pt'];
+    if (overlayRender is num) {
+      return overlayRender.toDouble();
+    }
+    if (overlayRender is String) {
+      final double? parsed = double.tryParse(overlayRender);
+      if (parsed != null) {
+        return parsed;
+      }
+    }
     final dynamic raw = metadata['computed_font_size_pt'];
     if (raw is num) {
       return raw.toDouble();

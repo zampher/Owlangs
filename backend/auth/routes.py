@@ -764,6 +764,23 @@ async def get_app_config_api(
                 )
                 app_config_dict.pop(key, None)
 
+        # System-level parsing engine keys: system.json is the source of truth.
+        # AppConfig defaults (translator_table_ocr=True, translator_formula_ocr=True)
+        # must not override system.json settings (parsing_engine.default_engine_settings).
+        _system_parsing_engine_keys = {
+            "translator_table_ocr",
+            "translator_formula_ocr",
+        }
+        for _key in _system_parsing_engine_keys:
+            if _key in app_config_dict:
+                logger.info(
+                    LogModule.AUTH,
+                    f"[CONFIG] Skipping AppConfig override for system-level key "
+                    f"{_key!r}: keeping value from system config "
+                    f"{config_dict.get(_key)!r}",
+                )
+                app_config_dict.pop(_key, None)
+
         config_dict.update(app_config_dict)
         logger.info(LogModule.AUTH, "[CONFIG] AppConfig loaded successfully")
     except Exception as e:

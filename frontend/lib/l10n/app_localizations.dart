@@ -1727,6 +1727,30 @@ abstract class AppLocalizations {
   /// **'Open MinerU settings'**
   String get quickSettingsOpenMineruSettings;
 
+  /// No description provided for @quickSettingsTableOcr.
+  ///
+  /// In en, this message translates to:
+  /// **'Table OCR'**
+  String get quickSettingsTableOcr;
+
+  /// No description provided for @quickSettingsTableOcrSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recognize tables during document parsing'**
+  String get quickSettingsTableOcrSubtitle;
+
+  /// No description provided for @quickSettingsFormulaOcr.
+  ///
+  /// In en, this message translates to:
+  /// **'Formula OCR'**
+  String get quickSettingsFormulaOcr;
+
+  /// No description provided for @quickSettingsFormulaOcrSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recognize formulas during document parsing'**
+  String get quickSettingsFormulaOcrSubtitle;
+
   /// No description provided for @quickSettingsMineruLabel.
   ///
   /// In en, this message translates to:

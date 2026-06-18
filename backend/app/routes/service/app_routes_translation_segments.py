@@ -159,7 +159,9 @@ def _resolve_layout_document(task_id: str, task_state: Dict[str, Any]):
         return layout_doc
 
     original_filename = str(task_state.get("original_filename") or "")
-    if not original_filename.lower().endswith(".pdf"):
+    from utils.mineru_layout_utils import needs_mineru_zip_restore
+
+    if not needs_mineru_zip_restore(original_filename):
         return None
 
     zip_bytes = task_state.get("layout_source_zip")
@@ -228,6 +230,14 @@ def _enrich_segments_pdf_typography(
 
     layout_doc = _resolve_layout_document(task_id, task_state)
     if layout_doc is None:
+        for seg in segments_list:
+            if isinstance(seg, dict):
+                seg.pop("computed_font_size_pt", None)
+                seg.pop("computed_font_weight", None)
+                seg.pop("computed_font_style", None)
+                seg.pop("computed_leading_em", None)
+                seg.pop("overlay_render_font_size_pt", None)
+                seg.pop("overlay_estimated_font_size_pt", None)
         return
 
     for seg in segments_list:
@@ -236,6 +246,8 @@ def _enrich_segments_pdf_typography(
             seg.pop("computed_font_weight", None)
             seg.pop("computed_font_style", None)
             seg.pop("computed_leading_em", None)
+            seg.pop("overlay_render_font_size_pt", None)
+            seg.pop("overlay_estimated_font_size_pt", None)
 
     _ensure_segment_layout_block_indices(segments_list, task_state)
 

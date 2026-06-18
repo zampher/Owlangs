@@ -933,6 +933,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get quickSettingsOpenMineruSettings => 'Open MinerU settings';
 
   @override
+  String get quickSettingsTableOcr => 'Table OCR';
+
+  @override
+  String get quickSettingsTableOcrSubtitle =>
+      'Recognize tables during document parsing';
+
+  @override
+  String get quickSettingsFormulaOcr => 'Formula OCR';
+
+  @override
+  String get quickSettingsFormulaOcrSubtitle =>
+      'Recognize formulas during document parsing';
+
+  @override
   String get quickSettingsMineruLabel => 'MinerU (mineru)';
 
   @override

@@ -4,7 +4,7 @@
 import os
 import json
 from dataclasses import dataclass, asdict, field
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, ClassVar, Set
 from pathlib import Path
 
 from logger import unified_logger as logger
@@ -235,7 +235,7 @@ class AppConfig:
     
     def save_to_file(self, config_file: str = "app_config.json") -> bool:
         """Save configuration to file (system directory priority, fallback to working directory on failure)"""
-        config_data = asdict(self)
+        config_data = self.get_config_dict()
         # Use system-appropriate paths
         from utils.path_utils import get_owlangs_paths
         paths = get_owlangs_paths()
@@ -306,9 +306,19 @@ class AppConfig:
                             coerced = value
                     setattr(self, key, coerced)
     
+    # Keys that are system-level settings managed by system.json (parsing_engine).
+    # AppConfig should not persist or expose these; system.json is the source of truth.
+    _SYSTEM_LEVEL_KEYS: ClassVar[Set[str]] = {
+        "translator_table_ocr",
+        "translator_formula_ocr",
+    }
+
     def get_config_dict(self) -> Dict[str, Any]:
-        """Get configuration dictionary"""
-        return asdict(self)
+        """Get configuration dictionary, excluding system-level keys."""
+        d = asdict(self)
+        for _key in self._SYSTEM_LEVEL_KEYS:
+            d.pop(_key, None)
+        return d
     
     def update_platform_api_key(self, platform: str, api_key: str) -> None:
         """Update platform API key"""

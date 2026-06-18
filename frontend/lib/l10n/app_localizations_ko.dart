@@ -906,6 +906,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get quickSettingsOpenMineruSettings => 'MinerU 설정 열기';
 
   @override
+  String get quickSettingsTableOcr => '표 OCR';
+
+  @override
+  String get quickSettingsTableOcrSubtitle => '문서 구문 분석 중 표 인식';
+
+  @override
+  String get quickSettingsFormulaOcr => '수식 OCR';
+
+  @override
+  String get quickSettingsFormulaOcrSubtitle => '문서 구문 분석 중 수식 인식';
+
+  @override
   String get quickSettingsMineruLabel => 'MinerU (mineru)';
 
   @override

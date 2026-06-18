@@ -293,6 +293,7 @@ class MarkdownWorkflowParams(BaseWorkflowParams):
     )
     mineru_token: Optional[str] = Field(None, description="Required API token when `convert_engine` is 'mineru'.")
     formula_ocr: bool = Field(True, description="Whether to perform OCR recognition on formulas. Effective for both `mineru` and `docling`.")
+    table_ocr: bool = Field(True, description="Whether to perform OCR recognition on tables. Effective for `mineru` engine.")
     code_ocr: bool = Field(True, description="Whether to perform OCR recognition on code blocks. Only effective for `docling` engine.")
     model_version: Literal["pipeline", "vlm", "hybrid", "vlm-auto-engine", "hybrid-auto-engine", "vlm-http-client", "hybrid-http-client"] = Field("hybrid-auto-engine",
                                                                description="MinerU backend: pipeline, vlm-auto-engine, hybrid-auto-engine, vlm-http-client, or hybrid-http-client.")

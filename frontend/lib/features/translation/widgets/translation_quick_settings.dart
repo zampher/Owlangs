@@ -62,6 +62,8 @@ class TranslationQuickSettings {
     this.qtTsTranslateObsolete = true,
     this.deepSplit = true,
     this.temperature,
+    this.tableOcr,
+    this.formulaOcr,
   });
 
   factory TranslationQuickSettings.fromJson(Map<String, dynamic> json) =>
@@ -86,6 +88,8 @@ class TranslationQuickSettings {
         temperature: json['temperature'] != null
             ? (json['temperature'] as num).toDouble()
             : null,
+        tableOcr: json['tableOcr'] as bool?,
+        formulaOcr: json['formulaOcr'] as bool?,
       );
   final String sourceLang;
   final String toLang;
@@ -109,6 +113,10 @@ class TranslationQuickSettings {
   // Temperature setting (null means use platform default)
   final double? temperature;
 
+  // MinerU OCR overrides (null means use system default from global settings)
+  final bool? tableOcr;
+  final bool? formulaOcr;
+
   TranslationQuickSettings copyWith({
     String? sourceLang,
     String? toLang,
@@ -126,6 +134,8 @@ class TranslationQuickSettings {
     bool? qtTsTranslateObsolete,
     bool? deepSplit,
     double? temperature,
+    bool? tableOcr,
+    bool? formulaOcr,
   }) =>
       TranslationQuickSettings(
         sourceLang: sourceLang ?? this.sourceLang,
@@ -149,6 +159,8 @@ class TranslationQuickSettings {
             qtTsTranslateObsolete ?? this.qtTsTranslateObsolete,
         deepSplit: deepSplit ?? this.deepSplit,
         temperature: temperature ?? this.temperature,
+        tableOcr: tableOcr ?? this.tableOcr,
+        formulaOcr: formulaOcr ?? this.formulaOcr,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -167,6 +179,8 @@ class TranslationQuickSettings {
         'qtTsTranslateObsolete': qtTsTranslateObsolete,
         'deepSplit': deepSplit,
         if (temperature != null) 'temperature': temperature,
+        if (tableOcr != null) 'tableOcr': tableOcr,
+        if (formulaOcr != null) 'formulaOcr': formulaOcr,
       };
 }
 
@@ -293,6 +307,20 @@ class TranslationQuickSettingsNotifier
   /// Update source language (used as MinerU OCR language hint for markdown_based workflows).
   void updateSourceLang(String sourceLang) {
     state = state.copyWith(sourceLang: sourceLang);
+    _saveSettings();
+  }
+
+  /// Update table OCR override for quick settings (single request only).
+  /// Pass null to revert to system default.
+  void updateTableOcr(bool? value) {
+    state = state.copyWith(tableOcr: value);
+    _saveSettings();
+  }
+
+  /// Update formula OCR override for quick settings (single request only).
+  /// Pass null to revert to system default.
+  void updateFormulaOcr(bool? value) {
+    state = state.copyWith(formulaOcr: value);
     _saveSettings();
   }
 
@@ -928,7 +956,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
     return 'auto';
   }
 
-  /// Combined MinerU OCR section: Source Language + Parsing Platform in one box.
+  /// Combined MinerU OCR section: Parsing Platform → Source Language → OCR toggles.
   /// Shown only for markdown_based workflow.
   Widget _buildMineruOcrSection(
     BuildContext context,
@@ -937,15 +965,39 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
     bool isTranslatePhase,
     WidgetRef ref,
   ) {
+    final GlobalSettings globalSettings = ref.watch(globalSettingsProvider);
+    final l10n = AppLocalizations.of(context)!;
+
+    // Effective OCR values: quick settings override (nullable) falls back to system default
+    final bool effectiveTableOcr = settings.tableOcr ?? globalSettings.tableOcr;
+    final bool effectiveFormulaOcr = settings.formulaOcr ?? globalSettings.formulaOcr;
+
     return _wrapQuickSettingSection(
       context,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
+          // 1. Parsing Platform (top)
+          _buildParsingPlatformSection(context, ref),
+          const SizedBox(height: 8),
+          // 2. Source Language
           _buildSourceLanguageSelector(
               context, settings, notifier, isTranslatePhase),
-          const SizedBox(height: 12),
-          _buildParsingPlatformSection(context, ref),
+          const SizedBox(height: 8),
+          // 3. Table OCR toggle
+          _buildOcrToggle(
+            label: l10n.quickSettingsTableOcr,
+            value: effectiveTableOcr,
+            enabled: !isTranslatePhase,
+            onChanged: notifier.updateTableOcr,
+          ),
+          // 4. Formula OCR toggle
+          _buildOcrToggle(
+            label: l10n.quickSettingsFormulaOcr,
+            value: effectiveFormulaOcr,
+            enabled: !isTranslatePhase,
+            onChanged: notifier.updateFormulaOcr,
+          ),
         ],
       ),
     );
@@ -1354,7 +1406,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             _buildPrimaryAIPlatform(context, ref),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             _buildTemperatureSlider(context, settings, notifier, ref),
           ],
         ),
@@ -1564,6 +1616,31 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
         visualDensity: VisualDensity.compact, // Added to reduce height
       );
 
+  /// Compact OCR toggle — label left, small switch right.
+  Widget _buildOcrToggle({
+    required String label,
+    required bool value,
+    required bool enabled,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        Switch(
+          value: value,
+          onChanged: enabled ? onChanged : null,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      ],
+    );
+  }
+
   // Removed: _buildSwitchOptions - Deep split is now always enabled by default
 
   // Removed: _buildSelectedAIPlatform (migrated to toolbar)
@@ -1597,67 +1674,44 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
     }
 
     final l10n = AppLocalizations.of(context)!;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: <Widget>[
-        Row(
-          children: <Widget>[
-            Text(
-              l10n.quickSettingsTemperature,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w500, fontSize: 13,), // Added fontSize
-            ),
-            const SizedBox(width: 6), // Reduced from 8 to 6
-            Flexible(
-              child: Text(
-                currentTemperature.toStringAsFixed(1),
-                style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 12,), // Added fontSize
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 6), // Reduced from 8 to 6
-            Flexible(
-              child: Text(
-                '(${temperatureMin.toStringAsFixed(1)} - ${temperatureMax.toStringAsFixed(1)})',
-                style: TextStyle(
-                  fontSize: 11, // Reduced from 12 to 11
-                  color: Colors.grey.shade600,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4), // Reduced from 8 to 4
-        Slider(
-          value: currentTemperature.clamp(temperatureMin, temperatureMax),
-          min: temperatureMin,
-          max: temperatureMax,
-          divisions: divisions,
-          label: currentTemperature.toStringAsFixed(1),
-          onChanged: (double value) {
-            final AIPlatformSettingsNotifier aiPlatformNotifier =
-                ref.read(aiPlatformSettingsProvider.notifier);
-            final String currentPlatform = aiPlatformSettings.defaultPlatform;
-            final AIPlatformInfo? platformInfo =
-                aiPlatformSettings.platforms[currentPlatform];
-            notifier.updateTemperature(
-              value,
-              aiPlatformNotifier,
-              currentPlatform,
-              platformInfo,
-            );
-          },
-        ),
         Text(
-          l10n.quickSettingsTemperatureHint,
-          style: TextStyle(
-              fontSize: 11,
-              color: Colors.grey.shade600,), // Reduced from 12 to 11
-          overflow: TextOverflow.ellipsis,
-          maxLines: 2,
+          l10n.quickSettingsTemperature,
+          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+        ),
+        SizedBox(
+          width: 32,
+          child: Text(
+            currentTemperature.toStringAsFixed(1),
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        Expanded(
+          child: SizedBox(
+            height: 28,
+            child: Slider(
+              value: currentTemperature.clamp(temperatureMin, temperatureMax),
+              min: temperatureMin,
+              max: temperatureMax,
+              divisions: divisions,
+              label: currentTemperature.toStringAsFixed(1),
+              onChanged: (double value) {
+                final AIPlatformSettingsNotifier aiPlatformNotifier =
+                    ref.read(aiPlatformSettingsProvider.notifier);
+                final String currentPlatform = aiPlatformSettings.defaultPlatform;
+                final AIPlatformInfo? platformInfo =
+                    aiPlatformSettings.platforms[currentPlatform];
+                notifier.updateTemperature(
+                  value,
+                  aiPlatformNotifier,
+                  currentPlatform,
+                  platformInfo,
+                );
+              },
+            ),
+          ),
         ),
       ],
     );

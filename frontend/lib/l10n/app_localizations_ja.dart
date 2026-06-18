@@ -904,6 +904,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get quickSettingsOpenMineruSettings => 'MinerU設定を開く';
 
   @override
+  String get quickSettingsTableOcr => '表OCR';
+
+  @override
+  String get quickSettingsTableOcrSubtitle => '文書解析時に表を認識';
+
+  @override
+  String get quickSettingsFormulaOcr => '数式OCR';
+
+  @override
+  String get quickSettingsFormulaOcrSubtitle => '文書解析時に数式を認識';
+
+  @override
   String get quickSettingsMineruLabel => 'MinerU (mineru)';
 
   @override

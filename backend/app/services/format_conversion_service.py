@@ -189,6 +189,8 @@ class FormatConversionService:
                 convert_engine = "mineru"
                 logger.info(LogModule.WORKFLOW, f"[FORMAT_CONVERSION] Image file detected ({file_ext}), using MinerU for OCR to extract text")
             
+            # formula_ocr and table_ocr: request override takes priority,
+            # system.json (parsing_engine.default_engine_settings) is the fallback default.
             formula_ocr = request.formula_ocr
             if formula_ocr is None:
                 if isinstance(parsing_engine, dict):
@@ -197,7 +199,7 @@ class FormatConversionService:
                     formula_ocr = getattr(parsing_engine, 'formula_ocr', True)
                 else:
                     formula_ocr = True
-            
+
             table_ocr = request.table_ocr
             if table_ocr is None:
                 if isinstance(parsing_engine, dict):
@@ -206,6 +208,12 @@ class FormatConversionService:
                     table_ocr = getattr(parsing_engine, 'table_ocr', True)
                 else:
                     table_ocr = True
+            logger.info(
+                LogModule.WORKFLOW,
+                "[FORMAT_CONVERSION] OCR settings resolved: formula_ocr=%s, table_ocr=%s "
+                "(request overrides: formula=%s, table=%s)"
+                % (formula_ocr, table_ocr, request.formula_ocr, request.table_ocr),
+            )
             
             model_version = request.model_version
             if model_version is None:

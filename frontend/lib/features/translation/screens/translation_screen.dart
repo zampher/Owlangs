@@ -2723,8 +2723,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         final FormatConvertParserOptions parserOpts =
             await formatSvc.resolveParserOptions(
           parsingEngine: globalSettings.parsingEngine,
-          formulaOcr: globalSettings.formulaOcr,
-          tableOcr: globalSettings.tableOcr,
+          formulaOcr: qs.formulaOcr ?? globalSettings.formulaOcr,
+          tableOcr: qs.tableOcr ?? globalSettings.tableOcr,
         );
 
         final Map<String, dynamic> convertRes = await formatSvc.convertFormat(
@@ -3443,14 +3443,19 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     notifier.setTotalDuration(null);
 
     try {
+      // Get Quick Settings for OCR overrides and language info
+      final TranslationQuickSettings qs = widget.flowId != null
+          ? ref.read(translationQuickSettingsProviderFamily(widget.flowId!))
+          : ref.read(translationQuickSettingsProvider);
+
       // Get global settings for parsing engine config
       final GlobalSettings globalSettings = ref.read(globalSettingsProvider);
       final FormatConversionService formatService = FormatConversionService();
       final FormatConvertParserOptions parserOpts =
           await formatService.resolveParserOptions(
         parsingEngine: globalSettings.parsingEngine,
-        formulaOcr: globalSettings.formulaOcr,
-        tableOcr: globalSettings.tableOcr,
+        formulaOcr: qs.formulaOcr ?? globalSettings.formulaOcr,
+        tableOcr: qs.tableOcr ?? globalSettings.tableOcr,
       );
 
       // Determine skipCache based on whether Extract phase has been run
@@ -3469,9 +3474,6 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       }
 
       // Get target language from Quick Settings for exclusion detection
-      final TranslationQuickSettings qs = widget.flowId != null
-          ? ref.read(translationQuickSettingsProviderFamily(widget.flowId!))
-          : ref.read(translationQuickSettingsProvider);
       final String? toLang = qs.toLang.isNotEmpty ? qs.toLang : null;
       final sourceLang =
           qs.sourceLang.isNotEmpty ? qs.sourceLang : 'auto';
@@ -4163,8 +4165,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
       final FormatConvertParserOptions parserOpts =
           await formatSvc.resolveParserOptions(
         parsingEngine: globalSettings.parsingEngine,
-        formulaOcr: globalSettings.formulaOcr,
-        tableOcr: globalSettings.tableOcr,
+        formulaOcr: qs.formulaOcr ?? globalSettings.formulaOcr,
+        tableOcr: qs.tableOcr ?? globalSettings.tableOcr,
       );
 
       final Map<String, dynamic> convertRes = await formatSvc.convertFormat(

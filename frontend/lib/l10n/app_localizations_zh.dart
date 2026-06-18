@@ -896,6 +896,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get quickSettingsOpenMineruSettings => '打开 MinerU 设置';
 
   @override
+  String get quickSettingsTableOcr => '表格 OCR';
+
+  @override
+  String get quickSettingsTableOcrSubtitle => '文档解析时识别表格';
+
+  @override
+  String get quickSettingsFormulaOcr => '公式 OCR';
+
+  @override
+  String get quickSettingsFormulaOcrSubtitle => '文档解析时识别公式';
+
+  @override
   String get quickSettingsMineruLabel => 'MinerU (mineru)';
 
   @override

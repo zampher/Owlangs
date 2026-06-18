@@ -955,6 +955,20 @@ class AppLocalizationsEs extends AppLocalizations {
   String get quickSettingsOpenMineruSettings => 'Abrir configuración de MinerU';
 
   @override
+  String get quickSettingsTableOcr => 'OCR de tablas';
+
+  @override
+  String get quickSettingsTableOcrSubtitle =>
+      'Reconocer tablas durante el análisis de documentos';
+
+  @override
+  String get quickSettingsFormulaOcr => 'OCR de fórmulas';
+
+  @override
+  String get quickSettingsFormulaOcrSubtitle =>
+      'Reconocer fórmulas durante el análisis de documentos';
+
+  @override
   String get quickSettingsMineruLabel => 'MinerU (mineru)';
 
   @override

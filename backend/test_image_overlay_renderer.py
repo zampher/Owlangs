@@ -460,6 +460,52 @@ class ImageOverlayRendererTest(unittest.TestCase):
         self.assertLessEqual(render_pt, 4.6)
         self.assertGreaterEqual(render_pt, 2.0)
 
+    def test_enrich_overlay_uses_target_language_font_not_calibri(self):
+        """Segment list must show overlay render pt (CJK font), not Typst/Calibri ~7pt."""
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            enrich_segment_font_fields,
+        )
+
+        page = LayoutPage(
+            page_index=0,
+            width=111.0,
+            height=327.0,
+            blocks=[
+                LayoutBlock(
+                    page_index=0,
+                    bbox=(22.0, 247.0, 103.0, 260.0),
+                    type="text",
+                    index=26,
+                    text=(
+                        "VENTILATION & AIR-CONDITIONING SYSTEM -SCHEMATIC DIAGRAM "
+                        "-MECHANICAL VENTILATION"
+                    ),
+                ),
+            ],
+        )
+        layout_doc = LayoutDocument(pages=[page])
+        text = "通风与空调系统 - 原理图 - 机械通风"
+        segment = {
+            "segment_index": 30,
+            "target_text": text,
+            "layout_block_indices": [26],
+        }
+        task_state = {
+            "original_filename": "diagram.png",
+            "overlay_source_image_size": [309, 910],
+            "to_lang": "zh",
+        }
+        enrich_segment_font_fields(
+            segment, layout_doc, text=text, task_state=task_state,
+        )
+        render_pt = segment.get("overlay_render_font_size_pt")
+        self.assertIsNotNone(render_pt)
+        assert render_pt is not None
+        self.assertLess(render_pt, 5.0)
+        self.assertGreater(render_pt, 2.0)
+        self.assertAlmostEqual(segment["computed_font_size_pt"], render_pt, places=1)
+        self.assertNotAlmostEqual(render_pt, 7.0, places=0)
+
 
 if __name__ == "__main__":
     unittest.main()

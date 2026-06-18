@@ -23,21 +23,32 @@ double snapPdfFontSize(double value) {
   return double.parse((steps * kPdfFontSizeStep).toStringAsFixed(1));
 }
 
+/// Floor to 0.1 pt step for segment list labels (no rounding up).
+double floorPdfFontSize(double value) {
+  final double clamped = value.clamp(kPdfFontSizeMin, kPdfFontSizeMax);
+  final int steps = (clamped / kPdfFontSizeStep).floor();
+  return double.parse((steps * kPdfFontSizeStep).toStringAsFixed(1));
+}
+
 /// Resolved segment font size for UI labels and batch ± steps (single source of truth).
 double? effectivePdfSegmentFontSizePtOrNull({
   String? fontSizeSource,
   double? fontSizePt,
   double? computedFontSizePt,
+  double? overlayRenderFontSizePt,
 }) {
-  // User override: show persisted pt (strict render target). Auto: use computed dry-run.
+  // User override: show persisted pt (strict render target). Auto: overlay render dry-run.
   if (fontSizeSource == 'user' && fontSizePt != null) {
-    return snapPdfFontSize(fontSizePt);
+    return floorPdfFontSize(fontSizePt);
+  }
+  if (overlayRenderFontSizePt != null) {
+    return floorPdfFontSize(overlayRenderFontSizePt);
   }
   if (computedFontSizePt != null) {
-    return snapPdfFontSize(computedFontSizePt);
+    return floorPdfFontSize(computedFontSizePt);
   }
   if (fontSizePt != null) {
-    return snapPdfFontSize(fontSizePt);
+    return floorPdfFontSize(fontSizePt);
   }
   return null;
 }
@@ -46,11 +57,13 @@ double effectivePdfSegmentFontSizePt({
   String? fontSizeSource,
   double? fontSizePt,
   double? computedFontSizePt,
+  double? overlayRenderFontSizePt,
 }) {
   return effectivePdfSegmentFontSizePtOrNull(
         fontSizeSource: fontSizeSource,
         fontSizePt: fontSizePt,
         computedFontSizePt: computedFontSizePt,
+        overlayRenderFontSizePt: overlayRenderFontSizePt,
       ) ??
       kPdfFontSizeMin;
 }
@@ -72,6 +85,7 @@ double effectivePdfSegmentFontSizePtFromMetadata(
     fontSizeSource: metadata['font_size_source'] as String?,
     fontSizePt: readDouble(metadata['font_size_pt']),
     computedFontSizePt: readDouble(metadata['computed_font_size_pt']),
+    overlayRenderFontSizePt: readDouble(metadata['overlay_render_font_size_pt']),
   );
 }
 

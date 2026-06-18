@@ -605,6 +605,17 @@ class TranslationService:
                        f"written_size={file_size_on_disk} bytes, expected_size={len(file_contents)} bytes")
             if file_size_on_disk != len(file_contents):
                 logger.warning(LogModule.WORKFLOW, f"[TRANSLATION-SERVICE] File size mismatch: task_id={task_id}, written={file_size_on_disk}, expected={len(file_contents)}")
+            try:
+                from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+                    cache_overlay_source_image_size,
+                )
+
+                cache_overlay_source_image_size(task_state, original_file_path)
+            except Exception as cache_err:
+                logger.debug(
+                    LogModule.WORKFLOW,
+                    f"[TRANSLATION-SERVICE] overlay_source_image_size cache skipped: {cache_err}",
+                )
         except Exception as e:
             logger.error(LogModule.WORKFLOW, f"[TRANSLATION-SERVICE] Failed to write file to disk: task_id={task_id}, path={original_file_path}, error={e}", exc_info=True)
             # Cleanup
