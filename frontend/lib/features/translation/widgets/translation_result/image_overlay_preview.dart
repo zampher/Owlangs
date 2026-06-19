@@ -4,7 +4,9 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../app/app_config.dart';
 import '../../../../l10n/app_localizations.dart';
@@ -293,6 +295,7 @@ class ImageOverlayCompareView extends StatefulWidget {
     required this.linkedScroll,
     super.key,
     this.highlightRect,
+    this.viewportController,
   });
 
   final String sourceImageUrl;
@@ -301,6 +304,11 @@ class ImageOverlayCompareView extends StatefulWidget {
 
   /// Bbox rectangle (in image pixel coordinates) to highlight on both panes.
   final Rect? highlightRect;
+
+  /// When provided, [InteractiveViewer] zoom is bidirectionally synced with
+  /// this controller so toolbar buttons (zoom In/Out/Reset) mirror the child's
+  /// zoom state and vice versa.
+  final PreviewViewportController? viewportController;
 
   @override
   State<ImageOverlayCompareView> createState() =>
@@ -319,19 +327,46 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
   final TransformationController _targetTransformController =
       TransformationController();
   bool _syncingTransform = false;
+  bool _syncingViewport = false;
 
   @override
   void initState() {
     super.initState();
     _sourceTransformController.addListener(_onSourceTransformChanged);
     _targetTransformController.addListener(_onTargetTransformChanged);
+    widget.viewportController?.addListener(_onViewportScaleChanged);
+    if (widget.viewportController != null) {
+      widget.viewportController!.childManagesZoom = true;
+    }
     _load();
+  }
+
+  bool _isCtrlPressed() {
+    return HardwareKeyboard.instance.logicalKeysPressed
+            .contains(LogicalKeyboardKey.controlLeft) ||
+        HardwareKeyboard.instance.logicalKeysPressed
+            .contains(LogicalKeyboardKey.controlRight);
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (!_isCtrlPressed() || event is! PointerScrollEvent || !mounted) return;
+    final PointerScrollEvent scroll = event;
+    final double dy = scroll.scrollDelta.dy;
+    if (dy == 0) return;
+    final double currentScale =
+        _sourceTransformController.value.getMaxScaleOnAxis();
+    final double factor = 1.0 - dy * 0.002;
+    final double nextScale = (currentScale * factor).clamp(0.5, 5.0);
+    final Matrix4 matrix = Matrix4.diagonal3Values(nextScale, nextScale, 1.0);
+    _sourceTransformController.value = matrix;
+    // _onSourceTransformChanged syncs target and viewport automatically.
   }
 
   void _onSourceTransformChanged() {
     if (_syncingTransform) return;
     _syncingTransform = true;
     _targetTransformController.value = _sourceTransformController.value;
+    _syncScaleToViewport(_sourceTransformController.value);
     _syncingTransform = false;
   }
 
@@ -339,11 +374,36 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
     if (_syncingTransform) return;
     _syncingTransform = true;
     _sourceTransformController.value = _targetTransformController.value;
+    _syncScaleToViewport(_targetTransformController.value);
     _syncingTransform = false;
+  }
+
+  void _syncScaleToViewport(Matrix4 matrix) {
+    final PreviewViewportController? vc = widget.viewportController;
+    if (vc == null || _syncingViewport) return;
+    _syncingViewport = true;
+    vc.setScale(matrix.getMaxScaleOnAxis());
+    _syncingViewport = false;
+  }
+
+  void _onViewportScaleChanged() {
+    final PreviewViewportController? vc = widget.viewportController;
+    if (vc == null || _syncingViewport) return;
+    final double scale = vc.scale;
+    _syncingViewport = true;
+    final Matrix4 matrix = Matrix4.diagonal3Values(scale, scale, 1.0);
+    _sourceTransformController.value = matrix;
+    _targetTransformController.value = matrix;
+    _syncingViewport = false;
   }
 
   @override
   void dispose() {
+    widget.viewportController
+        ?.removeListener(_onViewportScaleChanged);
+    if (widget.viewportController != null) {
+      widget.viewportController!.childManagesZoom = false;
+    }
     _sourceTransformController.removeListener(_onSourceTransformChanged);
     _targetTransformController.removeListener(_onTargetTransformChanged);
     _sourceTransformController.dispose();
@@ -357,6 +417,17 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
     if (oldWidget.sourceImageUrl != widget.sourceImageUrl ||
         oldWidget.targetImageUrl != widget.targetImageUrl) {
       _load();
+    }
+    if (oldWidget.viewportController != widget.viewportController) {
+      oldWidget.viewportController
+          ?.removeListener(_onViewportScaleChanged);
+      if (oldWidget.viewportController != null) {
+        oldWidget.viewportController!.childManagesZoom = false;
+      }
+      widget.viewportController?.addListener(_onViewportScaleChanged);
+      if (widget.viewportController != null) {
+        widget.viewportController!.childManagesZoom = true;
+      }
     }
   }
 
@@ -496,29 +567,32 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
     required Uint8List target,
   }) {
     final bool showHighlight = widget.highlightRect != null;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Expanded(
-          child: _buildPane(
-            label: l10n.translationPreviewPanelSource,
-            bytes: source,
-            imageSize: _sourceImageSize,
-            showHighlight: showHighlight,
-            transformController: _sourceTransformController,
+    return Listener(
+      onPointerSignal: _onPointerSignal,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Expanded(
+            child: _buildPane(
+              label: l10n.translationPreviewPanelSource,
+              bytes: source,
+              imageSize: _sourceImageSize,
+              showHighlight: showHighlight,
+              transformController: _sourceTransformController,
+            ),
           ),
-        ),
-        const VerticalDivider(width: 1),
-        Expanded(
-          child: _buildPane(
-            label: l10n.translationPreviewPanelTarget,
-            bytes: target,
-            imageSize: _targetImageSize,
-            showHighlight: showHighlight,
-            transformController: _targetTransformController,
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: _buildPane(
+              label: l10n.translationPreviewPanelTarget,
+              bytes: target,
+              imageSize: _targetImageSize,
+              showHighlight: showHighlight,
+              transformController: _targetTransformController,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

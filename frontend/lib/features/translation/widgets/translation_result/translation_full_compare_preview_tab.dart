@@ -734,6 +734,7 @@ class _TranslationFullComparePreviewTabState
                 targetImageUrl: targetImageUrl,
                 linkedScroll: _revisionLinkedScrollEnabled,
                 highlightRect: _buildHighlightRect(),
+                viewportController: _viewportController,
               ),
             ),
           ),
@@ -765,6 +766,7 @@ class _TranslationFullComparePreviewTabState
               navigationController: _pdfCompareNavigationController,
               highlightPageNumber: _highlightBboxPage,
               highlightBbox: _highlightBbox,
+              viewportController: _viewportController,
               onVisiblePageChanged: (int page, int totalPages) {
                 if (!mounted ||
                     (page == _comparePdfCurrentPage &&
@@ -846,6 +848,7 @@ class _TranslationFullComparePreviewTabState
           targetImageUrl: targetImageUrl,
           linkedScroll: _syncScrollEnabled,
           highlightRect: _buildHighlightRect(),
+          viewportController: _viewportController,
         ),
       );
     }
@@ -865,6 +868,7 @@ class _TranslationFullComparePreviewTabState
         linkedScroll: _syncScrollEnabled,
         highlightPageNumber: _highlightBboxPage,
         highlightBbox: _highlightBbox,
+        viewportController: _viewportController,
         onVisiblePageChanged: (int page, int totalPages) {
           if (!mounted ||
               (page == _comparePdfCurrentPage &&
@@ -988,11 +992,6 @@ class _TranslationFullComparePreviewTabState
                     ),
                   ],
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh, size: 18),
-                tooltip: l10n.translationPreviewRefreshPdf,
-                onPressed: _refreshPdfManually,
               ),
               if (widget.autoFollowSegmentPdfPageListenable != null &&
                   widget.onAutoFollowSegmentPdfPageChanged != null)
@@ -1140,6 +1139,12 @@ class _TranslationFullComparePreviewTabState
               ),
             ],
             const Spacer(),
+            if (showRevisionControls)
+              IconButton(
+                icon: const Icon(Icons.refresh, size: 18),
+                tooltip: l10n.translationPreviewRefreshPdf,
+                onPressed: _refreshPdfManually,
+              ),
             PreviewZoomToolbarActions(
               viewportController: _viewportController,
             ),

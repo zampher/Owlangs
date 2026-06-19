@@ -6,12 +6,15 @@ import 'dart:math' as math;
 
 import 'dart:typed_data';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pdfx/pdfx.dart';
 
 import '../../../shared/services/translation_service.dart';
 import 'pdf_continuous_page.dart';
 import 'pdf_continuous_scroll_view.dart';
+import 'translation_result/preview_viewport.dart';
 
 /// Scroll navigation for [PdfCompareContinuousView].
 class PdfCompareContinuousScrollController {
@@ -65,6 +68,7 @@ class PdfCompareContinuousView extends StatefulWidget {
     this.navigationController,
     this.highlightPageNumber,
     this.highlightBbox,
+    this.viewportController,
   });
 
   final String sourceDownloadUrl;
@@ -81,6 +85,11 @@ class PdfCompareContinuousView extends StatefulWidget {
 
   /// Bbox in PDF points `[x0, y0, x1, y1]` to highlight on the matching page.
   final List<double>? highlightBbox;
+
+  /// When provided, [InteractiveViewer] zoom is bidirectionally synced with
+  /// this controller so toolbar buttons (zoom In/Out/Reset) mirror the child's
+  /// zoom state and vice versa.
+  final PreviewViewportController? viewportController;
 
   @override
   State<PdfCompareContinuousView> createState() =>
@@ -106,6 +115,8 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
   final TransformationController _targetZoomController =
       TransformationController();
   bool _syncingZoom = false;
+  bool _syncingViewport = false;
+  bool _ctrlHeld = false;
 
   @override
   void initState() {
@@ -115,13 +126,46 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     widget.navigationController?._attach(this);
     _sourceZoomController.addListener(_onSourceZoomChanged);
     _targetZoomController.addListener(_onTargetZoomChanged);
+    widget.viewportController?.addListener(_onViewportScaleChanged);
+    if (widget.viewportController != null) {
+      widget.viewportController!.childManagesZoom = true;
+    }
+    HardwareKeyboard.instance.addHandler(_onKeyEvent);
     _loadDocuments();
+  }
+
+  bool _onKeyEvent(KeyEvent event) {
+    if (!mounted) return false;
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.controlLeft ||
+          event.logicalKey == LogicalKeyboardKey.controlRight) {
+        if (!_ctrlHeld && mounted) {
+          setState(() {
+            _ctrlHeld = true;
+          });
+        }
+        return false;
+      }
+    }
+    if (event is KeyUpEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.controlLeft ||
+          event.logicalKey == LogicalKeyboardKey.controlRight) {
+        if (mounted) {
+          setState(() {
+            _ctrlHeld = false;
+          });
+        }
+        return false;
+      }
+    }
+    return false;
   }
 
   void _onSourceZoomChanged() {
     if (_syncingZoom) return;
     _syncingZoom = true;
     _targetZoomController.value = _sourceZoomController.value;
+    _syncScaleToViewport(_sourceZoomController.value);
     _syncingZoom = false;
   }
 
@@ -129,12 +173,43 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     if (_syncingZoom) return;
     _syncingZoom = true;
     _sourceZoomController.value = _targetZoomController.value;
+    _syncScaleToViewport(_targetZoomController.value);
     _syncingZoom = false;
+  }
+
+  void _syncScaleToViewport(Matrix4 matrix) {
+    final PreviewViewportController? vc = widget.viewportController;
+    if (vc == null || _syncingViewport) return;
+    _syncingViewport = true;
+    vc.setScale(matrix.getMaxScaleOnAxis());
+    _syncingViewport = false;
+  }
+
+  void _onViewportScaleChanged() {
+    final PreviewViewportController? vc = widget.viewportController;
+    if (vc == null || _syncingViewport) return;
+    final double scale = vc.scale;
+    _syncingViewport = true;
+    final Matrix4 matrix = Matrix4.diagonal3Values(scale, scale, 1.0);
+    _sourceZoomController.value = matrix;
+    _targetZoomController.value = matrix;
+    _syncingViewport = false;
   }
 
   @override
   void didUpdateWidget(covariant PdfCompareContinuousView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.viewportController != widget.viewportController) {
+      oldWidget.viewportController
+          ?.removeListener(_onViewportScaleChanged);
+      if (oldWidget.viewportController != null) {
+        oldWidget.viewportController!.childManagesZoom = false;
+      }
+      widget.viewportController?.addListener(_onViewportScaleChanged);
+      if (widget.viewportController != null) {
+        widget.viewportController!.childManagesZoom = true;
+      }
+    }
     if (oldWidget.navigationController != widget.navigationController) {
       oldWidget.navigationController?._detach(this);
       widget.navigationController?._attach(this);
@@ -158,14 +233,40 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     }
   }
 
-  @override
+  bool _isCtrlPressed() {
+    return HardwareKeyboard.instance.logicalKeysPressed
+            .contains(LogicalKeyboardKey.controlLeft) ||
+        HardwareKeyboard.instance.logicalKeysPressed
+            .contains(LogicalKeyboardKey.controlRight);
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (!_isCtrlPressed() || event is! PointerScrollEvent || !mounted) return;
+    final PointerScrollEvent scroll = event;
+    final double dy = scroll.scrollDelta.dy;
+    if (dy == 0) return;
+    // Positive dy = scroll down → zoom out; negative dy → zoom in.
+    final double currentScale = _sourceZoomController.value.getMaxScaleOnAxis();
+    final double factor = 1.0 - dy * 0.002;
+    final double nextScale = (currentScale * factor).clamp(0.5, 5.0);
+    final Matrix4 matrix = Matrix4.diagonal3Values(nextScale, nextScale, 1.0);
+    // _onSourceZoomChanged syncs target and viewport automatically.
+    _sourceZoomController.value = matrix;
+  }
+
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKeyEvent);
     widget.navigationController?._detach(this);
     _scrollController.removeListener(_handleLinkedScroll);
     _targetScrollController.removeListener(_handleTargetScroll);
     _scrollController.dispose();
     _sourceScrollController.dispose();
     _targetScrollController.dispose();
+    widget.viewportController
+        ?.removeListener(_onViewportScaleChanged);
+    if (widget.viewportController != null) {
+      widget.viewportController!.childManagesZoom = false;
+    }
     _sourceZoomController.removeListener(_onSourceZoomChanged);
     _targetZoomController.removeListener(_onTargetZoomChanged);
     _sourceZoomController.dispose();
@@ -425,15 +526,19 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
         ? source.pagesCount
         : target.pagesCount;
 
-    return Scrollbar(
-      controller: _scrollController,
-      thumbVisibility: true,
-      child: ListView.builder(
+    return Listener(
+      onPointerSignal: _onPointerSignal,
+      child: Scrollbar(
         controller: _scrollController,
-        physics: const ClampingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
-        ),
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        thumbVisibility: true,
+        child: ListView.builder(
+          controller: _scrollController,
+          physics: _ctrlHeld
+              ? const NeverScrollableScrollPhysics()
+              : const ClampingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
         itemCount: rowCount,
         itemBuilder: (BuildContext context, int index) {
           final int pageNumber = index + 1;
@@ -459,6 +564,7 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                                   ? widget.highlightBbox
                                   : null,
                               transformController: _sourceZoomController,
+                              scaleEnabled: false,
                             )
                           : const SizedBox.shrink(),
                     ),
@@ -474,6 +580,7 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                                   ? widget.highlightBbox
                                   : null,
                               transformController: _targetZoomController,
+                              scaleEnabled: false,
                             )
                           : const SizedBox.shrink(),
                     ),
@@ -484,6 +591,7 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
           );
         },
       ),
+      ),
     );
   }
 
@@ -492,75 +600,87 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         Expanded(
-          child: Scrollbar(
-            controller: _sourceScrollController,
-            thumbVisibility: true,
-            child: ListView.builder(
+          child: Listener(
+            onPointerSignal: _onPointerSignal,
+            child: Scrollbar(
               controller: _sourceScrollController,
-              physics: const ClampingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
+              thumbVisibility: true,
+              child: ListView.builder(
+                controller: _sourceScrollController,
+                physics: _ctrlHeld
+                    ? const NeverScrollableScrollPhysics()
+                    : const ClampingScrollPhysics(
+                        parent: AlwaysScrollableScrollPhysics(),
+                      ),
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                itemCount: source.pagesCount,
+                itemBuilder: (BuildContext context, int index) {
+                  final int pageNumber = index + 1;
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index == source.pagesCount - 1 ? 0 : widget.pageGap,
+                    ),
+                    child: LayoutBuilder(
+                      builder: (BuildContext context, BoxConstraints constraints) {
+                        return PdfContinuousPage(
+                          document: source,
+                          pageNumber: pageNumber,
+                          maxWidth: constraints.maxWidth - 16,
+                          highlightBbox:
+                              (widget.highlightPageNumber == pageNumber)
+                                  ? widget.highlightBbox
+                                  : null,
+                          transformController: _sourceZoomController,
+                          scaleEnabled: false,
+                        );
+                      },
+                    ),
+                  );
+                },
               ),
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-              itemCount: source.pagesCount,
-              itemBuilder: (BuildContext context, int index) {
-                final int pageNumber = index + 1;
-                return Padding(
-                  padding: EdgeInsets.only(
-                    bottom: index == source.pagesCount - 1 ? 0 : widget.pageGap,
-                  ),
-                  child: LayoutBuilder(
-                    builder: (BuildContext context, BoxConstraints constraints) {
-                      return PdfContinuousPage(
-                        document: source,
-                        pageNumber: pageNumber,
-                        maxWidth: constraints.maxWidth - 16,
-                        highlightBbox:
-                            (widget.highlightPageNumber == pageNumber)
-                                ? widget.highlightBbox
-                                : null,
-                        transformController: _sourceZoomController,
-                      );
-                    },
-                  ),
-                );
-              },
             ),
           ),
         ),
         SizedBox(width: widget.columnGap),
         Expanded(
-          child: Scrollbar(
-            controller: _targetScrollController,
-            thumbVisibility: true,
-            child: ListView.builder(
+          child: Listener(
+            onPointerSignal: _onPointerSignal,
+            child: Scrollbar(
               controller: _targetScrollController,
-              physics: const ClampingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
+              thumbVisibility: true,
+              child: ListView.builder(
+                controller: _targetScrollController,
+                physics: _ctrlHeld
+                    ? const NeverScrollableScrollPhysics()
+                    : const ClampingScrollPhysics(
+                        parent: AlwaysScrollableScrollPhysics(),
+                      ),
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                itemCount: target.pagesCount,
+                itemBuilder: (BuildContext context, int index) {
+                  final int pageNumber = index + 1;
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index == target.pagesCount - 1 ? 0 : widget.pageGap,
+                    ),
+                    child: LayoutBuilder(
+                      builder: (BuildContext context, BoxConstraints constraints) {
+                        return PdfContinuousPage(
+                          document: target,
+                          pageNumber: pageNumber,
+                          maxWidth: constraints.maxWidth - 16,
+                          highlightBbox:
+                              (widget.highlightPageNumber == pageNumber)
+                                  ? widget.highlightBbox
+                                  : null,
+                          transformController: _targetZoomController,
+                          scaleEnabled: false,
+                        );
+                      },
+                    ),
+                  );
+                },
               ),
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-              itemCount: target.pagesCount,
-              itemBuilder: (BuildContext context, int index) {
-                final int pageNumber = index + 1;
-                return Padding(
-                  padding: EdgeInsets.only(
-                    bottom: index == target.pagesCount - 1 ? 0 : widget.pageGap,
-                  ),
-                  child: LayoutBuilder(
-                    builder: (BuildContext context, BoxConstraints constraints) {
-                      return PdfContinuousPage(
-                        document: target,
-                        pageNumber: pageNumber,
-                        maxWidth: constraints.maxWidth - 16,
-                        highlightBbox:
-                            (widget.highlightPageNumber == pageNumber)
-                                ? widget.highlightBbox
-                                : null,
-                        transformController: _targetZoomController,
-                      );
-                    },
-                  ),
-                );
-              },
             ),
           ),
         ),

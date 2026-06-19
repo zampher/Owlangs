@@ -20,6 +20,7 @@ class PdfContinuousPage extends StatefulWidget {
     required this.maxWidth,
     this.highlightBbox,
     this.transformController,
+    this.scaleEnabled = true,
     super.key,
   });
 
@@ -32,6 +33,10 @@ class PdfContinuousPage extends StatefulWidget {
 
   /// Optional controller to enable zoom/pan via [InteractiveViewer].
   final TransformationController? transformController;
+
+  /// Whether [InteractiveViewer] pinch/scroll-zoom gestures are enabled.
+  /// When false, only external changes to [transformController] are reflected.
+  final bool scaleEnabled;
 
   @override
   State<PdfContinuousPage> createState() => _PdfContinuousPageState();
@@ -157,6 +162,7 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
       imageBytes: image.bytes,
       highlightRect: screenRect,
       transformController: widget.transformController,
+      scaleEnabled: widget.scaleEnabled,
     );
   }
 }
@@ -172,6 +178,7 @@ class PdfContinuousPageFrame extends StatelessWidget {
     required this.imageBytes,
     this.highlightRect,
     this.transformController,
+    this.scaleEnabled = true,
     super.key,
   });
 
@@ -182,6 +189,9 @@ class PdfContinuousPageFrame extends StatelessWidget {
 
   /// Optional controller to enable zoom/pan via [InteractiveViewer].
   final TransformationController? transformController;
+
+  /// Whether [InteractiveViewer] pinch/scroll-zoom gestures are enabled.
+  final bool scaleEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -232,6 +242,7 @@ class PdfContinuousPageFrame extends StatelessWidget {
       child: InteractiveViewer(
         transformationController: transformController,
         constrained: true,
+        scaleEnabled: scaleEnabled,
         child: centered,
       ),
     );

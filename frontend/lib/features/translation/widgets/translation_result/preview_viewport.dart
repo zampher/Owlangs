@@ -43,6 +43,10 @@ class PreviewViewportController extends ChangeNotifier {
   final double maxScale;
   double _scale = 1.0;
 
+  /// When true, the child widget (e.g. [InteractiveViewer]) owns zoom
+  /// and [PreviewZoomableViewport] should not apply its own [Transform.scale].
+  bool childManagesZoom = false;
+
   double get scale => _scale;
 
   int get scalePercent => (_scale * 100).round();
@@ -57,6 +61,12 @@ class PreviewViewportController extends ChangeNotifier {
 
   void resetZoom() {
     _applyScale(1.0);
+  }
+
+  /// Sets scale from an external source (e.g. [InteractiveViewer] wheel zoom).
+  /// Call [notifyListeners] so toolbar buttons react.
+  void setScale(double value) {
+    _applyScale(value);
   }
 
   void _applyScale(double next) {
@@ -372,6 +382,9 @@ class _PreviewZoomableViewportState extends State<PreviewZoomableViewport> {
               if (scale <= 1.0) {
                 _scheduleMeasureContent();
                 if (widget.childHandlesVerticalScroll) {
+                  if (widget.controller.childManagesZoom) {
+                    return ClipRect(child: widget.child);
+                  }
                   return ClipRect(
                     child: Transform.scale(
                       scale: scale,
@@ -416,6 +429,9 @@ class _PreviewZoomableViewportState extends State<PreviewZoomableViewport> {
                 viewportHeight: viewportHeight,
               );
               if (widget.childHandlesVerticalScroll) {
+                if (widget.controller.childManagesZoom) {
+                  return ClipRect(child: widget.child);
+                }
                 return ClipRect(
                   child: Transform.scale(
                     scale: scale,
