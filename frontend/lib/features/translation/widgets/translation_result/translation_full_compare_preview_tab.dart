@@ -123,6 +123,9 @@ class _TranslationFullComparePreviewTabState
   int _comparePdfCurrentPage = 1;
   int _comparePdfTotalPages = 0;
   bool _revisionLinkedScrollEnabled = true;
+  bool _previewSignalsAlive = true;
+  final List<(Listenable, VoidCallback)> _previewSignalBindings =
+      <(Listenable, VoidCallback)>[];
 
   bool get _showsRevisionLinkedScroll =>
       _layoutMode == PdfCompareLayoutMode.compareRevision &&
@@ -156,16 +159,13 @@ class _TranslationFullComparePreviewTabState
         }
       },
     );
-    widget.pdfRenderRevisionListenable?.addListener(_onPdfRevisionListenableChanged);
-    widget.pdfPreviewJumpPageTriggerListenable
-        ?.addListener(_onPdfPreviewJumpPageRequested);
-    widget.pdfHighlightBboxListenable
-        ?.addListener(_onPdfBboxHighlightChanged);
-    widget.pdfHighlightBboxPageListenable
-        ?.addListener(_onPdfBboxHighlightChanged);
-    _onPdfBboxHighlightChanged();
+    _previewSignalsAlive = _bindPreviewSignalListeners();
+    if (_previewSignalsAlive) {
+      _onPdfBboxHighlightChanged();
+    }
     if (widget.initialLayoutMode != PdfCompareLayoutMode.comparePreview &&
-        _supportsRevisionPreview) {
+        _supportsRevisionPreview &&
+        _previewSignalsAlive) {
       _layoutMode = widget.initialLayoutMode;
       // Enter revision layout on the first frame so we do not briefly mount
       // PdfCompareContinuousView (source + target downloads) before revision mode.
@@ -183,32 +183,40 @@ class _TranslationFullComparePreviewTabState
     }
     if (oldWidget.pdfRenderRevisionListenable !=
         widget.pdfRenderRevisionListenable) {
-      oldWidget.pdfRenderRevisionListenable
-          ?.removeListener(_onPdfRevisionListenableChanged);
-      widget.pdfRenderRevisionListenable
-          ?.addListener(_onPdfRevisionListenableChanged);
-      _onPdfRevisionListenableChanged();
+      _rebindPreviewSignal(
+        oldWidget.pdfRenderRevisionListenable,
+        widget.pdfRenderRevisionListenable,
+        _onPdfRevisionListenableChanged,
+      );
+      if (_previewSignalsAlive) {
+        _onPdfRevisionListenableChanged();
+      }
     }
     if (oldWidget.pdfPreviewJumpPageTriggerListenable !=
         widget.pdfPreviewJumpPageTriggerListenable) {
-      oldWidget.pdfPreviewJumpPageTriggerListenable
-          ?.removeListener(_onPdfPreviewJumpPageRequested);
-      widget.pdfPreviewJumpPageTriggerListenable
-          ?.addListener(_onPdfPreviewJumpPageRequested);
+      _rebindPreviewSignal(
+        oldWidget.pdfPreviewJumpPageTriggerListenable,
+        widget.pdfPreviewJumpPageTriggerListenable,
+        _onPdfPreviewJumpPageRequested,
+      );
     }
     if (oldWidget.pdfHighlightBboxListenable !=
             widget.pdfHighlightBboxListenable ||
         oldWidget.pdfHighlightBboxPageListenable !=
             widget.pdfHighlightBboxPageListenable) {
-      oldWidget.pdfHighlightBboxListenable
-          ?.removeListener(_onPdfBboxHighlightChanged);
-      oldWidget.pdfHighlightBboxPageListenable
-          ?.removeListener(_onPdfBboxHighlightChanged);
-      widget.pdfHighlightBboxListenable
-          ?.addListener(_onPdfBboxHighlightChanged);
-      widget.pdfHighlightBboxPageListenable
-          ?.addListener(_onPdfBboxHighlightChanged);
-      _onPdfBboxHighlightChanged();
+      _rebindPreviewSignal(
+        oldWidget.pdfHighlightBboxListenable,
+        widget.pdfHighlightBboxListenable,
+        _onPdfBboxHighlightChanged,
+      );
+      _rebindPreviewSignal(
+        oldWidget.pdfHighlightBboxPageListenable,
+        widget.pdfHighlightBboxPageListenable,
+        _onPdfBboxHighlightChanged,
+      );
+      if (_previewSignalsAlive) {
+        _onPdfBboxHighlightChanged();
+      }
     }
     if (oldWidget.pdfRenderRevision != widget.pdfRenderRevision &&
         widget.pdfRenderRevisionListenable == null) {
@@ -226,20 +234,100 @@ class _TranslationFullComparePreviewTabState
 
   @override
   void dispose() {
-    widget.pdfRenderRevisionListenable
-        ?.removeListener(_onPdfRevisionListenableChanged);
-    widget.pdfPreviewJumpPageTriggerListenable
-        ?.removeListener(_onPdfPreviewJumpPageRequested);
-    widget.pdfHighlightBboxListenable
-        ?.removeListener(_onPdfBboxHighlightChanged);
-    widget.pdfHighlightBboxPageListenable
-        ?.removeListener(_onPdfBboxHighlightChanged);
+    _unbindPreviewSignalListeners();
     _pdfNavigationController.dispose();
     _pdfCompareNavigationController.dispose();
     _selectedSegmentIndicesNotifier.dispose();
     _fullscreenOverlay.dispose();
     _viewportController.dispose();
     super.dispose();
+  }
+
+  void _unbindPreviewSignalListeners() {
+    final List<(Listenable, VoidCallback)> bindings =
+        List<(Listenable, VoidCallback)>.from(_previewSignalBindings);
+    _previewSignalBindings.clear();
+    for (final (Listenable target, VoidCallback listener) in bindings) {
+      try {
+        target.removeListener(listener);
+      } on AssertionError {
+        // Parent notifier already disposed.
+      }
+    }
+  }
+
+  bool _tryAddPreviewSignalListener(
+    Listenable? target,
+    VoidCallback listener,
+  ) {
+    if (target == null) {
+      return true;
+    }
+    try {
+      target.addListener(listener);
+      _previewSignalBindings.add((target, listener));
+      return true;
+    } on AssertionError {
+      return false;
+    }
+  }
+
+  void _rebindPreviewSignal(
+    Listenable? oldTarget,
+    Listenable? newTarget,
+    VoidCallback listener,
+  ) {
+    if (oldTarget != null) {
+      try {
+        oldTarget.removeListener(listener);
+      } on AssertionError {
+        // Parent notifier already disposed.
+      }
+      _previewSignalBindings.remove((oldTarget, listener));
+    }
+    if (!_tryAddPreviewSignalListener(newTarget, listener)) {
+      _previewSignalsAlive = false;
+    }
+  }
+
+  bool _bindPreviewSignalListeners() {
+    _unbindPreviewSignalListeners();
+    var alive = true;
+    alive = _tryAddPreviewSignalListener(
+          widget.pdfRenderRevisionListenable,
+          _onPdfRevisionListenableChanged,
+        ) &&
+        alive;
+    alive = _tryAddPreviewSignalListener(
+          widget.pdfPreviewJumpPageTriggerListenable,
+          _onPdfPreviewJumpPageRequested,
+        ) &&
+        alive;
+    alive = _tryAddPreviewSignalListener(
+          widget.pdfHighlightBboxListenable,
+          _onPdfBboxHighlightChanged,
+        ) &&
+        alive;
+    alive = _tryAddPreviewSignalListener(
+          widget.pdfHighlightBboxPageListenable,
+          _onPdfBboxHighlightChanged,
+        ) &&
+        alive;
+    _previewSignalsAlive = alive;
+    return alive;
+  }
+
+  Widget _buildStalePreviewPlaceholder(AppLocalizations l10n) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          l10n.translationPreviewStaleSession,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      ),
+    );
   }
 
   void _onPdfRevisionListenableChanged() {
@@ -1093,6 +1181,15 @@ class _TranslationFullComparePreviewTabState
     required bool isFullscreenView,
   }) {
     final AppLocalizations l10n = AppLocalizations.of(context)!;
+    if (!_previewSignalsAlive) {
+      return Column(
+        children: <Widget>[
+          _buildPreviewToolbar(context, l10n, isFullscreenView: isFullscreenView),
+          const Divider(height: 1),
+          Expanded(child: _buildStalePreviewPlaceholder(l10n)),
+        ],
+      );
+    }
     return Column(
       children: <Widget>[
         _buildPreviewToolbar(context, l10n, isFullscreenView: isFullscreenView),

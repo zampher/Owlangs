@@ -79,6 +79,7 @@ class TranslationSegmentItem extends StatefulWidget {
     this.showPdfFontSize = false,
     this.fontSizePt,
     this.computedFontSizePt,
+    this.overlayRenderFontSizePt,
     this.fontSizeSource,
     this.fontWeight,
     this.computedFontWeight,
@@ -136,6 +137,7 @@ class TranslationSegmentItem extends StatefulWidget {
   final bool showPdfFontSize;
   final double? fontSizePt;
   final double? computedFontSizePt;
+  final double? overlayRenderFontSizePt;
   final String? fontSizeSource;
   final String? fontWeight;
   final String? computedFontWeight;
@@ -646,7 +648,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
 
   /// PDF revision panel: always show effective (computed or user) typography values.
   String _pdfRevisionFontLabel(AppLocalizations l10n) {
-    final List<String> styleParts = <String>[l10n.segmentPdfRevisionFontLabel];
+    final List<String> styleParts = <String>[];
     final double? sizePt = _effectiveFontSizePtOrNull();
     if (sizePt != null) {
       styleParts.add(l10n.segmentPdfFontSizeManual(sizePt.toStringAsFixed(1)));
@@ -675,6 +677,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
       fontSizeSource: widget.fontSizeSource,
       fontSizePt: widget.fontSizePt,
       computedFontSizePt: widget.computedFontSizePt,
+      overlayRenderFontSizePt: widget.overlayRenderFontSizePt,
     );
   }
 
@@ -683,6 +686,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
       fontSizeSource: widget.fontSizeSource,
       fontSizePt: widget.fontSizePt,
       computedFontSizePt: widget.computedFontSizePt,
+      overlayRenderFontSizePt: widget.overlayRenderFontSizePt,
     );
   }
 

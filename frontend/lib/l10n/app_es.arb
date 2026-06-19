@@ -1437,6 +1437,7 @@
   "translationPreviewFollowSegmentPageDesc": "Al activarlo, la vista previa del PDF de traducción salta a la página del segmento seleccionado o marcado",
   "translationPreviewMarkSelectedSegment": "Marcar segmento seleccionado",
   "translationPreviewMarkSelectedSegmentDesc": "Al activarlo, muestra un marco alrededor del segmento seleccionado en la vista previa de la traducción",
+  "translationPreviewStaleSession": "Vista previa no disponible. Vuelva a abrir la revisión de vista previa desde el panel de traducción.",
   "translationPreviewPdfPageIndicator": "Página {current} / {total}",
   "@translationPreviewPdfPageIndicator": {
     "placeholders": {

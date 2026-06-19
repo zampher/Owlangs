@@ -6908,6 +6908,12 @@ abstract class AppLocalizations {
   /// **'When enabled, show a frame around the selected segment on the translation preview'**
   String get translationPreviewMarkSelectedSegmentDesc;
 
+  /// No description provided for @translationPreviewStaleSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview unavailable. Reopen revision preview from the translation panel.'**
+  String get translationPreviewStaleSession;
+
   /// No description provided for @translationPreviewPdfPageIndicator.
   ///
   /// In en, this message translates to:

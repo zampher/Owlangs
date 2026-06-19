@@ -3793,6 +3793,10 @@ class AppLocalizationsKo extends AppLocalizations {
       '활성화하면 번역 미리보기에서 선택한 세그먼트 위치에 테두리를 표시합니다';
 
   @override
+  String get translationPreviewStaleSession =>
+      '미리보기를 사용할 수 없습니다. 번역 패널에서 미리보기 수정을 다시 여세요.';
+
+  @override
   String translationPreviewPdfPageIndicator(String current, String total) {
     return '$current / $total 페이지';
   }

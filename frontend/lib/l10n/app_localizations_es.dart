@@ -3984,6 +3984,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'Al activarlo, muestra un marco alrededor del segmento seleccionado en la vista previa de la traducción';
 
   @override
+  String get translationPreviewStaleSession =>
+      'Vista previa no disponible. Vuelva a abrir la revisión de vista previa desde el panel de traducción.';
+
+  @override
   String translationPreviewPdfPageIndicator(String current, String total) {
     return 'Página $current / $total';
   }

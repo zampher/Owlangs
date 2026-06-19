@@ -3753,6 +3753,9 @@ class AppLocalizationsZh extends AppLocalizations {
       '启用后，在译文预览中用边框标出当前选中片段的位置';
 
   @override
+  String get translationPreviewStaleSession => '预览已失效，请从翻译面板重新打开预览修订。';
+
+  @override
   String translationPreviewPdfPageIndicator(String current, String total) {
     return '第 $current / $total 页';
   }

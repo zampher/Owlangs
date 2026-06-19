@@ -1361,6 +1361,7 @@
   "translationPreviewFollowSegmentPageDesc": "활성화하면 세그먼트를 클릭하거나 선택할 때 번역 PDF 미리보기가 해당 페이지로 이동합니다",
   "translationPreviewMarkSelectedSegment": "선택한 세그먼트 표시",
   "translationPreviewMarkSelectedSegmentDesc": "활성화하면 번역 미리보기에서 선택한 세그먼트 위치에 테두리를 표시합니다",
+  "translationPreviewStaleSession": "미리보기를 사용할 수 없습니다. 번역 패널에서 미리보기 수정을 다시 여세요.",
   "translationPreviewPdfPageIndicator": "{current} / {total} 페이지",
   "@translationPreviewPdfPageIndicator": {
     "placeholders": {

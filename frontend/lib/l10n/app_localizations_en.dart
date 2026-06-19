@@ -3922,6 +3922,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'When enabled, show a frame around the selected segment on the translation preview';
 
   @override
+  String get translationPreviewStaleSession =>
+      'Preview unavailable. Reopen revision preview from the translation panel.';
+
+  @override
   String translationPreviewPdfPageIndicator(String current, String total) {
     return 'Page $current / $total';
   }

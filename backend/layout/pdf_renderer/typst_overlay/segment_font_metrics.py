@@ -638,6 +638,16 @@ def enrich_segment_font_fields(
         segment.pop("overlay_render_font_size_pt", None)
         segment.pop("overlay_estimated_font_size_pt", None)
 
+    _reconcile_pdf_render_font_size_pt(
+        segment,
+        block,
+        str(content),
+        layout_doc,
+        calculator=calculator,
+        task_state=task_state,
+        font_weight=block_font_weight,
+    )
+
     _reconcile_overlay_user_font_size_pt(
         segment,
         block,
@@ -648,6 +658,55 @@ def enrich_segment_font_fields(
         task_state=task_state,
         font_weight=block_font_weight,
     )
+
+
+def _reconcile_pdf_render_font_size_pt(
+    segment: Dict[str, Any],
+    block: LayoutBlock,
+    text: str,
+    layout_doc: LayoutDocument,
+    *,
+    calculator: Optional[FontFitCalculator] = None,
+    task_state: Optional[Dict[str, Any]] = None,
+    font_weight: str = "regular",
+) -> None:
+    """Attach PDF dry-run render pt to segment metadata (WYSIWYG UI labels)."""
+    if not text.strip():
+        return
+    if task_state is not None and is_layout_image_typography_task(
+        task_state, layout_doc=layout_doc,
+    ):
+        return
+
+    from layout.pdf_renderer.typst_overlay.pdf_font_dry_run import dry_run_pdf_font_size_pt
+
+    layout_raw = getattr(block, "raw", None) or {}
+    page_index = getattr(block, "page_index", 0) or 0
+    overlay_page = layout_doc.get_page(page_index)
+    page_width_pt: Optional[float] = None
+    if overlay_page is not None:
+        width = getattr(overlay_page, "width", None)
+        if width is not None:
+            try:
+                page_width_pt = float(width)
+            except (TypeError, ValueError):
+                page_width_pt = None
+
+    requested = normalize_user_font_size_pt(segment.get("font_size_pt"))
+    user_pt = requested if segment_has_user_font_size_override(segment) else None
+
+    render_pt = dry_run_pdf_font_size_pt(
+        block,
+        text,
+        layout_raw=layout_raw,
+        page_width_pt=page_width_pt,
+        user_pt=user_pt,
+        font_weight=font_weight,
+        calculator=calculator,
+    )
+    if render_pt is not None:
+        segment["computed_font_size_pt"] = render_pt
+        segment["overlay_render_font_size_pt"] = render_pt
 
 
 def _reconcile_overlay_user_font_size_pt(

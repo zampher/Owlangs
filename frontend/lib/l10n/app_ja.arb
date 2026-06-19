@@ -1361,6 +1361,7 @@
   "translationPreviewFollowSegmentPageDesc": "有効にすると、セグメントをクリックまたは選択したときに訳文 PDF プレビューが該当ページにジャンプします",
   "translationPreviewMarkSelectedSegment": "選択セグメントをマーク",
   "translationPreviewMarkSelectedSegmentDesc": "有効にすると、訳文プレビューで選択中のセグメント位置を枠で表示します",
+  "translationPreviewStaleSession": "プレビューは利用できません。翻訳パネルからプレビュー修正を再度開いてください。",
   "translationPreviewPdfPageIndicator": "{current} / {total} ページ",
   "@translationPreviewPdfPageIndicator": {
     "placeholders": {

@@ -569,6 +569,38 @@ def _enrich_segments_pdf_typography(
     )
 
 
+def _write_translation_segments_debug(
+    task_id: str,
+    task_state: Dict[str, Any],
+    response_data: Dict[str, Any],
+) -> None:
+    """Write translation segments with font/bbox metadata to temp debug dir."""
+    try:
+        import os as _os
+        temp_dir = task_state.get("temp_dir")
+        if not temp_dir or not _os.path.isdir(str(temp_dir)):
+            return
+        segments = response_data.get("segments", [])
+        if not isinstance(segments, list) or not segments:
+            return
+        from utils.extract_segments_debug import write_translation_segments_debug_json
+        written = write_translation_segments_debug_json(
+            str(temp_dir), segments, task_id=task_id
+        )
+        if written:
+            logger.debug(
+                LogModule.ROUTE,
+                f"[TRANSLATION-SEGMENTS-API] Task {task_id}: "
+                f"Wrote {len(segments)} translation segments to {written}"
+            )
+    except Exception as _e:
+        logger.debug(
+            LogModule.ROUTE,
+            f"[TRANSLATION-SEGMENTS-API] Task {task_id}: "
+            f"Failed to write translation_segments.json: {_e}"
+        )
+
+
 @router.get(
     "/translation-segments/{task_id}",
     summary="Get translation segments",
@@ -736,6 +768,9 @@ async def get_translation_segments_api(
         segments_list = response_data.get("segments", [])
         if isinstance(segments_list, list) and segments_list:
             _enrich_segments_pdf_typography(task_id, task_state, segments_list)
+
+    # Write enriched translation segments to debug file for font/bbox diagnosis
+    _write_translation_segments_debug(task_id, task_state, response_data)
 
     # Include image data map if available so frontend can render placeholders as images
     # Prefer translation-specific image map (placeholder IDs generated during translation)

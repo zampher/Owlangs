@@ -177,14 +177,25 @@ class _SegmentPdfTypographyDialogState extends State<_SegmentPdfTypographyDialog
   late double _leadingEm;
   late bool _isBold;
   late bool _isItalic;
+  late TextEditingController _fontSizeController;
+  late TextEditingController _leadingController;
 
   @override
   void initState() {
     super.initState();
     _fontSizePt = snapPdfFontSize(widget.initialFontSizePt);
+    _fontSizeController = TextEditingController(text: _fontSizePt.toStringAsFixed(1));
     _leadingEm = snapPdfLeadingEm(widget.initialLeadingEm);
+    _leadingController = TextEditingController(text: _leadingEm.toStringAsFixed(2));
     _isBold = widget.initialFontWeight == 'bold';
     _isItalic = widget.initialFontStyle == 'italic';
+  }
+
+  @override
+  void dispose() {
+    _fontSizeController.dispose();
+    _leadingController.dispose();
+    super.dispose();
   }
 
   String _previewSample() {
@@ -267,24 +278,61 @@ class _SegmentPdfTypographyDialogState extends State<_SegmentPdfTypographyDialog
             if (showFontControls) ...<Widget>[
               const SizedBox(height: 16),
               Text(
-                l10n.segmentPdfTypographyFontSizeLabel(
-                  _fontSizePt.toStringAsFixed(1),
-                ),
+                l10n.segmentPdfTypographyFontTitle,
                 style: theme.textTheme.labelMedium,
               ),
-              Slider(
-                value: _fontSizePt,
-                min: kPdfFontSizeMin,
-                max: kPdfFontSizeMax,
-                divisions:
-                    ((kPdfFontSizeMax - kPdfFontSizeMin) / kPdfFontSizeStep)
-                        .round(),
-                label: _fontSizePt.toStringAsFixed(1),
-                onChanged: (double value) {
-                  setState(() {
-                    _fontSizePt = snapPdfFontSize(value);
-                  });
-                },
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Slider(
+                      value: _fontSizePt,
+                      min: kPdfFontSizeMin,
+                      max: kPdfFontSizeMax,
+                      divisions: ((kPdfFontSizeMax - kPdfFontSizeMin) /
+                              kPdfFontSizeStep)
+                          .round(),
+                      label: _fontSizePt.toStringAsFixed(1),
+                      onChanged: (double value) {
+                        setState(() {
+                          _fontSizePt = snapPdfFontSize(value);
+                          _fontSizeController.text =
+                              _fontSizePt.toStringAsFixed(1);
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 72,
+                    child: TextField(
+                      controller: _fontSizeController,
+                      keyboardType:
+                          TextInputType.numberWithOptions(decimal: true),
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 8),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onSubmitted: (String value) {
+                        final double? parsed = double.tryParse(value);
+                        if (parsed != null) {
+                          setState(() {
+                            _fontSizePt = snapPdfFontSize(parsed);
+                            _fontSizeController.text =
+                                _fontSizePt.toStringAsFixed(1);
+                          });
+                        } else {
+                          _fontSizeController.text =
+                              _fontSizePt.toStringAsFixed(1);
+                        }
+                      },
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 4),
               ToggleButtons(
@@ -331,19 +379,58 @@ class _SegmentPdfTypographyDialogState extends State<_SegmentPdfTypographyDialog
                 ),
                 style: theme.textTheme.labelMedium,
               ),
-              Slider(
-                value: _leadingEm,
-                min: kPdfLeadingEmMin,
-                max: kPdfLeadingEmMax,
-                divisions:
-                    ((kPdfLeadingEmMax - kPdfLeadingEmMin) / kPdfLeadingEmStep)
-                        .round(),
-                label: _leadingEm.toStringAsFixed(2),
-                onChanged: (double value) {
-                  setState(() {
-                    _leadingEm = snapPdfLeadingEm(value);
-                  });
-                },
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Slider(
+                      value: _leadingEm,
+                      min: kPdfLeadingEmMin,
+                      max: kPdfLeadingEmMax,
+                      divisions: ((kPdfLeadingEmMax - kPdfLeadingEmMin) /
+                              kPdfLeadingEmStep)
+                          .round(),
+                      label: _leadingEm.toStringAsFixed(2),
+                      onChanged: (double value) {
+                        setState(() {
+                          _leadingEm = snapPdfLeadingEm(value);
+                          _leadingController.text =
+                              _leadingEm.toStringAsFixed(2);
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 72,
+                    child: TextField(
+                      controller: _leadingController,
+                      keyboardType:
+                          TextInputType.numberWithOptions(decimal: true),
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 8),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onSubmitted: (String value) {
+                        final double? parsed = double.tryParse(value);
+                        if (parsed != null) {
+                          setState(() {
+                            _leadingEm = snapPdfLeadingEm(parsed);
+                            _leadingController.text =
+                                _leadingEm.toStringAsFixed(2);
+                          });
+                        } else {
+                          _leadingController.text =
+                              _leadingEm.toStringAsFixed(2);
+                        }
+                      },
+                    ),
+                  ),
+                ],
               ),
             ],
           ],

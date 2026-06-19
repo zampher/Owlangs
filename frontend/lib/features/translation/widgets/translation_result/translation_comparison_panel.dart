@@ -164,25 +164,8 @@ class TranslationComparisonPanel extends ConsumerWidget {
     return null;
   }
 
-  double? _readComputedFontSizePt(Map<String, dynamic> metadata) {
-    final dynamic overlayRender = metadata['overlay_render_font_size_pt'];
-    if (overlayRender is num) {
-      return overlayRender.toDouble();
-    }
-    if (overlayRender is String) {
-      final double? parsed = double.tryParse(overlayRender);
-      if (parsed != null) {
-        return parsed;
-      }
-    }
-    final dynamic raw = metadata['computed_font_size_pt'];
-    if (raw is num) {
-      return raw.toDouble();
-    }
-    if (raw is String) {
-      return double.tryParse(raw);
-    }
-    return null;
+  double? _readOverlayRenderFontSizePt(Map<String, dynamic> metadata) {
+    return _readOptionalDouble(metadata['overlay_render_font_size_pt']);
   }
 
   String? _readFontWeight(Map<String, dynamic> metadata) {
@@ -1293,7 +1276,9 @@ class TranslationComparisonPanel extends ConsumerWidget {
               onFormulaFix: onFormulaFix,
               showPdfFontSize: showPdfFontSize && !pair.isImage,
               fontSizePt: _readFontSizePt(metadata),
-              computedFontSizePt: _readComputedFontSizePt(metadata),
+              computedFontSizePt:
+                  _readOptionalDouble(metadata['computed_font_size_pt']),
+              overlayRenderFontSizePt: _readOverlayRenderFontSizePt(metadata),
               fontSizeSource: metadata['font_size_source'] as String?,
               fontWeight: _readFontWeight(metadata),
               computedFontWeight: _readComputedFontWeight(metadata),
@@ -1508,7 +1493,9 @@ class TranslationComparisonPanel extends ConsumerWidget {
                       },
                   showPdfFontSize: showPdfFontSize && !isImage,
                   fontSizePt: _readFontSizePt(metadata),
-                  computedFontSizePt: _readComputedFontSizePt(metadata),
+                  computedFontSizePt:
+                      _readOptionalDouble(metadata['computed_font_size_pt']),
+                  overlayRenderFontSizePt: _readOverlayRenderFontSizePt(metadata),
                   fontSizeSource: metadata['font_size_source'] as String?,
                   fontWeight: _readFontWeight(metadata),
                   computedFontWeight: _readComputedFontWeight(metadata),

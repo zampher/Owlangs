@@ -312,12 +312,43 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
   Uint8List? _targetBytes;
   Object? _error;
   bool _loading = true;
+  Size? _sourceImageSize;
   Size? _targetImageSize;
+  final TransformationController _sourceTransformController =
+      TransformationController();
+  final TransformationController _targetTransformController =
+      TransformationController();
+  bool _syncingTransform = false;
 
   @override
   void initState() {
     super.initState();
+    _sourceTransformController.addListener(_onSourceTransformChanged);
+    _targetTransformController.addListener(_onTargetTransformChanged);
     _load();
+  }
+
+  void _onSourceTransformChanged() {
+    if (_syncingTransform) return;
+    _syncingTransform = true;
+    _targetTransformController.value = _sourceTransformController.value;
+    _syncingTransform = false;
+  }
+
+  void _onTargetTransformChanged() {
+    if (_syncingTransform) return;
+    _syncingTransform = true;
+    _sourceTransformController.value = _targetTransformController.value;
+    _syncingTransform = false;
+  }
+
+  @override
+  void dispose() {
+    _sourceTransformController.removeListener(_onSourceTransformChanged);
+    _targetTransformController.removeListener(_onTargetTransformChanged);
+    _sourceTransformController.dispose();
+    _targetTransformController.dispose();
+    super.dispose();
   }
 
   @override
@@ -333,6 +364,7 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
     setState(() {
       _loading = true;
       _error = null;
+      _sourceImageSize = null;
       _targetImageSize = null;
     });
     try {
@@ -356,7 +388,7 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
         _targetBytes = Uint8List.fromList(results[1]);
         _loading = false;
       });
-      _resolveTargetImageSize();
+      _resolveImageSizes();
     } catch (e) {
       if (!mounted) {
         return;
@@ -368,27 +400,44 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
     }
   }
 
-  void _resolveTargetImageSize() {
-    final Uint8List? bytes = _targetBytes;
-    if (bytes == null) return;
+  void _resolveImageSize(Uint8List bytes, void Function(Size size) onSize) {
     final MemoryImage memoryImage = MemoryImage(bytes);
     memoryImage.resolve(ImageConfiguration.empty).addListener(
       ImageStreamListener((ImageInfo info, bool sync) {
         if (!mounted) return;
-        setState(() {
-          _targetImageSize = Size(
+        onSize(
+          Size(
             info.image.width.toDouble(),
             info.image.height.toDouble(),
-          );
-        });
+          ),
+        );
       }),
     );
   }
 
-  Widget _buildBboxOverlay(BoxConstraints constraints) {
+  void _resolveImageSizes() {
+    final Uint8List? source = _sourceBytes;
+    final Uint8List? target = _targetBytes;
+    if (source != null && source.isNotEmpty) {
+      _resolveImageSize(source, (Size size) {
+        setState(() {
+          _sourceImageSize = size;
+        });
+      });
+    }
+    if (target != null && target.isNotEmpty) {
+      _resolveImageSize(target, (Size size) {
+        setState(() {
+          _targetImageSize = size;
+        });
+      });
+    }
+  }
+
+  Widget _buildBboxOverlay(BoxConstraints constraints, Size? imageSize) {
     final Rect? screenRect = layoutImageRectToDisplayRect(
       layoutRect: widget.highlightRect,
-      imageSize: _targetImageSize,
+      imageSize: imageSize,
       containerWidth: constraints.maxWidth,
       containerHeight: constraints.maxHeight,
     );
@@ -401,7 +450,9 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
   Widget _buildPane({
     required String label,
     required Uint8List bytes,
+    required Size? imageSize,
     required bool showHighlight,
+    required TransformationController transformController,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -416,6 +467,7 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
         Expanded(
           child: ClipRect(
             child: InteractiveViewer(
+              transformationController: transformController,
               constrained: true,
               child: LayoutBuilder(
                 builder: (BuildContext context, BoxConstraints constraints) {
@@ -425,7 +477,8 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
                       Center(
                         child: Image.memory(bytes, fit: BoxFit.contain),
                       ),
-                      if (showHighlight) _buildBboxOverlay(constraints),
+                      if (showHighlight)
+                        _buildBboxOverlay(constraints, imageSize),
                     ],
                   );
                 },
@@ -442,6 +495,7 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
     required Uint8List source,
     required Uint8List target,
   }) {
+    final bool showHighlight = widget.highlightRect != null;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -449,7 +503,9 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
           child: _buildPane(
             label: l10n.translationPreviewPanelSource,
             bytes: source,
-            showHighlight: false,
+            imageSize: _sourceImageSize,
+            showHighlight: showHighlight,
+            transformController: _sourceTransformController,
           ),
         ),
         const VerticalDivider(width: 1),
@@ -457,7 +513,9 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
           child: _buildPane(
             label: l10n.translationPreviewPanelTarget,
             bytes: target,
-            showHighlight: true,
+            imageSize: _targetImageSize,
+            showHighlight: showHighlight,
+            transformController: _targetTransformController,
           ),
         ),
       ],

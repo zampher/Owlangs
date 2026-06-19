@@ -56,6 +56,8 @@ void _translationResultLog(String message, {LogLevel level = LogLevel.debug}) {
   AppLogger.log('TranslationResultPreview', message, level: level);
 }
 
+const String _kTranslationPreviewTabId = 'translation_preview_tab';
+
 // Intent classes for keyboard shortcuts
 class _GlobalUndoIntent extends Intent {
   const _GlobalUndoIntent();
@@ -917,6 +919,7 @@ class _TranslationResultPreviewState
     // If taskId changed (e.g., from 'pending' to real taskId, or new translation task),
     // reload the content
     if (oldWidget.taskId != widget.taskId) {
+      _closeTranslationPreviewTabSilently();
       // Reset status tracking
       _lastKnownStatus = null;
 
@@ -1027,6 +1030,7 @@ class _TranslationResultPreviewState
 
   @override
   void dispose() {
+    _closeTranslationPreviewTabSilently();
     _selectedExclusionFiltersNotifier.dispose();
     _selectedPdfPageNumbersNotifier.dispose();
     _pdfPreviewJumpPageNotifier.dispose();
@@ -5742,6 +5746,17 @@ class _TranslationResultPreviewState
         : ref.read(previewTabsProvider.notifier);
   }
 
+  void _closeTranslationPreviewTabSilently() {
+    try {
+      _previewTabsNotifier().closeTabByIdSilently(_kTranslationPreviewTabId);
+    } catch (e) {
+      _translationResultLog(
+        '[REVISION_PREVIEW] Failed to close stale translation preview tab: $e',
+        level: LogLevel.warn,
+      );
+    }
+  }
+
   void _switchToPreviewTab(String tabId) {
     final PreviewTabsNotifier tabsNotifier = _previewTabsNotifier();
     final List<PreviewTab> currentTabs = widget.flowId != null
@@ -6021,7 +6036,7 @@ class _TranslationResultPreviewState
     );
 
     final AppLocalizations l10n = AppLocalizations.of(context)!;
-    const String tabId = 'translation_preview_tab';
+    const String tabId = _kTranslationPreviewTabId;
     _previewTabsNotifier().updateOrAddTab(
       PreviewTab(
         id: tabId,
@@ -6078,7 +6093,7 @@ class _TranslationResultPreviewState
 
     final String imageUrl = _buildImageOverlayPreviewUrl(effectiveDownloads);
     final AppLocalizations l10n = AppLocalizations.of(context)!;
-    const String tabId = 'translation_preview_tab';
+    const String tabId = _kTranslationPreviewTabId;
     _previewTabsNotifier().updateOrAddTab(
       PreviewTab(
         id: tabId,
@@ -6140,7 +6155,7 @@ class _TranslationResultPreviewState
     }
 
     final AppLocalizations l10n = AppLocalizations.of(context)!;
-    const String tabId = 'translation_preview_tab';
+    const String tabId = _kTranslationPreviewTabId;
     _previewTabsNotifier().updateOrAddTab(
       PreviewTab(
         id: tabId,
@@ -6152,6 +6167,7 @@ class _TranslationResultPreviewState
             ? Icons.edit_note
             : Icons.compare_arrows,
         content: TranslationFullComparePreviewTab(
+          key: ValueKey<String>('full_compare_${_apiTaskId()}'),
           taskId: _apiTaskId(),
           baseMode: baseMode,
           isPdfSource: _isPdfSourceFile(),
@@ -6295,7 +6311,7 @@ class _TranslationResultPreviewState
         ? l10n.translationExportPdfPreserveLayout
         : l10n.translationExportPdfReflow;
 
-    const String tabId = 'translation_preview_tab';
+    const String tabId = _kTranslationPreviewTabId;
     _previewTabsNotifier().updateOrAddTab(
       PreviewTab(
         id: tabId,

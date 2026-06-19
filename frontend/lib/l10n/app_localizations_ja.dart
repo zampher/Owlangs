@@ -3785,6 +3785,10 @@ class AppLocalizationsJa extends AppLocalizations {
       '有効にすると、訳文プレビューで選択中のセグメント位置を枠で表示します';
 
   @override
+  String get translationPreviewStaleSession =>
+      'プレビューは利用できません。翻訳パネルからプレビュー修正を再度開いてください。';
+
+  @override
   String translationPreviewPdfPageIndicator(String current, String total) {
     return '$current / $total ページ';
   }
