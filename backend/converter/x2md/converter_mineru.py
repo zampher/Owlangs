@@ -164,7 +164,8 @@ class ConverterMineruConfig(X2MarkdownConverterConfig):
     # PDF split configuration (for large PDFs exceeding MinerU limits)
     pdf_split_enabled: bool = True
     pdf_split_max_pages: int = 100
-    pdf_split_max_workers: int = 2  # Max concurrent workers for split PDF conversion
+    pdf_split_max_workers: int = 2  # Max concurrent workers for split PDF conversion (deprecated: use concurrent)
+    concurrent: int = 1  # Max concurrent PDF fragments sent to MinerU (cloud: 3, local: 1)
     request_retry_count: int = 2  # Number of retries for MinerU API requests
 
     def gethash(self) -> Hashable:
@@ -177,6 +178,7 @@ class ConverterMineruConfig(X2MarkdownConverterConfig):
             self.pdf_split_enabled,
             self.pdf_split_max_pages,
             self.pdf_split_max_workers,
+            self.concurrent,
         )
 
 
@@ -1251,7 +1253,7 @@ class ConverterMineru(X2MarkdownConverter):
         from utils.mineru_zip_merger import merge_mineru_zips
         from concurrent.futures import ThreadPoolExecutor
 
-        max_workers = getattr(self.config, "pdf_split_max_workers", 2)
+        max_workers = getattr(self.config, "concurrent", None) or getattr(self.config, "pdf_split_max_workers", 2)
 
         def _process_part(i: int, part_bytes: bytes) -> Tuple[int, str, bytes, Optional[LayoutDocument]]:
             self.logger.info(LogModule.WORKFLOW, f"[MINERU SPLIT] Processing part {i + 1}/{len(pdf_parts)}")
@@ -1398,7 +1400,7 @@ class ConverterMineru(X2MarkdownConverter):
         from utils.layout_merger import merge_layout_documents
         from utils.mineru_zip_merger import merge_mineru_zips
 
-        max_workers = getattr(self.config, "pdf_split_max_workers", 2)
+        max_workers = getattr(self.config, "concurrent", None) or getattr(self.config, "pdf_split_max_workers", 2)
 
         async def _process_part(i: int, part_bytes: bytes) -> Tuple[int, str, bytes, Optional[LayoutDocument]]:
             self.logger.info(LogModule.WORKFLOW, f"[MINERU SPLIT] Processing part {i + 1}/{len(pdf_parts)} (async)")

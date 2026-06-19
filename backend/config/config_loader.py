@@ -128,12 +128,12 @@ class UnifiedConfig:
                 'api_protocol': platform.api_protocol,
                 'api_endpoints': dict(platform.api_endpoints) if platform.api_endpoints else {},
             }
+            platforms_dict[key]['concurrent'] = (
+                int(platform.concurrent) if platform.concurrent is not None else 5
+            )
             if platform_type_uses_llm_chunk_concurrent(platform.platform_type):
                 platforms_dict[key]['chunk_size'] = (
                     int(platform.chunk_size) if platform.chunk_size is not None else 3000
-                )
-                platforms_dict[key]['concurrent'] = (
-                    int(platform.concurrent) if platform.concurrent is not None else 5
                 )
                 platforms_dict[key]['timeout'] = (
                     int(platform.timeout) if platform.timeout is not None else None
@@ -182,12 +182,10 @@ class UnifiedConfig:
                 'requires_api_key': platform_obj.requires_api_key,
                 'api_endpoints': platform_obj.api_endpoints,
             }
+            base['concurrent'] = platform_obj.concurrent
             if platform_type_uses_llm_chunk_concurrent(platform_obj.platform_type):
                 base['chunk_size'] = (
                     int(platform_obj.chunk_size) if platform_obj.chunk_size is not None else 3000
-                )
-                base['concurrent'] = (
-                    int(platform_obj.concurrent) if platform_obj.concurrent is not None else 5
                 )
                 base['segment_limit'] = (
                     int(platform_obj.segment_limit) if platform_obj.segment_limit is not None else 100

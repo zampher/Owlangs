@@ -496,6 +496,11 @@ class WorkflowConfigBuilder:
             logger.debug(LogModule.CONFIG, f"Creating ConverterMineruConfig: API Key={'***' if mineru_token else 'empty'}, formula_ocr={formula_ocr}, table_ocr={table_ocr}, model_version={model_version}, ocr_language={ocr_language}")
             if not mineru_token:
                 logger.warning(LogModule.CONFIG, "[WARNING] MinerU API Key is empty! Conversion will fail. Please configure MinerU API Key in Settings -> AI Platform -> MinerU.")
+            concurrent = (platform_cfg or {}).get('concurrent')
+            if concurrent is None or concurrent == 5:
+                # 5 is the AIPlatformConfig default — not explicitly configured.
+                # For MinerU, default to 1 (conservative: one PDF fragment at a time).
+                concurrent = 1
             converter_config = ConverterMineruConfig(
                 mineru_token=mineru_token,
                 formula_ocr=formula_ocr,
@@ -505,6 +510,7 @@ class WorkflowConfigBuilder:
                 pdf_split_enabled=pdf_cfg.pdf_split_enabled,
                 pdf_split_max_pages=pdf_cfg.pdf_split_max_pages,
                 pdf_split_max_workers=pdf_cfg.pdf_split_max_workers,
+                concurrent=concurrent,
                 request_retry_count=pdf_cfg.request_retry_count,
             )
         elif convert_engine == 'mineru_local':
@@ -527,6 +533,11 @@ class WorkflowConfigBuilder:
             pdf_cfg = unified.system.pdf
             logger.debug(LogModule.CONFIG, f"Creating ConverterMineruConfig (local): base_url={base_url}, model_version={model_version}, ocr_language={ocr_language}")
             table_ocr = getattr(payload, 'table_ocr', True)
+            concurrent = (platform_cfg or {}).get('concurrent')
+            if concurrent is None or concurrent == 5:
+                # 5 is the AIPlatformConfig default — not explicitly configured.
+                # For MinerU, default to 1 (conservative: one PDF fragment at a time).
+                concurrent = 1
             converter_config = ConverterMineruConfig(
                 mineru_token=mineru_token,
                 formula_ocr=formula_ocr,
@@ -537,6 +548,7 @@ class WorkflowConfigBuilder:
                 pdf_split_enabled=pdf_cfg.pdf_split_enabled,
                 pdf_split_max_pages=pdf_cfg.pdf_split_max_pages,
                 pdf_split_max_workers=pdf_cfg.pdf_split_max_workers,
+                concurrent=concurrent,
                 request_retry_count=pdf_cfg.request_retry_count,
             )
         elif convert_engine == 'docling':

@@ -181,7 +181,6 @@ class PlatformsConfig:
                         pdata['platform_type'] = 'parser'
                     if not platform_type_uses_llm_chunk_concurrent(ptype):
                         pdata.pop("chunk_size", None)
-                        pdata.pop("concurrent", None)
                         pdata.pop("timeout", None)
                         pdata.pop("write_timeout", None)
                         pdata.pop("test_connect_timeout", None)
@@ -241,7 +240,6 @@ class PlatformsConfig:
         "recommended_tokens",
         "api_protocol",
         "chunk_size",
-        "concurrent",
         "timeout",
         "write_timeout",
         "test_connect_timeout",
@@ -264,6 +262,7 @@ class PlatformsConfig:
         "token_link",
         "api_endpoints",
         "performance_note",
+        "concurrent",
         # LLM-only fields
         "model",
         "max_tokens",
@@ -275,7 +274,6 @@ class PlatformsConfig:
         "recommended_tokens",
         "api_protocol",
         "chunk_size",
-        "concurrent",
         "timeout",
         "write_timeout",
         "test_connect_timeout",

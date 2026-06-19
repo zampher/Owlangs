@@ -689,7 +689,8 @@
         "upload": "/file-urls/batch",
         "result": "/extract-results/batch/{batch_id}",
         "api_version": "cloud-v4"
-      }
+      },
+      "concurrent": 3
     },
     "mineru_local": {
       "name": "MinerU (Local)",
@@ -706,7 +707,8 @@
         "result": "/tasks/{task_id}/result",
         "status": "/tasks/{task_id}",
         "api_version": "local-v3.1"
-      }
+      },
+      "concurrent": 1
     }
   }
 }

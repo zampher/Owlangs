@@ -37,7 +37,8 @@ def test_get_config_dict_omits_chunk_for_parser():
     d = cfg.get_config_dict()
     inner = d["platforms"]["mineru"]
     assert "chunk_size" not in inner
-    assert "concurrent" not in inner
+    # concurrent is now valid for parser platforms (controls PDF fragment concurrency)
+    assert inner["concurrent"] == 8
     assert inner["platform_type"] == "parser"
 
 
@@ -76,7 +77,8 @@ def test_update_from_dict_strips_chunk_for_parser_json():
         }
     )
     assert cfg.platforms["mineru"].chunk_size == 3000
-    assert cfg.platforms["mineru"].concurrent == 5
+    # concurrent is now preserved for parser platforms
+    assert cfg.platforms["mineru"].concurrent == 9
 
 
 if __name__ == "__main__":
