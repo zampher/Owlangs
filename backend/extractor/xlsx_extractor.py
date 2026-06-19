@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 from .base import Extractor, ExtractResult
+from .xlsx_cell_utils import format_xlsx_cell_for_extraction
 
 
 class XlsxExtractor(Extractor):
@@ -18,7 +19,7 @@ class XlsxExtractor(Extractor):
     def __init__(self, file_bytes: bytes, chunk_size: int = 3000, translate_regions: Optional[List[str]] = None):
         """
         Extract text from spreadsheets.
-        
+
         Note: chunk_size is kept for API compatibility but not used in extraction.
         Chunking is handled by chunk_translation_helper during translation.
         """
@@ -36,16 +37,20 @@ class XlsxExtractor(Extractor):
         from io import BytesIO
         wb = load_workbook(BytesIO(self.file_bytes), data_only=True, read_only=True)
 
-        cells: List[Tuple[str, int, int, str]] = []  # (sheet, row, col, text)
+        cells: List[Tuple[str, int, int, str, dict]] = []
 
         def add_cell(sheet_name: str, cell):
             try:
-                val = cell.value
-                if val is None:
+                text, meta = format_xlsx_cell_for_extraction(cell)
+                if text is None or not text.strip():
                     return
-                text = str(val)
-                if text.strip():
-                    cells.append((sheet_name, cell.row, cell.column, text))
+                cells.append((
+                    sheet_name,
+                    cell.row,
+                    cell.column,
+                    text,
+                    meta,
+                ))
             except Exception:
                 return
 
@@ -78,14 +83,13 @@ class XlsxExtractor(Extractor):
 
         # Order by sheet, row, col
         cells.sort(key=lambda t: (t[0], t[1], t[2]))
-        # Build segments: each cell is a separate segment (fine-grained extraction)
-        # Chunking will be handled by chunk_translation_helper during translation
         segments: List[str] = []
         segment_info: List[dict] = []
-        for sheet, row, col, text in cells:
+        for sheet, row, col, text, meta in cells:
             segments.append(text)
-            segment_info.append({'cells': [{'sheet': sheet, 'row': row, 'col': col}]})
+            segment_info.append({
+                'cells': [{'sheet': sheet, 'row': row, 'col': col}],
+                **meta,
+            })
 
         return ExtractResult(segments=segments, segment_info=segment_info)
-
-

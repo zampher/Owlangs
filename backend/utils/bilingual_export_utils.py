@@ -1287,22 +1287,48 @@ def rebuild_bilingual_xlsx_from_segments(
         logger.error(LogModule.EXPORT, f"[BILINGUAL] Failed to load XLSX from content: {e}", exc_info=True)
         return None
 
-    segment_index = 0
-    modified_rows_by_sheet: Dict[str, set] = {}  # Track rows with modified cells per sheet
+    from extractor.xlsx_cell_utils import apply_xlsx_translated_cell_value
 
+    modified_rows_by_sheet: Dict[str, set] = {}
     for sheet in workbook.worksheets:
         modified_rows_by_sheet[sheet.title] = set()
-        for row in sheet.iter_rows():
-            for cell in row:
-                if not (isinstance(cell.value, str) and cell.data_type == "s"):
-                    continue
 
-                seg = segments_by_index.get(segment_index)
-                source = seg.get("source_text", "") if seg else ""
-                target = seg.get("modified_text") or seg.get("target_text", "") if seg else ""
-                is_excluded = bool(seg.get("is_excluded", False)) if seg else False
-                is_cleared = bool(seg.get("status") == "cleared") if seg else False
+    sorted_segments = sorted(
+        segments,
+        key=lambda seg: int(seg.get("segment_index", 0)),
+    )
+    has_segment_coordinates = any(
+        isinstance(seg.get("segment_info"), dict)
+        and isinstance(seg["segment_info"].get("cells"), list)
+        and seg["segment_info"]["cells"]
+        for seg in sorted_segments
+    )
 
+    if has_segment_coordinates:
+        for seg in sorted_segments:
+            seg_info = seg.get("segment_info")
+            if not isinstance(seg_info, dict):
+                continue
+            cells_meta = seg_info.get("cells") or []
+            if not cells_meta:
+                continue
+            ref = cells_meta[0]
+            sheet_name = ref.get("sheet")
+            row = ref.get("row")
+            col = ref.get("col")
+            if not sheet_name or not row or not col or sheet_name not in workbook.sheetnames:
+                continue
+
+            cell = workbook[sheet_name].cell(row=int(row), column=int(col))
+            source = seg.get("source_text", "")
+            target = seg.get("modified_text") or seg.get("target_text", "")
+            is_excluded = bool(seg.get("is_excluded", False))
+            is_cleared = bool(seg.get("status") == "cleared")
+            cell_kind = seg_info.get("cell_value_kind")
+
+            if cell_kind in ("date", "datetime", "time") and target and not is_excluded and not is_cleared:
+                apply_xlsx_translated_cell_value(cell, target, seg_info)
+            else:
                 apply_bilingual_styled_segment_to_xlsx_cell(
                     cell,
                     source_text=source,
@@ -1317,12 +1343,42 @@ def rebuild_bilingual_xlsx_from_segments(
                     target_text_color=target_text_color,
                 )
 
-                # Enable text wrapping so bilingual newlines display correctly
-                from openpyxl.styles import Alignment as OpenpyxlAlignment
-                cell.alignment = OpenpyxlAlignment(wrap_text=True)
+            from openpyxl.styles import Alignment as OpenpyxlAlignment
+            cell.alignment = OpenpyxlAlignment(wrap_text=True)
+            modified_rows_by_sheet[sheet_name].add(cell.row)
+    else:
+        segment_index = 0
+        for sheet in workbook.worksheets:
+            for row in sheet.iter_rows():
+                for cell in row:
+                    if not (isinstance(cell.value, str) and cell.data_type == "s"):
+                        continue
 
-                modified_rows_by_sheet[sheet.title].add(cell.row)
-                segment_index += 1
+                    seg = segments_by_index.get(segment_index)
+                    source = seg.get("source_text", "") if seg else ""
+                    target = seg.get("modified_text") or seg.get("target_text", "") if seg else ""
+                    is_excluded = bool(seg.get("is_excluded", False)) if seg else False
+                    is_cleared = bool(seg.get("status") == "cleared") if seg else False
+
+                    apply_bilingual_styled_segment_to_xlsx_cell(
+                        cell,
+                        source_text=source,
+                        target_text=target,
+                        target_first=target_first,
+                        is_excluded=is_excluded,
+                        is_cleared=is_cleared,
+                        inner_separator="\n",
+                        source_text_italic=source_text_italic,
+                        source_text_color=source_text_color,
+                        target_text_italic=target_text_italic,
+                        target_text_color=target_text_color,
+                    )
+
+                    from openpyxl.styles import Alignment as OpenpyxlAlignment
+                    cell.alignment = OpenpyxlAlignment(wrap_text=True)
+
+                    modified_rows_by_sheet[sheet.title].add(cell.row)
+                    segment_index += 1
 
     # Auto-fit row heights based on line count
     # Default Excel row height is 15 points; each line of text adds ~15 points

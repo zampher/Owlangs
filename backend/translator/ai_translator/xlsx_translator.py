@@ -12,6 +12,7 @@ from agents.segments_agent import SegmentsTranslateAgentConfig, SegmentsTranslat
 from ir.document import Document
 from translator.ai_translator.base import AiTranslatorConfig, AiTranslator
 from logger.logger import LogModule
+from extractor.xlsx_cell_utils import apply_xlsx_translated_cell_value
 
 
 @dataclass
@@ -72,6 +73,8 @@ class XlsxTranslator(AiTranslator):
                                 "sheet_name": sheet.title,
                                 "coordinate": cell.coordinate,
                                 "original_text": cell.value,
+                                "number_format": str(cell.number_format) if cell.number_format else "",
+                                "data_type": str(cell.data_type) if cell.data_type else "",
                             })
         # If translation regions are specified, only search within these regions
         else:
@@ -124,6 +127,8 @@ class XlsxTranslator(AiTranslator):
                                     "sheet_name": sheet.title,
                                     "coordinate": cell.coordinate,
                                     "original_text": cell.value,
+                                    "number_format": str(cell.number_format) if cell.number_format else "",
+                                    "data_type": str(cell.data_type) if cell.data_type else "",
                                 }
                                 cells_to_translate.append(cell_info)
                                 processed_coordinates.add(full_coordinate)
@@ -134,6 +139,15 @@ class XlsxTranslator(AiTranslator):
         original_texts = [cell["original_text"] for cell in cells_to_translate]
         return workbook, cells_to_translate, original_texts
 
+    def _cell_info_from_segment_meta(self, seg_info: dict, original_text: str) -> dict:
+        return {
+            "number_format": seg_info.get("number_format", ""),
+            "data_type": seg_info.get("data_type", ""),
+            "cell_value_kind": seg_info.get("cell_value_kind"),
+            "excel_serial": seg_info.get("excel_serial"),
+            "original_text": original_text,
+        }
+
     def _after_translate(self, workbook, cells_to_translate, translated_texts, original_texts):
         for i, cell_info in enumerate(cells_to_translate):
             sheet_name = cell_info["sheet_name"]
@@ -141,14 +155,16 @@ class XlsxTranslator(AiTranslator):
             translated_text = translated_texts[i]
             original_text = original_texts[i]
 
-            # Locate worksheet and cell
             sheet = workbook[sheet_name]
+            cell = sheet[coordinate]
             if self.insert_mode == "replace":
-                sheet[coordinate] = translated_text
+                apply_xlsx_translated_cell_value(cell, translated_text, cell_info)
             elif self.insert_mode == "append":
-                sheet[coordinate] = original_text + self.separator + translated_text
+                combined = original_text + self.separator + translated_text
+                apply_xlsx_translated_cell_value(cell, combined, cell_info)
             elif self.insert_mode == "prepend":
-                sheet[coordinate] = translated_text + self.separator + original_text
+                combined = translated_text + self.separator + original_text
+                apply_xlsx_translated_cell_value(cell, combined, cell_info)
             else:
                 self.logger.error(LogModule.TRANS, "Invalid XlsxTranslatorConfig parameter")
 
@@ -217,7 +233,10 @@ class XlsxTranslator(AiTranslator):
                                         cells_to_translate.append({
                                             "sheet_name": sheet_name,
                                             "coordinate": coordinate,
-                                            "original_text": original_texts[idx] if idx < len(original_texts) else "",
+                                            **self._cell_info_from_segment_meta(
+                                                seg_info,
+                                                original_texts[idx] if idx < len(original_texts) else "",
+                                            ),
                                         })
                         self.logger.debug(
                             LogModule.TRANS,
@@ -316,6 +335,8 @@ class XlsxTranslator(AiTranslator):
                         "sheet_name": "Sheet1",  # Default sheet
                         "coordinate": f"A{i+1}",  # Default coordinate
                         "original_text": original_texts[i] if i < len(original_texts) else "",
+                        "number_format": "",
+                        "data_type": "",
                     })
             else:
                 # Truncate to match
@@ -492,7 +513,10 @@ class XlsxTranslator(AiTranslator):
                                         cells_to_translate.append({
                                             "sheet_name": sheet_name,
                                             "coordinate": coordinate,
-                                            "original_text": original_texts[idx] if idx < len(original_texts) else "",
+                                            **self._cell_info_from_segment_meta(
+                                                seg_info,
+                                                original_texts[idx] if idx < len(original_texts) else "",
+                                            ),
                                         })
                         self.logger.debug(
                             LogModule.TRANS,
@@ -592,6 +616,8 @@ class XlsxTranslator(AiTranslator):
                         "sheet_name": "Sheet1",  # Default sheet
                         "coordinate": f"A{i+1}",  # Default coordinate
                         "original_text": original_texts[i] if i < len(original_texts) else "",
+                        "number_format": "",
+                        "data_type": "",
                     })
             else:
                 # Truncate to match
