@@ -93,6 +93,43 @@ class ImageOverlayRendererTest(unittest.TestCase):
         bbox = _scale_bbox_to_image((10.0, 10.0, 90.0, 40.0), page, (400, 200))
         self.assertEqual(bbox, (20, 20, 180, 80))
 
+    def test_scale_layout_bboxes_to_image_pixels(self):
+        from layout.image_overlay.renderer import (
+            scale_layout_bboxes_to_image_pixels,
+            transform_segment_bboxes_to_image_pixels,
+        )
+
+        page = LayoutPage(page_index=0, width=200.0, height=100.0, blocks=[])
+        scaled = scale_layout_bboxes_to_image_pixels(
+            [[10.0, 10.0, 90.0, 40.0]],
+            page=page,
+            image_size=(400, 200),
+        )
+        self.assertEqual(scaled, [[20.0, 20.0, 180.0, 80.0]])
+
+        segment = {
+            "segment_index": 1,
+            "layout_block_indices": [5],
+            "layout_block_bbox": [[10.0, 10.0, 90.0, 40.0]],
+        }
+        layout_doc = LayoutDocument(pages=[page])
+        self.assertTrue(
+            transform_segment_bboxes_to_image_pixels(
+                segment,
+                layout_doc=layout_doc,
+                image_size=(400, 200),
+            )
+        )
+        self.assertEqual(segment["layout_block_bbox_space"], "image_px")
+        self.assertEqual(segment["layout_block_bbox"], [[20.0, 20.0, 180.0, 80.0]])
+        self.assertFalse(
+            transform_segment_bboxes_to_image_pixels(
+                segment,
+                layout_doc=layout_doc,
+                image_size=(400, 200),
+            )
+        )
+
     def test_sample_cover_color_picks_brightest_pixel_in_strips(self):
         image = Image.new("RGB", (120, 40), color=(200, 200, 200))
         pixels = image.load()

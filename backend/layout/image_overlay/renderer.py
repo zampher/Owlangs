@@ -245,6 +245,87 @@ def _preferred_font_size_px(
     return preferred, bbox_cap_px
 
 
+def resolve_layout_page_for_segment(
+    layout_doc: Any,
+    segment: Dict[str, Any],
+    block_indices: Optional[List[Any]] = None,
+) -> Optional[LayoutPage]:
+    """Pick the layout page used to scale segment bboxes to raster pixels."""
+    from layout.base import LayoutDocument
+
+    if not isinstance(layout_doc, LayoutDocument) or not layout_doc.pages:
+        return None
+    pages = layout_doc.pages
+    page_num = segment.get("pdf_page_number")
+    if isinstance(page_num, int) and page_num >= 1:
+        page_idx = page_num - 1
+        if page_idx < len(pages):
+            return pages[page_idx]
+    indices = block_indices if block_indices is not None else segment.get("layout_block_indices")
+    if indices:
+        try:
+            first_idx = int(indices[0])
+        except (TypeError, ValueError, IndexError):
+            first_idx = None
+        if first_idx is not None:
+            for page in pages:
+                for block in page.blocks:
+                    if block.index == first_idx:
+                        return page
+    return pages[0]
+
+
+def scale_layout_bboxes_to_image_pixels(
+    bboxes: Any,
+    *,
+    page: Optional[LayoutPage],
+    image_size: Tuple[int, int],
+) -> List[List[float]]:
+    """Map layout-space bbox lists to image pixel coordinates."""
+    if not isinstance(bboxes, list) or not bboxes:
+        return []
+    scaled: List[List[float]] = []
+    for entry in bboxes:
+        if not isinstance(entry, (list, tuple)) or len(entry) < 4:
+            continue
+        try:
+            layout_bbox = tuple(float(v) for v in entry[:4])
+        except (TypeError, ValueError):
+            continue
+        left, top, right, bottom = _scale_bbox_to_image(
+            layout_bbox,
+            page,
+            image_size,
+        )
+        scaled.append([float(left), float(top), float(right), float(bottom)])
+    return scaled
+
+
+def transform_segment_bboxes_to_image_pixels(
+    segment: Dict[str, Any],
+    *,
+    layout_doc: Any,
+    image_size: Tuple[int, int],
+) -> bool:
+    """Scale one segment's layout_block_bbox to image pixels (idempotent)."""
+    if segment.get("layout_block_bbox_space") == "image_px":
+        return False
+    raw_bboxes = segment.get("layout_block_bbox")
+    if not raw_bboxes:
+        return False
+    page = resolve_layout_page_for_segment(layout_doc, segment)
+    scaled = scale_layout_bboxes_to_image_pixels(
+        raw_bboxes,
+        page=page,
+        image_size=image_size,
+    )
+    if not scaled:
+        return False
+    segment["layout_block_bbox"] = scaled
+    segment["layout_block_bbox_space"] = "image_px"
+    return True
+
+
 def _scale_bbox_to_image(
     bbox: Tuple[float, float, float, float],
     page: Optional[LayoutPage],

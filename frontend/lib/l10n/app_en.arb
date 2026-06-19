@@ -1443,6 +1443,8 @@
   "translationPreviewAutoRefreshPdf": "Auto refresh PDF",
   "translationPreviewFollowSegmentPage": "Follow segment page",
   "translationPreviewFollowSegmentPageDesc": "When enabled, the translation PDF preview jumps to the page of the focused or checked segment",
+  "translationPreviewMarkSelectedSegment": "Mark selected segment",
+  "translationPreviewMarkSelectedSegmentDesc": "When enabled, show a frame around the selected segment on the translation preview",
   "translationPreviewPdfPageIndicator": "Page {current} / {total}",
   "@translationPreviewPdfPageIndicator": {
     "placeholders": {

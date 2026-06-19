@@ -6896,6 +6896,18 @@ abstract class AppLocalizations {
   /// **'When enabled, the translation PDF preview jumps to the page of the focused or checked segment'**
   String get translationPreviewFollowSegmentPageDesc;
 
+  /// No description provided for @translationPreviewMarkSelectedSegment.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark selected segment'**
+  String get translationPreviewMarkSelectedSegment;
+
+  /// No description provided for @translationPreviewMarkSelectedSegmentDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, show a frame around the selected segment on the translation preview'**
+  String get translationPreviewMarkSelectedSegmentDesc;
+
   /// No description provided for @translationPreviewPdfPageIndicator.
   ///
   /// In en, this message translates to:

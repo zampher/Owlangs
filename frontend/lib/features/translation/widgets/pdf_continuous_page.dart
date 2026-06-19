@@ -6,18 +6,28 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:pdfx/pdfx.dart';
 
+import 'translation_result/layout_bbox_highlight.dart';
+
 /// Renders one PDF page at [maxWidth] using pdfium/pdf.js for pixel-accurate output.
+///
+/// When [highlightBbox] is provided (list of 4 doubles in PDF points:
+/// [x0, y0, x1, y1]), a 1px red outline is overlaid on the
+/// page image to indicate the segment's bounding box.
 class PdfContinuousPage extends StatefulWidget {
   const PdfContinuousPage({
     required this.document,
     required this.pageNumber,
     required this.maxWidth,
+    this.highlightBbox,
     super.key,
   });
 
   final PdfDocument document;
   final int pageNumber;
   final double maxWidth;
+
+  /// Optional highlight bounding box in PDF points: [x0, y0, x1, y1].
+  final List<double>? highlightBbox;
 
   @override
   State<PdfContinuousPage> createState() => _PdfContinuousPageState();
@@ -26,6 +36,8 @@ class PdfContinuousPage extends StatefulWidget {
 class _PdfContinuousPageState extends State<PdfContinuousPage> {
   PdfPageImage? _image;
   double _displayHeight = 0;
+  double _pdfPageWidth = 0;
+  double _pdfPageHeight = 0;
   Object? _error;
   bool _loading = true;
 
@@ -43,6 +55,8 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
         oldWidget.maxWidth != widget.maxWidth) {
       _renderPage();
     }
+    // Highlight bbox changes do not need a page re-render; overlay is
+    // recomputed in build() from the stored page dimensions.
   }
 
   Future<void> _renderPage() async {
@@ -58,6 +72,8 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
     PdfPage? page;
     try {
       page = await widget.document.getPage(widget.pageNumber);
+      _pdfPageWidth = page.width;
+      _pdfPageHeight = page.height;
       final double aspectRatio = page.height / page.width;
       final double displayHeight = widget.maxWidth * aspectRatio;
       final double dpr = MediaQuery.devicePixelRatioOf(context);
@@ -115,49 +131,89 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
       return const SizedBox.shrink();
     }
 
+    Rect? screenRect;
+    if (widget.highlightBbox != null &&
+        _pdfPageWidth > 0 &&
+        _pdfPageHeight > 0) {
+      final double scale = widget.maxWidth / _pdfPageWidth;
+      final List<double> bbox = widget.highlightBbox!;
+      if (bbox.length >= 4) {
+        screenRect = Rect.fromLTWH(
+          bbox[0] * scale,
+          bbox[1] * scale,
+          (bbox[2] - bbox[0]) * scale,
+          (bbox[3] - bbox[1]) * scale,
+        );
+      }
+    }
+
     return PdfContinuousPageFrame(
       width: widget.maxWidth,
       height: _displayHeight,
       imageBytes: image.bytes,
+      highlightRect: screenRect,
     );
   }
 }
 
 /// Word-like white page tile on a neutral canvas.
+///
+/// When [highlightRect] is provided (in display-pixel coordinates relative
+/// to the page image), a 1px red outline is rendered on top of the page.
 class PdfContinuousPageFrame extends StatelessWidget {
   const PdfContinuousPageFrame({
     required this.width,
     required this.height,
     required this.imageBytes,
+    this.highlightRect,
     super.key,
   });
 
   final double width;
   final double height;
   final Uint8List imageBytes;
+  final Rect? highlightRect;
 
   @override
   Widget build(BuildContext context) {
+    final Widget pageContent = DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x40000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Image.memory(
+        imageBytes,
+        width: width,
+        height: height,
+        fit: BoxFit.fill,
+        filterQuality: FilterQuality.high,
+        gaplessPlayback: true,
+      ),
+    );
+
+    if (highlightRect == null) {
+      return Center(child: pageContent);
+    }
+
     return Center(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: const <BoxShadow>[
-            BoxShadow(
-              color: Color(0x40000000),
-              blurRadius: 6,
-              offset: Offset(0, 2),
+      child: Stack(
+        children: <Widget>[
+          pageContent,
+          layoutBboxHighlightPositioned(
+            bboxRect: highlightRect!,
+            child: IgnorePointer(
+              child: Container(
+                decoration: layoutBboxHighlightDecoration(),
+              ),
             ),
-          ],
-        ),
-        child: Image.memory(
-          imageBytes,
-          width: width,
-          height: height,
-          fit: BoxFit.fill,
-          filterQuality: FilterQuality.high,
-          gaplessPlayback: true,
-        ),
+          ),
+        ],
       ),
     );
   }

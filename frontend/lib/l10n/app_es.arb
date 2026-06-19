@@ -1435,6 +1435,8 @@
   "translationPreviewAutoRefreshPdf": "Actualizar PDF automáticamente",
   "translationPreviewFollowSegmentPage": "Seguir página del segmento",
   "translationPreviewFollowSegmentPageDesc": "Al activarlo, la vista previa del PDF de traducción salta a la página del segmento seleccionado o marcado",
+  "translationPreviewMarkSelectedSegment": "Marcar segmento seleccionado",
+  "translationPreviewMarkSelectedSegmentDesc": "Al activarlo, muestra un marco alrededor del segmento seleccionado en la vista previa de la traducción",
   "translationPreviewPdfPageIndicator": "Página {current} / {total}",
   "@translationPreviewPdfPageIndicator": {
     "placeholders": {

@@ -21,9 +21,14 @@ from logger.logger import LogModule, unified_logger
 
 _SKIP_OVERLAY_BLOCK_TYPES = frozenset({"image", "figure", "list", "table"})
 _IMAGE_MARKDOWN_RE = re.compile(r"!\[[^\]]*\]\([^)]+\)", re.DOTALL)
+_MARKDOWN_IMAGE_PATH_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)", re.DOTALL)
 _DETAILS_WRAPPER_RE = re.compile(r"<details\b", re.IGNORECASE)
 _DETAILS_CLOSING_RE = re.compile(r"</details>", re.IGNORECASE)
 _SUMMARY_TAG_RE = re.compile(r"<summary\b", re.IGNORECASE)
+_MINERU_DETAILS_IMAGE_SUMMARY_RE = re.compile(
+    r"<summary\b[^>]*>\s*(text_image|natural_image)\s*</summary>",
+    re.IGNORECASE | re.DOTALL,
+)
 _HTML_TABLE_RE = re.compile(r"^<table\b", re.IGNORECASE | re.DOTALL)
 _PLACEHOLDER_RE = re.compile(r"^<ph-[a-zA-Z0-9]+>\s*$")
 
@@ -76,6 +81,246 @@ def _is_non_overlay_segment_text(text: str, segment: Dict[str, Any]) -> bool:
     if _contains_overlay_skip_markup(normalized):
         return True
     return False
+
+
+def _is_mineru_details_image_segment(text: str) -> bool:
+    """True for MinerU <details><summary>text_image|natural_image</summary> segments."""
+    normalized = (text or "").strip()
+    if not normalized:
+        return False
+    if _DETAILS_WRAPPER_RE.search(normalized) and _MINERU_DETAILS_IMAGE_SUMMARY_RE.search(normalized):
+        return True
+    return _is_mineru_details_image_fragment(text)
+
+
+def _is_mineru_details_image_fragment(text: str) -> bool:
+    """True for full or split MinerU text_image/natural_image markdown fragments."""
+    normalized = (text or "").strip()
+    if not normalized:
+        return False
+    if _MINERU_DETAILS_IMAGE_SUMMARY_RE.search(normalized):
+        return True
+    if _DETAILS_CLOSING_RE.search(normalized) and not _DETAILS_WRAPPER_RE.search(normalized):
+        body = _extract_closing_details_body_text(normalized)
+        return bool(body)
+    return False
+
+
+def _extract_closing_details_body_text(text: str) -> str:
+    """Body from a split closing half, e.g. 'DAYONE\\n</details>'."""
+    normalized = (text or "").replace("\r", "").strip()
+    if not normalized:
+        return ""
+    return re.sub(r"</details>\s*", "", normalized, flags=re.IGNORECASE).strip()
+
+
+def _extract_details_body_text(text: str) -> str:
+    """Text inside <details> excluding the <summary> line."""
+    normalized = (text or "").replace("\r", "")
+    if not normalized:
+        return ""
+    if (
+        _DETAILS_CLOSING_RE.search(normalized)
+        and not _DETAILS_WRAPPER_RE.search(normalized)
+    ):
+        return _extract_closing_details_body_text(normalized)
+    inner = re.sub(r"<details\b[^>]*>", "", normalized, count=1, flags=re.IGNORECASE)
+    inner = re.sub(r"</details>", "", inner, count=1, flags=re.IGNORECASE)
+    inner = re.sub(
+        r"<summary\b[^>]*>.*?</summary>",
+        "",
+        inner,
+        count=1,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return inner.strip()
+
+
+def _match_image_block_by_ocr(
+    norm_body: str,
+    layout_doc: LayoutDocument,
+    *,
+    want_sub_type: Optional[str] = None,
+) -> Optional[int]:
+    """Find layout image block whose OCR span content matches norm_body."""
+    from layout.mineru_layout_model import extract_mineru_image_span_content
+
+    best_idx: Optional[int] = None
+    best_score = -1
+    for block in layout_doc.iter_blocks():
+        if block.type != "image" or block.index is None:
+            continue
+        raw = getattr(block, "raw", None) or {}
+        if not isinstance(raw, dict):
+            continue
+        sub_type = str(raw.get("sub_type") or "").lower()
+        ocr = (block.text or "").strip() or (extract_mineru_image_span_content(raw) or "")
+        norm_ocr = _normalize_text_for_matching(ocr)
+
+        score = 0
+        if want_sub_type and sub_type == want_sub_type:
+            score += 10
+        if norm_body and norm_ocr:
+            if norm_body == norm_ocr:
+                score += 100
+            elif norm_body in norm_ocr or norm_ocr in norm_body:
+                score += 50
+
+        if score > best_score:
+            best_score = score
+            best_idx = int(block.index)
+
+    return best_idx if best_score > 0 else None
+
+
+def _mineru_details_image_sub_type(source_text: str) -> Optional[str]:
+    match = _MINERU_DETAILS_IMAGE_SUMMARY_RE.search(source_text or "")
+    if not match:
+        return None
+    return str(match.group(1)).lower()
+
+
+def _resolve_mineru_details_image_block_index(
+    segment: Dict[str, Any],
+    layout_doc: LayoutDocument,
+) -> Optional[int]:
+    """Map MinerU text_image/natural_image markdown to its layout image block bbox."""
+    source = _segment_source_text(segment)
+    if not _is_mineru_details_image_fragment(source):
+        return None
+
+    body = _extract_details_body_text(source)
+    norm_body = _normalize_text_for_matching(body)
+    want_sub_type = _mineru_details_image_sub_type(source)
+
+    if norm_body:
+        matched = _match_image_block_by_ocr(
+            norm_body,
+            layout_doc,
+            want_sub_type=want_sub_type,
+        )
+        if matched is not None:
+            return matched
+
+    if want_sub_type:
+        for block in layout_doc.iter_blocks():
+            if block.type != "image" or block.index is None:
+                continue
+            raw = getattr(block, "raw", None) or {}
+            if isinstance(raw, dict) and str(raw.get("sub_type") or "").lower() == want_sub_type:
+                return int(block.index)
+
+    return None
+
+
+def _normalize_asset_basename(path: str) -> str:
+    normalized = (path or "").replace("\\", "/").strip().lower()
+    if not normalized:
+        return ""
+    return normalized.split("/")[-1]
+
+
+def _extract_markdown_image_path(text: str) -> Optional[str]:
+    match = _MARKDOWN_IMAGE_PATH_RE.search(text or "")
+    if not match:
+        return None
+    return match.group(1).strip().strip("\"'")
+
+
+def _layout_block_image_basename(block: Any) -> str:
+    path = getattr(block, "image_path", None) or ""
+    if not path:
+        raw = getattr(block, "raw", None)
+        if isinstance(raw, dict):
+            from layout.mineru_layout_model import _extract_image_path_from_layout_block
+
+            path = _extract_image_path_from_layout_block(raw) or ""
+    return _normalize_asset_basename(path)
+
+
+def _iter_layout_block_indices_by_type(
+    layout_doc: LayoutDocument,
+    block_type: str,
+) -> List[int]:
+    indices: List[int] = []
+    for block in layout_doc.iter_blocks():
+        if block.type != block_type or block.index is None:
+            continue
+        indices.append(int(block.index))
+    return sorted(indices)
+
+
+def _resolve_markdown_image_block_index(
+    segment: Dict[str, Any],
+    layout_doc: LayoutDocument,
+    *,
+    claimed_blocks: Optional[set[int]] = None,
+) -> Optional[int]:
+    """Map ![](images/...) markdown segments to layout image blocks for bbox highlight."""
+    source = _segment_source_text(segment)
+    export = _segment_export_text(segment, "target_text")
+    path = _extract_markdown_image_path(source) or _extract_markdown_image_path(export)
+    if not path:
+        return None
+
+    norm_path = _normalize_asset_basename(path)
+    for block in layout_doc.iter_blocks():
+        if block.type != "image" or block.index is None:
+            continue
+        block_idx = int(block.index)
+        basename = _layout_block_image_basename(block)
+        if not basename:
+            continue
+        if basename == norm_path or basename in norm_path or norm_path in basename:
+            return block_idx
+
+    return None
+
+
+def _is_table_highlight_segment(segment: Dict[str, Any], text: str) -> bool:
+    normalized = (text or "").strip()
+    block_type = str(segment.get("block_type") or "").lower()
+    if block_type in {"table", "table_body"}:
+        return True
+    if segment.get("is_table"):
+        return True
+    if _HTML_TABLE_RE.match(normalized):
+        return True
+    try:
+        from utils.translation_segments import _is_table_segment
+
+        return _is_table_segment(normalized)
+    except Exception:
+        return False
+
+
+def _resolve_table_block_index(
+    layout_doc: LayoutDocument,
+    *,
+    claimed_blocks: set[int],
+) -> Optional[int]:
+    table_blocks = _iter_layout_block_indices_by_type(layout_doc, "table")
+    if not table_blocks:
+        return None
+    for block_idx in table_blocks:
+        if block_idx not in claimed_blocks:
+            return block_idx
+    return table_blocks[0]
+
+
+def _assign_segment_highlight_block(
+    seg: Dict[str, Any],
+    block_idx: int,
+    resolution: str,
+) -> bool:
+    new_indices = [block_idx]
+    if seg.get("layout_block_indices") == new_indices:
+        return False
+    seg["layout_block_indices"] = new_indices
+    seg["layout_block_indices_resolution"] = resolution
+    seg.pop("layout_block_bbox", None)
+    seg.pop("layout_block_bbox_space", None)
+    return True
 
 
 def _split_by_newlines(text: str, expected: int) -> Optional[List[str]]:
@@ -236,6 +481,8 @@ def _resolve_overlay_layout_block_indices(
     layout_block_original_texts: Dict[int, str],
     block_index_to_type: Dict[int, str],
     task_state: Dict[str, Any],
+    *,
+    allow_segment_map_fallback: bool = True,
 ) -> tuple[List[int], str]:
     """
     Resolve layout block indices for overlay export.
@@ -253,9 +500,10 @@ def _resolve_overlay_layout_block_indices(
     if matched:
         return matched, "source_text_match"
 
-    indices = resolve_segment_layout_block_indices(segment, task_state)
-    if indices:
-        return indices, "segment_map_fallback"
+    if allow_segment_map_fallback:
+        indices = resolve_segment_layout_block_indices(segment, task_state)
+        if indices:
+            return indices, "segment_map_fallback"
 
     return [], "unmapped"
 
@@ -437,6 +685,234 @@ def resolve_overlay_primary_text_block_index(
             continue
         return block_index_int
     return None
+
+
+def assign_overlay_layout_block_indices_for_segments(
+    segments: List[Dict[str, Any]],
+    layout_doc: LayoutDocument,
+    task_state: Optional[Dict[str, Any]] = None,
+    *,
+    claim_blocks: bool = True,
+) -> int:
+    """Assign one primary layout block per overlay segment for bbox highlight.
+
+    MinerU JPG/PNG markdown segments often misalign with ``segment_layout_block_map``
+    when image/details fragments are present. Re-resolve blocks via source_text_match
+    (same path as overlay export) and optionally claim blocks in segment order so
+    consecutive segments do not reuse the same bbox.
+    """
+    task_state = task_state or {}
+    layout_block_original_texts: Dict[int, str] = {}
+    block_index_to_type: Dict[int, str] = {}
+    block_index_to_bbox: Dict[int, tuple] = {}
+
+    for block in layout_doc.iter_blocks():
+        if block.index is None:
+            continue
+        block_index_int = int(block.index)
+        block_index_to_type[block_index_int] = block.type
+        block_index_to_bbox[block_index_int] = block.bbox
+        layout_block_original_texts[block_index_int] = (block.text or "").strip()
+
+    def _segment_sort_key(seg: Dict[str, Any]) -> int:
+        try:
+            return int(seg.get("segment_index", 0))
+        except (TypeError, ValueError):
+            return 0
+
+    ordered_segments = sorted(
+        (seg for seg in segments if isinstance(seg, dict)),
+        key=_segment_sort_key,
+    )
+
+    claimed_blocks: set[int] = set()
+    updated = 0
+    duplicate_warnings: List[str] = []
+
+    for seg in ordered_segments:
+        seg_idx = seg.get("segment_index", "?")
+        export_text = _segment_export_text(seg, "target_text")
+
+        # MinerU text_image / natural_image: OCR lives on the image block; bbox = image bbox.
+        image_block_idx = _resolve_mineru_details_image_block_index(seg, layout_doc)
+        if image_block_idx is not None:
+            new_indices = [image_block_idx]
+            if seg.get("layout_block_indices") != new_indices:
+                seg["layout_block_indices"] = new_indices
+                seg["layout_block_indices_resolution"] = "mineru_text_image"
+                seg.pop("layout_block_bbox", None)
+                seg.pop("layout_block_bbox_space", None)
+                updated += 1
+                unified_logger.debug(
+                    LogModule.EXPORT,
+                    "[IMAGE_OVERLAY] Segment "
+                    f"{seg_idx}: text_image -> image block {image_block_idx}",
+                )
+            if claim_blocks:
+                claimed_blocks.add(image_block_idx)
+            continue
+
+        # Markdown image segments: skip raster overlay text but keep image block bbox.
+        md_image_idx = _resolve_markdown_image_block_index(
+            seg,
+            layout_doc,
+            claimed_blocks=claimed_blocks,
+        )
+        if md_image_idx is not None:
+            if _assign_segment_highlight_block(seg, md_image_idx, "markdown_image"):
+                updated += 1
+                unified_logger.debug(
+                    LogModule.EXPORT,
+                    "[IMAGE_OVERLAY] Segment "
+                    f"{seg_idx}: markdown image -> image block {md_image_idx}",
+                )
+            if claim_blocks:
+                claimed_blocks.add(md_image_idx)
+            continue
+
+        # Table segments: skip raster overlay text but keep table block bbox.
+        if _is_table_highlight_segment(seg, _segment_source_text(seg)):
+            table_idx = _resolve_table_block_index(
+                layout_doc,
+                claimed_blocks=claimed_blocks,
+            )
+            if table_idx is not None:
+                if _assign_segment_highlight_block(seg, table_idx, "layout_table"):
+                    updated += 1
+                    unified_logger.debug(
+                        LogModule.EXPORT,
+                        "[IMAGE_OVERLAY] Segment "
+                        f"{seg_idx}: table -> table block {table_idx}",
+                    )
+                if claim_blocks:
+                    claimed_blocks.add(table_idx)
+                continue
+
+        if _is_non_overlay_segment_text(export_text, seg):
+            if seg.get("layout_block_indices"):
+                seg.pop("layout_block_indices", None)
+                seg.pop("layout_block_bbox", None)
+                seg.pop("layout_block_bbox_space", None)
+                updated += 1
+            continue
+
+        indices, resolution_method = _resolve_overlay_layout_block_indices(
+            seg,
+            layout_block_original_texts,
+            block_index_to_type,
+            task_state,
+            allow_segment_map_fallback=False,
+        )
+        if not indices:
+            continue
+
+        expanded = expand_renderable_block_indices(
+            indices,
+            layout_doc,
+            block_index_to_type,
+            block_index_to_bbox,
+        )
+        text_block_indices: List[int] = []
+        for idx in expanded:
+            try:
+                block_index_int = int(idx)
+            except (TypeError, ValueError):
+                continue
+            if block_index_to_type.get(block_index_int, "text") in _SKIP_OVERLAY_BLOCK_TYPES:
+                continue
+            text_block_indices.append(block_index_int)
+
+        if not text_block_indices:
+            continue
+
+        primary: Optional[int] = None
+        for block_index_int in text_block_indices:
+            if claim_blocks and block_index_int in claimed_blocks:
+                continue
+            primary = block_index_int
+            break
+        if primary is None:
+            primary = text_block_indices[0]
+            if claim_blocks and primary in claimed_blocks:
+                duplicate_warnings.append(
+                    f"segment={seg_idx} block={primary} "
+                    f"(all candidates claimed, candidates={text_block_indices})"
+                )
+
+        new_indices = [primary]
+        old_indices = seg.get("layout_block_indices")
+        if old_indices != new_indices:
+            seg["layout_block_indices"] = new_indices
+            seg["layout_block_indices_resolution"] = resolution_method
+            seg.pop("layout_block_bbox", None)
+            seg.pop("layout_block_bbox_space", None)
+            updated += 1
+            if old_indices and old_indices != new_indices:
+                unified_logger.debug(
+                    LogModule.EXPORT,
+                    "[IMAGE_OVERLAY] Segment "
+                    f"{seg_idx}: layout_block_indices {old_indices} -> "
+                    f"{new_indices} ({resolution_method})",
+                )
+
+        if claim_blocks and primary is not None:
+            claimed_blocks.add(primary)
+
+    # Sequential content match for text segments still unmapped (never use segment_map).
+    unmapped = [
+        seg
+        for seg in ordered_segments
+        if isinstance(seg, dict)
+        and not seg.get("layout_block_indices")
+        and not _is_non_overlay_segment_text(_segment_export_text(seg, "target_text"), seg)
+        and _resolve_mineru_details_image_block_index(seg, layout_doc) is None
+    ]
+    if unmapped:
+        try:
+            from utils import translation_segments as ts_mod
+
+            source_chunks = [_segment_source_text(seg) for seg in unmapped]
+            ts_mod._map_segments_to_layout_blocks(
+                unmapped,
+                source_chunks,
+                layout_doc,
+                unified_logger,
+            )
+            for seg in unmapped:
+                bidxs = seg.get("layout_block_indices") or []
+                if not bidxs:
+                    continue
+                primary = int(bidxs[0])
+                seg["layout_block_indices"] = [primary]
+                seg["layout_block_indices_resolution"] = "sequential_content_match"
+                seg.pop("layout_block_bbox", None)
+                seg.pop("layout_block_bbox_space", None)
+                updated += 1
+                if claim_blocks:
+                    claimed_blocks.add(primary)
+        except Exception as seq_err:
+            unified_logger.debug(
+                LogModule.EXPORT,
+                f"[IMAGE_OVERLAY] Sequential block mapping fallback failed: {seq_err}",
+            )
+
+    if duplicate_warnings:
+        preview = "; ".join(duplicate_warnings[:6])
+        if len(duplicate_warnings) > 6:
+            preview += f"; ... +{len(duplicate_warnings) - 6} more"
+        unified_logger.warning(
+            LogModule.EXPORT,
+            "[IMAGE_OVERLAY] Duplicate layout block assignment after reassignment: "
+            f"{preview}",
+        )
+
+    if updated > 0:
+        unified_logger.info(
+            LogModule.EXPORT,
+            "[IMAGE_OVERLAY] Reassigned layout_block_indices for "
+            f"{updated} segment(s) via overlay source_text_match",
+        )
+    return updated
 
 
 def build_block_typography_maps_from_overlay_meta(

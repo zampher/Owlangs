@@ -4,6 +4,71 @@ import re
 from typing import List, Tuple, Optional
 
 
+# MinerU text_image blocks export as <details><summary>text_image</summary>\n\nCONTENT\n</details>.
+# Inner blank lines must not split the block into separate translation segments.
+_DETAILS_BLOCK_PATTERN = re.compile(
+    r"(<details\b[\s\S]*?</details>)",
+    re.IGNORECASE,
+)
+_DETAILS_OPENING_FRAGMENT_RE = re.compile(r"<details\b", re.IGNORECASE)
+_DETAILS_CLOSING_FRAGMENT_RE = re.compile(r"</details>", re.IGNORECASE)
+
+
+def _split_text_preserving_details_blocks(text: str) -> List[str]:
+    """Split by blank lines but keep each <details>...</details> as one piece."""
+    normalized = text.replace("\r\n", "\n")
+    parts = _DETAILS_BLOCK_PATTERN.split(normalized)
+    paragraphs: List[str] = []
+    for index, part in enumerate(parts):
+        if not part:
+            continue
+        if index % 2 == 1:
+            stripped = part.strip()
+            if stripped:
+                paragraphs.append(stripped)
+            continue
+        blank_line_paras = re.split(r"\n\s*\n", part)
+        paragraphs.extend(piece.strip() for piece in blank_line_paras if piece.strip())
+    return paragraphs
+
+
+def _is_details_opening_fragment(text: str) -> bool:
+    stripped = (text or "").strip()
+    if not stripped:
+        return False
+    return (
+        _DETAILS_OPENING_FRAGMENT_RE.search(stripped) is not None
+        and _DETAILS_CLOSING_FRAGMENT_RE.search(stripped) is None
+    )
+
+
+def _is_details_closing_fragment(text: str) -> bool:
+    stripped = (text or "").strip()
+    if not stripped:
+        return False
+    return (
+        _DETAILS_CLOSING_FRAGMENT_RE.search(stripped) is not None
+        and _DETAILS_OPENING_FRAGMENT_RE.search(stripped) is None
+    )
+
+
+def merge_adjacent_details_fragments(chunks: List[str]) -> List[str]:
+    """Merge MinerU details blocks that were incorrectly split at inner blank lines."""
+    if len(chunks) < 2:
+        return chunks
+    merged: List[str] = []
+    index = 0
+    while index < len(chunks):
+        current = chunks[index]
+        if index + 1 < len(chunks):
+            nxt = chunks[index + 1]
+            if _is_details_opening_fragment(current) and _is_details_closing_fragment(nxt):
+                merged.append(current.rstrip() + "\n\n" + nxt.lstrip())
+                index += 2
+                continue
+        merged.append(current)
+        index += 1
+    return merged
 
 
 class MarkdownBlockSplitter:
@@ -102,11 +167,16 @@ class MarkdownBlockSplitter:
             if i % 2 == 1:  # This is a code block
                 blocks.append(part)
             else:  # This is regular Markdown content
-                # Split by one or more empty lines and preserve separators
-                # This effectively separates paragraphs, lists, headers, etc., and preserves empty lines between them
-                sub_parts = re.split(r'(\n{2,})', part)
-                # Filter out empty strings that re.split might produce
-                blocks.extend([p for p in sub_parts if p])
+                detail_parts = _DETAILS_BLOCK_PATTERN.split(part)
+                for detail_index, detail_part in enumerate(detail_parts):
+                    if not detail_part:
+                        continue
+                    if detail_index % 2 == 1:
+                        blocks.append(detail_part)
+                        continue
+                    # Split by one or more empty lines and preserve separators
+                    sub_parts = re.split(r"(\n{2,})", detail_part)
+                    blocks.extend(p for p in sub_parts if p)
 
         return blocks
 
@@ -181,10 +251,17 @@ def split_markdown_text(markdown_text: str, max_block_size=5000, deep_split: boo
     # syntax (headers, code blocks), it's likely plain text (e.g. text_input.md).
     # Fall back to paragraph splitting so each line becomes its own segment
     # instead of arbitrary byte-size chunks.
-    if deep_split and not re.search(r'#{1,6}\s|```|~~~', markdown_text):
-        chunks = split_text_into_paragraphs(markdown_text, max_block_size=max_block_size)
+    if deep_split and not re.search(
+        r"#{1,6}\s|```|~~~|<details\b",
+        markdown_text,
+        re.IGNORECASE,
+    ):
+        chunks = split_text_into_paragraphs(
+            markdown_text,
+            max_block_size=max_block_size,
+        )
 
-    return chunks
+    return merge_adjacent_details_fragments(chunks)
 
 
 def split_text_into_paragraphs(text: str, max_block_size: int = 5000) -> List[str]:
@@ -208,16 +285,17 @@ def split_text_into_paragraphs(text: str, max_block_size: int = 5000) -> List[st
     # Normalize line endings
     text = text.replace('\r\n', '\n')
 
-    # Try blank-line split first (natural paragraph boundaries)
-    blank_line_paras = re.split(r'\n\s*\n', text)
-    blank_line_paras = [p.strip() for p in blank_line_paras if p.strip()]
-
-    if len(blank_line_paras) > 1:
-        # File has blank-line paragraph boundaries — use them
-        raw_paragraphs = blank_line_paras
+    if _DETAILS_BLOCK_PATTERN.search(text):
+        raw_paragraphs = _split_text_preserving_details_blocks(text)
     else:
-        # No blank lines — each line is its own paragraph
-        raw_paragraphs = [line.strip() for line in text.split('\n') if line.strip()]
+        # Try blank-line split first (natural paragraph boundaries)
+        blank_line_paras = re.split(r'\n\s*\n', text)
+        blank_line_paras = [p.strip() for p in blank_line_paras if p.strip()]
+
+        if len(blank_line_paras) > 1:
+            raw_paragraphs = blank_line_paras
+        else:
+            raw_paragraphs = [line.strip() for line in text.split('\n') if line.strip()]
 
     result: List[str] = []
     for para in raw_paragraphs:

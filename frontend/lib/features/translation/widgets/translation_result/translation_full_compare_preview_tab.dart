@@ -49,6 +49,10 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
     this.pdfPreviewJumpPageListenable,
     this.pdfPreviewJumpPageTriggerListenable,
     this.autoFollowSegmentPdfPageListenable,
+    this.pdfHighlightBboxPageListenable,
+    this.pdfHighlightBboxListenable,
+    this.showSelectedSegmentMarkerListenable,
+    this.onShowSelectedSegmentMarkerChanged,
     this.onAutoFollowSegmentPdfPageChanged,
     this.segmentScrollController,
     super.key,
@@ -82,6 +86,10 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
   final ValueListenable<int?>? pdfPreviewJumpPageListenable;
   final ValueListenable<int>? pdfPreviewJumpPageTriggerListenable;
   final ValueListenable<bool>? autoFollowSegmentPdfPageListenable;
+  final ValueListenable<int?>? pdfHighlightBboxPageListenable;
+  final ValueListenable<List<double>?>? pdfHighlightBboxListenable;
+  final ValueListenable<bool>? showSelectedSegmentMarkerListenable;
+  final ValueChanged<bool>? onShowSelectedSegmentMarkerChanged;
   final ValueChanged<bool>? onAutoFollowSegmentPdfPageChanged;
   final ScrollController? segmentScrollController;
   final Future<PreviewSelection?> Function()? onRequestPreviewSettings;
@@ -104,6 +112,8 @@ class _TranslationFullComparePreviewTabState
   bool _autoRefreshPdf = true;
   int _displayPdfRevision = 0;
   Set<int> _displayDirtySegmentIndices = <int>{};
+  int? _highlightBboxPage;
+  List<double>? _highlightBbox;
   final ValueNotifier<Set<int>> _selectedSegmentIndicesNotifier =
       ValueNotifier<Set<int>>(<int>{});
   final PdfContinuousScrollController _pdfNavigationController =
@@ -149,6 +159,11 @@ class _TranslationFullComparePreviewTabState
     widget.pdfRenderRevisionListenable?.addListener(_onPdfRevisionListenableChanged);
     widget.pdfPreviewJumpPageTriggerListenable
         ?.addListener(_onPdfPreviewJumpPageRequested);
+    widget.pdfHighlightBboxListenable
+        ?.addListener(_onPdfBboxHighlightChanged);
+    widget.pdfHighlightBboxPageListenable
+        ?.addListener(_onPdfBboxHighlightChanged);
+    _onPdfBboxHighlightChanged();
     if (widget.initialLayoutMode != PdfCompareLayoutMode.comparePreview &&
         _supportsRevisionPreview) {
       _layoutMode = widget.initialLayoutMode;
@@ -181,6 +196,20 @@ class _TranslationFullComparePreviewTabState
       widget.pdfPreviewJumpPageTriggerListenable
           ?.addListener(_onPdfPreviewJumpPageRequested);
     }
+    if (oldWidget.pdfHighlightBboxListenable !=
+            widget.pdfHighlightBboxListenable ||
+        oldWidget.pdfHighlightBboxPageListenable !=
+            widget.pdfHighlightBboxPageListenable) {
+      oldWidget.pdfHighlightBboxListenable
+          ?.removeListener(_onPdfBboxHighlightChanged);
+      oldWidget.pdfHighlightBboxPageListenable
+          ?.removeListener(_onPdfBboxHighlightChanged);
+      widget.pdfHighlightBboxListenable
+          ?.addListener(_onPdfBboxHighlightChanged);
+      widget.pdfHighlightBboxPageListenable
+          ?.addListener(_onPdfBboxHighlightChanged);
+      _onPdfBboxHighlightChanged();
+    }
     if (oldWidget.pdfRenderRevision != widget.pdfRenderRevision &&
         widget.pdfRenderRevisionListenable == null) {
       _maybeApplyPdfRevision(widget.pdfRenderRevision);
@@ -201,6 +230,10 @@ class _TranslationFullComparePreviewTabState
         ?.removeListener(_onPdfRevisionListenableChanged);
     widget.pdfPreviewJumpPageTriggerListenable
         ?.removeListener(_onPdfPreviewJumpPageRequested);
+    widget.pdfHighlightBboxListenable
+        ?.removeListener(_onPdfBboxHighlightChanged);
+    widget.pdfHighlightBboxPageListenable
+        ?.removeListener(_onPdfBboxHighlightChanged);
     _pdfNavigationController.dispose();
     _pdfCompareNavigationController.dispose();
     _selectedSegmentIndicesNotifier.dispose();
@@ -225,6 +258,29 @@ class _TranslationFullComparePreviewTabState
     } else {
       unawaited(_pdfNavigationController.jumpToPage(pageNumber));
     }
+  }
+
+  void _onPdfBboxHighlightChanged() {
+    final int? page = widget.pdfHighlightBboxPageListenable?.value;
+    final List<double>? bbox = widget.pdfHighlightBboxListenable?.value;
+    if (bbox != null && bbox.length >= 4) {
+      setState(() {
+        _highlightBbox = bbox;
+        // Image overlay bbox uses image pixel coords; page is optional.
+        if (page != null) {
+          _highlightBboxPage = page;
+        } else if (_isImageRevisionSource) {
+          _highlightBboxPage = 1;
+        } else {
+          _highlightBboxPage = null;
+        }
+      });
+      return;
+    }
+    setState(() {
+      _highlightBboxPage = null;
+      _highlightBbox = null;
+    });
   }
 
   void _maybeApplyPdfRevision(int revision) {
@@ -269,6 +325,7 @@ class _TranslationFullComparePreviewTabState
     setState(() {
       _layoutMode = mode;
     });
+    _onPdfBboxHighlightChanged();
   }
 
   Future<void> _enterRevisionLayoutMode([
@@ -463,6 +520,14 @@ class _TranslationFullComparePreviewTabState
         : '${AppConfig.baseUrl}$downloadUrl';
   }
 
+  Rect? _buildHighlightRect() {
+    final List<double>? bbox = _highlightBbox;
+    if (bbox != null && bbox.length >= 4) {
+      return layoutBlockBboxToImageRect(bbox);
+    }
+    return null;
+  }
+
   Widget _buildTargetImagePreview(
     AppLocalizations l10n, {
     required String targetImageUrl,
@@ -470,7 +535,7 @@ class _TranslationFullComparePreviewTabState
     return ImageOverlayPreviewView(
       imageUrl: targetImageUrl,
       panelLabel: l10n.translationPreviewPanelTarget,
-      viewportController: _viewportController,
+      highlightRect: _buildHighlightRect(),
     );
   }
 
@@ -491,6 +556,8 @@ class _TranslationFullComparePreviewTabState
           enableNavigation ? _pdfNavigationController : null,
       scrollController: scrollController,
       showScrollbar: showScrollbar,
+      highlightPageNumber: _highlightBboxPage,
+      highlightBbox: _highlightBbox,
       onDownload: widget.onDownload,
       onRequestPreviewSettings: widget.onRequestPreviewSettings,
     );
@@ -513,9 +580,13 @@ class _TranslationFullComparePreviewTabState
         children: <Widget>[
           Expanded(
             flex: 3,
-            child: _buildTargetImagePreview(
-              l10n,
-              targetImageUrl: targetImageUrl,
+            child: PreviewZoomableViewport(
+              controller: _viewportController,
+              childHandlesVerticalScroll: true,
+              child: _buildTargetImagePreview(
+                l10n,
+                targetImageUrl: targetImageUrl,
+              ),
             ),
           ),
           const VerticalDivider(width: 1),
@@ -574,6 +645,7 @@ class _TranslationFullComparePreviewTabState
                 sourceImageUrl: svc.buildSourceImageUrl(widget.taskId),
                 targetImageUrl: targetImageUrl,
                 linkedScroll: _revisionLinkedScrollEnabled,
+                highlightRect: _buildHighlightRect(),
               ),
             ),
           ),
@@ -603,6 +675,8 @@ class _TranslationFullComparePreviewTabState
               targetRendererType: widget.baseMode.rendererType,
               linkedScroll: _revisionLinkedScrollEnabled,
               navigationController: _pdfCompareNavigationController,
+              highlightPageNumber: _highlightBboxPage,
+              highlightBbox: _highlightBbox,
               onVisiblePageChanged: (int page, int totalPages) {
                 if (!mounted ||
                     (page == _comparePdfCurrentPage &&
@@ -683,6 +757,7 @@ class _TranslationFullComparePreviewTabState
           sourceImageUrl: svc.buildSourceImageUrl(widget.taskId),
           targetImageUrl: targetImageUrl,
           linkedScroll: _syncScrollEnabled,
+          highlightRect: _buildHighlightRect(),
         ),
       );
     }
@@ -700,6 +775,8 @@ class _TranslationFullComparePreviewTabState
         targetDownloadUrl: targetPdfUrl,
         targetRendererType: widget.baseMode.rendererType,
         linkedScroll: _syncScrollEnabled,
+        highlightPageNumber: _highlightBboxPage,
+        highlightBbox: _highlightBbox,
         onVisiblePageChanged: (int page, int totalPages) {
           if (!mounted ||
               (page == _comparePdfCurrentPage &&
@@ -850,6 +927,35 @@ class _TranslationFullComparePreviewTabState
                           ),
                           Text(
                             l10n.translationPreviewFollowSegmentPage,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              if (widget.showSelectedSegmentMarkerListenable != null &&
+                  widget.onShowSelectedSegmentMarkerChanged != null)
+                ValueListenableBuilder<bool>(
+                  valueListenable: widget.showSelectedSegmentMarkerListenable!,
+                  builder: (BuildContext context, bool enabled, Widget? _) {
+                    return Tooltip(
+                      message:
+                          l10n.translationPreviewMarkSelectedSegmentDesc,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Checkbox(
+                            value: enabled,
+                            onChanged: (bool? value) {
+                              widget.onShowSelectedSegmentMarkerChanged!(
+                                value ?? false,
+                              );
+                            },
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          Text(
+                            l10n.translationPreviewMarkSelectedSegment,
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],

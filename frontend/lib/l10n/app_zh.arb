@@ -1380,6 +1380,8 @@
   "translationPreviewAutoRefreshPdf": "自动刷新 PDF",
   "translationPreviewFollowSegmentPage": "跟随片段页",
   "translationPreviewFollowSegmentPageDesc": "启用后，点击或勾选片段时，译文 PDF 预览自动跳转到该片段所在页",
+  "translationPreviewMarkSelectedSegment": "标记选中片段",
+  "translationPreviewMarkSelectedSegmentDesc": "启用后，在译文预览中用边框标出当前选中片段的位置",
   "translationPreviewPdfPageIndicator": "第 {current} / {total} 页",
   "@translationPreviewPdfPageIndicator": {
     "placeholders": {

@@ -97,6 +97,10 @@ class PdfContinuousScrollController {
 }
 
 /// Word-style continuous vertical scroll through all PDF pages (pixel rendering).
+///
+/// When both [highlightPageNumber] and [highlightBbox] are non-null, a
+/// semi-transparent blue rectangle is rendered on the specified page at the
+/// given bounding box coordinates (in PDF points).
 class PdfContinuousScrollView extends StatefulWidget {
   const PdfContinuousScrollView({
     required this.document,
@@ -108,6 +112,8 @@ class PdfContinuousScrollView extends StatefulWidget {
     this.backgroundColor = const Color(0xFFD6D6D6),
     this.onPageVisible,
     this.showScrollbar = true,
+    this.highlightPageNumber,
+    this.highlightBbox,
   });
 
   final PdfDocument document;
@@ -118,6 +124,12 @@ class PdfContinuousScrollView extends StatefulWidget {
   final Color backgroundColor;
   final void Function(int pageNumber)? onPageVisible;
   final bool showScrollbar;
+
+  /// 1-based page number to render the highlight rectangle on.
+  final int? highlightPageNumber;
+
+  /// Bounding box in PDF points: [x0, y0, x1, y1].
+  final List<double>? highlightBbox;
 
   @override
   State<PdfContinuousScrollView> createState() =>
@@ -313,6 +325,10 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
             itemCount: pageCount,
             itemBuilder: (BuildContext context, int index) {
               final int pageNumber = index + 1;
+              final List<double>? pageHighlightBbox =
+                  (widget.highlightPageNumber == pageNumber)
+                      ? widget.highlightBbox
+                      : null;
               return Padding(
                 padding: EdgeInsets.only(
                   bottom: index == pageCount - 1 ? 0 : widget.pageGap,
@@ -321,6 +337,7 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
                   document: widget.document,
                   pageNumber: pageNumber,
                   maxWidth: pageWidth,
+                  highlightBbox: pageHighlightBbox,
                 ),
               );
             },
@@ -350,6 +367,8 @@ class PdfContinuousPreviewLoader extends StatefulWidget {
     this.onDocumentLoaded,
     this.onPageVisible,
     this.showScrollbar = true,
+    this.highlightPageNumber,
+    this.highlightBbox,
   });
 
   final String downloadUrl;
@@ -359,6 +378,12 @@ class PdfContinuousPreviewLoader extends StatefulWidget {
   final void Function(PdfDocument document)? onDocumentLoaded;
   final void Function(int pageNumber)? onPageVisible;
   final bool showScrollbar;
+
+  /// 1-based page number to render the highlight rectangle on.
+  final int? highlightPageNumber;
+
+  /// Bounding box in PDF points: [x0, y0, x1, y1].
+  final List<double>? highlightBbox;
 
   @override
   State<PdfContinuousPreviewLoader> createState() =>
@@ -489,6 +514,8 @@ class _PdfContinuousPreviewLoaderState extends State<PdfContinuousPreviewLoader>
       navigationController: widget.navigationController,
       onPageVisible: widget.onPageVisible,
       showScrollbar: widget.showScrollbar,
+      highlightPageNumber: widget.highlightPageNumber,
+      highlightBbox: widget.highlightBbox,
     );
   }
 }

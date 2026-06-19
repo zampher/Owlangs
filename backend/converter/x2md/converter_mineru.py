@@ -185,6 +185,20 @@ class ConverterMineruConfig(X2MarkdownConverterConfig):
 # Increased pool timeout to avoid exhaustion during frequent polling.
 timeout = httpx.Timeout(connect=60.0, read=600.0, write=600.0, pool=30.0)
 
+# Local MinerU timeout: sync /file_parse endpoint blocks until processing
+# completes, so the read timeout must accommodate the worst-case processing
+# time for large documents (up to 30 minutes).
+_local_timeout = httpx.Timeout(connect=30.0, read=3600.0, write=300.0, pool=30.0)
+
+# Retry settings for local MinerU API calls.
+# IMPORTANT: Only retry on connection-level errors (ConnectError,
+# RemoteProtocolError). Do NOT retry on ReadTimeout/WriteTimeout because
+# the sync /file_parse endpoint is blocking — a timeout means the server
+# is still processing, and retrying would re-upload the file and restart
+# processing from scratch, making the situation worse.
+_LOCAL_MINERU_RETRY_COUNT = 2  # 3 total attempts
+_LOCAL_MINERU_RETRY_DELAY_BASE = 3  # seconds (3, 9, 27 with multiplier 3x)
+
 import ssl
 ssl_context = ssl.create_default_context()
 ssl_context.check_hostname = False
@@ -744,6 +758,47 @@ class MinerULocalBackend(MinerUBackend):
         
         return headers, body_bytes, content_type
     
+    def _make_local_request_with_retry(self, url: str, headers: Dict,
+                                       body_bytes: bytes) -> httpx.Response:
+        """Make HTTP POST request to local MinerU with retry logic.
+
+        Only retries on connection-level errors (ConnectError,
+        RemoteProtocolError) with exponential backoff (3s → 9s → 27s).
+        ReadTimeout and WriteTimeout are NOT retried because the sync
+        /file_parse endpoint is blocking — a timeout means the server is
+        still processing, and retrying would re-upload and restart.
+        """
+        max_attempts = _LOCAL_MINERU_RETRY_COUNT + 1
+        last_error: Optional[Exception] = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                with httpx.Client(
+                    trust_env=False,
+                    timeout=_local_timeout,
+                    verify=False,
+                    limits=limits,
+                    proxy=None,
+                    mounts={'http://': None, 'https://': None},
+                ) as client:
+                    response = client.post(url, headers=headers,
+                                          content=body_bytes)
+                    return response
+            except (httpx.ConnectError, httpx.RemoteProtocolError) as e:
+                last_error = e
+                if attempt < max_attempts:
+                    wait_s = _LOCAL_MINERU_RETRY_DELAY_BASE * (3 ** (attempt - 1))
+                    logger.warning(
+                        LogModule.CONVERT,
+                        f"[MINERU Local] Request failed (attempt {attempt}/{max_attempts}), "
+                        f"retrying in {wait_s}s: {e}"
+                    )
+                    time.sleep(wait_s)
+                else:
+                    raise last_error
+
+        # Should not reach here; raise last known error as safety net
+        raise last_error  # type: ignore[misc]
+
     def upload(self, document: Document) -> str:
         """Upload document to local MinerU using sync parsing."""
         url = self._get_upload_sync_endpoint()
@@ -770,82 +825,122 @@ class MinerULocalBackend(MinerUBackend):
                 document.name,
             ),
         )
-        
-        with httpx.Client(trust_env=False, timeout=timeout, verify=False, limits=limits, proxy=None, mounts={'http://': None, 'https://': None}) as client:
-            response = client.post(url, headers=headers, content=body_bytes)
-            
-            if response.status_code != 200:
-                raise Exception(_format_local_mineru_upload_error(response.status_code, response.text))
-            
-            # Response should be ZIP file
-            content_type = response.headers.get('content-type', '')
-            if 'zip' in content_type or response.content[:2] == b'PK':
-                # Got ZIP directly
-                zip_size = len(response.content)
-                logger.info(LogModule.CONVERT, f"[MINERU Local] Received ZIP response: {zip_size} bytes, content-type={content_type}")
-                
-                # Save ZIP to task temp directory if available, otherwise to system temp
-                zip_bytes = response.content
-                temp_dir = tempfile.gettempdir()
-                logger.info(LogModule.CONVERT, f"[MINERU Local] Temp directory: {temp_dir}")
-                
-                # Try to find current task directory (owlangs_*)
-                task_dirs = [d for d in glob.glob(os.path.join(temp_dir, "owlangs_*")) if os.path.isdir(d)]
-                logger.info(LogModule.CONVERT, f"[MINERU Local] Found {len(task_dirs)} task directories: {task_dirs[:3]}")
-                
-                if task_dirs:
-                    # Use most recent task directory
-                    task_dir = max(task_dirs, key=os.path.getmtime)
-                    zip_path = os.path.join(task_dir, "mineru_response.zip")
-                    logger.info(LogModule.CONVERT, f"[MINERU Local] Using task directory: {task_dir}")
-                else:
-                    zip_path = os.path.join(temp_dir, f"mineru_response_{int(time.time())}.zip")
-                    logger.info(LogModule.CONVERT, f"[MINERU Local] No task directory found, using temp: {zip_path}")
-                
-                logger.info(LogModule.CONVERT, f"[MINERU Local] Attempting to save ZIP to: {zip_path}")
-                try:
-                    # Check if it's really a ZIP (starts with PK)
-                    if zip_bytes[:2] != b'PK':
-                        logger.error(LogModule.CONVERT, f"[MINERU Local] Response is not a ZIP file! First 100 bytes: {zip_bytes[:100]}")
-                        try:
-                            # Try to decode as JSON for error message
-                            error_json = json.loads(zip_bytes.decode('utf-8'))
-                            logger.error(LogModule.CONVERT, f"[MINERU Local] Error response: {error_json}")
-                        except:
-                            pass
-                    
-                    with open(zip_path, 'wb') as f:
-                        f.write(zip_bytes)
-                    logger.info(LogModule.CONVERT, f"[MINERU Local] SUCCESS: Saved ZIP to: {zip_path} ({os.path.getsize(zip_path)} bytes)")
-                    
-                    # Log ZIP contents with detailed file sizes
-                    try:
-                        with zipfile.ZipFile(zip_path, 'r') as zf:
-                            file_list = zf.namelist()
-                            logger.info(LogModule.CONVERT, f"[MINERU Local] ZIP contents ({len(file_list)} files):")
-                            for f in file_list:
-                                info = zf.getinfo(f)
-                                logger.info(LogModule.CONVERT, f"  - {f} ({info.file_size} bytes)")
-                    except Exception as e:
-                        logger.error(LogModule.CONVERT, f"[MINERU Local] Failed to read ZIP contents: {e}")
-                        
-                except Exception as e:
-                    logger.error(LogModule.CONVERT, f"[MINERU Local] FAILED to save ZIP: {e}")
 
-                self._pending_sync_zip_bytes = zip_bytes
-                return _LOCAL_MINERU_SYNC_TASK_ID
+        response = self._make_local_request_with_retry(url, headers, body_bytes)
+
+        if response.status_code != 200:
+            raise Exception(_format_local_mineru_upload_error(response.status_code, response.text))
+
+        # Response should be ZIP file
+        content_type = response.headers.get('content-type', '')
+        if 'zip' in content_type or response.content[:2] == b'PK':
+            # Got ZIP directly
+            zip_size = len(response.content)
+            logger.info(LogModule.CONVERT, f"[MINERU Local] Received ZIP response: {zip_size} bytes, content-type={content_type}")
+
+            # Save ZIP to task temp directory if available, otherwise to system temp
+            zip_bytes = response.content
+            temp_dir = tempfile.gettempdir()
+            logger.info(LogModule.CONVERT, f"[MINERU Local] Temp directory: {temp_dir}")
+
+            # Try to find current task directory (owlangs_*)
+            task_dirs = [d for d in glob.glob(os.path.join(temp_dir, "owlangs_*")) if os.path.isdir(d)]
+            logger.info(LogModule.CONVERT, f"[MINERU Local] Found {len(task_dirs)} task directories: {task_dirs[:3]}")
+
+            if task_dirs:
+                # Use most recent task directory
+                task_dir = max(task_dirs, key=os.path.getmtime)
+                zip_path = os.path.join(task_dir, "mineru_response.zip")
+                logger.info(LogModule.CONVERT, f"[MINERU Local] Using task directory: {task_dir}")
             else:
-                # Got JSON response
+                zip_path = os.path.join(temp_dir, f"mineru_response_{int(time.time())}.zip")
+                logger.info(LogModule.CONVERT, f"[MINERU Local] No task directory found, using temp: {zip_path}")
+
+            logger.info(LogModule.CONVERT, f"[MINERU Local] Attempting to save ZIP to: {zip_path}")
+            try:
+                # Check if it's really a ZIP (starts with PK)
+                if zip_bytes[:2] != b'PK':
+                    logger.error(LogModule.CONVERT, f"[MINERU Local] Response is not a ZIP file! First 100 bytes: {zip_bytes[:100]}")
+                    try:
+                        # Try to decode as JSON for error message
+                        error_json = json.loads(zip_bytes.decode('utf-8'))
+                        logger.error(LogModule.CONVERT, f"[MINERU Local] Error response: {error_json}")
+                    except:
+                        pass
+
+                with open(zip_path, 'wb') as f:
+                    f.write(zip_bytes)
+                logger.info(LogModule.CONVERT, f"[MINERU Local] SUCCESS: Saved ZIP to: {zip_path} ({os.path.getsize(zip_path)} bytes)")
+
+                # Log ZIP contents with detailed file sizes
                 try:
-                    result = response.json()
-                    # Check if there's a task ID for async
-                    if 'task_id' in result:
-                        return result['task_id']
-                    else:
-                        raise Exception(f"Unexpected response: {result}")
-                except json.JSONDecodeError:
-                    raise Exception(f"Unexpected response format: {response.text[:500]}")
+                    with zipfile.ZipFile(zip_path, 'r') as zf:
+                        file_list = zf.namelist()
+                        logger.info(LogModule.CONVERT, f"[MINERU Local] ZIP contents ({len(file_list)} files):")
+                        for f in file_list:
+                            info = zf.getinfo(f)
+                            logger.info(LogModule.CONVERT, f"  - {f} ({info.file_size} bytes)")
+                except Exception as e:
+                    logger.error(LogModule.CONVERT, f"[MINERU Local] Failed to read ZIP contents: {e}")
+
+            except Exception as e:
+                logger.error(LogModule.CONVERT, f"[MINERU Local] FAILED to save ZIP: {e}")
+
+            self._pending_sync_zip_bytes = zip_bytes
+            return _LOCAL_MINERU_SYNC_TASK_ID
+        else:
+            # Got JSON response
+            try:
+                result = response.json()
+                # Check if there's a task ID for async
+                if 'task_id' in result:
+                    return result['task_id']
+                else:
+                    raise Exception(f"Unexpected response: {result}")
+            except json.JSONDecodeError:
+                raise Exception(f"Unexpected response format: {response.text[:500]}")
     
+    async def _make_local_request_with_retry_async(
+        self, url: str, headers: Dict, body_bytes: bytes,
+    ) -> httpx.Response:
+        """Async HTTP POST to local MinerU with retry logic.
+
+        Only retries on connection-level errors (ConnectError,
+        RemoteProtocolError) with exponential backoff (3s → 9s → 27s).
+        ReadTimeout and WriteTimeout are NOT retried because the sync
+        /file_parse endpoint is blocking — a timeout means the server is
+        still processing, and retrying would re-upload and restart.
+        """
+        max_attempts = _LOCAL_MINERU_RETRY_COUNT + 1
+        last_error: Optional[Exception] = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with httpx.AsyncClient(
+                    trust_env=False,
+                    timeout=_local_timeout,
+                    verify=False,
+                    limits=limits,
+                    proxy=None,
+                    mounts={'http://': None, 'https://': None},
+                ) as client:
+                    response = await client.post(url, headers=headers,
+                                                 content=body_bytes)
+                    return response
+            except (httpx.ConnectError, httpx.RemoteProtocolError) as e:
+                last_error = e
+                if attempt < max_attempts:
+                    wait_s = _LOCAL_MINERU_RETRY_DELAY_BASE * (3 ** (attempt - 1))
+                    logger.warning(
+                        LogModule.CONVERT,
+                        f"[MINERU Local] Async request failed (attempt {attempt}/{max_attempts}), "
+                        f"retrying in {wait_s}s: {e}"
+                    )
+                    await asyncio.sleep(wait_s)
+                else:
+                    raise last_error
+
+        raise last_error  # type: ignore[misc]
+
     async def upload_async(self, document: Document) -> str:
         """Async upload document to local MinerU."""
         url = self._get_upload_sync_endpoint()
@@ -872,30 +967,31 @@ class MinerULocalBackend(MinerUBackend):
                 document.name,
             ),
         )
-        
-        async with httpx.AsyncClient(trust_env=False, timeout=timeout, verify=False, limits=limits, proxy=None, mounts={'http://': None, 'https://': None}) as client:
-            response = await client.post(url, headers=headers, content=body_bytes)
-            
-            if response.status_code != 200:
-                raise Exception(_format_local_mineru_upload_error(response.status_code, response.text))
-            
-            # Response should be ZIP file
-            content_type = response.headers.get('content-type', '')
-            if 'zip' in content_type or response.content[:2] == b'PK':
-                # Got ZIP directly
-                zip_size = len(response.content)
-                logger.info(LogModule.CONVERT, f"[MINERU Local] Async received ZIP response: {zip_size} bytes, content-type={content_type}")
-                self._pending_sync_zip_bytes = response.content
-                return _LOCAL_MINERU_SYNC_TASK_ID
-            else:
-                try:
-                    result = response.json()
-                    if 'task_id' in result:
-                        return result['task_id']
-                    else:
-                        raise Exception(f"Unexpected response: {result}")
-                except json.JSONDecodeError:
-                    raise Exception(f"Unexpected response format: {response.text[:500]}")
+
+        response = await self._make_local_request_with_retry_async(
+            url, headers, body_bytes,
+        )
+
+        if response.status_code != 200:
+            raise Exception(_format_local_mineru_upload_error(response.status_code, response.text))
+
+        # Response should be ZIP file
+        content_type = response.headers.get('content-type', '')
+        if 'zip' in content_type or response.content[:2] == b'PK':
+            # Got ZIP directly
+            zip_size = len(response.content)
+            logger.info(LogModule.CONVERT, f"[MINERU Local] Async received ZIP response: {zip_size} bytes, content-type={content_type}")
+            self._pending_sync_zip_bytes = response.content
+            return _LOCAL_MINERU_SYNC_TASK_ID
+        else:
+            try:
+                result = response.json()
+                if 'task_id' in result:
+                    return result['task_id']
+                else:
+                    raise Exception(f"Unexpected response: {result}")
+            except json.JSONDecodeError:
+                raise Exception(f"Unexpected response format: {response.text[:500]}")
     
     def get_result(self, task_id: str) -> Tuple[str, bytes]:
         """Get parsing result."""

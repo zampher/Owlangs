@@ -63,6 +63,8 @@ class PdfCompareContinuousView extends StatefulWidget {
     this.columnGap = 1,
     this.onVisiblePageChanged,
     this.navigationController,
+    this.highlightPageNumber,
+    this.highlightBbox,
   });
 
   final String sourceDownloadUrl;
@@ -73,6 +75,12 @@ class PdfCompareContinuousView extends StatefulWidget {
   final double columnGap;
   final void Function(int page, int totalPages)? onVisiblePageChanged;
   final PdfCompareContinuousScrollController? navigationController;
+
+  /// When non-null, the page number (1-based) whose bbox should be highlighted.
+  final int? highlightPageNumber;
+
+  /// Bbox in PDF points `[x0, y0, x1, y1]` to highlight on the matching page.
+  final List<double>? highlightBbox;
 
   @override
   State<PdfCompareContinuousView> createState() =>
@@ -421,6 +429,10 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                               document: source,
                               pageNumber: pageNumber,
                               maxWidth: columnWidth - 16,
+                              highlightBbox: (widget.highlightPageNumber ==
+                                      pageNumber)
+                                  ? widget.highlightBbox
+                                  : null,
                             )
                           : const SizedBox.shrink(),
                     ),
@@ -431,6 +443,10 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                               document: target,
                               pageNumber: pageNumber,
                               maxWidth: columnWidth - 16,
+                              highlightBbox: (widget.highlightPageNumber ==
+                                      pageNumber)
+                                  ? widget.highlightBbox
+                                  : null,
                             )
                           : const SizedBox.shrink(),
                     ),
@@ -471,6 +487,10 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                         document: source,
                         pageNumber: pageNumber,
                         maxWidth: constraints.maxWidth - 16,
+                        highlightBbox:
+                            (widget.highlightPageNumber == pageNumber)
+                                ? widget.highlightBbox
+                                : null,
                       );
                     },
                   ),
@@ -503,6 +523,10 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                         document: target,
                         pageNumber: pageNumber,
                         maxWidth: constraints.maxWidth - 16,
+                        highlightBbox:
+                            (widget.highlightPageNumber == pageNumber)
+                                ? widget.highlightBbox
+                                : null,
                       );
                     },
                   ),

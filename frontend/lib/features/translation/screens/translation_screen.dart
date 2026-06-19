@@ -3518,12 +3518,17 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           // This ensures users can see Convert progress and results
           _addFormatConversionTab(taskId, <String, String>{});
 
-          // Poll for status (similar to translation)
+          // Poll for status (similar to translation).
+          // Large PDF files can take 15+ minutes for MinerU processing;
+          // use 30-minute timeout with 4 s interval to reduce main-thread
+          // pressure on Windows.
           final TranslationService svc = TranslationService();
           // Note: Format conversion does not require language detection,
           // so we skip the language match warning check for format conversion tasks
           final Map<String, dynamic> statusResp = await svc.pollUntilDone(
             taskId,
+            timeoutSec: 1800,
+            intervalSec: 4,
             onUpdate: (Map<String, dynamic> st) {
               final String backendStatus = (st['status'] ?? '').toString();
               final String backendMessage = (st['message'] ?? '').toString();
@@ -5490,6 +5495,8 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
 
       final Map<String, dynamic> statusResp = await svc.pollUntilDone(
         taskId,
+        timeoutSec: 1800,
+        intervalSec: 3,
         onUpdate: (Map<String, dynamic> st) async {
           final String backendStatus = (st['status'] ?? '').toString();
           final String backendMessage = (st['message'] ?? '').toString();

@@ -1359,6 +1359,8 @@
   "translationPreviewAutoRefreshPdf": "PDF 自動更新",
   "translationPreviewFollowSegmentPage": "セグメントページに追従",
   "translationPreviewFollowSegmentPageDesc": "有効にすると、セグメントをクリックまたは選択したときに訳文 PDF プレビューが該当ページにジャンプします",
+  "translationPreviewMarkSelectedSegment": "選択セグメントをマーク",
+  "translationPreviewMarkSelectedSegmentDesc": "有効にすると、訳文プレビューで選択中のセグメント位置を枠で表示します",
   "translationPreviewPdfPageIndicator": "{current} / {total} ページ",
   "@translationPreviewPdfPageIndicator": {
     "placeholders": {

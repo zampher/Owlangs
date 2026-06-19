@@ -209,6 +209,15 @@ def _ensure_segment_layout_block_indices(
     """Attach layout_block_indices from task maps when segments lack them."""
     if not segments_list:
         return
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        is_image_overlay_task,
+    )
+
+    # Raster JPG/PNG uses markdown segments that do not align 1:1 with this map
+    # (details/image fragments). Overlay reassignment handles those tasks.
+    if is_image_overlay_task(task_state):
+        return
+
     ts_mod = _ts_module()
     seg_map = task_state.get("segment_layout_block_map")
     if isinstance(seg_map, list) and seg_map:
@@ -217,6 +226,296 @@ def _ensure_segment_layout_block_indices(
     chunk_map = task_state.get("layout_chunk_block_map")
     if isinstance(chunk_map, list) and chunk_map:
         ts_mod._apply_layout_block_indices_to_segments(segments_list, chunk_map)
+
+
+def _enrich_segments_layout_block_bbox(
+    task_id: str,
+    task_state: Dict[str, Any],
+    segments_list: List[Dict[str, Any]],
+) -> None:
+    """Attach layout_block_bbox to segments that have layout_block_indices but lack bbox.
+
+    This covers tasks recorded before bbox was stored, and tasks where
+    layout_document / bbox_map becomes available later (e.g. reloaded from ZIP).
+    """
+    if not segments_list:
+        return
+
+    layout_doc = _resolve_layout_document(task_id, task_state)
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        is_image_overlay_task,
+    )
+
+    if is_image_overlay_task(task_state):
+        if layout_doc is not None:
+            _reassign_image_overlay_layout_block_indices(
+                task_id,
+                task_state,
+                segments_list,
+                layout_doc=layout_doc,
+            )
+    else:
+        # Ensure segments have layout_block_indices first (may need to restore
+        # from task_state maps). This is normally done in _enrich_segments_pdf_typography
+        # but we must do it here too because we run before that function.
+        _ensure_segment_layout_block_indices(segments_list, task_state)
+
+        # Content-based fallback for segments still missing layout_block_indices
+        # (e.g. deep_split text segments not covered by segment_layout_block_map).
+        if layout_doc is not None:
+            unmapped = [
+                seg for seg in segments_list
+                if isinstance(seg, dict) and not seg.get("layout_block_indices")
+            ]
+            if unmapped:
+                try:
+                    source_chunks = [
+                        str(seg.get("source_text") or "") for seg in unmapped
+                    ]
+                    ts_mod = _ts_module()
+                    ts_mod._map_segments_to_layout_blocks(
+                        unmapped, source_chunks, layout_doc, logger
+                    )
+                    mapped_now = sum(
+                        1 for seg in unmapped if seg.get("layout_block_indices")
+                    )
+                    if mapped_now > 0:
+                        logger.info(
+                            LogModule.ROUTE,
+                            f"[TRANSLATION-SEGMENTS-API] Task {task_id}: "
+                            f"Mapped {mapped_now}/{len(unmapped)} previously unmapped "
+                            f"segments via layout_document content match"
+                        )
+                except Exception as fallback_err:
+                    logger.debug(
+                        LogModule.ROUTE,
+                        f"[TRANSLATION-SEGMENTS-API] Task {task_id}: "
+                        f"layout_document fallback mapping failed: {fallback_err}"
+                    )
+
+    if layout_doc is None:
+        layout_doc = _resolve_layout_document(task_id, task_state)
+
+    # Find segments that have layout_block_indices but no usable layout_block_bbox
+    from utils.format_convert_utils import (
+        bboxes_for_layout_block_indices,
+        normalize_layout_block_bbox_map,
+        segment_needs_layout_block_bbox,
+    )
+
+    if is_image_overlay_task(task_state):
+        needs_bbox = [
+            seg
+            for seg in segments_list
+            if isinstance(seg, dict) and seg.get("layout_block_indices")
+        ]
+    else:
+        needs_bbox = [
+            seg for seg in segments_list
+            if isinstance(seg, dict) and segment_needs_layout_block_bbox(seg)
+        ]
+    if not needs_bbox:
+        # Log diagnostic info to understand why bbox enrichment is skipped
+        has_indices = sum(
+            1 for seg in segments_list
+            if isinstance(seg, dict) and seg.get("layout_block_indices")
+        )
+        has_bbox = sum(
+            1 for seg in segments_list
+            if isinstance(seg, dict)
+            and seg.get("layout_block_bbox")
+            and isinstance(seg.get("layout_block_bbox"), list)
+            and len(seg.get("layout_block_bbox")) > 0
+        )
+        logger.debug(
+            LogModule.ROUTE,
+            f"[LAYOUT-BBOX] Task {task_id}: enrichment skipped "
+            f"(total={len(segments_list)}, with_indices={has_indices}, "
+            f"with_nonempty_bbox={has_bbox})",
+        )
+        return
+
+    logger.info(
+        LogModule.ROUTE,
+        f"[LAYOUT-BBOX] Task {task_id}: enriching {len(needs_bbox)} segment(s) "
+        f"missing layout_block_bbox",
+    )
+
+    bbox_map = normalize_layout_block_bbox_map(task_state.get("layout_block_bbox"))
+    if not bbox_map:
+        if layout_doc is None:
+            layout_doc = _resolve_layout_document(task_id, task_state)
+        if layout_doc is not None:
+            try:
+                from utils.format_convert_utils import get_layout_block_bbox
+
+                bbox_map = get_layout_block_bbox(layout_doc)
+                if bbox_map:
+                    task_state["layout_block_bbox"] = bbox_map
+                    logger.info(
+                        LogModule.ROUTE,
+                        f"[TRANSLATION-SEGMENTS-API] Task {task_id}: "
+                        f"Built layout_block_bbox for {len(bbox_map)} blocks on demand"
+                    )
+            except Exception as e:
+                logger.debug(
+                    LogModule.ROUTE,
+                    f"[TRANSLATION-SEGMENTS-API] Failed to build layout_block_bbox on demand: {e}"
+                )
+                return
+        else:
+            logger.debug(
+                LogModule.ROUTE,
+                f"[TRANSLATION-SEGMENTS-API] Task {task_id}: "
+                f"{len(needs_bbox)} segments need bbox but layout_document "
+                f"not available (reload from ZIP failed)"
+            )
+            return
+
+    if not bbox_map and layout_doc is None:
+        layout_doc = _resolve_layout_document(task_id, task_state)
+
+    logger.info(
+        LogModule.ROUTE,
+        f"[LAYOUT-BBOX] Task {task_id}: bbox_map blocks={len(bbox_map)}, "
+        f"layout_doc={'yes' if layout_doc is not None else 'no'}",
+    )
+
+    enriched = 0
+    failed: List[str] = []
+    for seg in needs_bbox:
+        bidxs = seg.get("layout_block_indices", [])
+        detail = bboxes_for_layout_block_indices(
+            bidxs,
+            bbox_map,
+            layout_document=layout_doc,
+            return_miss_detail=True,
+        )
+        seg_bboxes = detail.get("bboxes", []) if isinstance(detail, dict) else []
+        seg_idx = seg.get("segment_index", "?")
+        if seg_bboxes:
+            seg["layout_block_bbox"] = seg_bboxes
+            enriched += 1
+            extra = f" (+{len(seg_bboxes) - 1} more)" if len(seg_bboxes) > 1 else ""
+            logger.debug(
+                LogModule.ROUTE,
+                f"[LAYOUT-BBOX] Task {task_id} segment {seg_idx}: "
+                f"indices={bidxs} -> bbox={seg_bboxes[0]}{extra}",
+            )
+        else:
+            seg.pop("layout_block_bbox", None)
+            if isinstance(detail, dict):
+                failed.append(
+                    f"seg={seg_idx} indices={bidxs} "
+                    f"miss={detail.get('missed', [])} "
+                    f"map_blocks={detail.get('map_block_count', 0)} "
+                    f"map_keys_sample={detail.get('map_keys_sample', [])}"
+                )
+            else:
+                failed.append(f"seg={seg_idx} indices={bidxs} resolved=[]")
+
+    if enriched > 0:
+        logger.info(
+            LogModule.ROUTE,
+            f"[LAYOUT-BBOX] Task {task_id}: enriched {enriched}/{len(needs_bbox)} "
+            f"segment(s) with layout_block_bbox",
+        )
+    if failed:
+        preview = "; ".join(failed[:8])
+        if len(failed) > 8:
+            preview += f"; ... +{len(failed) - 8} more"
+        logger.warning(
+            LogModule.ROUTE,
+            f"[LAYOUT-BBOX] Task {task_id}: {len(failed)} segment(s) still "
+            f"without bbox after enrich: {preview}",
+        )
+
+
+def _reassign_image_overlay_layout_block_indices(
+    task_id: str,
+    task_state: Dict[str, Any],
+    segments_list: List[Dict[str, Any]],
+    *,
+    layout_doc: Any = None,
+) -> None:
+    """Fix segment->block mapping for raster overlay tasks (source_text_match)."""
+    from layout.image_overlay.block_text_map import (
+        assign_overlay_layout_block_indices_for_segments,
+    )
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        is_image_overlay_task,
+    )
+
+    if not is_image_overlay_task(task_state):
+        return
+    if layout_doc is None:
+        layout_doc = _resolve_layout_document(task_id, task_state)
+    if layout_doc is None:
+        return
+
+    updated = assign_overlay_layout_block_indices_for_segments(
+        segments_list,
+        layout_doc,
+        task_state,
+        claim_blocks=True,
+    )
+    if updated > 0:
+        logger.info(
+            LogModule.ROUTE,
+            f"[LAYOUT-BBOX] Task {task_id}: realigned layout_block_indices for "
+            f"{updated} image overlay segment(s)",
+        )
+    # Always rebuild bbox after index realignment (stored bbox may target wrong block).
+    for seg in segments_list:
+        if isinstance(seg, dict) and seg.get("layout_block_indices"):
+            seg.pop("layout_block_bbox", None)
+            seg.pop("layout_block_bbox_space", None)
+
+
+def _transform_image_overlay_bboxes_to_pixels(
+    task_id: str,
+    task_state: Dict[str, Any],
+    segments_list: List[Dict[str, Any]],
+    *,
+    layout_doc: Any = None,
+) -> None:
+    """Convert layout_block_bbox from layout coords to image pixels for raster preview."""
+    from layout.image_overlay.renderer import transform_segment_bboxes_to_image_pixels
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        is_image_overlay_task,
+        resolve_image_overlay_image_size,
+    )
+
+    if not is_image_overlay_task(task_state):
+        return
+    if layout_doc is None:
+        layout_doc = _resolve_layout_document(task_id, task_state)
+    image_size = resolve_image_overlay_image_size(task_state, layout_doc=layout_doc)
+    if not image_size or layout_doc is None:
+        logger.debug(
+            LogModule.ROUTE,
+            f"[LAYOUT-BBOX] Task {task_id}: skip image-pixel bbox transform "
+            f"(image_size={image_size}, layout_doc={'yes' if layout_doc else 'no'})",
+        )
+        return
+
+    transformed = 0
+    for seg in segments_list:
+        if not isinstance(seg, dict):
+            continue
+        if transform_segment_bboxes_to_image_pixels(
+            seg,
+            layout_doc=layout_doc,
+            image_size=image_size,
+        ):
+            transformed += 1
+    if transformed > 0:
+        logger.info(
+            LogModule.ROUTE,
+            f"[LAYOUT-BBOX] Task {task_id}: scaled layout_block_bbox to image "
+            f"pixels for {transformed} segment(s) "
+            f"(image_size={list(image_size)})",
+        )
 
 
 def _enrich_segments_pdf_typography(
@@ -419,6 +718,18 @@ async def get_translation_segments_api(
         if isinstance(seg, dict):
             text = seg.get("modified_text") or seg.get("target_text") or seg.get("source_text") or ""
             seg["has_latex"] = has_latex_content(text)
+
+    # Enrich segments with layout_block_bbox on demand (for segments that have
+    # layout_block_indices but lack stored bbox, e.g. from older tasks).
+    if isinstance(response_data, dict):
+        segments_list = response_data.get("segments", [])
+        if isinstance(segments_list, list) and segments_list:
+            _enrich_segments_layout_block_bbox(task_id, task_state, segments_list)
+            _transform_image_overlay_bboxes_to_pixels(
+                task_id,
+                task_state,
+                segments_list,
+            )
 
     # Enrich PDF layout segments with computed/user font size metadata.
     if isinstance(response_data, dict):

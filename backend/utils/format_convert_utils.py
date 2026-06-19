@@ -13,7 +13,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from docx import Document
 from docx.oxml.ns import qn
@@ -1954,6 +1954,100 @@ def get_layout_block_bbox(layout_document: Any) -> Dict[int, Tuple[float, float,
     except Exception as e:
         logger.debug(LogModule.RESTOR, f"get_layout_block_bbox failed: {e}")
     return out
+
+
+def normalize_layout_block_bbox_map(
+    raw_map: Any,
+) -> Dict[int, Tuple[float, float, float, float]]:
+    """Normalize block-index -> bbox map (int keys, float 4-tuple values)."""
+    out: Dict[int, Tuple[float, float, float, float]] = {}
+    if not isinstance(raw_map, dict):
+        return out
+    for k, v in raw_map.items():
+        if v is None:
+            continue
+        try:
+            bidx = int(k)
+            if not hasattr(v, "__iter__") or isinstance(v, (str, bytes)):
+                continue
+            coords = list(v)
+            if len(coords) < 4:
+                continue
+            out[bidx] = (
+                float(coords[0]),
+                float(coords[1]),
+                float(coords[2]),
+                float(coords[3]),
+            )
+        except (TypeError, ValueError, IndexError):
+            continue
+    return out
+
+
+def bboxes_for_layout_block_indices(
+    block_indices: Any,
+    bbox_map: Optional[Dict[Any, Any]] = None,
+    *,
+    layout_document: Any = None,
+    return_miss_detail: bool = False,
+) -> Union[List[List[float]], Dict[str, Any]]:
+    """Resolve per-segment layout_block_bbox from block indices (JSON-safe lists)."""
+    if not block_indices:
+        if return_miss_detail:
+            return {"bboxes": [], "missed": [], "map_keys_sample": []}
+        return []
+    lookup = normalize_layout_block_bbox_map(bbox_map)
+    if not lookup and layout_document is not None:
+        lookup = get_layout_block_bbox(layout_document)
+
+    doc_by_index: Dict[int, Tuple[float, float, float, float]] = {}
+    if layout_document is not None:
+        try:
+            from layout.base import LayoutDocument as _LD
+
+            if isinstance(layout_document, _LD):
+                for block in layout_document.iter_blocks():
+                    if block.index is not None and getattr(block, "bbox", None):
+                        doc_by_index[int(block.index)] = tuple(
+                            float(x) for x in block.bbox[:4]
+                        )
+        except Exception:
+            pass
+
+    result: List[List[float]] = []
+    missed: List[int] = []
+    for raw_idx in block_indices:
+        try:
+            bidx = int(raw_idx)
+        except (TypeError, ValueError):
+            continue
+        bbox = lookup.get(bidx) or doc_by_index.get(bidx)
+        if bbox is not None:
+            result.append(
+                [float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])]
+            )
+        else:
+            missed.append(bidx)
+
+    if return_miss_detail:
+        map_keys = sorted(set(lookup.keys()) | set(doc_by_index.keys()))
+        return {
+            "bboxes": result,
+            "missed": missed,
+            "map_keys_sample": map_keys[:12],
+            "map_block_count": len(map_keys),
+        }
+    return result
+
+
+def segment_needs_layout_block_bbox(segment: Dict[str, Any]) -> bool:
+    """True when segment has block indices but no usable layout_block_bbox."""
+    if not segment.get("layout_block_indices"):
+        return False
+    existing = segment.get("layout_block_bbox")
+    if existing is None:
+        return True
+    return isinstance(existing, list) and len(existing) == 0
 
 
 def _log_latex_error_context(stderr: str, tex_path: Path, md_path: Optional[Path]) -> None:

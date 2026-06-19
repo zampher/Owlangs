@@ -139,6 +139,26 @@ def _extract_image_path_from_layout_block(block_data: Dict[str, Any]) -> Optiona
     return None
 
 
+def extract_mineru_image_span_content(block_data: Dict[str, Any]) -> Optional[str]:
+    """OCR / alt text stored on MinerU image spans (e.g. text_image content=DAYONE)."""
+    blocks = block_data.get("blocks") or []
+    for sub_block in blocks:
+        if not isinstance(sub_block, dict):
+            continue
+        for line in sub_block.get("lines") or []:
+            if not isinstance(line, dict):
+                continue
+            for span in line.get("spans") or []:
+                if not isinstance(span, dict):
+                    continue
+                if span.get("type") != "image":
+                    continue
+                content = span.get("content")
+                if isinstance(content, str) and content.strip():
+                    return content.strip()
+    return None
+
+
 _LIST_CONTAINER_TYPES = frozenset({"list", "ref_list", "references"})
 
 
@@ -218,6 +238,10 @@ def _append_mineru_block_to_pages(
     img_path = _extract_image_path_from_layout_block(block_data)
     if block_type == "image" and not img_path:
         img_path = _extract_image_path_from_layout_block(block_data)
+    if block_type == "image" and not text:
+        span_content = extract_mineru_image_span_content(block_data)
+        if span_content:
+            text = span_content
 
     block = LayoutBlock(
         page_index=page_idx,

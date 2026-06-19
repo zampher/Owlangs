@@ -623,7 +623,13 @@ class _TranslationResultPreviewState
   late final ValueNotifier<int> _pdfPreviewJumpPageTriggerNotifier =
       ValueNotifier<int>(0);
   int _pdfPreviewJumpPageTrigger = 0;
+  late final ValueNotifier<int?> _pdfHighlightBboxPageNotifier =
+      ValueNotifier<int?>(null);
+  late final ValueNotifier<List<double>?> _pdfHighlightBboxNotifier =
+      ValueNotifier<List<double>?>(null);
   late final ValueNotifier<bool> _autoFollowSegmentPdfPageNotifier =
+      ValueNotifier<bool>(true);
+  late final ValueNotifier<bool> _showSelectedSegmentMarkerNotifier =
       ValueNotifier<bool>(true);
   bool _isRefreshingForFilter = false;
 
@@ -1025,7 +1031,10 @@ class _TranslationResultPreviewState
     _selectedPdfPageNumbersNotifier.dispose();
     _pdfPreviewJumpPageNotifier.dispose();
     _pdfPreviewJumpPageTriggerNotifier.dispose();
+    _pdfHighlightBboxPageNotifier.dispose();
+    _pdfHighlightBboxNotifier.dispose();
     _autoFollowSegmentPdfPageNotifier.dispose();
+    _showSelectedSegmentMarkerNotifier.dispose();
     _highlightedIndexNotifier.dispose();
     _pdfPreviewRevisionNotifier.dispose();
     _pdfPreviewDirtySegmentsNotifier.dispose();
@@ -1255,6 +1264,68 @@ class _TranslationResultPreviewState
     return null;
   }
 
+  /// Parse `layout_block_bbox` from an API segment dict into
+  /// `List<List<double>>` (list of [x0, y0, x1, y1] entries in PDF points).
+  static List<List<double>>? _parseLayoutBlockBbox(dynamic raw) {
+    if (raw is! List || raw.isEmpty) {
+      return null;
+    }
+    // Single bbox flat list: [x0, y0, x1, y1]
+    if (raw.length >= 4 && raw[0] is num) {
+      return <List<double>>[
+        <double>[
+          (raw[0] as num).toDouble(),
+          (raw[1] as num).toDouble(),
+          (raw[2] as num).toDouble(),
+          (raw[3] as num).toDouble(),
+        ],
+      ];
+    }
+    final List<List<double>> result = <List<double>>[];
+    for (final dynamic entry in raw) {
+      if (entry is List && entry.length >= 4) {
+        result.add(<double>[
+          (entry[0] as num).toDouble(),
+          (entry[1] as num).toDouble(),
+          (entry[2] as num).toDouble(),
+          (entry[3] as num).toDouble(),
+        ]);
+      }
+    }
+    return result.isNotEmpty ? result : null;
+  }
+
+  /// Read the primary (first) layout block bbox for a segment, in image pixel coords.
+  /// Returns `[x0, y0, x1, y1]` or null.
+  List<double>? _readSegmentBbox(int index) {
+    final Map<String, dynamic>? metadata = _allSegmentsMetadata[index];
+    final dynamic raw = metadata?['layout_block_bbox'];
+    final List<List<double>>? parsed = _parseLayoutBlockBbox(raw);
+    if (parsed == null || parsed.isEmpty || parsed.first.length < 4) {
+      return null;
+    }
+    final List<double> first = parsed.first;
+    return <double>[first[0], first[1], first[2], first[3]];
+  }
+
+  static bool _isMineruTextImageLikeSegmentText(String? text) {
+    if (text == null || text.trim().isEmpty) {
+      return false;
+    }
+    final String normalized = text;
+    final RegExp detailsRe = RegExp(r'<details\b', caseSensitive: false);
+    final RegExp summaryRe = RegExp(
+      r'<summary\b[^>]*>\s*(text_image|natural_image)\s*</summary>',
+      caseSensitive: false,
+    );
+    final RegExp closingRe = RegExp(r'</details>', caseSensitive: false);
+    if (detailsRe.hasMatch(normalized) && summaryRe.hasMatch(normalized)) {
+      return true;
+    }
+    // Split markdown closing half, e.g. "DAYONE\n</details>"
+    return closingRe.hasMatch(normalized) && !detailsRe.hasMatch(normalized);
+  }
+
   bool _isAllPdfPagesSelected() {
     if (_selectedPdfPageNumbers.isEmpty) {
       return true;
@@ -1301,11 +1372,50 @@ class _TranslationResultPreviewState
     _pdfPreviewJumpPageTriggerNotifier.value = ++_pdfPreviewJumpPageTrigger;
   }
 
+  void _requestPdfBboxHighlight(int index) {
+    if (!_showSelectedSegmentMarkerNotifier.value) {
+      _clearPdfBboxHighlight();
+      return;
+    }
+    final Map<String, dynamic>? meta = _allSegmentsMetadata[index];
+    final int? page = _readPdfPageNumber(meta);
+    final List<double>? bbox = _readSegmentBbox(index);
+    final dynamic indicesRaw = meta?['layout_block_indices'];
+    final dynamic bboxRaw = meta?['layout_block_bbox'];
+    final dynamic resolution = meta?['layout_block_indices_resolution'];
+    final String? sourceParagraph = index >= 0 && index < _sourceParagraphs.length
+        ? _sourceParagraphs[index]
+        : null;
+    final bool mineruTextImage =
+        _isMineruTextImageLikeSegmentText(sourceParagraph);
+    _translationResultLog(
+      '[BBOX-HIGHLIGHT] segment=$index page=$page '
+      'indices=$indicesRaw resolution=$resolution '
+      'mineru_text_image=$mineruTextImage '
+      'metadata_bbox=$bboxRaw resolved_bbox=${bbox?.toString() ?? "null"}',
+      level: bbox != null ? LogLevel.debug : LogLevel.warn,
+    );
+    if (bbox != null) {
+      final int? resolvedPage =
+          page ?? (_isImageSourceFile() ? 1 : null);
+      _pdfHighlightBboxPageNotifier.value = resolvedPage;
+      _pdfHighlightBboxNotifier.value = bbox;
+    } else {
+      _clearPdfBboxHighlight();
+    }
+  }
+
+  void _clearPdfBboxHighlight() {
+    _pdfHighlightBboxPageNotifier.value = null;
+    _pdfHighlightBboxNotifier.value = null;
+  }
+
   void _followSegmentPdfPage(int index) {
     final int? page = _readPdfPageNumber(_allSegmentsMetadata[index]);
     if (page != null && page >= 1) {
       _requestPdfPreviewJump(page);
     }
+    _requestPdfBboxHighlight(index);
   }
 
   void _setAutoFollowSegmentPdfPage(bool enabled) {
@@ -1315,6 +1425,20 @@ class _TranslationResultPreviewState
     _autoFollowSegmentPdfPageNotifier.value = enabled;
     if (enabled && highlightedIndex != null) {
       _followSegmentPdfPage(highlightedIndex!);
+    }
+  }
+
+  void _setShowSelectedSegmentMarker(bool enabled) {
+    if (_showSelectedSegmentMarkerNotifier.value == enabled) {
+      return;
+    }
+    _showSelectedSegmentMarkerNotifier.value = enabled;
+    if (!enabled) {
+      _clearPdfBboxHighlight();
+      return;
+    }
+    if (highlightedIndex != null) {
+      _requestPdfBboxHighlight(highlightedIndex!);
     }
   }
 
@@ -1668,6 +1792,7 @@ class _TranslationResultPreviewState
             'detected_exclusion_reason': detectedExclusionReason,
             if (exclusionMetadata != null)
               'exclusion_metadata': exclusionMetadata,
+            ..._layoutBlockMetadataFieldsFromApi(segment),
             ...segmentClassificationFieldsFromApi(segment),
             ..._pdfFontSizeMetadataFields(segment),
           };
@@ -1879,6 +2004,7 @@ class _TranslationResultPreviewState
               if (exclusionMetadata != null)
                 'exclusion_metadata': exclusionMetadata,
               ...segmentClassificationFieldsFromApi(segment),
+              ..._layoutBlockMetadataFieldsFromApi(segment),
               ..._pdfFontSizeMetadataFields(segment),
             };
           }
@@ -2113,6 +2239,8 @@ class _TranslationResultPreviewState
 
           // Single pass: Process all segments and fill in source and target
           var processedCount = 0;
+          int layoutIndicesCount = 0;
+          int layoutBboxCount = 0;
           for (final segment in segments) {
             // Extract target_text from segments API (this is the translated text)
             final String targetText = segment['modified_text'] as String? ??
@@ -2259,6 +2387,14 @@ class _TranslationResultPreviewState
             }
 
             // Store metadata for pagination
+            final Map<String, dynamic> layoutFields =
+                _layoutBlockMetadataFieldsFromApi(segment);
+            if (layoutFields.containsKey('layout_block_indices')) {
+              layoutIndicesCount++;
+            }
+            if (layoutFields.containsKey('layout_block_bbox')) {
+              layoutBboxCount++;
+            }
             _allSegmentsMetadata[segmentIndex] = <String, dynamic>{
               'target_text': targetText,
               'platform_used': platformUsed,
@@ -2269,6 +2405,7 @@ class _TranslationResultPreviewState
               'is_excluded': isExcluded,
               'exclusion_reason': exclusionReason,
               'used_platforms': usedPlatforms,
+              ...layoutFields,
             };
           }
 
@@ -2291,6 +2428,13 @@ class _TranslationResultPreviewState
             'with_target=$totalWithTarget, excluded=$totalExcluded, '
             'images=$totalImages, failed=$totalFailed',
             level: LogLevel.info,
+          );
+          _translationResultLog(
+            '[LAYOUT-BBOX] Metadata from API: with_indices=$layoutIndicesCount '
+            'with_bbox=$layoutBboxCount / ${segments.length}',
+            level: layoutBboxCount < layoutIndicesCount
+                ? LogLevel.warn
+                : LogLevel.info,
           );
 
           // Update total segments count
@@ -2746,6 +2890,55 @@ class _TranslationResultPreviewState
     return null;
   }
 
+  /// Layout block indices/bbox/page from translation-segments API (PDF/image revision).
+  Map<String, dynamic> _layoutBlockMetadataFieldsFromApi(
+    Map<dynamic, dynamic> segment,
+  ) {
+    final List<List<double>>? layoutBlockBbox =
+        _parseLayoutBlockBbox(segment['layout_block_bbox']);
+    List<int>? layoutBlockIndices;
+    final dynamic indicesRaw = segment['layout_block_indices'];
+    if (indicesRaw is List) {
+      final List<int> parsed = <int>[];
+      for (final dynamic entry in indicesRaw) {
+        if (entry is int) {
+          parsed.add(entry);
+        } else if (entry is num) {
+          parsed.add(entry.toInt());
+        } else if (entry is String) {
+          final int? value = int.tryParse(entry);
+          if (value != null) {
+            parsed.add(value);
+          }
+        }
+      }
+      if (parsed.isNotEmpty) {
+        layoutBlockIndices = parsed;
+      }
+    }
+    final int? segmentIndex = segment['segment_index'] is int
+        ? segment['segment_index'] as int
+        : int.tryParse('${segment['segment_index']}');
+    if (layoutBlockIndices != null && layoutBlockBbox == null) {
+      _translationResultLog(
+        '[LAYOUT-BBOX] segment=$segmentIndex indices=$layoutBlockIndices '
+        'api_layout_block_bbox=${segment['layout_block_bbox']} '
+        'parse_failed_or_empty',
+        level: LogLevel.warn,
+      );
+    }
+    return <String, dynamic>{
+      if (layoutBlockIndices != null)
+        'layout_block_indices': layoutBlockIndices,
+      if (layoutBlockBbox != null) 'layout_block_bbox': layoutBlockBbox,
+      if (segment.containsKey('layout_block_indices_resolution'))
+        'layout_block_indices_resolution':
+            segment['layout_block_indices_resolution'],
+      if (segment.containsKey('pdf_page_number'))
+        'pdf_page_number': _parseOptionalInt(segment['pdf_page_number']),
+    };
+  }
+
   Map<String, dynamic> _pdfFontSizeMetadataFields(Map<String, dynamic> segment) {
     return <String, dynamic>{
       if (segment.containsKey('font_size_pt'))
@@ -2780,8 +2973,6 @@ class _TranslationResultPreviewState
             _parseOptionalDouble(segment['computed_leading_em']),
       if (segment.containsKey('leading_em_source'))
         'leading_em_source': segment['leading_em_source'],
-      if (segment.containsKey('pdf_page_number'))
-        'pdf_page_number': _parseOptionalInt(segment['pdf_page_number']),
     };
   }
 
@@ -4784,6 +4975,8 @@ class _TranslationResultPreviewState
         return;
       }
 
+      int withIndices = 0;
+      int withBbox = 0;
       for (final dynamic raw in segments) {
         if (raw is! Map) {
           continue;
@@ -4793,15 +4986,33 @@ class _TranslationResultPreviewState
         final int index = segment['segment_index'] as int? ?? 0;
         final Map<String, dynamic> fontFields =
             _pdfFontSizeMetadataFields(segment);
+        final Map<String, dynamic> layoutFields =
+            _layoutBlockMetadataFieldsFromApi(segment);
+        if (layoutFields.containsKey('layout_block_indices')) {
+          withIndices++;
+        }
+        if (layoutFields.containsKey('layout_block_bbox')) {
+          withBbox++;
+        }
         if (_allSegmentsMetadata.containsKey(index)) {
           _allSegmentsMetadata[index] = <String, dynamic>{
             ..._allSegmentsMetadata[index]!,
+            ...layoutFields,
             ...fontFields,
           };
         } else {
-          _allSegmentsMetadata[index] = fontFields;
+          _allSegmentsMetadata[index] = <String, dynamic>{
+            ...layoutFields,
+            ...fontFields,
+          };
         }
       }
+
+      _translationResultLog(
+        '[LAYOUT-BBOX] Typography refresh merged: with_indices=$withIndices '
+        'with_bbox=$withBbox / ${segments.length} (forceRefresh=$forceRefresh)',
+        level: withBbox < withIndices ? LogLevel.warn : LogLevel.info,
+      );
 
       _clearFilteredIndicesCache();
       if (mounted) {
@@ -4986,6 +5197,7 @@ class _TranslationResultPreviewState
       heightCache: null,
       onHighlightParagraph: (int index) {
         _highlightParagraph(index);
+        _requestPdfBboxHighlight(index);
         if (_autoFollowSegmentPdfPageNotifier.value) {
           _followSegmentPdfPage(index);
         }
@@ -5581,6 +5793,9 @@ class _TranslationResultPreviewState
         baseMode: baseMode,
         initialLayoutMode: PdfCompareLayoutMode.compareRevision,
       );
+      if (mounted && highlightedIndex != null) {
+        _requestPdfBboxHighlight(highlightedIndex!);
+      }
     } catch (e, stackTrace) {
       _translationResultLog(
         '[REVISION_PREVIEW] Failed to open revision mode ($baseMode): $e\n$stackTrace',
@@ -6026,6 +6241,22 @@ class _TranslationResultPreviewState
               _supportsRevisionForMode(baseMode) &&
                       baseMode == TranslationPreviewMode.pdfPreserve
                   ? _autoFollowSegmentPdfPageNotifier
+                  : null,
+          pdfHighlightBboxPageListenable:
+              _supportsRevisionForMode(baseMode)
+                  ? _pdfHighlightBboxPageNotifier
+                  : null,
+          pdfHighlightBboxListenable:
+              _supportsRevisionForMode(baseMode)
+                  ? _pdfHighlightBboxNotifier
+                  : null,
+          showSelectedSegmentMarkerListenable:
+              _supportsRevisionForMode(baseMode)
+                  ? _showSelectedSegmentMarkerNotifier
+                  : null,
+          onShowSelectedSegmentMarkerChanged:
+              _supportsRevisionForMode(baseMode)
+                  ? _setShowSelectedSegmentMarker
                   : null,
           onAutoFollowSegmentPdfPageChanged:
               _supportsRevisionForMode(baseMode) &&

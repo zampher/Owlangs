@@ -471,6 +471,15 @@ class TranslationService:
                     error_with_hint = (
                         f"{error_text}. Please check your network and try disabling VPN/proxy, then retry."
                     )
+                elif "ReadTimeout" in error_text or "Read timed out" in error_text:
+                    error_with_hint = (
+                        "The MinerU service is taking too long to respond. "
+                        "This may be caused by GPU unavailability or high server load. "
+                        "Please check the MinerU server status and retry."
+                    )
+                elif "timed out after" in error_text.lower():
+                    # asyncio.wait_for / task-level timeout
+                    error_with_hint = error_text
                 else:
                     error_with_hint = error_text
                 task_state["status"] = "failed"

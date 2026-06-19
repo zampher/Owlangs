@@ -3778,6 +3778,13 @@ class AppLocalizationsJa extends AppLocalizations {
       '有効にすると、セグメントをクリックまたは選択したときに訳文 PDF プレビューが該当ページにジャンプします';
 
   @override
+  String get translationPreviewMarkSelectedSegment => '選択セグメントをマーク';
+
+  @override
+  String get translationPreviewMarkSelectedSegmentDesc =>
+      '有効にすると、訳文プレビューで選択中のセグメント位置を枠で表示します';
+
+  @override
   String translationPreviewPdfPageIndicator(String current, String total) {
     return '$current / $total ページ';
   }

@@ -865,9 +865,30 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
     async def convert_without_translation_async(self) -> MarkdownDocument:
         """
         Async helper to convert source document to Markdown only.
+
+        Wraps the conversion in ``asyncio.wait_for`` with a generous timeout
+        (default 20 min) to prevent hung MinerU tasks from blocking the
+        event loop indefinitely.
         """
         convert_engine, convert_config, *_ = self._pre_translate(self.document_original)
-        document_md = await asyncio.to_thread(self._get_document_md, convert_engine, convert_config)
+        timeout_s = 3600  # 60 minutes — must exceed the HTTP read timeout (1800s) used by local MinerU sync endpoint
+        try:
+            document_md = await asyncio.wait_for(
+                asyncio.to_thread(self._get_document_md, convert_engine, convert_config),
+                timeout=timeout_s,
+            )
+        except asyncio.TimeoutError:
+            self.config.logger.error(
+                LogModule.WORKFLOW,
+                "[WORKFLOW] Format conversion timed out after %.0f seconds "
+                "with engine=%s. Verify the MinerU service is healthy." %
+                (timeout_s, convert_engine),
+            )
+            raise RuntimeError(
+                "Format conversion timed out after %.0f seconds. "
+                "The MinerU service may be unresponsive. "
+                "Please check the MinerU server status and retry." % timeout_s
+            )
         self.document_translated = document_md
         return document_md
 

@@ -3976,6 +3976,14 @@ class AppLocalizationsEs extends AppLocalizations {
       'Al activarlo, la vista previa del PDF de traducción salta a la página del segmento seleccionado o marcado';
 
   @override
+  String get translationPreviewMarkSelectedSegment =>
+      'Marcar segmento seleccionado';
+
+  @override
+  String get translationPreviewMarkSelectedSegmentDesc =>
+      'Al activarlo, muestra un marco alrededor del segmento seleccionado en la vista previa de la traducción';
+
+  @override
   String translationPreviewPdfPageIndicator(String current, String total) {
     return 'Página $current / $total';
   }

@@ -259,6 +259,14 @@ def _is_image_segment(text: str) -> bool:
     markdown_image_pattern = r"!\[.*?\]\([^)]+\)"
     if re.match(rf"^{markdown_image_pattern}\s*$", text_stripped):
         return True
+
+    # MinerU JPG/PNG: embedded OCR images export as <details><summary>text_image</summary>
+    if re.search(r"<details\b", text_stripped, re.IGNORECASE) and re.search(
+        r"<summary\b[^>]*>\s*(text_image|natural_image)\s*</summary>",
+        text_stripped,
+        re.IGNORECASE,
+    ):
+        return True
     
     return False
 
@@ -2537,11 +2545,100 @@ def record_translation_segments(
                     )
             except Exception as e:
                 logger.debug(LogModule.TRANS, f"[RECORD_SEGMENTS] Failed to build layout_block_bbox: {e}")
+        if layout_doc is not None and segments:
+            try:
+                from layout.base import LayoutDocument as _LD
+                from layout.image_overlay.block_text_map import (
+                    assign_overlay_layout_block_indices_for_segments,
+                )
+                from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+                    is_image_overlay_task,
+                )
+
+                if isinstance(layout_doc, _LD) and is_image_overlay_task(task_state):
+                    realigned = assign_overlay_layout_block_indices_for_segments(
+                        segments,
+                        layout_doc,
+                        task_state,
+                        claim_blocks=True,
+                    )
+                    if realigned > 0:
+                        logger.info(
+                            LogModule.TRANS,
+                            f"[RECORD_SEGMENTS] Task {task_id}: realigned "
+                            f"layout_block_indices for {realigned} image overlay "
+                            f"segment(s) before bbox attach",
+                        )
+            except Exception as realign_err:
+                logger.debug(
+                    LogModule.TRANS,
+                    f"[RECORD_SEGMENTS] Task {task_id}: overlay block "
+                    f"realignment skipped: {realign_err}",
+                )
         if bbox_map and segments:
+            from utils.format_convert_utils import (
+                bboxes_for_layout_block_indices,
+                normalize_layout_block_bbox_map,
+            )
+
             for segment_dict in segments:
                 bidxs = segment_dict.get("layout_block_indices", [])
-                if bidxs:
-                    segment_dict["layout_block_bbox"] = [bbox_map[bidx] for bidx in bidxs if bidx in bbox_map]
+                if not bidxs:
+                    continue
+                seg_bboxes = bboxes_for_layout_block_indices(
+                    bidxs,
+                    bbox_map,
+                    layout_document=layout_doc,
+                )
+                if seg_bboxes:
+                    segment_dict["layout_block_bbox"] = seg_bboxes
+                else:
+                    segment_dict.pop("layout_block_bbox", None)
+                    seg_idx = segment_dict.get("segment_index", "?")
+                    logger.warning(
+                        LogModule.TRANS,
+                        f"[LAYOUT-BBOX] Task {task_id} segment {seg_idx}: "
+                        f"record-time bbox empty for indices={bidxs} "
+                        f"(bbox_map blocks="
+                        f"{len(normalize_layout_block_bbox_map(bbox_map))})",
+                    )
+            try:
+                from layout.image_overlay.renderer import (
+                    transform_segment_bboxes_to_image_pixels,
+                )
+                from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+                    is_image_overlay_task,
+                    resolve_image_overlay_image_size,
+                )
+
+                if is_image_overlay_task(task_state):
+                    image_size = resolve_image_overlay_image_size(
+                        task_state,
+                        layout_doc=layout_doc,
+                    )
+                    if image_size and layout_doc is not None:
+                        pixel_count = sum(
+                            1
+                            for segment_dict in segments
+                            if transform_segment_bboxes_to_image_pixels(
+                                segment_dict,
+                                layout_doc=layout_doc,
+                                image_size=image_size,
+                            )
+                        )
+                        if pixel_count > 0:
+                            logger.info(
+                                LogModule.TRANS,
+                                f"[RECORD_SEGMENTS] Task {task_id}: scaled "
+                                f"layout_block_bbox to image pixels for "
+                                f"{pixel_count} segment(s)",
+                            )
+            except Exception as pixel_err:
+                logger.debug(
+                    LogModule.TRANS,
+                    f"[RECORD_SEGMENTS] Task {task_id}: image-pixel bbox "
+                    f"transform skipped: {pixel_err}",
+                )
     
     # For PDF workflow, segment_index already follows layout blocks' original order
     # Layout blocks' order is optimized by the layout algorithm, so we don't need to reassign

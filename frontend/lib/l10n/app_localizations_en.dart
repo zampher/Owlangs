@@ -3915,6 +3915,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'When enabled, the translation PDF preview jumps to the page of the focused or checked segment';
 
   @override
+  String get translationPreviewMarkSelectedSegment => 'Mark selected segment';
+
+  @override
+  String get translationPreviewMarkSelectedSegmentDesc =>
+      'When enabled, show a frame around the selected segment on the translation preview';
+
+  @override
   String translationPreviewPdfPageIndicator(String current, String total) {
     return 'Page $current / $total';
   }

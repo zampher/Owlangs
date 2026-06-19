@@ -25,6 +25,8 @@ class PdfPreview extends StatefulWidget {
     this.navigationController,
     this.scrollController,
     this.showScrollbar = true,
+    this.highlightPageNumber,
+    this.highlightBbox,
   });
 
   final String downloadUrl;
@@ -39,6 +41,12 @@ class PdfPreview extends StatefulWidget {
   final PdfContinuousScrollController? navigationController;
   final ScrollController? scrollController;
   final bool showScrollbar;
+
+  /// 1-based page number to render the highlight rectangle on.
+  final int? highlightPageNumber;
+
+  /// Bounding box in PDF points: [x0, y0, x1, y1].
+  final List<double>? highlightBbox;
 
   @override
   State<PdfPreview> createState() => _PdfPreviewWebState();
@@ -109,6 +117,8 @@ class _PdfPreviewWebState extends State<PdfPreview> {
             downloadUrl: widget.downloadUrl,
             rendererType: _rendererType,
             navigationController: widget.navigationController,
+            highlightPageNumber: widget.highlightPageNumber,
+            highlightBbox: widget.highlightBbox,
             onDocumentLoaded: (PdfDocument document) {
               if (!mounted) {
                 return;

@@ -3746,6 +3746,13 @@ class AppLocalizationsZh extends AppLocalizations {
       '启用后，点击或勾选片段时，译文 PDF 预览自动跳转到该片段所在页';
 
   @override
+  String get translationPreviewMarkSelectedSegment => '标记选中片段';
+
+  @override
+  String get translationPreviewMarkSelectedSegmentDesc =>
+      '启用后，在译文预览中用边框标出当前选中片段的位置';
+
+  @override
   String translationPreviewPdfPageIndicator(String current, String total) {
     return '第 $current / $total 页';
   }

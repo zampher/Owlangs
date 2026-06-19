@@ -42,6 +42,29 @@ def _sample_layout_doc() -> LayoutDocument:
                         bbox=(13.0, 38.0, 98.0, 53.0),
                         type="image",
                         index=2,
+                        text="DAYONE",
+                        image_path="4812d07ab014233ee9c5a7a9c80e8e9b7c8ad8dd8c3b343ee7f7a90d2b741ea9.jpg",
+                        raw={
+                            "type": "image",
+                            "sub_type": "text_image",
+                            "bbox": [13, 38, 98, 53],
+                            "blocks": [
+                                {
+                                    "type": "image_body",
+                                    "lines": [
+                                        {
+                                            "spans": [
+                                                {
+                                                    "type": "image",
+                                                    "content": "DAYONE",
+                                                    "image_path": "4812d07ab014233ee9c5a7a9c80e8e9b7c8ad8dd8c3b343ee7f7a90d2b741ea9.jpg",
+                                                }
+                                            ]
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
                     ),
                     LayoutBlock(
                         page_index=0,
@@ -219,6 +242,246 @@ class ImageOverlayBlockTextMapTest(unittest.TestCase):
             task_state={"segment_layout_block_map": [[], [], [2], [3, 4], [4], [5], [6]]},
         )
         self.assertEqual(block_idx, 4)
+
+    def test_assign_overlay_layout_block_indices_fixes_misaligned_map(self):
+        from layout.image_overlay.block_text_map import (
+            assign_overlay_layout_block_indices_for_segments,
+        )
+
+        layout_doc = _sample_layout_doc()
+        segments = [
+            {
+                "segment_index": 1,
+                "source_text": "CUENT :",
+                "layout_block_indices": [1],
+                "target_text": "客户：",
+            },
+            {
+                "segment_index": 2,
+                "is_image": True,
+                "source_text": "![](images/x.jpg)",
+                "layout_block_indices": [2],
+                "target_text": "![](images/x.jpg)",
+            },
+            {
+                "segment_index": 3,
+                "source_text": "<details>\n<summary>text_image</summary>\nDAYONE\n</details>",
+                "layout_block_indices": [3, 4],
+                "target_text": "<details>\n<summary>文字图片</summary>\nDAYONE\n</details>",
+            },
+            {
+                "segment_index": 4,
+                "source_text": "UNIT 20-01, TEEGA TOWER, NO. 1, JALAN LAKSAMANA, PUTERI HARBOUR, ISKANDAR PUTERI, JOHOR.",
+                "layout_block_indices": [4],
+                "target_text": "单位 20-01，TEEGA 大厦，1号，拉克斯马纳路，公主港，依斯干达公主城，柔佛州。",
+            },
+            {
+                "segment_index": 5,
+                "source_text": "ARCHITECT :",
+                "layout_block_indices": [5],
+                "target_text": "建筑师：",
+            },
+            {
+                "segment_index": 6,
+                "source_text": "Ar. NEO KIM CHENG",
+                "layout_block_indices": [6],
+                "target_text": "建筑师 黄金成",
+            },
+        ]
+        task_state = {
+            "segment_layout_block_map": [[], [], [2], [3, 4], [4], [5], [6]],
+        }
+        updated = assign_overlay_layout_block_indices_for_segments(
+            segments,
+            layout_doc,
+            task_state,
+            claim_blocks=True,
+        )
+        self.assertGreater(updated, 0)
+        self.assertEqual(segments[2]["layout_block_indices"], [2])
+        self.assertEqual(segments[3]["layout_block_indices"], [3])
+        self.assertEqual(segments[4]["layout_block_indices"], [4])
+        self.assertEqual(segments[5]["layout_block_indices"], [5])
+        block_assignments = [
+            seg["layout_block_indices"][0]
+            for seg in segments
+            if seg.get("layout_block_indices")
+        ]
+        self.assertEqual(len(block_assignments), len(set(block_assignments)))
+
+    def test_text_image_details_maps_to_image_block_bbox(self):
+        from layout.image_overlay.block_text_map import (
+            _resolve_mineru_details_image_block_index,
+        )
+
+        layout_doc = _sample_layout_doc()
+        segment = {
+            "segment_index": 3,
+            "source_text": "<details>\n<summary>text_image</summary>\nDAYONE\n</details>",
+            "target_text": "<details>\n<summary>文字图片</summary>\nDAYONE\n</details>",
+        }
+        block_idx = _resolve_mineru_details_image_block_index(segment, layout_doc)
+        self.assertEqual(block_idx, 2)
+
+    def test_split_closing_details_fragment_maps_to_image_block(self):
+        from layout.image_overlay.block_text_map import (
+            _resolve_mineru_details_image_block_index,
+        )
+
+        layout_doc = _sample_layout_doc()
+        segment = {
+            "segment_index": 5,
+            "source_text": "DAYONE\n</details>",
+            "target_text": "DAYONE\n</details>",
+        }
+        block_idx = _resolve_mineru_details_image_block_index(segment, layout_doc)
+        self.assertEqual(block_idx, 2)
+
+    def test_assign_ignores_wrong_segment_layout_block_map(self):
+        from layout.image_overlay.block_text_map import (
+            assign_overlay_layout_block_indices_for_segments,
+        )
+
+        layout_doc = _sample_layout_doc()
+        segments = [
+            {
+                "segment_index": 1,
+                "source_text": "CUENT :",
+                "layout_block_indices": [99],
+                "target_text": "客户：",
+            },
+            {
+                "segment_index": 2,
+                "source_text": "![](images/x.jpg)",
+                "layout_block_indices": [2],
+                "target_text": "![](images/x.jpg)",
+            },
+            {
+                "segment_index": 3,
+                "source_text": "<details>\n<summary>text_image</summary>\nDAYONE\n</details>",
+                "layout_block_indices": [99],
+                "target_text": "<details>\n<summary>文字图片</summary>\nDAYONE\n</details>",
+            },
+            {
+                "segment_index": 4,
+                "source_text": "UNIT 20-01, TEEGA TOWER, NO. 1, JALAN LAKSAMANA, PUTERI HARBOUR, ISKANDAR PUTERI, JOHOR.",
+                "layout_block_indices": [99],
+                "target_text": "单位 20-01",
+            },
+            {
+                "segment_index": 5,
+                "source_text": "ARCHITECT :",
+                "layout_block_indices": [99],
+                "target_text": "建筑师：",
+            },
+            {
+                "segment_index": 6,
+                "source_text": "Ar. NEO KIM CHENG",
+                "layout_block_indices": [99],
+                "target_text": "建筑师 黄金成",
+            },
+        ]
+        task_state = {
+            "segment_layout_block_map": [[], [], [2], [3, 4], [4], [5], [6]],
+        }
+        assign_overlay_layout_block_indices_for_segments(
+            segments,
+            layout_doc,
+            task_state,
+            claim_blocks=True,
+        )
+        self.assertEqual(segments[0]["layout_block_indices"], [1])
+        self.assertEqual(segments[2]["layout_block_indices"], [2])
+        self.assertEqual(segments[2]["layout_block_indices_resolution"], "mineru_text_image")
+        self.assertEqual(segments[3]["layout_block_indices"], [3])
+        self.assertEqual(segments[4]["layout_block_indices"], [4])
+        self.assertEqual(segments[5]["layout_block_indices"], [5])
+
+    def test_markdown_image_segment_maps_to_layout_image_block(self):
+        from layout.image_overlay.block_text_map import (
+            _resolve_markdown_image_block_index,
+            assign_overlay_layout_block_indices_for_segments,
+        )
+
+        layout_doc = _sample_layout_doc()
+        hash_name = (
+            "4812d07ab014233ee9c5a7a9c80e8e9b7c8ad8dd8c3b343ee7f7a90d2b741ea9.jpg"
+        )
+        segment = {
+            "segment_index": 2,
+            "is_image": True,
+            "source_text": f"![](images/{hash_name})",
+            "target_text": f"![](images/{hash_name})",
+        }
+        self.assertEqual(
+            _resolve_markdown_image_block_index(
+                segment,
+                layout_doc,
+                claimed_blocks=set(),
+            ),
+            2,
+        )
+
+        cleared = dict(segment)
+        assign_overlay_layout_block_indices_for_segments(
+            [cleared],
+            layout_doc,
+            {},
+            claim_blocks=True,
+        )
+        self.assertEqual(cleared["layout_block_indices"], [2])
+        self.assertEqual(cleared["layout_block_indices_resolution"], "markdown_image")
+
+    def test_html_table_segment_maps_to_layout_table_block(self):
+        from layout.image_overlay.block_text_map import (
+            _resolve_table_block_index,
+            assign_overlay_layout_block_indices_for_segments,
+        )
+
+        table_html = "<table><tr><td>A</td><td>B</td></tr></table>"
+        layout_doc = LayoutDocument(
+            pages=[
+                LayoutPage(
+                    page_index=0,
+                    width=200,
+                    height=200,
+                    blocks=[
+                        LayoutBlock(
+                            page_index=0,
+                            bbox=(10.0, 10.0, 90.0, 50.0),
+                            type="table",
+                            index=0,
+                            text=table_html,
+                        ),
+                        LayoutBlock(
+                            page_index=0,
+                            bbox=(10.0, 60.0, 90.0, 80.0),
+                            type="text",
+                            index=1,
+                            text="After table",
+                        ),
+                    ],
+                )
+            ],
+            engine="mineru",
+        )
+        segment = {
+            "segment_index": 1,
+            "source_text": table_html,
+            "target_text": table_html,
+        }
+        self.assertEqual(
+            _resolve_table_block_index(layout_doc, claimed_blocks=set()),
+            0,
+        )
+        assign_overlay_layout_block_indices_for_segments(
+            [segment],
+            layout_doc,
+            {},
+            claim_blocks=True,
+        )
+        self.assertEqual(segment["layout_block_indices"], [0])
+        self.assertEqual(segment["layout_block_indices_resolution"], "layout_table")
 
 
 if __name__ == "__main__":
