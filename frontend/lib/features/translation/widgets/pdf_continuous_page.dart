@@ -19,6 +19,7 @@ class PdfContinuousPage extends StatefulWidget {
     required this.pageNumber,
     required this.maxWidth,
     this.highlightBbox,
+    this.transformController,
     super.key,
   });
 
@@ -28,6 +29,9 @@ class PdfContinuousPage extends StatefulWidget {
 
   /// Optional highlight bounding box in PDF points: [x0, y0, x1, y1].
   final List<double>? highlightBbox;
+
+  /// Optional controller to enable zoom/pan via [InteractiveViewer].
+  final TransformationController? transformController;
 
   @override
   State<PdfContinuousPage> createState() => _PdfContinuousPageState();
@@ -152,6 +156,7 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
       height: _displayHeight,
       imageBytes: image.bytes,
       highlightRect: screenRect,
+      transformController: widget.transformController,
     );
   }
 }
@@ -166,6 +171,7 @@ class PdfContinuousPageFrame extends StatelessWidget {
     required this.height,
     required this.imageBytes,
     this.highlightRect,
+    this.transformController,
     super.key,
   });
 
@@ -173,6 +179,9 @@ class PdfContinuousPageFrame extends StatelessWidget {
   final double height;
   final Uint8List imageBytes;
   final Rect? highlightRect;
+
+  /// Optional controller to enable zoom/pan via [InteractiveViewer].
+  final TransformationController? transformController;
 
   @override
   Widget build(BuildContext context) {
@@ -197,23 +206,33 @@ class PdfContinuousPageFrame extends StatelessWidget {
       ),
     );
 
-    if (highlightRect == null) {
-      return Center(child: pageContent);
+    final Widget tile = highlightRect == null
+        ? pageContent
+        : Stack(
+            children: <Widget>[
+              pageContent,
+              layoutBboxHighlightPositioned(
+                bboxRect: highlightRect!,
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: layoutBboxHighlightDecoration(),
+                  ),
+                ),
+              ),
+            ],
+          );
+
+    final Widget centered = Center(child: tile);
+
+    if (transformController == null) {
+      return centered;
     }
 
-    return Center(
-      child: Stack(
-        children: <Widget>[
-          pageContent,
-          layoutBboxHighlightPositioned(
-            bboxRect: highlightRect!,
-            child: IgnorePointer(
-              child: Container(
-                decoration: layoutBboxHighlightDecoration(),
-              ),
-            ),
-          ),
-        ],
+    return ClipRect(
+      child: InteractiveViewer(
+        transformationController: transformController,
+        constrained: true,
+        child: centered,
       ),
     );
   }

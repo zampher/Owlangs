@@ -101,6 +101,11 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
   int _lastReportedPage = 0;
   int _totalPages = 0;
   int? _pendingJumpPageNumber;
+  final TransformationController _sourceZoomController =
+      TransformationController();
+  final TransformationController _targetZoomController =
+      TransformationController();
+  bool _syncingZoom = false;
 
   @override
   void initState() {
@@ -108,7 +113,23 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     _scrollController.addListener(_handleLinkedScroll);
     _targetScrollController.addListener(_handleTargetScroll);
     widget.navigationController?._attach(this);
+    _sourceZoomController.addListener(_onSourceZoomChanged);
+    _targetZoomController.addListener(_onTargetZoomChanged);
     _loadDocuments();
+  }
+
+  void _onSourceZoomChanged() {
+    if (_syncingZoom) return;
+    _syncingZoom = true;
+    _targetZoomController.value = _sourceZoomController.value;
+    _syncingZoom = false;
+  }
+
+  void _onTargetZoomChanged() {
+    if (_syncingZoom) return;
+    _syncingZoom = true;
+    _sourceZoomController.value = _targetZoomController.value;
+    _syncingZoom = false;
   }
 
   @override
@@ -145,6 +166,10 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     _scrollController.dispose();
     _sourceScrollController.dispose();
     _targetScrollController.dispose();
+    _sourceZoomController.removeListener(_onSourceZoomChanged);
+    _targetZoomController.removeListener(_onTargetZoomChanged);
+    _sourceZoomController.dispose();
+    _targetZoomController.dispose();
     _sourceDocument?.close();
     _targetDocument?.close();
     super.dispose();
@@ -433,6 +458,7 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                                       pageNumber)
                                   ? widget.highlightBbox
                                   : null,
+                              transformController: _sourceZoomController,
                             )
                           : const SizedBox.shrink(),
                     ),
@@ -447,6 +473,7 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                                       pageNumber)
                                   ? widget.highlightBbox
                                   : null,
+                              transformController: _targetZoomController,
                             )
                           : const SizedBox.shrink(),
                     ),
@@ -491,6 +518,7 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                             (widget.highlightPageNumber == pageNumber)
                                 ? widget.highlightBbox
                                 : null,
+                        transformController: _sourceZoomController,
                       );
                     },
                   ),
@@ -527,6 +555,7 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                             (widget.highlightPageNumber == pageNumber)
                                 ? widget.highlightBbox
                                 : null,
+                        transformController: _targetZoomController,
                       );
                     },
                   ),
