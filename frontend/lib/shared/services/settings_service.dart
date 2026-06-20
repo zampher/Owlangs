@@ -82,6 +82,8 @@ class SettingsService {
     'mineruToken': 'sensitive',
     'translator_mineru_token': 'sensitive',
     'mineru_local_token': 'sensitive',
+    'paddle_token': 'sensitive',
+    'paddle_local_token': 'sensitive',
   };
 
   /// Save setting (automatic classification and batch)

@@ -352,11 +352,12 @@ class WorkflowExecutor:
             
             # Store attachment documents in task_state for downstream usage (e.g., layout images)
             task_state["attachments"] = dict(attachment_dict)
-            mineru_doc = attachment_dict.get("mineru")
-            if mineru_doc and hasattr(mineru_doc, "content") and mineru_doc.content:
-                task_state["layout_source_zip"] = mineru_doc.content
-                logger.debug(LogModule.EXTRACT, f"[WORKFLOW-EXECUTOR] Stored MinerU ZIP bytes for task {task_id} (reason={reason})")
-                
+            # Check for layout ZIP from either MinerU ("mineru") or PaddleOCR ("paddle")
+            _layout_doc = attachment_dict.get("mineru") or attachment_dict.get("paddle")
+            if _layout_doc and hasattr(_layout_doc, "content") and _layout_doc.content:
+                task_state["layout_source_zip"] = _layout_doc.content
+                logger.debug(LogModule.EXTRACT, f"[WORKFLOW-EXECUTOR] Stored layout ZIP bytes for task {task_id} (reason={reason})")
+
                 # Extract MinerU ZIP to task's temp directory for easy access
                 temp_dir = task_state.get("temp_dir")
                 if temp_dir and os.path.isdir(temp_dir):
@@ -365,23 +366,39 @@ class WorkflowExecutor:
                         import io
                         mineru_zip_path = os.path.join(temp_dir, "mineru_layout.zip")
                         mineru_extract_dir = os.path.join(temp_dir, "mineru_extracted")
-                        
+
                         # Save ZIP file to temp directory
                         with open(mineru_zip_path, 'wb') as f:
                             f.write(mineru_doc.content)
                         logger.debug(LogModule.EXTRACT, f"[WORKFLOW-EXECUTOR] Saved MinerU ZIP to {mineru_zip_path}")
-                        
+
                         # Extract ZIP contents to mineru_extracted subdirectory
                         os.makedirs(mineru_extract_dir, exist_ok=True)
                         with zipfile.ZipFile(io.BytesIO(mineru_doc.content), 'r') as zip_ref:
                             zip_ref.extractall(mineru_extract_dir)
                         logger.debug(LogModule.EXTRACT, f"[WORKFLOW-EXECUTOR] Extracted MinerU ZIP to {mineru_extract_dir}")
-                        
+
                         # Store paths in task_state for reference
                         task_state["mineru_zip_path"] = mineru_zip_path
                         task_state["mineru_extract_dir"] = mineru_extract_dir
                     except Exception as extract_error:
                         logger.warning(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Failed to extract MinerU ZIP to temp directory: {extract_error}")
+
+            # --- PaddleOCR layout ZIP ---
+            paddle_doc = attachment_dict.get("paddle")
+            if paddle_doc and hasattr(paddle_doc, "content") and paddle_doc.content:
+                task_state["layout_source_zip"] = paddle_doc.content
+                task_state.setdefault("layout_engine", "paddle")
+                temp_dir = task_state.get("temp_dir")
+                if temp_dir and os.path.isdir(temp_dir):
+                    try:
+                        paddle_zip_path = os.path.join(temp_dir, "paddle_layout.zip")
+                        with open(paddle_zip_path, 'wb') as f:
+                            f.write(paddle_doc.content)
+                        task_state["paddle_zip_path"] = paddle_zip_path
+                        logger.debug(LogModule.EXTRACT, f"[WORKFLOW-EXECUTOR] Saved PaddleOCR ZIP to {paddle_zip_path}")
+                    except Exception as extract_error:
+                        logger.warning(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Failed to save PaddleOCR ZIP: {extract_error}")
         except Exception as attachment_error:
             logger.debug(LogModule.EXTRACT, f"[WORKFLOW-EXECUTOR] Failed to sync workflow attachments ({reason}): {attachment_error}")
     

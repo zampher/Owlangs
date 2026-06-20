@@ -125,15 +125,26 @@ class _ImageOverlayPreviewViewState extends State<ImageOverlayPreviewView> {
   }
 
   Widget _buildImageStack(Uint8List bytes, BoxConstraints constraints) {
-    return Stack(
-      clipBehavior: Clip.none,
-      alignment: Alignment.center,
-      children: <Widget>[
-        // Must match [ImageOverlayCompareView] and [layoutImageRectToDisplayRect]
-        // centering so bbox overlay aligns with BoxFit.contain letterboxing.
-        Center(child: Image.memory(bytes, fit: BoxFit.contain)),
-        _buildHighlightOverlay(constraints),
-      ],
+    // Force the Stack to fill container dimensions so bbox overlay coordinates
+    // computed by layoutImageRectToDisplayRect (which include letterboxing
+    // offsets) align with the Stack's own coordinate system.
+    final double w =
+        constraints.maxWidth.isFinite ? constraints.maxWidth : 0;
+    final double h =
+        constraints.maxHeight.isFinite ? constraints.maxHeight : 0;
+    return SizedBox(
+      width: w > 0 ? w : null,
+      height: h > 0 ? h : null,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          // Must match [ImageOverlayCompareView] and
+          // [layoutImageRectToDisplayRect] centering so bbox overlay aligns
+          // with BoxFit.contain letterboxing.
+          Center(child: Image.memory(bytes, fit: BoxFit.contain)),
+          _buildHighlightOverlay(constraints),
+        ],
+      ),
     );
   }
 
@@ -542,15 +553,28 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
               constrained: true,
               child: LayoutBuilder(
                 builder: (BuildContext context, BoxConstraints constraints) {
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    children: <Widget>[
-                      Center(
-                        child: Image.memory(bytes, fit: BoxFit.contain),
-                      ),
-                      if (showHighlight)
-                        _buildBboxOverlay(constraints, imageSize),
-                    ],
+                  // Force the Stack to fill container dimensions so bbox
+                  // overlay coordinates computed by
+                  // layoutImageRectToDisplayRect (which include letterboxing
+                  // offsets) align with the Stack's own coordinate system.
+                  final double w =
+                      constraints.maxWidth.isFinite ? constraints.maxWidth : 0;
+                  final double h = constraints.maxHeight.isFinite
+                      ? constraints.maxHeight
+                      : 0;
+                  return SizedBox(
+                    width: w > 0 ? w : null,
+                    height: h > 0 ? h : null,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: <Widget>[
+                        Center(
+                          child: Image.memory(bytes, fit: BoxFit.contain),
+                        ),
+                        if (showHighlight)
+                          _buildBboxOverlay(constraints, imageSize),
+                      ],
+                    ),
                   );
                 },
               ),

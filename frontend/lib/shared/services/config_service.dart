@@ -698,6 +698,7 @@ class AIPlatformInfo {
     this.isConfigured = false,
     this.isApiAvailable,
     this.platformType = 'llm',
+    this.parserEngine,
     this.parserSubtype,
     this.apiEndpoints,
     this.lastTestError,
@@ -709,6 +710,8 @@ class AIPlatformInfo {
     int? writeTimeout,
     int? testConnectTimeout,
     int? testRequestTimeout,
+    this.useDocOrientationClassify = false,
+    this.restructurePages = false,
   }) : timeout = (timeout != null && timeout > 0) ? timeout : (_isLocalUrl(url) ? 300 : 200),
        writeTimeout = (writeTimeout != null && writeTimeout > 0) ? writeTimeout : 300,
        testConnectTimeout = (testConnectTimeout != null && testConnectTimeout > 0) ? testConnectTimeout : 30,
@@ -762,6 +765,7 @@ class AIPlatformInfo {
       isConfigured: isConfigured,
       isApiAvailable: isApiAvailable,
       platformType: _normalizePlatformType(json['platform_type']),
+      parserEngine: json['parser_engine']?.toString(),
       parserSubtype: json['parser_subtype']?.toString(),
       apiEndpoints: json['api_endpoints'] != null
           ? Map<String, String>.from(
@@ -776,6 +780,8 @@ class AIPlatformInfo {
       writeTimeout: _toInt(json['write_timeout'], null),
       testConnectTimeout: _toInt(json['test_connect_timeout'], null),
       testRequestTimeout: _toInt(json['test_request_timeout'], null),
+      useDocOrientationClassify: json['use_doc_orientation_classify'] == true,
+      restructurePages: json['restructure_pages'] == true,
     );
   }
 
@@ -865,6 +871,7 @@ class AIPlatformInfo {
   final bool isConfigured;
   final bool? isApiAvailable;
   final String platformType;
+  final String? parserEngine;
   final String? parserSubtype;
   final Map<String, String>? apiEndpoints;
   final String? lastTestError;
@@ -876,6 +883,8 @@ class AIPlatformInfo {
   final int writeTimeout;
   final int testConnectTimeout;
   final int testRequestTimeout;
+  final bool useDocOrientationClassify;
+  final bool restructurePages;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'name': name,
@@ -893,6 +902,7 @@ class AIPlatformInfo {
         'description': description,
         'token_link': tokenLink,
         'platform_type': platformType,
+        'parser_engine': parserEngine,
         'parser_subtype': parserSubtype,
         'api_protocol': apiProtocol,
         'requires_api_key': requiresApiKey,
@@ -903,6 +913,8 @@ class AIPlatformInfo {
         'write_timeout': writeTimeout,
         'test_connect_timeout': testConnectTimeout,
         'test_request_timeout': testRequestTimeout,
+        'use_doc_orientation_classify': useDocOrientationClassify,
+        'restructure_pages': restructurePages,
         // Intentionally exclude lastTestError from persisted JSON
       };
 
@@ -936,6 +948,9 @@ class AIPlatformInfo {
     int? writeTimeout,
     int? testConnectTimeout,
     int? testRequestTimeout,
+    String? parserEngine,
+    bool? useDocOrientationClassify,
+    bool? restructurePages,
   }) =>
       AIPlatformInfo(
         key: key,
@@ -958,6 +973,7 @@ class AIPlatformInfo {
         isConfigured: isConfigured ?? this.isConfigured,
         isApiAvailable: isApiAvailable ?? this.isApiAvailable,
         platformType: platformType ?? this.platformType,
+        parserEngine: parserEngine ?? this.parserEngine,
         parserSubtype: parserSubtype ?? this.parserSubtype,
         apiEndpoints: apiEndpoints ?? this.apiEndpoints,
         lastTestError: lastTestError,
@@ -969,5 +985,8 @@ class AIPlatformInfo {
         writeTimeout: writeTimeout ?? this.writeTimeout,
         testConnectTimeout: testConnectTimeout ?? this.testConnectTimeout,
         testRequestTimeout: testRequestTimeout ?? this.testRequestTimeout,
+        useDocOrientationClassify:
+            useDocOrientationClassify ?? this.useDocOrientationClassify,
+        restructurePages: restructurePages ?? this.restructurePages,
       );
 }

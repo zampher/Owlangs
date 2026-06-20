@@ -163,9 +163,12 @@ class AIPlatformTestService {
     int? testRequestTimeout,
   }) async {
     final p = platform.toLowerCase();
-    // Both mineru (cloud) and mineru_local use the same test endpoint
+    // MinerU and PaddleOCR platforms use their own test endpoints
     if (p == 'mineru' || p == 'mineru_local') {
       return testMinerU(apiKey, platformType: p, baseUrl: baseUrl);
+    }
+    if (p == 'paddle' || p == 'paddle_local') {
+      return testPaddleOCR(apiKey, platformType: p, baseUrl: baseUrl);
     }
     return _testViaBackend(
       platformType: p,
@@ -174,6 +177,20 @@ class AIPlatformTestService {
       modelName: modelName,
       testConnectTimeout: testConnectTimeout,
       testRequestTimeout: testRequestTimeout,
+    );
+  }
+
+  /// Test PaddleOCR connection (backend proxy)
+  Future<Map<String, dynamic>> testPaddleOCR(
+    String apiKey, {
+    String platformType = 'paddle',
+    String? baseUrl,
+  }) async {
+    // PaddleOCR testing goes through the unified backend endpoint
+    return _testViaBackend(
+      platformType: platformType,
+      apiKey: apiKey,
+      baseUrl: baseUrl,
     );
   }
 

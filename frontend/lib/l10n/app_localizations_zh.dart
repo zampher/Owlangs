@@ -908,6 +908,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get quickSettingsFormulaOcrSubtitle => '文档解析时识别公式';
 
   @override
+  String get quickSettingsPaddleUseDocOrientationClassify => '自动检测方向';
+
+  @override
+  String get quickSettingsPaddleUseDocOrientationClassifySubtitle =>
+      'OCR 前自动检测和纠正文档方向';
+
+  @override
+  String get quickSettingsPaddleRestructurePages => '页面重组';
+
+  @override
+  String get quickSettingsPaddleRestructurePagesSubtitle => '重组页面布局以获得更好的阅读顺序';
+
+  @override
   String get quickSettingsMineruLabel => 'MinerU (mineru)';
 
   @override
@@ -1272,6 +1285,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get batchUploadMineruLocal => 'MinerU 本地';
+
+  @override
+  String get batchUploadPaddle => 'PaddleOCR';
+
+  @override
+  String get batchUploadPaddleLocal => 'PaddleOCR 本地';
 
   @override
   String get commonClose => '关闭';
@@ -1693,6 +1712,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsParsingEngineMineruLocalDesc => '本地部署 MinerU，API Key 可选';
 
   @override
+  String get settingsParsingEnginePaddle => 'PaddleOCR (云端)';
+
+  @override
+  String get settingsParsingEnginePaddleDesc => '高精度OCR，支持标题、表格、公式识别';
+
+  @override
+  String get settingsParsingEnginePaddleLocal => 'PaddleOCR (本地)';
+
+  @override
+  String get settingsParsingEnginePaddleLocalDesc =>
+      '本地部署 PaddleOCR；需要 NVIDIA GPU（约8.5 GB显存）';
+
+  @override
   String get settingsParsingEnginePdfplumber => 'PDFPlumber';
 
   @override
@@ -1728,6 +1760,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsParsingEngineNewTaskNotice => '更改仅对新任务生效';
+
+  @override
+  String get settingsPaddleOcrModelLabel => 'PaddleOCR 模型';
+
+  @override
+  String get settingsPaddleUseDocOrientationClassify => '自动检测方向';
+
+  @override
+  String get settingsPaddleUseDocOrientationClassifySubtitle =>
+      'OCR 前自动检测和纠正文档方向';
+
+  @override
+  String get settingsPaddleRestructurePages => '页面重组';
+
+  @override
+  String get settingsPaddleRestructurePagesSubtitle => '重组页面布局以获得更好的阅读顺序';
 
   @override
   String get settingsPdfSplitMaxPages => 'PDF分片页数';

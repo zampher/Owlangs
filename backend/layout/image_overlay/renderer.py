@@ -337,14 +337,11 @@ def _scale_bbox_to_image(
     if sx != 1.0 or sy != 1.0:
         x0, x1 = x0 * sx, x1 * sx
         y0, y1 = y0 * sy, y1 * sy
-    left = max(0, int(round(min(x0, x1))))
-    top = max(0, int(round(min(y0, y1))))
-    right = min(img_w, int(round(max(x0, x1))))
-    bottom = min(img_h, int(round(max(y0, y1))))
-    if right <= left:
-        right = min(img_w, left + 1)
-    if bottom <= top:
-        bottom = min(img_h, top + 1)
+    # Clamp to image bounds, guaranteeing at least 1 px width/height
+    left = max(0, min(int(round(min(x0, x1))), img_w - 1))
+    top = max(0, min(int(round(min(y0, y1))), img_h - 1))
+    right = max(left + 1, min(img_w, int(round(max(x0, x1)))))
+    bottom = max(top + 1, min(img_h, int(round(max(y0, y1)))))
     return left, top, right, bottom
 
 
@@ -454,6 +451,13 @@ def _erase_region(
     margin_px: float,
 ) -> None:
     x0, y0, x1, y1 = bbox
+    if x0 >= x1 or y0 >= y1:
+        from logger import unified_logger as _log
+        _log.warning(
+            "[IMAGE_OVERLAY] Skipping erase_region with invalid bbox: "
+            f"({x0}, {y0}, {x1}, {y1}) — width={x1 - x0}, height={y1 - y0}",
+        )
+        return
     m = max(0.0, margin_px)
     draw.rectangle(
         (x0 - m, y0 - m, x1 + m, y1 + m),

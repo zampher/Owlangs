@@ -26,6 +26,8 @@ except ImportError:
 def _collect_redaction_rects(
     layout_doc: LayoutDocument,
     margin_pt: float = 2.0,
+    *,
+    skip_block_indices: Optional[set] = None,
 ) -> Dict[int, List[Tuple[float, float, float, float]]]:
     """
     Collect bounding boxes of all translated text blocks as redaction targets.
@@ -39,13 +41,26 @@ def _collect_redaction_rects(
         and their bbox must still be redacted so that the original text
         on the source PDF is cleared.
 
+    Args:
+        layout_doc: LayoutDocument with all layout blocks.
+        margin_pt: Extra margin (in points) to expand each redaction rect.
+        skip_block_indices: Set of block indices for which neither redaction
+            nor overlay placement should happen (excluded or translation-
+            failed segments).
+
     Returns:
         Dict mapping page_index -> list of (x0, y0, x1, y1) rects to redact.
     """
+    skip_set = skip_block_indices or set()
     redaction_map: Dict[int, List[Tuple[float, float, float, float]]] = {}
     image_block_count = 0
     cross_page_rect_count = 0
     merge_prev_rect_count = 0
+    skipped_by_skip_set = 0
+    skipped_no_text = 0
+    skipped_chart = 0
+    skipped_table = 0
+    redacted_blocks: list[tuple] = []  # (page, idx, type, bbox)
 
     for page in layout_doc.pages:
         rects: List[Tuple[float, float, float, float]] = []
@@ -53,18 +68,29 @@ def _collect_redaction_rects(
 
         # -- Primary pass: redact all text blocks and cross-page paired blocks --
         for block in page.blocks:
+            block_index = getattr(block, "index", None)
+
+            # Skip blocks that are in the skip set — don't erase their
+            # original text and don't place overlay text on top of them.
+            if block_index is not None and block_index in skip_set:
+                skipped_by_skip_set += 1
+                continue
+
             raw = getattr(block, "raw", None) or {}
             is_cross_page_pair = isinstance(raw, dict) and raw.get("_cross_page_pair_of") is not None
 
-            # Skip chart blocks - they should always stay on original PDF
-            # Chart visual content (images) must not be redacted
-            if block.type == "chart":
-                # Chart blocks should NEVER be redacted - they always have visual content
-                # that must remain on the original PDF
+            # Skip chart and table blocks - they should always stay on original PDF
+            # Chart and table visual content (images) must not be redacted
+            if block.type in ("chart", "table"):
+                if block.type == "chart":
+                    skipped_chart += 1
+                else:
+                    skipped_table += 1
                 continue
 
             # Skip blocks that are neither text blocks nor cross-page paired blocks
             if not block.has_text() and not is_cross_page_pair:
+                skipped_no_text += 1
                 continue
 
             x0, y0, x1, y1 = block.bbox
@@ -76,6 +102,7 @@ def _collect_redaction_rects(
                 y1 + margin_pt,
             ))
             text_block_count += 1
+            redacted_blocks.append((page.page_index, block_index, block.type, block.bbox))
 
             # Detect cross-page lines inside this block's raw data.
             # MinerU marks cross-page spans (not lines) with "cross_page": true.
@@ -119,6 +146,10 @@ def _collect_redaction_rects(
         # paragraph block.  They have empty lines but their bbox covers
         # original text that must still be cleared on this page.
         for block in page.blocks:
+            block_index = getattr(block, "index", None)
+            if block_index is not None and block_index in skip_set:
+                continue
+
             raw = getattr(block, "raw", None) or {}
             if not isinstance(raw, dict):
                 continue
@@ -136,13 +167,13 @@ def _collect_redaction_rects(
             ))
             merge_prev_rect_count += 1
 
-        # Count image blocks and chart blocks on this page (should NOT be redacted)
+        # Count image blocks, chart blocks, and table blocks on this page (should NOT be redacted)
         page_images = list(page.iter_image_blocks())
         visual_blocks_excluded = len(page_images)
-        
-        # Also count all chart blocks (they are all excluded from redaction)
-        chart_block_count = sum(1 for block in page.blocks if block.type == "chart")
-        visual_blocks_excluded += chart_block_count
+
+        # Also count all chart and table blocks (they are all excluded from redaction)
+        chart_table_count = sum(1 for block in page.blocks if block.type in ("chart", "table"))
+        visual_blocks_excluded += chart_table_count
         
         if visual_blocks_excluded:
             image_block_count += visual_blocks_excluded
@@ -161,8 +192,22 @@ def _collect_redaction_rects(
         f"text_blocks={sum(len(r) for r in redaction_map.values())}, "
         f"image_blocks_excluded={image_block_count}, "
         f"cross_page_rects={cross_page_rect_count}, "
-        f"merge_prev_rects={merge_prev_rect_count}"
+        f"merge_prev_rects={merge_prev_rect_count}, "
+        f"skip_set_size={len(skip_set)}, "
+        f"skip_set={sorted(skip_set) if skip_set else '[]'}, "
+        f"skipped_by_set={skipped_by_skip_set}, "
+        f"skipped_no_text={skipped_no_text}, "
+        f"skipped_chart={skipped_chart}, "
+        f"skipped_table={skipped_table}"
     )
+    if redacted_blocks and unified_logger.isEnabledFor(10):  # DEBUG level
+        for page_idx, blk_idx, blk_type, blk_bbox in redacted_blocks:
+            unified_logger.debug(
+                LogModule.RESTOR,
+                f"[SOURCE_CLEANUP] REDACT page={page_idx} block_idx={blk_idx} "
+                f"type={blk_type} bbox=({blk_bbox[0]:.1f},{blk_bbox[1]:.1f},"
+                f"{blk_bbox[2]:.1f},{blk_bbox[3]:.1f})",
+            )
 
     return redaction_map
 
@@ -198,6 +243,83 @@ def _merge_overlapping_rects(
     return merged
 
 
+def _clip_rects_against_skipped_blocks(
+    rects: List[Tuple[float, float, float, float]],
+    layout_doc: LayoutDocument,
+    page_index: int,
+    skip_block_indices: set,
+) -> List[Tuple[float, float, float, float]]:
+    """Clip redaction rects to exclude areas belonging to non-redacted blocks.
+
+    Protects every block on the page whose content must NOT be erased:
+      - Blocks in skip_block_indices (translation unchanged / failed)
+      - Blocks with no detected text (has_text()=False) — their bbox
+        may still contain original PDF content
+      - Chart / table / image blocks
+
+    When a redaction rect overlaps with a protected block's bbox, the
+    overlapping portion is split away so the original content survives.
+    """
+    protected_rects: List[Tuple[float, float, float, float]] = []
+    for page in layout_doc.pages:
+        if page.page_index != page_index:
+            continue
+        for block in page.blocks:
+            blk_idx = getattr(block, "index", None)
+            # Protect all blocks that _collect_redaction_rects would skip:
+            #   1. skip_set blocks
+            #   2. blocks without text (has_text()=False)
+            #   3. chart / table blocks
+            if blk_idx is not None and blk_idx in skip_block_indices:
+                protected_rects.append(block.bbox)
+            elif not block.has_text():
+                protected_rects.append(block.bbox)
+            elif block.type in ("chart", "table"):
+                protected_rects.append(block.bbox)
+
+    if not protected_rects:
+        return rects
+
+    clipped: List[Tuple[float, float, float, float]] = []
+    for rx0, ry0, rx1, ry1 in rects:
+        fragments = [(rx0, ry0, rx1, ry1)]
+        for px0, py0, px1, py1 in protected_rects:
+            next_fragments: List[Tuple[float, float, float, float]] = []
+            for fx0, fy0, fx1, fy1 in fragments:
+                # No overlap — keep fragment as-is
+                if fx0 >= px1 or fx1 <= px0 or fy0 >= py1 or fy1 <= py0:
+                    next_fragments.append((fx0, fy0, fx1, fy1))
+                    continue
+                # Split fragment around the protected rect (4 sub-rects)
+                # Left of protected rect
+                if fx0 < px0:
+                    next_fragments.append((fx0, fy0, px0, fy1))
+                # Right of protected rect
+                if fx1 > px1:
+                    next_fragments.append((px1, fy0, fx1, fy1))
+                # Top of protected rect (between px0 and px1 in x)
+                clip_x0 = max(fx0, px0)
+                clip_x1 = min(fx1, px1)
+                if fy0 < py0:
+                    next_fragments.append((clip_x0, fy0, clip_x1, py0))
+                # Bottom of protected rect
+                if fy1 > py1:
+                    next_fragments.append((clip_x0, py1, clip_x1, fy1))
+            fragments = next_fragments
+        clipped.extend(fragments)
+
+    clipped_count = len(clipped) - len(rects)
+    if clipped_count != 0:
+        unified_logger.info(
+            LogModule.RESTOR,
+            f"[SOURCE_CLEANUP] Page {page_index}: split {clipped_count} "
+            f"extra redaction fragment(s) to protect non-redacted blocks "
+            f"(protected={len(protected_rects)}, before={len(rects)}, after={len(clipped)})",
+        )
+
+    return clipped
+
+
 def clean_source_pdf(
     source_pdf_path: Path,
     layout_doc: LayoutDocument,
@@ -206,6 +328,7 @@ def clean_source_pdf(
     merge_rects: bool = True,
     fill_color: Tuple[float, float, float] = (1.0, 1.0, 1.0),
     extra_redaction_rects: Optional[Dict[int, List[Tuple[float, float, float, float]]]] = None,
+    skip_block_indices: Optional[set] = None,
 ) -> bytes:
     """
     Clean original text from a source PDF and return the cleaned PDF bytes.
@@ -223,6 +346,9 @@ def clean_source_pdf(
         output_path: Optional path to save the cleaned PDF
         merge_rects: Whether to merge overlapping rects
         fill_color: RGB fill color for redacted areas (default white)
+        skip_block_indices: Set of block indices to skip (excluded or
+            translation-failed segments whose original text should not
+            be erased)
 
     Returns:
         Cleaned PDF file content as bytes
@@ -237,14 +363,17 @@ def clean_source_pdf(
 
     unified_logger.info(
         LogModule.RESTOR,
-        f"[SOURCE_CLEANUP] Cleaning source PDF: {source_pdf_path}"
+        f"[SOURCE_CLEANUP] Cleaning source PDF: {source_pdf_path}, "
+        f"skip_block_indices={sorted(skip_block_indices) if skip_block_indices else 'None/empty'}"
     )
 
     # Open the source PDF
     doc = fitz.open(source_pdf_path)
     try:
         # Collect redaction rects from layout blocks
-        redaction_map = _collect_redaction_rects(layout_doc)
+        redaction_map = _collect_redaction_rects(
+            layout_doc, skip_block_indices=skip_block_indices,
+        )
 
         if extra_redaction_rects:
             for page_idx, extra_rects in extra_redaction_rects.items():
@@ -269,6 +398,13 @@ def clean_source_pdf(
 
             if merge_rects:
                 rects = _merge_overlapping_rects(rects)
+
+            # Protect skipped blocks: clip redaction rects so they do not
+            # erase original content of excluded / translation-failed segments.
+            if skip_block_indices:
+                rects = _clip_rects_against_skipped_blocks(
+                    rects, layout_doc, page_idx, skip_block_indices,
+                )
 
             for rx0, ry0, rx1, ry1 in rects:
                 rect = fitz.Rect(rx0, ry0, rx1, ry1)

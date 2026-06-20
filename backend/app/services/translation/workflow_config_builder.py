@@ -64,6 +64,24 @@ from converter.x2md.converter_docling import ConverterDoclingConfig
 from backend.config.secrets_manager import SecretsManager
 
 
+def resolve_layout_engine(convert_engine: str) -> str:
+    """
+    Map convert_engine to the layout engine string used by the registry.
+
+    >>> resolve_layout_engine("mineru")
+    'mineru'
+    >>> resolve_layout_engine("mineru_local")
+    'mineru'
+    >>> resolve_layout_engine("paddle")
+    'paddle'
+    """
+    if convert_engine in ("mineru", "mineru_local"):
+        return "mineru"
+    if convert_engine in ("paddle", "paddle_local"):
+        return "paddle"
+    return convert_engine
+
+
 class WorkflowConfigBuilder:
     """Builder for creating workflow configurations."""
     
@@ -555,6 +573,84 @@ class WorkflowConfigBuilder:
             converter_config = ConverterDoclingConfig(
                 formula_ocr=getattr(payload, 'formula_ocr', True),
                 code_ocr=getattr(payload, 'code_ocr', True)
+            )
+        elif convert_engine == 'paddle':
+            from layout.ocr_provider.paddle.provider import PaddleOCRConfig
+            from backend.config.config_loader import get_unified_config
+            from backend.config.secrets_manager import SecretsManager
+            unified = get_unified_config()
+            secrets = SecretsManager()
+            paddle_token = (secrets.get_api_key('paddle') or '').strip()
+            platform_cfg = unified.get_ai_platform_config('paddle')
+            concurrent = (platform_cfg or {}).get('concurrent', 3)
+            if concurrent is None or concurrent == 5:
+                concurrent = 3
+            # Read model from payload override first, then platform config, then default.
+            # Guard: known MinerU model names are never valid for PaddleOCR.
+            _KNOWN_MINERU_MODELS = frozenset({
+                'pipeline', 'vlm-auto-engine', 'hybrid-auto-engine',
+                'vlm-http-client', 'hybrid-http-client', 'vlm',
+            })
+            paddle_model = getattr(payload, 'model_version', '') if not isinstance(payload, dict) else payload.get('model_version', '')
+            if not paddle_model or paddle_model in _KNOWN_MINERU_MODELS:
+                paddle_model = (platform_cfg or {}).get('model', '') or ''
+            if not paddle_model or paddle_model == 'default' or paddle_model in _KNOWN_MINERU_MODELS:
+                paddle_model = 'PaddleOCR-VL-1.6'
+            converter_config = PaddleOCRConfig(
+                token=paddle_token,
+                base_url=(platform_cfg or {}).get('url', 'https://paddleocr.aistudio-app.com'),
+                api_endpoints=(platform_cfg or {}).get('api_endpoints', {}),
+                model=paddle_model,
+                concurrent=concurrent,
+                use_doc_orientation_classify=(platform_cfg or {}).get('use_doc_orientation_classify', False),
+                restructure_pages=(platform_cfg or {}).get('restructure_pages', False),
+            )
+            logger.info(
+                LogModule.LAYOUT,
+                f"[PADDLEOCR-CONFIG] Task {self.task_id}: built PaddleOCR cloud config — "
+                f"model={paddle_model}, "
+                f"use_doc_orientation_classify={converter_config.use_doc_orientation_classify}, "
+                f"restructure_pages={converter_config.restructure_pages}, "
+                f"concurrent={concurrent}",
+            )
+        elif convert_engine == 'paddle_local':
+            from layout.ocr_provider.paddle.provider import PaddleOCRConfig
+            from backend.config.config_loader import get_unified_config
+            from backend.config.secrets_manager import SecretsManager
+            unified = get_unified_config()
+            secrets = SecretsManager()
+            paddle_token = (secrets.get_api_key('paddle_local') or '').strip()
+            platform_cfg = unified.get_ai_platform_config('paddle_local')
+            concurrent = (platform_cfg or {}).get('concurrent', 1)
+            if concurrent is None or concurrent == 5:
+                concurrent = 1
+            # Read model from payload override first, then platform config, then default.
+            # Guard: known MinerU model names are never valid for PaddleOCR.
+            _KNOWN_MINERU_MODELS = frozenset({
+                'pipeline', 'vlm-auto-engine', 'hybrid-auto-engine',
+                'vlm-http-client', 'hybrid-http-client', 'vlm',
+            })
+            paddle_model = getattr(payload, 'model_version', '') if not isinstance(payload, dict) else payload.get('model_version', '')
+            if not paddle_model or paddle_model in _KNOWN_MINERU_MODELS:
+                paddle_model = (platform_cfg or {}).get('model', '') or ''
+            if not paddle_model or paddle_model == 'default' or paddle_model in _KNOWN_MINERU_MODELS:
+                paddle_model = 'paddleocr-vl'
+            converter_config = PaddleOCRConfig(
+                token=paddle_token,
+                base_url=(platform_cfg or {}).get('url', 'http://localhost:8099'),
+                api_endpoints=(platform_cfg or {}).get('api_endpoints', {}),
+                model=paddle_model,
+                concurrent=concurrent,
+                use_doc_orientation_classify=(platform_cfg or {}).get('use_doc_orientation_classify', False),
+                restructure_pages=(platform_cfg or {}).get('restructure_pages', False),
+            )
+            logger.info(
+                LogModule.LAYOUT,
+                f"[PADDLEOCR-CONFIG] Task {self.task_id}: built PaddleOCR local config — "
+                f"model={paddle_model}, "
+                f"use_doc_orientation_classify={converter_config.use_doc_orientation_classify}, "
+                f"restructure_pages={converter_config.restructure_pages}, "
+                f"concurrent={concurrent}",
             )
         # For 'identity' engine, converter_config remains None
         

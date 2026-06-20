@@ -161,6 +161,35 @@ def extract_mineru_image_span_content(block_data: Dict[str, Any]) -> Optional[st
 
 _LIST_CONTAINER_TYPES = frozenset({"list", "ref_list", "references"})
 
+# MinerU block type → (sub_type, tags, should_translate)
+_MINERU_BLOCK_SEMANTICS: Dict[str, tuple] = {
+    "text": ("body", [], True),
+    "title": ("title", ["heading", "title"], True),
+    "sub_title": ("heading", ["heading"], True),
+    "header": ("header", ["skip_translation"], False),
+    "footer": ("footer", ["skip_translation"], False),
+    "image": ("image_body", ["image", "skip_translation"], False),
+    "interline_equation": ("display_formula", ["formula", "skip_translation"], False),
+    "table": ("table_body", ["table", "skip_translation"], False),
+    "chart": ("chart_body", ["chart", "skip_translation"], False),
+    "code": ("code_block", ["skip_translation"], False),
+    "page_number": ("page_number", ["skip_translation"], False),
+    "page_footnote": ("footnote", [], True),
+    "list": ("list", [], True),
+    "ref_list": ("reference", [], True),
+    "references": ("reference", [], True),
+    "ref_text": ("reference", [], True),
+}
+
+
+def _get_mineru_block_semantics(block_type: str):
+    """Return (sub_type, tags, should_translate) for a MinerU block type."""
+    entry = _MINERU_BLOCK_SEMANTICS.get(block_type)
+    if entry is not None:
+        return entry
+    # Unknown types default to translatable text
+    return ("", [], True)
+
 
 def _parse_mineru_bbox(block_data: Dict[str, Any]) -> Optional[tuple[float, float, float, float]]:
     bbox = block_data.get("bbox")
@@ -200,14 +229,18 @@ def _append_mineru_block_to_pages(
     if block_type in _LIST_CONTAINER_TYPES and isinstance(nested_blocks, list) and nested_blocks:
         parent_raw = {k: v for k, v in block_data.items() if k != "blocks"}
         parent_text = _extract_text_from_layout_block(parent_raw)
+        p_sub_type, p_tags, p_should_translate = _get_mineru_block_semantics(block_type)
         parent_block = LayoutBlock(
             page_index=page_idx,
             bbox=(x0, y0, x1, y1),
             type=block_type,
+            sub_type=p_sub_type,
             index=global_index,
             text=parent_text,
             image_path=None,
             raw=parent_raw,
+            tags=list(p_tags),
+            should_translate=p_should_translate,
         )
         pages_dict.setdefault(page_idx, []).append(parent_block)
         global_index += 1
@@ -221,14 +254,18 @@ def _append_mineru_block_to_pages(
             sx0, sy0, sx1, sy1 = sub_bbox_tuple
             sub_type = str(sub.get("type", "unknown"))
             sub_text = _extract_text_from_layout_block(sub)
+            s_sub_type, s_tags, s_should_translate = _get_mineru_block_semantics(sub_type)
             sub_block = LayoutBlock(
                 page_index=page_idx,
                 bbox=(sx0, sy0, sx1, sy1),
                 type=sub_type,
+                sub_type=s_sub_type,
                 index=global_index,
                 text=sub_text,
                 image_path=None,
                 raw=sub.copy(),
+                tags=list(s_tags),
+                should_translate=s_should_translate,
             )
             pages_dict.setdefault(page_idx, []).append(sub_block)
             global_index += 1
@@ -243,14 +280,18 @@ def _append_mineru_block_to_pages(
         if span_content:
             text = span_content
 
+    b_sub_type, b_tags, b_should_translate = _get_mineru_block_semantics(block_type)
     block = LayoutBlock(
         page_index=page_idx,
         bbox=(x0, y0, x1, y1),
         type=block_type,
+        sub_type=b_sub_type,
         index=global_index,
         text=text,
         image_path=img_path,
         raw=block_data.copy(),
+        tags=list(b_tags),
+        should_translate=b_should_translate,
     )
     pages_dict.setdefault(page_idx, []).append(block)
     return global_index + 1
@@ -323,6 +364,7 @@ def _finalize_mineru_layout_document(
     pages_dict: Dict[int, List[LayoutBlock]],
     pdf_info: List[Any],
     metadata: Optional[Dict[str, Any]] = None,
+    engine: str = "mineru",
 ) -> LayoutDocument:
     pages: List[LayoutPage] = []
     for page_idx in sorted(pages_dict.keys()):
@@ -339,7 +381,7 @@ def _finalize_mineru_layout_document(
             )
         )
 
-    doc = LayoutDocument(pages=pages, engine="mineru", metadata=metadata or {})
+    doc = LayoutDocument(pages=pages, engine=engine, metadata=metadata or {})
     _infer_title_heading_levels(doc)
     _apply_cross_page_block_pairs(doc)
     return doc
@@ -439,10 +481,10 @@ def _infer_title_heading_levels(doc: LayoutDocument) -> None:
                 block.heading_level = _infer_heading_level_from_font_size(font_size)
 
 
-def parse_layout_json(layout_path: Path) -> LayoutDocument:
+def parse_layout_json(layout_path: Path, engine: str = "mineru") -> LayoutDocument:
     """
     Parse MinerU layout.json file into LayoutDocument.
-    
+
     Args:
         layout_path: Path to layout.json file
         
@@ -541,23 +583,27 @@ def parse_content_list_json(content_list_path: Path) -> LayoutDocument:
         if isinstance(text, list):
             text = " ".join(str(t) for t in text)
         text = str(text) if text is not None else None
-        
+
         img_path = item.get("img_path")
         img_path = str(img_path) if img_path is not None else None
-        
+
+        c_sub_type, c_tags, c_should_translate = _get_mineru_block_semantics(block_type)
         block = LayoutBlock(
             page_index=page_idx,
             bbox=(x0, y0, x1, y1),
             type=block_type,
+            sub_type=c_sub_type,
             index=global_index,
             text=text,
             image_path=img_path,
-            raw=item.copy()
+            raw=item.copy(),
+            tags=list(c_tags),
+            should_translate=c_should_translate,
         )
-        
+
         pages_dict.setdefault(page_idx, []).append(block)
         global_index += 1
-    
+
     # Build LayoutDocument
     pages = []
     for page_idx in sorted(pages_dict.keys()):
@@ -566,23 +612,24 @@ def parse_content_list_json(content_list_path: Path) -> LayoutDocument:
             blocks=pages_dict[page_idx]
         ))
 
-    doc = LayoutDocument(pages=pages, engine="mineru")
+    doc = LayoutDocument(pages=pages, engine=engine)
     _infer_title_heading_levels(doc)
     return doc
 
 
-def parse_mineru_layout_from_zip_bytes(zip_bytes: bytes) -> Optional[LayoutDocument]:
+def parse_mineru_layout_from_zip_bytes(zip_bytes: bytes, engine: str = "mineru") -> Optional[LayoutDocument]:
     """
     Parse MinerU layout from ZIP bytes in memory.
-    
+
     Tries to parse in this order:
     1. layout.json (new format with nested structure)
     2. *_middle.json (local MinerU API format, same as layout.json)
     3. *_content_list.json (legacy format with flat list)
-    
+
     Args:
         zip_bytes: ZIP file content as bytes
-        
+        engine: Engine name to set on the resulting LayoutDocument (default "mineru")
+
     Returns:
         LayoutDocument if parsing succeeds, None otherwise
     """
@@ -664,6 +711,7 @@ def parse_mineru_layout_from_zip_bytes(zip_bytes: bytes) -> Optional[LayoutDocum
                         pages_dict,
                         pdf_info,
                         metadata,
+                        engine=engine,
                     )
             except Exception as e:
                 logger.debug(LogModule.LAYOUT, f"Failed to parse layout.json, trying middle.json: {e}")
@@ -727,6 +775,7 @@ def parse_mineru_layout_from_zip_bytes(zip_bytes: bytes) -> Optional[LayoutDocum
                         pages_dict,
                         pdf_info,
                         metadata,
+                        engine=engine,
                     )
             except Exception as e:
                 logger.debug(LogModule.LAYOUT, f"Failed to parse middle.json, trying content_list.json: {e}")
@@ -773,23 +822,27 @@ def parse_mineru_layout_from_zip_bytes(zip_bytes: bytes) -> Optional[LayoutDocum
             if isinstance(text, list):
                 text = " ".join(str(t) for t in text)
             text = str(text) if text is not None else None
-            
+
             img_path = item.get("img_path")
             img_path = str(img_path) if img_path is not None else None
-            
+
+            c2_sub_type, c2_tags, c2_should_translate = _get_mineru_block_semantics(block_type)
             block = LayoutBlock(
                 page_index=page_idx,
                 bbox=(x0, y0, x1, y1),
                 type=block_type,
+                sub_type=c2_sub_type,
                 index=global_index,
                 text=text,
                 image_path=img_path,
-                raw=item.copy()
+                raw=item.copy(),
+                tags=list(c2_tags),
+                should_translate=c2_should_translate,
             )
-            
+
             pages_dict.setdefault(page_idx, []).append(block)
             global_index += 1
-        
+
         # Build LayoutDocument
         pages = []
         for page_idx in sorted(pages_dict.keys()):
@@ -797,9 +850,9 @@ def parse_mineru_layout_from_zip_bytes(zip_bytes: bytes) -> Optional[LayoutDocum
                 page_index=page_idx,
                 blocks=pages_dict[page_idx]
             ))
-        
+
         logger.info(LogModule.LAYOUT, f"Parsed MinerU *_content_list.json: {len(pages)} pages, {global_index} blocks")
-        doc = LayoutDocument(pages=pages, engine="mineru")
+        doc = LayoutDocument(pages=pages, engine=engine)
         _infer_title_heading_levels(doc)
         return doc
 

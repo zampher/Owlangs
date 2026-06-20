@@ -917,8 +917,11 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
                                   hintText: l10n.aiPlatformPlatformNameHint,
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(child: _buildApiProtocolDropdown()),
+                              // API Protocol is for LLM platforms only
+                              if (widget.platformInfo.platformType != 'parser') ...<Widget>[
+                                const SizedBox(width: 8),
+                                Expanded(child: _buildApiProtocolDropdown()),
+                              ],
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -927,18 +930,29 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
                             _urlController,
                             hintText: l10n.aiPlatformApiUrlHint,
                           ),
-                          const SizedBox(height: 8),
-                          _buildModelField(),
+                          // Model field is for LLM platforms only, parsers use parser_subtype dropdown instead
+                          if (widget.platformInfo.platformType != 'parser') ...<Widget>[
+                            const SizedBox(height: 8),
+                            _buildModelField(),
+                          ],
                           if (widget.platformInfo.platformType == 'parser') ...<Widget>[
                             const SizedBox(height: 8),
                             _buildParserSubtypeDropdown(),
+                            // PaddleOCR model dropdown — only for paddle parsers
+                            if (widget.platformInfo.parserEngine == 'paddle') ...<Widget>[
+                              const SizedBox(height: 8),
+                              _buildPaddleModelDropdown(),
+                            ],
                           ],
                           const SizedBox(height: 16),
                           _buildHasApiKeySwitch(),
                           const SizedBox(height: 8),
                           _buildApiKeyField(),
-                          const SizedBox(height: 8),
-                          _buildThinkingModeSupportedField(),
+                          // Thinking mode is only for LLM platforms, not parsers
+                          if (widget.platformInfo.platformType != 'parser') ...<Widget>[
+                            const SizedBox(height: 8),
+                            _buildThinkingModeSupportedField(),
+                          ],
                         ],
                       ),
                     ),
@@ -1333,6 +1347,51 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
       ],
       onChanged: (String? value) {
         // Subtype is saved via copyWith in _saveConfig
+      },
+    );
+  }
+
+  /// Known PaddleOCR document parsing models (order: newest first).
+  static const List<String> _paddleOcrModels = <String>[
+    'PaddleOCR-VL-1.6',
+    'PaddleOCR-VL',
+    'paddleocr-vl',
+  ];
+
+  /// PaddleOCR model dropdown for Paddle parser platforms.
+  Widget _buildPaddleModelDropdown() {
+    final l10n = AppLocalizations.of(context)!;
+    final String currentModel = _modelController.text.trim();
+    // If the current model is not in the known list, add it as an option
+    final List<String> modelOptions = _paddleOcrModels.contains(currentModel)
+        ? _paddleOcrModels
+        : <String>[currentModel, ..._paddleOcrModels];
+
+    return DropdownButtonFormField<String>(
+      value: modelOptions.contains(currentModel) ? currentModel : modelOptions.first,
+      decoration: InputDecoration(
+        labelText: l10n.settingsPaddleOcrModelLabel,
+        prefixIcon: const Icon(Icons.model_training),
+        border: const OutlineInputBorder(),
+        contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      ),
+      items: modelOptions
+          .map(
+            (String model) => DropdownMenuItem<String>(
+              value: model,
+              child: Text(
+                model,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: (String? value) {
+        if (value != null) {
+          _modelController.text = value;
+        }
       },
     );
   }

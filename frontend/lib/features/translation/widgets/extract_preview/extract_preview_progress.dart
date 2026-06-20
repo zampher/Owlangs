@@ -351,7 +351,7 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
             } else {
               // Generic error message
               combinedMessage =
-                  'Failed to extract segments from file. The file may be corrupted, in an unsupported format (e.g., WPS format), or incompatible with the extraction process. Please try converting the file to a standard format (e.g., standard DOCX) and try again.';
+                  'Failed to extract segments from file. The file may be corrupted, in an unsupported format, or the OCR engine could not extract text from it. If it is an image, try using a different OCR engine (Settings > Parsing Engine). If the problem persists, please contact the developer.';
             }
           }
 

@@ -679,8 +679,8 @@
     "mineru": {
       "name": "MinerU (Cloud)",
       "url": "https://mineru.net/api/v4",
-      "performance_note": "Advanced document parsing and conversion service with OCR capabilities",
       "platform_type": "parser",
+      "parser_engine": "mineru",
       "parser_subtype": "cloud",
       "requires_api_key": true,
       "description": "MinerU is a powerful document parsing service that converts various document formats (PDF, Word, PowerPoint, etc.) into structured markdown format with high accuracy and OCR support.",
@@ -690,13 +690,15 @@
         "result": "/extract-results/batch/{batch_id}",
         "api_version": "cloud-v4"
       },
-      "concurrent": 3
+      "performance_note": "Advanced document parsing and conversion service with OCR capabilities",
+      "concurrent": 5,
+      "model": ""
     },
     "mineru_local": {
       "name": "MinerU (Local)",
       "url": "http://localhost:8080",
-      "performance_note": "Self-hosted MinerU; API key optional.",
       "platform_type": "parser",
+      "parser_engine": "mineru",
       "parser_subtype": "local",
       "requires_api_key": false,
       "description": "Locally deployed MinerU (v3.1+). Set base URL matching your mineru-api startup port (e.g., http://localhost:8920). The port number depends on your mineru-api configuration. API key is optional for local deployment.",
@@ -708,7 +710,47 @@
         "status": "/tasks/{task_id}",
         "api_version": "local-v3.1"
       },
-      "concurrent": 1
+      "performance_note": "Self-hosted MinerU; API key optional.",
+      "concurrent": 5,
+      "model": "vlm-auto-engine"
+    },
+    "paddle": {
+      "name": "PaddleOCR (Cloud)",
+      "url": "https://paddleocr.aistudio-app.com",
+      "platform_type": "parser",
+      "parser_engine": "paddle",
+      "parser_subtype": "cloud",
+      "requires_api_key": true,
+      "description": "PaddleOCR Cloud API for document OCR and layout parsing. High-accuracy OCR with rich layout parsing (titles, tables, formulas).",
+      "token_link": "https://aistudio.baidu.com/",
+      "api_endpoints": {
+        "submit": "/api/v2/ocr/jobs",
+        "result": "/api/v2/ocr/jobs/{job_id}"
+      },
+      "performance_note": "High-accuracy OCR with rich layout parsing (titles, tables, formulas)",
+      "concurrent": 5,
+      "use_doc_orientation_classify": false,
+      "restructure_pages": false,
+      "model": "PaddleOCR-VL-1.6"
+    },
+    "paddle_local": {
+      "name": "PaddleOCR (Local)",
+      "url": "http://localhost:8099",
+      "platform_type": "parser",
+      "parser_engine": "paddle",
+      "parser_subtype": "local",
+      "requires_api_key": false,
+      "description": "Self-hosted PaddleOCR-VL via Docker (edgaras0x4e/paddleocr-pdf-api or official PaddleOCR service). API key is optional for local deployment.",
+      "token_link": "https://hub.docker.com/r/edgaras0x4e/paddleocr-pdf-api",
+      "api_endpoints": {
+        "submit": "/ocr",
+        "result": "/ocr/{job_id}/result"
+      },
+      "performance_note": "Self-hosted PaddleOCR; requires NVIDIA GPU (~8.5 GB VRAM).",
+      "concurrent": 5,
+      "use_doc_orientation_classify": false,
+      "restructure_pages": false,
+      "model": "paddleocr-vl"
     }
   }
 }

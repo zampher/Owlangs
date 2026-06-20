@@ -1164,6 +1164,7 @@ class ConverterMineru(X2MarkdownConverter):
         self.backend = BackendFactory.create_backend(config)
         self.attachments: list[AttachMent] = []
         self.layout_document: LayoutDocument | None = None
+        self._layout_engine: str = "mineru"
         # Optional callback for split-PDF progress reporting: (current_part, total_parts, message)
         self.progress_callback: Optional[Callable[[int, int, str], None]] = None
         
@@ -1225,7 +1226,7 @@ class ConverterMineru(X2MarkdownConverter):
                 content=zip_bytes, suffix=".zip", stem="mineru"
             )))
             try:
-                self.layout_document = load_layout_from_engine_zip("mineru", zip_bytes)
+                self.layout_document = load_layout_from_engine_zip(self._layout_engine, zip_bytes)
             except Exception as e:
                 self.logger.debug(LogModule.WORKFLOW, f"[LAYOUT] Failed to parse MinerU layout: {e}")
 
@@ -1282,7 +1283,7 @@ class ConverterMineru(X2MarkdownConverter):
                 except Exception as e:
                     self.logger.warning(LogModule.WORKFLOW, f"[MINERU Local] Failed to embed images for part {i + 1}: {e}")
 
-            layout_doc = load_layout_from_engine_zip("mineru", zip_bytes)
+            layout_doc = load_layout_from_engine_zip(self._layout_engine, zip_bytes)
             if not layout_doc:
                 self.logger.warning(LogModule.WORKFLOW, f"[MINERU SPLIT] No layout document parsed for part {i + 1}")
 
@@ -1372,7 +1373,7 @@ class ConverterMineru(X2MarkdownConverter):
                 content=zip_bytes, suffix=".zip", stem="mineru"
             )))
             try:
-                self.layout_document = load_layout_from_engine_zip("mineru", zip_bytes)
+                self.layout_document = load_layout_from_engine_zip(self._layout_engine, zip_bytes)
             except Exception as e:
                 self.logger.debug(LogModule.WORKFLOW, f"[LAYOUT] Failed to parse MinerU layout (async): {e}")
 
@@ -1430,7 +1431,7 @@ class ConverterMineru(X2MarkdownConverter):
                 except Exception as e:
                     self.logger.warning(LogModule.WORKFLOW, f"[MINERU Local] Failed to embed images for part {i + 1} (async): {e}")
 
-            layout_doc = load_layout_from_engine_zip("mineru", zip_bytes)
+            layout_doc = load_layout_from_engine_zip(self._layout_engine, zip_bytes)
             if not layout_doc:
                 self.logger.warning(LogModule.WORKFLOW, f"[MINERU SPLIT] No layout document parsed for part {i + 1} (async)")
 

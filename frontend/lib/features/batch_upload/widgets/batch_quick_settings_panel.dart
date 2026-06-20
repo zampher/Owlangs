@@ -475,7 +475,7 @@ class _BatchQuickSettingsPanelState
   Widget _buildParsingEngineSection(AppLocalizations l10n, ThemeData theme) {
     final aiSettings = ref.watch(aiPlatformSettingsProvider);
     final aiNotifier = ref.read(aiPlatformSettingsProvider.notifier);
-    final parserOptions = <String>['mineru', 'mineru_local'];
+    final parserOptions = <String>['mineru', 'mineru_local', 'paddle', 'paddle_local'];
     final selectedParser = widget.parsingEngine;
 
     Color parserStatusColor(String key) {
@@ -504,19 +504,29 @@ class _BatchQuickSettingsPanelState
                 constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 onPressed: () async {
                   try {
+                    final bool localParser = selectedParser == 'mineru_local' || selectedParser == 'paddle_local';
                     final result = await ConfigService().testAIPlatform(
                       selectedParser,
-                      selectedParser == 'mineru_local'
-                          ? (aiSettings.platforms['mineru_local']?.apiKey ?? '')
-                          : '',
+                      localParser ? (aiSettings.platforms[selectedParser]?.apiKey ?? '') : '',
                       baseUrl: aiSettings.platforms[selectedParser]?.url,
                     );
                     await aiNotifier.refreshPlatformStatus();
                     if (!context.mounted) return;
                     final success = result?['success'] == true;
-                    final testLabel = selectedParser == 'mineru_local'
-                        ? l10n.batchUploadMineruLocal
-                        : l10n.batchUploadMineru;
+                    String testLabel;
+                    switch (selectedParser) {
+                      case 'mineru_local':
+                        testLabel = l10n.batchUploadMineruLocal;
+                        break;
+                      case 'paddle':
+                        testLabel = l10n.batchUploadPaddle;
+                        break;
+                      case 'paddle_local':
+                        testLabel = l10n.batchUploadPaddleLocal;
+                        break;
+                      default:
+                        testLabel = l10n.batchUploadMineru;
+                    }
                     final String detailMessage = success
                         ? buildMinerUTestSuccessMessage(l10n, result)
                         : (result?['message']?.toString() ??

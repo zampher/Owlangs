@@ -16,6 +16,7 @@ from .app_routes_format_conversion import router as format_router
 from .app_routes_glossary import router as glossary_router
 from .app_routes_translation_segments import router as segments_router
 from .app_routes_formula_check import router as formula_check_router
+from .app_routes_debug import router as debug_router
 
 router = APIRouter()
 router.include_router(translation_router, tags=["Translation"])
@@ -26,6 +27,7 @@ router.include_router(format_router, tags=["Format Conversion"])
 router.include_router(glossary_router, tags=["Glossary"])
 router.include_router(segments_router, tags=["Translation Segments"])
 router.include_router(formula_check_router, tags=["LaTeX Formula Check"])
+router.include_router(debug_router, tags=["Debug"])
 
 __all__ = ["router"]
 

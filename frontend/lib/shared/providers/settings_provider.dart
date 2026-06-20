@@ -712,8 +712,9 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     // 3. Trigger batch save to backend (with debounce)
     if (parsingEngine != null) {
       await _settingsService.saveSetting('', 'parsingEngine', parsingEngine);
-      // Map to backend key if needed
-      if (parsingEngine == 'mineru' || parsingEngine == 'mineru_local') {
+      // Map to backend key if needed (all parser engines)
+      if (parsingEngine == 'mineru' || parsingEngine == 'mineru_local' ||
+          parsingEngine == 'paddle' || parsingEngine == 'paddle_local') {
         await _settingsService.saveSetting(
           '',
           'translator_convert_engine',

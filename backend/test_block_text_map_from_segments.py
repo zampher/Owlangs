@@ -71,7 +71,7 @@ def test_build_block_text_map_uses_target_when_only_some_segments_have_modified(
             "target_text": "摘要正文译文",
         },
     ]
-    block_map = generator.build_block_text_map_from_segments(
+    block_map, _skip = generator.build_block_text_map_from_segments(
         layout_doc,
         segments,
         text_field="target_text",
@@ -95,7 +95,7 @@ def test_build_block_text_map_resolves_segment_layout_block_map():
     task_state = {
         "segment_layout_block_map": [[] for _ in range(28)] + [[28]],
     }
-    block_map = generator.build_block_text_map_from_segments(
+    block_map, _skip = generator.build_block_text_map_from_segments(
         layout_doc,
         segments,
         text_field="target_text",
@@ -151,7 +151,7 @@ def test_expand_list_block_to_text_children():
     assert expanded == [13, 14]
 
     generator = PDFGenerator(task_manager=None)
-    block_map = generator.build_block_text_map_from_segments(
+    block_map, _skip = generator.build_block_text_map_from_segments(
         layout_doc,
         [
             {

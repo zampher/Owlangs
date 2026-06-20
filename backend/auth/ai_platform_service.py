@@ -80,6 +80,70 @@ def _parse_models_from_openai_list_json(models_data: object) -> list[str]:
     return models
 
 
+async def _test_paddleocr_connectivity(
+    base_url: str,
+    api_key: str,
+    platform: str,
+) -> Dict[str, Any]:
+    """Test PaddleOCR API connectivity.
+
+    PaddleOCR is a parser platform, not an LLM. It does not expose
+    /models or /chat/completions. We verify reachability by probing
+    the API submit endpoint listed in platforms.json.
+    """
+    try:
+        base = (base_url or '').strip().rstrip('/')
+        if not base:
+            return {"success": False, "error": "No base URL configured for PaddleOCR"}
+
+        # Read the submit endpoint path from platforms config
+        from backend.config.config_loader import get_unified_config
+        config = get_unified_config()
+        platform_cfg = config.get_ai_platform_config(platform)
+        api_endpoints = (platform_cfg or {}).get('api_endpoints', {})
+        submit_path = api_endpoints.get('submit', '/api/v2/ocr/jobs')
+        probe_url = f"{base}{submit_path}"
+
+        async with httpx.AsyncClient(timeout=15.0, proxy=None, mounts={'http://': None, 'https://': None}) as client:
+            headers = {}
+            if api_key and api_key.strip():
+                # Official PaddleOCR SDK uses lowercase "bearer"
+                headers["Authorization"] = f"bearer {api_key}"
+
+            # Try reaching the submit endpoint — any non-404 response
+            # (including 401, 405) means the API server is reachable
+            resp = await client.get(probe_url, headers=headers, follow_redirects=True)
+
+            if resp.status_code == 404:
+                return {
+                    "success": False,
+                    "error": f"PaddleOCR API endpoint not found at {probe_url} (HTTP 404). Check the base URL in Settings.",
+                    "message": f"PaddleOCR API endpoint not found at {probe_url} (HTTP 404). Check the base URL in Settings.",
+                }
+
+            # Any status other than 404 means the server is alive
+            label = "PaddleOCR Cloud" if platform == "paddle" else "PaddleOCR Local"
+            return {
+                "success": True,
+                "message": f"{label} API is reachable at {base}",
+            }
+
+    except httpx.ConnectError as e:
+        return {
+            "success": False,
+            "error": f"Cannot connect to PaddleOCR at {base_url!r}: {e}. Check that the service is running and the URL is correct.",
+            "message": f"Cannot connect to PaddleOCR at {base_url!r}: {e}.",
+        }
+    except httpx.TimeoutException:
+        return {
+            "success": False,
+            "error": f"Connection to PaddleOCR at {base_url!r} timed out. Check the service status and network.",
+            "message": f"Connection to PaddleOCR at {base_url!r} timed out.",
+        }
+    except Exception as e:
+        return {"success": False, "error": f"PaddleOCR test failed: {e}", "message": f"PaddleOCR test failed: {e}"}
+
+
 async def detect_max_tokens_limit(
     platform_type: str,
     base_url: str,
@@ -272,6 +336,10 @@ async def test_ai_platform_connectivity(
             return await test_mineru_local_connectivity(base, api_key or '')
         except Exception as e:
             return {"success": False, "error": f"Local MinerU test failed: {e}"}
+
+    # PaddleOCR cloud / local: parser platform, check API endpoint reachability
+    if platform in ('paddle', 'paddle_local'):
+        return await _test_paddleocr_connectivity(base_url, api_key or '', platform)
 
     # LLM platforms: use models list API for connectivity test (no token consumption)
     result: Dict[str, Any] = {}

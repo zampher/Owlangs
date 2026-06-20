@@ -107,6 +107,7 @@ class PDFGenerator:
             if not segments_data or not isinstance(segments_data, dict):
                 logger.warning(LogModule.EXPORT, f"[LAYOUT] No translation segments found in task_state")
                 block_text_map: Dict[int, str] = {}
+                skip_overlay_block_indices: set[int] = set()
                 font_size_by_block_index: Dict[int, float] = {}
                 font_weight_by_block_index: Dict[int, str] = {}
                 font_style_by_block_index: Dict[int, str] = {}
@@ -131,14 +132,14 @@ class PDFGenerator:
                 # Build mapping: segments (translated text) -> layout blocks (structure)
                 # If segments contain formatting info (LaTeX, Markdown tables), it's preserved
                 # Layout blocks provide structure (formula/table/image positions, formats)
-                block_text_map = self.build_block_text_map_from_segments(
+                block_text_map, skip_overlay_block_indices = self.build_block_text_map_from_segments(
                     layout_doc,
                     segments,
                     text_field=text_field,
                     task_state=task_state,
                     is_deep_split_enabled=is_deep_split_enabled,
                 )
-                logger.info(LogModule.EXPORT,f"[LAYOUT] Built block text map: {len(block_text_map)} blocks mapped")
+                logger.info(LogModule.EXPORT,f"[LAYOUT] Built block text map: {len(block_text_map)} blocks mapped, {len(skip_overlay_block_indices)} skip-overlay")
 
                 from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
                     build_block_font_map_from_segments,
@@ -283,6 +284,11 @@ class PDFGenerator:
                                 if leading_em_by_block_index
                                 else None
                             ),
+                            skip_overlay_block_indices=(
+                                skip_overlay_block_indices
+                                if skip_overlay_block_indices
+                                else None
+                            ),
                         )
                         if _rt == "typst_overlay":
                             source_pdf = task_state.get("original_file_path")
@@ -395,35 +401,43 @@ class PDFGenerator:
         text_field: str,
         task_state: Dict[str, Any],
         is_deep_split_enabled: bool = False,
-    ) -> Dict[int, str]:
+    ) -> tuple[Dict[int, str], set[int]]:
         """
         Build block text mapping from segments (unified for both original and translated PDF).
-        
+
         This function extracts text from segments and distributes it to layout blocks,
         using the same logic for both source_text (original PDF) and target_text/modified_text (translated PDF).
-        
+
+        Also returns a set of block indices that should skip overlay rendering because
+        the segment was excluded from translation or translation did not change the text
+        (source_text == target_text). For these blocks, original PDF text is preserved
+        (not erased) and no Typst overlay text is placed.
+
         CRITICAL: This function prioritizes information from segments:
         1. Text content: Uses target_text/modified_text from segments (translated text with preserved formatting)
         2. Block mapping: Uses layout_block_indices from segments to map to layout blocks
         3. Block type: Uses layout_document's block.type for structure (formula, table, image, etc.)
-        
+
         The rendered PDF will use:
         - Layout structure (formula/table/image positions, formats) from layout_document
         - Translated text content (with preserved LaTeX formulas, Markdown tables) from segments
-        
-        If segments already contain formatting information (e.g., LaTeX formulas in $...$, 
+
+        If segments already contain formatting information (e.g., LaTeX formulas in $...$,
         Markdown tables in |...| format), these are preserved and used directly.
         If not, the layout_document's structure information is used as fallback.
-        
+
         Args:
             layout_doc: LayoutDocument instance (provides structure: formula/table/image positions and formats)
             segments: List of segment dictionaries (provides translated text with preserved formatting)
             text_field: Field name to extract from segments ('source_text', 'target_text', or 'modified_text')
             task_state: Task state dictionary (for layout_chunk_block_texts)
             is_deep_split_enabled: Whether deep split is enabled (affects how multiple segments map to same block)
-            
+
         Returns:
-            Dictionary mapping block index to text content (translated text from segments)
+            Tuple of (block_text_map, skip_overlay_block_indices):
+            - block_text_map: Dictionary mapping block index to text content
+            - skip_overlay_block_indices: Set of block indices that should NOT be overlaid
+              (excluded segments or translation-failed segments where source_text == target_text)
         """
         from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
             resolve_segment_layout_block_indices,
@@ -508,6 +522,13 @@ class PDFGenerator:
             weights = [max(len((hint or "").strip()), 1) for hint in block_hints]
             return _split_by_weights(normalized_text, weights)
         
+        # Build set of block indices that should skip overlay rendering.
+        # A segment skips overlay when:
+        #   - is_excluded is truthy (explicitly excluded from translation), OR
+        #   - source_text == target_text and no modified_text override
+        #     (translation engine returned unchanged text)
+        skip_overlay_block_indices: set[int] = set()
+
         # Map text from segments to blocks
         for seg_index, seg in enumerate(segments):
             # For segments with text (even if is_image=True, e.g., image captions), participate in mapping
@@ -517,8 +538,6 @@ class PDFGenerator:
                 continue
             
             text = _segment_export_text(seg, text_field)
-            if not text:
-                continue
 
             indices = _expand_renderable_block_indices(
                 indices,
@@ -526,7 +545,7 @@ class PDFGenerator:
                 block_index_to_type,
                 block_index_to_bbox,
             )
-            
+
             # Filter out image blocks from indices, BUT keep image blocks for image caption segments
             # Image captions are text segments that map to image blocks, and their text should be preserved
             text_block_indices: List[int] = []
@@ -553,7 +572,7 @@ class PDFGenerator:
                     continue
                 else:
                     text_block_indices.append(block_index_int)
-            
+
             # If we have text but only image blocks, this might be an image caption segment
             # Map the text to the image block(s) so it can be retrieved later
             if not text_block_indices and image_block_indices and text:
@@ -565,10 +584,39 @@ class PDFGenerator:
                     else:
                         block_text_map[img_idx] = text
                 continue
-            
+
             if not text_block_indices:
                 continue
-            
+
+            # Detect segments that should skip overlay rendering.
+            #   - Excluded: seg["is_excluded"] is truthy (pre-determined exclusion)
+            #   - Translation failed: source_text == target_text and no modified_text
+            #     (translation engine returned unchanged text, meaning no translation occurred)
+            #   - Empty target: target_text/modified_text is empty but source_text exists
+            #     (translation failed to produce output — preserve original PDF content)
+            is_excluded = bool(seg.get("is_excluded"))
+            source_text = (seg.get("source_text") or "").strip()
+            target_text = (seg.get("target_text") or "").strip()
+            modified_text = (seg.get("modified_text") or "").strip()
+            translation_unchanged = (
+                not is_excluded
+                and source_text
+                and source_text == target_text
+                and not modified_text
+            )
+            translation_failed = (
+                not is_excluded
+                and not text
+                and source_text
+                and text_field != "source_text"
+            )
+            if is_excluded or translation_unchanged or translation_failed:
+                for idx in text_block_indices:
+                    skip_overlay_block_indices.add(idx)
+
+            if not text:
+                continue
+
             try:
                 expected_blocks = len(text_block_indices)
                 if expected_blocks == 1:
@@ -630,7 +678,12 @@ class PDFGenerator:
             block_index_to_bbox,
         )
         
-        return block_text_map
+        logger.info(
+            LogModule.EXPORT,
+            f"[LAYOUT] Built skip_overlay_block_indices: {len(skip_overlay_block_indices)} blocks "
+            f"(excluded, translation-unchanged, or translation-failed segments)",
+        )
+        return block_text_map, skip_overlay_block_indices
 
     @staticmethod
     def _reconcile_block_text_map_lengths(

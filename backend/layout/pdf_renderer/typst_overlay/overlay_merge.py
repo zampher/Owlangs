@@ -83,6 +83,19 @@ def merge_overlay_pdf(
             source_page = source_doc[page_idx]
             overlay_page = overlay_doc[page_idx]
 
+            src_w = float(source_page.rect.width)
+            src_h = float(source_page.rect.height)
+            ovl_w = float(overlay_page.rect.width)
+            ovl_h = float(overlay_page.rect.height)
+            if abs(src_w - ovl_w) > 0.05 or abs(src_h - ovl_h) > 0.05:
+                unified_logger.warning(
+                    LogModule.RESTOR,
+                    f"[OVERLAY_MERGE] Page {page_idx + 1} dimension mismatch: "
+                    f"source=({src_w:.2f}, {src_h:.2f}) "
+                    f"overlay=({ovl_w:.2f}, {ovl_h:.2f}) "
+                    f"delta=({ovl_w - src_w:+.4f}, {ovl_h - src_h:+.4f})"
+                )
+
             # Show overlay PDF page on top of source page
             source_page.show_pdf_page(
                 source_page.rect,

@@ -35,7 +35,11 @@ class AIPlatformConfig:
     recommended_tokens: Optional[int] = None
     performance_note: Optional[str] = None
     platform_type: str = "llm"  # "llm", "parser", "converter"
+    parser_engine: Optional[str] = None  # "mineru", "paddle" — which parser engine
     parser_subtype: Optional[str] = None  # "cloud", "local" for parser type platforms (e.g., MinerU)
+    # PaddleOCR-specific parameters
+    use_doc_orientation_classify: bool = False
+    restructure_pages: bool = False
     api_protocol: str = "openai"  # API protocol: "openai", "ollama", "anthropic"
     requires_api_key: bool = True  # Whether API key is required for this platform (disable for local deployments)
     description: Optional[str] = None
@@ -222,6 +226,21 @@ class PlatformsConfig:
                                 LogModule.CONFIG,
                                 f"Migrated '{platform_key}': single_segment_retry_mode='{old_ssr}' → segment_limit={pdata_filtered.get('segment_limit', 100)}"
                             )
+                    # Migrate: populate parser_engine for parser platforms missing it.
+                    # PaddleOCR support was added in a later version; older configs have
+                    # parser_engine=null for all parser platforms.  Infer from the
+                    # platform key so the frontend can show the correct model dropdown.
+                    if ptype == 'parser' and pdata_filtered.get('parser_engine') is None:
+                        _known_engines = ('mineru', 'paddle')
+                        for _eng in _known_engines:
+                            if platform_key == _eng or platform_key.startswith(f'{_eng}_'):
+                                pdata_filtered['parser_engine'] = _eng
+                                needs_migration = True
+                                logger.info(
+                                    LogModule.CONFIG,
+                                    f"Migrated '{platform_key}': parser_engine → '{_eng}'",
+                                )
+                                break
                     self.platforms[platform_key] = AIPlatformConfig(**pdata_filtered)
             if needs_migration:
                 self._needs_migration = True
@@ -230,7 +249,8 @@ class PlatformsConfig:
     # Field order for consistent JSON serialization (matches platforms.json structure)
     # Fields exclusive to LLM platforms (not used by parser/converter platforms)
     _LLM_ONLY_FIELDS = {
-        "model",
+        # NOTE: "model" is NOT here — it is used by both LLM and parser
+        # platforms (e.g., MinerU model version, PaddleOCR model flavor).
         "max_tokens",
         "temperature",
         "temperature_min",
@@ -256,6 +276,7 @@ class PlatformsConfig:
         "name",
         "url",
         "platform_type",
+        "parser_engine",
         "parser_subtype",
         "requires_api_key",
         "description",
@@ -263,7 +284,10 @@ class PlatformsConfig:
         "api_endpoints",
         "performance_note",
         "concurrent",
-        # LLM-only fields
+        # Parser-platform fields (PaddleOCR-specific; ignored for LLM)
+        "use_doc_orientation_classify",
+        "restructure_pages",
+        # LLM / shared model field
         "model",
         "max_tokens",
         "temperature",

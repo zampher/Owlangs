@@ -519,7 +519,13 @@ def _build_image_data_map_for_format_export(
         try:
             from layout.registry import load_layout_from_engine_zip
 
-            layout_doc = load_layout_from_engine_zip("mineru", zip_bytes)
+            _raw_engine = task_state.get("layout_engine") or task_state.get("convert_engine") or "mineru"
+            _layout_engine = str(_raw_engine).strip().lower()
+            if _layout_engine.startswith("paddle"):
+                _layout_engine = "paddle"
+            elif _layout_engine.startswith("mineru"):
+                _layout_engine = "mineru"
+            layout_doc = load_layout_from_engine_zip(_layout_engine, zip_bytes)
             if layout_doc:
                 task_state["layout_document"] = layout_doc
         except Exception as load_error:
@@ -1464,6 +1470,7 @@ async def _typst_overlay_pdf_response(
         segments = [s for s in raw_segments if isinstance(s, dict)]
 
     block_text_map: Dict[int, str] = {}
+    skip_overlay_block_indices: set[int] = set()
     font_size_by_block_index: Dict[int, float] = {}
     font_weight_by_block_index: Dict[int, str] = {}
     font_style_by_block_index: Dict[int, str] = {}
@@ -1471,7 +1478,7 @@ async def _typst_overlay_pdf_response(
     if segments:
         is_deep_split_enabled = bool(task_state.get("deep_split"))
         text_field = "target_text"
-        block_text_map = pdf_generator.build_block_text_map_from_segments(
+        block_text_map, skip_overlay_block_indices = pdf_generator.build_block_text_map_from_segments(
             layout_doc,
             segments,
             text_field=text_field,
@@ -1651,6 +1658,9 @@ async def _typst_overlay_pdf_response(
                     render_page_indices=render_page_indices,
                     base_merged_pdf_bytes=base_merged_pdf_bytes,
                     cleaned_source_output_path=cleaned_source_file,
+                    skip_overlay_block_indices=(
+                        skip_overlay_block_indices if skip_overlay_block_indices else None
+                    ),
                 ),
             )
         except Exception as e:
@@ -1689,6 +1699,9 @@ async def _typst_overlay_pdf_response(
                                 leading_em_by_block_index if leading_em_by_block_index else None
                             ),
                             cleaned_source_output_path=cleaned_source_file,
+                            skip_overlay_block_indices=(
+                                skip_overlay_block_indices if skip_overlay_block_indices else None
+                            ),
                         ),
                     )
                 except Exception as retry_error:
@@ -1753,6 +1766,9 @@ async def _typst_overlay_pdf_response(
                             leading_em_by_block_index if leading_em_by_block_index else None
                         ),
                         cleaned_source_output_path=cleaned_source_file,
+                        skip_overlay_block_indices=(
+                            skip_overlay_block_indices if skip_overlay_block_indices else None
+                        ),
                     ),
                 )
             except Exception as retry_error:
@@ -2705,7 +2721,13 @@ class DownloadService:
                 try:
                     from layout.registry import load_layout_from_engine_zip
                     from utils.format_convert_utils import get_layout_block_bbox
-                    layout_doc = load_layout_from_engine_zip("mineru", zip_bytes)
+                    _raw_engine = task_state.get("layout_engine") or task_state.get("convert_engine") or "mineru"
+                    _layout_engine = str(_raw_engine).strip().lower()
+                    if _layout_engine.startswith("paddle"):
+                        _layout_engine = "paddle"
+                    elif _layout_engine.startswith("mineru"):
+                        _layout_engine = "mineru"
+                    layout_doc = load_layout_from_engine_zip(_layout_engine, zip_bytes)
                     if layout_doc:
                         task_state["layout_document"] = layout_doc
                         task_state["layout_block_bbox"] = get_layout_block_bbox(layout_doc)

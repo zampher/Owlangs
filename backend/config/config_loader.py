@@ -101,37 +101,43 @@ class UnifiedConfig:
         """Get AI platforms configuration (for backward compatibility)"""
         platforms_dict = {}
         for key, platform in self.platforms.platforms.items():
-            # Ensure numeric fields are properly typed
-            max_tokens = int(platform.max_tokens) if platform.max_tokens is not None else 4096
-            temperature = float(platform.temperature) if platform.temperature is not None else 0.3
-            temperature_min = float(platform.temperature_min) if platform.temperature_min is not None else 0.0
-            temperature_max = float(platform.temperature_max) if platform.temperature_max is not None else 2.0
-            recommended_tokens = int(platform.recommended_tokens) if platform.recommended_tokens is not None else None
-            
+            is_llm = platform_type_uses_llm_chunk_concurrent(platform.platform_type)
+
             platforms_dict[key] = {
                 'name': platform.name,
                 'url': platform.url,
                 'model': platform.model,
-                'max_tokens': max_tokens,
-                'temperature': temperature,
-                'temperature_min': temperature_min,
-                'temperature_max': temperature_max,
-                'thinking_mode_supported': bool(platform.thinking_mode_supported),
-                'thinking_mode': platform.thinking_mode,
-                'recommended_tokens': recommended_tokens,
                 'performance_note': platform.performance_note,
                 'platform_type': platform.platform_type,
                 'parser_subtype': platform.parser_subtype,
                 'description': platform.description,
                 'token_link': platform.token_link,
                 'requires_api_key': bool(platform.requires_api_key),
-                'api_protocol': platform.api_protocol,
                 'api_endpoints': dict(platform.api_endpoints) if platform.api_endpoints else {},
             }
             platforms_dict[key]['concurrent'] = (
                 int(platform.concurrent) if platform.concurrent is not None else 5
             )
-            if platform_type_uses_llm_chunk_concurrent(platform.platform_type):
+            # LLM-only fields: only include for LLM platforms (not parser/converter)
+            if is_llm:
+                platforms_dict[key]['max_tokens'] = (
+                    int(platform.max_tokens) if platform.max_tokens is not None else 4096
+                )
+                platforms_dict[key]['temperature'] = (
+                    float(platform.temperature) if platform.temperature is not None else 0.3
+                )
+                platforms_dict[key]['temperature_min'] = (
+                    float(platform.temperature_min) if platform.temperature_min is not None else 0.0
+                )
+                platforms_dict[key]['temperature_max'] = (
+                    float(platform.temperature_max) if platform.temperature_max is not None else 2.0
+                )
+                platforms_dict[key]['thinking_mode_supported'] = bool(platform.thinking_mode_supported)
+                platforms_dict[key]['thinking_mode'] = platform.thinking_mode
+                platforms_dict[key]['recommended_tokens'] = (
+                    int(platform.recommended_tokens) if platform.recommended_tokens is not None else None
+                )
+                platforms_dict[key]['api_protocol'] = platform.api_protocol
                 platforms_dict[key]['chunk_size'] = (
                     int(platform.chunk_size) if platform.chunk_size is not None else 3000
                 )
@@ -163,27 +169,44 @@ class UnifiedConfig:
         """Get AI platform configuration (for backward compatibility)"""
         platform_obj = self.platforms.get_platform_config(platform)
         if platform_obj:
+            is_llm = platform_type_uses_llm_chunk_concurrent(platform_obj.platform_type)
             base = {
                 'name': platform_obj.name,
                 'url': platform_obj.url,
                 'model': platform_obj.model,
-                'max_tokens': platform_obj.max_tokens,
-                'temperature': platform_obj.temperature,
-                'temperature_min': platform_obj.temperature_min,
-                'temperature_max': platform_obj.temperature_max,
-                'thinking_mode_supported': platform_obj.thinking_mode_supported,
-                'thinking_mode': platform_obj.thinking_mode,
-                'recommended_tokens': platform_obj.recommended_tokens,
                 'performance_note': platform_obj.performance_note,
                 'platform_type': platform_obj.platform_type,
-                'api_protocol': platform_obj.api_protocol,
+                'parser_engine': platform_obj.parser_engine,
+                'parser_subtype': platform_obj.parser_subtype,
                 'description': platform_obj.description,
                 'token_link': platform_obj.token_link,
-                'requires_api_key': platform_obj.requires_api_key,
-                'api_endpoints': platform_obj.api_endpoints,
+                'requires_api_key': bool(platform_obj.requires_api_key),
+                'api_endpoints': dict(platform_obj.api_endpoints) if platform_obj.api_endpoints else {},
+                'use_doc_orientation_classify': bool(platform_obj.use_doc_orientation_classify),
+                'restructure_pages': bool(platform_obj.restructure_pages),
             }
-            base['concurrent'] = platform_obj.concurrent
-            if platform_type_uses_llm_chunk_concurrent(platform_obj.platform_type):
+            base['concurrent'] = (
+                int(platform_obj.concurrent) if platform_obj.concurrent is not None else 5
+            )
+            if is_llm:
+                base['max_tokens'] = (
+                    int(platform_obj.max_tokens) if platform_obj.max_tokens is not None else 4096
+                )
+                base['temperature'] = (
+                    float(platform_obj.temperature) if platform_obj.temperature is not None else 0.3
+                )
+                base['temperature_min'] = (
+                    float(platform_obj.temperature_min) if platform_obj.temperature_min is not None else 0.0
+                )
+                base['temperature_max'] = (
+                    float(platform_obj.temperature_max) if platform_obj.temperature_max is not None else 2.0
+                )
+                base['thinking_mode_supported'] = bool(platform_obj.thinking_mode_supported)
+                base['thinking_mode'] = platform_obj.thinking_mode
+                base['recommended_tokens'] = (
+                    int(platform_obj.recommended_tokens) if platform_obj.recommended_tokens is not None else None
+                )
+                base['api_protocol'] = platform_obj.api_protocol
                 base['chunk_size'] = (
                     int(platform_obj.chunk_size) if platform_obj.chunk_size is not None else 3000
                 )

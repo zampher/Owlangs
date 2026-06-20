@@ -64,6 +64,8 @@ class TranslationQuickSettings {
     this.temperature,
     this.tableOcr,
     this.formulaOcr,
+    this.useDocOrientationClassify,
+    this.restructurePages,
   });
 
   factory TranslationQuickSettings.fromJson(Map<String, dynamic> json) =>
@@ -90,6 +92,9 @@ class TranslationQuickSettings {
             : null,
         tableOcr: json['tableOcr'] as bool?,
         formulaOcr: json['formulaOcr'] as bool?,
+        useDocOrientationClassify:
+            json['useDocOrientationClassify'] as bool?,
+        restructurePages: json['restructurePages'] as bool?,
       );
   final String sourceLang;
   final String toLang;
@@ -117,6 +122,10 @@ class TranslationQuickSettings {
   final bool? tableOcr;
   final bool? formulaOcr;
 
+  // PaddleOCR overrides (null means use system default from platform config)
+  final bool? useDocOrientationClassify;
+  final bool? restructurePages;
+
   TranslationQuickSettings copyWith({
     String? sourceLang,
     String? toLang,
@@ -136,6 +145,8 @@ class TranslationQuickSettings {
     double? temperature,
     bool? tableOcr,
     bool? formulaOcr,
+    bool? useDocOrientationClassify,
+    bool? restructurePages,
   }) =>
       TranslationQuickSettings(
         sourceLang: sourceLang ?? this.sourceLang,
@@ -161,6 +172,9 @@ class TranslationQuickSettings {
         temperature: temperature ?? this.temperature,
         tableOcr: tableOcr ?? this.tableOcr,
         formulaOcr: formulaOcr ?? this.formulaOcr,
+        useDocOrientationClassify:
+            useDocOrientationClassify ?? this.useDocOrientationClassify,
+        restructurePages: restructurePages ?? this.restructurePages,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -181,6 +195,9 @@ class TranslationQuickSettings {
         if (temperature != null) 'temperature': temperature,
         if (tableOcr != null) 'tableOcr': tableOcr,
         if (formulaOcr != null) 'formulaOcr': formulaOcr,
+        if (useDocOrientationClassify != null)
+          'useDocOrientationClassify': useDocOrientationClassify,
+        if (restructurePages != null) 'restructurePages': restructurePages,
       };
 }
 
@@ -321,6 +338,20 @@ class TranslationQuickSettingsNotifier
   /// Pass null to revert to system default.
   void updateFormulaOcr(bool? value) {
     state = state.copyWith(formulaOcr: value);
+    _saveSettings();
+  }
+
+  /// Update useDocOrientationClassify override for quick settings (single request only).
+  /// Pass null to revert to system default.
+  void updateUseDocOrientationClassify(bool? value) {
+    state = state.copyWith(useDocOrientationClassify: value);
+    _saveSettings();
+  }
+
+  /// Update restructurePages override for quick settings (single request only).
+  /// Pass null to revert to system default.
+  void updateRestructurePages(bool? value) {
+    state = state.copyWith(restructurePages: value);
     _saveSettings();
   }
 
@@ -968,11 +999,13 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
     WidgetRef ref,
   ) {
     final GlobalSettings globalSettings = ref.watch(globalSettingsProvider);
+    final AIPlatformSettings aiPlatformSettings =
+        ref.watch(aiPlatformSettingsProvider);
     final l10n = AppLocalizations.of(context)!;
 
-    // Effective OCR values: quick settings override (nullable) falls back to system default
-    final bool effectiveTableOcr = settings.tableOcr ?? globalSettings.tableOcr;
-    final bool effectiveFormulaOcr = settings.formulaOcr ?? globalSettings.formulaOcr;
+    final String selectedParser = globalSettings.parsingEngine;
+    final bool isPaddleEngine =
+        selectedParser == 'paddle' || selectedParser == 'paddle_local';
 
     return _wrapQuickSettingSection(
       context,
@@ -985,21 +1018,47 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
           // 2. Source Language
           _buildSourceLanguageSelector(
               context, settings, notifier, isTranslatePhase),
-          const SizedBox(height: 8),
-          // 3. Table OCR toggle
-          _buildOcrToggle(
-            label: l10n.quickSettingsTableOcr,
-            value: effectiveTableOcr,
-            enabled: !isTranslatePhase,
-            onChanged: notifier.updateTableOcr,
-          ),
-          // 4. Formula OCR toggle
-          _buildOcrToggle(
-            label: l10n.quickSettingsFormulaOcr,
-            value: effectiveFormulaOcr,
-            enabled: !isTranslatePhase,
-            onChanged: notifier.updateFormulaOcr,
-          ),
+          // 3. Engine-aware toggles
+          if (!isPaddleEngine) ...<Widget>[
+            const SizedBox(height: 8),
+            // MinerU: Table OCR toggle
+            _buildOcrToggle(
+              label: l10n.quickSettingsTableOcr,
+              value: settings.tableOcr ?? globalSettings.tableOcr,
+              enabled: !isTranslatePhase,
+              onChanged: notifier.updateTableOcr,
+            ),
+            // MinerU: Formula OCR toggle
+            _buildOcrToggle(
+              label: l10n.quickSettingsFormulaOcr,
+              value: settings.formulaOcr ?? globalSettings.formulaOcr,
+              enabled: !isTranslatePhase,
+              onChanged: notifier.updateFormulaOcr,
+            ),
+          ],
+          if (isPaddleEngine) ...<Widget>[
+            const SizedBox(height: 8),
+            // PaddleOCR: Auto-Detect Orientation toggle
+            _buildOcrToggle(
+              label: l10n.quickSettingsPaddleUseDocOrientationClassify,
+              value: settings.useDocOrientationClassify ??
+                  (aiPlatformSettings.platforms[selectedParser]
+                          ?.useDocOrientationClassify ??
+                      false),
+              enabled: !isTranslatePhase,
+              onChanged: notifier.updateUseDocOrientationClassify,
+            ),
+            // PaddleOCR: Restructure Pages toggle
+            _buildOcrToggle(
+              label: l10n.quickSettingsPaddleRestructurePages,
+              value: settings.restructurePages ??
+                  (aiPlatformSettings.platforms[selectedParser]
+                          ?.restructurePages ??
+                      false),
+              enabled: !isTranslatePhase,
+              onChanged: notifier.updateRestructurePages,
+            ),
+          ],
         ],
       ),
     );
@@ -1016,7 +1075,7 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
         ref.read(globalSettingsProvider.notifier);
 
     final String selectedParser = globalSettings.parsingEngine;
-    final List<String> parserOptions = <String>['mineru', 'mineru_local'];
+    final List<String> parserOptions = <String>['mineru', 'mineru_local', 'paddle', 'paddle_local'];
 
     AIPlatformInfo? getParserInfo(String key) => aiPlatformSettings.platforms[key];
 
@@ -1042,9 +1101,15 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
     }
 
     final l10n = AppLocalizations.of(context)!;
-    final String testLabel = selectedParser == 'mineru_local'
-        ? 'MinerU Local'
-        : 'MinerU';
+    String testLabelForParser(String parser) {
+      switch (parser) {
+        case 'mineru_local': return l10n.settingsParsingEngineMineruLocal;
+        case 'paddle': return l10n.settingsParsingEnginePaddle;
+        case 'paddle_local': return l10n.settingsParsingEnginePaddleLocal;
+        default: return l10n.settingsParsingEngineMineru;
+      }
+    }
+    final String testLabel = testLabelForParser(selectedParser);
 
     return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1066,8 +1131,8 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                       const BoxConstraints(minWidth: 32, minHeight: 32),
                   onPressed: () async {
                     try {
-                      final String apiKey = selectedParser == 'mineru_local'
-                          ? (getParserInfo('mineru_local')?.apiKey ?? '')
+                      final String apiKey = (selectedParser == 'mineru_local' || selectedParser == 'paddle_local')
+                          ? (getParserInfo(selectedParser)?.apiKey ?? '')
                           : '';
                       final result =
                           await ConfigService().testAIPlatform(

@@ -874,6 +874,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
         unified_ref_font_pt, unified_ref_leading_em = self._collect_unified_ref_metrics(
             layout_doc,
         )
+        skip_overlay: set = getattr(self.config, "skip_overlay_block_indices", None) or set()
 
         for page in layout_doc.pages:
             blocks: List[RenderBlock] = []
@@ -935,6 +936,18 @@ class TypstOverlayRenderer(BasePDFRenderer):
 
                 # Use block.index (from MinerU layout) as the mapping key
                 block_key = block.index if block.index is not None else total_blocks
+
+                # Skip overlay for excluded or translation-failed segments:
+                # don't erase original text and don't place overlay text.
+                if block_key in skip_overlay:
+                    skipped_blocks.append((
+                        getattr(block, 'index', '?'),
+                        getattr(block, 'type', '?'),
+                        "skip_overlay",
+                        block.bbox,
+                    ))
+                    continue
+
                 translated = ""
                 if self.config.translated_text_by_block_index:
                     translated = self.config.translated_text_by_block_index.get(block_key, "")
@@ -1125,6 +1138,13 @@ class TypstOverlayRenderer(BasePDFRenderer):
         # is ineffective.  Use background-embed mode instead.
         is_image_based = self._is_image_based_pdf(self._source_pdf_path)
 
+        unified_logger.info(
+            LogModule.RESTOR,
+            f"[TYPST_OVERLAY] Step 2: skip_overlay_block_indices="
+            f"{sorted(skip_overlay) if skip_overlay else 'empty/None'}, "
+            f"is_image_based={is_image_based}",
+        )
+
         cleanup_started = time.perf_counter()
         try:
             cleaned_pdf_bytes = clean_source_pdf(
@@ -1132,6 +1152,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 layout_doc,
                 merge_rects=True,
                 extra_redaction_rects=extra_redaction_rects or None,
+                skip_block_indices=skip_overlay or None,
             )
             diagnostics["cleanup_elapsed"] = time.perf_counter() - cleanup_started
         except Exception as e:
@@ -1156,7 +1177,14 @@ class TypstOverlayRenderer(BasePDFRenderer):
 
         import fitz
         src_doc = fitz.open(stream=cleaned_pdf_bytes, filetype="pdf")
+        _orig_doc = None
         try:
+            # Diagnostic: compare cleaned PDF with original source dimensions
+            try:
+                _orig_doc = fitz.open(self._source_pdf_path)
+            except Exception:
+                pass
+
             page_keys = sorted(render_blocks_by_page.keys())
             render_only = getattr(self.config, "render_page_indices", None)
             if render_only is not None:
@@ -1171,8 +1199,25 @@ class TypstOverlayRenderer(BasePDFRenderer):
                         blocks=render_blocks_by_page[page_idx],
                     )
                     page_specs.append(spec)
+                    # Compare cleaned vs original page dimensions
+                    if _orig_doc and page_idx < len(_orig_doc):
+                        _op = _orig_doc[page_idx]
+                        _cw = float(page.rect.width)
+                        _ch = float(page.rect.height)
+                        _ow = float(_op.rect.width)
+                        _oh = float(_op.rect.height)
+                        if abs(_cw - _ow) > 0.05 or abs(_ch - _oh) > 0.05:
+                            unified_logger.warning(
+                                LogModule.RESTOR,
+                                f"[TYPST_OVERLAY] Page {page_idx} dims changed after cleanup: "
+                                f"original=({_ow:.2f}, {_oh:.2f}) "
+                                f"cleaned=({_cw:.2f}, {_ch:.2f}) "
+                                f"delta=({_cw - _ow:+.2f}, {_ch - _oh:+.2f})",
+                            )
         finally:
             src_doc.close()
+            if _orig_doc:
+                _orig_doc.close()
 
         diagnostics["build_specs_elapsed"] = time.perf_counter() - specs_started
 
@@ -1292,6 +1337,35 @@ class TypstOverlayRenderer(BasePDFRenderer):
             raise
 
         diagnostics["compile_elapsed"] = time.perf_counter() - compile_started
+
+        # ---- Diagnostic: Compare compiled overlay page dims against specs ----
+        _ovl_check_doc = fitz.open(pdf_path)
+        try:
+            _ovl_pages = len(_ovl_check_doc)
+            _spec_pages = len(page_specs)
+            if _ovl_pages != _spec_pages:
+                unified_logger.warning(
+                    LogModule.RESTOR,
+                    f"[TYPST_OVERLAY] Compiled page count mismatch: "
+                    f"specs={_spec_pages} overlay_pdf={_ovl_pages}",
+                )
+            for _sp in page_specs:
+                _pi = _sp.page_index
+                if _pi < _ovl_pages:
+                    _op = _ovl_check_doc[_pi]
+                    _ow = float(_op.rect.width)
+                    _oh = float(_op.rect.height)
+                    _dw = _ow - _sp.page_width_pt
+                    _dh = _oh - _sp.page_height_pt
+                    if abs(_dw) > 0.05 or abs(_dh) > 0.05:
+                        unified_logger.warning(
+                            LogModule.RESTOR,
+                            f"[TYPST_OVERLAY] Page {_pi}: spec=({_sp.page_width_pt:.2f}, "
+                            f"{_sp.page_height_pt:.2f}) compiled=({_ow:.2f}, {_oh:.2f}) "
+                            f"delta=({_dw:+.2f}, {_dh:+.2f})",
+                        )
+        finally:
+            _ovl_check_doc.close()
 
         # ---- Step 6: Merge overlay onto cleaned PDF ----
         merge_started = time.perf_counter()

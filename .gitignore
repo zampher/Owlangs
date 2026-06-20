@@ -125,6 +125,7 @@ configs/static.json
 CLAUDE.md
 memory
 MEMORY.md
+AGENTS.md
 
 test
 backend/anonymize

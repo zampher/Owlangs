@@ -916,6 +916,20 @@ class AppLocalizationsJa extends AppLocalizations {
   String get quickSettingsFormulaOcrSubtitle => '文書解析時に数式を認識';
 
   @override
+  String get quickSettingsPaddleUseDocOrientationClassify => '文書方向の自動検出';
+
+  @override
+  String get quickSettingsPaddleUseDocOrientationClassifySubtitle =>
+      'OCR前に文書の向きを自動検出して修正します';
+
+  @override
+  String get quickSettingsPaddleRestructurePages => 'ページ再構成';
+
+  @override
+  String get quickSettingsPaddleRestructurePagesSubtitle =>
+      'より良い読み順のためにページレイアウトを再構成します';
+
+  @override
   String get quickSettingsMineruLabel => 'MinerU (mineru)';
 
   @override
@@ -1283,6 +1297,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get batchUploadMineruLocal => 'MinerU ローカル';
+
+  @override
+  String get batchUploadPaddle => 'PaddleOCR';
+
+  @override
+  String get batchUploadPaddleLocal => 'PaddleOCR ローカル';
 
   @override
   String get commonClose => '閉じる';
@@ -1706,6 +1726,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsParsingEngineMineruLocalDesc => 'セルフホスト MinerU、APIキー任意';
 
   @override
+  String get settingsParsingEnginePaddle => 'PaddleOCR (クラウド)';
+
+  @override
+  String get settingsParsingEnginePaddleDesc => '高精度OCR、タイトル・表・数式のレイアウト解析対応';
+
+  @override
+  String get settingsParsingEnginePaddleLocal => 'PaddleOCR (ローカル)';
+
+  @override
+  String get settingsParsingEnginePaddleLocalDesc =>
+      'セルフホスト PaddleOCR、NVIDIA GPU（約8.5GB VRAM）が必要';
+
+  @override
   String get settingsParsingEnginePdfplumber => 'PDFPlumber';
 
   @override
@@ -1741,6 +1774,23 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsParsingEngineNewTaskNotice => '変更は新規タスクにのみ適用されます';
+
+  @override
+  String get settingsPaddleOcrModelLabel => 'PaddleOCR モデル';
+
+  @override
+  String get settingsPaddleUseDocOrientationClassify => '文書方向の自動検出';
+
+  @override
+  String get settingsPaddleUseDocOrientationClassifySubtitle =>
+      'OCR前に文書の向きを自動検出して修正します';
+
+  @override
+  String get settingsPaddleRestructurePages => 'ページ再構成';
+
+  @override
+  String get settingsPaddleRestructurePagesSubtitle =>
+      'より良い読み順のためにページレイアウトを再構成します';
 
   @override
   String get settingsPdfSplitMaxPages => 'PDF分割最大ページ数';

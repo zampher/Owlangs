@@ -44,10 +44,14 @@ def merge_layout_documents(docs: List[LayoutDocument]) -> LayoutDocument:
                     page_index=block.page_index + page_offset,
                     bbox=block.bbox,
                     type=block.type,
+                    sub_type=block.sub_type,
                     index=global_block_idx,
                     text=block.text,
                     image_path=block.image_path,
                     raw=_adjust_raw_page_idx(block.raw, page_offset) if block.raw else {},
+                    heading_level=block.heading_level,
+                    tags=list(block.tags),
+                    should_translate=block.should_translate,
                 )
                 new_page.blocks.append(new_block)
                 global_block_idx += 1

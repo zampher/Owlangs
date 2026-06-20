@@ -61,6 +61,15 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
     _converter_factory["mineru"] = (ConverterMineru, ConverterMineruConfig)
     _converter_factory["mineru_local"] = (ConverterMineru, ConverterMineruConfig)
 
+    # Register PaddleOCR adapter if httpx is available
+    try:
+        from layout.ocr_provider.paddle.converter_adapter import PaddleToConverterAdapter
+        from layout.ocr_provider.paddle.provider import PaddleOCRConfig
+        _converter_factory["paddle"] = (PaddleToConverterAdapter, PaddleOCRConfig)
+        _converter_factory["paddle_local"] = (PaddleToConverterAdapter, PaddleOCRConfig)
+    except ImportError:
+        pass
+
     def __init__(self, config: MarkdownBasedWorkflowConfig):
         super().__init__(config=config)
         self.convert_engine = config.convert_engine
@@ -174,6 +183,25 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
                 
                 # If we have any reusable resource (extracted_dir, mineru_zip_path, or zip_bytes), proceed
                 if extracted_dir or mineru_zip_path or zip_bytes:
+                    # Verify engine consistency — if task_state was populated by a
+                    # different engine, skip reuse so a fresh parse runs with the
+                    # currently requested engine.
+                    cached_engine = None
+                    if hasattr(self, "_task_state") and self._task_state:
+                        cached_engine = self._task_state.get("layout_engine")
+                    if cached_engine and cached_engine != convert_engine:
+                        if self.config.logger:
+                            self.config.logger.info(
+                                LogModule.WORKFLOW,
+                                f"[MINERU] Skipping cached MinerU results: "
+                                f"cached_engine={cached_engine}, requested_engine={convert_engine}",
+                            )
+                        extracted_dir = None
+                        mineru_zip_path = None
+                        zip_bytes = None
+
+                # If after engine check we still have reusable resources, proceed
+                if extracted_dir or mineru_zip_path or zip_bytes:
                     # Reuse the existing MinerU result instead of re-uploading
                     from converter.x2md.converter_mineru import get_md_from_zip_url_with_inline_images
                     import io
@@ -220,7 +248,12 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
                         if zip_bytes:
                             try:
                                 from layout.registry import load_layout_from_engine_zip
-                                self.layout_document = load_layout_from_engine_zip("mineru", zip_bytes)
+                                layout_engine = convert_engine
+                                if layout_engine.startswith("paddle"):
+                                    layout_engine = "paddle"
+                                elif layout_engine.startswith("mineru"):
+                                    layout_engine = "mineru"
+                                self.layout_document = load_layout_from_engine_zip(layout_engine, zip_bytes)
                                 if self.config.logger and self.layout_document:
                                     self.config.logger.info(
                                         LogModule.WORKFLOW,
@@ -263,8 +296,13 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
                         
                         # Load layout_document from the ZIP file
                         from layout.registry import load_layout_from_engine_zip
-                        self.layout_document = load_layout_from_engine_zip("mineru", zip_bytes)
-                        
+                        _layout_engine = convert_engine
+                        if _layout_engine.startswith("paddle"):
+                            _layout_engine = "paddle"
+                        elif _layout_engine.startswith("mineru"):
+                            _layout_engine = "mineru"
+                        self.layout_document = load_layout_from_engine_zip(_layout_engine, zip_bytes)
+
                         if self.config.logger:
                             self.config.logger.info(
                                 LogModule.WORKFLOW,
@@ -291,8 +329,13 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
                         
                         # Load layout_document from the ZIP file
                         from layout.registry import load_layout_from_engine_zip
-                        self.layout_document = load_layout_from_engine_zip("mineru", zip_bytes)
-                        
+                        _layout_engine = convert_engine
+                        if _layout_engine.startswith("paddle"):
+                            _layout_engine = "paddle"
+                        elif _layout_engine.startswith("mineru"):
+                            _layout_engine = "mineru"
+                        self.layout_document = load_layout_from_engine_zip(_layout_engine, zip_bytes)
+
                         if self.config.logger:
                             self.config.logger.info(
                                 LogModule.WORKFLOW,
@@ -361,7 +404,12 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
                     
                     if zip_bytes:
                         from layout.registry import load_layout_from_engine_zip
-                        self.layout_document = load_layout_from_engine_zip("mineru", zip_bytes)
+                        _layout_engine = convert_engine
+                        if _layout_engine.startswith("paddle"):
+                            _layout_engine = "paddle"
+                        elif _layout_engine.startswith("mineru"):
+                            _layout_engine = "mineru"
+                        self.layout_document = load_layout_from_engine_zip(_layout_engine, zip_bytes)
                         if self.layout_document and self.config.logger:
                             self.config.logger.info(
                                 LogModule.WORKFLOW,

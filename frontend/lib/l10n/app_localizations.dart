@@ -1751,6 +1751,30 @@ abstract class AppLocalizations {
   /// **'Recognize formulas during document parsing'**
   String get quickSettingsFormulaOcrSubtitle;
 
+  /// No description provided for @quickSettingsPaddleUseDocOrientationClassify.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-Detect Orientation'**
+  String get quickSettingsPaddleUseDocOrientationClassify;
+
+  /// No description provided for @quickSettingsPaddleUseDocOrientationClassifySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatically detect and correct document orientation before OCR'**
+  String get quickSettingsPaddleUseDocOrientationClassifySubtitle;
+
+  /// No description provided for @quickSettingsPaddleRestructurePages.
+  ///
+  /// In en, this message translates to:
+  /// **'Restructure Pages'**
+  String get quickSettingsPaddleRestructurePages;
+
+  /// No description provided for @quickSettingsPaddleRestructurePagesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Restructure page layout for better reading order'**
+  String get quickSettingsPaddleRestructurePagesSubtitle;
+
   /// No description provided for @quickSettingsMineruLabel.
   ///
   /// In en, this message translates to:
@@ -2410,6 +2434,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'MinerU Local'**
   String get batchUploadMineruLocal;
+
+  /// No description provided for @batchUploadPaddle.
+  ///
+  /// In en, this message translates to:
+  /// **'PaddleOCR'**
+  String get batchUploadPaddle;
+
+  /// No description provided for @batchUploadPaddleLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'PaddleOCR Local'**
+  String get batchUploadPaddleLocal;
 
   /// No description provided for @commonClose.
   ///
@@ -3161,6 +3197,30 @@ abstract class AppLocalizations {
   /// **'Self-hosted MinerU; API key optional'**
   String get settingsParsingEngineMineruLocalDesc;
 
+  /// No description provided for @settingsParsingEnginePaddle.
+  ///
+  /// In en, this message translates to:
+  /// **'PaddleOCR (Cloud)'**
+  String get settingsParsingEnginePaddle;
+
+  /// No description provided for @settingsParsingEnginePaddleDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'High-accuracy OCR with layout parsing for titles, tables, and formulas'**
+  String get settingsParsingEnginePaddleDesc;
+
+  /// No description provided for @settingsParsingEnginePaddleLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'PaddleOCR (Local)'**
+  String get settingsParsingEnginePaddleLocal;
+
+  /// No description provided for @settingsParsingEnginePaddleLocalDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Self-hosted PaddleOCR; requires NVIDIA GPU (~8.5 GB VRAM)'**
+  String get settingsParsingEnginePaddleLocalDesc;
+
   /// No description provided for @settingsParsingEnginePdfplumber.
   ///
   /// In en, this message translates to:
@@ -3232,6 +3292,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Changes apply to new tasks only'**
   String get settingsParsingEngineNewTaskNotice;
+
+  /// No description provided for @settingsPaddleOcrModelLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'PaddleOCR Model'**
+  String get settingsPaddleOcrModelLabel;
+
+  /// No description provided for @settingsPaddleUseDocOrientationClassify.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-Detect Orientation'**
+  String get settingsPaddleUseDocOrientationClassify;
+
+  /// No description provided for @settingsPaddleUseDocOrientationClassifySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatically detect and correct document orientation before OCR'**
+  String get settingsPaddleUseDocOrientationClassifySubtitle;
+
+  /// No description provided for @settingsPaddleRestructurePages.
+  ///
+  /// In en, this message translates to:
+  /// **'Restructure Pages'**
+  String get settingsPaddleRestructurePages;
+
+  /// No description provided for @settingsPaddleRestructurePagesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Restructure page layout for better reading order'**
+  String get settingsPaddleRestructurePagesSubtitle;
 
   /// No description provided for @settingsPdfSplitMaxPages.
   ///

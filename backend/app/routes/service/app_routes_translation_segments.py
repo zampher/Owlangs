@@ -152,8 +152,61 @@ def _enrich_translation_segments_with_detected_reasons(
         )
 
 
+def _resolve_layout_engine(task_state: Dict[str, Any]) -> str:
+    """Map task_state engine fields to a registered layout loader name."""
+    raw = (
+        task_state.get("layout_engine")
+        or task_state.get("convert_engine")
+        or "mineru"
+    )
+    engine = str(raw).strip().lower()
+    if engine.startswith("paddle"):
+        return "paddle"
+    if engine.startswith("mineru"):
+        return "mineru"
+    return engine
+
+
+def _read_layout_zip_bytes(task_state: Dict[str, Any], engine: str) -> Optional[bytes]:
+    """Load layout ZIP bytes for the given engine from task_state."""
+    import os
+
+    zip_bytes = task_state.get("layout_source_zip")
+    if isinstance(zip_bytes, (bytes, bytearray)) and zip_bytes:
+        return bytes(zip_bytes)
+
+    if engine == "paddle":
+        paddle_path = task_state.get("paddle_zip_path")
+        if isinstance(paddle_path, str) and os.path.isfile(paddle_path):
+            try:
+                with open(paddle_path, "rb") as handle:
+                    return handle.read()
+            except OSError:
+                pass
+
+    attachments = task_state.get("attachments")
+    if isinstance(attachments, dict):
+        attachment_key = "paddle" if engine == "paddle" else "mineru"
+        doc = attachments.get(attachment_key)
+        if doc is not None and hasattr(doc, "content") and doc.content:
+            return doc.content
+
+    if engine != "paddle":
+        workflow_inst = task_state.get("workflow_instance")
+        if workflow_inst is not None and hasattr(workflow_inst, "attachment"):
+            try:
+                attachment_docs = workflow_inst.attachment.get_documents()
+                if isinstance(attachment_docs, dict) and "mineru" in attachment_docs:
+                    candidate = attachment_docs["mineru"]
+                    if candidate:
+                        return candidate
+            except Exception:
+                pass
+    return None
+
+
 def _resolve_layout_document(task_id: str, task_state: Dict[str, Any]):
-    """Return layout_document from task state, reloading from MinerU ZIP when needed."""
+    """Return layout_document from task state, reloading from layout ZIP when needed."""
     layout_doc = task_state.get("layout_document")
     if layout_doc is not None:
         return layout_doc
@@ -164,17 +217,8 @@ def _resolve_layout_document(task_id: str, task_state: Dict[str, Any]):
     if not needs_mineru_zip_restore(original_filename):
         return None
 
-    zip_bytes = task_state.get("layout_source_zip")
-    if zip_bytes is None:
-        workflow_inst = task_state.get("workflow_instance")
-        if workflow_inst is not None and hasattr(workflow_inst, "attachment"):
-            try:
-                attachments = workflow_inst.attachment.get_documents()
-                if isinstance(attachments, dict) and "mineru" in attachments:
-                    zip_bytes = attachments["mineru"]
-            except Exception:
-                zip_bytes = None
-
+    engine = _resolve_layout_engine(task_state)
+    zip_bytes = _read_layout_zip_bytes(task_state, engine)
     if not zip_bytes:
         return None
 
@@ -182,14 +226,14 @@ def _resolve_layout_document(task_id: str, task_state: Dict[str, Any]):
         from layout.registry import load_layout_from_engine_zip
         from utils.format_convert_utils import get_layout_block_bbox
 
-        layout_doc = load_layout_from_engine_zip("mineru", zip_bytes)
+        layout_doc = load_layout_from_engine_zip(engine, zip_bytes)
         if layout_doc is not None:
             task_state["layout_document"] = layout_doc
             task_state["layout_block_bbox"] = get_layout_block_bbox(layout_doc)
             logger.info(
                 LogModule.ROUTE,
-                f"[TRANSLATION-SEGMENTS-API] Reloaded layout_document from ZIP for task {task_id}: "
-                f"{layout_doc.page_count} pages",
+                f"[TRANSLATION-SEGMENTS-API] Reloaded layout_document from {engine} ZIP "
+                f"for task {task_id}: {layout_doc.page_count} pages",
             )
     except Exception as reload_err:
         logger.warning(

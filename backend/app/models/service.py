@@ -44,11 +44,11 @@ class ConvertRequest(BaseModel):
     """Request model for document conversion."""
     file_name: str
     file_content: str  # Base64 encoded
-    convert_engine: ConvertEngineType = "identity"
+    convert_engine: ConvertEngineType = "mineru"
     mineru_token: Optional[str] = None
     formula_ocr: bool = True
     table_ocr: bool = True
-    model_version: Literal["pipeline", "vlm", "hybrid", "vlm-auto-engine", "hybrid-auto-engine", "vlm-http-client", "hybrid-http-client"] = "hybrid-auto-engine"
+    model_version: str = "hybrid-auto-engine"
 
 
 class ConvertResponse(BaseModel):
@@ -287,16 +287,16 @@ class MarkdownWorkflowParams(BaseWorkflowParams):
     """Parameters for Markdown-based translation workflow."""
     workflow_type: Literal['markdown_based'] = Field(..., description="Specify to use Markdown-based translation workflow.")
     convert_engine: ConvertEngineType = Field(
-        "identity",
+        "mineru",
         description="Select the engine to parse files into markdown. If input file is .md, this can be `null` or not passed.",
-        examples=["identity", "mineru", "docling"]
+        examples=["mineru", "paddle", "mineru_local", "paddle_local"]
     )
     mineru_token: Optional[str] = Field(None, description="Required API token when `convert_engine` is 'mineru'.")
     formula_ocr: bool = Field(True, description="Whether to perform OCR recognition on formulas. Effective for both `mineru` and `docling`.")
     table_ocr: bool = Field(True, description="Whether to perform OCR recognition on tables. Effective for `mineru` engine.")
     code_ocr: bool = Field(True, description="Whether to perform OCR recognition on code blocks. Only effective for `docling` engine.")
-    model_version: Literal["pipeline", "vlm", "hybrid", "vlm-auto-engine", "hybrid-auto-engine", "vlm-http-client", "hybrid-http-client"] = Field("hybrid-auto-engine",
-                                                               description="MinerU backend: pipeline, vlm-auto-engine, hybrid-auto-engine, vlm-http-client, or hybrid-http-client.")
+    model_version: str = Field("hybrid-auto-engine",
+                               description="MinerU backend: pipeline, vlm-auto-engine, hybrid-auto-engine, vlm-http-client, or hybrid-http-client. PaddleOCR: model name (e.g. PaddleOCR-VL-1.6).")
     ocr_language: Optional[str] = Field(None, description="OCR language (e.g. 'auto', 'zh', 'en'). Only effective for `mineru` engine.")
 
     @field_validator('mineru_token')

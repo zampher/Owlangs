@@ -918,6 +918,20 @@ class AppLocalizationsKo extends AppLocalizations {
   String get quickSettingsFormulaOcrSubtitle => '문서 구문 분석 중 수식 인식';
 
   @override
+  String get quickSettingsPaddleUseDocOrientationClassify => '문서 방향 자동 감지';
+
+  @override
+  String get quickSettingsPaddleUseDocOrientationClassifySubtitle =>
+      'OCR 전에 문서 방향을 자동으로 감지하고 수정합니다';
+
+  @override
+  String get quickSettingsPaddleRestructurePages => '페이지 재구성';
+
+  @override
+  String get quickSettingsPaddleRestructurePagesSubtitle =>
+      '더 나은 읽기 순서를 위해 페이지 레이아웃을 재구성합니다';
+
+  @override
   String get quickSettingsMineruLabel => 'MinerU (mineru)';
 
   @override
@@ -1284,6 +1298,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get batchUploadMineruLocal => 'MinerU 로컬';
+
+  @override
+  String get batchUploadPaddle => 'PaddleOCR';
+
+  @override
+  String get batchUploadPaddleLocal => 'PaddleOCR 로컬';
 
   @override
   String get commonClose => '닫기';
@@ -1706,6 +1726,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsParsingEngineMineruLocalDesc => '자체 호스팅 MinerU, API 키 선택';
 
   @override
+  String get settingsParsingEnginePaddle => 'PaddleOCR (클라우드)';
+
+  @override
+  String get settingsParsingEnginePaddleDesc => '고정밀 OCR, 제목·표·수식 레이아웃 분석 지원';
+
+  @override
+  String get settingsParsingEnginePaddleLocal => 'PaddleOCR (로컬)';
+
+  @override
+  String get settingsParsingEnginePaddleLocalDesc =>
+      '자체 호스팅 PaddleOCR, NVIDIA GPU (약 8.5GB VRAM) 필요';
+
+  @override
   String get settingsParsingEnginePdfplumber => 'PDFPlumber';
 
   @override
@@ -1741,6 +1774,23 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get settingsParsingEngineNewTaskNotice => '변경 사항은 새 작업에만 적용됩니다';
+
+  @override
+  String get settingsPaddleOcrModelLabel => 'PaddleOCR 모델';
+
+  @override
+  String get settingsPaddleUseDocOrientationClassify => '문서 방향 자동 감지';
+
+  @override
+  String get settingsPaddleUseDocOrientationClassifySubtitle =>
+      'OCR 전에 문서 방향을 자동으로 감지하고 수정합니다';
+
+  @override
+  String get settingsPaddleRestructurePages => '페이지 재구성';
+
+  @override
+  String get settingsPaddleRestructurePagesSubtitle =>
+      '더 나은 읽기 순서를 위해 페이지 레이아웃을 재구성합니다';
 
   @override
   String get settingsPdfSplitMaxPages => 'PDF 분할 최대 페이지';

@@ -267,6 +267,12 @@ class FormatConversionService {
           secretsConfig?['translator_mineru_token_meta']
               as Map<String, dynamic>?;
       mineruToken = mineruTokenData?['key'] as String? ?? '';
+    } else if (parsingEngine == 'paddle') {
+      final Map<String, dynamic>? secretsConfig =
+          await _configService.getSecretsConfig();
+      // Backend raw-secrets returns 'platform_api_keys' (flat {platform: key_string})
+      final apiKeys = secretsConfig?['platform_api_keys'] as Map<String, dynamic>?;
+      mineruToken = (apiKeys?['paddle'] as String?) ?? '';
     }
     return FormatConvertParserOptions(
       convertEngine: parsingEngine,

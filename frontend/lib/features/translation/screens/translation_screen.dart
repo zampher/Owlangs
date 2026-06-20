@@ -5255,7 +5255,9 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           'table_ocr': globalSettings.tableOcr,
           'model_version': _nonEmpty(
                 aiPlatformSettings.platforms[globalSettings.parsingEngine]?.model,
-                'hybrid-auto-engine',
+                (globalSettings.parsingEngine == 'paddle' || globalSettings.parsingEngine == 'paddle_local')
+                    ? 'PaddleOCR-VL-1.6'
+                    : 'hybrid-auto-engine',
               ),
           if (globalSettings.parsingEngine == 'mineru' &&
               mineruToken.isNotEmpty) ...<String, dynamic>{

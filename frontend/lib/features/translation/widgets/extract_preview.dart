@@ -45,6 +45,8 @@ import 'extract_preview/extract_preview_pagination.dart';
 import 'extract_preview/extract_preview_progress.dart';
 import 'extract_preview/extract_preview_language_match.dart';
 import '../../../../shared/widgets/segment_search_box.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../app/app_config.dart';
 
 class ExtractPreview extends ConsumerStatefulWidget {
   // If true, this tab is waiting for a real taskId
@@ -2807,9 +2809,8 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                 } else {
                   // Generic error message
                   combinedMessage =
-                      'Failed to extract segments from file. The file may be corrupted, encrypted by a third-party system, '
-                      'in an unsupported format (e.g., WPS format), or incompatible with the extraction process. '
-                      'Please try converting the file to a standard format (e.g., standard DOCX) and try again. '
+                      'Failed to extract segments from file. The file may be corrupted, in an unsupported format, or the OCR engine could not extract text from it. '
+                      'If it is an image, try using a different OCR engine (Settings > Parsing Engine). '
                       'If the problem persists, please contact the developer.';
                 }
               }
@@ -3251,10 +3252,38 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                 minHeight: 28,
               ),
             ),
+          // Debug: render layout bboxes on source image
+          if (initialDataLoaded && !isPreparing && allSegments.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.bug_report, size: 14),
+              tooltip: 'Debug: Save bbox overlay PNG',
+              onPressed: () => _debugOpenBboxOverlay(),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: 28,
+                minHeight: 28,
+              ),
+            ),
 
         ],
       ),
     );
+
+  Future<void> _debugOpenBboxOverlay() async {
+    final String taskId = widget.taskId;
+    final String url =
+        '${AppConfig.baseUrl}/service/task/$taskId/debug/bbox_overlay';
+    try {
+      final Uri uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (mounted) {
+        AppLogger.log('DEBUG-BBOX', 'Failed to open: $url, error: $e', level: LogLevel.error);
+      }
+    }
+  }
 
   /// Build a compact filter button for the toolbar (simplified text, minimal margins)
   Widget _buildCompactFilterButton({

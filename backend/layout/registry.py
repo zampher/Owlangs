@@ -100,8 +100,19 @@ def load_layout_from_engine_dir(engine: str, dir_path: Path) -> Optional[LayoutD
 # Register MinerU loader
 def _load_mineru_layout(zip_bytes: bytes) -> Optional[LayoutDocument]:
     """Load MinerU layout from ZIP bytes."""
-    from layout.mineru_layout_model import parse_mineru_layout_from_zip_bytes
-    return parse_mineru_layout_from_zip_bytes(zip_bytes)
+    from layout.ocr_provider.mineru.layout_parser import parse_mineru_layout_from_zip_bytes
+    return parse_mineru_layout_from_zip_bytes(zip_bytes, engine="mineru")
 
 
 register_layout_loader("mineru", _load_mineru_layout)
+
+
+def _load_paddle_layout(zip_bytes: bytes) -> Optional[LayoutDocument]:
+    """Load PaddleOCR layout from ZIP bytes."""
+    from layout.ocr_provider.paddle.zip_loader import parse_paddle_layout_from_zip_bytes
+
+    return parse_paddle_layout_from_zip_bytes(zip_bytes)
+
+
+register_layout_loader("paddle", _load_paddle_layout)
+register_layout_loader("paddle_local", _load_paddle_layout)

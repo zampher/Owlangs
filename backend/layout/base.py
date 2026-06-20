@@ -16,30 +16,38 @@ from typing import Dict, List, Optional, Tuple, Any, Iterator
 class LayoutBlock:
     """
     A single layout block (text or image) with position information.
-    
+
     Attributes:
         page_index: Zero-based page index where this block appears
         bbox: Bounding box as (x0, y0, x1, y1) in page coordinates
         type: Block type (e.g., 'text', 'image', 'header', 'footer', 'title')
+        sub_type: Semantic sub-type (e.g., 'body', 'title', 'heading',
+            'caption', 'header', 'footer', 'footnote', 'image_body',
+            'table_body', 'display_formula', 'code_block', 'page_number')
         index: Optional global index for mapping to translation segments
         text: Text content (if type is text)
         image_path: Relative path to image file (if type is image)
         raw: Raw engine-specific data for debugging/extensions
         heading_level: Inferred heading level (0-6); 0 = no heading, 1-6 = H1-H6
+        tags: Semantic tags (e.g., 'skip_translation', 'heading', 'title')
+        should_translate: Whether this block should be translated
     """
     page_index: int
     bbox: Tuple[float, float, float, float]  # (x0, y0, x1, y1)
     type: str
+    sub_type: str = ""  # Semantic sub-type for finer-grained block classification
     index: Optional[int] = None  # Global index for segment mapping
     text: Optional[str] = None
     image_path: Optional[str] = None
     raw: Dict[str, Any] = field(default_factory=dict)
     heading_level: int = 0  # 0 = body text/no heading, 1-6 = H1-H6 heading levels
-    
+    tags: List[str] = field(default_factory=list)
+    should_translate: bool = True
+
     def has_text(self) -> bool:
         """Check if block has text content."""
         return bool(self.text and self.text.strip())
-    
+
     def has_image(self) -> bool:
         """Check if block has image."""
         return bool(self.image_path)

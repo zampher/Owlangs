@@ -3074,13 +3074,21 @@ class StatusService:
         
         # If layout_document is not available, try to load from layout_source_zip or attachments or disk
         if layout_doc is None:
-            logger.trace(LogModule.EXTRACT, f"[LAYOUT-EXTRACT] layout_document not in task_state, attempting to load from layout_source_zip or attachments")
+            # Resolve the layout engine from task_state so we use the correct loader
+            # (e.g. "mineru" for MinerU data, "paddle" for PaddleOCR data)
+            raw_layout_engine = st.get("layout_engine") or st.get("convert_engine") or "mineru"
+            layout_engine = str(raw_layout_engine).strip().lower()
+            if layout_engine.startswith("paddle"):
+                layout_engine = "paddle"
+            elif layout_engine.startswith("mineru"):
+                layout_engine = "mineru"
+            logger.trace(LogModule.EXTRACT, f"[LAYOUT-EXTRACT] layout_document not in task_state, resolved engine={layout_engine}, attempting to load from layout_source_zip or attachments")
             # Try layout_source_zip first
             layout_source_zip = st.get("layout_source_zip")
             if layout_source_zip:
                 try:
                     from layout.registry import load_layout_from_engine_zip
-                    layout_doc = load_layout_from_engine_zip("mineru", layout_source_zip)
+                    layout_doc = load_layout_from_engine_zip(layout_engine, layout_source_zip)
                     if layout_doc:
                         # Store in task_state for future use (bbox at extraction so export does not need layout_doc)
                         st["layout_document"] = layout_doc
@@ -3104,7 +3112,7 @@ class StatusService:
                     if zip_bytes:
                         try:
                             from layout.registry import load_layout_from_engine_zip
-                            layout_doc = load_layout_from_engine_zip("mineru", zip_bytes)
+                            layout_doc = load_layout_from_engine_zip(layout_engine, zip_bytes)
                             if layout_doc:
                                 # Store in task_state for future use (bbox at extraction so export does not need layout_doc)
                                 st["layout_document"] = layout_doc
@@ -3128,7 +3136,7 @@ class StatusService:
                         with open(mineru_zip_path, "rb") as f:
                             zip_bytes = f.read()
                         from layout.registry import load_layout_from_engine_zip
-                        layout_doc = load_layout_from_engine_zip("mineru", zip_bytes)
+                        layout_doc = load_layout_from_engine_zip(layout_engine, zip_bytes)
                         if layout_doc:
                             st["layout_document"] = layout_doc
                             from utils.format_convert_utils import get_layout_block_bbox

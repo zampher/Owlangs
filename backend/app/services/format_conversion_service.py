@@ -182,13 +182,9 @@ class FormatConversionService:
                     f"[FORMAT_CONVERSION] convert_engine not in request; using server default "
                     f"convert_engine={convert_engine}",
                 )
-            # Images: always use MinerU for OCR (extract text for translation)
             _name = (request.file_name or "").lower()
             file_ext = ("." + _name.rsplit(".", 1)[-1]) if "." in _name else ""
-            if file_ext in (".jpg", ".jpeg", ".png"):
-                convert_engine = "mineru"
-                logger.info(LogModule.WORKFLOW, f"[FORMAT_CONVERSION] Image file detected ({file_ext}), using MinerU for OCR to extract text")
-            
+
             # formula_ocr and table_ocr: request override takes priority,
             # system.json (parsing_engine.default_engine_settings) is the fallback default.
             formula_ocr = request.formula_ocr
@@ -224,10 +220,11 @@ class FormatConversionService:
                 else:
                     model_version = 'hybrid-auto-engine'
                 # Prefer hybrid for images (better OCR/layout); keep vlm/pipeline if explicitly set
-                if file_ext in (".jpg", ".jpeg", ".png"):
+                # Only applies to MinerU; PaddleOCR has its own model selection.
+                if file_ext in (".jpg", ".jpeg", ".png") and convert_engine in ("mineru", "mineru_local"):
                     model_version = "hybrid-auto-engine"
                     logger.info(LogModule.WORKFLOW, "[FORMAT_CONVERSION] Image file: using MinerU hybrid backend for OCR")
-            elif file_ext in (".jpg", ".jpeg", ".png") and model_version not in ("hybrid-auto-engine", "hybrid-http-client", "hybrid", "pipeline"):
+            elif file_ext in (".jpg", ".jpeg", ".png") and convert_engine in ("mineru", "mineru_local") and model_version not in ("hybrid-auto-engine", "hybrid-http-client", "hybrid", "pipeline"):
                 logger.info(LogModule.WORKFLOW, f"[FORMAT_CONVERSION] Image file with model_version={model_version}; consider 'hybrid' for better OCR")
             # OCR language: explicit request.ocr_language, else to_lang as hint (e.g. zh/en), else auto
             ocr_language = getattr(request, "ocr_language", None)
@@ -771,13 +768,19 @@ class FormatConversionService:
                 
                 # If layout_document is not available, try to load from layout_source_zip or attachments
                 if layout_doc is None:
-                    logger.info(LogModule.WORKFLOW, f"[RESPLIT] layout_document not in task_state, attempting to load from layout_source_zip or attachments")
+                    _raw_engine = st.get("layout_engine") or st.get("convert_engine") or "mineru"
+                    _layout_engine = str(_raw_engine).strip().lower()
+                    if _layout_engine.startswith("paddle"):
+                        _layout_engine = "paddle"
+                    elif _layout_engine.startswith("mineru"):
+                        _layout_engine = "mineru"
+                    logger.info(LogModule.WORKFLOW, f"[RESPLIT] layout_document not in task_state, attempting to load from layout_source_zip or attachments (engine={_layout_engine})")
                     # Try layout_source_zip first
                     layout_source_zip = st.get("layout_source_zip")
                     if layout_source_zip:
                         try:
                             from layout.registry import load_layout_from_engine_zip
-                            layout_doc = load_layout_from_engine_zip("mineru", layout_source_zip)
+                            layout_doc = load_layout_from_engine_zip(_layout_engine, layout_source_zip)
                             if layout_doc:
                                 # Store in task_state for future use
                                 st["layout_document"] = layout_doc
@@ -799,7 +802,7 @@ class FormatConversionService:
                             if zip_bytes:
                                 try:
                                     from layout.registry import load_layout_from_engine_zip
-                                    layout_doc = load_layout_from_engine_zip("mineru", zip_bytes)
+                                    layout_doc = load_layout_from_engine_zip(_layout_engine, zip_bytes)
                                     if layout_doc:
                                         # Store in task_state for future use
                                         st["layout_document"] = layout_doc
@@ -809,14 +812,43 @@ class FormatConversionService:
                                 except Exception as load_error:
                                     logger.warning(LogModule.WORKFLOW, f"[RESPLIT] Failed to load layout_document from MinerU attachment: {load_error}")
                 
-                # Always restart MinerU conversion for markdown_based MinerU workflows
-                # when Re-extract is triggered so that updated OCR language (ocr_language)
-                # can take effect. Existing layout_document (if any) will be replaced.
+                # Re-extract: destroy current extracted data so the platform
+                # performs a fresh extraction rather than reusing old caches.
                 logger.info(
                     LogModule.WORKFLOW,
-                    f"[RESPLIT] Restarting MinerU conversion for task {task_id} "
-                    f"to apply updated OCR language and regenerate layout document...",
+                    f"[RESPLIT] Clearing old extraction data before re-extract for task {task_id}",
                 )
+                _cleared_keys = []
+                for _key in (
+                    "layout_document",
+                    "layout_source_zip",
+                    "source_chunks_cache",
+                    "source_preview",
+                    "segments_metadata",
+                    "segment_layout_block_map",
+                    "layout_prepared_chunks",
+                    "layout_chunk_block_map",
+                    "layout_markdown_source",
+                ):
+                    if _key in st:
+                        st.pop(_key, None)
+                        _cleared_keys.append(_key)
+                # Also clear mineru/paddle attachments so old ZIP data is not
+                # restored by _restore_mineru_attachment inside execute_convert.
+                _attachments = st.get("attachments", {})
+                if _attachments:
+                    for _att_key in list(_attachments.keys()):
+                        if _att_key in ("mineru", "paddle"):
+                            _attachments.pop(_att_key, None)
+                            _cleared_keys.append(f"attachments.{_att_key}")
+                    if not _attachments:
+                        st.pop("attachments", None)
+                        _cleared_keys.append("attachments")
+                logger.info(
+                    LogModule.WORKFLOW,
+                    f"[RESPLIT] Task {task_id}: cleared extraction data — {_cleared_keys}",
+                )
+
                 # Clear old error so UI shows "Re-extracting..." instead of previous failure message; new error will be set if this run fails
                 task_manager.update_task(task_id, {
                     "status": "processing",
@@ -858,10 +890,16 @@ class FormatConversionService:
                                 payload['model_version'] = parsing_engine_cfg.get('mineru_model_version', payload.get('model_version', 'hybrid-auto-engine'))
                                 # Clear cached workflow_config so it gets rebuilt with updated settings
                                 payload['workflow_config'] = None
+                                # Force skip_cache so the LRU cache does not return old extraction results
+                                payload['skip_cache'] = True
                             else:
                                 setattr(payload, 'convert_engine', current_convert_engine)
                                 if hasattr(payload, 'workflow_config'):
                                     setattr(payload, 'workflow_config', None)
+                                try:
+                                    setattr(payload, 'skip_cache', True)
+                                except Exception:
+                                    pass
                             st["payload"] = payload
                             logger.info(
                                 LogModule.WORKFLOW,
@@ -924,39 +962,54 @@ class FormatConversionService:
                     # After conversion, try to load layout_document again
                     layout_doc = st.get("layout_document")
                     if layout_doc is None:
-                        # Try to load from layout_source_zip or attachments again
+                        # Resolve layout engine to map convert_engine → registry key
+                        _raw_engine = (
+                            st.get("layout_engine")
+                            or st.get("convert_engine")
+                            or (payload.get("convert_engine") if isinstance(payload, dict) else getattr(payload, "convert_engine", None))
+                            or "mineru"
+                        )
+                        _post_engine = str(_raw_engine).strip().lower()
+                        if _post_engine.startswith("paddle"):
+                            _post_engine = "paddle"
+                        elif _post_engine.startswith("mineru"):
+                            _post_engine = "mineru"
+
+                        # Try to load from layout_source_zip or attachments
                         layout_source_zip = st.get("layout_source_zip")
                         if layout_source_zip:
                             try:
                                 from layout.registry import load_layout_from_engine_zip
 
                                 layout_doc = load_layout_from_engine_zip(
-                                    "mineru", layout_source_zip
+                                    _post_engine, layout_source_zip
                                 )
                                 if layout_doc:
                                     st["layout_document"] = layout_doc
                                     logger.info(
                                         LogModule.EXPORT,
-                                        f"[RESPLIT] Loaded layout_document after MinerU conversion for task {task_id}",
+                                        f"[RESPLIT] Loaded layout_document after conversion for task {task_id} (engine={_post_engine})",
                                     )
                             except Exception as load_error:
                                 logger.warning(
                                     LogModule.WORKFLOW,
-                                    f"[RESPLIT] Failed to load layout_document after MinerU conversion: {load_error}",
+                                    f"[RESPLIT] Failed to load layout_document after conversion: {load_error}",
                                 )
 
-                        # If still not available, try attachments
+                        # If still not available, try attachments (mineru or paddle)
                         if layout_doc is None:
                             attachments = st.get("attachments", {})
-                            if "mineru" in attachments:
-                                mineru_attachment = attachments["mineru"]
+                            for _att_key in ("mineru", "paddle"):
+                                _attachment = attachments.get(_att_key)
+                                if _attachment is None:
+                                    continue
                                 zip_bytes = None
-                                if hasattr(mineru_attachment, "content"):
-                                    zip_bytes = mineru_attachment.content
-                                elif hasattr(mineru_attachment, "document") and hasattr(
-                                    mineru_attachment.document, "content"
+                                if hasattr(_attachment, "content"):
+                                    zip_bytes = _attachment.content
+                                elif hasattr(_attachment, "document") and hasattr(
+                                    _attachment.document, "content"
                                 ):
-                                    zip_bytes = mineru_attachment.document.content
+                                    zip_bytes = _attachment.document.content
 
                                 if zip_bytes:
                                     try:
@@ -965,19 +1018,20 @@ class FormatConversionService:
                                         )
 
                                         layout_doc = load_layout_from_engine_zip(
-                                            "mineru", zip_bytes
+                                            _post_engine, zip_bytes
                                         )
                                         if layout_doc:
                                             st["layout_document"] = layout_doc
                                             st["layout_source_zip"] = zip_bytes
                                             logger.info(
                                                 LogModule.WORKFLOW,
-                                                f"[RESPLIT] Loaded layout_document from MinerU attachment after conversion for task {task_id}",
+                                                f"[RESPLIT] Loaded layout_document from {_att_key} attachment after conversion for task {task_id}",
                                             )
+                                            break
                                     except Exception as load_error:
                                         logger.warning(
                                             LogModule.WORKFLOW,
-                                            f"[RESPLIT] Failed to load layout_document from MinerU attachment after conversion: {load_error}",
+                                            f"[RESPLIT] Failed to load layout_document from {_att_key} attachment after conversion: {load_error}",
                                         )
 
                     if layout_doc is None:

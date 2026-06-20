@@ -80,6 +80,18 @@ def _is_non_overlay_segment_text(text: str, segment: Dict[str, Any]) -> bool:
         return True
     if _contains_overlay_skip_markup(normalized):
         return True
+    # Skip translation-failed segments (source == target, no manual edit)
+    is_excluded = bool(segment.get("is_excluded"))
+    source_text = (segment.get("source_text") or "").strip()
+    target_text = (segment.get("target_text") or "").strip()
+    modified_text = (segment.get("modified_text") or "").strip()
+    if (
+        not is_excluded
+        and source_text
+        and source_text == target_text
+        and not modified_text
+    ):
+        return True
     return False
 
 

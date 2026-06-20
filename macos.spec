@@ -152,6 +152,7 @@ hiddenimports = [
     'backend.app.routes.service.app_routes_glossary',
     'backend.app.routes.service.app_routes_translation_segments',
     'backend.app.routes.service.app_routes_formula_check',
+    'backend.app.routes.service.app_routes_debug',
     # backend.app.models, config, utils (used by routes and services)
     'backend.app.models',
     'backend.app.models.service',
@@ -230,6 +231,13 @@ hiddenimports = [
     'layout.mineru_layout_model',
     'layout.markdown_builder',
     'layout.registry',
+    # layout OCR provider - multi-engine OCR/layout parsing (MinerU + PaddleOCR)
+    'layout.ocr_provider', 'layout.ocr_provider.base', 'layout.ocr_provider.types',
+    'layout.ocr_provider.mineru', 'layout.ocr_provider.mineru.layout_parser', 'layout.ocr_provider.mineru.provider',
+    'layout.ocr_provider.paddle', 'layout.ocr_provider.paddle.api_client',
+    'layout.ocr_provider.paddle.block_labels', 'layout.ocr_provider.paddle.converter_adapter',
+    'layout.ocr_provider.paddle.layout_parser', 'layout.ocr_provider.paddle.provider',
+    'layout.ocr_provider.paddle.zip_loader',
     # layout PDF renderer - Typst overlay (high-fidelity PDF export)
     'layout.pdf_renderer',
     'layout.pdf_renderer.config',
@@ -325,7 +333,7 @@ hiddenimports = [
     # MCP transport dependencies
     'sse_starlette',
     'sse_starlette.sse',
-    'httpx_sse',
+    'httpx', 'httpx_sse',
     'jwt',
     'pydantic_settings',
     'anyio',

@@ -383,10 +383,29 @@ class SecretsManager:
                 f"Failed to save merged secrets.json structure: {e}",
             )
     
+    def get_api_key(self, platform: str) -> Optional[str]:
+        """
+        Get API key for a single platform by name.
+
+        Handles MinerU special tokens (mineru_token, mineru_local_token)
+        and falls back to the generic api_keys dict for other platforms.
+
+        Args:
+            platform: Platform name (e.g. "mineru", "paddle", "openai")
+
+        Returns:
+            API key string or None if not configured
+        """
+        if platform == "mineru":
+            return self.get_mineru_token()
+        if platform == "mineru_local":
+            return self.get_mineru_local_token()
+        return self.get_api_keys().get(platform)
+
     def get_api_keys(self) -> Dict[str, str]:
         """
         Get API key configuration
-        
+
         Returns:
             API key dictionary
         """

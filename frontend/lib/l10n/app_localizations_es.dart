@@ -969,6 +969,21 @@ class AppLocalizationsEs extends AppLocalizations {
       'Reconocer fórmulas durante el análisis de documentos';
 
   @override
+  String get quickSettingsPaddleUseDocOrientationClassify =>
+      'Detección Automática de Orientación';
+
+  @override
+  String get quickSettingsPaddleUseDocOrientationClassifySubtitle =>
+      'Detectar y corregir automáticamente la orientación del documento antes del OCR';
+
+  @override
+  String get quickSettingsPaddleRestructurePages => 'Reestructurar Páginas';
+
+  @override
+  String get quickSettingsPaddleRestructurePagesSubtitle =>
+      'Reestructurar el diseño de página para mejor orden de lectura';
+
+  @override
   String get quickSettingsMineruLabel => 'MinerU (mineru)';
 
   @override
@@ -1362,6 +1377,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get batchUploadMineruLocal => 'MinerU Local';
+
+  @override
+  String get batchUploadPaddle => 'PaddleOCR';
+
+  @override
+  String get batchUploadPaddleLocal => 'PaddleOCR Local';
 
   @override
   String get commonClose => 'Cerrar';
@@ -1797,6 +1818,20 @@ class AppLocalizationsEs extends AppLocalizations {
       'MinerU autoalojado; clave API opcional';
 
   @override
+  String get settingsParsingEnginePaddle => 'PaddleOCR (Nube)';
+
+  @override
+  String get settingsParsingEnginePaddleDesc =>
+      'OCR de alta precisión con análisis de diseño para títulos, tablas y fórmulas';
+
+  @override
+  String get settingsParsingEnginePaddleLocal => 'PaddleOCR (Local)';
+
+  @override
+  String get settingsParsingEnginePaddleLocalDesc =>
+      'PaddleOCR autoalojado; requiere GPU NVIDIA (~8.5 GB VRAM)';
+
+  @override
   String get settingsParsingEnginePdfplumber => 'PDFPlumber';
 
   @override
@@ -1837,6 +1872,24 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get settingsParsingEngineNewTaskNotice =>
       'Los cambios solo se aplican a tareas nuevas';
+
+  @override
+  String get settingsPaddleOcrModelLabel => 'Modelo PaddleOCR';
+
+  @override
+  String get settingsPaddleUseDocOrientationClassify =>
+      'Detección Automática de Orientación';
+
+  @override
+  String get settingsPaddleUseDocOrientationClassifySubtitle =>
+      'Detectar y corregir automáticamente la orientación del documento antes del OCR';
+
+  @override
+  String get settingsPaddleRestructurePages => 'Reestructurar Páginas';
+
+  @override
+  String get settingsPaddleRestructurePagesSubtitle =>
+      'Reestructurar el diseño de página para mejor orden de lectura';
 
   @override
   String get settingsPdfSplitMaxPages => 'Páginas máximas por división PDF';

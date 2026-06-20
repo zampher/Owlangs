@@ -1020,6 +1020,7 @@ class TranslationService:
                         "layout_document",
                         "mineru_zip_path",
                         "mineru_extract_dir",
+                        "paddle_zip_path",
                         "source_input_type",
                     ):
                         if layout_key in convert_state and convert_state.get(layout_key) is not None:
@@ -1217,7 +1218,7 @@ class TranslationService:
         # For markdown_based workflow, try to reuse MinerU results from Extract phase
         # This avoids re-uploading and re-downloading from MinerU server
         if workflow_type == "markdown_based":
-            self._try_reuse_mineru_results(task_id, workflow, payload, task_state, file_contents, original_filename)
+            self._try_reuse_layout_results(task_id, workflow, payload, task_state, file_contents, original_filename)
         
         # For markdown_based workflow, set task_state for MinerU reuse
         # Always attach task_state so md_based_workflow can inspect MinerU paths, even
@@ -1814,10 +1815,11 @@ class TranslationService:
 
                     if isinstance(layout_doc, _LD):
                         task_state["layout_document"] = layout_doc
+                        task_state["layout_engine"] = getattr(layout_doc, "engine", "unknown")
                         logger.debug(
                             LogModule.EXTRACT,
                             f"[ATTACHMENT] Stored layout_document for task {task_id} "
-                            f"({layout_doc.page_count} pages, reason={reason})",
+                            f"({layout_doc.page_count} pages, engine={task_state['layout_engine']}, reason={reason})",
                         )
                 except Exception as layout_error:
                     logger.debug(
@@ -1840,7 +1842,7 @@ class TranslationService:
             if mineru_doc and hasattr(mineru_doc, "content") and mineru_doc.content:
                 task_state["layout_source_zip"] = mineru_doc.content
                 logger.debug(LogModule.EXTRACT, f"[ATTACHMENT] Stored MinerU ZIP bytes for task {task_id} (reason={reason})")
-                
+
                 # Extract MinerU ZIP to task's temp directory for easy access
                 temp_dir = task_state.get("temp_dir")
                 if temp_dir and os.path.isdir(temp_dir):
@@ -1849,27 +1851,43 @@ class TranslationService:
                         import io
                         mineru_zip_path = os.path.join(temp_dir, "mineru_layout.zip")
                         mineru_extract_dir = os.path.join(temp_dir, "mineru_extracted")
-                        
+
                         # Save ZIP file to temp directory
                         with open(mineru_zip_path, 'wb') as f:
                             f.write(mineru_doc.content)
                         logger.debug(LogModule.EXTRACT, f"[ATTACHMENT] Saved MinerU ZIP to {mineru_zip_path}")
-                        
+
                         # Extract ZIP contents to mineru_extracted subdirectory
                         os.makedirs(mineru_extract_dir, exist_ok=True)
                         with zipfile.ZipFile(io.BytesIO(mineru_doc.content), 'r') as zip_ref:
                             zip_ref.extractall(mineru_extract_dir)
                         logger.debug(LogModule.EXTRACT, f"[ATTACHMENT] Extracted MinerU ZIP to {mineru_extract_dir}")
-                        
+
                         # Store paths in task_state for reference
                         task_state["mineru_zip_path"] = mineru_zip_path
                         task_state["mineru_extract_dir"] = mineru_extract_dir
                     except Exception as extract_error:
                         logger.warning(LogModule.EXTRACT, f"[ATTACHMENT] Failed to extract MinerU ZIP to temp directory: {extract_error}")
+
+            # --- PaddleOCR layout ZIP ---
+            paddle_doc = attachment_dict.get("paddle")
+            if paddle_doc and hasattr(paddle_doc, "content") and paddle_doc.content:
+                task_state["layout_source_zip"] = paddle_doc.content
+                task_state.setdefault("layout_engine", "paddle")
+                temp_dir = task_state.get("temp_dir")
+                if temp_dir and os.path.isdir(temp_dir):
+                    try:
+                        paddle_zip_path = os.path.join(temp_dir, "paddle_layout.zip")
+                        with open(paddle_zip_path, 'wb') as f:
+                            f.write(paddle_doc.content)
+                        task_state["paddle_zip_path"] = paddle_zip_path
+                        logger.debug(LogModule.EXTRACT, f"[ATTACHMENT] Saved PaddleOCR ZIP to {paddle_zip_path}")
+                    except Exception as extract_error:
+                        logger.warning(LogModule.EXTRACT, f"[ATTACHMENT] Failed to save PaddleOCR ZIP: {extract_error}")
         except Exception as attachment_error:
             logger.debug(LogModule.WORKFLOW, f"[ATTACHMENT] Failed to sync workflow attachments ({reason}): {attachment_error}")
     
-    def _try_reuse_mineru_results(
+    def _try_reuse_layout_results(
         self,
         task_id: str,
         workflow: Any,
@@ -1879,9 +1897,14 @@ class TranslationService:
         original_filename: str
     ) -> None:
         """
-        Try to reuse MinerU results from Extract phase or Convert phase.
-        This avoids re-uploading and re-downloading from MinerU server.
-        
+        Try to reuse layout parsing results from Extract phase or Convert phase.
+        This avoids re-running the OCR/layout parser (MinerU or PaddleOCR).
+
+        When searching for reusable results from other tasks, the layout engine
+        must match the currently requested convert_engine.  If the cached result
+        was produced by a different engine, it is skipped so that a fresh parse
+        with the current engine is performed.
+
         Args:
             task_id: Task identifier
             workflow: Workflow instance
@@ -1894,33 +1917,51 @@ class TranslationService:
             convert_engine = getattr(payload, 'convert_engine', 'mineru')
             is_format_conversion = task_state.get("is_format_conversion", False) or task_state.get("convert_only", False)
             is_pdf_file = original_filename.lower().endswith('.pdf')
-            
-            # Only try to reuse for PDF files with MinerU engine
-            if not (is_pdf_file and convert_engine in ("mineru", "mineru_local")):
+
+            # Only try to reuse for PDF files with a known layout engine
+            if not is_pdf_file:
+                return
+
+            # MinerU-specific engines have persistent artifacts (ZIP, extract dir)
+            # that can be copied across tasks.  Other engines (e.g. Paddle) are
+            # cloud-based and do not have persistent local artifacts to reuse yet.
+            if convert_engine not in ("mineru", "mineru_local"):
                 return
             
             import hashlib
             # Calculate file hash to find Extract phase task_state
             file_hash = hashlib.sha1(file_contents).hexdigest()
             
-            # First, check if current task_state already has MinerU results
+            # First, check if current task_state already has results from the same engine
             extract_task_state = None
-            if (task_state.get("mineru_extract_dir") or 
-                task_state.get("mineru_zip_path") or 
+            if (task_state.get("mineru_extract_dir") or
+                task_state.get("mineru_zip_path") or
                 task_state.get("layout_source_zip")):
-                extract_task_state = task_state
-                logger.info(
-                    LogModule.EXTRACT,
-                    f"[MINERU-REUSE] Found MinerU results in current task_state for task {task_id}: "
-                    f"mineru_extract_dir={task_state.get('mineru_extract_dir')}, "
-                    f"mineru_zip_path={task_state.get('mineru_zip_path')}, "
-                    f"has_layout_source_zip={bool(task_state.get('layout_source_zip'))}"
-                )
+                # Verify engine consistency — if task_state was populated by a
+                # different engine, skip reuse so a fresh parse runs with the
+                # currently requested engine.
+                cached_engine = task_state.get("layout_engine")
+                if cached_engine and cached_engine != convert_engine:
+                    logger.info(
+                        LogModule.EXTRACT,
+                        f"[LAYOUT-REUSE] Skipping cached results in current task_state for task {task_id}: "
+                        f"cached_engine={cached_engine}, requested_engine={convert_engine}",
+                    )
+                else:
+                    extract_task_state = task_state
+                    logger.info(
+                        LogModule.EXTRACT,
+                        f"[LAYOUT-REUSE] Found layout results in current task_state for task {task_id}: "
+                        f"mineru_extract_dir={task_state.get('mineru_extract_dir')}, "
+                        f"mineru_zip_path={task_state.get('mineru_zip_path')}, "
+                        f"has_layout_source_zip={bool(task_state.get('layout_source_zip'))}, "
+                        f"engine={cached_engine or 'unknown'}",
+                    )
             else:
                 # Search for Extract phase task_state with same file hash
                 logger.debug(
                     LogModule.EXTRACT,
-                    f"[MINERU-REUSE] Current task_state does not have MinerU results, "
+                    f"[LAYOUT-REUSE] Current task_state does not have MinerU results, "
                     f"searching other tasks for file hash: {file_hash[:16]}..., filename: {original_filename}"
                 )
                 
@@ -1931,7 +1972,7 @@ class TranslationService:
                 all_tasks = self.task_manager.get_all_tasks()
                 logger.debug(
                     LogModule.EXTRACT,
-                    f"[MINERU-REUSE] Total tasks in tasks_state: {len(all_tasks)}, "
+                    f"[LAYOUT-REUSE] Total tasks in tasks_state: {len(all_tasks)}, "
                     f"current task_id: {task_id}"
                 )
                 
@@ -1945,16 +1986,28 @@ class TranslationService:
                     if other_task_id == task_id:
                         continue
                     
-                    # Check if it has MinerU results
-                    has_mineru_results = (
-                        other_task_state.get("mineru_extract_dir") or 
+                    # Check if it has layout results AND the engine matches
+                    has_results = (
+                        other_task_state.get("mineru_extract_dir") or
                         other_task_state.get("mineru_zip_path") or
                         other_task_state.get("layout_source_zip")
                     )
-                    if not has_mineru_results:
+                    if not has_results:
                         logger.debug(
                             LogModule.EXTRACT,
-                            f"[MINERU-REUSE] Skipping task {other_task_id}: no MinerU results"
+                            f"[LAYOUT-REUSE] Skipping task {other_task_id}: no layout results"
+                        )
+                        continue
+
+                    # Verify engine consistency — do not reuse results produced
+                    # by a different layout engine (e.g. skip MinerU results when
+                    # the user switched to Paddle).
+                    cached_engine = other_task_state.get("layout_engine")
+                    if cached_engine and cached_engine != convert_engine:
+                        logger.debug(
+                            LogModule.EXTRACT,
+                            f"[LAYOUT-REUSE] Skipping task {other_task_id}: "
+                            f"cached_engine={cached_engine}, requested_engine={convert_engine}",
                         )
                         continue
                     
@@ -1973,7 +2026,7 @@ class TranslationService:
                     task_type = "Convert" if is_convert_only else "Extract"
                     logger.debug(
                         LogModule.EXTRACT,
-                        f"[MINERU-REUSE] Checking {task_type} task {other_task_id}: "
+                        f"[LAYOUT-REUSE] Checking {task_type} task {other_task_id}: "
                         f"filename={other_task_state.get('original_filename')}, "
                         f"has_mineru_extract_dir={bool(other_task_state.get('mineru_extract_dir'))}, "
                         f"has_mineru_zip_path={bool(other_task_state.get('mineru_zip_path'))}, "
@@ -1994,7 +2047,7 @@ class TranslationService:
                         except Exception as e:
                             logger.debug(
                                 LogModule.EXTRACT,
-                                f"[MINERU-REUSE] Failed to read file from task {other_task_id}: {e}"
+                                f"[LAYOUT-REUSE] Failed to read file from task {other_task_id}: {e}"
                             )
                             pass
                     
@@ -2005,7 +2058,7 @@ class TranslationService:
                     
                     logger.debug(
                         LogModule.EXTRACT,
-                        f"[MINERU-REUSE] Task {other_task_id} match check: "
+                        f"[LAYOUT-REUSE] Task {other_task_id} match check: "
                         f"hash_matches={hash_matches}, filename_matches={filename_matches}, "
                         f"size_matches={size_matches}, "
                         f"other_file_hash={other_file_hash[:16] if other_file_hash else 'None'}..., "
@@ -2018,7 +2071,7 @@ class TranslationService:
                         task_type = "Convert" if is_convert_only else "Extract"
                         logger.info(
                             LogModule.EXTRACT,
-                            f"[MINERU-REUSE] Found {task_type} phase task_state for task {task_id}: "
+                            f"[LAYOUT-REUSE] Found {task_type} phase task_state for task {task_id}: "
                             f"source_task_id={other_task_id}, "
                             f"match_reason={'hash' if hash_matches else 'filename+size'}, "
                             f"mineru_extract_dir={extract_task_state.get('mineru_extract_dir')}, "
@@ -2029,7 +2082,7 @@ class TranslationService:
                     else:
                         logger.debug(
                             LogModule.EXTRACT,
-                            f"[MINERU-REUSE] Task {other_task_id} does not match: "
+                            f"[LAYOUT-REUSE] Task {other_task_id} does not match: "
                             f"hash_matches={hash_matches}, filename_matches={filename_matches}, "
                             f"size_matches={size_matches}"
                         )
@@ -2037,7 +2090,7 @@ class TranslationService:
                 if not extract_task_state:
                     logger.info(
                         LogModule.EXTRACT,
-                        f"[MINERU-REUSE] No matching Extract phase task_state found for task {task_id}. "
+                        f"[LAYOUT-REUSE] No matching Extract phase task_state found for task {task_id}. "
                         f"Will proceed with normal MinerU conversion (may re-upload/re-download)."
                     )
             
@@ -2050,7 +2103,7 @@ class TranslationService:
                     task_state["mineru_extract_dir"] = extract_dir
                     logger.info(
                         LogModule.EXTRACT,
-                        f"[MINERU-REUSE] Copied mineru_extract_dir from Extract phase to translation phase: {extract_dir}"
+                        f"[LAYOUT-REUSE] Copied mineru_extract_dir from Extract phase to translation phase: {extract_dir}"
                     )
                 
                 # Copy layout_source_zip if available
@@ -2059,7 +2112,7 @@ class TranslationService:
                     task_state["layout_source_zip"] = layout_source_zip
                     logger.info(
                         LogModule.EXTRACT,
-                        f"[MINERU-REUSE] Copied layout_source_zip from Extract phase to translation phase "
+                        f"[LAYOUT-REUSE] Copied layout_source_zip from Extract phase to translation phase "
                         f"(size: {len(layout_source_zip)} bytes)"
                     )
                     
@@ -2068,7 +2121,7 @@ class TranslationService:
                         workflow._layout_source_zip = layout_source_zip
                         logger.debug(
                             LogModule.EXTRACT,
-                            f"[MINERU-REUSE] Set workflow._layout_source_zip for task {task_id}"
+                            f"[LAYOUT-REUSE] Set workflow._layout_source_zip for task {task_id}"
                         )
                 
                 # Copy mineru_zip_path if available
@@ -2077,7 +2130,16 @@ class TranslationService:
                     task_state["mineru_zip_path"] = mineru_zip_path
                     logger.info(
                         LogModule.EXTRACT,
-                        f"[MINERU-REUSE] Copied mineru_zip_path from Extract phase to translation phase: {mineru_zip_path}"
+                        f"[LAYOUT-REUSE] Copied mineru_zip_path from Extract phase to translation phase: {mineru_zip_path}"
+                    )
+
+                # Copy paddle_zip_path if available
+                paddle_zip_path = extract_task_state.get("paddle_zip_path")
+                if paddle_zip_path and os.path.exists(paddle_zip_path):
+                    task_state["paddle_zip_path"] = paddle_zip_path
+                    logger.info(
+                        LogModule.EXTRACT,
+                        f"[LAYOUT-REUSE] Copied paddle_zip_path from Extract phase to translation phase: {paddle_zip_path}"
                     )
                 
                 # Copy MinerU attachment if available
@@ -2088,7 +2150,7 @@ class TranslationService:
                     task_state["attachments"]["mineru"] = extract_attachments["mineru"]
                     logger.info(
                         LogModule.EXTRACT,
-                        f"[MINERU-REUSE] Copied MinerU attachment from Extract phase to translation phase"
+                        f"[LAYOUT-REUSE] Copied MinerU attachment from Extract phase to translation phase"
                     )
                     
                     # CRITICAL: Also restore MinerU attachment to workflow so it can be used
@@ -2100,7 +2162,7 @@ class TranslationService:
                                 workflow.attachment.add_document("mineru", mineru_attachment.document)
                                 logger.info(
                                     LogModule.EXTRACT,
-                                    f"[MINERU-REUSE] Restored MinerU attachment to workflow for task {task_id}"
+                                    f"[LAYOUT-REUSE] Restored MinerU attachment to workflow for task {task_id}"
                                 )
                             elif layout_source_zip:
                                 # Fallback: create document from layout_source_zip
@@ -2110,12 +2172,12 @@ class TranslationService:
                                 workflow._layout_source_zip = layout_source_zip
                                 logger.info(
                                     LogModule.EXTRACT,
-                                    f"[MINERU-REUSE] Restored MinerU ZIP to workflow from layout_source_zip for task {task_id}"
+                                    f"[LAYOUT-REUSE] Restored MinerU ZIP to workflow from layout_source_zip for task {task_id}"
                                 )
                         except Exception as restore_error:
                             logger.warning(
                                 LogModule.EXTRACT,
-                                f"[MINERU-REUSE] Failed to restore MinerU attachment to workflow: {restore_error}"
+                                f"[LAYOUT-REUSE] Failed to restore MinerU attachment to workflow: {restore_error}"
                             )
                 
                 # CRITICAL: Copy layout_prepared_chunks and related data from Extract phase
@@ -2124,26 +2186,26 @@ class TranslationService:
                     task_state["layout_prepared_chunks"] = extract_task_state["layout_prepared_chunks"]
                     logger.info(
                         LogModule.EXTRACT,
-                        f"[MINERU-REUSE] Copied layout_prepared_chunks from Extract phase to translation phase: "
+                        f"[LAYOUT-REUSE] Copied layout_prepared_chunks from Extract phase to translation phase: "
                         f"{len(extract_task_state['layout_prepared_chunks'])} chunks"
                     )
                 if "layout_chunk_block_map" in extract_task_state:
                     task_state["layout_chunk_block_map"] = extract_task_state["layout_chunk_block_map"]
                     logger.debug(
                         LogModule.EXTRACT,
-                        f"[MINERU-REUSE] Copied layout_chunk_block_map from Extract phase to translation phase"
+                        f"[LAYOUT-REUSE] Copied layout_chunk_block_map from Extract phase to translation phase"
                     )
                 if "segment_layout_block_map" in extract_task_state:
                     task_state["segment_layout_block_map"] = extract_task_state["segment_layout_block_map"]
                     logger.debug(
                         LogModule.EXTRACT,
-                        f"[MINERU-REUSE] Copied segment_layout_block_map from Extract phase to translation phase"
+                        f"[LAYOUT-REUSE] Copied segment_layout_block_map from Extract phase to translation phase"
                     )
                 if "layout_chunk_block_texts" in extract_task_state:
                     task_state["layout_chunk_block_texts"] = extract_task_state["layout_chunk_block_texts"]
                     logger.debug(
                         LogModule.EXTRACT,
-                        f"[MINERU-REUSE] Copied layout_chunk_block_texts from Extract phase to translation phase"
+                        f"[LAYOUT-REUSE] Copied layout_chunk_block_texts from Extract phase to translation phase"
                     )
                 
                 # Also copy segments_metadata to preserve excluded_segments and excluded_segment_indices.
@@ -2179,7 +2241,7 @@ class TranslationService:
                             )
                             logger.info(
                                 LogModule.EXTRACT,
-                                f"[MINERU-REUSE] Filtered out user_selected/unknown from inherited exclusions: "
+                                f"[LAYOUT-REUSE] Filtered out user_selected/unknown from inherited exclusions: "
                                 f"{removed} removed, {len(filtered_excluded)} content-based kept"
                             )
                     excluded_segments_count = len(task_state["segments_metadata"].get("excluded_segments", {}))
@@ -2187,7 +2249,7 @@ class TranslationService:
                     if excluded_segments_count > 0 or excluded_indices_count > 0:
                         logger.info(
                             LogModule.EXTRACT,
-                            f"[MINERU-REUSE] Copied segments_metadata from Extract phase to translation phase: "
+                            f"[LAYOUT-REUSE] Copied segments_metadata from Extract phase to translation phase: "
                             f"{excluded_segments_count} excluded_segments (dict), {excluded_indices_count} excluded_segment_indices (list)"
                         )
                 
@@ -2198,7 +2260,7 @@ class TranslationService:
                     cache_segments_count = len(extract_task_state.get("source_chunks_cache", {}).get("segments", []))
                     logger.info(
                         LogModule.EXTRACT,
-                        f"[MINERU-REUSE] Copied source_chunks_cache from Extract phase to translation phase: "
+                        f"[LAYOUT-REUSE] Copied source_chunks_cache from Extract phase to translation phase: "
                         f"{cache_segments_count} segments (indexed by segment_index)"
                     )
                 
@@ -2209,14 +2271,14 @@ class TranslationService:
                     task_state["table_body_format"] = extract_task_state["table_body_format"]
                     logger.info(
                         LogModule.EXTRACT,
-                        f"[MINERU-REUSE] Copied table_body_format from Extract/Convert phase to translation phase: "
+                        f"[LAYOUT-REUSE] Copied table_body_format from Extract/Convert phase to translation phase: "
                         f"{extract_task_state['table_body_format']}"
                     )
                 if "equation_format" in extract_task_state and "equation_format" not in task_state:
                     task_state["equation_format"] = extract_task_state["equation_format"]
                     logger.info(
                         LogModule.EXTRACT,
-                        f"[MINERU-REUSE] Copied equation_format from Extract/Convert phase to translation phase: "
+                        f"[LAYOUT-REUSE] Copied equation_format from Extract/Convert phase to translation phase: "
                         f"{extract_task_state['equation_format']}"
                     )
                 
@@ -2249,11 +2311,11 @@ class TranslationService:
                                 if "equation_format" in task_state:
                                     setattr(payload, 'equation_format', task_state["equation_format"])
                             except Exception as e:
-                                logger.debug(LogModule.WORKFLOW, f"[MINERU-REUSE] Failed to update payload format settings: {e}")
+                                logger.debug(LogModule.WORKFLOW, f"[LAYOUT-REUSE] Failed to update payload format settings: {e}")
         except Exception as reuse_error:
             logger.warning(
                 LogModule.EXTRACT,
-                f"[MINERU-REUSE] Failed to reuse MinerU results from Extract phase: {reuse_error}",
+                f"[LAYOUT-REUSE] Failed to reuse MinerU results from Extract phase: {reuse_error}",
                 exc_info=True
             )
     
@@ -2337,7 +2399,13 @@ class TranslationService:
                     if layout_source_zip:
                         try:
                             from layout.registry import load_layout_from_engine_zip
-                            layout_doc = load_layout_from_engine_zip("mineru", layout_source_zip)
+                            _raw_engine = task_state.get("layout_engine") or task_state.get("convert_engine") or "mineru"
+                            _layout_engine = str(_raw_engine).strip().lower()
+                            if _layout_engine.startswith("paddle"):
+                                _layout_engine = "paddle"
+                            elif _layout_engine.startswith("mineru"):
+                                _layout_engine = "mineru"
+                            layout_doc = load_layout_from_engine_zip(_layout_engine, layout_source_zip)
                             if layout_doc:
                                 task_state["layout_document"] = layout_doc
                                 logger.info(LogModule.EXTRACT, f"[PREVIEW] Task {task_id}: Loaded layout_document from layout_source_zip")
@@ -2927,14 +2995,31 @@ class TranslationService:
                 return
             
             task_state["layout_document"] = layout_doc
+            task_state["layout_engine"] = getattr(layout_doc, "engine", "unknown")
             total_blocks = sum(1 for _ in layout_doc.iter_blocks())
             logger.debug(
                 LogModule.EXTRACT,
                 f"[LAYOUT] Stored layout_document in task_state for task {task_id}: "
                 f"{layout_doc.page_count} pages, {total_blocks} blocks, "
+                f"engine={task_state['layout_engine']}, "
                 f"is_format_conversion={is_format_conversion}"
             )
-            
+
+            # Write layout blocks debug JSON (page/block/bbox info) for diagnosis
+            try:
+                from utils.extract_segments_debug import write_layout_blocks_debug_json
+                temp_dir = task_state.get("temp_dir")
+                written = write_layout_blocks_debug_json(
+                    temp_dir, layout_doc, task_id=task_id,
+                )
+                if written:
+                    logger.debug(
+                        LogModule.EXTRACT,
+                        f"[LAYOUT] Wrote layout blocks debug: {written}",
+                    )
+            except Exception:
+                pass
+
             # For PDF files, generate layout-based preview if not already generated
             is_pdf_file = original_filename.lower().endswith('.pdf')
             if is_pdf_file and not is_format_conversion:

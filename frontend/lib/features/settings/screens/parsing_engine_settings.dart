@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/providers/settings_provider.dart';
+import '../../../shared/services/config_service.dart';
 import '../../../shared/utils/mineru_language_data.dart';
+import 'ai_platform_settings.dart';
 
 // 解析引擎设置状态管理
 final StateNotifierProvider<ParsingEngineSettingsNotifier,
@@ -118,8 +120,20 @@ class ParsingEngineSettingsScreen extends ConsumerWidget {
     WidgetRef ref,
   ) {
     final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final AIPlatformSettings aiPlatformSettings =
+        ref.watch(aiPlatformSettingsProvider);
+    final AIPlatformSettingsNotifier aiPlatformNotifier =
+        ref.read(aiPlatformSettingsProvider.notifier);
     // Hardcoded parser engine codes
-    final List<String> engineCodes = <String>['mineru', 'mineru_local'];
+    final List<String> engineCodes = <String>['mineru', 'mineru_local', 'paddle', 'paddle_local'];
+
+    final String selectedEngine = engineCodes.contains(settings.parsingEngine)
+        ? settings.parsingEngine
+        : engineCodes.first;
+    final bool isPaddleEngine =
+        selectedEngine == 'paddle' || selectedEngine == 'paddle_local';
+    final AIPlatformInfo? paddlePlatformInfo =
+        aiPlatformSettings.platforms[selectedEngine];
 
     return Card(
       elevation: 4,
@@ -152,9 +166,7 @@ class ParsingEngineSettingsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              initialValue: engineCodes.contains(settings.parsingEngine)
-                  ? settings.parsingEngine
-                  : engineCodes.first,
+              initialValue: selectedEngine,
               decoration: InputDecoration(
                 labelText: l10n.settingsParsingEngineLabel,
                 border: const OutlineInputBorder(),
@@ -176,29 +188,66 @@ class ParsingEngineSettingsScreen extends ConsumerWidget {
               onChanged: (String? value) =>
                   notifier.updateParsingEngineSettings(parsingEngine: value),
             ),
+            // PaddleOCR-specific toggles — only shown for PaddleOCR engines
+            if (isPaddleEngine) ...<Widget>[
+              const SizedBox(height: 12),
+              // Use Doc Orientation Classify — PaddleOCR specific
+              SwitchListTile(
+                title: Text(l10n.settingsPaddleUseDocOrientationClassify),
+                subtitle: Text(l10n.settingsPaddleUseDocOrientationClassifySubtitle),
+                value: paddlePlatformInfo?.useDocOrientationClassify ?? false,
+                onChanged: (bool value) {
+                  if (paddlePlatformInfo != null) {
+                    aiPlatformNotifier.updatePlatformConfig(
+                      selectedEngine,
+                      paddlePlatformInfo.copyWith(useDocOrientationClassify: value),
+                    );
+                  }
+                },
+                contentPadding: EdgeInsets.zero,
+              ),
+              // Restructure Pages — PaddleOCR specific
+              SwitchListTile(
+                title: Text(l10n.settingsPaddleRestructurePages),
+                subtitle: Text(l10n.settingsPaddleRestructurePagesSubtitle),
+                value: paddlePlatformInfo?.restructurePages ?? false,
+                onChanged: (bool value) {
+                  if (paddlePlatformInfo != null) {
+                    aiPlatformNotifier.updatePlatformConfig(
+                      selectedEngine,
+                      paddlePlatformInfo.copyWith(restructurePages: value),
+                    );
+                  }
+                },
+                contentPadding: EdgeInsets.zero,
+              ),
+            ],
             const SizedBox(height: 16),
             const Divider(),
             const SizedBox(height: 8),
-            // Formula OCR Toggle
-            SwitchListTile(
-              title: Text(l10n.settingsFormulaOcr),
-              subtitle: Text(l10n.settingsFormulaOcrSubtitle),
-              value: settings.formulaOcr,
-              onChanged: (bool value) =>
-                  notifier.updateParsingEngineSettings(formulaOcr: value),
-              contentPadding: EdgeInsets.zero,
-            ),
-            // Table OCR Toggle
-            SwitchListTile(
-              title: Text(l10n.settingsTableOcr),
-              subtitle: Text(l10n.settingsTableOcrSubtitle),
-              value: settings.tableOcr,
-              onChanged: (bool value) =>
-                  notifier.updateParsingEngineSettings(tableOcr: value),
-              contentPadding: EdgeInsets.zero,
-            ),
-            const SizedBox(height: 16),
-            const Divider(),
+            // MinerU parser features — hidden when Paddle is selected
+            if (!isPaddleEngine) ...<Widget>[
+              // Formula OCR Toggle
+              SwitchListTile(
+                title: Text(l10n.settingsFormulaOcr),
+                subtitle: Text(l10n.settingsFormulaOcrSubtitle),
+                value: settings.formulaOcr,
+                onChanged: (bool value) =>
+                    notifier.updateParsingEngineSettings(formulaOcr: value),
+                contentPadding: EdgeInsets.zero,
+              ),
+              // Table OCR Toggle
+              SwitchListTile(
+                title: Text(l10n.settingsTableOcr),
+                subtitle: Text(l10n.settingsTableOcrSubtitle),
+                value: settings.tableOcr,
+                onChanged: (bool value) =>
+                    notifier.updateParsingEngineSettings(tableOcr: value),
+                contentPadding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: 16),
+              const Divider(),
+            ],
             const SizedBox(height: 8),
             Text(
               l10n.settingsParsingEngineNewTaskNotice,
@@ -276,6 +325,10 @@ class ParsingEngineSettingsScreen extends ConsumerWidget {
         return l10n.settingsParsingEngineMineru;
       case 'mineru_local':
         return l10n.settingsParsingEngineMineruLocal;
+      case 'paddle':
+        return l10n.settingsParsingEnginePaddle;
+      case 'paddle_local':
+        return l10n.settingsParsingEnginePaddleLocal;
       default:
         return code;
     }
