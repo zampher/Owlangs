@@ -1017,7 +1017,7 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
                     f", fill: {text_fill}); [{escaped}] }} ]{comma}"
                 )
 
-    columns_str = "(" + ", ".join(["1fr"] * col_count) + ")"
+    columns_str = "(" + ", ".join(["auto"] * col_count) + ")"
     row_h = round(
         max(1.0, (layout_height - TABLE_CELL_PAD_PT * 2) / max(1, row_count)),
         1,
