@@ -264,7 +264,10 @@ class _PreviewPanelState extends ConsumerState<PreviewPanel> {
                     .clamp(0, tabsState.tabs.length - 1),
                 children: tabsState.tabs
                     .map<Widget>(
-                      (PreviewTab tab) => SizedBox.expand(child: tab.content),
+                      (PreviewTab tab) => SizedBox.expand(
+                        key: ValueKey<String>('preview_tab_panel_${tab.id}'),
+                        child: tab.content,
+                      ),
                     )
                     .toList(),
               ),

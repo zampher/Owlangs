@@ -78,6 +78,35 @@ String mergePreviewUrl(String baseUrl, Map<String, String> params) {
       .toString();
 }
 
+/// Compare preview/download URLs ignoring parameter order.
+bool previewUrlsEquivalent(String a, String b) {
+  if (a == b) {
+    return true;
+  }
+  try {
+    final Uri uriA = Uri.parse(a);
+    final Uri uriB = Uri.parse(b);
+    if (uriA.scheme != uriB.scheme ||
+        uriA.host != uriB.host ||
+        uriA.path != uriB.path) {
+      return false;
+    }
+    final Map<String, String> paramsA = uriA.queryParameters;
+    final Map<String, String> paramsB = uriB.queryParameters;
+    if (paramsA.length != paramsB.length) {
+      return false;
+    }
+    for (final MapEntry<String, String> entry in paramsA.entries) {
+      if (paramsB[entry.key] != entry.value) {
+        return false;
+      }
+    }
+    return true;
+  } on FormatException {
+    return false;
+  }
+}
+
 /// Append preview=1 so backend serves HTML inline (not attachment download).
 String appendPreviewInlineParam(String url) {
   final Uri uri = Uri.parse(url);

@@ -168,21 +168,34 @@ class FormatSettings {
 /// Notifier for managing format settings per task
 class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
   FormatSettingsNotifier({this.taskId}) : super(const FormatSettings()) {
-    _loadFromFlowOrDefaults();
+    _initialLoad = _loadFromFlowOrDefaults();
   }
 
   final String? taskId;
+  late final Future<void> _initialLoad;
+  bool _loadComplete = false;
+
+  /// True after the first async load from flow state or user defaults finishes.
+  bool get isLoadComplete => _loadComplete;
+
+  /// Await persisted format settings before building preview export URLs.
+  Future<void> ensureLoaded() => _initialLoad;
+
+  void _markLoadComplete() {
+    _loadComplete = true;
+  }
 
   /// Load format settings from Flow state or user defaults
   /// Priority: Flow state > User defaults > Code defaults
   Future<void> _loadFromFlowOrDefaults() async {
-    if (taskId == null) {
-      // No taskId, load from user defaults only
-      await _loadFromUserDefaults();
-      return;
-    }
-
     try {
+      if (taskId == null) {
+        // No taskId, load from user defaults only
+        await _loadFromUserDefaults();
+        return;
+      }
+
+      try {
       // Try to load from Flow state (backend task_state)
       final TranslationService translationService = TranslationService();
       final Map<String, dynamic> flowSettings =
@@ -199,28 +212,40 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
       final String? targetTextColor = flowSettings['target_text_color'] as String?;
       final String? coverColorMode = flowSettings['cover_color_mode'] as String?;
 
-      if (tableFormat != null || equationFormat != null || chartFormat != null || bilingualExport != null || bilingualOrder != null || sourceTextItalic != null || sourceTextColor != null || targetTextItalic != null || targetTextColor != null || coverColorMode != null) {
-        state = FormatSettings(
-          tableFormat: tableFormat,
-          equationFormat: equationFormat,
-          chartFormat: chartFormat,
-          bilingualExport: bilingualExport,
-          bilingualOrder: bilingualOrder,
-          sourceTextItalic: sourceTextItalic,
-          sourceTextColor: sourceTextColor,
-          targetTextItalic: targetTextItalic,
-          targetTextColor: targetTextColor,
-          coverColorMode: coverColorMode,
-        );
-        return; // Use Flow state settings
+        if (tableFormat != null ||
+            equationFormat != null ||
+            chartFormat != null ||
+            bilingualExport != null ||
+            bilingualOrder != null ||
+            sourceTextItalic != null ||
+            sourceTextColor != null ||
+            targetTextItalic != null ||
+            targetTextColor != null ||
+            coverColorMode != null) {
+          state = FormatSettings(
+            tableFormat: tableFormat,
+            equationFormat: equationFormat,
+            chartFormat: chartFormat,
+            bilingualExport: bilingualExport,
+            bilingualOrder: bilingualOrder,
+            sourceTextItalic: sourceTextItalic,
+            sourceTextColor: sourceTextColor,
+            targetTextItalic: targetTextItalic,
+            targetTextColor: targetTextColor,
+            coverColorMode: coverColorMode,
+          );
+          return; // Use Flow state settings
+        }
+      } catch (e) {
+        // If loading from Flow state fails, fall back to user defaults
+        // Silently fail to avoid disrupting user experience
       }
-    } catch (e) {
-      // If loading from Flow state fails, fall back to user defaults
-      // Silently fail to avoid disrupting user experience
-    }
 
-    // Fallback to user defaults
-    await _loadFromUserDefaults();
+      // Fallback to user defaults
+      await _loadFromUserDefaults();
+    } finally {
+      _markLoadComplete();
+    }
   }
 
   /// Reload format settings from Flow state

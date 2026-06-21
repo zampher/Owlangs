@@ -12,10 +12,12 @@ import 'package:flutter/services.dart';
 import 'package:pdfx/pdfx.dart';
 
 import '../../../shared/services/translation_service.dart';
+import '../../../shared/utils/app_logger.dart';
 import 'pdf_continuous_page.dart';
 import 'pdf_page_utils.dart';
 import 'pdf_continuous_scroll_view.dart';
 import 'translation_result/preview_viewport.dart';
+import 'translation_result/preview_url_utils.dart';
 
 /// Scroll navigation for [PdfCompareContinuousView].
 class PdfCompareContinuousScrollController {
@@ -122,6 +124,11 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
   @override
   void initState() {
     super.initState();
+    AppLogger.log(
+      'PdfCompareContinuousView',
+      'initState source=${widget.sourceDownloadUrl}',
+      level: LogLevel.info,
+    );
     _scrollController.addListener(_handleLinkedScroll);
     _targetScrollController.addListener(_handleTargetScroll);
     widget.navigationController?._attach(this);
@@ -218,10 +225,35 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     if (oldWidget.sourceDownloadUrl != widget.sourceDownloadUrl ||
         oldWidget.targetDownloadUrl != widget.targetDownloadUrl ||
         oldWidget.targetRendererType != widget.targetRendererType) {
+      final bool sourceUnchanged = previewUrlsEquivalent(
+        oldWidget.sourceDownloadUrl,
+        widget.sourceDownloadUrl,
+      );
+      final bool targetUnchanged = previewUrlsEquivalent(
+        oldWidget.targetDownloadUrl,
+        widget.targetDownloadUrl,
+      );
+      if (sourceUnchanged &&
+          targetUnchanged &&
+          oldWidget.targetRendererType == widget.targetRendererType) {
+        AppLogger.log(
+          'PdfCompareContinuousView',
+          'Skipping redundant PDF reload (equivalent URLs)',
+          level: LogLevel.debug,
+        );
+        return;
+      }
+      AppLogger.log(
+        'PdfCompareContinuousView',
+        'Reloading compare PDFs: sourceChanged=${!sourceUnchanged} '
+        'targetChanged=${!targetUnchanged} '
+        'rendererChanged=${oldWidget.targetRendererType != widget.targetRendererType}',
+        level: LogLevel.info,
+      );
       _linkedRowHeights = null;
       _targetRowHeights = null;
       _lastReportedPage = 0;
-      _loadDocuments();
+      _loadDocuments(reason: 'url-change');
       return;
     }
     if (oldWidget.linkedScroll != widget.linkedScroll) {
@@ -255,7 +287,13 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     _sourceZoomController.value = matrix;
   }
 
+  @override
   void dispose() {
+    AppLogger.log(
+      'PdfCompareContinuousView',
+      'dispose source=${widget.sourceDownloadUrl}',
+      level: LogLevel.info,
+    );
     HardwareKeyboard.instance.removeHandler(_onKeyEvent);
     widget.navigationController?._detach(this);
     _scrollController.removeListener(_handleLinkedScroll);
@@ -468,7 +506,7 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
   bool _loadInProgress = false;
   bool _loadPending = false;
 
-  Future<void> _loadDocuments() async {
+  Future<void> _loadDocuments({String reason = 'initial'}) async {
     // Guard against concurrent calls: if already loading, mark pending and
     // the current load will re-invoke when it completes.
     if (_loadInProgress) {
@@ -477,6 +515,12 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     }
     _loadInProgress = true;
     _loadPending = false;
+
+    AppLogger.log(
+      'PdfCompareContinuousView',
+      'Loading compare PDFs (reason=$reason, hasContent=${_sourceDocument != null && _targetDocument != null})',
+      level: LogLevel.info,
+    );
 
     // Only show the loading spinner when we have nothing to display.
     // When documents are already loaded (e.g. URL change from revision
@@ -549,7 +593,7 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     // If another URL change was requested while we were loading, process it now.
     if (_loadPending && mounted) {
       _loadPending = false;
-      unawaited(_loadDocuments());
+      unawaited(_loadDocuments(reason: 'queued'));
     }
   }
 

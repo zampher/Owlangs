@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/app_config.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/services/translation_service.dart';
+import '../../../../shared/utils/app_logger.dart';
 import '../../providers/format_settings_provider.dart';
 import '../pdf_continuous_scroll_view.dart';
 import '../pdf_compare_continuous_view.dart';
@@ -124,6 +125,7 @@ class _TranslationFullComparePreviewTabState
   int _comparePdfTotalPages = 0;
   bool _revisionLinkedScrollEnabled = true;
   bool _previewSignalsAlive = true;
+  final GlobalKey _pdfCompareViewKey = GlobalKey();
   final List<(Listenable, VoidCallback)> _previewSignalBindings =
       <(Listenable, VoidCallback)>[];
 
@@ -148,7 +150,14 @@ class _TranslationFullComparePreviewTabState
   void initState() {
     super.initState();
     _syncScrollEnabled = widget.initialSyncScroll;
+    _layoutMode = widget.initialLayoutMode;
     _displayPdfRevision = widget.pdfRenderRevision;
+    AppLogger.log(
+      'TranslationFullComparePreviewTab',
+      'initState task=${widget.taskId} layout=$_layoutMode '
+      'revisionReady=$_supportsRevisionPreview',
+      level: LogLevel.info,
+    );
     _viewportController = PreviewViewportController();
     _fullscreenOverlay = PreviewFullscreenOverlay(
       onExit: () {
@@ -162,16 +171,6 @@ class _TranslationFullComparePreviewTabState
     _previewSignalsAlive = _bindPreviewSignalListeners();
     if (_previewSignalsAlive) {
       _onPdfBboxHighlightChanged();
-    }
-    if (widget.initialLayoutMode != PdfCompareLayoutMode.comparePreview &&
-        _supportsRevisionPreview &&
-        _previewSignalsAlive) {
-      _layoutMode = widget.initialLayoutMode;
-      // Enter revision layout on the first frame so we do not briefly mount
-      // PdfCompareContinuousView (source + target downloads) before revision mode.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_enterRevisionLayoutMode(widget.initialLayoutMode));
-      });
     }
   }
 
@@ -234,6 +233,11 @@ class _TranslationFullComparePreviewTabState
 
   @override
   void dispose() {
+    AppLogger.log(
+      'TranslationFullComparePreviewTab',
+      'dispose task=${widget.taskId}',
+      level: LogLevel.info,
+    );
     _unbindPreviewSignalListeners();
     _pdfNavigationController.dispose();
     _pdfCompareNavigationController.dispose();
@@ -581,6 +585,36 @@ class _TranslationFullComparePreviewTabState
     );
   }
 
+  Widget _buildPdfCompareContinuousView({
+    required String sourcePdfUrl,
+    required String targetPdfUrl,
+    required bool linkedScroll,
+    PdfCompareContinuousScrollController? navigationController,
+  }) {
+    return PdfCompareContinuousView(
+      key: _pdfCompareViewKey,
+      sourceDownloadUrl: sourcePdfUrl,
+      targetDownloadUrl: targetPdfUrl,
+      targetRendererType: widget.baseMode.rendererType,
+      linkedScroll: linkedScroll,
+      navigationController: navigationController,
+      highlightPageNumber: _highlightBboxPage,
+      highlightBbox: _highlightBbox,
+      viewportController: _viewportController,
+      onVisiblePageChanged: (int page, int totalPages) {
+        if (!mounted ||
+            (page == _comparePdfCurrentPage &&
+                totalPages == _comparePdfTotalPages)) {
+          return;
+        }
+        setState(() {
+          _comparePdfCurrentPage = page;
+          _comparePdfTotalPages = totalPages;
+        });
+      },
+    );
+  }
+
   String _buildTargetImageUrl(Map<String, String> formatParams) {
     return mergePreviewUrl(
       widget.translatedImageUrl!,
@@ -758,26 +792,11 @@ class _TranslationFullComparePreviewTabState
           child: PreviewZoomableViewport(
             controller: _viewportController,
             childHandlesVerticalScroll: true,
-            child: PdfCompareContinuousView(
-              sourceDownloadUrl: sourcePdfUrl,
-              targetDownloadUrl: targetPdfUrl,
-              targetRendererType: widget.baseMode.rendererType,
+            child: _buildPdfCompareContinuousView(
+              sourcePdfUrl: sourcePdfUrl,
+              targetPdfUrl: targetPdfUrl,
               linkedScroll: _revisionLinkedScrollEnabled,
               navigationController: _pdfCompareNavigationController,
-              highlightPageNumber: _highlightBboxPage,
-              highlightBbox: _highlightBbox,
-              viewportController: _viewportController,
-              onVisiblePageChanged: (int page, int totalPages) {
-                if (!mounted ||
-                    (page == _comparePdfCurrentPage &&
-                        totalPages == _comparePdfTotalPages)) {
-                  return;
-                }
-                setState(() {
-                  _comparePdfCurrentPage = page;
-                  _comparePdfTotalPages = totalPages;
-                });
-              },
             ),
           ),
         ),
@@ -861,31 +880,19 @@ class _TranslationFullComparePreviewTabState
     return PreviewZoomableViewport(
       controller: _viewportController,
       childHandlesVerticalScroll: true,
-      child: PdfCompareContinuousView(
-        sourceDownloadUrl: sourcePdfUrl,
-        targetDownloadUrl: targetPdfUrl,
-        targetRendererType: widget.baseMode.rendererType,
+      child: _buildPdfCompareContinuousView(
+        sourcePdfUrl: sourcePdfUrl,
+        targetPdfUrl: targetPdfUrl,
         linkedScroll: _syncScrollEnabled,
-        highlightPageNumber: _highlightBboxPage,
-        highlightBbox: _highlightBbox,
-        viewportController: _viewportController,
-        onVisiblePageChanged: (int page, int totalPages) {
-          if (!mounted ||
-              (page == _comparePdfCurrentPage &&
-                  totalPages == _comparePdfTotalPages)) {
-            return;
-          }
-          setState(() {
-            _comparePdfCurrentPage = page;
-            _comparePdfTotalPages = totalPages;
-          });
-        },
       ),
     );
   }
 
   Widget _buildPreviewBody(AppLocalizations l10n) {
-    if (_layoutMode.showsRevisionControls && _supportsRevisionPreview) {
+    if (_layoutMode.showsRevisionControls) {
+      if (!_supportsRevisionPreview) {
+        return const Center(child: CircularProgressIndicator());
+      }
       return _buildPdfRevisionPanel(l10n);
     }
     return _buildComparePreviewBody(l10n);

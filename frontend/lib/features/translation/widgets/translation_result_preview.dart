@@ -641,6 +641,8 @@ class _TranslationResultPreviewState
   int? _cachedExclusionCountsMetadataSize;
 
   bool _loadingHtmlPreview = false;
+  bool _revisionPreviewOpening = false;
+  final GlobalKey _fullComparePreviewTabKey = GlobalKey();
   // Format settings are now managed by formatSettingsProviderFamily
   // Removed: String? _selectedTableFormat;
   // Removed: String? _selectedEquationFormat;
@@ -5863,6 +5865,14 @@ class _TranslationResultPreviewState
   Future<void> _onEnterRevisionPreviewMode({
     required TranslationPreviewMode baseMode,
   }) async {
+    if (_revisionPreviewOpening) {
+      _translationResultLog(
+        '[REVISION_PREVIEW] Ignoring duplicate revision preview launch',
+      );
+      return;
+    }
+    _revisionPreviewOpening = true;
+
     _lastPreviewMode = baseMode;
     _lastFullDocumentCompare = true;
     _lastSyncScroll = baseMode.defaultFullCompareSyncScroll;
@@ -5874,6 +5884,11 @@ class _TranslationResultPreviewState
     }
 
     try {
+      await ref
+          .read(formatSettingsProviderFamily(_apiTaskId()).notifier)
+          .ensureLoaded();
+      await _onRevisionModeEntered(baseMode);
+
       if (_totalSegmentsCount == 0 && !_isLoading) {
         await _loadTranslationContent(forceRefreshSegments: true);
       }
@@ -5889,6 +5904,7 @@ class _TranslationResultPreviewState
       await _openFullDocumentCompareTab(
         baseMode: baseMode,
         initialLayoutMode: PdfCompareLayoutMode.compareRevision,
+        revisionMetadataPrefetched: true,
       );
       if (mounted && highlightedIndex != null) {
         _requestPdfBboxHighlight(highlightedIndex!);
@@ -5902,6 +5918,7 @@ class _TranslationResultPreviewState
         MessageService.showError(context, 'Failed to open revision preview: $e');
       }
     } finally {
+      _revisionPreviewOpening = false;
       if (mounted) {
         setState(() {
           _loadingHtmlPreview = false;
@@ -6197,6 +6214,7 @@ class _TranslationResultPreviewState
     required TranslationPreviewMode baseMode,
     PdfCompareLayoutMode initialLayoutMode =
         PdfCompareLayoutMode.comparePreview,
+    bool revisionMetadataPrefetched = false,
   }) async {
     final dynamic translationState = widget.flowId != null
         ? ref.read(translationStateProviderFamily(widget.flowId!))
@@ -6238,6 +6256,35 @@ class _TranslationResultPreviewState
 
     final AppLocalizations l10n = AppLocalizations.of(context)!;
     const String tabId = _kTranslationPreviewTabId;
+
+    final PreviewTabsState tabsState = widget.flowId != null
+        ? ref.read(previewTabsProviderFamily(widget.flowId!))
+        : ref.read(previewTabsProvider);
+    final int existingIndex =
+        tabsState.tabs.indexWhere((PreviewTab tab) => tab.id == tabId);
+    if (existingIndex >= 0 && initialLayoutMode.showsRevisionControls) {
+      final PreviewTab existing = tabsState.tabs[existingIndex];
+      final Map<String, dynamic>? dataRef = existing.dataRef;
+      if (dataRef?['taskId'] == _apiTaskId() &&
+          dataRef?['fullCompareRevision'] == true &&
+          dataRef?['fullCompareBaseMode'] == baseMode.name) {
+        _translationResultLog(
+          '[REVISION_PREVIEW] Reusing existing revision preview tab '
+          '(task=${_apiTaskId()})',
+          level: LogLevel.info,
+        );
+        _switchToPreviewTab(tabId);
+        return;
+      }
+    }
+
+    _translationResultLog(
+      '[REVISION_PREVIEW] Opening full compare tab '
+      '(task=${_apiTaskId()}, layout=$initialLayoutMode, '
+      'replaceExisting=${existingIndex >= 0})',
+      level: LogLevel.info,
+    );
+
     _previewTabsNotifier().updateOrAddTab(
       PreviewTab(
         id: tabId,
@@ -6249,7 +6296,7 @@ class _TranslationResultPreviewState
             ? Icons.edit_note
             : Icons.compare_arrows,
         content: TranslationFullComparePreviewTab(
-          key: ValueKey<String>('full_compare_${_apiTaskId()}'),
+          key: _fullComparePreviewTabKey,
           taskId: _apiTaskId(),
           baseMode: baseMode,
           isPdfSource: _isPdfSourceFile(),
@@ -6323,9 +6370,10 @@ class _TranslationResultPreviewState
                     SegmentPdfTypographyDialogMode.leadingOnly,
                   )
               : null,
-          onPdfRevisionModeEntered: _supportsRevisionForMode(baseMode)
-              ? () => _onRevisionModeEntered(baseMode)
-              : null,
+          onPdfRevisionModeEntered:
+              !revisionMetadataPrefetched && _supportsRevisionForMode(baseMode)
+                  ? () => _onRevisionModeEntered(baseMode)
+                  : null,
           pdfPreviewJumpPageListenable: _supportsRevisionForMode(baseMode) &&
                   baseMode == TranslationPreviewMode.pdfPreserve
               ? _pdfPreviewJumpPageNotifier
@@ -6370,6 +6418,8 @@ class _TranslationResultPreviewState
           'taskId': _apiTaskId(),
           'flowId': widget.flowId,
           'downloads': effectiveDownloads,
+          'fullCompareRevision': initialLayoutMode.showsRevisionControls,
+          'fullCompareBaseMode': baseMode.name,
         },
       ),
     );
