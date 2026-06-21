@@ -11,6 +11,7 @@ by all PDF renderer implementations (ReportLab, HTML-to-PDF, etc.).
 import zipfile
 from typing import Dict, Optional, List, Tuple
 from layout.base import LayoutBlock, LayoutDocument
+from layout.block_types import IMAGE_CAPTION, CAPTION, TABLE_BODY, CHART_BODY
 
 
 class BlockProcessor:
@@ -107,7 +108,7 @@ class BlockProcessor:
             if not isinstance(sub, dict):
                 continue
             sub_type = str(sub.get("type", ""))
-            if sub_type not in ("image_caption", "caption"):
+            if sub_type not in (IMAGE_CAPTION, CAPTION):
                 continue
 
             bbox = sub.get("bbox")
@@ -442,7 +443,7 @@ class BlockProcessor:
         
         # Extract interline_equation images (MinerU renders formulas as JPG with hash filenames)
         for block in layout_doc.iter_blocks():
-            if block.type != "interline_equation":
+            if not block.is_equation():
                 continue
             img_path = None
             raw_block = block.raw if hasattr(block, "raw") and isinstance(block.raw, dict) else {}
@@ -475,7 +476,7 @@ class BlockProcessor:
                 for sub in nested_blocks:
                     if not isinstance(sub, dict):
                         continue
-                    if sub.get("type") == "table_body":
+                    if sub.get("type") == TABLE_BODY:
                         lines = sub.get("lines", [])
                         for line in lines:
                             if not isinstance(line, dict):
@@ -500,7 +501,7 @@ class BlockProcessor:
             for sub in nested_blocks:
                 if not isinstance(sub, dict):
                     continue
-                if sub.get("type") != "chart_body":
+                if sub.get("type") != CHART_BODY:
                     continue
                 for line in sub.get("lines") or []:
                     if not isinstance(line, dict):

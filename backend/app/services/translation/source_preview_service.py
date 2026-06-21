@@ -15,7 +15,7 @@ import hashlib
 import os
 import time
 from typing import Any, Dict, Optional, List
-from pathlib import Path
+from layout.block_types import CHART_BODY
 
 from logger import unified_logger as logger
 from logger.logger import LogModule
@@ -2085,7 +2085,7 @@ class SourcePreviewService:
             pre_existing_excluded_indices = set(ExclusionManager.get_excluded_segments(task_state).keys())
 
             for idx, chunk in enumerate(layout_result.chunks):
-                is_chart_body = chunk.chunk_type == "chart_body"
+                is_chart_body = chunk.chunk_type == CHART_BODY
                 is_image = chunk.chunk_type == "image" or (
                     is_chart_body and bool(chunk.image_path)
                 )

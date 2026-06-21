@@ -21,11 +21,11 @@ String? segmentFilterKeyFromMetadata(Map<String, dynamic> metadata) {
     return ExclusionReason.reference.value;
   }
 
-  if (blockType == 'header' || blockType == 'page_header') {
+  if (blockType == 'header') {
     return 'structural_header';
   }
 
-  if (blockType == 'footer' || blockType == 'page_footer') {
+  if (blockType == 'footer') {
     return 'structural_footer';
   }
 

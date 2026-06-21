@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any, Tuple, List
 from html.parser import HTMLParser
 from html import escape
 
+from layout.block_types import TABLE_BODY, CHART_BODY
 from logger import unified_logger as logger
 from logger.logger import LogModule
 
@@ -72,7 +73,7 @@ def _extract_table_from_layout_block(block) -> tuple[Optional[str], Optional[str
     for sub in nested_blocks:
         if not isinstance(sub, dict):
             continue
-        if str(sub.get("type", "")) != "table_body":
+        if str(sub.get("type", "")) != TABLE_BODY:
             continue
         
         lines = sub.get("lines", [])
@@ -487,7 +488,7 @@ def _extract_chart_from_layout_block(block) -> tuple[Optional[str], Optional[str
     for sub in nested_blocks:
         if not isinstance(sub, dict):
             continue
-        if str(sub.get("type", "")) != "chart_body":
+        if str(sub.get("type", "")) != CHART_BODY:
             continue
 
         lines = sub.get("lines", [])
@@ -532,7 +533,7 @@ def _is_chart_body_segment(
     - Image placeholder markdown: ![Chart](layoutimgN)
     - Markdown table (html chart_body_format)
     """
-    if segment and segment.get("chunk_type") == "chart_body":
+    if segment and segment.get("chunk_type") == CHART_BODY:
         return True
 
     source_text = (segment or {}).get("source_text") or ""

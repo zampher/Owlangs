@@ -22,6 +22,8 @@ from urllib.parse import urlencode
 from typing import Optional, Dict, Any, List, Tuple
 from pathlib import Path
 
+from layout.block_types import CHART_BODY
+
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, Response
 
@@ -302,7 +304,7 @@ def _populate_layout_placeholder_image_map(
 
         for idx, chunk in enumerate(chunks):
             # Handle both image chunks and chart_body chunks (when rendered as images)
-            if chunk.chunk_type != "image" and chunk.chunk_type != "chart_body":
+            if chunk.chunk_type != "image" and chunk.chunk_type != CHART_BODY:
                 continue
             placeholder_id = chunk.image_placeholder or f"layoutimg{idx}"
             alt_text = chunk.image_alt or (chunk.image_path or "Image")
@@ -342,6 +344,34 @@ def _populate_layout_placeholder_image_map(
             f"[DOWNLOAD] Registered {registered} layoutimg placeholder(s) in image_data_map",
         )
     return registered
+
+
+def _build_block_rotation_map_from_segments(
+    segments: list,
+    task_state: Dict[str, Any],
+) -> Dict[int, int]:
+    """Build a block_index -> rotation map from translation segments.
+
+    Each segment carries an optional ``rotation`` field (0/90/180/270) and
+    one or more ``layout_block_indices``.  Only segments with a non-zero
+    rotation are included.
+    """
+    rotation_map: Dict[int, int] = {}
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        rotation = seg.get("rotation", 0)
+        if not rotation:
+            continue
+        block_indices = seg.get("layout_block_indices") or []
+        if not block_indices:
+            continue
+        # Apply the rotation to all block indices this segment covers.
+        # Last segment wins if multiple segments reference the same block.
+        for bi in block_indices:
+            if isinstance(bi, int) and bi >= 0:
+                rotation_map[bi] = int(rotation)
+    return rotation_map
 
 
 def _resolve_layout_zip_bytes(task_state: Dict[str, Any]) -> Optional[bytes]:
@@ -1475,6 +1505,7 @@ async def _typst_overlay_pdf_response(
     font_weight_by_block_index: Dict[int, str] = {}
     font_style_by_block_index: Dict[int, str] = {}
     leading_em_by_block_index: Dict[int, float] = {}
+    rotation_by_block_index: Dict[int, int] = {}
     if segments:
         is_deep_split_enabled = bool(task_state.get("deep_split"))
         text_field = "target_text"
@@ -1521,6 +1552,16 @@ async def _typst_overlay_pdf_response(
                 f"for {len(leading_em_by_block_index)} block(s): "
                 f"{sorted(leading_em_by_block_index.items())[:8]}",
             )
+        rotation_by_block_index = _build_block_rotation_map_from_segments(
+            segments, task_state,
+        )
+        if rotation_by_block_index:
+            logger.info(
+                LogModule.EXPORT,
+                f"[TYPST_OVERLAY] Task {task_id}: applying user rotation overrides "
+                f"for {len(rotation_by_block_index)} block(s): "
+                f"{sorted(rotation_by_block_index.items())[:8]}",
+            )
 
     zip_bytes = _resolve_layout_zip_bytes(task_state)
     if not zip_bytes:
@@ -1548,6 +1589,7 @@ async def _typst_overlay_pdf_response(
         font_weight_by_block_index=font_weight_by_block_index or None,
         font_style_by_block_index=font_style_by_block_index or None,
         leading_em_by_block_index=leading_em_by_block_index or None,
+        rotation_by_block_index=rotation_by_block_index or None,
     )
 
     output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
@@ -1654,6 +1696,9 @@ async def _typst_overlay_pdf_response(
                     ),
                     leading_em_by_block_index=(
                         leading_em_by_block_index if leading_em_by_block_index else None
+                    ),
+                    rotation_by_block_index=(
+                        rotation_by_block_index if rotation_by_block_index else None
                     ),
                     render_page_indices=render_page_indices,
                     base_merged_pdf_bytes=base_merged_pdf_bytes,

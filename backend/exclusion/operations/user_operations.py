@@ -15,6 +15,7 @@ but are user-initiated and should preserve user choices.
 import time
 from typing import Optional
 
+from layout.block_types import TABLE_BODY, TABLE
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from exclusion.core.exclusion_reason import ExclusionReason
@@ -194,8 +195,8 @@ def exclude_translation_segment(
         # Not excluded yet - detect appropriate exclusion reason using same interface as Extract phase
         source_text = segment.get("source_text", "")
         block_type = segment.get("block_type")
-        is_table = (block_type == "table_body" or block_type == "table")
-        
+        is_table = (block_type == TABLE_BODY or block_type == TABLE)
+
         if not is_table:
             from utils.translation_segments import _is_table_segment
             is_table = _is_table_segment(source_text)
@@ -345,8 +346,8 @@ def unexclude_translation_segment(
     payload = task_state.get("payload")
     if payload and isinstance(payload, dict):
         target_lang = payload.get("to_lang") or payload.get("target_lang")
-    
-    is_table = (block_type == "table_body" or block_type == "table")
+
+    is_table = (block_type == TABLE_BODY or block_type == TABLE)
     if not is_table:
         from utils.translation_segments import _is_table_segment
         is_table = _is_table_segment(source_text)

@@ -81,7 +81,7 @@ def _collect_redaction_rects(
 
             # Skip chart and table blocks - they should always stay on original PDF
             # Chart and table visual content (images) must not be redacted
-            if block.type in ("chart", "table"):
+            if block.should_skip_redaction():
                 if block.type == "chart":
                     skipped_chart += 1
                 else:
@@ -172,7 +172,7 @@ def _collect_redaction_rects(
         visual_blocks_excluded = len(page_images)
 
         # Also count all chart and table blocks (they are all excluded from redaction)
-        chart_table_count = sum(1 for block in page.blocks if block.type in ("chart", "table"))
+        chart_table_count = sum(1 for block in page.blocks if block.should_skip_redaction())
         visual_blocks_excluded += chart_table_count
         
         if visual_blocks_excluded:
@@ -274,7 +274,7 @@ def _clip_rects_against_skipped_blocks(
                 protected_rects.append(block.bbox)
             elif not block.has_text():
                 protected_rects.append(block.bbox)
-            elif block.type in ("chart", "table"):
+            elif block.should_skip_redaction():
                 protected_rects.append(block.bbox)
 
     if not protected_rects:

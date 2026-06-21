@@ -956,6 +956,7 @@ async def update_segment_api(
     leading_em = body.get("leading_em")
     leading_em_reset = bool(body.get("leading_em_reset", False))
     pdf_font_reset = bool(body.get("pdf_font_reset", False))
+    rotation = body.get("rotation")
 
     segment = _ts_module().update_translation_segment(
         task_id=task_id,
@@ -973,6 +974,7 @@ async def update_segment_api(
         leading_em=leading_em,
         leading_em_reset=leading_em_reset,
         pdf_font_reset=pdf_font_reset,
+        rotation=rotation,
     )
 
     if segment is None:

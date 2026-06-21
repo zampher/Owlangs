@@ -17,15 +17,15 @@ from layout.image_overlay.debug_output import (
 )
 from layout.image_overlay.font_resolver import font_loader_for_family
 from layout.image_overlay.models import ImageOverlayConfig, ImageOverlayResult
+from layout.block_types import EQUATION_BLOCK_TYPES, VISUAL_BLOCK_TYPES, IMAGE, TABLE, CHART, LIST, LEGACY_FIGURE
 from layout.pdf_renderer.typst_overlay.visual_images import (
-    EQUATION_BLOCK_TYPES,
     VisualImagePlacement,
     collect_visual_image_placements,
     lookup_image_bytes,
 )
 from logger.logger import LogModule, unified_logger
 
-_SKIP_TEXT_BLOCK_TYPES = frozenset({"image", "figure", "list"})
+_SKIP_TEXT_BLOCK_TYPES = frozenset({IMAGE, LEGACY_FIGURE, LIST})
 _CJK_CHAR_RE = re.compile(
     r"[\u4e00-\u9fff\u3400-\u4dbf\u3040-\u30ff\uac00-\ud7af]",
 )

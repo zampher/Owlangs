@@ -13,6 +13,10 @@ import re
 from html.parser import HTMLParser
 
 from layout.base import LayoutDocument
+from layout.block_types import (
+    IMAGE_CAPTION, TABLE_CAPTION, CHART_CAPTION, CAPTION,
+    TABLE_BODY, CHART_BODY,
+)
 from logger import unified_logger as logger
 from logger.logger import LogModule
 
@@ -221,7 +225,7 @@ def _extract_text_from_block(block) -> str:
     text = (getattr(block, "text", None) or "").strip()
     if text:
         # Log caption-like blocks for debugging (e.g. image_caption)
-        if getattr(block, "type", "") in ("image_caption", "caption"):
+        if getattr(block, "type", "") in (IMAGE_CAPTION, CAPTION):
             logger.info(LogModule.LAYOUT, "[LAYOUT] Caption text extracted from block "
                 f"index={getattr(block, 'index', None)}, "
                 f"page={getattr(block, 'page_index', None)}, "
@@ -238,7 +242,7 @@ def _extract_text_from_block(block) -> str:
     raw_text = raw.get("text")
     if isinstance(raw_text, str) and raw_text.strip():
         text = raw_text.strip()
-        if getattr(block, "type", "") in ("image_caption", "caption"):
+        if getattr(block, "type", "") in (IMAGE_CAPTION, CAPTION):
             logger.info(LogModule.LAYOUT, "[LAYOUT] Caption raw.text extracted from block "
                 f"index={getattr(block, 'index', None)}, "
                 f"page={getattr(block, 'page_index', None)}, "
@@ -278,7 +282,7 @@ def _extract_text_from_block(block) -> str:
                     parts.append(span_text.strip())
     merged = " ".join(parts).strip()
     if merged:
-        if getattr(block, "type", "") in ("image_caption", "caption"):
+        if getattr(block, "type", "") in (IMAGE_CAPTION, CAPTION):
             logger.info(LogModule.LAYOUT, "[LAYOUT] Caption text merged from lines/spans for block "
                 f"index={getattr(block, 'index', None)}, "
                 f"page={getattr(block, 'page_index', None)}, "
@@ -597,7 +601,7 @@ def _build_layout_markdown(
                     if not isinstance(sub, dict):
                         continue
                     sub_type = str(sub.get("type", ""))
-                    if sub_type in ("image_caption", "caption"):
+                    if sub_type in (IMAGE_CAPTION, CAPTION):
                             lines = sub.get("lines") or []
                             line_texts: list[str] = []
                             for line in lines:
@@ -686,7 +690,7 @@ def _build_layout_markdown(
                 if not isinstance(sub, dict):
                     continue
                 sub_type = str(sub.get("type", ""))
-                if sub_type == "table_caption":
+                if sub_type == TABLE_CAPTION:
                     lines = sub.get("lines") or []
                     line_texts: list[str] = []
                     for line in lines:
@@ -725,7 +729,7 @@ def _build_layout_markdown(
             for sub in nested_blocks:
                 if not isinstance(sub, dict):
                     continue
-                if str(sub.get("type", "")) != "table_body":
+                if str(sub.get("type", "")) != TABLE_BODY:
                     continue
                 lines = sub.get("lines") or []
                 for line in lines:
@@ -750,6 +754,24 @@ def _build_layout_markdown(
                         break
                 if table_html or table_image_path_from_span:
                     break
+
+            # Fallback for PaddleOCR format: table HTML is stored directly in
+            # block_content (populated as block.text), not inside a nested
+            # raw.blocks structure.  Paddle table captions are separate text
+            # blocks handled elsewhere, so we only extract the table body.
+            if not table_html and not table_image_path_from_span:
+                block_content = str(raw_block.get("block_content", "") or "")
+                if not block_content:
+                    block_content = block.text or ""
+                block_content = block_content.strip()
+                if block_content.lower().startswith("<table"):
+                    table_html = block_content
+                    logger.debug(
+                        LogModule.LAYOUT,
+                        "[LAYOUT] Table HTML extracted from Paddle block_content: "
+                        f"page={block.page_index}, block_index={block_index}, "
+                        f"preview={block_content[:120]!r}",
+                    )
 
             # Extract table footnotes
             footnote_texts: list[str] = []
@@ -856,7 +878,7 @@ def _build_layout_markdown(
                 chunks.append(
                     LayoutChunk(
                         text=table_markdown,
-                        chunk_type="table_body",
+                        chunk_type=TABLE_BODY,
                         block_indices=[block_index] if block_index >= 0 else [],
                         block_texts=[table_markdown],
                         image_path=None,
@@ -899,7 +921,7 @@ def _build_layout_markdown(
                 if not isinstance(sub, dict):
                     continue
                 sub_type = str(sub.get("type", ""))
-                if sub_type == "chart_caption":
+                if sub_type == CHART_CAPTION:
                     lines = sub.get("lines") or []
                     line_texts: list[str] = []
                     for line in lines:
@@ -936,7 +958,7 @@ def _build_layout_markdown(
             for sub in nested_blocks:
                 if not isinstance(sub, dict):
                     continue
-                if str(sub.get("type", "")) != "chart_body":
+                if str(sub.get("type", "")) != CHART_BODY:
                     continue
                 lines = sub.get("lines") or []
                 for line in lines:
@@ -998,7 +1020,7 @@ def _build_layout_markdown(
                 chunks.append(
                     LayoutChunk(
                         text=image_text,
-                        chunk_type="chart_body",  # Keep as chart_body for exclusion detection, even when rendered as image
+                        chunk_type=CHART_BODY,  # Keep as chart_body for exclusion detection, even when rendered as image
                         block_indices=[block_index] if block_index >= 0 else [],
                         image_path=chart_image_path,
                         image_placeholder=placeholder_id,
@@ -1019,7 +1041,7 @@ def _build_layout_markdown(
                 chunks.append(
                     LayoutChunk(
                         text=chart_content,
-                        chunk_type="chart_body",
+                        chunk_type=CHART_BODY,
                         block_indices=[block_index] if block_index >= 0 else [],
                         block_texts=[chart_content],
                         image_path=None,
@@ -1122,7 +1144,7 @@ def _build_layout_markdown(
         # heading_level=0 means false-positive title (body text) — no heading prefix.
         # Only self-hosted MinerU (middle.json) provides font size in layout.json;
         # Cloud API titles all default to H1.
-        is_title = block.type == "title"
+        is_title = block.is_heading()
         if is_title:
             # Convert to markdown heading: remove existing # if present, then add correct level
             text_stripped = text.strip()

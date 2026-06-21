@@ -14,6 +14,7 @@ import io
 from typing import Dict, Optional
 
 from layout.base import LayoutDocument, LayoutBlock
+from layout.block_types import LEGACY_FIGURE
 from logger import unified_logger as logger
 from logger.logger import LogModule
 
@@ -245,7 +246,7 @@ def render_layout_html(
             else:
                 # Render all other block types (text, title, header, footer, page_number, figure, table, formula, equation, etc.)
                 # This ensures we don't miss any content that was previously excluded
-                if block.text or block.type in ("text", "title", "header", "footer", "page_number", "figure", "table", "formula", "equation"):
+                if block.text or block.type in ("text", "title", "header", "footer", "page_number", LEGACY_FIGURE, "table", "formula", "equation"):
                     rendered_blocks += 1
                     # Use translated text if available, otherwise use original text
                     # For headers/footers/page_numbers, always use original text if no translation available
@@ -263,7 +264,7 @@ def render_layout_html(
                     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
                     
                     # Include block type in class for styling
-                    block_type_class = f" {block.type}" if block.type in ("header", "footer", "page_number", "title", "figure", "table", "formula", "equation") else ""
+                    block_type_class = f" {block.type}" if block.type in ("header", "footer", "page_number", "title", LEGACY_FIGURE, "table", "formula", "equation") else ""
                     block_index_attr = f' data-block-index="{block.index}"' if block.index is not None else ""
                     html_parts.append(
                         f'        <div class="block text{block_type_class}" style="{style}"{block_index_attr}>\n'

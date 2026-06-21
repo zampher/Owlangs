@@ -1422,6 +1422,15 @@
       }
     }
   },
+  "segmentRotationLabel": "{degrees}°",
+  "@segmentRotationLabel": {
+    "placeholders": {
+      "degrees": {
+        "type": "int"
+      }
+    }
+  },
+  "segmentRotationOff": "Rotate",
   "segmentPdfFontSizeTitle": "PDF font size",
   "segmentPdfTypographyTitle": "PDF typography",
   "segmentPdfTypographyFontTitle": "PDF font",

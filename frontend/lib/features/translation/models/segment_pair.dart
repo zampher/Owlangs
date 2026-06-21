@@ -15,6 +15,7 @@ class SegmentPair {
     this.isExcluded = false,
     this.exclusionReason,
     this.usedPlatforms = const <String>[],
+    this.rotation = 0,
   });
 
   final int index;
@@ -29,4 +30,5 @@ class SegmentPair {
   final String?
       exclusionReason; // Exclusion reason (e.g., 'image', 'formula', 'reference')
   final List<String> usedPlatforms;
+  final int rotation; // Manual rotation override: 0, 90, 180, or 270
 }

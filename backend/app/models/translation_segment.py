@@ -57,6 +57,11 @@ class TranslationSegment:
     font_weight: Optional[str] = None
     font_style: Optional[str] = None
     leading_em: Optional[float] = None
+
+    # Optional rotation for overlay placement: 0=none, 90=CW, 180=flip, 270=CCW.
+    # Applied when the source bbox dimension does not match the translated text's
+    # reading direction (e.g., table rotated 90 in the original PDF).
+    rotation: int = 0
     
     @classmethod
     def create(
@@ -117,6 +122,7 @@ class TranslationSegment:
             "font_weight": self.font_weight,
             "font_style": self.font_style,
             "leading_em": self.leading_em,
+            "rotation": self.rotation,
         }
     
     @classmethod
@@ -155,6 +161,7 @@ class TranslationSegment:
             font_weight=data.get("font_weight"),
             font_style=data.get("font_style"),
             leading_em=data.get("leading_em"),
+            rotation=data.get("rotation", 0),
         )
     
     def update_target_text(self, new_text: str, modified_by: Optional[str] = None) -> None:

@@ -7,10 +7,12 @@ from __future__ import annotations
 from typing import Dict, List
 
 from layout.base import LayoutDocument
+from layout.block_types import RENDERABLE_TEXT_BLOCK_TYPES, LEGACY_FIGURE, CAPTION, LIST
 from logger.logger import LogModule, unified_logger
 
+# Extended local frozenset: canonical renderable types plus legacy "figure" and "caption"
 _RENDERABLE_TEXT_BLOCK_TYPES = frozenset(
-    {"text", "title", "header", "footer", "page_number", "ref_text", "figure", "caption"}
+    RENDERABLE_TEXT_BLOCK_TYPES | {LEGACY_FIGURE, CAPTION}
 )
 
 
@@ -27,8 +29,8 @@ def _bbox_contains(outer: tuple, inner: tuple, *, margin: float = 1.0) -> bool:
 
 def _is_list_expandable_child_type(block_type: str) -> bool:
     return block_type in _RENDERABLE_TEXT_BLOCK_TYPES and block_type not in {
-        "list",
-        "figure",
+        LIST,
+        LEGACY_FIGURE,
     }
 
 

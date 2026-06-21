@@ -52,6 +52,59 @@ class LayoutBlock:
         """Check if block has image."""
         return bool(self.image_path)
 
+    # -- semantic category convenience methods ---------------------------
+    # These delegate to the canonical frozensets in layout.block_types so
+    # that downstream code does not need to hard-code type strings.
+
+    def is_visual(self) -> bool:
+        """Image, table, or chart block -- rendered as image, never translated."""
+        from layout.block_types import VISUAL_BLOCK_TYPES, BODY_SUB_TYPES
+        return self.type in VISUAL_BLOCK_TYPES or self.sub_type in BODY_SUB_TYPES
+
+    def is_equation(self) -> bool:
+        """Formula / equation block -- never translated, may render as image or LaTeX."""
+        from layout.block_types import EQUATION_BLOCK_TYPES
+        return self.type in EQUATION_BLOCK_TYPES
+
+    def is_structural(self) -> bool:
+        """Header, footer, or page-number block -- never translated."""
+        from layout.block_types import STRUCTURAL_BLOCK_TYPES
+        return self.type in STRUCTURAL_BLOCK_TYPES
+
+    def is_heading(self) -> bool:
+        """Title or sub-title block -- translated with heading formatting."""
+        from layout.block_types import HEADING_BLOCK_TYPES
+        return self.type in HEADING_BLOCK_TYPES or self.sub_type == "heading"
+
+    def is_list_container(self) -> bool:
+        """List container block that should be expanded to child text blocks."""
+        from layout.block_types import LIST_CONTAINER_TYPES
+        return self.type in LIST_CONTAINER_TYPES
+
+    def is_reference(self) -> bool:
+        """Reference / citation entry block -- translated, special font handling."""
+        from layout.block_types import REFERENCE_BLOCK_TYPES
+        return self.type in REFERENCE_BLOCK_TYPES
+
+    def is_footnote(self) -> bool:
+        """Page footnote block -- translated, special formatting."""
+        from layout.block_types import PAGE_FOOTNOTE
+        return self.type == PAGE_FOOTNOTE or self.sub_type == "footnote"
+
+    def is_code(self) -> bool:
+        """Code block -- never translated."""
+        from layout.block_types import CODE
+        return self.type == CODE
+
+    def should_skip_redaction(self) -> bool:
+        """Block whose original PDF content should never be erased."""
+        from layout.block_types import SKIP_REDACTION_TYPES
+        return self.type in SKIP_REDACTION_TYPES
+
+    def is_text_content(self) -> bool:
+        """Block contains translatable text (not visual, not equation)."""
+        return self.has_text() and not self.is_visual() and not self.is_equation()
+
 
 @dataclass
 class LayoutPage:

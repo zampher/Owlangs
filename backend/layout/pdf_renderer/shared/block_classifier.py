@@ -10,6 +10,7 @@ and checking whether blocks should be included in baseline calculations.
 
 from typing import Optional, Dict, Set
 from layout.base import LayoutBlock
+from layout.block_types import HEADER, FOOTER, TEXT, TITLE, REF_TEXT, CAPTION, TABLE_CAPTION, IMAGE_CAPTION, TABLE_FOOTNOTE, TABLE_BODY
 
 
 class FrontendStyleOverride:
@@ -61,18 +62,18 @@ class BlockClassifier:
     
     # 统一字号类型（0.5pt 步长，无微调）
     UNIFIED_FONT_SIZE_TYPES_05PT: Set[str] = {
-        "header",
-        "footer",
-        "caption",  # image_caption + table_caption
+        HEADER,
+        FOOTER,
+        CAPTION,
         "table_notes",  # table_footnote
-        "table_body",
-        "ref_text",
+        TABLE_BODY,
+        REF_TEXT,
     }
-    
+
     # 统一字号类型（1.0pt 步长，需要微调）
     UNIFIED_FONT_SIZE_TYPES_10PT: Set[str] = {
-        "text",
-        "title",
+        TEXT,
+        TITLE,
     }
     
     # 所有统一字号类型
@@ -115,11 +116,11 @@ class BlockClassifier:
         block_type = getattr(block, "type", "unknown") or "unknown"
         
         # Handle caption types
-        if block_type in ("image_caption", "table_caption"):
-            return "caption"
-        
+        if block_type in (IMAGE_CAPTION, TABLE_CAPTION):
+            return CAPTION
+
         # Handle table footnote
-        if block_type == "table_footnote":
+        if block_type == TABLE_FOOTNOTE:
             return "table_notes"
         
         return block_type

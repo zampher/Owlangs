@@ -27,6 +27,7 @@ class TestVisualImagePlacements(unittest.TestCase):
             index=82,
             bbox=(110.0, 441.0, 302.0, 610.0),
             image_path=None,
+            is_equation=lambda: False,
             raw={
                 "blocks": [
                     {
@@ -68,6 +69,7 @@ class TestVisualImagePlacements(unittest.TestCase):
             index=82,
             bbox=(110.0, 441.0, 302.0, 610.0),
             image_path="394134b7dae435ee.jpg",
+            is_equation=lambda: False,
             raw={"blocks": []},
         )
         page = SimpleNamespace(page_index=5, blocks=[chart_block])
@@ -89,6 +91,7 @@ class TestVisualImagePlacements(unittest.TestCase):
             index=35,
             bbox=(100.0, 200.0, 500.0, 240.0),
             image_path=None,
+            is_equation=lambda: True,
             raw={
                 "lines": [
                     {
@@ -126,6 +129,7 @@ class TestVisualImagePlacements(unittest.TestCase):
             index=35,
             bbox=(100.0, 200.0, 500.0, 240.0),
             image_path="eqhash123.jpg",
+            is_equation=lambda: True,
             raw={},
         )
         page = SimpleNamespace(page_index=1, blocks=[eq_block])

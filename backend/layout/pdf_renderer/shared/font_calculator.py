@@ -11,6 +11,7 @@ by all PDF renderer implementations (ReportLab, HTML-to-PDF, etc.).
 from typing import Dict, Optional, List, Tuple, Callable
 from layout.base import LayoutDocument, LayoutBlock
 from logger.logger import unified_logger, LogModule
+from layout.block_types import IMAGE_CAPTION, TABLE_CAPTION, CAPTION
 from layout.pdf_renderer.shared.block_classifier import (
     BlockClassifier,
     FrontendStyleOverrides,
@@ -489,7 +490,7 @@ class FontSizeCalculator:
                             if not isinstance(sub, dict):
                                 continue
                             sub_type = str(sub.get("type", ""))
-                            if sub_type in ("image_caption", "caption"):
+                            if sub_type in (IMAGE_CAPTION, CAPTION):
                                 # Extract caption text and bbox
                                 caption_text = BlockProcessor.extract_text_from_raw_layout(sub) or ""
                                 if not caption_text.strip():
@@ -554,7 +555,7 @@ class FontSizeCalculator:
                         if not isinstance(sub, dict):
                             continue
                         sub_type = str(sub.get("type", ""))
-                        if sub_type == "table_caption":
+                        if sub_type == TABLE_CAPTION:
                             # Extract caption text and bbox
                             caption_text = BlockProcessor.extract_text_from_raw_layout(sub) or ""
                             if not caption_text.strip():

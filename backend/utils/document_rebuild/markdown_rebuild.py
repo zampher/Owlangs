@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
 from ir.markdown_document import MarkdownDocument
+from layout.block_types import STRUCTURAL_BLOCK_TYPES, TITLE, TABLE_BODY, CHART_BODY
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from utils.translation_segments import get_translation_segments
@@ -324,7 +325,7 @@ def _rebuild_markdown_from_layout_segments(
         if block_indices:
             for bidx in block_indices:
                 block_type = block_index_to_type.get(bidx, "")
-                if block_type in ("header", "footer", "page_number"):
+                if block_type in STRUCTURAL_BLOCK_TYPES:
                     is_excluded_block = True
                     logger.debug(LogModule.RESTOR,
                         f"[REBUILD] Skipping segment (segment_index={segment.get('segment_index')}) "
@@ -429,7 +430,7 @@ def _rebuild_markdown_from_layout_segments(
             from layout.pdf_font_extractor import _is_likely_heading
             for page in layout_doc.pages:
                 for block in page.blocks:
-                    if block.type == "title" and not _is_likely_heading(block):
+                    if block.type == TITLE and not _is_likely_heading(block):
                         block.heading_level = 0  # false positive → body text
         except Exception as e:
             logger.debug(LogModule.RESTOR,
@@ -479,7 +480,7 @@ def _rebuild_markdown_from_layout_segments(
                     )
                     is_table_body_segment = (
                         _is_markdown_table(target_text)
-                        or segment.get("block_type") == "table_body"
+                        or segment.get("block_type") == TABLE_BODY
                         or segment.get("is_table_body")
                         or (
                             table_block_idx is not None

@@ -17,6 +17,7 @@ from pathlib import Path
 # Delayed import to avoid circular import issues in PyInstaller frozen builds
 # from app.models.translation_segment import TranslationSegment, TranslationSegmentsMetadata
 from agents.seg_prompt_utils import parse_seg_output
+from layout.block_types import TABLE_BODY, TABLE
 from logger import unified_logger as logger
 from logger.logger import LogModule
 
@@ -3296,11 +3297,12 @@ def update_translation_segment(
     leading_em: Optional[float] = None,
     leading_em_reset: bool = False,
     pdf_font_reset: bool = False,
+    rotation: Optional[int] = None,
     task_state: Optional[dict] = None,
 ) -> Optional[dict]:
     """
     Update a translation segment.
-    
+
     Args:
         task_id: Task identifier
         segment_index: Segment index to update
@@ -3308,8 +3310,9 @@ def update_translation_segment(
         reviewed: Whether to mark as reviewed
         review_notes: Review notes
         modified_by: Identifier of who made the modification
+        rotation: Optional rotation angle (0, 90, 180, 270). 0 = none.
         task_state: Task state dictionary (if None, will be imported)
-    
+
     Returns:
         Updated segment dictionary, or None if not found
     """
@@ -3391,6 +3394,29 @@ def update_translation_segment(
         pdf_font_reset=pdf_font_reset,
         log_changes=True,
     )
+    # Apply rotation change (0, 90, 180, 270).  0 = no rotation.
+    if rotation is not None:
+        valid_rotations = {0, 90, 180, 270}
+        if rotation in valid_rotations:
+            old_rotation = segment.get("rotation", 0)
+            if rotation != old_rotation:
+                segment["rotation"] = rotation
+                segment["modified"] = True
+                segment["modified_by"] = modified_by or segment.get("modified_by")
+                segment["modified_at"] = time.time()
+                logger.info(
+                    LogModule.TRANS,
+                    f"Updated rotation for segment {segment_index} on task {task_id}: "
+                    f"{old_rotation} -> {rotation}",
+                )
+                typography_changed = True
+        else:
+            logger.warning(
+                LogModule.TRANS,
+                f"Ignoring invalid rotation value {rotation!r} for segment {segment_index} "
+                f"on task {task_id}. Valid values: 0, 90, 180, 270.",
+            )
+
     if typography_changed:
         from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
             invalidate_pdf_export_cache,
@@ -3679,8 +3705,8 @@ def exclude_translation_segment(
         # CRITICAL: For table segments, set as TABLE instead of USER_SELECTED
         # This allows users to properly identify and manage table exclusions
         source_text = segment.get("source_text", "")
-        block_type = segment.get("block_type")  # May be "table_body" for PDF tables
-        is_table = (block_type == "table_body" or block_type == "table")
+        block_type = segment.get("block_type")  # May be TABLE_BODY for PDF tables
+        is_table = (block_type == TABLE_BODY or block_type == TABLE)
         
         # Check if this is a table segment (for markdown/HTML workflows)
         if not is_table:

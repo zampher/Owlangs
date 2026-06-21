@@ -56,7 +56,8 @@ def test_table_not_translatable():
 def test_formula_not_translatable():
     """formula block should not be translated."""
     bt, st, tags, tr = map_paddle_label("display_formula")
-    assert bt == "formula"
+    assert bt == "interline_equation"
+    assert "skip_translation" in tags
     assert tr is False
 
 

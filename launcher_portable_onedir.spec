@@ -140,7 +140,7 @@ hiddenimports = [
     'pptx', 'pptx.util', 'pptx.dml.color', 'pptx.enum.shapes',
     'pptx.enum.text', 'pptx.shapes.base', 'pptx.shapes.group',
     'pptx.shapes.autoshape', 'pptx.table', 'pptx.shapes.freeform', 'pptx.text.text',
-    'layout', 'layout.base', 'layout.mineru_layout_model', 'layout.markdown_builder', 'layout.registry',
+    'layout', 'layout.base', 'layout.block_types', 'layout.mineru_layout_model', 'layout.markdown_builder', 'layout.registry',
     # layout OCR provider - multi-engine OCR/layout parsing (MinerU + PaddleOCR)
     'layout.ocr_provider', 'layout.ocr_provider.base', 'layout.ocr_provider.types',
     'layout.ocr_provider.mineru', 'layout.ocr_provider.mineru.layout_parser', 'layout.ocr_provider.mineru.provider',

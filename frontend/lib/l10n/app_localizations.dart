@@ -6860,6 +6860,18 @@ abstract class AppLocalizations {
   /// **'{sizePt}pt'**
   String segmentPdfFontSizeManual(String sizePt);
 
+  /// No description provided for @segmentRotationLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{degrees}°'**
+  String segmentRotationLabel(int degrees);
+
+  /// No description provided for @segmentRotationOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Rotate'**
+  String get segmentRotationOff;
+
   /// No description provided for @segmentPdfFontSizeTitle.
   ///
   /// In en, this message translates to:

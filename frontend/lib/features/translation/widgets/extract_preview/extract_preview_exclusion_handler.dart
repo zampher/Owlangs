@@ -130,10 +130,10 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
         // Reference segments
         counts[ExclusionReason.reference.value] =
             (counts[ExclusionReason.reference.value] ?? 0) + 1;
-      } else if (blockType == 'header' || blockType == 'page_header') {
+      } else if (blockType == 'header') {
         // Header segments (structural)
         counts['structural_header'] = (counts['structural_header'] ?? 0) + 1;
-      } else if (blockType == 'footer' || blockType == 'page_footer') {
+      } else if (blockType == 'footer') {
         // Footer segments (structural)
         counts['structural_footer'] = (counts['structural_footer'] ?? 0) + 1;
       } else if (blockType == 'table_body' || (isTableBody ?? false)) {
@@ -434,9 +434,9 @@ mixin ExtractPreviewExclusionHandlerMixin<T extends ConsumerStatefulWidget>
       segmentType = ExclusionReason.image.value;
     } else if (blockType == 'ref_text') {
       segmentType = ExclusionReason.reference.value;
-    } else if (blockType == 'header' || blockType == 'page_header') {
+    } else if (blockType == 'header') {
       segmentType = 'structural_header';
-    } else if (blockType == 'footer' || blockType == 'page_footer') {
+    } else if (blockType == 'footer') {
       segmentType = 'structural_footer';
     } else if (blockType == 'table_body' || (isTableBody ?? false)) {
       segmentType = ExclusionReason.table.value;

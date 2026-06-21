@@ -1107,6 +1107,7 @@ class _TranslationResultPreviewState
                     ?.map((e) => e.toString())
                     .toList() ??
                 <String>[],
+            rotation: metadata['rotation'] as int? ?? 0,
           );
         }
         throw ArgumentError('Invalid item type');
@@ -2977,6 +2978,8 @@ class _TranslationResultPreviewState
             _parseOptionalDouble(segment['computed_leading_em']),
       if (segment.containsKey('leading_em_source'))
         'leading_em_source': segment['leading_em_source'],
+      if (segment.containsKey('rotation'))
+        'rotation': _parseOptionalInt(segment['rotation']) ?? 0,
     };
   }
 
@@ -5120,6 +5123,7 @@ class _TranslationResultPreviewState
       onFormulaFix: _handleFormulaFixForSegment,
       showPdfFontSize: false,
       onFontSizeChanged: null,
+      onRotationChanged: null,
     );
   }
 
@@ -5225,6 +5229,7 @@ class _TranslationResultPreviewState
       onFormulaFix: _handleFormulaFixForSegment,
       showPdfFontSize: true,
       onFontSizeChanged: _handleFontSizeChanged,
+      onRotationChanged: _handleRotationChanged,
       showSegmentScrollbar: showSegmentScrollbar,
     );
   }
@@ -5616,6 +5621,46 @@ class _TranslationResultPreviewState
     } catch (e) {
       if (mounted) {
         MessageService.showError(context, 'Failed to update PDF typography: $e');
+      }
+    }
+  }
+
+  /// Handle manual rotation toggle for a segment.
+  Future<void> _handleRotationChanged(int index, int rotation) async {
+    try {
+      final TranslationService svc = TranslationService();
+      final Map<String, dynamic> response = await svc.updateTranslationSegment(
+        _apiTaskId(),
+        index,
+        rotation: rotation,
+      );
+      final Map<String, dynamic>? updatedSegment =
+          response['segment'] is Map
+              ? Map<String, dynamic>.from(
+                  response['segment'] as Map<dynamic, dynamic>,
+                )
+              : null;
+
+      // Update local metadata so the UI reflects the change immediately.
+      if (_allSegmentsMetadata.containsKey(index)) {
+        _allSegmentsMetadata[index] = <String, dynamic>{
+          ..._allSegmentsMetadata[index]!,
+          'rotation': rotation,
+        };
+      } else {
+        _allSegmentsMetadata[index] = <String, dynamic>{
+          'rotation': rotation,
+        };
+      }
+
+      if (mounted && _shouldRefreshOverlayPreviewRevision) {
+        _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
+        setState(() {});
+        await _segmentsPaginationController?.refresh();
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showError(context, 'Failed to update rotation: $e');
       }
     }
   }

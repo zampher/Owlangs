@@ -116,7 +116,7 @@ def _extract_image_path_from_layout_block(block_data: Dict[str, Any]) -> Optiona
         for sub_block in blocks:
             if not isinstance(sub_block, dict):
                 continue
-            if sub_block.get("type") == "chart_body":
+            if sub_block.get("type") == CHART_BODY:
                 lines = sub_block.get("lines", [])
                 for line in lines:
                     if not isinstance(line, dict):
@@ -159,7 +159,7 @@ def extract_mineru_image_span_content(block_data: Dict[str, Any]) -> Optional[st
     return None
 
 
-_LIST_CONTAINER_TYPES = frozenset({"list", "ref_list", "references"})
+from layout.block_types import LIST_CONTAINER_TYPES as _LIST_CONTAINER_TYPES, CHART_BODY
 
 # MinerU block type → (sub_type, tags, should_translate)
 _MINERU_BLOCK_SEMANTICS: Dict[str, tuple] = {

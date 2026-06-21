@@ -102,7 +102,7 @@ def _generate_layout_json(layout_doc: LayoutDocument) -> dict:
                     "bbox": list(block.bbox),
                     "text": block.text or "",
                 }
-            if block.type in ("header", "footer", "page_number"):
+            if block.is_structural():
                 page_data["discarded_blocks"].append(block_data)
             else:
                 page_data["para_blocks"].append(block_data)

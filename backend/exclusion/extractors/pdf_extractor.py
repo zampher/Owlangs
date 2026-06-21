@@ -6,6 +6,7 @@
 import re
 from typing import Dict, Optional, Any
 
+from layout.block_types import TABLE_BODY
 from exclusion.extractors.base import FormatMetadataExtractor
 
 
@@ -102,9 +103,9 @@ class PDFMetadataExtractor(FormatMetadataExtractor):
                 return metadata
             
             # PDF layout: table_body from LayoutMarkdownBuilder chunk_type (no string-based check)
-            if chunk_type == "table_body":
+            if chunk_type == TABLE_BODY:
                 metadata["is_table"] = True
-                metadata["block_type"] = "table_body"
+                metadata["block_type"] = TABLE_BODY
                 return metadata
             
             # Check block types from chunk_block_indices

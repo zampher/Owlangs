@@ -69,6 +69,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
     this.isConvertOnly = false,
     this.showPdfFontSize = false,
     this.onFontSizeChanged,
+    this.onRotationChanged,
     this.batchSelectionEnabled = false,
     this.selectedSegmentIndices = const <int>{},
     this.selectedSegmentIndicesListenable,
@@ -131,6 +132,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
     bool reset,
     SegmentPdfTypographyDialogMode scope,
   })? onFontSizeChanged;
+  final void Function(int index, int rotation)? onRotationChanged;
   final bool batchSelectionEnabled;
   final Set<int> selectedSegmentIndices;
   final ValueListenable<Set<int>>? selectedSegmentIndicesListenable;
@@ -1289,6 +1291,8 @@ class TranslationComparisonPanel extends ConsumerWidget {
               leadingEm: _readLeadingEm(metadata),
               computedLeadingEm: _readComputedLeadingEm(metadata),
               leadingEmSource: metadata['leading_em_source'] as String?,
+              rotation: metadata['rotation'] as int? ?? 0,
+              onRotationChanged: onRotationChanged,
               onFontSizeChanged: onFontSizeChanged,
               pdfRevisionMode: pdfRevisionMode,
             ),
@@ -1506,6 +1510,8 @@ class TranslationComparisonPanel extends ConsumerWidget {
                   leadingEm: _readLeadingEm(metadata),
                   computedLeadingEm: _readComputedLeadingEm(metadata),
                   leadingEmSource: metadata['leading_em_source'] as String?,
+                  rotation: metadata['rotation'] as int? ?? 0,
+                  onRotationChanged: onRotationChanged,
                   onFontSizeChanged: onFontSizeChanged,
                 ),
               )

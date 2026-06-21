@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from layout.base import LayoutDocument
+from layout.block_types import IMAGE, TABLE, CHART, LIST, SKIP_OVERLAY_BLOCK_TYPES, TABLE_BODY, LEGACY_FIGURE
 from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
     normalize_user_font_size_pt,
     normalize_user_font_weight,
@@ -19,7 +20,7 @@ from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
 from layout.renderable_block_indices import expand_renderable_block_indices
 from logger.logger import LogModule, unified_logger
 
-_SKIP_OVERLAY_BLOCK_TYPES = frozenset({"image", "figure", "list", "table"})
+_LOCAL_SKIP_OVERLAY_BLOCK_TYPES = frozenset({IMAGE, LEGACY_FIGURE, LIST, TABLE})
 _IMAGE_MARKDOWN_RE = re.compile(r"!\[[^\]]*\]\([^)]+\)", re.DOTALL)
 _MARKDOWN_IMAGE_PATH_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)", re.DOTALL)
 _DETAILS_WRAPPER_RE = re.compile(r"<details\b", re.IGNORECASE)
@@ -292,7 +293,7 @@ def _resolve_markdown_image_block_index(
 def _is_table_highlight_segment(segment: Dict[str, Any], text: str) -> bool:
     normalized = (text or "").strip()
     block_type = str(segment.get("block_type") or "").lower()
-    if block_type in {"table", "table_body"}:
+    if block_type in {TABLE, TABLE_BODY}:
         return True
     if segment.get("is_table"):
         return True
@@ -449,7 +450,7 @@ def _match_source_text_to_layout_blocks(
     best_indices: List[int] = []
     best_score = -1
     for idx, layout_text in layout_block_original_texts.items():
-        if block_index_to_type.get(idx, "text") in _SKIP_OVERLAY_BLOCK_TYPES:
+        if block_index_to_type.get(idx, "text") in _LOCAL_SKIP_OVERLAY_BLOCK_TYPES:
             continue
         norm_layout = _normalize_text_for_matching(layout_text)
         if not norm_layout:
@@ -605,7 +606,7 @@ def build_image_overlay_block_text_map(
             raw = block_index_to_raw.get(block_index_int, {})
             if isinstance(raw, dict) and raw.get("_cross_page_pair_of") is not None:
                 continue
-            if block_type in _SKIP_OVERLAY_BLOCK_TYPES:
+            if block_type in _LOCAL_SKIP_OVERLAY_BLOCK_TYPES:
                 continue
             text_block_indices.append(block_index_int)
 
@@ -693,7 +694,7 @@ def resolve_overlay_primary_text_block_index(
         except (TypeError, ValueError):
             continue
         block_type = block_index_to_type.get(block_index_int, "text")
-        if block_type in _SKIP_OVERLAY_BLOCK_TYPES:
+        if block_type in _LOCAL_SKIP_OVERLAY_BLOCK_TYPES:
             continue
         return block_index_int
     return None
@@ -830,7 +831,7 @@ def assign_overlay_layout_block_indices_for_segments(
                 block_index_int = int(idx)
             except (TypeError, ValueError):
                 continue
-            if block_index_to_type.get(block_index_int, "text") in _SKIP_OVERLAY_BLOCK_TYPES:
+            if block_index_to_type.get(block_index_int, "text") in _LOCAL_SKIP_OVERLAY_BLOCK_TYPES:
                 continue
             text_block_indices.append(block_index_int)
 

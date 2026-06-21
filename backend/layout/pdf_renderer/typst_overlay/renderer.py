@@ -74,7 +74,11 @@ from layout.pdf_renderer.typst_overlay.visual_images import (
     collect_visual_image_placements,
     lookup_image_bytes,
     extract_equation_image_path,
+)
+from layout.block_types import (
     EQUATION_BLOCK_TYPES,
+    TABLE_CAPTION, IMAGE_CAPTION, CHART_CAPTION, CAPTION,
+    TABLE_FOOTNOTE, CHART_BODY,
 )
 from layout.pdf_renderer.shared.block_processor import BlockProcessor
 from logger.logger import unified_logger, LogModule
@@ -427,7 +431,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
 
     @staticmethod
     def _extract_caption_footnote_from_translated(merged_text: str):
-        """Extract caption and footnote from a merged table/image translation.
+        """Extract caption, body, and footnote from a merged table/image translation.
 
         The merged text typically has the structure::
 
@@ -436,7 +440,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
             footnote lines
 
         Returns:
-            (caption_text, footnote_text) — either may be ``None``.
+            (caption_text, body_text, footnote_text) — each may be ``None``.
         """
         lines = merged_text.split('\n')
 
@@ -460,15 +464,18 @@ class TypstOverlayRenderer(BasePDFRenderer):
         if body_start is None:
             # No body content — entire text may be caption only
             text = merged_text.strip()
-            return (text if text else None, None)
+            return (text if text else None, None, None)
 
         caption_parts = [l.strip() for l in lines[:body_start] if l.strip()]
         caption = '\n'.join(caption_parts) if caption_parts else None
 
+        body_parts = [l.strip() for l in lines[body_start:body_end + 1] if l.strip()]
+        body = '\n'.join(body_parts) if body_parts else None
+
         footnote_parts = [l.strip() for l in lines[body_end + 1:] if l.strip()]
         footnote = '\n'.join(footnote_parts) if footnote_parts else None
 
-        return (caption, footnote)
+        return (caption, body, footnote)
 
     def _extract_caption_footnote_render_blocks(
         self,
@@ -504,7 +511,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
         if not translated_text:
             return []
 
-        caption_text, footnote_text = self._extract_caption_footnote_from_translated(
+        caption_text, _body_text, footnote_text = self._extract_caption_footnote_from_translated(
             translated_text,
         )
 
@@ -524,9 +531,9 @@ class TypstOverlayRenderer(BasePDFRenderer):
             except (TypeError, ValueError):
                 continue
 
-            if sub_type in ("table_caption", "image_caption", "chart_caption", "caption"):
+            if sub_type in (TABLE_CAPTION, IMAGE_CAPTION, CHART_CAPTION, CAPTION):
                 caption_bbox = sub_bbox_t
-            elif sub_type == "table_footnote":
+            elif sub_type == TABLE_FOOTNOTE:
                 footnote_bboxes.append(sub_bbox_t)
 
         result: List[RenderBlock] = []
@@ -553,6 +560,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 cover_fill=(1.0, 1.0, 1.0),
                 use_cover_fill=False,
                 opaque_fill=True,
+                rotation=self._block_rotation(parent_index),
             ))
 
         if footnote_text and footnote_bboxes:
@@ -571,6 +579,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     cover_fill=(1.0, 1.0, 1.0),
                     use_cover_fill=False,
                     opaque_fill=True,
+                    rotation=self._block_rotation(parent_index),
                 ))
 
         if result:
@@ -659,7 +668,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 1
                 for page in layout_doc.pages
                 for block in page.blocks
-                if block.type in EQUATION_BLOCK_TYPES
+                if block.is_equation()
             )
             if eq_count and not any(p.block_type == "equation" for p in placements):
                 unified_logger.warning(
@@ -766,6 +775,20 @@ class TypstOverlayRenderer(BasePDFRenderer):
             return float(value)
         except (TypeError, ValueError):
             return None
+
+    def _block_rotation(self, block_key: int) -> int:
+        """Return user-specified rotation for a layout block, if any."""
+        overrides = getattr(self.config, "rotation_by_block_index", None) or {}
+        if not overrides:
+            return 0
+        value = overrides.get(block_key)
+        if value is None:
+            return 0
+        try:
+            rot = int(value)
+            return rot if rot in {0, 90, 180, 270} else 0
+        except (TypeError, ValueError):
+            return 0
 
     def _apply_block_typography_overrides(
         self,
@@ -894,12 +917,52 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     blocks.append(rb)
                     total_blocks += 1
 
-                if eq_fmt == "image" and block.type in EQUATION_BLOCK_TYPES:
+                if eq_fmt == "image" and block.is_equation():
                     eq_img = extract_equation_image_path(block) or ""
                     skipped_blocks.append((
                         getattr(block, 'index', '?'),
                         getattr(block, 'type', '?'),
                         eq_img,
+                        block.bbox,
+                    ))
+                    continue
+
+                # If a table block has translated content, extract the table body
+                # (markdown table) and create a RenderBlock for it.  The caption
+                # and footnote are already extracted above as separate blocks.
+                block_type = getattr(block, 'type', '') or ''
+                if block_type == 'table':
+                    block_key = block.index if block.index is not None else total_blocks
+                    translated = ""
+                    if self.config.translated_text_by_block_index:
+                        translated = self.config.translated_text_by_block_index.get(block_key, "")
+                    if translated:
+                        _cap, table_body, _fn = self._extract_caption_footnote_from_translated(
+                            translated,
+                        )
+                        if table_body and table_body.strip():
+                            tb_rb = layout_block_to_render_block(
+                                block,
+                                page_index=page.page_index,
+                                translated_text=table_body,
+                                block_id=f"block-{block_key}",
+                            )
+                            tb_rb.opaque_fill = True
+                            tb_rb = self._font_fit.calculate_fit_params(
+                                tb_rb, page_width_pt=page_width_pt,
+                            )
+                            tb_rb = self._apply_block_typography_overrides(tb_rb, block_key)
+                            tb_rb.rotation = self._block_rotation(block_key)
+                            blocks.append(tb_rb)
+                            total_blocks += 1
+
+                    # Still skip (don't fall through to text handling) — the
+                    # caption/footnote blocks above and the table body block here
+                    # are the only overlay content for this table block.
+                    skipped_blocks.append((
+                        getattr(block, 'index', '?'),
+                        getattr(block, 'type', '?'),
+                        "table_overlay",
                         block.bbox,
                     ))
                     continue
@@ -914,7 +977,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                         if isinstance(raw, dict):
                             nested_blocks = raw.get("blocks") or []
                             for sub in nested_blocks:
-                                if isinstance(sub, dict) and sub.get("type") == "chart_body":
+                                if isinstance(sub, dict) and sub.get("type") == CHART_BODY:
                                     for line in sub.get("lines") or []:
                                         if isinstance(line, dict):
                                             for span in line.get("spans") or []:
@@ -1000,6 +1063,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                         page_width_pt=page_width_pt,
                     )
                 rb = self._apply_block_typography_overrides(rb, block_key)
+                rb.rotation = self._block_rotation(block_key)
                 blocks.append(rb)
                 total_blocks += 1
 
@@ -1029,6 +1093,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                         leading_em=rb.leading_em,
                         font_weight=rb.font_weight,
                         font_style=getattr(rb, "font_style", "normal"),
+                        rotation=rb.rotation,
                         use_cover_fill=False,
                         opaque_fill=True,
                         cover_fill=(1.0, 1.0, 1.0),

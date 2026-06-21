@@ -85,6 +85,7 @@ from layout.pdf_renderer.shared.layout_calculator import LayoutCalculator
 from layout.pdf_renderer.shared.text_utils import TextUtils
 from utils.font_utils import FontUtils
 from layout.pdf_renderer.shared.font_calculator import FontSizeCalculator
+from layout.block_types import IMAGE_CAPTION, TABLE_CAPTION, TABLE_BODY, CAPTION, LEGACY_FIGURE
 from layout.pdf_renderer.shared.block_processor import BlockProcessor
 from layout.pdf_renderer.shared.table_utils import TableUtils
 
@@ -359,7 +360,7 @@ def _render_table_block(
             continue
         sub_type = str(sub.get("type", ""))
         
-        if sub_type == "table_caption":
+        if sub_type == TABLE_CAPTION:
             original_caption_text = _extract_text_from_raw_layout(sub) or ""
             caption_text_from_layout = original_caption_text
             caption_bbox = sub.get("bbox")
@@ -442,7 +443,7 @@ def _render_table_block(
                     elif non_table_lines:
                         # Fallback: use first non-table line (assuming it's caption)
                         caption_text = non_table_lines[0]
-        elif sub_type == "table_body":
+        elif sub_type == TABLE_BODY:
             body_bbox = sub.get("bbox")
             
             # Extract HTML table and/or image_path from table_body
@@ -2096,7 +2097,7 @@ def render_layout_pdf_reportlab(
                         text_source = "block.raw"
                 
                 # Render if we have text, or if it's a supported text type (might have text in raw)
-                is_text_type = block.type in ("text", "title", "header", "footer", "page_number", "figure", "table", "formula", "equation", "interline_equation", "list")
+                is_text_type = block.type in ("text", "title", "header", "footer", "page_number", LEGACY_FIGURE, "table", "formula", "equation", "interline_equation", "list")
                 
                 if text.strip() or is_text_type:
                     if not text.strip():
@@ -2238,7 +2239,7 @@ def render_layout_pdf_reportlab(
                         # Check if this is ref_text or caption block (used in both if and else branches)
                         # caption includes both image_caption and table_caption (unified for consistent font sizing)
                         is_ref_text = block.type == "ref_text"
-                        is_caption = block.type in ("image_caption", "table_caption", "caption")
+                        is_caption = block.type in (IMAGE_CAPTION, TABLE_CAPTION, CAPTION)
                         is_unified_baseline_block = is_ref_text or is_caption
                         
                         # Check if total height exceeds available space
@@ -2616,7 +2617,7 @@ def render_layout_pdf_reportlab(
                         # The global baseline search already ensures all ref_text and caption blocks can fit with the baseline
                         # caption includes both image_caption and table_caption (unified for consistent font sizing)
                         is_ref_text_block = block.type == "ref_text"
-                        is_caption_block = block.type in ("image_caption", "table_caption", "caption")
+                        is_caption_block = block.type in (IMAGE_CAPTION, TABLE_CAPTION, CAPTION)
                         is_unified_baseline_block_final = is_ref_text_block or is_caption_block
                         if is_unified_baseline_block_final:
                             # Skip Final adjustment for ref_text to preserve unified font size

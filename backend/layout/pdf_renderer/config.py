@@ -35,6 +35,7 @@ class PDFRendererConfig:
         font_weight_by_block_index: Optional[Dict[int, str]] = None,
         font_style_by_block_index: Optional[Dict[int, str]] = None,
         leading_em_by_block_index: Optional[Dict[int, float]] = None,
+        rotation_by_block_index: Optional[Dict[int, int]] = None,
         render_page_indices: Optional[Set[int]] = None,
         base_merged_pdf_bytes: Optional[bytes] = None,
         cleaned_source_output_path: Optional[Path] = None,
@@ -69,6 +70,7 @@ class PDFRendererConfig:
         self.font_weight_by_block_index = font_weight_by_block_index or {}
         self.font_style_by_block_index = font_style_by_block_index or {}
         self.leading_em_by_block_index = leading_em_by_block_index or {}
+        self.rotation_by_block_index = rotation_by_block_index or {}
         self.render_page_indices = render_page_indices
         self.base_merged_pdf_bytes = base_merged_pdf_bytes
         self.cleaned_source_output_path = cleaned_source_output_path

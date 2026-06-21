@@ -657,6 +657,7 @@ class TranslationService {
     double? leadingEm,
     bool leadingEmReset = false,
     bool pdfFontReset = false,
+    int? rotation,
   }) async {
     final dio = _buildAuthedDio();
     final body = <String, dynamic>{};
@@ -664,6 +665,7 @@ class TranslationService {
     if (reviewed != null) body['reviewed'] = reviewed;
     if (reviewNotes != null) body['review_notes'] = reviewNotes;
     if (modifiedBy != null) body['modified_by'] = modifiedBy;
+    if (rotation != null) body['rotation'] = rotation;
     if (pdfFontReset) {
       body['pdf_font_reset'] = true;
     } else {

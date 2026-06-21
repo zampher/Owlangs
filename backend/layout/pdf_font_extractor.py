@@ -84,7 +84,7 @@ def _process_document(doc: LayoutDocument, pdf_doc) -> None:
 
         # Match title blocks to PDF text spans
         for block in page.blocks:
-            if block.type != "title":
+            if not block.is_heading():
                 continue
 
             max_font_size = _match_max_font_size(block.bbox, text_spans)

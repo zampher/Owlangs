@@ -92,6 +92,8 @@ class TranslationSegmentItem extends StatefulWidget {
     this.leadingEmSource,
     this.onFontSizeChanged,
     this.pdfRevisionMode = false,
+    this.rotation = 0,
+    this.onRotationChanged,
   });
   final String text;
   final String?
@@ -158,6 +160,8 @@ class TranslationSegmentItem extends StatefulWidget {
     SegmentPdfTypographyDialogMode scope,
   })? onFontSizeChanged;
   final bool pdfRevisionMode;
+  final int rotation; // Current rotation value: 0, 90, 180, or 270
+  final void Function(int index, int rotation)? onRotationChanged;
 
   @override
   State<TranslationSegmentItem> createState() => _TranslationSegmentItemState();
@@ -821,6 +825,67 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     );
   }
 
+  Widget _buildRotationChip(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final bool hasRotation = widget.rotation != 0;
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final int nextRotation = (widget.rotation + 90) % 360;
+    final String label = hasRotation
+        ? l10n.segmentRotationLabel(widget.rotation)
+        : l10n.segmentRotationOff;
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            if (widget.onRotationChanged != null) {
+              widget.onRotationChanged!(widget.index, nextRotation);
+            }
+          },
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: hasRotation
+                  ? colors.secondaryContainer
+                  : colors.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: hasRotation
+                    ? colors.secondary
+                    : colors.outlineVariant,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(
+                  Icons.rotate_right,
+                  size: 12,
+                  color: hasRotation
+                      ? colors.onSecondaryContainer
+                      : colors.onSurfaceVariant,
+                ),
+                const SizedBox(width: 2),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: hasRotation
+                        ? colors.onSecondaryContainer
+                        : colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildViewMode() {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -1031,6 +1096,8 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                     children: <Widget>[
                       if (widget.showPdfFontSize && widget.onFontSizeChanged != null)
                         _buildPdfFontSizeChip(),
+                      if (widget.onRotationChanged != null && !widget.isSource)
+                        _buildRotationChip(context),
                       // Platform badge
                       if (!widget.pdfRevisionMode && widget.platformUsed != null)
                         Container(
@@ -1251,14 +1318,13 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                           ),
                         ),
                       // Excluded badge (clickable to edit, with quick unexclude x button)
-                      if (!widget.pdfRevisionMode && _localIsExcluded)
+                      if (_localIsExcluded)
                         Padding(
                           padding: const EdgeInsets.only(left: 4),
                           child: _buildExclusionBadge(context),
                         ),
                       // Exclude button (if not excluded and not source)
-                      if (!widget.pdfRevisionMode &&
-                          !_localIsExcluded &&
+                      if (!_localIsExcluded &&
                           !widget.isSource &&
                           widget.onExclude != null)
                         Padding(

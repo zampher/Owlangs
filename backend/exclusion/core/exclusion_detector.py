@@ -7,6 +7,7 @@ Exclusion detection function for translation segments.
 
 from typing import Optional, Tuple
 
+from layout.block_types import IMAGE_CAPTION, CAPTION, TABLE_BODY, TABLE_CAPTION, TABLE_FOOTNOTE, CHART_BODY
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from exclusion.core.exclusion_reason import ExclusionReason
@@ -72,7 +73,7 @@ def detect_exclusion_reason(
     # Priority 1: Image
     # CRITICAL: Do NOT exclude image_caption blocks as images
     # Image captions contain actual text content and should be translated, not excluded
-    if block_type not in ("image_caption", "caption"):
+    if block_type not in (IMAGE_CAPTION, CAPTION):
         if is_image or _is_image_segment(text_stripped):
             return (ExclusionReason.IMAGE, {})
     
@@ -88,11 +89,11 @@ def detect_exclusion_reason(
     # For PDF, if layout says it's a table, it's a table (no identifier override)
     if strict_table_priority:
         # Priority 3: Table Body (from block_type or is_table flag) - STRICT for PDF
-        if block_type == "table_body" or (is_table and block_type != "table_caption" and block_type != "table_footnote") or _is_table_segment(text_stripped):
-            return (ExclusionReason.TABLE, {"block_type": "table_body"})
+        if block_type == TABLE_BODY or (is_table and block_type != TABLE_CAPTION and block_type != TABLE_FOOTNOTE) or _is_table_segment(text_stripped):
+            return (ExclusionReason.TABLE, {"block_type": TABLE_BODY})
         # Priority 4: Chart Body (from block_type) - STRICT for PDF, optional exclusion
-        if block_type == "chart_body":
-            return (ExclusionReason.CHART, {"block_type": "chart_body"})
+        if block_type == CHART_BODY:
+            return (ExclusionReason.CHART, {"block_type": CHART_BODY})
     
     # Priority 3 (non-PDF) or Priority 5 (PDF): Identifier (URL, email, serial number, pure numbers, etc.)
     # For non-PDF formats: Identifier takes priority over Table
@@ -183,7 +184,7 @@ def detect_exclusion_reason(
             return (ExclusionReason.IDENTIFIER, {})
         else:
             # PDF: Only if not already identified as table (strict table priority)
-            if not (block_type == "table_body" or (is_table and block_type != "table_caption" and block_type != "table_footnote") or _is_table_segment(text_stripped)):
+            if not (block_type == TABLE_BODY or (is_table and block_type != TABLE_CAPTION and block_type != TABLE_FOOTNOTE) or _is_table_segment(text_stripped)):
                 if target_lang:
                     from exclusion.detection.language_match_detector import is_language_match
                     match_result = is_language_match(text_stripped, target_lang)
@@ -214,12 +215,12 @@ def detect_exclusion_reason(
     # For non-PDF: Only check table if not already identified as identifier
     # For PDF: Already checked above (strict_table_priority=True), skip here
     if not strict_table_priority:
-        if block_type == "table_body" or (is_table and block_type != "table_caption" and block_type != "table_footnote") or _is_table_segment(text_stripped):
-            return (ExclusionReason.TABLE, {"block_type": "table_body"})
-    
+        if block_type == TABLE_BODY or (is_table and block_type != TABLE_CAPTION and block_type != TABLE_FOOTNOTE) or _is_table_segment(text_stripped):
+            return (ExclusionReason.TABLE, {"block_type": TABLE_BODY})
+
     # Priority 5: Chart Body (from block_type) - optional exclusion, default not excluded
-    if block_type == "chart_body":
-        return (ExclusionReason.CHART, {"block_type": "chart_body"})
+    if block_type == CHART_BODY:
+        return (ExclusionReason.CHART, {"block_type": CHART_BODY})
     
     # Priority 6: Reference (from block_type)
     if block_type == "ref_text":

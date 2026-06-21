@@ -32,6 +32,7 @@ from fastapi.responses import JSONResponse
 from backend.app.services.task import task_manager, MSG_LEVEL_WARNING
 from logger import unified_logger as logger
 from logger.logger import LogModule
+from layout.block_types import IMAGE_CAPTION, CAPTION, TABLE_BODY, CHART_BODY, TABLE
 from utils.pagination import parse_pagination_params, PaginatedResponse
 
 # Track task_ids running background language detection so we don't start duplicate threads
@@ -737,7 +738,7 @@ class StatusService:
                             for block in page.blocks:
                                 if block.type == "table":
                                     has_tables = True
-                                elif block.type == "interline_equation":
+                                elif block.is_equation():
                                     has_interline_equations = True
                                 elif block.type == "chart":
                                     has_charts = True
@@ -3364,7 +3365,7 @@ class StatusService:
                         is_image = True
                         if not image_path:
                             image_path = block_image_map.get(block_idx)
-                    elif block_type in ("image_caption", "caption"):
+                    elif block_type in (IMAGE_CAPTION, CAPTION):
                         # CRITICAL: image_caption blocks contain actual text content and should NOT be excluded as images
                         # Reset is_image to False if we encounter an image_caption block
                         is_image = False
@@ -3389,14 +3390,14 @@ class StatusService:
                     elif block_type == "chart":
                         # Check if chunk is a chart_body type from LayoutMarkdownBuilder
                         chunk_type = getattr(chunk, "chunk_type", None)
-                        if chunk_type == "chart_body":
-                            block_type = "chart_body"
+                        if chunk_type == CHART_BODY:
+                            block_type = CHART_BODY
             
             # Also check if chunk text contains image placeholder (fallback)
             # CRITICAL: Only treat as image if block_type is NOT image_caption
             # Image captions may contain placeholders but also have actual text content
             placeholder_match = re.search(r'<ph-([^>]+)>', chunk_text)
-            if placeholder_match and not is_image and block_type not in ("image_caption", "caption"):
+            if placeholder_match and not is_image and block_type not in (IMAGE_CAPTION, CAPTION):
                 is_image = True
                 placeholder_id = placeholder_match.group(1)
                 # Try to find image_path from placeholder_id
@@ -3514,14 +3515,14 @@ class StatusService:
                 excluded_segment_indices_list.append(chunk_idx)
             
             # Determine if this is a chart_body segment
-            is_chart_body = block_type == "chart_body"
-            
+            is_chart_body = block_type == CHART_BODY
+
             # Build segment data
             # CRITICAL: Store original segment index (chunk_idx) for proper mapping
             # chunk_idx is the index in layout_result.chunks, which is the original segment index
             segment_data = {
                 "text": chunk_text,
-                "block_type": block_type,  # For table_body, this will be "table_body"
+                "block_type": block_type,  # For table_body, this will be TABLE_BODY
                 "block_index": block_index,
                 "layout_block_indices": list(chunk_block_indices)
                 if chunk_block_indices
@@ -4106,8 +4107,8 @@ class StatusService:
                         original_chunk_type = orig_chunk.chunk_type if hasattr(orig_chunk, 'chunk_type') else None
                         break
             
-            if original_chunk_type == "chart_body":
-                chunk_type = "chart_body"  # Preserve chart_body type for exclusion detection
+            if original_chunk_type == CHART_BODY:
+                chunk_type = CHART_BODY  # Preserve chart_body type for exclusion detection
             elif is_chunk_excluded:
                 # Check if this excluded chunk is an image segment
                 if chunk_segment_indices and chunk_segment_indices[0] < len(all_segments):
@@ -4769,7 +4770,7 @@ class StatusService:
                     is_table_body = False
                 
                 # Check if this is a table segment
-                is_table = (block_type == "table_body" or block_type == "table" or is_table_body)
+                is_table = (block_type == TABLE_BODY or block_type == TABLE or is_table_body)
                 if not is_table:
                     from utils.translation_segments import _is_table_segment
                     is_table = _is_table_segment(seg_text)
@@ -5032,7 +5033,7 @@ class StatusService:
                 is_table_body = False
             
             # Check if this is a table segment (for better detection)
-            is_table = (block_type == "table_body" or block_type == "table" or is_table_body)
+            is_table = (block_type == TABLE_BODY or block_type == TABLE or is_table_body)
             if not is_table:
                 from utils.translation_segments import _is_table_segment
                 is_table = _is_table_segment(seg_text)

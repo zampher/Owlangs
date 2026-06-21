@@ -15,14 +15,14 @@ from typing import Dict, Tuple, List
 PADDLE_LABEL_MAP: Dict[str, Tuple[str, str, List[str], bool]] = {
     "doc_title": ("title", "title", ["heading", "title"], True),
     "text": ("text", "body", [], True),
-    "paragraph_title": ("text", "heading", ["heading"], True),
+    "paragraph_title": ("sub_title", "heading", ["heading"], True),
     "abstract": ("text", "abstract", ["abstract"], True),
     "content": ("text", "table_of_contents", ["toc"], True),
-    "reference_content": ("text", "reference_entry", ["skip_translation"], False),
+    "reference_content": ("ref_text", "reference_entry", ["skip_translation"], False),
     "formula_number": ("text", "formula_number", ["skip_translation"], False),
     "header": ("header", "header", ["skip_translation"], False),
     "footer": ("footer", "footer", ["skip_translation"], False),
-    "footnote": ("text", "footnote", [], True),
+    "footnote": ("page_footnote", "footnote", [], True),
     "aside_text": ("text", "metadata", ["skip_translation"], False),
     "number": ("page_number", "page_number", ["skip_translation"], False),
     "figure_title": ("text", "figure_caption", ["caption"], True),
@@ -33,8 +33,8 @@ PADDLE_LABEL_MAP: Dict[str, Tuple[str, str, List[str], bool]] = {
     "footer_image": ("image", "image_body", ["image", "skip_translation"], False),
     "image": ("image", "image_body", ["image", "skip_translation"], False),
     "algorithm": ("code", "code_block", ["code"], False),
-    "display_formula": ("formula", "display_formula", ["formula"], False),
-    "formula": ("formula", "display_formula", ["formula"], False),
+    "display_formula": ("interline_equation", "display_formula", ["formula", "skip_translation"], False),
+    "formula": ("interline_equation", "display_formula", ["formula", "skip_translation"], False),
     "vision_footnote": ("text", "footnote", [], True),
 }
 

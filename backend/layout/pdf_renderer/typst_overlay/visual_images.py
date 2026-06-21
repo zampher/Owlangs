@@ -30,7 +30,7 @@ class VisualImagePlacement:
     block_type: str  # "chart" | "table" | "equation"
 
 
-EQUATION_BLOCK_TYPES = frozenset({"interline_equation", "formula", "equation"})
+from layout.block_types import EQUATION_BLOCK_TYPES, VISUAL_BLOCK_TYPES, CHART_BODY, TABLE_BODY
 
 
 def extract_equation_image_path(block) -> Optional[str]:
@@ -148,7 +148,7 @@ def collect_visual_image_placements(
 
             if block.type == "chart" and chart_fmt == "image":
                 body_bbox, image_path = _extract_body_image_from_nested(
-                    block, "chart_body", "chart",
+                    block, CHART_BODY, "chart",
                 )
                 if not image_path and getattr(block, "image_path", None):
                     image_path = str(block.image_path)
@@ -165,7 +165,7 @@ def collect_visual_image_placements(
 
             elif block.type == "table" and table_fmt == "image":
                 body_bbox, image_path = _extract_body_image_from_nested(
-                    block, "table_body", "table",
+                    block, TABLE_BODY, "table",
                 )
                 if not body_bbox:
                     body_bbox = _parse_bbox(getattr(block, "bbox", None))
@@ -178,7 +178,7 @@ def collect_visual_image_placements(
                         block_type="table",
                     ))
 
-            elif block.type in EQUATION_BLOCK_TYPES and eq_fmt == "image":
+            elif block.is_equation() and eq_fmt == "image":
                 image_path = extract_equation_image_path(block)
                 body_bbox = _parse_bbox(getattr(block, "bbox", None))
                 if body_bbox and image_path and lookup_image_bytes(image_data_map, image_path):

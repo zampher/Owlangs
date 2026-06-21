@@ -271,8 +271,23 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     _targetZoomController.removeListener(_onTargetZoomChanged);
     _sourceZoomController.dispose();
     _targetZoomController.dispose();
-    _sourceDocument?.close();
-    _targetDocument?.close();
+
+    // Delay document close until after the next frame so that child
+    // PdfContinuousPage._renderPage() calls (which may be awaiting
+    // getPage() or page.render()) have time to complete before the
+    // underlying native document is freed. Closing while native
+    // rendering is in-flight can cause a native crash in pdfx.
+    final PdfDocument? sourceDoc = _sourceDocument;
+    final PdfDocument? targetDoc = _targetDocument;
+    _sourceDocument = null;
+    _targetDocument = null;
+    if (sourceDoc != null || targetDoc != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        sourceDoc?.close();
+        targetDoc?.close();
+      });
+    }
+
     super.dispose();
   }
 
@@ -449,17 +464,32 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     callback(page, _totalPages);
   }
 
+  bool _loadInProgress = false;
+  bool _loadPending = false;
+
   Future<void> _loadDocuments() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    await _sourceDocument?.close();
-    await _targetDocument?.close();
-    _sourceDocument = null;
-    _targetDocument = null;
+    // Guard against concurrent calls: if already loading, mark pending and
+    // the current load will re-invoke when it completes.
+    if (_loadInProgress) {
+      _loadPending = true;
+      return;
+    }
+    _loadInProgress = true;
+    _loadPending = false;
+
+    // Only show the loading spinner when we have nothing to display.
+    // When documents are already loaded (e.g. URL change from revision
+    // update), keep the old content visible to avoid a flash.
+    final bool hasContent = _sourceDocument != null && _targetDocument != null;
+    if (!hasContent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
 
     try {
+      // Download new documents while old content stays visible.
       final TranslationService svc = TranslationService();
       final String targetUrl =
           _withRenderer(widget.targetDownloadUrl, widget.targetRendererType);
@@ -470,16 +500,36 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
       if (!mounted) {
         return;
       }
-      _sourceDocument =
+
+      // Open new documents BEFORE closing old ones, so there is no
+      // window where _sourceDocument / _targetDocument are null while
+      // the build method may still access them (when hasContent is true).
+      final PdfDocument newSource =
           await PdfDocument.openData(Uint8List.fromList(results[0]));
-      _targetDocument =
+      final PdfDocument newTarget =
           await PdfDocument.openData(Uint8List.fromList(results[1]));
       if (!mounted) {
+        await newSource.close();
+        await newTarget.close();
         return;
       }
+
+      // Atomically swap in new documents, then close old ones.
+      // The download time ensures in-flight PdfContinuousPage renders
+      // on the old documents have completed, preventing native crashes.
+      final PdfDocument? oldSource = _sourceDocument;
+      final PdfDocument? oldTarget = _targetDocument;
+      _sourceDocument = newSource;
+      _targetDocument = newTarget;
+
       setState(() {
         _loading = false;
+        _error = null;
       });
+
+      await oldSource?.close();
+      await oldTarget?.close();
+
       if (_contentWidth > 0) {
         await _preloadRowHeights(_contentWidth);
       }
@@ -491,6 +541,14 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
         _error = error;
         _loading = false;
       });
+    } finally {
+      _loadInProgress = false;
+    }
+
+    // If another URL change was requested while we were loading, process it now.
+    if (_loadPending && mounted) {
+      _loadPending = false;
+      unawaited(_loadDocuments());
     }
   }
 

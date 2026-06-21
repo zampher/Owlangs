@@ -17,15 +17,14 @@ def merge_template_into_current(template_data: Any, current_data: Any) -> Any:
     - other types: keep current if it is not None; otherwise fall back to template.
     """
     if isinstance(template_data, dict) and isinstance(current_data, dict):
-        merged: Dict[str, Any] = {}
+        # Start from current data to preserve its key order.
+        # New keys from the template are appended at the end.
+        merged = dict(current_data)
         for k, tv in template_data.items():
-            if k in current_data:
-                merged[k] = merge_template_into_current(tv, current_data[k])
+            if k in merged:
+                merged[k] = merge_template_into_current(tv, merged[k])
             else:
                 merged[k] = tv
-        for k, cv in current_data.items():
-            if k not in merged:
-                merged[k] = cv
         return merged
 
     if current_data is not None:

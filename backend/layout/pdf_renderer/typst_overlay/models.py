@@ -76,8 +76,14 @@ class RenderBlock:
     # When True, keep leading_em fixed during fit-to-box; only font size may shrink.
     leading_em_locked: bool = False
 
+    # -- table rendering (translated markdown table) --
+    table_rows: Optional[List[List[str]]] = None  # 2D cell array for Typst #table()
+
     # -- embedded visual (chart/table body as image) --
     image_rel_path: str = ""                # path relative to Typst work dir
+
+    # -- rotation --
+    rotation: int = 0                       # 0, 90, 180, 270 — CCW via Typst rotate()
 
     # -- advanced --
     math_map: Optional[List[dict]] = None    # formula identifier -> latex map
@@ -131,9 +137,12 @@ def layout_block_to_render_block(
 
     # Determine render kind from block type
     block_type = getattr(block, 'type', 'text') or 'text'
-    if block_type in ('image', 'figure', 'table'):
-        # Image/table blocks: skip text rendering, keep original
+    if block_type in ('image', 'figure'):
+        # Image blocks: skip text rendering, keep original
         render_kind = "skip"
+    elif block_type == 'table':
+        # Table blocks: render as Typst #table() when translated content exists
+        render_kind = "table"
     elif block_type in ('title', 'header') or heading_level >= 1:
         # Titles use markdown rendering so multi-line document titles wrap with leading.
         render_kind = "markdown"

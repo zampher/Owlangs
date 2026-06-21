@@ -49,6 +49,7 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
   double _pdfPageHeight = 0;
   Object? _error;
   bool _loading = true;
+  bool _disposed = false;
 
   @override
   void initState() {
@@ -68,8 +69,14 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
     // recomputed in build() from the stored page dimensions.
   }
 
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   Future<void> _renderPage() async {
-    if (!mounted) {
+    if (_disposed || !mounted) {
       return;
     }
     setState(() {
@@ -81,6 +88,10 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
     PdfPage? page;
     try {
       page = await widget.document.getPage(widget.pageNumber);
+      if (_disposed || !mounted) {
+        await page.close();
+        return;
+      }
       _pdfPageWidth = page.width;
       _pdfPageHeight = page.height;
       final double aspectRatio = page.height / page.width;
@@ -93,7 +104,7 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
         backgroundColor: '#ffffff',
         quality: 100,
       );
-      if (!mounted) {
+      if (_disposed || !mounted) {
         return;
       }
       setState(() {
@@ -102,7 +113,7 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
         _loading = false;
       });
     } catch (error) {
-      if (!mounted) {
+      if (_disposed || !mounted) {
         return;
       }
       setState(() {

@@ -1359,6 +1359,15 @@
       }
     }
   },
+  "segmentRotationLabel": "{degrees}°",
+  "@segmentRotationLabel": {
+    "placeholders": {
+      "degrees": {
+        "type": "int"
+      }
+    }
+  },
+  "segmentRotationOff": "旋转",
   "segmentPdfFontSizeTitle": "PDF 字号",
   "segmentPdfTypographyTitle": "PDF 字体",
   "segmentPdfTypographyFontTitle": "PDF 字体",

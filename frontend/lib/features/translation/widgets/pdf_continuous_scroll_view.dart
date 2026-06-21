@@ -428,8 +428,6 @@ class _PdfContinuousPreviewLoaderState extends State<PdfContinuousPreviewLoader>
       _loading = true;
       _error = null;
     });
-    await _document?.close();
-    _document = null;
 
     try {
       final TranslationService svc = TranslationService();
@@ -440,6 +438,15 @@ class _PdfContinuousPreviewLoaderState extends State<PdfContinuousPreviewLoader>
       if (data.isEmpty) {
         throw StateError('Downloaded PDF is empty');
       }
+
+      // Close the old document AFTER downloading the new one. The download
+      // gives in-flight PdfContinuousPage._renderPage() calls (which may be
+      // awaiting getPage() or page.render() on the old document) time to
+      // complete before we close the document. Closing while native rendering
+      // is in-flight can cause a native crash in pdfx.
+      await _document?.close();
+      _document = null;
+
       final PdfDocument document =
           await PdfDocument.openData(Uint8List.fromList(data));
       if (!mounted) {
@@ -465,7 +472,18 @@ class _PdfContinuousPreviewLoaderState extends State<PdfContinuousPreviewLoader>
 
   @override
   void dispose() {
-    _document?.close();
+    // Delay document close until after the next frame so that child
+    // PdfContinuousPage._renderPage() calls (which may be awaiting
+    // getPage() or page.render()) have time to complete before the
+    // underlying native document is freed. Closing while native
+    // rendering is in-flight can cause a native crash in pdfx.
+    final PdfDocument? doc = _document;
+    _document = null;
+    if (doc != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        doc.close();
+      });
+    }
     super.dispose();
   }
 

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from layout.base import LayoutBlock, LayoutDocument, LayoutPage
+from layout.block_types import NON_TEXT_BLOCK_TYPES as _NON_TEXT_BLOCK_TYPES
 from layout.pdf_renderer.typst_overlay.font_fit import (
     DEFAULT_LEADING_EM,
     FontFitCalculator,
@@ -27,14 +28,6 @@ LEADING_EM_DEFAULT = DEFAULT_LEADING_EM
 
 VALID_FONT_WEIGHTS = frozenset({"regular", "bold"})
 VALID_FONT_STYLES = frozenset({"normal", "italic"})
-
-_NON_TEXT_BLOCK_TYPES = frozenset({
-    "image",
-    "figure",
-    "table",
-    "chart",
-    "list",
-})
 
 _IMAGE_OVERLAY_EXTENSIONS = frozenset({
     ".jpg",

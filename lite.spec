@@ -262,6 +262,7 @@ hiddenimports = [
     # layout module: used by layout_merger and mineru_zip_merger
     'layout',
     'layout.base',
+    'layout.block_types',
     'layout.mineru_layout_model',
     'layout.markdown_builder',
     'layout.registry',

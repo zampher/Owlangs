@@ -4,7 +4,7 @@
 import os
 import json
 from dataclasses import dataclass, asdict, field, fields
-from typing import Optional, Dict, Any
+from typing import List, Optional, Dict, Any
 from pathlib import Path
 
 from logger import unified_logger as logger
@@ -64,6 +64,9 @@ class PlatformsConfig:
     version: str = "2.0.0"
     default_platform: str = "deepseek"
     platforms: Dict[str, AIPlatformConfig] = field(default_factory=dict)
+    # Preserved field order from the original JSON for each platform key.
+    # Used by get_config_dict() to write keys in the same order they were read.
+    _platform_field_orders: Dict[str, List[str]] = field(default_factory=dict, init=False)
     
     @classmethod
     def load_from_file(cls, config_file: str = "platforms.json") -> "PlatformsConfig":
@@ -178,6 +181,8 @@ class PlatformsConfig:
                     continue
                 if isinstance(platform_data, dict):
                     pdata = dict(platform_data)
+                    # Preserve original JSON field order for consistent write-back
+                    self._platform_field_orders[platform_key] = list(pdata.keys())
                     ptype = pdata.get("platform_type", "llm")
                     # Normalize legacy platform_type values (e.g. 'pdf_parser' → 'parser')
                     if ptype == 'pdf_parser':
@@ -310,6 +315,10 @@ class PlatformsConfig:
 
         For non-LLM platforms (parser/converter), LLM-only fields are omitted
         to keep the configuration clean and avoid confusion.
+
+        Field order is taken from the preserved original JSON order when
+        available, falling back to _PLATFORM_FIELD_ORDER for platforms that
+        were added programmatically (no load-time order to preserve).
         """
         from collections import OrderedDict
 
@@ -327,10 +336,28 @@ class PlatformsConfig:
             # Determine if this is an LLM platform
             is_llm_platform = platform_type_uses_llm_chunk_concurrent(platform_config.platform_type)
 
-            # Add fields in defined order
-            for field_name in self._PLATFORM_FIELD_ORDER:
-                if field_name in plat_raw:
-                    # Skip LLM-only fields for non-LLM platforms (parser/converter)
+            # Use preserved original field order when available;
+            # fall back to _PLATFORM_FIELD_ORDER for programmatically-added platforms.
+            field_order = self._platform_field_orders.get(platform_key)
+            if field_order is None:
+                field_order = self._PLATFORM_FIELD_ORDER
+
+            # Add fields in the preserved order
+            seen: set = set()
+            for field_name in field_order:
+                if field_name not in plat_raw:
+                    continue
+                if not is_llm_platform and field_name in self._LLM_ONLY_FIELDS:
+                    seen.add(field_name)
+                    continue
+                plat_dict[field_name] = plat_raw[field_name]
+                seen.add(field_name)
+
+            # Append any fields present in the dataclass but missing from the
+            # order list (e.g. new fields added during migration that weren't
+            # in the original JSON).
+            for field_name in plat_raw:
+                if field_name not in seen:
                     if not is_llm_platform and field_name in self._LLM_ONLY_FIELDS:
                         continue
                     plat_dict[field_name] = plat_raw[field_name]

@@ -3768,6 +3768,14 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String segmentRotationLabel(int degrees) {
+    return '$degrees°';
+  }
+
+  @override
+  String get segmentRotationOff => 'Rotate';
+
+  @override
   String get segmentPdfFontSizeTitle => 'PDF 글꼴 크기';
 
   @override

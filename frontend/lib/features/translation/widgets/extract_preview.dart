@@ -1682,10 +1682,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                 // Default-not-excluded: do not add structural (header/footer) to excluded set on initial load
                 // so checkbox state stays unchecked even if backend sent is_excluded=true for them
                 final String? blockType = seg['block_type'] as String?;
-                if (blockType == 'header' ||
-                    blockType == 'page_header' ||
-                    blockType == 'footer' ||
-                    blockType == 'page_footer') {
+                if (blockType == 'header' || blockType == 'footer') {
                   final bool isExcluded = seg['is_excluded'] as bool? ?? false;
                   if (isExcluded && kDebugMode) {
                     _log(
@@ -1810,15 +1807,13 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
 
                 if (blockType == 'ref_text') {
                   referenceSegmentIndices.add(i);
-                } else if (isPdfOrDocx &&
-                    (blockType == 'header' || blockType == 'page_header')) {
+                } else if (isPdfOrDocx && blockType == 'header') {
                   headerSegmentIndices.add(i);
                   _log(
                     '[ExtractPreview] Found header segment at index $i: block_type=$blockType',
                     level: LogLevel.info,
                   );
-                } else if (isPdfOrDocx &&
-                    (blockType == 'footer' || blockType == 'page_footer')) {
+                } else if (isPdfOrDocx && blockType == 'footer') {
                   footerSegmentIndices.add(i);
                   _log(
                     '[ExtractPreview] Found footer segment at index $i: block_type=$blockType',
@@ -2649,10 +2644,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
               if (item is Map) {
                 // Default-not-excluded: skip structural (header/footer) on initial load
                 final String? blockType = item['block_type'] as String?;
-                if (blockType == 'header' ||
-                    blockType == 'page_header' ||
-                    blockType == 'footer' ||
-                    blockType == 'page_footer') {
+                if (blockType == 'header' || blockType == 'footer') {
                   continue;
                 }
                 final bool isExcluded = item['is_excluded'] as bool? ?? false;
@@ -3148,16 +3140,17 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
             Flexible(
               child: Row(
                 children: <Widget>[
-                  SizedBox(
-                    width: 200,
-                    height: 4,
-                    child: LinearProgressIndicator(
-                      value: translationProgress == 0.0 ? null : translationProgress,
-                      backgroundColor: Colors.grey.shade300,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Colors.blue.shade700,
+                  Expanded(
+                    child: SizedBox(
+                      height: 4,
+                      child: LinearProgressIndicator(
+                        value: translationProgress == 0.0 ? null : translationProgress,
+                        backgroundColor: Colors.grey.shade300,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.blue.shade700,
+                        ),
+                        minHeight: 4,
                       ),
-                      minHeight: 4,
                     ),
                   ),
                   const SizedBox(width: 4),

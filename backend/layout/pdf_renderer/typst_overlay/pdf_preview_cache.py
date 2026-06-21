@@ -20,6 +20,7 @@ def _segment_fingerprint_fields(segment: Dict[str, Any]) -> Dict[str, Any]:
         "font_weight": segment.get("font_weight"),
         "font_style": segment.get("font_style"),
         "leading_em": segment.get("leading_em"),
+        "rotation": segment.get("rotation", 0),
     }
 
 
@@ -33,6 +34,7 @@ def compute_typst_overlay_content_fingerprint(
     font_weight_by_block_index: Optional[Dict[int, str]] = None,
     font_style_by_block_index: Optional[Dict[int, str]] = None,
     leading_em_by_block_index: Optional[Dict[int, float]] = None,
+    rotation_by_block_index: Optional[Dict[int, int]] = None,
 ) -> str:
     """Stable hash of all inputs that affect Typst overlay PDF output."""
     payload: Dict[str, Any] = {
@@ -50,6 +52,7 @@ def compute_typst_overlay_content_fingerprint(
         "font_weight_by_block_index": _sorted_int_key_map(font_weight_by_block_index),
         "font_style_by_block_index": _sorted_int_key_map(font_style_by_block_index),
         "leading_em_by_block_index": _sorted_int_key_map(leading_em_by_block_index),
+        "rotation_by_block_index": _sorted_int_key_map(rotation_by_block_index),
     }
     encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
