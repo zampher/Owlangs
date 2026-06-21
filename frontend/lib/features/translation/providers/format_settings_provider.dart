@@ -22,7 +22,7 @@ class FormatSettings {
   });
 
   /// Table format: 'html' or 'image'
-  /// Default: 'html' for non-PDF; 'image' for PDF layout workflow
+  /// Default: 'html' for all workflows (PDF/PNG included)
   final String? tableFormat;
 
   /// Equation format: 'text', 'latex', or 'image'
@@ -59,7 +59,7 @@ class FormatSettings {
 
   /// Get table format with default fallback
   String getTableFormat({bool isPdfWorkflow = false}) =>
-      tableFormat ?? (isPdfWorkflow ? 'image' : 'html');
+      tableFormat ?? 'html';
 
   /// Get equation format with default fallback (UI radio values: text=LaTeX, image=Image)
   String getEquationFormat({bool isPdfWorkflow = false}) {

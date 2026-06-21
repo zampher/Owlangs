@@ -12,6 +12,7 @@ import '../../models/exclusion_reason.dart';
 import '../../../../shared/services/translation_service.dart';
 import '../common/exclusion_reason_editor.dart';
 import 'segment_pdf_typography_dialog.dart';
+import '../../utils/segment_type_utils.dart';
 
 // Intent classes for keyboard shortcuts
 class _CancelEditingIntent extends Intent {
@@ -94,6 +95,9 @@ class TranslationSegmentItem extends StatefulWidget {
     this.pdfRevisionMode = false,
     this.rotation = 0,
     this.onRotationChanged,
+    this.tableStrokePt = 0,
+    this.onTableStrokeChanged,
+    this.showTableStroke = false,
   });
   final String text;
   final String?
@@ -162,6 +166,9 @@ class TranslationSegmentItem extends StatefulWidget {
   final bool pdfRevisionMode;
   final int rotation; // Current rotation value: 0, 90, 180, or 270
   final void Function(int index, int rotation)? onRotationChanged;
+  final double tableStrokePt; // Table grid stroke width in pt (0 = hidden)
+  final void Function(int index, double tableStrokePt)? onTableStrokeChanged;
+  final bool showTableStroke;
 
   @override
   State<TranslationSegmentItem> createState() => _TranslationSegmentItemState();
@@ -886,6 +893,163 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     );
   }
 
+  Widget _buildTableStrokeChip(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final bool hasStroke = widget.tableStrokePt > 0;
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final String label = hasStroke
+        ? l10n.segmentTableStrokeLabel(
+            formatPdfTableStrokePtLabel(widget.tableStrokePt),
+          )
+        : l10n.segmentTableStrokeOff;
+    final bool canEdit = widget.onTableStrokeChanged != null;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: MenuAnchor(
+        style: MenuStyle(
+          visualDensity: VisualDensity.compact,
+          minimumSize: const WidgetStatePropertyAll<Size>(Size(148, 0)),
+        ),
+        menuChildren: <Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: Text(
+              l10n.segmentTableStrokeMenuTitle,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          ),
+          ...kPdfTableStrokeOptionsPt.map((double optionPt) {
+            final bool selected = isPdfTableStrokeOptionSelected(
+              widget.tableStrokePt,
+              optionPt,
+            );
+            final String optionLabel = optionPt <= 0
+                ? l10n.segmentTableStrokeNone
+                : l10n.segmentTableStrokeLabel(
+                    formatPdfTableStrokePtLabel(optionPt),
+                  );
+            return MenuItemButton(
+              onPressed: canEdit
+                  ? () => widget.onTableStrokeChanged!(
+                        widget.index,
+                        optionPt,
+                      )
+                  : null,
+              child: _buildTableStrokeMenuRow(
+                context,
+                strokePt: optionPt,
+                label: optionLabel,
+                checked: selected,
+              ),
+            );
+          }),
+        ],
+        builder: (
+          BuildContext context,
+          MenuController controller,
+          Widget? child,
+        ) {
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: canEdit
+                  ? () {
+                      if (controller.isOpen) {
+                        controller.close();
+                      } else {
+                        controller.open();
+                      }
+                    }
+                  : null,
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: hasStroke
+                      ? colors.secondaryContainer
+                      : colors.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: hasStroke
+                        ? colors.secondary
+                        : colors.outlineVariant,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      Icons.grid_on_outlined,
+                      size: 12,
+                      color: hasStroke
+                          ? colors.onSecondaryContainer
+                          : colors.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: hasStroke
+                            ? colors.onSecondaryContainer
+                            : colors.onSurfaceVariant,
+                      ),
+                    ),
+                    if (canEdit) ...<Widget>[
+                      Icon(
+                        Icons.arrow_drop_down,
+                        size: 14,
+                        color: hasStroke
+                            ? colors.onSecondaryContainer
+                            : colors.onSurfaceVariant,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTableStrokeMenuRow(
+    BuildContext context, {
+    required double strokePt,
+    required String label,
+    required bool checked,
+  }) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return Row(
+      children: <Widget>[
+        SizedBox(
+          width: 18,
+          child: checked
+              ? Icon(Icons.check, size: 14, color: colors.primary)
+              : const SizedBox.shrink(),
+        ),
+        _TableGridPreviewIcon(
+          strokePt: strokePt,
+          color: colors.onSurface,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildViewMode() {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -1083,6 +1247,9 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                       _localIsExcluded ||
                       _localIsCleared ||
                       (widget.showPdfFontSize && widget.onFontSizeChanged != null) ||
+                      (widget.onRotationChanged != null) ||
+                      (widget.onTableStrokeChanged != null &&
+                          widget.showTableStroke) ||
                       (widget.onExclude != null && !_localIsExcluded) ||
                       (widget.onClear != null &&
                           widget.text.isNotEmpty &&
@@ -1098,6 +1265,10 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                         _buildPdfFontSizeChip(),
                       if (widget.onRotationChanged != null && !widget.isSource)
                         _buildRotationChip(context),
+                      if (widget.onTableStrokeChanged != null &&
+                          !widget.isSource &&
+                          widget.showTableStroke)
+                        _buildTableStrokeChip(context),
                       // Platform badge
                       if (!widget.pdfRevisionMode && widget.platformUsed != null)
                         Container(
@@ -2005,5 +2176,80 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
         },
       ),
     );
+  }
+}
+
+/// Mini 2x2 grid preview for table border weight (Word/Excel-style menu icon).
+class _TableGridPreviewIcon extends StatelessWidget {
+  const _TableGridPreviewIcon({
+    required this.strokePt,
+    required this.color,
+  });
+
+  final double strokePt;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 22,
+      height: 16,
+      child: CustomPaint(
+        painter: _TableGridPreviewPainter(
+          strokePt: strokePt,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+class _TableGridPreviewPainter extends CustomPainter {
+  _TableGridPreviewPainter({
+    required this.strokePt,
+    required this.color,
+  });
+
+  final double strokePt;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Rect bounds = Rect.fromLTWH(1, 1, size.width - 2, size.height - 2);
+    if (strokePt <= 0) {
+      final Paint dashed = Paint()
+        ..color = color.withValues(alpha: 0.35)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1;
+      canvas.drawRect(bounds, dashed);
+      return;
+    }
+
+    final double previewStroke = switch (strokePt) {
+      <= 0.5 => 0.8,
+      <= 1.0 => 1.1,
+      _ => 1.4,
+    };
+    final Paint linePaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = previewStroke;
+
+    canvas.drawRect(bounds, linePaint);
+    canvas.drawLine(
+      Offset(bounds.left, bounds.center.dy),
+      Offset(bounds.right, bounds.center.dy),
+      linePaint,
+    );
+    canvas.drawLine(
+      Offset(bounds.center.dx, bounds.top),
+      Offset(bounds.center.dx, bounds.bottom),
+      linePaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _TableGridPreviewPainter oldDelegate) {
+    return oldDelegate.strokePt != strokePt || oldDelegate.color != color;
   }
 }

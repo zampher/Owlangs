@@ -745,8 +745,8 @@ class _TranslationResultPreviewState
         // Attachments are available but not used in this widget
       }
 
-      // PDF layout: display defaults come from FormatSettings getters (table=image, equation=latex).
-      // Do not auto-persist legacy html/text values into task state.
+      // PDF layout: display defaults come from FormatSettings getters (table=html, equation=latex).
+      // Do not auto-persist legacy image values from older builds into task state.
       final bool isPdfFile =
           widget.fileName?.toLowerCase().endsWith('.pdf') ?? false;
       final bool hasTables = status['has_tables'] as bool? ?? false;
@@ -762,8 +762,8 @@ class _TranslationResultPreviewState
         final FormatSettings current = ref.read(
           formatSettingsProviderFamily(taskId),
         );
-        // Clear legacy auto-persisted table default from older builds (html).
-        if (hasTables && current.tableFormat == 'html') {
+        // Clear legacy auto-persisted table default from older builds (image).
+        if (hasTables && current.tableFormat == 'image') {
           formatNotifier.clearTableFormat();
         }
         setState(() {
@@ -2980,6 +2980,8 @@ class _TranslationResultPreviewState
         'leading_em_source': segment['leading_em_source'],
       if (segment.containsKey('rotation'))
         'rotation': _parseOptionalInt(segment['rotation']) ?? 0,
+      if (segment.containsKey('table_stroke_pt'))
+        'table_stroke_pt': _parseOptionalDouble(segment['table_stroke_pt']) ?? 0,
     };
   }
 
@@ -5124,6 +5126,7 @@ class _TranslationResultPreviewState
       showPdfFontSize: false,
       onFontSizeChanged: null,
       onRotationChanged: null,
+      onTableStrokeChanged: null,
     );
   }
 
@@ -5230,6 +5233,7 @@ class _TranslationResultPreviewState
       showPdfFontSize: true,
       onFontSizeChanged: _handleFontSizeChanged,
       onRotationChanged: _handleRotationChanged,
+      onTableStrokeChanged: _handleTableStrokeChanged,
       showSegmentScrollbar: showSegmentScrollbar,
     );
   }
@@ -5661,6 +5665,39 @@ class _TranslationResultPreviewState
     } catch (e) {
       if (mounted) {
         MessageService.showError(context, 'Failed to update rotation: $e');
+      }
+    }
+  }
+
+  /// Handle table grid stroke toggle for a PDF table segment.
+  Future<void> _handleTableStrokeChanged(int index, double tableStrokePt) async {
+    try {
+      final TranslationService svc = TranslationService();
+      await svc.updateTranslationSegment(
+        _apiTaskId(),
+        index,
+        tableStrokePt: tableStrokePt,
+      );
+
+      if (_allSegmentsMetadata.containsKey(index)) {
+        _allSegmentsMetadata[index] = <String, dynamic>{
+          ..._allSegmentsMetadata[index]!,
+          'table_stroke_pt': tableStrokePt,
+        };
+      } else {
+        _allSegmentsMetadata[index] = <String, dynamic>{
+          'table_stroke_pt': tableStrokePt,
+        };
+      }
+
+      if (mounted && _shouldRefreshOverlayPreviewRevision) {
+        _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
+        setState(() {});
+        await _segmentsPaginationController?.refresh();
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showError(context, 'Failed to update table grid: $e');
       }
     }
   }

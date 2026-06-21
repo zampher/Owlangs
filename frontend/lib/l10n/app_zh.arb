@@ -1368,6 +1368,17 @@
     }
   },
   "segmentRotationOff": "旋转",
+  "segmentTableStrokeLabel": "{strokePt} pt",
+  "@segmentTableStrokeLabel": {
+    "placeholders": {
+      "strokePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentTableStrokeOff": "表格线",
+  "segmentTableStrokeNone": "无",
+  "segmentTableStrokeMenuTitle": "线宽",
   "segmentPdfFontSizeTitle": "PDF 字号",
   "segmentPdfTypographyTitle": "PDF 字体",
   "segmentPdfTypographyFontTitle": "PDF 字体",

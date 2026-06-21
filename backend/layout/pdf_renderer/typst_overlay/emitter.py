@@ -20,6 +20,9 @@ from pathlib import Path
 from typing import List
 
 from layout.pdf_renderer.typst_overlay.formula_safety import formula_safety_insets_pt
+from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+    DEFAULT_TABLE_STROKE_PT,
+)
 from layout.pdf_renderer.typst_overlay.models import RenderBlock, RenderPageSpec
 
 
@@ -745,6 +748,16 @@ TABLE_MIN_FONT_PT = 5.5
 TABLE_MAX_FONT_PT = 12.0
 TABLE_ROW_HEIGHT_FACTOR = 1.55
 TABLE_HEADER_COLOR = (0.95, 0.95, 0.98)
+TABLE_STROKE_COLOR = (0.45, 0.45, 0.45)
+
+
+def _typst_table_stroke_arg(stroke_pt: float) -> str:
+    """Return Typst table stroke argument for grid lines."""
+    if stroke_pt <= 0:
+        return "stroke: none,"
+    return (
+        f"stroke: {round(stroke_pt, 2)}pt + {_typst_rgb(TABLE_STROKE_COLOR)},"
+    )
 
 
 def _table_reading_dimensions(
@@ -858,6 +871,11 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
         1,
     )
     rows_spec = "(" + ", ".join([f"{row_h}pt"] * row_count) + ")"
+    table_stroke_pt = max(
+        0.0,
+        float(getattr(block, "table_stroke_pt", DEFAULT_TABLE_STROKE_PT)),
+    )
+    stroke_arg = _typst_table_stroke_arg(table_stroke_pt)
 
     table_var = f"{var_prefix}_table"
     inner_var = f"{var_prefix}_inner"
@@ -866,7 +884,7 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
         f"#let {table_var} = table(",
         f"  columns: {columns_str},",
         f"  rows: {rows_spec},",
-        "  stroke: none,",
+        f"  {stroke_arg}",
         f"  inset: {TABLE_CELL_PAD_PT}pt,",
         f"  align: (left + horizon,) * {col_count},",
     ]

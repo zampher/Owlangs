@@ -70,6 +70,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
     this.showPdfFontSize = false,
     this.onFontSizeChanged,
     this.onRotationChanged,
+    this.onTableStrokeChanged,
     this.batchSelectionEnabled = false,
     this.selectedSegmentIndices = const <int>{},
     this.selectedSegmentIndicesListenable,
@@ -133,6 +134,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
     SegmentPdfTypographyDialogMode scope,
   })? onFontSizeChanged;
   final void Function(int index, int rotation)? onRotationChanged;
+  final void Function(int index, double tableStrokePt)? onTableStrokeChanged;
   final bool batchSelectionEnabled;
   final Set<int> selectedSegmentIndices;
   final ValueListenable<Set<int>>? selectedSegmentIndicesListenable;
@@ -1293,6 +1295,9 @@ class TranslationComparisonPanel extends ConsumerWidget {
               leadingEmSource: metadata['leading_em_source'] as String?,
               rotation: metadata['rotation'] as int? ?? 0,
               onRotationChanged: onRotationChanged,
+              tableStrokePt: readPdfTableStrokePt(metadata),
+              onTableStrokeChanged: onTableStrokeChanged,
+              showTableStroke: isPdfTableSegment(metadata),
               onFontSizeChanged: onFontSizeChanged,
               pdfRevisionMode: pdfRevisionMode,
             ),
@@ -1512,6 +1517,9 @@ class TranslationComparisonPanel extends ConsumerWidget {
                   leadingEmSource: metadata['leading_em_source'] as String?,
                   rotation: metadata['rotation'] as int? ?? 0,
                   onRotationChanged: onRotationChanged,
+                  tableStrokePt: readPdfTableStrokePt(metadata),
+                  onTableStrokeChanged: onTableStrokeChanged,
+                  showTableStroke: isPdfTableSegment(metadata),
                   onFontSizeChanged: onFontSizeChanged,
                 ),
               )

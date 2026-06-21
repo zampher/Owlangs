@@ -68,7 +68,23 @@ def test_table_rotation_180_keeps_original_data_and_rotates_grid():
     assert src.index("Alpha") < src.index("Beta")
 
 
-def test_empty_table_cells_render_without_measure_scale():
+def test_table_stroke_default_pt_emits_typst_stroke():
+    block = _sample_table_block()
+    src = _render_table_block("block-tbl", block)
+    assert "stroke: 0.5pt + rgb(" in src
+
+
+def test_table_stroke_pt_emits_typst_stroke():
+    block = _sample_table_block(table_stroke_pt=0.5)
+    src = _render_table_block("block-tbl", block)
+    assert "stroke: 0.5pt + rgb(" in src
+
+
+def test_table_stroke_pt_zero_uses_none():
+    block = _sample_table_block(table_stroke_pt=0.0)
+    src = _render_table_block("block-tbl", block)
+    assert "stroke: none," in src
+
     block = _sample_table_block(
         markdown_text="| H1 | H2 |\n| --- | --- |\n|  |  |\n|  |  |\n",
     )

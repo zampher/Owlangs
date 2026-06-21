@@ -62,6 +62,9 @@ class TranslationSegment:
     # Applied when the source bbox dimension does not match the translated text's
     # reading direction (e.g., table rotated 90 in the original PDF).
     rotation: int = 0
+
+    # Optional table grid stroke width for PDF overlay tables (pt). 0 = hidden.
+    table_stroke_pt: Optional[float] = None
     
     @classmethod
     def create(
@@ -123,6 +126,7 @@ class TranslationSegment:
             "font_style": self.font_style,
             "leading_em": self.leading_em,
             "rotation": self.rotation,
+            "table_stroke_pt": self.table_stroke_pt,
         }
     
     @classmethod
@@ -162,6 +166,7 @@ class TranslationSegment:
             font_style=data.get("font_style"),
             leading_em=data.get("leading_em"),
             rotation=data.get("rotation", 0),
+            table_stroke_pt=data.get("table_stroke_pt"),
         )
     
     def update_target_text(self, new_text: str, modified_by: Optional[str] = None) -> None:

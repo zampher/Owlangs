@@ -3298,6 +3298,7 @@ def update_translation_segment(
     leading_em_reset: bool = False,
     pdf_font_reset: bool = False,
     rotation: Optional[int] = None,
+    table_stroke_pt: Optional[float] = None,
     task_state: Optional[dict] = None,
 ) -> Optional[dict]:
     """
@@ -3311,6 +3312,7 @@ def update_translation_segment(
         review_notes: Review notes
         modified_by: Identifier of who made the modification
         rotation: Optional rotation angle (0, 90, 180, 270). 0 = none.
+        table_stroke_pt: Optional table grid stroke width in pt (0 = hidden).
         task_state: Task state dictionary (if None, will be imported)
 
     Returns:
@@ -3416,6 +3418,41 @@ def update_translation_segment(
                 f"Ignoring invalid rotation value {rotation!r} for segment {segment_index} "
                 f"on task {task_id}. Valid values: 0, 90, 180, 270.",
             )
+
+    if table_stroke_pt is not None:
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            normalize_table_stroke_pt,
+        )
+        normalized_stroke = normalize_table_stroke_pt(table_stroke_pt)
+        if normalized_stroke is None:
+            logger.warning(
+                LogModule.TRANS,
+                f"Ignoring invalid table_stroke_pt={table_stroke_pt!r} for segment "
+                f"{segment_index} on task {task_id}",
+            )
+        else:
+            old_stroke = segment.get("table_stroke_pt")
+            if old_stroke is None:
+                from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+                    DEFAULT_TABLE_STROKE_PT,
+                )
+                old_stroke_value = DEFAULT_TABLE_STROKE_PT
+            else:
+                try:
+                    old_stroke_value = float(old_stroke or 0)
+                except (TypeError, ValueError):
+                    old_stroke_value = 0.0
+            if normalized_stroke != old_stroke_value or "table_stroke_pt" not in segment:
+                segment["table_stroke_pt"] = normalized_stroke
+                segment["modified"] = True
+                segment["modified_by"] = modified_by or segment.get("modified_by")
+                segment["modified_at"] = time.time()
+                logger.info(
+                    LogModule.TRANS,
+                    f"Updated table_stroke_pt for segment {segment_index} on task {task_id}: "
+                    f"{old_stroke_value} -> {normalized_stroke}",
+                )
+                typography_changed = True
 
     if typography_changed:
         from layout.pdf_renderer.typst_overlay.segment_font_metrics import (

@@ -85,6 +85,9 @@ class RenderBlock:
     # -- rotation --
     rotation: int = 0                       # 0, 90, 180, 270 — CCW via Typst rotate()
 
+    # -- table grid lines (pt); 0 = hidden, default 0.5pt --
+    table_stroke_pt: float = 0.5
+
     # -- advanced --
     math_map: Optional[List[dict]] = None    # formula identifier -> latex map
     preserve_line_breaks: bool = False

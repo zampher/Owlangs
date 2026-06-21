@@ -3768,6 +3768,20 @@ class AppLocalizationsJa extends AppLocalizations {
   String get segmentRotationOff => 'Rotate';
 
   @override
+  String segmentTableStrokeLabel(String strokePt) {
+    return '$strokePt pt';
+  }
+
+  @override
+  String get segmentTableStrokeOff => 'Grid';
+
+  @override
+  String get segmentTableStrokeNone => 'None';
+
+  @override
+  String get segmentTableStrokeMenuTitle => 'Border weight';
+
+  @override
   String get segmentPdfFontSizeTitle => 'PDF フォントサイズ';
 
   @override

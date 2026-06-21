@@ -790,6 +790,24 @@ class TypstOverlayRenderer(BasePDFRenderer):
         except (TypeError, ValueError):
             return 0
 
+    def _block_table_stroke_pt(self, block_key: int) -> float:
+        """Return table grid stroke width for a layout block (default 0.5pt)."""
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            DEFAULT_TABLE_STROKE_PT,
+        )
+
+        overrides = getattr(self.config, "table_stroke_pt_by_block_index", None) or {}
+        if block_key not in overrides:
+            return DEFAULT_TABLE_STROKE_PT
+        value = overrides.get(block_key)
+        if value is None:
+            return DEFAULT_TABLE_STROKE_PT
+        try:
+            stroke_pt = float(value)
+        except (TypeError, ValueError):
+            return DEFAULT_TABLE_STROKE_PT
+        return max(0.0, stroke_pt)
+
     def _apply_block_typography_overrides(
         self,
         rb: RenderBlock,
@@ -953,6 +971,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                             )
                             tb_rb = self._apply_block_typography_overrides(tb_rb, block_key)
                             tb_rb.rotation = self._block_rotation(block_key)
+                            tb_rb.table_stroke_pt = self._block_table_stroke_pt(block_key)
                             blocks.append(tb_rb)
                             total_blocks += 1
 

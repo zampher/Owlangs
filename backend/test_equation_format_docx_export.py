@@ -103,13 +103,13 @@ def test_resolve_export_format_settings_from_task_state():
     assert tbl == "image"
 
 
-def test_resolve_export_format_settings_pdf_defaults_table_image():
+def test_resolve_export_format_settings_pdf_defaults_table_html():
     from backend.app.services.download.download_service import _resolve_export_format_settings
 
     task_state = {"original_filename": "paper.pdf"}
-    eq, tbl = _resolve_export_format_settings(task_state)
+    eq, tbl, _chart = _resolve_export_format_settings(task_state)
     assert eq == "latex"
-    assert tbl == "image"
+    assert tbl == "html"
 
 
 def test_resolve_export_format_settings_non_pdf_defaults_table_html():

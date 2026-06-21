@@ -3734,6 +3734,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get segmentRotationOff => '旋转';
 
   @override
+  String segmentTableStrokeLabel(String strokePt) {
+    return '$strokePt pt';
+  }
+
+  @override
+  String get segmentTableStrokeOff => '表格线';
+
+  @override
+  String get segmentTableStrokeNone => '无';
+
+  @override
+  String get segmentTableStrokeMenuTitle => '线宽';
+
+  @override
   String get segmentPdfFontSizeTitle => 'PDF 字号';
 
   @override

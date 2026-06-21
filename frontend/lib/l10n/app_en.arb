@@ -1431,6 +1431,17 @@
     }
   },
   "segmentRotationOff": "Rotate",
+  "segmentTableStrokeLabel": "{strokePt} pt",
+  "@segmentTableStrokeLabel": {
+    "placeholders": {
+      "strokePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentTableStrokeOff": "Grid",
+  "segmentTableStrokeNone": "None",
+  "segmentTableStrokeMenuTitle": "Border weight",
   "segmentPdfFontSizeTitle": "PDF font size",
   "segmentPdfTypographyTitle": "PDF typography",
   "segmentPdfTypographyFontTitle": "PDF font",

@@ -123,8 +123,8 @@ class _TranslationPreviewContentWidgetState
       final uri = Uri.parse(downloadUrl);
       final queryParams = Map<String, String>.from(uri.queryParameters);
 
-      // Use provided format parameters or default to 'image'
-      final tableFormat = widget.tableFormat ?? 'image';
+      // Use provided format parameters or default to 'html'
+      final tableFormat = widget.tableFormat ?? 'html';
       final equationFormat = widget.equationFormat ?? 'image';
 
       queryParams['table_body_format'] = tableFormat;

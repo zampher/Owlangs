@@ -73,11 +73,106 @@ Map<String, dynamic> segmentClassificationFieldsFromApi(
   final bool isTableBody = segment['is_table_body'] as bool? ??
       segInfo?['is_table_body'] as bool? ??
       false;
+  final String? chunkType = segment['chunk_type'] as String? ??
+      segInfo?['chunk_type'] as String?;
 
   return <String, dynamic>{
     if (blockType != null && blockType.isNotEmpty) 'block_type': blockType,
     if (isTableBody) 'is_table_body': true,
+    if (chunkType != null && chunkType.isNotEmpty) 'chunk_type': chunkType,
   };
+}
+
+/// Default PDF table grid stroke width (pt).
+const double kPdfDefaultTableStrokePt = 0.5;
+
+/// Preset table grid stroke widths (pt) cycled in PDF revision UI.
+/// Selectable table grid stroke widths (pt) in PDF revision UI.
+const List<double> kPdfTableStrokeOptionsPt = <double>[0, 0.5, 1.0, 1.5];
+
+/// Whether [text] looks like a markdown pipe table (header + at least one row).
+bool isMarkdownTableText(String? text) {
+  if (text == null || text.trim().isEmpty) {
+    return false;
+  }
+  final List<String> lines = text
+      .split('\n')
+      .map((String line) => line.trim())
+      .where((String line) => line.isNotEmpty)
+      .toList();
+  if (lines.length < 2) {
+    return false;
+  }
+  int tableLineCount = 0;
+  for (final String line in lines) {
+    if (line.startsWith('|') && line.endsWith('|')) {
+      tableLineCount++;
+    }
+  }
+  return tableLineCount >= 2;
+}
+
+/// Whether [metadata] describes a PDF table segment (table body overlay).
+bool isPdfTableSegment(Map<String, dynamic> metadata) {
+  final String? blockType = metadata['block_type'] as String?;
+  final bool isTableBody = metadata['is_table_body'] as bool? ?? false;
+  if (isTableBody ||
+      blockType == 'table' ||
+      blockType == 'table_body') {
+    return true;
+  }
+
+  final String? chunkType = metadata['chunk_type'] as String?;
+  if (chunkType == 'table_body') {
+    return true;
+  }
+
+  final String? detectedReason =
+      metadata['detected_exclusion_reason'] as String?;
+  final String? exclusionReason = metadata['exclusion_reason'] as String?;
+  if (detectedReason == ExclusionReason.table.value ||
+      exclusionReason == ExclusionReason.table.value) {
+    return true;
+  }
+
+  final String targetText = metadata['target_text'] as String? ?? '';
+  final String sourceText = metadata['source_text'] as String? ?? '';
+  return isMarkdownTableText(targetText) || isMarkdownTableText(sourceText);
+}
+
+double readPdfTableStrokePt(Map<String, dynamic> metadata) {
+  if (!metadata.containsKey('table_stroke_pt')) {
+    return kPdfDefaultTableStrokePt;
+  }
+  final dynamic raw = metadata['table_stroke_pt'];
+  if (raw is num) {
+    return raw.toDouble();
+  }
+  if (raw is String) {
+    return double.tryParse(raw) ?? kPdfDefaultTableStrokePt;
+  }
+  return kPdfDefaultTableStrokePt;
+}
+
+/// Normalize stroke width to one decimal place for option matching.
+double normalizePdfTableStrokePt(double strokePt) {
+  return (strokePt * 10).roundToDouble() / 10.0;
+}
+
+/// Whether [strokePt] matches a selectable table stroke option.
+bool isPdfTableStrokeOptionSelected(double current, double option) {
+  return normalizePdfTableStrokePt(current) == option;
+}
+
+/// Format stroke width for chip/menu labels.
+String formatPdfTableStrokePtLabel(double strokePt) {
+  final double normalized = normalizePdfTableStrokePt(strokePt);
+  if (normalized <= 0) {
+    return '0';
+  }
+  return normalized.truncateToDouble() == normalized
+      ? normalized.toStringAsFixed(0)
+      : normalized.toStringAsFixed(1);
 }
 
 /// Whether [metadata] matches any selected type filter in [selectedFilters].

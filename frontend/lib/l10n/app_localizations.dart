@@ -6872,6 +6872,30 @@ abstract class AppLocalizations {
   /// **'Rotate'**
   String get segmentRotationOff;
 
+  /// No description provided for @segmentTableStrokeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{strokePt} pt'**
+  String segmentTableStrokeLabel(String strokePt);
+
+  /// No description provided for @segmentTableStrokeOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Grid'**
+  String get segmentTableStrokeOff;
+
+  /// No description provided for @segmentTableStrokeNone.
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get segmentTableStrokeNone;
+
+  /// No description provided for @segmentTableStrokeMenuTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Border weight'**
+  String get segmentTableStrokeMenuTitle;
+
   /// No description provided for @segmentPdfFontSizeTitle.
   ///
   /// In en, this message translates to:

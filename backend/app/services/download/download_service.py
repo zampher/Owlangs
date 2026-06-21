@@ -374,6 +374,18 @@ def _build_block_rotation_map_from_segments(
     return rotation_map
 
 
+def _build_block_table_stroke_map_from_segments(
+    segments: list,
+    task_state: Dict[str, Any],
+) -> Dict[int, float]:
+    """Build block_index -> table_stroke_pt from segments that set grid lines."""
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        build_block_table_stroke_map_from_segments,
+    )
+
+    return build_block_table_stroke_map_from_segments(segments, task_state)
+
+
 def _resolve_layout_zip_bytes(task_state: Dict[str, Any]) -> Optional[bytes]:
     """Resolve MinerU layout ZIP bytes for chart/table/image export (matches DOCX path)."""
     zip_bytes = task_state.get("layout_source_zip")
@@ -427,11 +439,11 @@ def _resolve_export_format_settings(
                 tbl = getattr(payload_obj, "table_body_format", None)
             if chart is None:
                 chart = getattr(payload_obj, "chart_body_format", None)
-    # PDF flow: default to image for tables/charts, latex for equations
+    # PDF flow: default to html for tables, image for charts, latex for equations
     orig_filename = (task_state.get("original_filename") or "").lower()
     is_pdf_flow = orig_filename.endswith(".pdf")
     default_eq = "latex" if is_pdf_flow else "text"
-    default_tbl = "image" if is_pdf_flow else "html"
+    default_tbl = "html"
     default_chart = "image" if is_pdf_flow else "html"
 
     eq = (eq or default_eq).lower().strip()
@@ -1506,6 +1518,7 @@ async def _typst_overlay_pdf_response(
     font_style_by_block_index: Dict[int, str] = {}
     leading_em_by_block_index: Dict[int, float] = {}
     rotation_by_block_index: Dict[int, int] = {}
+    table_stroke_pt_by_block_index: Dict[int, float] = {}
     if segments:
         is_deep_split_enabled = bool(task_state.get("deep_split"))
         text_field = "target_text"
@@ -1562,6 +1575,16 @@ async def _typst_overlay_pdf_response(
                 f"for {len(rotation_by_block_index)} block(s): "
                 f"{sorted(rotation_by_block_index.items())[:8]}",
             )
+        table_stroke_pt_by_block_index = _build_block_table_stroke_map_from_segments(
+            segments, task_state,
+        )
+        if table_stroke_pt_by_block_index:
+            logger.info(
+                LogModule.EXPORT,
+                f"[TYPST_OVERLAY] Task {task_id}: applying table stroke overrides "
+                f"for {len(table_stroke_pt_by_block_index)} block(s): "
+                f"{sorted(table_stroke_pt_by_block_index.items())[:8]}",
+            )
 
     zip_bytes = _resolve_layout_zip_bytes(task_state)
     if not zip_bytes:
@@ -1590,6 +1613,7 @@ async def _typst_overlay_pdf_response(
         font_style_by_block_index=font_style_by_block_index or None,
         leading_em_by_block_index=leading_em_by_block_index or None,
         rotation_by_block_index=rotation_by_block_index or None,
+        table_stroke_pt_by_block_index=table_stroke_pt_by_block_index or None,
     )
 
     output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
@@ -1699,6 +1723,11 @@ async def _typst_overlay_pdf_response(
                     ),
                     rotation_by_block_index=(
                         rotation_by_block_index if rotation_by_block_index else None
+                    ),
+                    table_stroke_pt_by_block_index=(
+                        table_stroke_pt_by_block_index
+                        if table_stroke_pt_by_block_index
+                        else None
                     ),
                     render_page_indices=render_page_indices,
                     base_merged_pdf_bytes=base_merged_pdf_bytes,
@@ -2874,11 +2903,11 @@ class DownloadService:
                         if original_eq_format not in ("text", "latex", "image"):
                             original_eq_format = "latex" if is_pdf_file else "text"
 
-                        original_tbl_format = (task_state.get("table_body_format") or (_pl.get("table_body_format") if isinstance(_pl, dict) else (getattr(_pl, "table_body_format", None) if _pl else None)) or ("image" if is_pdf_file else "html"))
+                        original_tbl_format = (task_state.get("table_body_format") or (_pl.get("table_body_format") if isinstance(_pl, dict) else (getattr(_pl, "table_body_format", None) if _pl else None)) or "html")
                         if isinstance(original_tbl_format, str):
                             original_tbl_format = original_tbl_format.lower().strip()
                         if original_tbl_format not in ("html", "image"):
-                            original_tbl_format = "image" if is_pdf_file else "html"
+                            original_tbl_format = "html"
                         
                         # If format changed or we have layout_document, regenerate markdown with new format
                         format_changed = (eq_format != original_eq_format) or (table_format != original_tbl_format)

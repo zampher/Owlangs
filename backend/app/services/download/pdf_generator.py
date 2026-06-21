@@ -196,7 +196,7 @@ class PDFGenerator:
                     f"[PDF] Task {task_id}: layout ZIP not found; chart image embedding may fail",
                 )
             
-            # Resolve table/equation/chart format (PDF defaults: table=image, chart=image, equation=latex)
+            # Resolve table/equation/chart format (PDF defaults: table=html, chart=image, equation=latex)
             from backend.app.services.download.download_service import _resolve_export_format_settings
 
             equation_format_resolved, table_body_format_resolved, chart_body_format_resolved = _resolve_export_format_settings(

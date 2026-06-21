@@ -658,6 +658,7 @@ class TranslationService {
     bool leadingEmReset = false,
     bool pdfFontReset = false,
     int? rotation,
+    double? tableStrokePt,
   }) async {
     final dio = _buildAuthedDio();
     final body = <String, dynamic>{};
@@ -666,6 +667,7 @@ class TranslationService {
     if (reviewNotes != null) body['review_notes'] = reviewNotes;
     if (modifiedBy != null) body['modified_by'] = modifiedBy;
     if (rotation != null) body['rotation'] = rotation;
+    if (tableStrokePt != null) body['table_stroke_pt'] = tableStrokePt;
     if (pdfFontReset) {
       body['pdf_font_reset'] = true;
     } else {

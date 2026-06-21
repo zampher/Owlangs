@@ -562,6 +562,43 @@ def _transform_image_overlay_bboxes_to_pixels(
         )
 
 
+def _enrich_segments_table_fields(
+    task_state: Dict[str, Any],
+    segments_list: List[Dict[str, Any]],
+) -> None:
+    """Attach table classification from layout_prepared_chunks when missing."""
+    from layout.block_types import TABLE_BODY
+
+    chunks = task_state.get("layout_prepared_chunks") or []
+    if not chunks or not segments_list:
+        return
+
+    for seg in segments_list:
+        if not isinstance(seg, dict):
+            continue
+        if seg.get("is_table_body") or seg.get("block_type") in (TABLE_BODY, "table"):
+            continue
+        idx = seg.get("segment_index")
+        if idx is None:
+            continue
+        try:
+            chunk_idx = int(idx)
+        except (TypeError, ValueError):
+            continue
+        if chunk_idx < 0 or chunk_idx >= len(chunks):
+            continue
+        chunk = chunks[chunk_idx]
+        if not isinstance(chunk, dict):
+            continue
+        chunk_type = chunk.get("chunk_type")
+        if chunk_type == TABLE_BODY:
+            seg["chunk_type"] = TABLE_BODY
+            seg["block_type"] = TABLE_BODY
+            seg["is_table_body"] = True
+        elif chunk_type:
+            seg["chunk_type"] = chunk_type
+
+
 def _enrich_segments_pdf_typography(
     task_id: str,
     task_state: Dict[str, Any],
@@ -811,6 +848,7 @@ async def get_translation_segments_api(
     if isinstance(response_data, dict):
         segments_list = response_data.get("segments", [])
         if isinstance(segments_list, list) and segments_list:
+            _enrich_segments_table_fields(task_state, segments_list)
             _enrich_segments_pdf_typography(task_id, task_state, segments_list)
 
     # Write enriched translation segments to debug file for font/bbox diagnosis
@@ -957,6 +995,7 @@ async def update_segment_api(
     leading_em_reset = bool(body.get("leading_em_reset", False))
     pdf_font_reset = bool(body.get("pdf_font_reset", False))
     rotation = body.get("rotation")
+    table_stroke_pt = body.get("table_stroke_pt")
 
     segment = _ts_module().update_translation_segment(
         task_id=task_id,
@@ -975,6 +1014,7 @@ async def update_segment_api(
         leading_em_reset=leading_em_reset,
         pdf_font_reset=pdf_font_reset,
         rotation=rotation,
+        table_stroke_pt=table_stroke_pt,
     )
 
     if segment is None:

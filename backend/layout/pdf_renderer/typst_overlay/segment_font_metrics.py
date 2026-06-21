@@ -23,6 +23,8 @@ FONT_SIZE_PT_STEP = 0.1
 
 LEADING_EM_MIN = 0.35
 LEADING_EM_MAX = 3.0
+
+DEFAULT_TABLE_STROKE_PT = 0.5
 LEADING_EM_STEP = 0.05
 LEADING_EM_DEFAULT = DEFAULT_LEADING_EM
 
@@ -866,6 +868,38 @@ def build_block_font_style_map_from_segments(
             continue
         for idx in resolve_segment_layout_block_indices(seg, task_state):
             block_map[idx] = style
+    return block_map
+
+
+def normalize_table_stroke_pt(value: Any) -> Optional[float]:
+    """Normalize user table grid stroke width in pt (0 = hidden)."""
+    if value is None:
+        return None
+    try:
+        stroke_pt = float(value)
+    except (TypeError, ValueError):
+        return None
+    if stroke_pt < 0 or stroke_pt > 3.0:
+        return None
+    return round(stroke_pt, 2)
+
+
+def build_block_table_stroke_map_from_segments(
+    segments: List[Dict[str, Any]],
+    task_state: Optional[Dict[str, Any]] = None,
+) -> Dict[int, float]:
+    """Expand segment-level table stroke overrides to layout block indices."""
+    block_map: Dict[int, float] = {}
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        if "table_stroke_pt" not in seg:
+            continue
+        stroke_pt = normalize_table_stroke_pt(seg.get("table_stroke_pt"))
+        if stroke_pt is None:
+            continue
+        for idx in resolve_segment_layout_block_indices(seg, task_state):
+            block_map[idx] = stroke_pt
     return block_map
 
 
