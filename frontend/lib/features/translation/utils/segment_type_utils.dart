@@ -86,9 +86,11 @@ Map<String, dynamic> segmentClassificationFieldsFromApi(
 /// Default PDF table grid stroke width (pt).
 const double kPdfDefaultTableStrokePt = 0.5;
 
-/// Preset table grid stroke widths (pt) cycled in PDF revision UI.
-/// Selectable table grid stroke widths (pt) in PDF revision UI.
+/// Preset table grid stroke widths (pt) in PDF revision UI.
 const List<double> kPdfTableStrokeOptionsPt = <double>[0, 0.5, 1.0, 1.5];
+
+/// Selectable PDF overlay rotation angles (degrees, clockwise).
+const List<int> kPdfRotationOptionsDegrees = <int>[0, 90, 180, 270];
 
 /// Whether [text] looks like a markdown pipe table (header + at least one row).
 bool isMarkdownTableText(String? text) {

@@ -3907,6 +3907,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get segmentRotationOff => 'Rotate';
 
   @override
+  String get segmentRotationNone => 'No rotation';
+
+  @override
+  String get segmentRotationMenuTitle => 'Angle';
+
+  @override
   String segmentTableStrokeLabel(String strokePt) {
     return '$strokePt pt';
   }
@@ -3919,6 +3925,84 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get segmentTableStrokeMenuTitle => 'Border weight';
+
+  @override
+  String get segmentItemExclude => 'Exclude';
+
+  @override
+  String get segmentItemEdit => 'Edit';
+
+  @override
+  String get segmentItemRetry => 'Retry';
+
+  @override
+  String get segmentItemMarkedRetry => 'Marked Retry';
+
+  @override
+  String get segmentItemClear => 'Clear';
+
+  @override
+  String get segmentItemCleared => 'Cleared';
+
+  @override
+  String get segmentItemFix => 'Fix';
+
+  @override
+  String segmentItemExclusionBadge(String reason) {
+    return 'EX: $reason';
+  }
+
+  @override
+  String get segmentItemExclusionRemoveTooltip => 'Click to remove exclusion';
+
+  @override
+  String get segmentItemExclusionLockedTooltip =>
+      'This segment is automatically excluded and cannot be unexcluded';
+
+  @override
+  String get segmentItemExclusionEditTooltip =>
+      'Click to edit exclusion reason';
+
+  @override
+  String get segmentItemExclusionRemoved => 'Exclusion removed';
+
+  @override
+  String get segmentItemExclusionReasonUpdated => 'Exclusion reason updated';
+
+  @override
+  String segmentItemExclusionUpdateFailed(String error) {
+    return 'Failed to update exclusion reason: $error';
+  }
+
+  @override
+  String get segmentItemUndoEditTooltip => 'Undo (Edit)';
+
+  @override
+  String get segmentItemRedoEditTooltip => 'Redo (Edit)';
+
+  @override
+  String get segmentItemUndoSaveTooltip => 'Undo (Save)';
+
+  @override
+  String get segmentItemRedoSaveTooltip => 'Redo (Save)';
+
+  @override
+  String get segmentItemCancel => 'Cancel';
+
+  @override
+  String get segmentItemSave => 'Save';
+
+  @override
+  String get segmentItemEditShortcutHint =>
+      'Press Ctrl+Enter to save, Esc to cancel';
+
+  @override
+  String get segmentItemTranslationHint => 'Enter translation...';
+
+  @override
+  String segmentItemSaveFailed(String error) {
+    return 'Failed to save: $error';
+  }
 
   @override
   String get segmentPdfFontSizeTitle => 'PDF font size';

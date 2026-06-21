@@ -1336,6 +1336,21 @@
   "translationQueueSelectFormatsTitle": "Seleccionar formatos de descarga",
   "translationQueueSelectFormatsFormatLabel": "Formato",
   "translationQueueSelectFormatsDownload": "Descargar",
+  "translationQueueBatchLabelHint": "Etiqueta del lote (para agrupar en la cola)",
+  "translationQueueBatchCreateFailed": "Error al crear el lote de carga",
+  "translationQueueUngroupedSection": "Sin agrupar",
+  "translationQueueBatchProgress": "{completed}/{total} completados",
+  "@translationQueueBatchProgress": {
+    "placeholders": {
+      "completed": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "translationQueueBatchSelectAll": "Seleccionar lote",
+  "translationQueueBatchDownload": "Descargar lote",
+  "translationQueueBatchDelete": "Eliminar lote",
+  "translationQueueBatchDeleteTitle": "¿Eliminar este lote?",
+  "translationQueueBatchDeleteMessage": "Se eliminarán todas las tareas del lote y sus resultados en caché.",
   "reeditTitle": "Editar traducción",
   "reeditSaveExport": "Guardar y exportar",
   "reeditFetchError": "Error al cargar segmentos de traducción.",
@@ -1380,6 +1395,8 @@
   "translationExportPdfPreserveLayoutDesc": "Superpone la traducción sobre el diseño PDF original",
   "translationExportPdfReflow": "PDF recompuesto",
   "translationExportPdfReflowDesc": "Recompuesto desde Markdown traducido; el diseño puede diferir del original",
+  "translationExportImageOriginalLayout": "Imagen con diseño original",
+  "translationExportImageOriginalLayoutDesc": "Borra el texto OCR y escribe la traducción sobre la imagen original",
 
   "translationPreviewDialogTitle": "Configuración de vista previa",
   "translationPreviewStart": "Iniciar vista previa",
@@ -1441,6 +1458,72 @@
   "segmentPdfTypographyResetFont": "Restablecer fuente a automático",
   "segmentPdfTypographyResetLeading": "Restablecer interlineado a automático",
   "segmentPdfFontSizeApply": "Aplicar",
+  "segmentRotationLabel": "{degrees}°",
+  "@segmentRotationLabel": {
+    "placeholders": {
+      "degrees": {
+        "type": "int"
+      }
+    }
+  },
+  "segmentRotationOff": "Rotar",
+  "segmentRotationNone": "Sin rotación",
+  "segmentRotationMenuTitle": "Ángulo",
+  "segmentTableStrokeLabel": "{strokePt} pt",
+  "@segmentTableStrokeLabel": {
+    "placeholders": {
+      "strokePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentTableStrokeOff": "Cuadrícula",
+  "segmentTableStrokeNone": "Ninguna",
+  "segmentTableStrokeMenuTitle": "Grosor del borde",
+  "segmentItemExclude": "Excluir",
+  "segmentItemEdit": "Editar",
+  "segmentItemRetry": "Reintentar",
+  "segmentItemMarkedRetry": "Marcado para reintentar",
+  "segmentItemClear": "Borrar",
+  "segmentItemCleared": "Borrado",
+  "segmentItemFix": "Corregir",
+  "segmentItemExclusionBadge": "EX: {reason}",
+  "@segmentItemExclusionBadge": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentItemExclusionRemoveTooltip": "Haga clic para quitar la exclusión",
+  "segmentItemExclusionLockedTooltip": "Este segmento se excluyó automáticamente y no se puede revertir",
+  "segmentItemExclusionEditTooltip": "Haga clic para editar el motivo de exclusión",
+  "segmentItemExclusionRemoved": "Exclusión eliminada",
+  "segmentItemExclusionReasonUpdated": "Motivo de exclusión actualizado",
+  "segmentItemExclusionUpdateFailed": "Error al actualizar el motivo de exclusión: {error}",
+  "@segmentItemExclusionUpdateFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentItemUndoEditTooltip": "Deshacer (edición)",
+  "segmentItemRedoEditTooltip": "Rehacer (edición)",
+  "segmentItemUndoSaveTooltip": "Deshacer (guardado)",
+  "segmentItemRedoSaveTooltip": "Rehacer (guardado)",
+  "segmentItemCancel": "Cancelar",
+  "segmentItemSave": "Guardar",
+  "segmentItemEditShortcutHint": "Pulse Ctrl+Enter para guardar, Esc para cancelar",
+  "segmentItemTranslationHint": "Introduzca la traducción...",
+  "segmentItemSaveFailed": "Error al guardar: {error}",
+  "@segmentItemSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "translationPreviewRevisionSyncScrollDesc": "Al activarlo, oculta las barras de desplazamiento separadas de las vistas previas de original y traducción; muestra una barra compartida entre ambas con desplazamiento vinculado",
   "translationPreviewPdfRevision": "Revisión en vista previa",
   "translationPreviewPdfRevisionCompare": "Vista comparativa",

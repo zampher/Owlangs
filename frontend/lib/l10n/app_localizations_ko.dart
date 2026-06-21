@@ -585,11 +585,11 @@ class AppLocalizationsKo extends AppLocalizations {
       '원본 PDF 레이아웃에 번역을 겹쳐 구성과 차트 위치 유지';
 
   @override
-  String get translationExportImageOriginalLayout => 'Original layout image';
+  String get translationExportImageOriginalLayout => '원본 레이아웃 이미지';
 
   @override
   String get translationExportImageOriginalLayoutDesc =>
-      'Erase OCR text and write translation on the source image';
+      'OCR 텍스트 영역을 지우고 원본 이미지 위에 번역문을 작성합니다';
 
   @override
   String get translationExportPdfReflow => '재排版 PDF';
@@ -3612,36 +3612,34 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationQueueSelectFormatsDownload => '다운로드';
 
   @override
-  String get translationQueueBatchLabelHint =>
-      'Batch label (for task queue grouping)';
+  String get translationQueueBatchLabelHint => '배치 레이블(작업 큐 그룹화용)';
 
   @override
-  String get translationQueueBatchCreateFailed =>
-      'Failed to create upload batch';
+  String get translationQueueBatchCreateFailed => '업로드 배치 생성에 실패했습니다';
 
   @override
-  String get translationQueueUngroupedSection => 'Ungrouped';
+  String get translationQueueUngroupedSection => '그룹 없음';
 
   @override
   String translationQueueBatchProgress(int completed, int total) {
-    return '$completed/$total completed';
+    return '완료 $completed/$total';
   }
 
   @override
-  String get translationQueueBatchSelectAll => 'Select batch';
+  String get translationQueueBatchSelectAll => '배치 선택';
 
   @override
-  String get translationQueueBatchDownload => 'Download batch';
+  String get translationQueueBatchDownload => '배치 다운로드';
 
   @override
-  String get translationQueueBatchDelete => 'Delete batch';
+  String get translationQueueBatchDelete => '배치 삭제';
 
   @override
-  String get translationQueueBatchDeleteTitle => 'Delete this batch?';
+  String get translationQueueBatchDeleteTitle => '이 배치를 삭제하시겠습니까?';
 
   @override
   String get translationQueueBatchDeleteMessage =>
-      'All tasks in this batch will be removed from the queue and their cached results deleted.';
+      '이 배치의 모든 작업이 큐에서 제거되고 캐시된 결과도 삭제됩니다.';
 
   @override
   String get reeditTitle => '번역 편집';
@@ -3773,7 +3771,13 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get segmentRotationOff => 'Rotate';
+  String get segmentRotationOff => '회전';
+
+  @override
+  String get segmentRotationNone => '회전 없음';
+
+  @override
+  String get segmentRotationMenuTitle => '각도';
 
   @override
   String segmentTableStrokeLabel(String strokePt) {
@@ -3781,13 +3785,89 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get segmentTableStrokeOff => 'Grid';
+  String get segmentTableStrokeOff => '격자';
 
   @override
-  String get segmentTableStrokeNone => 'None';
+  String get segmentTableStrokeNone => '없음';
 
   @override
-  String get segmentTableStrokeMenuTitle => 'Border weight';
+  String get segmentTableStrokeMenuTitle => '선 두께';
+
+  @override
+  String get segmentItemExclude => '제외';
+
+  @override
+  String get segmentItemEdit => '편집';
+
+  @override
+  String get segmentItemRetry => '재시도';
+
+  @override
+  String get segmentItemMarkedRetry => '재시도 표시됨';
+
+  @override
+  String get segmentItemClear => '지우기';
+
+  @override
+  String get segmentItemCleared => '지워짐';
+
+  @override
+  String get segmentItemFix => '수정';
+
+  @override
+  String segmentItemExclusionBadge(String reason) {
+    return '제외: $reason';
+  }
+
+  @override
+  String get segmentItemExclusionRemoveTooltip => '클릭하여 제외 해제';
+
+  @override
+  String get segmentItemExclusionLockedTooltip =>
+      '이 세그먼트는 자동으로 제외되어 해제할 수 없습니다';
+
+  @override
+  String get segmentItemExclusionEditTooltip => '클릭하여 제외 사유 편집';
+
+  @override
+  String get segmentItemExclusionRemoved => '제외가 해제되었습니다';
+
+  @override
+  String get segmentItemExclusionReasonUpdated => '제외 사유가 업데이트되었습니다';
+
+  @override
+  String segmentItemExclusionUpdateFailed(String error) {
+    return '제외 사유 업데이트 실패: $error';
+  }
+
+  @override
+  String get segmentItemUndoEditTooltip => '실행 취소(편집)';
+
+  @override
+  String get segmentItemRedoEditTooltip => '다시 실행(편집)';
+
+  @override
+  String get segmentItemUndoSaveTooltip => '실행 취소(저장)';
+
+  @override
+  String get segmentItemRedoSaveTooltip => '다시 실행(저장)';
+
+  @override
+  String get segmentItemCancel => '취소';
+
+  @override
+  String get segmentItemSave => '저장';
+
+  @override
+  String get segmentItemEditShortcutHint => 'Ctrl+Enter로 저장, Esc로 취소';
+
+  @override
+  String get segmentItemTranslationHint => '번역문 입력...';
+
+  @override
+  String segmentItemSaveFailed(String error) {
+    return '저장 실패: $error';
+  }
 
   @override
   String get segmentPdfFontSizeTitle => 'PDF 글꼴 크기';

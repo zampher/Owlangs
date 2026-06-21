@@ -107,13 +107,127 @@ def _typst_rotate_angle(rotation: int) -> int:
     return 0
 
 
+def _rotated_reading_dimensions(
+    width: float,
+    height: float,
+    rotation: int,
+) -> tuple[float, float]:
+    """Return inner layout (width, height) before Typst ``rotate()`` maps into bbox.
+
+    For 90°/270° the PDF bbox is tall and narrow; flow text is composed in swapped
+    dimensions so horizontal lines fill the reading-oriented area, then rotated into
+    the bbox.
+    """
+    if rotation in {90, 270}:
+        return height, width
+    return width, height
+
+
+# Backward-compatible alias used by table tests.
+_table_reading_dimensions = _rotated_reading_dimensions
+
+
+def _typst_emit_flow_placement_in_context(
+    *,
+    x0: float,
+    y0: float,
+    bbox_w: float,
+    bbox_h: float,
+    inner_var: str,
+    outer_var: str,
+    rotation: int,
+    fill_arg: str = "",
+    indent: str = "  ",
+) -> list[str]:
+    """Emit ``place(...)`` lines for use inside an existing ``#context`` block.
+
+    Required when *inner_var* is bound with ``let`` inside that context (e.g.
+    after ``measure()`` for auto-scaled short plain text).
+    """
+    if rotation in {90, 180, 270}:
+        typst_angle = _typst_rotate_angle(rotation)
+        return [
+            f"{indent}let {outer_var} = block(width: {round(bbox_w, 1)}pt, "
+            f"height: {round(bbox_h, 1)}pt, clip: true{fill_arg})[",
+            f"{indent}  #align(center + horizon)[",
+            f"{indent}    #rotate({typst_angle}deg, origin: center, {inner_var})",
+            f"{indent}  ]",
+            f"{indent}]",
+            f"{indent}place(top + left, dx: {round(x0, 1)}pt, dy: {round(y0, 1)}pt, "
+            f"{outer_var})",
+        ]
+    return [
+        f"{indent}place(top + left, dx: {round(x0, 1)}pt, dy: {round(y0, 1)}pt, "
+        f"{inner_var})",
+    ]
+
+
+def _typst_emit_rotated_placement(
+    *,
+    x0: float,
+    y0: float,
+    bbox_w: float,
+    bbox_h: float,
+    inner_var: str,
+    outer_var: str,
+    rotation: int,
+    fill_arg: str = "",
+) -> list[str]:
+    """Place *inner_var* inside a clipped bbox, rotating when needed."""
+    if rotation in {90, 180, 270}:
+        typst_angle = _typst_rotate_angle(rotation)
+        return [
+            f"#let {outer_var} = block(width: {round(bbox_w, 1)}pt, "
+            f"height: {round(bbox_h, 1)}pt, clip: true{fill_arg})[",
+            f"  #align(center + horizon)[",
+            f"    #rotate({typst_angle}deg, origin: center, {inner_var})",
+            f"  ]",
+            f"]",
+            "#context {",
+            f"  place(top + left, dx: {round(x0, 1)}pt, dy: {round(y0, 1)}pt, "
+            f"{outer_var})",
+            "}",
+        ]
+    return [
+        "#context {",
+        f"  place(top + left, dx: {round(x0, 1)}pt, dy: {round(y0, 1)}pt, {inner_var})",
+        "}",
+    ]
+
+
+def _typst_place_flow_block(
+    x0: float,
+    y0: float,
+    bbox_w: float,
+    bbox_h: float,
+    inner_var: str,
+    var_prefix: str,
+    rotation: int,
+    *,
+    fill_arg: str = "",
+    dy_offset: float = 0.0,
+) -> str:
+    """Place a flow-text inner block, clipping to bbox when rotated."""
+    outer_var = f"{var_prefix}_bbox"
+    lines = _typst_emit_rotated_placement(
+        x0=x0,
+        y0=y0 + dy_offset,
+        bbox_w=bbox_w,
+        bbox_h=bbox_h,
+        inner_var=inner_var,
+        outer_var=outer_var,
+        rotation=rotation,
+        fill_arg=fill_arg,
+    )
+    return "\n".join(lines) + "\n"
+
+
 def _typst_place_context(x_pt: float, y_pt: float, body_name: str,
                         *, rotation: int = 0) -> str:
     """Generate a Typst #context { place(...) } call for overlay placement.
 
-    When *rotation* is 90, 180, or 270, the body is wrapped in
-    ``rotate(angle, origin: center, body)`` so that the content is
-    visually rotated within its bounding box (counter-clockwise).
+    Prefer ``_typst_place_flow_block`` for rotated flow text so content stays
+    inside the bbox. *rotation* here is legacy and rotates without clipping.
     """
     typst_angle = _typst_rotate_angle(rotation)
     body_ref = (
@@ -394,6 +508,7 @@ def _render_plain_block(block_id: str, block: RenderBlock,
     width = max(MIN_BLOCK_SIZE_PT, x1 - x0)
     height = max(MIN_BLOCK_SIZE_PT, y1 - y0)
     rotation = getattr(block, "rotation", 0) or 0
+    layout_width, layout_height = _rotated_reading_dimensions(width, height, rotation)
     text_fill = _typst_rgb(block.text_color)
     var_prefix = block_id.replace("-", "_")
     block_fill = _block_fill_arg(block, force_opaque=force_opaque)
@@ -417,7 +532,7 @@ def _render_plain_block(block_id: str, block: RenderBlock,
             fit_call = _block_markdown_fit_call(
                 block,
                 text_var,
-                min(height * 0.9, block.fit_max_height_pt or height),
+                min(layout_height * 0.9, block.fit_max_height_pt or layout_height),
                 font_style,
                 first_indent,
                 justify,
@@ -430,8 +545,12 @@ def _render_plain_block(block_id: str, block: RenderBlock,
 
         parts = [
             f"#let {text_var} = \"{_escape_typst_string(sanitized)}\"",
-            _typst_markdown_block(body_var, width, height, block_fill, body_expr),
-            _typst_place_context(x0, y0, body_var, rotation=rotation),
+            _typst_markdown_block(
+                body_var, layout_width, layout_height, block_fill, body_expr),
+            _typst_place_flow_block(
+                x0, y0, width, height, body_var, var_prefix, rotation,
+                fill_arg=block_fill if rotation in {90, 180, 270} else "",
+            ).rstrip(),
         ]
         return "\n".join(parts) + "\n"
 
@@ -441,47 +560,54 @@ def _render_plain_block(block_id: str, block: RenderBlock,
         box_var = f"{var_prefix}_box"
         lines = [
             f"#let {text_var} = \"{_escape_typst_string(text)}\"",
-            f"#let {box_var} = block(width: {width}pt, height: {height}pt{block_fill})"
+            f"#let {box_var} = block(width: {layout_width}pt, height: {layout_height}pt{block_fill})"
             f"[#{{ {_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; {text_var} }}]",
-            _typst_place_context(x0, y0, box_var, rotation=rotation),
+            _typst_place_flow_block(
+                x0, y0, width, height, box_var, var_prefix, rotation,
+                fill_arg=block_fill if rotation in {90, 180, 270} else "",
+            ).rstrip(),
         ]
         return "\n".join(lines) + "\n"
 
-    # Short text: use a simple box with auto-scaling
+    # Short text: use a simple box with auto-scaling (measure + place in one context).
     text_var = f"{var_prefix}_txt"
     base_var = f"{var_prefix}_base"
-    scaled_var = f"{var_prefix}_scaled"
+    inner_var = f"{var_prefix}_inner"
+    outer_var = f"{var_prefix}_bbox"
+    rotate_fill = block_fill if rotation in {90, 180, 270} else ""
 
     lines = [
         f"#let {text_var} = \"{_escape_typst_string(text)}\"",
         f"#let {base_var} = box[#{{ {_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; {text_var} }}]",
         "#context {",
         f"  let base-size = measure({base_var})",
-        f"  let scaled-font = if base-size.width > {width}pt "
-        f"{{ {block.font_size_pt}pt * ({width}pt / base-size.width) }} "
+        f"  let scaled-font = if base-size.width > {layout_width}pt "
+        f"{{ {block.font_size_pt}pt * ({layout_width}pt / base-size.width) }} "
         f"else {{ {block.font_size_pt}pt }}",
-        f"  let {scaled_var} = block(width: {width}pt, height: {height}pt{block_fill})"
+        f"  let {inner_var} = block(width: {layout_width}pt, height: {layout_height}pt{block_fill})"
         f"[#{{ set text(size: scaled-font, weight: "
         f"\"{block.font_weight}\"{_typst_font_style_clause(font_style)}, fill: {text_fill}); {text_var} }}]",
+        *_typst_emit_flow_placement_in_context(
+            x0=x0,
+            y0=y0,
+            bbox_w=width,
+            bbox_h=height,
+            inner_var=inner_var,
+            outer_var=outer_var,
+            rotation=rotation,
+            fill_arg=rotate_fill,
+        ),
+        "}",
     ]
-    if rotation in {90, 180, 270}:
-        typst_angle = _typst_rotate_angle(rotation)
-        lines.append(
-            f"  place(top + left, dx: {round(x0, 1)}pt, dy: {round(y0, 1)}pt, "
-            f"rotate({typst_angle}deg, origin: center, {scaled_var}))"
-        )
-    else:
-        lines.append(
-            f"  place(top + left, dx: {round(x0, 1)}pt, dy: {round(y0, 1)}pt, "
-            f"{scaled_var})"
-        )
-    lines.append("}")
     return "\n".join(lines) + "\n"
 
 
 def _render_preserved_line_boxes(block_id: str, block: RenderBlock,
                                   text_fill: str, block_fill: str) -> str:
     """Render blocks with preserved line breaks using per-line fit."""
+    x0, y0, x1, y1 = block.inner_bbox
+    width = max(MIN_BLOCK_SIZE_PT, x1 - x0)
+    height = max(MIN_BLOCK_SIZE_PT, y1 - y0)
     parts: list[str] = []
     font_weight = block.font_weight or "regular"
     font_style = getattr(block, "font_style", None) or "normal"
@@ -499,6 +625,7 @@ def _render_preserved_line_boxes(block_id: str, block: RenderBlock,
             _typst_place_context(cx0, cy0, cover_name).rstrip(),
         ])
 
+    line_placements: list[str] = []
     for index, line in enumerate(block.preserved_line_boxes or []):
         if len(line.bbox) != 4 or not str(line.text or "").strip():
             continue
@@ -518,11 +645,17 @@ def _render_preserved_line_boxes(block_id: str, block: RenderBlock,
                 0.0,
                 "false",
             )
-            parts.extend([
-                f"#let {line_name} = \"{_escape_typst_string(line.text)}\"",
-                _typst_markdown_block(body_name, lw, lh, block_fill, body_expr),
-                _typst_place_context(lx0, ly0, body_name, rotation=rotation).rstrip(),
-            ])
+            parts.append(f"#let {line_name} = \"{_escape_typst_string(line.text)}\"")
+            parts.append(
+                _typst_markdown_block(body_name, lw, lh, block_fill, body_expr).rstrip())
+            if rotation in {90, 180, 270}:
+                line_placements.append(
+                    f"  place(top + left, dx: {round(lx0 - x0, 1)}pt, "
+                    f"dy: {round(ly0 - y0, 1)}pt, {body_name})"
+                )
+            else:
+                parts.append(
+                    _typst_place_context(lx0, ly0, body_name).rstrip())
             continue
         max_font_pt = round(max(1.0, min(block.font_size_pt, lh * 0.86)), 2)
         min_font_pt = round(max(1.0, min(max_font_pt, lh * 0.58)), 2)
@@ -531,9 +664,30 @@ def _render_preserved_line_boxes(block_id: str, block: RenderBlock,
             _typst_markdown_block(
                 body_name, lw, lh, block_fill,
                 f"set text(fill: {text_fill}); "
-                f"{_typst_single_line_fit_call(line_name, max_font_pt, min_font_pt, lw, lh, font_weight, font_style, 'false')}"),
-            _typst_place_context(lx0, ly0, body_name, rotation=rotation).rstrip(),
+                f"{_typst_single_line_fit_call(line_name, max_font_pt, min_font_pt, lw, lh, font_weight, font_style, 'false')}").rstrip(),
         ])
+        if rotation in {90, 180, 270}:
+            line_placements.append(
+                f"  place(top + left, dx: {round(lx0 - x0, 1)}pt, "
+                f"dy: {round(ly0 - y0, 1)}pt, {body_name})"
+            )
+        else:
+            parts.append(_typst_place_context(lx0, ly0, body_name).rstrip())
+
+    if rotation in {90, 180, 270} and line_placements:
+        inner_var = f"{var_prefix}_inner"
+        parts.extend([
+            f"#let {inner_var} = block(width: {round(width, 1)}pt, "
+            f"height: {round(height, 1)}pt{block_fill})[",
+            "#context {",
+            *line_placements,
+            "}]",
+            _typst_place_flow_block(
+                x0, y0, width, height, inner_var, var_prefix, rotation,
+                fill_arg=block_fill,
+            ).rstrip(),
+        ])
+
     return "\n".join(parts) + ("\n" if parts else "")
 
 
@@ -544,9 +698,11 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
     width = max(MIN_BLOCK_SIZE_PT, x1 - x0)
     height = max(MIN_BLOCK_SIZE_PT, y1 - y0)
     rotation = getattr(block, "rotation", 0) or 0
+    layout_width, layout_height = _rotated_reading_dimensions(width, height, rotation)
     text_fill = _typst_rgb(block.text_color)
     var_prefix = block_id.replace("-", "_")
     block_fill = _block_fill_arg(block, force_opaque=force_opaque)
+    rotate_fill = block_fill if rotation in {90, 180, 270} else ""
 
     text = block.markdown_text or block.plain_text
     if not text.strip():
@@ -566,9 +722,9 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
         text,
         block.math_map,
         font_size_pt=block.font_size_pt,
-        box_height_pt=height,
+        box_height_pt=layout_height,
     )
-    content_fit_height = max(MIN_BLOCK_SIZE_PT, height - formula_insets.total_pt)
+    content_fit_height = max(MIN_BLOCK_SIZE_PT, layout_height - formula_insets.total_pt)
 
     # TOC entries (dedicated TOC entry dispatch)
     if block.toc_entries:
@@ -584,15 +740,18 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
         line_values = [line.strip() for line in text.splitlines() if line.strip()]
         body_expr = _typst_preserved_lines_expr(
             lines_name, block.font_size_pt, block.leading_em,
-            block.font_weight, font_style, text_fill, justify, width)
+            block.font_weight, font_style, text_fill, justify, layout_width)
         parts = [
             f"#let {lines_name} = (" + ", ".join(
                 f"\"{_escape_typst_string(v)}\"" for v in line_values) + ("," if len(line_values) == 1 else "") + ")",
             _typst_markdown_block(
-                body_var, width, height, block_fill, body_expr,
+                body_var, layout_width, layout_height, block_fill, body_expr,
                 content_top_inset_pt=formula_insets.top_pt,
                 content_bottom_inset_pt=formula_insets.bottom_pt),
-            _typst_place_context(x0, y0, body_var, rotation=rotation),
+            _typst_place_flow_block(
+                x0, y0, width, height, body_var, var_prefix, rotation,
+                fill_arg=rotate_fill,
+            ).rstrip(),
         ]
         return "\n".join(parts) + "\n"
 
@@ -601,7 +760,7 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
             # Single-line fit mode (block renderer path)
             max_font_pt = max(block.font_size_pt, block.fit_max_font_size_pt or block.font_size_pt)
             min_font_pt = max(1.0, min(block.fit_min_font_size_pt or block.font_size_pt, block.font_size_pt))
-            fit_w = max(width, block.fit_target_width_pt) if block.fit_target_width_pt > 0 else width
+            fit_w = max(layout_width, block.fit_target_width_pt) if block.fit_target_width_pt > 0 else layout_width
             fit_h = max(MIN_BLOCK_SIZE_PT, min(content_fit_height, block.fit_max_height_pt or content_fit_height))
             shift_up = max(0.0, block.fit_shift_up_pt)
             fit_call = _typst_single_line_fit_call(
@@ -610,11 +769,14 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
             parts = [
                 f"#let {md_var} = \"{_escape_typst_string(text)}\"",
                 _typst_markdown_block(
-                    body_var, fit_w, height, block_fill,
+                    body_var, fit_w, layout_height, block_fill,
                     f"set text(fill: {text_fill}); {fit_call}",
                     content_top_inset_pt=formula_insets.top_pt,
                     content_bottom_inset_pt=formula_insets.bottom_pt),
-                _typst_place_context(x0, y0 - shift_up, body_var, rotation=rotation),
+                _typst_place_flow_block(
+                    x0, y0, width, height, body_var, var_prefix, rotation,
+                    fill_arg=rotate_fill, dy_offset=-shift_up,
+                ).rstrip(),
             ]
             return "\n".join(parts) + "\n"
 
@@ -630,11 +792,14 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
         parts = [
             f"#let {md_var} = \"{_escape_typst_string(text)}\"",
             _typst_markdown_block(
-                body_var, width, height, block_fill,
+                body_var, layout_width, layout_height, block_fill,
                 f"set text(fill: {text_fill}); {fit_call}",
                 content_top_inset_pt=formula_insets.top_pt,
                 content_bottom_inset_pt=formula_insets.bottom_pt),
-            _typst_place_context(x0, y0, body_var, rotation=rotation),
+            _typst_place_flow_block(
+                x0, y0, width, height, body_var, var_prefix, rotation,
+                fill_arg=rotate_fill,
+            ).rstrip(),
         ]
         return "\n".join(parts) + "\n"
     else:
@@ -645,10 +810,13 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
         parts = [
             f"#let {md_var} = \"{_escape_typst_string(text)}\"",
             _typst_markdown_block(
-                body_var, width, height, block_fill, body_expr,
+                body_var, layout_width, layout_height, block_fill, body_expr,
                 content_top_inset_pt=formula_insets.top_pt,
                 content_bottom_inset_pt=formula_insets.bottom_pt),
-            _typst_place_context(x0, y0, body_var, rotation=rotation),
+            _typst_place_flow_block(
+                x0, y0, width, height, body_var, var_prefix, rotation,
+                fill_arg=rotate_fill,
+            ).rstrip(),
         ]
         return "\n".join(parts) + "\n"
 
@@ -760,22 +928,6 @@ def _typst_table_stroke_arg(stroke_pt: float) -> str:
     )
 
 
-def _table_reading_dimensions(
-    width: float,
-    height: float,
-    rotation: int,
-) -> tuple[float, float]:
-    """Return inner layout (width, height) before Typst ``rotate()`` maps into bbox.
-
-    For 90°/270° the PDF bbox is tall and narrow; the table is composed in swapped
-    dimensions so horizontal text fills the reading-oriented area, then rotated into
-    the bbox. Row/column structure comes from Typst rotation, not data transposition.
-    """
-    if rotation in {90, 270}:
-        return height, width
-    return width, height
-
-
 def _estimate_table_font_pt(
     *,
     layout_width: float,
@@ -810,7 +962,7 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
     width = max(MIN_BLOCK_SIZE_PT, x1 - x0)
     height = max(MIN_BLOCK_SIZE_PT, y1 - y0)
     rotation = getattr(block, "rotation", 0) or 0
-    layout_width, layout_height = _table_reading_dimensions(width, height, rotation)
+    layout_width, layout_height = _rotated_reading_dimensions(width, height, rotation)
     text_fill = _typst_rgb(block.text_color)
     var_prefix = block_id.replace("-", "_")
 
@@ -903,19 +1055,18 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
         f"[#{{ {table_var} }}]"
     )
     if rotation in {90, 180, 270}:
-        typst_angle = _typst_rotate_angle(rotation)
-        parts.extend([
-            f"#let {outer_var} = block(width: {bbox_w}pt, height: {bbox_h}pt, "
-            f"clip: true{fill_arg})[",
-            f"  #align(center + horizon)[",
-            f"    #rotate({typst_angle}deg, origin: center, {inner_var})",
-            f"  ]",
-            f"]",
-            "#context {",
-            f"  place(top + left, dx: {round(x0, 1)}pt, dy: {round(y0, 1)}pt, "
-            f"{outer_var})",
-            "}",
-        ])
+        parts.extend(
+            _typst_emit_rotated_placement(
+                x0=x0,
+                y0=y0,
+                bbox_w=bbox_w,
+                bbox_h=bbox_h,
+                inner_var=inner_var,
+                outer_var=outer_var,
+                rotation=rotation,
+                fill_arg=fill_arg,
+            )
+        )
     else:
         parts.extend([
             f"#let {outer_var} = block(width: {bbox_w}pt, height: {bbox_h}pt"

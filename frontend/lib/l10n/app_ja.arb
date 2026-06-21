@@ -1238,6 +1238,21 @@
   "translationQueueSelectFormatsTitle": "ダウンロード形式を選択",
   "translationQueueSelectFormatsFormatLabel": "形式",
   "translationQueueSelectFormatsDownload": "ダウンロード",
+  "translationQueueBatchLabelHint": "バッチラベル（タスクキューのグループ分け用）",
+  "translationQueueBatchCreateFailed": "アップロードバッチの作成に失敗しました",
+  "translationQueueUngroupedSection": "グループなし",
+  "translationQueueBatchProgress": "完了 {completed}/{total}",
+  "@translationQueueBatchProgress": {
+    "placeholders": {
+      "completed": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "translationQueueBatchSelectAll": "バッチを選択",
+  "translationQueueBatchDownload": "バッチをダウンロード",
+  "translationQueueBatchDelete": "バッチを削除",
+  "translationQueueBatchDeleteTitle": "このバッチを削除しますか？",
+  "translationQueueBatchDeleteMessage": "このバッチ内のすべてのタスクがキューから削除され、キャッシュ結果も削除されます。",
   "reeditTitle": "翻訳を編集",
   "reeditSaveExport": "保存してエクスポート",
   "reeditFetchError": "翻訳セグメントの読み込みに失敗しました。",
@@ -1304,6 +1319,8 @@
   "translationExportPdfPreserveLayoutDesc": "元の PDF 版式に訳文を重ね、レイアウトと図表位置を維持",
   "translationExportPdfReflow": "再排版 PDF",
   "translationExportPdfReflowDesc": "訳文 Markdown から再排版。版式は原文と異なる場合があります",
+  "translationExportImageOriginalLayout": "原レイアウト画像",
+  "translationExportImageOriginalLayoutDesc": "OCR テキスト領域を消去し、原画像上に訳文を書き込みます",
 
   "translationPreviewDialogTitle": "プレビュー設定",
   "translationPreviewStart": "プレビューを開始",
@@ -1365,6 +1382,72 @@
   "segmentPdfTypographyResetFont": "フォントを自動に戻す",
   "segmentPdfTypographyResetLeading": "行間を自動に戻す",
   "segmentPdfFontSizeApply": "適用",
+  "segmentRotationLabel": "{degrees}°",
+  "@segmentRotationLabel": {
+    "placeholders": {
+      "degrees": {
+        "type": "int"
+      }
+    }
+  },
+  "segmentRotationOff": "回転",
+  "segmentRotationNone": "回転なし",
+  "segmentRotationMenuTitle": "角度",
+  "segmentTableStrokeLabel": "{strokePt} pt",
+  "@segmentTableStrokeLabel": {
+    "placeholders": {
+      "strokePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentTableStrokeOff": "罫線",
+  "segmentTableStrokeNone": "なし",
+  "segmentTableStrokeMenuTitle": "線幅",
+  "segmentItemExclude": "除外",
+  "segmentItemEdit": "編集",
+  "segmentItemRetry": "再試行",
+  "segmentItemMarkedRetry": "再試行マーク済み",
+  "segmentItemClear": "クリア",
+  "segmentItemCleared": "クリア済み",
+  "segmentItemFix": "修正",
+  "segmentItemExclusionBadge": "除外: {reason}",
+  "@segmentItemExclusionBadge": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentItemExclusionRemoveTooltip": "クリックして除外を解除",
+  "segmentItemExclusionLockedTooltip": "このセグメントは自動除外されており、解除できません",
+  "segmentItemExclusionEditTooltip": "クリックして除外理由を編集",
+  "segmentItemExclusionRemoved": "除外を解除しました",
+  "segmentItemExclusionReasonUpdated": "除外理由を更新しました",
+  "segmentItemExclusionUpdateFailed": "除外理由の更新に失敗しました: {error}",
+  "@segmentItemExclusionUpdateFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentItemUndoEditTooltip": "元に戻す（編集）",
+  "segmentItemRedoEditTooltip": "やり直し（編集）",
+  "segmentItemUndoSaveTooltip": "元に戻す（保存）",
+  "segmentItemRedoSaveTooltip": "やり直し（保存）",
+  "segmentItemCancel": "キャンセル",
+  "segmentItemSave": "保存",
+  "segmentItemEditShortcutHint": "Ctrl+Enter で保存、Esc でキャンセル",
+  "segmentItemTranslationHint": "訳文を入力...",
+  "segmentItemSaveFailed": "保存に失敗しました: {error}",
+  "@segmentItemSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "translationPreviewRevisionSyncScrollDesc": "有効にすると、原文と訳文プレビューの個別スクロールバーを非表示にし、間に共通スクロールバーを表示して連動スクロールします",
   "translationPreviewPdfRevision": "プレビュー修正",
   "translationPreviewPdfRevisionCompare": "対照プレビュー",

@@ -1431,6 +1431,8 @@
     }
   },
   "segmentRotationOff": "Rotate",
+  "segmentRotationNone": "No rotation",
+  "segmentRotationMenuTitle": "Angle",
   "segmentTableStrokeLabel": "{strokePt} pt",
   "@segmentTableStrokeLabel": {
     "placeholders": {
@@ -1442,6 +1444,50 @@
   "segmentTableStrokeOff": "Grid",
   "segmentTableStrokeNone": "None",
   "segmentTableStrokeMenuTitle": "Border weight",
+  "segmentItemExclude": "Exclude",
+  "segmentItemEdit": "Edit",
+  "segmentItemRetry": "Retry",
+  "segmentItemMarkedRetry": "Marked Retry",
+  "segmentItemClear": "Clear",
+  "segmentItemCleared": "Cleared",
+  "segmentItemFix": "Fix",
+  "segmentItemExclusionBadge": "EX: {reason}",
+  "@segmentItemExclusionBadge": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentItemExclusionRemoveTooltip": "Click to remove exclusion",
+  "segmentItemExclusionLockedTooltip": "This segment is automatically excluded and cannot be unexcluded",
+  "segmentItemExclusionEditTooltip": "Click to edit exclusion reason",
+  "segmentItemExclusionRemoved": "Exclusion removed",
+  "segmentItemExclusionReasonUpdated": "Exclusion reason updated",
+  "segmentItemExclusionUpdateFailed": "Failed to update exclusion reason: {error}",
+  "@segmentItemExclusionUpdateFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentItemUndoEditTooltip": "Undo (Edit)",
+  "segmentItemRedoEditTooltip": "Redo (Edit)",
+  "segmentItemUndoSaveTooltip": "Undo (Save)",
+  "segmentItemRedoSaveTooltip": "Redo (Save)",
+  "segmentItemCancel": "Cancel",
+  "segmentItemSave": "Save",
+  "segmentItemEditShortcutHint": "Press Ctrl+Enter to save, Esc to cancel",
+  "segmentItemTranslationHint": "Enter translation...",
+  "segmentItemSaveFailed": "Failed to save: {error}",
+  "@segmentItemSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "segmentPdfFontSizeTitle": "PDF font size",
   "segmentPdfTypographyTitle": "PDF typography",
   "segmentPdfTypographyFontTitle": "PDF font",

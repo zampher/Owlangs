@@ -612,11 +612,12 @@ class AppLocalizationsEs extends AppLocalizations {
       'Superpone la traducción sobre el diseño PDF original';
 
   @override
-  String get translationExportImageOriginalLayout => 'Original layout image';
+  String get translationExportImageOriginalLayout =>
+      'Imagen con diseño original';
 
   @override
   String get translationExportImageOriginalLayoutDesc =>
-      'Erase OCR text and write translation on the source image';
+      'Borra el texto OCR y escribe la traducción sobre la imagen original';
 
   @override
   String get translationExportPdfReflow => 'PDF recompuesto';
@@ -3793,35 +3794,35 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get translationQueueBatchLabelHint =>
-      'Batch label (for task queue grouping)';
+      'Etiqueta del lote (para agrupar en la cola)';
 
   @override
   String get translationQueueBatchCreateFailed =>
-      'Failed to create upload batch';
+      'Error al crear el lote de carga';
 
   @override
-  String get translationQueueUngroupedSection => 'Ungrouped';
+  String get translationQueueUngroupedSection => 'Sin agrupar';
 
   @override
   String translationQueueBatchProgress(int completed, int total) {
-    return '$completed/$total completed';
+    return '$completed/$total completados';
   }
 
   @override
-  String get translationQueueBatchSelectAll => 'Select batch';
+  String get translationQueueBatchSelectAll => 'Seleccionar lote';
 
   @override
-  String get translationQueueBatchDownload => 'Download batch';
+  String get translationQueueBatchDownload => 'Descargar lote';
 
   @override
-  String get translationQueueBatchDelete => 'Delete batch';
+  String get translationQueueBatchDelete => 'Eliminar lote';
 
   @override
-  String get translationQueueBatchDeleteTitle => 'Delete this batch?';
+  String get translationQueueBatchDeleteTitle => '¿Eliminar este lote?';
 
   @override
   String get translationQueueBatchDeleteMessage =>
-      'All tasks in this batch will be removed from the queue and their cached results deleted.';
+      'Se eliminarán todas las tareas del lote y sus resultados en caché.';
 
   @override
   String get reeditTitle => 'Editar traducción';
@@ -3961,7 +3962,13 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get segmentRotationOff => 'Rotate';
+  String get segmentRotationOff => 'Rotar';
+
+  @override
+  String get segmentRotationNone => 'Sin rotación';
+
+  @override
+  String get segmentRotationMenuTitle => 'Ángulo';
 
   @override
   String segmentTableStrokeLabel(String strokePt) {
@@ -3969,13 +3976,93 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get segmentTableStrokeOff => 'Grid';
+  String get segmentTableStrokeOff => 'Cuadrícula';
 
   @override
-  String get segmentTableStrokeNone => 'None';
+  String get segmentTableStrokeNone => 'Ninguna';
 
   @override
-  String get segmentTableStrokeMenuTitle => 'Border weight';
+  String get segmentTableStrokeMenuTitle => 'Grosor del borde';
+
+  @override
+  String get segmentItemExclude => 'Excluir';
+
+  @override
+  String get segmentItemEdit => 'Editar';
+
+  @override
+  String get segmentItemRetry => 'Reintentar';
+
+  @override
+  String get segmentItemMarkedRetry => 'Marcado para reintentar';
+
+  @override
+  String get segmentItemClear => 'Borrar';
+
+  @override
+  String get segmentItemCleared => 'Borrado';
+
+  @override
+  String get segmentItemFix => 'Corregir';
+
+  @override
+  String segmentItemExclusionBadge(String reason) {
+    return 'EX: $reason';
+  }
+
+  @override
+  String get segmentItemExclusionRemoveTooltip =>
+      'Haga clic para quitar la exclusión';
+
+  @override
+  String get segmentItemExclusionLockedTooltip =>
+      'Este segmento se excluyó automáticamente y no se puede revertir';
+
+  @override
+  String get segmentItemExclusionEditTooltip =>
+      'Haga clic para editar el motivo de exclusión';
+
+  @override
+  String get segmentItemExclusionRemoved => 'Exclusión eliminada';
+
+  @override
+  String get segmentItemExclusionReasonUpdated =>
+      'Motivo de exclusión actualizado';
+
+  @override
+  String segmentItemExclusionUpdateFailed(String error) {
+    return 'Error al actualizar el motivo de exclusión: $error';
+  }
+
+  @override
+  String get segmentItemUndoEditTooltip => 'Deshacer (edición)';
+
+  @override
+  String get segmentItemRedoEditTooltip => 'Rehacer (edición)';
+
+  @override
+  String get segmentItemUndoSaveTooltip => 'Deshacer (guardado)';
+
+  @override
+  String get segmentItemRedoSaveTooltip => 'Rehacer (guardado)';
+
+  @override
+  String get segmentItemCancel => 'Cancelar';
+
+  @override
+  String get segmentItemSave => 'Guardar';
+
+  @override
+  String get segmentItemEditShortcutHint =>
+      'Pulse Ctrl+Enter para guardar, Esc para cancelar';
+
+  @override
+  String get segmentItemTranslationHint => 'Introduzca la traducción...';
+
+  @override
+  String segmentItemSaveFailed(String error) {
+    return 'Error al guardar: $error';
+  }
 
   @override
   String get segmentPdfFontSizeTitle => 'Tamaño de fuente PDF';

@@ -1368,6 +1368,8 @@
     }
   },
   "segmentRotationOff": "旋转",
+  "segmentRotationNone": "无旋转",
+  "segmentRotationMenuTitle": "角度",
   "segmentTableStrokeLabel": "{strokePt} pt",
   "@segmentTableStrokeLabel": {
     "placeholders": {
@@ -1379,6 +1381,50 @@
   "segmentTableStrokeOff": "表格线",
   "segmentTableStrokeNone": "无",
   "segmentTableStrokeMenuTitle": "线宽",
+  "segmentItemExclude": "排除",
+  "segmentItemEdit": "编辑",
+  "segmentItemRetry": "重试",
+  "segmentItemMarkedRetry": "已标记重试",
+  "segmentItemClear": "清空",
+  "segmentItemCleared": "已清空",
+  "segmentItemFix": "修复",
+  "segmentItemExclusionBadge": "排除: {reason}",
+  "@segmentItemExclusionBadge": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentItemExclusionRemoveTooltip": "点击取消排除",
+  "segmentItemExclusionLockedTooltip": "此片段已自动排除，无法取消",
+  "segmentItemExclusionEditTooltip": "点击编辑排除原因",
+  "segmentItemExclusionRemoved": "已取消排除",
+  "segmentItemExclusionReasonUpdated": "排除原因已更新",
+  "segmentItemExclusionUpdateFailed": "更新排除原因失败：{error}",
+  "@segmentItemExclusionUpdateFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentItemUndoEditTooltip": "撤销（编辑）",
+  "segmentItemRedoEditTooltip": "重做（编辑）",
+  "segmentItemUndoSaveTooltip": "撤销（保存）",
+  "segmentItemRedoSaveTooltip": "重做（保存）",
+  "segmentItemCancel": "取消",
+  "segmentItemSave": "保存",
+  "segmentItemEditShortcutHint": "按 Ctrl+Enter 保存，Esc 取消",
+  "segmentItemTranslationHint": "输入译文...",
+  "segmentItemSaveFailed": "保存失败：{error}",
+  "@segmentItemSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "segmentPdfFontSizeTitle": "PDF 字号",
   "segmentPdfTypographyTitle": "PDF 字体",
   "segmentPdfTypographyFontTitle": "PDF 字体",

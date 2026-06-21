@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:pdfx/pdfx.dart';
 
 import 'translation_result/layout_bbox_highlight.dart';
+import 'pdf_page_utils.dart';
 
 /// Renders one PDF page at [maxWidth] using pdfium/pdf.js for pixel-accurate output.
 ///
@@ -50,6 +51,7 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
   Object? _error;
   bool _loading = true;
   bool _disposed = false;
+  int _renderGeneration = 0;
 
   @override
   void initState() {
@@ -72,13 +74,24 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
   @override
   void dispose() {
     _disposed = true;
+    _renderGeneration++;
     super.dispose();
+  }
+
+  bool _isRenderCurrent(int generation, {required String documentId}) {
+    return generation == _renderGeneration &&
+        !_disposed &&
+        mounted &&
+        widget.document.id == documentId;
   }
 
   Future<void> _renderPage() async {
     if (_disposed || !mounted) {
       return;
     }
+    final int generation = ++_renderGeneration;
+    final String documentId = widget.document.id;
+
     setState(() {
       _loading = true;
       _error = null;
@@ -88,8 +101,7 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
     PdfPage? page;
     try {
       page = await widget.document.getPage(widget.pageNumber);
-      if (_disposed || !mounted) {
-        await page.close();
+      if (!_isRenderCurrent(generation, documentId: documentId)) {
         return;
       }
       _pdfPageWidth = page.width;
@@ -104,7 +116,7 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
         backgroundColor: '#ffffff',
         quality: 100,
       );
-      if (_disposed || !mounted) {
+      if (!_isRenderCurrent(generation, documentId: documentId)) {
         return;
       }
       setState(() {
@@ -113,7 +125,7 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
         _loading = false;
       });
     } catch (error) {
-      if (_disposed || !mounted) {
+      if (!_isRenderCurrent(generation, documentId: documentId)) {
         return;
       }
       setState(() {
@@ -121,7 +133,7 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
         _loading = false;
       });
     } finally {
-      await page?.close();
+      await safeClosePdfPage(page);
     }
   }
 

@@ -1238,6 +1238,21 @@
   "translationQueueSelectFormatsTitle": "다운로드 형식 선택",
   "translationQueueSelectFormatsFormatLabel": "형식",
   "translationQueueSelectFormatsDownload": "다운로드",
+  "translationQueueBatchLabelHint": "배치 레이블(작업 큐 그룹화용)",
+  "translationQueueBatchCreateFailed": "업로드 배치 생성에 실패했습니다",
+  "translationQueueUngroupedSection": "그룹 없음",
+  "translationQueueBatchProgress": "완료 {completed}/{total}",
+  "@translationQueueBatchProgress": {
+    "placeholders": {
+      "completed": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "translationQueueBatchSelectAll": "배치 선택",
+  "translationQueueBatchDownload": "배치 다운로드",
+  "translationQueueBatchDelete": "배치 삭제",
+  "translationQueueBatchDeleteTitle": "이 배치를 삭제하시겠습니까?",
+  "translationQueueBatchDeleteMessage": "이 배치의 모든 작업이 큐에서 제거되고 캐시된 결과도 삭제됩니다.",
   "reeditTitle": "번역 편집",
   "reeditSaveExport": "저장 및 내보내기",
   "reeditFetchError": "번역 세그먼트를 불러오지 못했습니다.",
@@ -1304,6 +1319,8 @@
   "translationExportPdfPreserveLayoutDesc": "원본 PDF 레이아웃에 번역을 겹쳐 구성과 차트 위치 유지",
   "translationExportPdfReflow": "재排版 PDF",
   "translationExportPdfReflowDesc": "번역 Markdown으로 재조판. 원문과 레이아웃이 다를 수 있음",
+  "translationExportImageOriginalLayout": "원본 레이아웃 이미지",
+  "translationExportImageOriginalLayoutDesc": "OCR 텍스트 영역을 지우고 원본 이미지 위에 번역문을 작성합니다",
 
   "translationPreviewDialogTitle": "미리보기 설정",
   "translationPreviewStart": "미리보기 시작",
@@ -1365,6 +1382,72 @@
   "segmentPdfTypographyResetFont": "글꼴 자동으로 재설정",
   "segmentPdfTypographyResetLeading": "줄 간격 자동으로 재설정",
   "segmentPdfFontSizeApply": "적용",
+  "segmentRotationLabel": "{degrees}°",
+  "@segmentRotationLabel": {
+    "placeholders": {
+      "degrees": {
+        "type": "int"
+      }
+    }
+  },
+  "segmentRotationOff": "회전",
+  "segmentRotationNone": "회전 없음",
+  "segmentRotationMenuTitle": "각도",
+  "segmentTableStrokeLabel": "{strokePt} pt",
+  "@segmentTableStrokeLabel": {
+    "placeholders": {
+      "strokePt": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentTableStrokeOff": "격자",
+  "segmentTableStrokeNone": "없음",
+  "segmentTableStrokeMenuTitle": "선 두께",
+  "segmentItemExclude": "제외",
+  "segmentItemEdit": "편집",
+  "segmentItemRetry": "재시도",
+  "segmentItemMarkedRetry": "재시도 표시됨",
+  "segmentItemClear": "지우기",
+  "segmentItemCleared": "지워짐",
+  "segmentItemFix": "수정",
+  "segmentItemExclusionBadge": "제외: {reason}",
+  "@segmentItemExclusionBadge": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentItemExclusionRemoveTooltip": "클릭하여 제외 해제",
+  "segmentItemExclusionLockedTooltip": "이 세그먼트는 자동으로 제외되어 해제할 수 없습니다",
+  "segmentItemExclusionEditTooltip": "클릭하여 제외 사유 편집",
+  "segmentItemExclusionRemoved": "제외가 해제되었습니다",
+  "segmentItemExclusionReasonUpdated": "제외 사유가 업데이트되었습니다",
+  "segmentItemExclusionUpdateFailed": "제외 사유 업데이트 실패: {error}",
+  "@segmentItemExclusionUpdateFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentItemUndoEditTooltip": "실행 취소(편집)",
+  "segmentItemRedoEditTooltip": "다시 실행(편집)",
+  "segmentItemUndoSaveTooltip": "실행 취소(저장)",
+  "segmentItemRedoSaveTooltip": "다시 실행(저장)",
+  "segmentItemCancel": "취소",
+  "segmentItemSave": "저장",
+  "segmentItemEditShortcutHint": "Ctrl+Enter로 저장, Esc로 취소",
+  "segmentItemTranslationHint": "번역문 입력...",
+  "segmentItemSaveFailed": "저장 실패: {error}",
+  "@segmentItemSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "translationPreviewRevisionSyncScrollDesc": "활성화하면 원문과 번역문 미리보기의 개별 스크롤바를 숨기고, 사이에 공통 스크롤바를 표시하여 연동 스크롤합니다",
   "translationPreviewPdfRevision": "미리보기 수정",
   "translationPreviewPdfRevisionCompare": "대조 미리보기",

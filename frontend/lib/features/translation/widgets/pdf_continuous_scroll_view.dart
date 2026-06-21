@@ -9,6 +9,7 @@ import 'package:pdfx/pdfx.dart';
 
 import '../../../shared/services/translation_service.dart';
 import 'pdf_continuous_page.dart';
+import 'pdf_page_utils.dart';
 
 /// Returns the 1-based page number whose body contains [anchorOffset].
 int visiblePdfPageAtScrollOffset({
@@ -212,7 +213,7 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
       } catch (_) {
         heights.add(_pageWidth * 1.414);
       } finally {
-        await page?.close();
+        await safeClosePdfPage(page);
       }
       if (!mounted) {
         return;

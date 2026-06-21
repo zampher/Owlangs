@@ -6872,6 +6872,18 @@ abstract class AppLocalizations {
   /// **'Rotate'**
   String get segmentRotationOff;
 
+  /// No description provided for @segmentRotationNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No rotation'**
+  String get segmentRotationNone;
+
+  /// No description provided for @segmentRotationMenuTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Angle'**
+  String get segmentRotationMenuTitle;
+
   /// No description provided for @segmentTableStrokeLabel.
   ///
   /// In en, this message translates to:
@@ -6895,6 +6907,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Border weight'**
   String get segmentTableStrokeMenuTitle;
+
+  /// No description provided for @segmentItemExclude.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude'**
+  String get segmentItemExclude;
+
+  /// No description provided for @segmentItemEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get segmentItemEdit;
+
+  /// No description provided for @segmentItemRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get segmentItemRetry;
+
+  /// No description provided for @segmentItemMarkedRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Marked Retry'**
+  String get segmentItemMarkedRetry;
+
+  /// No description provided for @segmentItemClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get segmentItemClear;
+
+  /// No description provided for @segmentItemCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleared'**
+  String get segmentItemCleared;
+
+  /// No description provided for @segmentItemFix.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix'**
+  String get segmentItemFix;
+
+  /// No description provided for @segmentItemExclusionBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'EX: {reason}'**
+  String segmentItemExclusionBadge(String reason);
+
+  /// No description provided for @segmentItemExclusionRemoveTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Click to remove exclusion'**
+  String get segmentItemExclusionRemoveTooltip;
+
+  /// No description provided for @segmentItemExclusionLockedTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'This segment is automatically excluded and cannot be unexcluded'**
+  String get segmentItemExclusionLockedTooltip;
+
+  /// No description provided for @segmentItemExclusionEditTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Click to edit exclusion reason'**
+  String get segmentItemExclusionEditTooltip;
+
+  /// No description provided for @segmentItemExclusionRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclusion removed'**
+  String get segmentItemExclusionRemoved;
+
+  /// No description provided for @segmentItemExclusionReasonUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclusion reason updated'**
+  String get segmentItemExclusionReasonUpdated;
+
+  /// No description provided for @segmentItemExclusionUpdateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to update exclusion reason: {error}'**
+  String segmentItemExclusionUpdateFailed(String error);
+
+  /// No description provided for @segmentItemUndoEditTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo (Edit)'**
+  String get segmentItemUndoEditTooltip;
+
+  /// No description provided for @segmentItemRedoEditTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Redo (Edit)'**
+  String get segmentItemRedoEditTooltip;
+
+  /// No description provided for @segmentItemUndoSaveTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo (Save)'**
+  String get segmentItemUndoSaveTooltip;
+
+  /// No description provided for @segmentItemRedoSaveTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Redo (Save)'**
+  String get segmentItemRedoSaveTooltip;
+
+  /// No description provided for @segmentItemCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get segmentItemCancel;
+
+  /// No description provided for @segmentItemSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get segmentItemSave;
+
+  /// No description provided for @segmentItemEditShortcutHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Press Ctrl+Enter to save, Esc to cancel'**
+  String get segmentItemEditShortcutHint;
+
+  /// No description provided for @segmentItemTranslationHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter translation...'**
+  String get segmentItemTranslationHint;
+
+  /// No description provided for @segmentItemSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to save: {error}'**
+  String segmentItemSaveFailed(String error);
 
   /// No description provided for @segmentPdfFontSizeTitle.
   ///

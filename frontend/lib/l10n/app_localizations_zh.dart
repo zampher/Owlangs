@@ -3734,6 +3734,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get segmentRotationOff => '旋转';
 
   @override
+  String get segmentRotationNone => '无旋转';
+
+  @override
+  String get segmentRotationMenuTitle => '角度';
+
+  @override
   String segmentTableStrokeLabel(String strokePt) {
     return '$strokePt pt';
   }
@@ -3746,6 +3752,81 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get segmentTableStrokeMenuTitle => '线宽';
+
+  @override
+  String get segmentItemExclude => '排除';
+
+  @override
+  String get segmentItemEdit => '编辑';
+
+  @override
+  String get segmentItemRetry => '重试';
+
+  @override
+  String get segmentItemMarkedRetry => '已标记重试';
+
+  @override
+  String get segmentItemClear => '清空';
+
+  @override
+  String get segmentItemCleared => '已清空';
+
+  @override
+  String get segmentItemFix => '修复';
+
+  @override
+  String segmentItemExclusionBadge(String reason) {
+    return '排除: $reason';
+  }
+
+  @override
+  String get segmentItemExclusionRemoveTooltip => '点击取消排除';
+
+  @override
+  String get segmentItemExclusionLockedTooltip => '此片段已自动排除，无法取消';
+
+  @override
+  String get segmentItemExclusionEditTooltip => '点击编辑排除原因';
+
+  @override
+  String get segmentItemExclusionRemoved => '已取消排除';
+
+  @override
+  String get segmentItemExclusionReasonUpdated => '排除原因已更新';
+
+  @override
+  String segmentItemExclusionUpdateFailed(String error) {
+    return '更新排除原因失败：$error';
+  }
+
+  @override
+  String get segmentItemUndoEditTooltip => '撤销（编辑）';
+
+  @override
+  String get segmentItemRedoEditTooltip => '重做（编辑）';
+
+  @override
+  String get segmentItemUndoSaveTooltip => '撤销（保存）';
+
+  @override
+  String get segmentItemRedoSaveTooltip => '重做（保存）';
+
+  @override
+  String get segmentItemCancel => '取消';
+
+  @override
+  String get segmentItemSave => '保存';
+
+  @override
+  String get segmentItemEditShortcutHint => '按 Ctrl+Enter 保存，Esc 取消';
+
+  @override
+  String get segmentItemTranslationHint => '输入译文...';
+
+  @override
+  String segmentItemSaveFailed(String error) {
+    return '保存失败：$error';
+  }
 
   @override
   String get segmentPdfFontSizeTitle => 'PDF 字号';

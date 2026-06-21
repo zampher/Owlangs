@@ -569,7 +569,10 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
           _lastText = _originalText;
           // Keep original text on error (don't update _originalText)
         });
-        MessageService.showError(context, 'Failed to save: $e');
+        MessageService.showError(
+          context,
+          AppLocalizations.of(context)!.segmentItemSaveFailed('$e'),
+        );
       }
     }
   }
@@ -836,60 +839,146 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     final l10n = AppLocalizations.of(context)!;
     final bool hasRotation = widget.rotation != 0;
     final ColorScheme colors = Theme.of(context).colorScheme;
-    final int nextRotation = (widget.rotation + 90) % 360;
     final String label = hasRotation
         ? l10n.segmentRotationLabel(widget.rotation)
         : l10n.segmentRotationOff;
+    final bool canEdit = widget.onRotationChanged != null;
+
     return Padding(
       padding: const EdgeInsets.only(left: 4),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            if (widget.onRotationChanged != null) {
-              widget.onRotationChanged!(widget.index, nextRotation);
-            }
-          },
-          borderRadius: BorderRadius.circular(4),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: hasRotation
-                  ? colors.secondaryContainer
-                  : colors.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: hasRotation
-                    ? colors.secondary
-                    : colors.outlineVariant,
+      child: MenuAnchor(
+        style: MenuStyle(
+          visualDensity: VisualDensity.compact,
+          minimumSize: const WidgetStatePropertyAll<Size>(Size(148, 0)),
+        ),
+        menuChildren: <Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: Text(
+              l10n.segmentRotationMenuTitle,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: colors.onSurfaceVariant,
               ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Icon(
-                  Icons.rotate_right,
-                  size: 12,
+          ),
+          ...kPdfRotationOptionsDegrees.map((int degrees) {
+            final bool selected = widget.rotation == degrees;
+            final String optionLabel = degrees == 0
+                ? l10n.segmentRotationNone
+                : l10n.segmentRotationLabel(degrees);
+            return MenuItemButton(
+              onPressed: canEdit
+                  ? () => widget.onRotationChanged!(widget.index, degrees)
+                  : null,
+              child: _buildRotationMenuRow(
+                context,
+                degrees: degrees,
+                label: optionLabel,
+                checked: selected,
+              ),
+            );
+          }),
+        ],
+        builder: (
+          BuildContext context,
+          MenuController controller,
+          Widget? child,
+        ) {
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: canEdit
+                  ? () {
+                      if (controller.isOpen) {
+                        controller.close();
+                      } else {
+                        controller.open();
+                      }
+                    }
+                  : null,
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
                   color: hasRotation
-                      ? colors.onSecondaryContainer
-                      : colors.onSurfaceVariant,
-                ),
-                const SizedBox(width: 2),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
+                      ? colors.secondaryContainer
+                      : colors.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
                     color: hasRotation
-                        ? colors.onSecondaryContainer
-                        : colors.onSurfaceVariant,
+                        ? colors.secondary
+                        : colors.outlineVariant,
                   ),
                 ),
-              ],
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      Icons.rotate_right,
+                      size: 12,
+                      color: hasRotation
+                          ? colors.onSecondaryContainer
+                          : colors.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: hasRotation
+                            ? colors.onSecondaryContainer
+                            : colors.onSurfaceVariant,
+                      ),
+                    ),
+                    if (canEdit) ...<Widget>[
+                      Icon(
+                        Icons.arrow_drop_down,
+                        size: 14,
+                        color: hasRotation
+                            ? colors.onSecondaryContainer
+                            : colors.onSurfaceVariant,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildRotationMenuRow(
+    BuildContext context, {
+    required int degrees,
+    required String label,
+    required bool checked,
+  }) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return Row(
+      children: <Widget>[
+        SizedBox(
+          width: 18,
+          child: checked
+              ? Icon(Icons.check, size: 14, color: colors.primary)
+              : const SizedBox.shrink(),
+        ),
+        _RotationPreviewIcon(
+          degrees: degrees,
+          color: colors.onSurface,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 12),
           ),
         ),
-      ),
+      ],
     );
   }
 
@@ -1051,6 +1140,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
   }
 
   Widget _buildViewMode() {
+    final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final displayIndex = widget.index + 1; // 1-based display
@@ -1364,9 +1454,8 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                                     const SizedBox(width: 2),
                                     Text(
                                       widget.pdfRevisionMode
-                                          ? AppLocalizations.of(context)!
-                                              .segmentPdfRevisionEditLabel
-                                          : 'Edit',
+                                          ? l10n.segmentPdfRevisionEditLabel
+                                          : l10n.segmentItemEdit,
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w500,
@@ -1421,7 +1510,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                                     ),
                                     const SizedBox(width: 2),
                                     Text(
-                                      'Retry',
+                                      l10n.segmentItemRetry,
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w500,
@@ -1475,7 +1564,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                                     ),
                                     const SizedBox(width: 2),
                                     Text(
-                                      'Marked Retry',
+                                      l10n.segmentItemMarkedRetry,
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w500,
@@ -1536,7 +1625,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                                     ),
                                     const SizedBox(width: 2),
                                     Text(
-                                      'Exclude',
+                                      l10n.segmentItemExclude,
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w500,
@@ -1589,7 +1678,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                                     ),
                                     const SizedBox(width: 2),
                                     Text(
-                                      'Cleared',
+                                      l10n.segmentItemCleared,
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w500,
@@ -1655,9 +1744,8 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                                     const SizedBox(width: 2),
                                     Text(
                                       widget.pdfRevisionMode
-                                          ? AppLocalizations.of(context)!
-                                              .segmentPdfRevisionClearLabel
-                                          : 'Clear',
+                                          ? l10n.segmentPdfRevisionClearLabel
+                                          : l10n.segmentItemClear,
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w500,
@@ -1710,7 +1798,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                                     ),
                                     const SizedBox(width: 2),
                                     Text(
-                                      'Fix',
+                                      l10n.segmentItemFix,
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w500,
@@ -1749,13 +1837,15 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
   /// Build exclusion badge with reason-specific styling
   /// New design: Badge body for quick unexclude, edit button for editing, x button for quick unexclude
   Widget _buildExclusionBadge(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final reason = ExclusionReason.fromString(widget.exclusionReason);
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final bool canUnexclude = reason.canUnexclude && widget.onUnexclude != null;
     final bool canEdit = widget.taskId != null;
 
-    // Build display text with EX prefix
-    final String displayText = 'EX: ${reason.displayName}';
+    final String displayText = l10n.segmentItemExclusionBadge(
+      reason.displayNameLocalized(l10n),
+    );
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -1778,8 +1868,8 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
             borderRadius: BorderRadius.circular(4),
             child: Tooltip(
               message: canUnexclude
-                  ? 'Click to remove exclusion'
-                  : 'This segment is automatically excluded and cannot be unexcluded',
+                  ? l10n.segmentItemExclusionRemoveTooltip
+                  : l10n.segmentItemExclusionLockedTooltip,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 6,
@@ -1837,7 +1927,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
         if (canEdit) ...<Widget>[
           const SizedBox(width: 4),
           Tooltip(
-            message: 'Click to edit exclusion reason',
+            message: l10n.segmentItemExclusionEditTooltip,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () {
@@ -1865,7 +1955,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
         if (canUnexclude) ...<Widget>[
           const SizedBox(width: 4),
           Tooltip(
-            message: 'Click to remove exclusion',
+            message: l10n.segmentItemExclusionRemoveTooltip,
             child: GestureDetector(
               behavior: HitTestBehavior
                   .opaque, // Prevent event propagation to parent InkWell
@@ -1945,11 +2035,12 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
         }
 
         if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
           MessageService.showInfo(
             context,
             newReason == null
-                ? 'Exclusion removed'
-                : 'Exclusion reason updated',
+                ? l10n.segmentItemExclusionRemoved
+                : l10n.segmentItemExclusionReasonUpdated,
           );
         }
       } catch (e) {
@@ -1957,14 +2048,16 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
         if (mounted) {
           MessageService.showError(
             context,
-            'Failed to update exclusion reason: $e',
+            AppLocalizations.of(context)!.segmentItemExclusionUpdateFailed('$e'),
           );
         }
       }
     }
   }
 
-  Widget _buildEditMode() => Column(
+  Widget _buildEditMode() {
+    final l10n = AppLocalizations.of(context)!;
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           // Editable text field with keyboard shortcuts
@@ -2036,7 +2129,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                 // Editing mode: use edit history undo/redo
                 IconButton(
                   icon: const Icon(Icons.undo, size: 18),
-                  tooltip: 'Undo (Edit)',
+                  tooltip: l10n.segmentItemUndoEditTooltip,
                   onPressed: _canUndoEditing ? _undoEditing : null,
                   color: _canUndoEditing
                       ? Colors.blue.shade700
@@ -2047,7 +2140,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.redo, size: 18),
-                  tooltip: 'Redo (Edit)',
+                  tooltip: l10n.segmentItemRedoEditTooltip,
                   onPressed: _canRedoEditing ? _redoEditing : null,
                   color: _canRedoEditing
                       ? Colors.blue.shade700
@@ -2062,7 +2155,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                 // Not editing: use segment revision undo/redo (Save operations)
                 IconButton(
                   icon: const Icon(Icons.undo, size: 18),
-                  tooltip: 'Undo (Save)',
+                  tooltip: l10n.segmentItemUndoSaveTooltip,
                   onPressed: widget.canUndo && widget.onUndo != null
                       ? () => widget.onUndo!(widget.index)
                       : null,
@@ -2075,7 +2168,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.redo, size: 18),
-                  tooltip: 'Redo (Save)',
+                  tooltip: l10n.segmentItemRedoSaveTooltip,
                   onPressed: widget.canRedo && widget.onRedo != null
                       ? () => widget.onRedo!(widget.index)
                       : null,
@@ -2090,13 +2183,13 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
               ],
               TextButton(
                 onPressed: _cancelEditing,
-                child: const Text('Cancel'),
+                child: Text(l10n.segmentItemCancel),
               ),
               const SizedBox(width: 8),
               ElevatedButton.icon(
                 onPressed: _saveEditing,
                 icon: const Icon(Icons.save, size: 16),
-                label: const Text('Save'),
+                label: Text(l10n.segmentItemSave),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green.shade700,
                   foregroundColor: Colors.white,
@@ -2108,7 +2201,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
-              'Press Ctrl+Enter to save, Esc to cancel',
+              l10n.segmentItemEditShortcutHint,
               style: TextStyle(
                 fontSize: 11,
                 color: Colors.grey.shade600,
@@ -2118,8 +2211,10 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
           ),
         ],
       );
+  }
 
   Widget _buildAdaptiveEditorField() {
+    final l10n = AppLocalizations.of(context)!;
     final textStyle = TextStyle(fontSize: widget.editFontSize ?? 16.0);
     return ValueListenableBuilder<TextEditingValue>(
       valueListenable: _textController,
@@ -2163,7 +2258,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                 maxLines: null,
                 textAlignVertical: TextAlignVertical.top,
                 decoration: InputDecoration(
-                  hintText: 'Enter translation...',
+                  hintText: l10n.segmentItemTranslationHint,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(4),
                   ),
@@ -2174,6 +2269,35 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Mini rotation preview for the angle picker menu.
+class _RotationPreviewIcon extends StatelessWidget {
+  const _RotationPreviewIcon({
+    required this.degrees,
+    required this.color,
+  });
+
+  final int degrees;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 22,
+      height: 16,
+      child: Center(
+        child: Transform.rotate(
+          angle: degrees * math.pi / 180.0,
+          child: Icon(
+            Icons.text_rotation_none,
+            size: 14,
+            color: degrees == 0 ? color.withValues(alpha: 0.45) : color,
+          ),
+        ),
       ),
     );
   }

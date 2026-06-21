@@ -13,6 +13,7 @@ import 'package:pdfx/pdfx.dart';
 
 import '../../../shared/services/translation_service.dart';
 import 'pdf_continuous_page.dart';
+import 'pdf_page_utils.dart';
 import 'pdf_continuous_scroll_view.dart';
 import 'translation_result/preview_viewport.dart';
 
@@ -318,7 +319,7 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     } catch (_) {
       return maxWidth * 1.414;
     } finally {
-      await page?.close();
+      await safeClosePdfPage(page);
     }
   }
 
