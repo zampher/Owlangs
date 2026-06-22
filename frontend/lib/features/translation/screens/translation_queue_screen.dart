@@ -2391,12 +2391,17 @@ class _QueueListIconButton extends StatelessWidget {
     return Semantics(
       label: semanticLabel,
       button: true,
-      child: IconButton(
-        icon: Icon(icon, size: 20, color: iconColor),
-        visualDensity: VisualDensity.compact,
-        padding: const EdgeInsets.all(4),
-        constraints: BoxConstraints(minWidth: minSize, minHeight: minSize),
-        onPressed: onPressed,
+      child: Tooltip(
+        message: semanticLabel,
+        triggerMode: TooltipTriggerMode.longPress,
+        child: IconButton(
+          icon: Icon(icon, size: 20, color: iconColor),
+          tooltip: semanticLabel,
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.all(4),
+          constraints: BoxConstraints(minWidth: minSize, minHeight: minSize),
+          onPressed: onPressed,
+        ),
       ),
     );
   }
@@ -2424,19 +2429,22 @@ class _DownloadFormatButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context)!;
     final String label = _downloadFormatButtonLabel(ft, l10n);
-    // No IconButton tooltip inside scrollable queue rows — Tooltip OverlayPortal
-    // triggers hit-test assertions while the list is scrolling.
     return Semantics(
       label: label,
       button: true,
-      child: IconButton(
-      icon: Icon(_downloadFormatIcon(ft), size: 20),
-      visualDensity: VisualDensity.compact,
-      padding: const EdgeInsets.all(4),
-      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-      onPressed: url.isNotEmpty
-          ? () => onDownload(taskId, ft, url, name, isFormatConversion)
-          : null,
+      child: Tooltip(
+        message: label,
+        triggerMode: TooltipTriggerMode.longPress,
+        child: IconButton(
+        icon: Icon(_downloadFormatIcon(ft), size: 20),
+        tooltip: label,
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.all(4),
+        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+        onPressed: url.isNotEmpty
+            ? () => onDownload(taskId, ft, url, name, isFormatConversion)
+            : null,
+        ),
       ),
     );
   }
