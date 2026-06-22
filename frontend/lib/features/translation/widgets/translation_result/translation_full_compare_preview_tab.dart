@@ -1147,30 +1147,25 @@ class _TranslationFullComparePreviewTabState
                   },
                 ),
               if (widget.bboxEditModeListenable != null)
-                ValueListenableBuilder<bool>(
-                  valueListenable: widget.bboxEditModeListenable!,
-                  builder: (BuildContext context, bool enabled, Widget? _) {
-                    return Tooltip(
-                      message: l10n.translationPreviewEditSegmentBboxDesc,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          Checkbox(
-                            value: enabled,
-                            onChanged: (bool? value) {
-                              widget.onBboxEditModeChanged
-                                  ?.call(value ?? false);
-                            },
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          Text(
-                            l10n.translationPreviewEditSegmentBbox,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
+                Tooltip(
+                  message: l10n.translationPreviewEditSegmentBboxDesc,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Checkbox(
+                        value: _bboxEditMode,
+                        onChanged: (bool? value) {
+                          widget.onBboxEditModeChanged
+                              ?.call(value ?? false);
+                        },
+                        visualDensity: VisualDensity.compact,
                       ),
-                    );
-                  },
+                      Text(
+                        l10n.translationPreviewEditSegmentBbox,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
                 ),
               if (kPdfLeadingTypographyUiEnabled &&
                   widget.onBatchLeadingApply != null)
