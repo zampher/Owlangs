@@ -115,6 +115,9 @@ class PdfContinuousScrollView extends StatefulWidget {
     this.showScrollbar = true,
     this.highlightPageNumber,
     this.highlightBbox,
+    this.bboxEditMode = false,
+    this.onEditBboxChanged,
+    this.onEditBboxReset,
   });
 
   final PdfDocument document;
@@ -131,6 +134,15 @@ class PdfContinuousScrollView extends StatefulWidget {
 
   /// Bounding box in PDF points: [x0, y0, x1, y1].
   final List<double>? highlightBbox;
+
+  /// Whether bbox edit mode is active.
+  final bool bboxEditMode;
+
+  /// Called when the user finishes dragging the bbox overlay.
+  final ValueChanged<Rect>? onEditBboxChanged;
+
+  /// Called when the user taps the reset button.
+  final VoidCallback? onEditBboxReset;
 
   @override
   State<PdfContinuousScrollView> createState() =>
@@ -330,6 +342,8 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
                   (widget.highlightPageNumber == pageNumber)
                       ? widget.highlightBbox
                       : null;
+              final bool pageEditMode =
+                  widget.bboxEditMode && widget.highlightPageNumber == pageNumber;
               return Padding(
                 padding: EdgeInsets.only(
                   bottom: index == pageCount - 1 ? 0 : widget.pageGap,
@@ -339,6 +353,9 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
                   pageNumber: pageNumber,
                   maxWidth: pageWidth,
                   highlightBbox: pageHighlightBbox,
+                  bboxEditMode: pageEditMode,
+                  onEditBboxChanged: pageEditMode ? widget.onEditBboxChanged : null,
+                  onEditBboxReset: pageEditMode ? widget.onEditBboxReset : null,
                 ),
               );
             },
@@ -370,6 +387,9 @@ class PdfContinuousPreviewLoader extends StatefulWidget {
     this.showScrollbar = true,
     this.highlightPageNumber,
     this.highlightBbox,
+    this.bboxEditMode = false,
+    this.onEditBboxChanged,
+    this.onEditBboxReset,
   });
 
   final String downloadUrl;
@@ -385,6 +405,15 @@ class PdfContinuousPreviewLoader extends StatefulWidget {
 
   /// Bounding box in PDF points: [x0, y0, x1, y1].
   final List<double>? highlightBbox;
+
+  /// Whether bbox edit mode is active.
+  final bool bboxEditMode;
+
+  /// Called when the user finishes dragging the bbox overlay.
+  final ValueChanged<Rect>? onEditBboxChanged;
+
+  /// Called when the user taps the reset button.
+  final VoidCallback? onEditBboxReset;
 
   @override
   State<PdfContinuousPreviewLoader> createState() =>
@@ -535,6 +564,9 @@ class _PdfContinuousPreviewLoaderState extends State<PdfContinuousPreviewLoader>
       showScrollbar: widget.showScrollbar,
       highlightPageNumber: widget.highlightPageNumber,
       highlightBbox: widget.highlightBbox,
+      bboxEditMode: widget.bboxEditMode,
+      onEditBboxChanged: widget.onEditBboxChanged,
+      onEditBboxReset: widget.onEditBboxReset,
     );
   }
 }

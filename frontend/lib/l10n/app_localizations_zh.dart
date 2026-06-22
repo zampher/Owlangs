@@ -3904,6 +3904,12 @@ class AppLocalizationsZh extends AppLocalizations {
       '启用后，在译文预览中用边框标出当前选中片段的位置';
 
   @override
+  String get translationPreviewEditSegmentBbox => '编辑Bbox';
+
+  @override
+  String get translationPreviewEditSegmentBboxDesc => '启用后，可通过拖拽手柄调整选中片段的边界框';
+
+  @override
   String get translationPreviewStaleSession => '预览已失效，请从翻译面板重新打开预览修订。';
 
   @override

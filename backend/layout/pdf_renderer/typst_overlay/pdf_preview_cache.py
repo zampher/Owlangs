@@ -37,6 +37,7 @@ def compute_typst_overlay_content_fingerprint(
     leading_em_by_block_index: Optional[Dict[int, float]] = None,
     rotation_by_block_index: Optional[Dict[int, int]] = None,
     table_stroke_pt_by_block_index: Optional[Dict[int, float]] = None,
+    bbox_override_by_block_index: Optional[Dict[int, tuple]] = None,
 ) -> str:
     """Stable hash of all inputs that affect Typst overlay PDF output."""
     payload: Dict[str, Any] = {
@@ -57,6 +58,9 @@ def compute_typst_overlay_content_fingerprint(
         "rotation_by_block_index": _sorted_int_key_map(rotation_by_block_index),
         "table_stroke_pt_by_block_index": _sorted_int_key_map(
             table_stroke_pt_by_block_index,
+        ),
+        "bbox_override_by_block_index": _sorted_int_key_map(
+            bbox_override_by_block_index,
         ),
     }
     encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)

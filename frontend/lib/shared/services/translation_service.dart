@@ -659,6 +659,8 @@ class TranslationService {
     bool pdfFontReset = false,
     int? rotation,
     double? tableStrokePt,
+    List<double>? layoutBlockBboxOverride,
+    bool layoutBlockBboxReset = false,
   }) async {
     final dio = _buildAuthedDio();
     final body = <String, dynamic>{};
@@ -668,6 +670,11 @@ class TranslationService {
     if (modifiedBy != null) body['modified_by'] = modifiedBy;
     if (rotation != null) body['rotation'] = rotation;
     if (tableStrokePt != null) body['table_stroke_pt'] = tableStrokePt;
+    if (layoutBlockBboxReset) {
+      body['layout_block_bbox_reset'] = true;
+    } else if (layoutBlockBboxOverride != null) {
+      body['layout_block_bbox_override'] = layoutBlockBboxOverride;
+    }
     if (pdfFontReset) {
       body['pdf_font_reset'] = true;
     } else {

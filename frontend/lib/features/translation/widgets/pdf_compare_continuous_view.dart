@@ -71,7 +71,12 @@ class PdfCompareContinuousView extends StatefulWidget {
     this.navigationController,
     this.highlightPageNumber,
     this.highlightBbox,
+    this.sourceHighlightBbox,
     this.viewportController,
+    this.bboxEditMode = false,
+    this.editBboxRect,
+    this.onEditBboxChanged,
+    this.onEditBboxReset,
   });
 
   final String sourceDownloadUrl;
@@ -89,10 +94,26 @@ class PdfCompareContinuousView extends StatefulWidget {
   /// Bbox in PDF points `[x0, y0, x1, y1]` to highlight on the matching page.
   final List<double>? highlightBbox;
 
+  /// Original (non-overridden) bbox for the source (left) side highlight.
+  /// When editing bbox, the source side should always show the original.
+  final List<double>? sourceHighlightBbox;
+
   /// When provided, [InteractiveViewer] zoom is bidirectionally synced with
   /// this controller so toolbar buttons (zoom In/Out/Reset) mirror the child's
   /// zoom state and vice versa.
   final PreviewViewportController? viewportController;
+
+  /// Whether bbox edit mode is active.
+  final bool bboxEditMode;
+
+  /// Bbox for the edit overlay in display-pixel coordinates.
+  final Rect? editBboxRect;
+
+  /// Called when the user finishes dragging the bbox overlay.
+  final ValueChanged<Rect>? onEditBboxChanged;
+
+  /// Called when the user taps the reset button.
+  final VoidCallback? onEditBboxReset;
 
   @override
   State<PdfCompareContinuousView> createState() =>
@@ -664,7 +685,8 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                               maxWidth: columnWidth - 16,
                               highlightBbox: (widget.highlightPageNumber ==
                                       pageNumber)
-                                  ? widget.highlightBbox
+                                  ? (widget.sourceHighlightBbox ??
+                                      widget.highlightBbox)
                                   : null,
                               transformController: _sourceZoomController,
                               scaleEnabled: false,
@@ -684,6 +706,18 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                                   : null,
                               transformController: _targetZoomController,
                               scaleEnabled: false,
+                              bboxEditMode: (widget.highlightPageNumber ==
+                                      pageNumber)
+                                  ? widget.bboxEditMode
+                                  : false,
+                              onEditBboxChanged: (widget.highlightPageNumber ==
+                                      pageNumber)
+                                  ? widget.onEditBboxChanged
+                                  : null,
+                              onEditBboxReset: (widget.highlightPageNumber ==
+                                      pageNumber)
+                                  ? widget.onEditBboxReset
+                                  : null,
                             )
                           : const SizedBox.shrink(),
                     ),
@@ -731,7 +765,8 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                           maxWidth: constraints.maxWidth - 16,
                           highlightBbox:
                               (widget.highlightPageNumber == pageNumber)
-                                  ? widget.highlightBbox
+                                  ? (widget.sourceHighlightBbox ??
+                                      widget.highlightBbox)
                                   : null,
                           transformController: _sourceZoomController,
                           scaleEnabled: false,
@@ -778,6 +813,18 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                                   : null,
                           transformController: _targetZoomController,
                           scaleEnabled: false,
+                          bboxEditMode: (widget.highlightPageNumber ==
+                                  pageNumber)
+                              ? widget.bboxEditMode
+                              : false,
+                          onEditBboxChanged: (widget.highlightPageNumber ==
+                                  pageNumber)
+                              ? widget.onEditBboxChanged
+                              : null,
+                          onEditBboxReset: (widget.highlightPageNumber ==
+                                  pageNumber)
+                              ? widget.onEditBboxReset
+                              : null,
                         );
                       },
                     ),

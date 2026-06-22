@@ -4081,6 +4081,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'When enabled, show a frame around the selected segment on the translation preview';
 
   @override
+  String get translationPreviewEditSegmentBbox => 'Edit Bbox';
+
+  @override
+  String get translationPreviewEditSegmentBboxDesc =>
+      'When enabled, drag handles to adjust bounding box of the selected segment';
+
+  @override
   String get translationPreviewStaleSession =>
       'Preview unavailable. Reopen revision preview from the translation panel.';
 

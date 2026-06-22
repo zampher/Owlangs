@@ -34,7 +34,7 @@ Pipeline Overview::
 """
 
 import io
-import shutil
+
 import time
 import zipfile
 from pathlib import Path
@@ -178,10 +178,14 @@ class TypstOverlayRenderer(BasePDFRenderer):
         """
         Detect if the PDF is image-based (scanned / single large image per page).
 
-        Returns True if any page has a single image whose area covers >=
+        Returns True if any page has an image whose *on-page* area covers >=
         ``coverage_threshold`` of the page area.  Such PDFs cannot use the
         redaction-based overlay approach because there are no text objects
         to redact — all content is baked into a raster image.
+
+        Uses ``page.get_image_info()`` to obtain image display coordinates
+        (points, same coordinate system as the page), avoiding the pixel-vs-point
+        unit mismatch that ``fitz.Pixmap.width/height`` would introduce.
 
         Args:
             pdf_path: Path to the PDF file.
@@ -192,31 +196,32 @@ class TypstOverlayRenderer(BasePDFRenderer):
         try:
             for page_idx in range(len(doc)):
                 page = doc[page_idx]
-                images = page.get_images(full=True)
-                if len(images) != 1:
-                    continue
-                xref = images[0][0]
-                try:
-                    pix = fitz.Pixmap(doc, xref)
-                    img_area = pix.width * pix.height
-                    pix = None
-                except Exception:
-                    continue
-                # Scale image pixels to page coordinates
                 page_rect = page.rect
                 page_area = page_rect.width * page_rect.height
                 if page_area <= 0:
                     continue
-                coverage = img_area / page_area
-                if coverage >= coverage_threshold:
-                    unified_logger.info(
-                        LogModule.RESTOR,
-                        f"[TYPST_OVERLAY] Image-based PDF detected: "
-                        f"page {page_idx} has 1 image covering "
-                        f"{coverage:.0%} of page area ({images[0][2]}x{images[0][3]}px). "
-                        f"Will use background-embed mode."
-                    )
-                    return True
+                image_infos = page.get_image_info()
+                for info in image_infos:
+                    bbox = info.get("bbox")
+                    if bbox is None or len(bbox) != 4:
+                        continue
+                    # bbox is (x0, y0, x1, y1) as a tuple, not a fitz.Rect
+                    img_w = bbox[2] - bbox[0]
+                    img_h = bbox[3] - bbox[1]
+                    if img_w <= 0 or img_h <= 0:
+                        continue
+                    img_area_on_page = img_w * img_h
+                    coverage = img_area_on_page / page_area
+                    if coverage >= coverage_threshold:
+                        unified_logger.info(
+                            LogModule.RESTOR,
+                            f"[TYPST_OVERLAY] Image-based PDF detected: "
+                            f"page {page_idx} has image covering "
+                            f"{coverage:.0%} of page area "
+                            f"(on-page bbox={bbox}). "
+                            f"Will use background-embed mode."
+                        )
+                        return True
         finally:
             doc.close()
         return False
@@ -790,6 +795,21 @@ class TypstOverlayRenderer(BasePDFRenderer):
         except (TypeError, ValueError):
             return 0
 
+    def _block_bbox_override(self, block_key: int) -> Optional[tuple]:
+        """Return user-specified bbox override for a layout block, if any."""
+        overrides = getattr(self.config, "bbox_override_by_block_index", None) or {}
+        if not overrides:
+            return None
+        value = overrides.get(block_key)
+        if value is None:
+            return None
+        if isinstance(value, (tuple, list)) and len(value) == 4:
+            try:
+                return tuple(float(v) for v in value)
+            except (TypeError, ValueError):
+                return None
+        return None
+
     def _block_table_stroke_pt(self, block_key: int) -> float:
         """Return table grid stroke width for a layout block (default 0.5pt)."""
         from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
@@ -966,6 +986,9 @@ class TypstOverlayRenderer(BasePDFRenderer):
                                 block_id=f"block-{block_key}",
                             )
                             tb_rb.opaque_fill = True
+                            bbox_override = self._block_bbox_override(block_key)
+                            if bbox_override is not None:
+                                tb_rb.inner_bbox = bbox_override
                             tb_rb = self._font_fit.calculate_fit_params(
                                 tb_rb, page_width_pt=page_width_pt,
                             )
@@ -1059,6 +1082,12 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 )
                 if main_bbox is not None:
                     rb.inner_bbox = main_bbox
+                # Apply bbox override BEFORE font fitting so that the font
+                # size is calculated based on the new (overridden) bbox
+                # dimensions, not the original MinerU bbox.
+                bbox_override = self._block_bbox_override(block_key)
+                if bbox_override is not None:
+                    rb.inner_bbox = bbox_override
                 layout_raw = getattr(block, "raw", None) or {}
                 override_pt = self._block_font_override_pt(block_key)
                 if override_pt is not None:
@@ -1237,6 +1266,9 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 merge_rects=True,
                 extra_redaction_rects=extra_redaction_rects or None,
                 skip_block_indices=skip_overlay or None,
+                bbox_override_by_block_index=(
+                    self.config.bbox_override_by_block_index or None
+                ),
             )
             diagnostics["cleanup_elapsed"] = time.perf_counter() - cleanup_started
         except Exception as e:
@@ -1320,7 +1352,10 @@ class TypstOverlayRenderer(BasePDFRenderer):
 
             emit_started = time.perf_counter()
             src_pdf_in_workdir = work_dir / "source.pdf"
-            shutil.copy2(self._source_pdf_path, src_pdf_in_workdir)
+            # Use the cleaned PDF (post-redaction) as the background so
+            # that original text areas are erased before overlay.  Using
+            # the raw source PDF would leave original text visible.
+            src_pdf_in_workdir.write_bytes(cleaned_pdf_bytes)
             typst_source = build_typst_background_source(
                 page_specs,
                 background_pdf_path=src_pdf_in_workdir,

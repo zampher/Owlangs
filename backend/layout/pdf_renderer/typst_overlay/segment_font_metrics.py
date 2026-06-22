@@ -871,6 +871,29 @@ def build_block_font_style_map_from_segments(
     return block_map
 
 
+def build_block_bbox_override_map_from_segments(
+    segments: List[Dict[str, Any]],
+    task_state: Optional[Dict[str, Any]] = None,
+) -> Dict[int, tuple]:
+    """Build block_index -> bbox_override map from segments with overrides."""
+    block_map: Dict[int, tuple] = {}
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        override = seg.get("layout_block_bbox_override")
+        if not override:
+            continue
+        if not isinstance(override, (tuple, list)) or len(override) != 4:
+            continue
+        try:
+            bbox = tuple(float(v) for v in override)
+        except (TypeError, ValueError):
+            continue
+        for idx in resolve_segment_layout_block_indices(seg, task_state):
+            block_map[idx] = bbox
+    return block_map
+
+
 def normalize_table_stroke_pt(value: Any) -> Optional[float]:
     """Normalize user table grid stroke width in pt (0 = hidden)."""
     if value is None:

@@ -3936,6 +3936,13 @@ class AppLocalizationsJa extends AppLocalizations {
       '有効にすると、訳文プレビューで選択中のセグメント位置を枠で表示します';
 
   @override
+  String get translationPreviewEditSegmentBbox => 'Edit Bbox';
+
+  @override
+  String get translationPreviewEditSegmentBboxDesc =>
+      'When enabled, drag handles to adjust bounding box of the selected segment';
+
+  @override
   String get translationPreviewStaleSession =>
       'プレビューは利用できません。翻訳パネルからプレビュー修正を再度開いてください。';
 

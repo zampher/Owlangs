@@ -3299,6 +3299,8 @@ def update_translation_segment(
     pdf_font_reset: bool = False,
     rotation: Optional[int] = None,
     table_stroke_pt: Optional[float] = None,
+    layout_block_bbox_override: Optional[list] = None,
+    layout_block_bbox_reset: bool = False,
     task_state: Optional[dict] = None,
 ) -> Optional[dict]:
     """
@@ -3313,6 +3315,8 @@ def update_translation_segment(
         modified_by: Identifier of who made the modification
         rotation: Optional rotation angle (0, 90, 180, 270). 0 = none.
         table_stroke_pt: Optional table grid stroke width in pt (0 = hidden).
+        layout_block_bbox_override: Optional bbox override [x0, y0, x1, y1].
+        layout_block_bbox_reset: If True, clear the bbox override (restore default).
         task_state: Task state dictionary (if None, will be imported)
 
     Returns:
@@ -3453,6 +3457,48 @@ def update_translation_segment(
                     f"{old_stroke_value} -> {normalized_stroke}",
                 )
                 typography_changed = True
+
+    # Apply bbox override change
+    if layout_block_bbox_reset:
+        if "layout_block_bbox_override" in segment:
+            del segment["layout_block_bbox_override"]
+            segment["modified"] = True
+            segment["modified_by"] = modified_by or segment.get("modified_by")
+            segment["modified_at"] = time.time()
+            logger.info(
+                LogModule.TRANS,
+                f"Reset bbox override for segment {segment_index} on task {task_id}",
+            )
+            typography_changed = True
+    elif layout_block_bbox_override is not None:
+        if not isinstance(layout_block_bbox_override, (tuple, list)) or len(layout_block_bbox_override) != 4:
+            logger.warning(
+                LogModule.TRANS,
+                f"Ignoring invalid layout_block_bbox_override={layout_block_bbox_override!r} "
+                f"for segment {segment_index} on task {task_id}. Expected [x0, y0, x1, y1].",
+            )
+        else:
+            try:
+                normalized = [float(v) for v in layout_block_bbox_override]
+            except (TypeError, ValueError):
+                logger.warning(
+                    LogModule.TRANS,
+                    f"Ignoring non-numeric layout_block_bbox_override for segment "
+                    f"{segment_index} on task {task_id}",
+                )
+            else:
+                old_override = segment.get("layout_block_bbox_override")
+                if old_override != normalized:
+                    segment["layout_block_bbox_override"] = normalized
+                    segment["modified"] = True
+                    segment["modified_by"] = modified_by or segment.get("modified_by")
+                    segment["modified_at"] = time.time()
+                    logger.info(
+                        LogModule.TRANS,
+                        f"Updated bbox override for segment {segment_index} on task {task_id}: "
+                        f"{old_override} -> {normalized}",
+                    )
+                    typography_changed = True
 
     if typography_changed:
         from layout.pdf_renderer.typst_overlay.segment_font_metrics import (

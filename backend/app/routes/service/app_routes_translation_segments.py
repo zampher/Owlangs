@@ -996,6 +996,8 @@ async def update_segment_api(
     pdf_font_reset = bool(body.get("pdf_font_reset", False))
     rotation = body.get("rotation")
     table_stroke_pt = body.get("table_stroke_pt")
+    layout_block_bbox_override = body.get("layout_block_bbox_override")
+    layout_block_bbox_reset = bool(body.get("layout_block_bbox_reset", False))
 
     segment = _ts_module().update_translation_segment(
         task_id=task_id,
@@ -1015,6 +1017,8 @@ async def update_segment_api(
         pdf_font_reset=pdf_font_reset,
         rotation=rotation,
         table_stroke_pt=table_stroke_pt,
+        layout_block_bbox_override=layout_block_bbox_override,
+        layout_block_bbox_reset=layout_block_bbox_reset,
     )
 
     if segment is None:

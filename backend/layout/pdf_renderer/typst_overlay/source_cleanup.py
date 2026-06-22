@@ -28,31 +28,44 @@ def _collect_redaction_rects(
     margin_pt: float = 2.0,
     *,
     skip_block_indices: Optional[set] = None,
-) -> Dict[int, List[Tuple[float, float, float, float]]]:
+    bbox_override_by_block_index: Optional[Dict[int, tuple]] = None,
+) -> Tuple[
+    Dict[int, List[Tuple[float, float, float, float]]],
+    Dict[int, List[Tuple[float, float, float, float]]],
+]:
     """
-    Collect bounding boxes of all translated text blocks as redaction targets.
+    Collect bounding boxes of translated text blocks as redaction targets.
 
     Also collects:
-      - Cross-page lines (lines with ``cross_page: true`` in raw data)
-        whose bboxes fall on the *next* page.
-      - ``merge_prev`` blocks (blocks whose text was merged into the
-        previous page's paragraph).  These carry ``merge_prev: true`` and
-        ``lines_deleted: true`` in their raw data, have empty ``lines``,
-        and their bbox must still be redacted so that the original text
-        on the source PDF is cleared.
+      - Cross-page lines whose bboxes fall on the *next* page.
+      - merge_prev blocks whose text was merged into a previous paragraph.
+      - Override bbox areas from bbox_override_by_block_index.
+
+    Returns a (redaction_map, override_original_map) tuple:
+
+    * redaction_map — page-indexed redaction rects for all text blocks.
+      These are subject to _clip_rects_against_skipped_blocks.
+    * override_original_map — page-indexed ORIGINAL bboxes of blocks that
+      have a bbox override.  These are ADDED AFTER clipping so that other
+      blocks (images, empty text blocks) cannot protect the original area
+      and prevent its erasure.  The user has explicitly opted into erasing
+      both the original and the override areas.
 
     Args:
         layout_doc: LayoutDocument with all layout blocks.
         margin_pt: Extra margin (in points) to expand each redaction rect.
         skip_block_indices: Set of block indices for which neither redaction
-            nor overlay placement should happen (excluded or translation-
-            failed segments).
-
-    Returns:
-        Dict mapping page_index -> list of (x0, y0, x1, y1) rects to redact.
+            nor overlay placement should happen.
+        bbox_override_by_block_index: Optional mapping from block index to
+            [x0, y0, x1, y1] override.  The override area is also redacted.
     """
     skip_set = skip_block_indices or set()
+    bbox_overrides = bbox_override_by_block_index or {}
     redaction_map: Dict[int, List[Tuple[float, float, float, float]]] = {}
+    # Original bboxes of blocks that have overrides.  These are added
+    # AFTER _clip_rects_against_skipped_blocks so that no other block
+    # (image, empty text, etc.) can protect the original area.
+    override_original_map: Dict[int, List[Tuple[float, float, float, float]]] = {}
     image_block_count = 0
     cross_page_rect_count = 0
     merge_prev_rect_count = 0
@@ -60,6 +73,7 @@ def _collect_redaction_rects(
     skipped_no_text = 0
     skipped_chart = 0
     skipped_table = 0
+    override_rect_count = 0
     redacted_blocks: list[tuple] = []  # (page, idx, type, bbox)
 
     for page in layout_doc.pages:
@@ -103,6 +117,40 @@ def _collect_redaction_rects(
             ))
             text_block_count += 1
             redacted_blocks.append((page.page_index, block_index, block.type, block.bbox))
+
+            # Also redact user-overridden bbox area so that any original PDF
+            # text in the expanded/moved region is erased.  This is a
+            # safety measure — the original bbox (above) is always redacted
+            # regardless of whether an override exists.
+            # Record the ORIGINAL bbox separately so it can be added AFTER
+            # _clip_rects_against_skipped_blocks.  This ensures other blocks
+            # (images, empty text blocks) cannot protect the original area
+            # and prevent its erasure.
+            if block_index is not None and block_index in bbox_overrides:
+                # Record the original bbox so it bypasses _clip_rects —
+                # no other block may protect this area from erasure.
+                override_original_map.setdefault(page.page_index, []).append((
+                    max(0, x0 - margin_pt),
+                    max(0, y0 - margin_pt),
+                    x1 + margin_pt,
+                    y1 + margin_pt,
+                ))
+                override_bbox = bbox_overrides[block_index]
+                if isinstance(override_bbox, (tuple, list)) and len(override_bbox) == 4:
+                    try:
+                        ox0, oy0, ox1, oy1 = (
+                            float(override_bbox[0]), float(override_bbox[1]),
+                            float(override_bbox[2]), float(override_bbox[3]),
+                        )
+                        rects.append((
+                            max(0, ox0 - margin_pt),
+                            max(0, oy0 - margin_pt),
+                            ox1 + margin_pt,
+                            oy1 + margin_pt,
+                        ))
+                        override_rect_count += 1
+                    except (TypeError, ValueError):
+                        pass
 
             # Detect cross-page lines inside this block's raw data.
             # MinerU marks cross-page spans (not lines) with "cross_page": true.
@@ -193,6 +241,9 @@ def _collect_redaction_rects(
         f"image_blocks_excluded={image_block_count}, "
         f"cross_page_rects={cross_page_rect_count}, "
         f"merge_prev_rects={merge_prev_rect_count}, "
+        f"override_rects={override_rect_count}, "
+        f"override_original_pages={sorted(override_original_map.keys())}, "
+        f"override_original_rects={sum(len(v) for v in override_original_map.values())}, "
         f"skip_set_size={len(skip_set)}, "
         f"skip_set={sorted(skip_set) if skip_set else '[]'}, "
         f"skipped_by_set={skipped_by_skip_set}, "
@@ -200,6 +251,13 @@ def _collect_redaction_rects(
         f"skipped_chart={skipped_chart}, "
         f"skipped_table={skipped_table}"
     )
+    if override_original_map:
+        for p_idx, orects in sorted(override_original_map.items()):
+            unified_logger.info(
+                LogModule.RESTOR,
+                f"[SOURCE_CLEANUP] override_original_map page={p_idx}: "
+                f"{len(orects)} rect(s) — {orects}",
+            )
     if redacted_blocks and unified_logger.isEnabledFor(10):  # DEBUG level
         for page_idx, blk_idx, blk_type, blk_bbox in redacted_blocks:
             unified_logger.debug(
@@ -209,7 +267,7 @@ def _collect_redaction_rects(
                 f"{blk_bbox[2]:.1f},{blk_bbox[3]:.1f})",
             )
 
-    return redaction_map
+    return redaction_map, override_original_map
 
 
 def _merge_overlapping_rects(
@@ -248,6 +306,8 @@ def _clip_rects_against_skipped_blocks(
     layout_doc: LayoutDocument,
     page_index: int,
     skip_block_indices: set,
+    *,
+    override_block_indices: Optional[set] = None,
 ) -> List[Tuple[float, float, float, float]]:
     """Clip redaction rects to exclude areas belonging to non-redacted blocks.
 
@@ -257,15 +317,25 @@ def _clip_rects_against_skipped_blocks(
         may still contain original PDF content
       - Chart / table / image blocks
 
+    Blocks in override_block_indices are NEVER protected, because the
+    user has explicitly opted into erasing both the original and the
+    override bbox areas.
+
     When a redaction rect overlaps with a protected block's bbox, the
     overlapping portion is split away so the original content survives.
     """
+    override_ids = override_block_indices or set()
     protected_rects: List[Tuple[float, float, float, float]] = []
     for page in layout_doc.pages:
         if page.page_index != page_index:
             continue
         for block in page.blocks:
             blk_idx = getattr(block, "index", None)
+            # Blocks with a bbox override should NOT protect their
+            # original area — the user has explicitly opted into erasing
+            # both the original and override bbox areas.
+            if blk_idx is not None and blk_idx in override_ids:
+                continue
             # Protect all blocks that _collect_redaction_rects would skip:
             #   1. skip_set blocks
             #   2. blocks without text (has_text()=False)
@@ -329,6 +399,7 @@ def clean_source_pdf(
     fill_color: Tuple[float, float, float] = (1.0, 1.0, 1.0),
     extra_redaction_rects: Optional[Dict[int, List[Tuple[float, float, float, float]]]] = None,
     skip_block_indices: Optional[set] = None,
+    bbox_override_by_block_index: Optional[Dict[int, tuple]] = None,
 ) -> bytes:
     """
     Clean original text from a source PDF and return the cleaned PDF bytes.
@@ -349,6 +420,11 @@ def clean_source_pdf(
         skip_block_indices: Set of block indices to skip (excluded or
             translation-failed segments whose original text should not
             be erased)
+        bbox_override_by_block_index: Optional mapping from block index
+            to user-specified bbox override.  When provided, both the
+            original block bbox and the overridden bbox are redacted
+            so that any original PDF text in the expanded/moved region
+            is erased.
 
     Returns:
         Cleaned PDF file content as bytes
@@ -370,9 +446,14 @@ def clean_source_pdf(
     # Open the source PDF
     doc = fitz.open(source_pdf_path)
     try:
-        # Collect redaction rects from layout blocks
-        redaction_map = _collect_redaction_rects(
-            layout_doc, skip_block_indices=skip_block_indices,
+        # Collect redaction rects from layout blocks.
+        # override_original_map holds the original bboxes of blocks that
+        # have overrides — these are applied AFTER clipping so that no
+        # other block can protect the original text area from erasure.
+        redaction_map, override_original_map = _collect_redaction_rects(
+            layout_doc,
+            skip_block_indices=skip_block_indices,
+            bbox_override_by_block_index=bbox_override_by_block_index,
         )
 
         if extra_redaction_rects:
@@ -401,9 +482,41 @@ def clean_source_pdf(
 
             # Protect skipped blocks: clip redaction rects so they do not
             # erase original content of excluded / translation-failed segments.
-            if skip_block_indices:
+            # Blocks with bbox overrides are NEVER protected — the user
+            # has explicitly opted into erasing both areas.
+            override_block_indices: Optional[set] = None
+            if bbox_override_by_block_index:
+                override_block_indices = set(bbox_override_by_block_index.keys())
+            if skip_block_indices or override_block_indices:
                 rects = _clip_rects_against_skipped_blocks(
-                    rects, layout_doc, page_idx, skip_block_indices,
+                    rects, layout_doc, page_idx, skip_block_indices or set(),
+                    override_block_indices=override_block_indices,
+                )
+
+            # Add original bboxes of override blocks AFTER clipping so
+            # they bypass protected-block exclusion entirely.  The user
+            # has explicitly opted into erasing both the original and
+            # override bbox areas.
+            if page_idx in override_original_map:
+                orig_rects = override_original_map[page_idx]
+                before_count = len(rects)
+                before_details = [
+                    (round(r[0], 1), round(r[1], 1), round(r[2], 1), round(r[3], 1))
+                    for r in rects
+                ]
+                if merge_rects:
+                    orig_rects = _merge_overlapping_rects(orig_rects)
+                rects.extend(orig_rects)
+                orig_details = [
+                    (round(r[0], 1), round(r[1], 1), round(r[2], 1), round(r[3], 1))
+                    for r in orig_rects
+                ]
+                unified_logger.info(
+                    LogModule.RESTOR,
+                    f"[SOURCE_CLEANUP] Page {page_idx}: added "
+                    f"{len(orig_rects)} override-original rect(s) AFTER clipping: "
+                    f"before={before_details}, added={orig_details}, "
+                    f"total={len(rects)}",
                 )
 
             for rx0, ry0, rx1, ry1 in rects:

@@ -16,6 +16,7 @@ class SegmentPair {
     this.exclusionReason,
     this.usedPlatforms = const <String>[],
     this.rotation = 0,
+    this.layoutBlockBboxOverride,
   });
 
   final int index;
@@ -31,4 +32,7 @@ class SegmentPair {
       exclusionReason; // Exclusion reason (e.g., 'image', 'formula', 'reference')
   final List<String> usedPlatforms;
   final int rotation; // Manual rotation override: 0, 90, 180, or 270
+
+  /// Bbox override in PDF points: [x0, y0, x1, y1], or null for default.
+  final List<double>? layoutBlockBboxOverride;
 }

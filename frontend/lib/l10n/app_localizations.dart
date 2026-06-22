@@ -7184,6 +7184,18 @@ abstract class AppLocalizations {
   /// **'When enabled, show a frame around the selected segment on the translation preview'**
   String get translationPreviewMarkSelectedSegmentDesc;
 
+  /// No description provided for @translationPreviewEditSegmentBbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Bbox'**
+  String get translationPreviewEditSegmentBbox;
+
+  /// No description provided for @translationPreviewEditSegmentBboxDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, drag handles to adjust bounding box of the selected segment'**
+  String get translationPreviewEditSegmentBboxDesc;
+
   /// No description provided for @translationPreviewStaleSession.
   ///
   /// In en, this message translates to:

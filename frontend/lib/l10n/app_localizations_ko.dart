@@ -3945,6 +3945,13 @@ class AppLocalizationsKo extends AppLocalizations {
       '활성화하면 번역 미리보기에서 선택한 세그먼트 위치에 테두리를 표시합니다';
 
   @override
+  String get translationPreviewEditSegmentBbox => 'Edit Bbox';
+
+  @override
+  String get translationPreviewEditSegmentBboxDesc =>
+      'When enabled, drag handles to adjust bounding box of the selected segment';
+
+  @override
   String get translationPreviewStaleSession =>
       '미리보기를 사용할 수 없습니다. 번역 패널에서 미리보기 수정을 다시 여세요.';
 

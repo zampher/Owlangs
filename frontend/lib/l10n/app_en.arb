@@ -1526,6 +1526,8 @@
   "translationPreviewFollowSegmentPageDesc": "When enabled, the translation PDF preview jumps to the page of the focused or checked segment",
   "translationPreviewMarkSelectedSegment": "Mark selected segment",
   "translationPreviewMarkSelectedSegmentDesc": "When enabled, show a frame around the selected segment on the translation preview",
+  "translationPreviewEditSegmentBbox": "Edit Bbox",
+  "translationPreviewEditSegmentBboxDesc": "When enabled, drag handles to adjust bounding box of the selected segment",
   "translationPreviewStaleSession": "Preview unavailable. Reopen revision preview from the translation panel.",
   "translationPreviewPdfPageIndicator": "Page {current} / {total}",
   "@translationPreviewPdfPageIndicator": {

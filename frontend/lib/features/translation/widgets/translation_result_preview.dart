@@ -629,10 +629,15 @@ class _TranslationResultPreviewState
       ValueNotifier<int?>(null);
   late final ValueNotifier<List<double>?> _pdfHighlightBboxNotifier =
       ValueNotifier<List<double>?>(null);
+  /// Original (non-overridden) bbox for source-side PDF preview highlight.
+  late final ValueNotifier<List<double>?> _pdfSourceHighlightBboxNotifier =
+      ValueNotifier<List<double>?>(null);
   late final ValueNotifier<bool> _autoFollowSegmentPdfPageNotifier =
       ValueNotifier<bool>(true);
   late final ValueNotifier<bool> _showSelectedSegmentMarkerNotifier =
       ValueNotifier<bool>(true);
+  late final ValueNotifier<bool> _bboxEditModeNotifier =
+      ValueNotifier<bool>(false);
   bool _isRefreshingForFilter = false;
 
   // PERFORMANCE: Cache exclusion counts to avoid expensive recalculation on every rebuild
@@ -1039,8 +1044,10 @@ class _TranslationResultPreviewState
     _pdfPreviewJumpPageTriggerNotifier.dispose();
     _pdfHighlightBboxPageNotifier.dispose();
     _pdfHighlightBboxNotifier.dispose();
+    _pdfSourceHighlightBboxNotifier.dispose();
     _autoFollowSegmentPdfPageNotifier.dispose();
     _showSelectedSegmentMarkerNotifier.dispose();
+    _bboxEditModeNotifier.dispose();
     _highlightedIndexNotifier.dispose();
     _pdfPreviewRevisionNotifier.dispose();
     _pdfPreviewDirtySegmentsNotifier.dispose();
@@ -1304,7 +1311,29 @@ class _TranslationResultPreviewState
 
   /// Read the primary (first) layout block bbox for a segment, in image pixel coords.
   /// Returns `[x0, y0, x1, y1]` or null.
+  /// Prefers [layout_block_bbox_override] when present.
   List<double>? _readSegmentBbox(int index) {
+    final Map<String, dynamic>? metadata = _allSegmentsMetadata[index];
+    // Prefer the override bbox if it exists.
+    final dynamic overrideRaw = metadata?['layout_block_bbox_override'];
+    if (overrideRaw is List && overrideRaw.length == 4) {
+      final List<double>? parsed = _parseBboxList(overrideRaw);
+      if (parsed != null) {
+        return parsed;
+      }
+    }
+    final dynamic raw = metadata?['layout_block_bbox'];
+    final List<List<double>>? parsed = _parseLayoutBlockBbox(raw);
+    if (parsed == null || parsed.isEmpty || parsed.first.length < 4) {
+      return null;
+    }
+    final List<double> first = parsed.first;
+    return <double>[first[0], first[1], first[2], first[3]];
+  }
+
+  /// Read the original (non-overridden) layout block bbox for a segment.
+  /// Always returns the [layout_block_bbox] value, ignoring any override.
+  List<double>? _readSegmentOriginalBbox(int index) {
     final Map<String, dynamic>? metadata = _allSegmentsMetadata[index];
     final dynamic raw = metadata?['layout_block_bbox'];
     final List<List<double>>? parsed = _parseLayoutBlockBbox(raw);
@@ -1313,6 +1342,24 @@ class _TranslationResultPreviewState
     }
     final List<double> first = parsed.first;
     return <double>[first[0], first[1], first[2], first[3]];
+  }
+
+  /// Parse a single bbox list `[x0, y0, x1, y1]` from dynamic source.
+  /// Returns null if the value cannot be parsed.
+  List<double>? _parseBboxList(dynamic raw) {
+    if (raw is! List || raw.length < 4) {
+      return null;
+    }
+    try {
+      return <double>[
+        (raw[0] as num).toDouble(),
+        (raw[1] as num).toDouble(),
+        (raw[2] as num).toDouble(),
+        (raw[3] as num).toDouble(),
+      ];
+    } catch (_) {
+      return null;
+    }
   }
 
   static bool _isMineruTextImageLikeSegmentText(String? text) {
@@ -1387,6 +1434,8 @@ class _TranslationResultPreviewState
     final Map<String, dynamic>? meta = _allSegmentsMetadata[index];
     final int? page = _readPdfPageNumber(meta);
     final List<double>? bbox = _readSegmentBbox(index);
+    // Always read the original (non-overridden) bbox for source-side highlight.
+    final List<double>? originalBbox = _readSegmentOriginalBbox(index);
     final dynamic indicesRaw = meta?['layout_block_indices'];
     final dynamic bboxRaw = meta?['layout_block_bbox'];
     final dynamic resolution = meta?['layout_block_indices_resolution'];
@@ -1407,6 +1456,8 @@ class _TranslationResultPreviewState
           page ?? (_isImageSourceFile() ? 1 : null);
       _pdfHighlightBboxPageNotifier.value = resolvedPage;
       _pdfHighlightBboxNotifier.value = bbox;
+      // Source-side bbox always shows the original (non-overridden) value.
+      _pdfSourceHighlightBboxNotifier.value = originalBbox;
     } else {
       _clearPdfBboxHighlight();
     }
@@ -1415,6 +1466,7 @@ class _TranslationResultPreviewState
   void _clearPdfBboxHighlight() {
     _pdfHighlightBboxPageNotifier.value = null;
     _pdfHighlightBboxNotifier.value = null;
+    _pdfSourceHighlightBboxNotifier.value = null;
   }
 
   void _followSegmentPdfPage(int index) {
@@ -1447,6 +1499,13 @@ class _TranslationResultPreviewState
     if (highlightedIndex != null) {
       _requestPdfBboxHighlight(highlightedIndex!);
     }
+  }
+
+  void _setBboxEditMode(bool enabled) {
+    if (_bboxEditModeNotifier.value == enabled) {
+      return;
+    }
+    _bboxEditModeNotifier.value = enabled;
   }
 
   Future<void> _handlePdfPageFilterChanged(
@@ -2938,6 +2997,8 @@ class _TranslationResultPreviewState
       if (layoutBlockIndices != null)
         'layout_block_indices': layoutBlockIndices,
       if (layoutBlockBbox != null) 'layout_block_bbox': layoutBlockBbox,
+      if (segment.containsKey('layout_block_bbox_override'))
+        'layout_block_bbox_override': segment['layout_block_bbox_override'],
       if (segment.containsKey('layout_block_indices_resolution'))
         'layout_block_indices_resolution':
             segment['layout_block_indices_resolution'],
@@ -5671,6 +5732,76 @@ class _TranslationResultPreviewState
     }
   }
 
+  /// Handle bbox override change from drag editing.
+  Future<void> _handleBboxOverrideChanged(
+    int index,
+    List<double> bbox,
+  ) async {
+    try {
+      final TranslationService svc = TranslationService();
+      await svc.updateTranslationSegment(
+        _apiTaskId(),
+        index,
+        layoutBlockBboxOverride: bbox,
+      );
+
+      // Update local metadata so the UI reflects the change immediately.
+      if (_allSegmentsMetadata.containsKey(index)) {
+        _allSegmentsMetadata[index] = <String, dynamic>{
+          ..._allSegmentsMetadata[index]!,
+          'layout_block_bbox_override': bbox,
+        };
+      } else {
+        _allSegmentsMetadata[index] = <String, dynamic>{
+          'layout_block_bbox_override': bbox,
+        };
+      }
+
+      if (mounted && _shouldRefreshOverlayPreviewRevision) {
+        // Refresh the PDF bbox highlight so the target preview shows the
+        // new override and the source preview shows the original bbox.
+        _requestPdfBboxHighlight(index);
+        _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
+        setState(() {});
+        await _segmentsPaginationController?.refresh();
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showError(context, 'Failed to update bbox: $e');
+      }
+    }
+  }
+
+  /// Handle bbox override reset.
+  Future<void> _handleBboxOverrideReset(int index) async {
+    try {
+      final TranslationService svc = TranslationService();
+      await svc.updateTranslationSegment(
+        _apiTaskId(),
+        index,
+        layoutBlockBboxReset: true,
+      );
+
+      // Remove the override from local metadata.
+      if (_allSegmentsMetadata.containsKey(index)) {
+        final Map<String, dynamic> updated =
+            Map<String, dynamic>.from(_allSegmentsMetadata[index]!);
+        updated.remove('layout_block_bbox_override');
+        _allSegmentsMetadata[index] = updated;
+      }
+
+      if (mounted && _shouldRefreshOverlayPreviewRevision) {
+        _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
+        setState(() {});
+        await _segmentsPaginationController?.refresh();
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showError(context, 'Failed to reset bbox: $e');
+      }
+    }
+  }
+
   /// Handle table grid stroke toggle for a PDF table segment.
   Future<void> _handleTableStrokeChanged(int index, double tableStrokePt) async {
     try {
@@ -6396,6 +6527,10 @@ class _TranslationResultPreviewState
               _supportsRevisionForMode(baseMode)
                   ? _pdfHighlightBboxNotifier
                   : null,
+          sourceHighlightBboxListenable:
+              _supportsRevisionForMode(baseMode)
+                  ? _pdfSourceHighlightBboxNotifier
+                  : null,
           showSelectedSegmentMarkerListenable:
               _supportsRevisionForMode(baseMode)
                   ? _showSelectedSegmentMarkerNotifier
@@ -6408,6 +6543,32 @@ class _TranslationResultPreviewState
               _supportsRevisionForMode(baseMode) &&
                       baseMode == TranslationPreviewMode.pdfPreserve
                   ? _setAutoFollowSegmentPdfPage
+                  : null,
+          bboxEditModeListenable:
+              _supportsRevisionForMode(baseMode)
+                  ? _bboxEditModeNotifier
+                  : null,
+          onBboxEditModeChanged:
+              _supportsRevisionForMode(baseMode)
+                  ? _setBboxEditMode
+                  : null,
+          onBboxOverrideChanged:
+              _supportsRevisionForMode(baseMode)
+                  ? (List<double> bbox) {
+                      final int? idx = highlightedIndex;
+                      if (idx != null) {
+                        unawaited(_handleBboxOverrideChanged(idx, bbox));
+                      }
+                    }
+                  : null,
+          onBboxOverrideReset:
+              _supportsRevisionForMode(baseMode)
+                  ? () {
+                      final int? idx = highlightedIndex;
+                      if (idx != null) {
+                        unawaited(_handleBboxOverrideReset(idx));
+                      }
+                    }
                   : null,
           getFilteredSelectableSegmentIndices:
               _supportsRevisionForMode(baseMode)

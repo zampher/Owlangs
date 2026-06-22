@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:pdfx/pdfx.dart';
 
 import 'translation_result/layout_bbox_highlight.dart';
+import 'translation_result/layout_bbox_edit_overlay.dart';
 import 'pdf_page_utils.dart';
 
 /// Renders one PDF page at [maxWidth] using pdfium/pdf.js for pixel-accurate output.
@@ -22,6 +23,9 @@ class PdfContinuousPage extends StatefulWidget {
     this.highlightBbox,
     this.transformController,
     this.scaleEnabled = true,
+    this.bboxEditMode = false,
+    this.onEditBboxChanged,
+    this.onEditBboxReset,
     super.key,
   });
 
@@ -38,6 +42,16 @@ class PdfContinuousPage extends StatefulWidget {
   /// Whether [InteractiveViewer] pinch/scroll-zoom gestures are enabled.
   /// When false, only external changes to [transformController] are reflected.
   final bool scaleEnabled;
+
+  /// Whether bbox edit mode is active for this page.
+  final bool bboxEditMode;
+
+  /// Called when the user finishes dragging the bbox overlay, with the
+  /// new bbox in display-pixel coordinates (relative to the page image).
+  final ValueChanged<Rect>? onEditBboxChanged;
+
+  /// Called when the user taps the reset button on the bbox overlay.
+  final VoidCallback? onEditBboxReset;
 
   @override
   State<PdfContinuousPage> createState() => _PdfContinuousPageState();
@@ -137,6 +151,21 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
     }
   }
 
+  /// Wraps [callback] (which expects display-pixel rect) with a converter
+  /// that transforms the rect to PDF points before calling the outer callback.
+  ValueChanged<Rect>? _toPdfCallback(ValueChanged<Rect>? callback) {
+    if (callback == null || _pdfPageWidth <= 0) return null;
+    final double scale = widget.maxWidth / _pdfPageWidth;
+    return (Rect displayRect) {
+      callback(Rect.fromLTWH(
+        displayRect.left / scale,
+        displayRect.top / scale,
+        displayRect.width / scale,
+        displayRect.height / scale,
+      ));
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -164,6 +193,7 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
     }
 
     Rect? screenRect;
+    Rect? editBboxRect;
     if (widget.highlightBbox != null &&
         _pdfPageWidth > 0 &&
         _pdfPageHeight > 0) {
@@ -176,6 +206,8 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
           (bbox[2] - bbox[0]) * scale,
           (bbox[3] - bbox[1]) * scale,
         );
+        // The edit overlay uses the same initial bbox in display pixels.
+        editBboxRect = screenRect;
       }
     }
 
@@ -186,6 +218,10 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
       highlightRect: screenRect,
       transformController: widget.transformController,
       scaleEnabled: widget.scaleEnabled,
+      bboxEditMode: widget.bboxEditMode,
+      editBboxRect: editBboxRect,
+      onEditBboxChanged: _toPdfCallback(widget.onEditBboxChanged),
+      onEditBboxReset: widget.onEditBboxReset,
     );
   }
 }
@@ -202,6 +238,10 @@ class PdfContinuousPageFrame extends StatelessWidget {
     this.highlightRect,
     this.transformController,
     this.scaleEnabled = true,
+    this.bboxEditMode = false,
+    this.editBboxRect,
+    this.onEditBboxChanged,
+    this.onEditBboxReset,
     super.key,
   });
 
@@ -215,6 +255,18 @@ class PdfContinuousPageFrame extends StatelessWidget {
 
   /// Whether [InteractiveViewer] pinch/scroll-zoom gestures are enabled.
   final bool scaleEnabled;
+
+  /// Whether bbox edit mode is active.
+  final bool bboxEditMode;
+
+  /// Bbox for the edit overlay in display-pixel coordinates.
+  final Rect? editBboxRect;
+
+  /// Called when the user finishes dragging the bbox overlay.
+  final ValueChanged<Rect>? onEditBboxChanged;
+
+  /// Called when the user taps the reset button.
+  final VoidCallback? onEditBboxReset;
 
   @override
   Widget build(BuildContext context) {
@@ -239,21 +291,7 @@ class PdfContinuousPageFrame extends StatelessWidget {
       ),
     );
 
-    final Widget tile = highlightRect == null
-        ? pageContent
-        : Stack(
-            children: <Widget>[
-              pageContent,
-              layoutBboxHighlightPositioned(
-                bboxRect: highlightRect!,
-                child: IgnorePointer(
-                  child: Container(
-                    decoration: layoutBboxHighlightDecoration(),
-                  ),
-                ),
-              ),
-            ],
-          );
+    final Widget tile = _buildTile(pageContent);
 
     final Widget centered = Center(child: tile);
 
@@ -269,5 +307,44 @@ class PdfContinuousPageFrame extends StatelessWidget {
         child: centered,
       ),
     );
+  }
+
+  Widget _buildTile(Widget pageContent) {
+    // Edit mode: show interactive edit overlay
+    if (bboxEditMode && editBboxRect != null) {
+      return Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          pageContent,
+          Positioned.fill(
+            child: LayoutBboxEditOverlay(
+              bboxRect: editBboxRect!,
+              imageSize: Size(width, height),
+              onChanged: onEditBboxChanged ?? (_) {},
+              onReset: onEditBboxReset,
+            ),
+          ),
+        ],
+      );
+    }
+
+    // View mode: show red highlight (existing behavior)
+    if (highlightRect != null) {
+      return Stack(
+        children: <Widget>[
+          pageContent,
+          layoutBboxHighlightPositioned(
+            bboxRect: highlightRect!,
+            child: IgnorePointer(
+              child: Container(
+                decoration: layoutBboxHighlightDecoration(),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return pageContent;
   }
 }

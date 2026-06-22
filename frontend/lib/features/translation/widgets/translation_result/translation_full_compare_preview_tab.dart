@@ -52,6 +52,7 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
     this.autoFollowSegmentPdfPageListenable,
     this.pdfHighlightBboxPageListenable,
     this.pdfHighlightBboxListenable,
+    this.sourceHighlightBboxListenable,
     this.showSelectedSegmentMarkerListenable,
     this.onShowSelectedSegmentMarkerChanged,
     this.onAutoFollowSegmentPdfPageChanged,
@@ -61,6 +62,10 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
     this.onDownload,
     this.onShowDownload,
     this.onSyncScrollChanged,
+    this.bboxEditModeListenable,
+    this.onBboxEditModeChanged,
+    this.onBboxOverrideChanged,
+    this.onBboxOverrideReset,
   });
 
   final String taskId;
@@ -89,6 +94,8 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
   final ValueListenable<bool>? autoFollowSegmentPdfPageListenable;
   final ValueListenable<int?>? pdfHighlightBboxPageListenable;
   final ValueListenable<List<double>?>? pdfHighlightBboxListenable;
+  /// Original (non-overridden) bbox for source-side PDF preview highlight.
+  final ValueListenable<List<double>?>? sourceHighlightBboxListenable;
   final ValueListenable<bool>? showSelectedSegmentMarkerListenable;
   final ValueChanged<bool>? onShowSelectedSegmentMarkerChanged;
   final ValueChanged<bool>? onAutoFollowSegmentPdfPageChanged;
@@ -97,6 +104,18 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
   final void Function(String format, String url)? onDownload;
   final Future<void> Function()? onShowDownload;
   final ValueChanged<bool>? onSyncScrollChanged;
+
+  /// Whether bbox edit mode is active.
+  final ValueListenable<bool>? bboxEditModeListenable;
+
+  /// Called when the user toggles the bbox edit mode checkbox.
+  final ValueChanged<bool>? onBboxEditModeChanged;
+
+  /// Called when the user finishes dragging, with the new bbox in PDF points.
+  final void Function(List<double> bbox)? onBboxOverrideChanged;
+
+  /// Called when the user taps the reset button.
+  final VoidCallback? onBboxOverrideReset;
 
   @override
   ConsumerState<TranslationFullComparePreviewTab> createState() =>
@@ -115,6 +134,10 @@ class _TranslationFullComparePreviewTabState
   Set<int> _displayDirtySegmentIndices = <int>{};
   int? _highlightBboxPage;
   List<double>? _highlightBbox;
+  /// Original (non-overridden) bbox for source-side PDF highlight.
+  List<double>? _sourceHighlightBbox;
+  bool _bboxEditMode = false;
+
   final ValueNotifier<Set<int>> _selectedSegmentIndicesNotifier =
       ValueNotifier<Set<int>>(<int>{});
   final PdfContinuousScrollController _pdfNavigationController =
@@ -217,6 +240,27 @@ class _TranslationFullComparePreviewTabState
         _onPdfBboxHighlightChanged();
       }
     }
+    if (oldWidget.sourceHighlightBboxListenable !=
+        widget.sourceHighlightBboxListenable) {
+      _rebindPreviewSignal(
+        oldWidget.sourceHighlightBboxListenable,
+        widget.sourceHighlightBboxListenable,
+        _onPdfBboxHighlightChanged,
+      );
+      if (_previewSignalsAlive) {
+        _onPdfBboxHighlightChanged();
+      }
+    }
+    if (oldWidget.bboxEditModeListenable != widget.bboxEditModeListenable) {
+      _rebindPreviewSignal(
+        oldWidget.bboxEditModeListenable,
+        widget.bboxEditModeListenable,
+        _onBboxEditModeChanged,
+      );
+      if (_previewSignalsAlive) {
+        _onBboxEditModeChanged();
+      }
+    }
     if (oldWidget.pdfRenderRevision != widget.pdfRenderRevision &&
         widget.pdfRenderRevisionListenable == null) {
       _maybeApplyPdfRevision(widget.pdfRenderRevision);
@@ -317,6 +361,16 @@ class _TranslationFullComparePreviewTabState
           _onPdfBboxHighlightChanged,
         ) &&
         alive;
+    alive = _tryAddPreviewSignalListener(
+          widget.sourceHighlightBboxListenable,
+          _onPdfBboxHighlightChanged,
+        ) &&
+        alive;
+    alive = _tryAddPreviewSignalListener(
+          widget.bboxEditModeListenable,
+          _onBboxEditModeChanged,
+        ) &&
+        alive;
     _previewSignalsAlive = alive;
     return alive;
   }
@@ -355,9 +409,13 @@ class _TranslationFullComparePreviewTabState
   void _onPdfBboxHighlightChanged() {
     final int? page = widget.pdfHighlightBboxPageListenable?.value;
     final List<double>? bbox = widget.pdfHighlightBboxListenable?.value;
+    // Source highlight always uses the original (non-overridden) bbox.
+    final List<double>? sourceBbox =
+        widget.sourceHighlightBboxListenable?.value;
     if (bbox != null && bbox.length >= 4) {
       setState(() {
         _highlightBbox = bbox;
+        _sourceHighlightBbox = sourceBbox;
         // Image overlay bbox uses image pixel coords; page is optional.
         if (page != null) {
           _highlightBboxPage = page;
@@ -372,7 +430,31 @@ class _TranslationFullComparePreviewTabState
     setState(() {
       _highlightBboxPage = null;
       _highlightBbox = null;
+      _sourceHighlightBbox = null;
     });
+  }
+
+  void _onBboxEditModeChanged() {
+    final bool editMode = widget.bboxEditModeListenable?.value ?? false;
+    if (mounted) {
+      setState(() {
+        _bboxEditMode = editMode;
+      });
+    }
+  }
+
+  /// Called by [PdfContinuousPage] when dragging ends in the edit overlay.
+  /// [pdfRect] is already in PDF points (converted by PdfContinuousPage).
+  void _onEditBboxChanged(Rect pdfRect) {
+    if (widget.onBboxOverrideChanged == null) {
+      return;
+    }
+    widget.onBboxOverrideChanged!(<double>[
+      pdfRect.left,
+      pdfRect.top,
+      pdfRect.right,
+      pdfRect.bottom,
+    ]);
   }
 
   void _maybeApplyPdfRevision(int revision) {
@@ -600,7 +682,11 @@ class _TranslationFullComparePreviewTabState
       navigationController: navigationController,
       highlightPageNumber: _highlightBboxPage,
       highlightBbox: _highlightBbox,
+      sourceHighlightBbox: _sourceHighlightBbox,
       viewportController: _viewportController,
+      bboxEditMode: _bboxEditMode,
+      onEditBboxChanged: _onEditBboxChanged,
+      onEditBboxReset: widget.onBboxOverrideReset,
       onVisiblePageChanged: (int page, int totalPages) {
         if (!mounted ||
             (page == _comparePdfCurrentPage &&
@@ -680,6 +766,9 @@ class _TranslationFullComparePreviewTabState
       showScrollbar: showScrollbar,
       highlightPageNumber: _highlightBboxPage,
       highlightBbox: _highlightBbox,
+      bboxEditMode: _bboxEditMode,
+      onEditBboxChanged: _onEditBboxChanged,
+      onEditBboxReset: widget.onBboxOverrideReset,
       onDownload: widget.onDownload,
       onRequestPreviewSettings: widget.onRequestPreviewSettings,
     );
@@ -1050,6 +1139,32 @@ class _TranslationFullComparePreviewTabState
                           ),
                           Text(
                             l10n.translationPreviewMarkSelectedSegment,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              if (widget.bboxEditModeListenable != null)
+                ValueListenableBuilder<bool>(
+                  valueListenable: widget.bboxEditModeListenable!,
+                  builder: (BuildContext context, bool enabled, Widget? _) {
+                    return Tooltip(
+                      message: l10n.translationPreviewEditSegmentBboxDesc,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Checkbox(
+                            value: enabled,
+                            onChanged: (bool? value) {
+                              widget.onBboxEditModeChanged
+                                  ?.call(value ?? false);
+                            },
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          Text(
+                            l10n.translationPreviewEditSegmentBbox,
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],

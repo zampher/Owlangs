@@ -1519,6 +1519,7 @@ async def _typst_overlay_pdf_response(
     leading_em_by_block_index: Dict[int, float] = {}
     rotation_by_block_index: Dict[int, int] = {}
     table_stroke_pt_by_block_index: Dict[int, float] = {}
+    bbox_override_by_block_index: Dict[int, tuple] = {}
     if segments:
         is_deep_split_enabled = bool(task_state.get("deep_split"))
         text_field = "target_text"
@@ -1534,6 +1535,7 @@ async def _typst_overlay_pdf_response(
             build_block_font_style_map_from_segments,
             build_block_font_weight_map_from_segments,
             build_block_leading_map_from_segments,
+            build_block_bbox_override_map_from_segments,
         )
         font_size_by_block_index = build_block_font_map_from_segments(
             segments,
@@ -1585,6 +1587,16 @@ async def _typst_overlay_pdf_response(
                 f"for {len(table_stroke_pt_by_block_index)} block(s): "
                 f"{sorted(table_stroke_pt_by_block_index.items())[:8]}",
             )
+        bbox_override_by_block_index = build_block_bbox_override_map_from_segments(
+            segments, task_state,
+        )
+        if bbox_override_by_block_index:
+            logger.info(
+                LogModule.EXPORT,
+                f"[TYPST_OVERLAY] Task {task_id}: applying user bbox overrides "
+                f"for {len(bbox_override_by_block_index)} block(s): "
+                f"{sorted(bbox_override_by_block_index.items())[:8]}",
+            )
 
     zip_bytes = _resolve_layout_zip_bytes(task_state)
     if not zip_bytes:
@@ -1614,6 +1626,7 @@ async def _typst_overlay_pdf_response(
         leading_em_by_block_index=leading_em_by_block_index or None,
         rotation_by_block_index=rotation_by_block_index or None,
         table_stroke_pt_by_block_index=table_stroke_pt_by_block_index or None,
+        bbox_override_by_block_index=bbox_override_by_block_index or None,
     )
 
     output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
@@ -1729,6 +1742,11 @@ async def _typst_overlay_pdf_response(
                         if table_stroke_pt_by_block_index
                         else None
                     ),
+                    bbox_override_by_block_index=(
+                        bbox_override_by_block_index
+                        if bbox_override_by_block_index
+                        else None
+                    ),
                     render_page_indices=render_page_indices,
                     base_merged_pdf_bytes=base_merged_pdf_bytes,
                     cleaned_source_output_path=cleaned_source_file,
@@ -1771,6 +1789,19 @@ async def _typst_overlay_pdf_response(
                             ),
                             leading_em_by_block_index=(
                                 leading_em_by_block_index if leading_em_by_block_index else None
+                            ),
+                            rotation_by_block_index=(
+                                rotation_by_block_index if rotation_by_block_index else None
+                            ),
+                            table_stroke_pt_by_block_index=(
+                                table_stroke_pt_by_block_index
+                                if table_stroke_pt_by_block_index
+                                else None
+                            ),
+                            bbox_override_by_block_index=(
+                                bbox_override_by_block_index
+                                if bbox_override_by_block_index
+                                else None
                             ),
                             cleaned_source_output_path=cleaned_source_file,
                             skip_overlay_block_indices=(
@@ -1838,6 +1869,19 @@ async def _typst_overlay_pdf_response(
                         ),
                         leading_em_by_block_index=(
                             leading_em_by_block_index if leading_em_by_block_index else None
+                        ),
+                        rotation_by_block_index=(
+                            rotation_by_block_index if rotation_by_block_index else None
+                        ),
+                        table_stroke_pt_by_block_index=(
+                            table_stroke_pt_by_block_index
+                            if table_stroke_pt_by_block_index
+                            else None
+                        ),
+                        bbox_override_by_block_index=(
+                            bbox_override_by_block_index
+                            if bbox_override_by_block_index
+                            else None
                         ),
                         cleaned_source_output_path=cleaned_source_file,
                         skip_overlay_block_indices=(
