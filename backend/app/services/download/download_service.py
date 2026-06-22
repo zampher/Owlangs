@@ -228,6 +228,29 @@ def _populate_layout_placeholder_image_map(
     if not chunks:
         return 0
 
+    # Build block_index → block lookup for PDF extraction fallback
+    block_lookup: Dict[int, Any] = {}
+    if layout_doc is not None:
+        for page in layout_doc.pages:
+            for block in page.blocks:
+                if block.index is not None:
+                    block_lookup[block.index] = block
+
+    source_pdf_path = task_state.get("original_file_path")
+    _paddle_engine = getattr(layout_doc, "engine", "") == "paddle"
+
+    # Open source PDF once for image extraction fallback (PaddleOCR)
+    _source_doc = None
+    if _paddle_engine and source_pdf_path:
+        try:
+            import fitz as _fitz
+            _source_doc = _fitz.open(source_pdf_path)
+        except Exception as _open_err:
+            logger.warning(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Failed to open source PDF for image extraction: {_open_err}",
+            )
+
     zip_file = None
     registered = 0
     try:
@@ -309,6 +332,16 @@ def _populate_layout_placeholder_image_map(
             placeholder_id = chunk.image_placeholder or f"layoutimg{idx}"
             alt_text = chunk.image_alt or (chunk.image_path or "Image")
             data_uri = _read_image_data_uri(chunk.image_path)
+            if not data_uri and _paddle_engine and _source_doc is not None and chunk.block_indices:
+                data_uri = _extract_image_data_uri_from_pdf_block(
+                    _source_doc, chunk.block_indices, block_lookup
+                )
+                if data_uri:
+                    logger.info(
+                        LogModule.EXPORT,
+                        f"[DOWNLOAD] Extracted image from source PDF for "
+                        f"placeholder '{placeholder_id}', block_indices={chunk.block_indices}",
+                    )
             if not data_uri:
                 continue
             image_data_map[placeholder_id] = {
@@ -337,6 +370,11 @@ def _populate_layout_placeholder_image_map(
                 zip_file.close()
             except Exception:
                 pass
+        if _source_doc is not None:
+            try:
+                _source_doc.close()
+            except Exception:
+                pass
 
     if registered:
         logger.info(
@@ -344,6 +382,55 @@ def _populate_layout_placeholder_image_map(
             f"[DOWNLOAD] Registered {registered} layoutimg placeholder(s) in image_data_map",
         )
     return registered
+
+
+def _extract_image_data_uri_from_pdf_block(
+    source_doc,
+    block_indices: list,
+    block_lookup: Dict[int, Any],
+) -> Optional[str]:
+    """
+    Extract image from source PDF at the block bbox position.
+
+    Fallback used when the layout ZIP does not contain image files (e.g. PaddleOCR).
+    Accepts an already-open fitz.Document to avoid repeated open/close.
+    """
+    try:
+        import fitz
+    except ImportError:
+        return None
+
+    try:
+        for blk_idx in block_indices:
+            block = block_lookup.get(blk_idx)
+            if block is None:
+                continue
+            bbox = getattr(block, "bbox", None)
+            if bbox is None:
+                continue
+            page_index = getattr(block, "page_index", -1)
+            if page_index < 0 or page_index >= len(source_doc):
+                continue
+
+            page = source_doc[page_index]
+            rect = fitz.Rect(*bbox)
+            page_rect = page.rect
+            rect &= page_rect
+            if rect.is_empty:
+                continue
+
+            pix = page.get_pixmap(clip=rect, dpi=150)
+            img_bytes = pix.tobytes("png")
+            data_uri = f"data:image/png;base64,{base64.b64encode(img_bytes).decode('ascii')}"
+            return data_uri
+    except Exception as e:
+        logger.warning(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Failed to extract image from PDF at block_indices={block_indices}: {e}",
+        )
+        return None
+
+    return None
 
 
 def _build_block_rotation_map_from_segments(
