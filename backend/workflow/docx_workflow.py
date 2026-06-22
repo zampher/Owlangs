@@ -79,20 +79,27 @@ class DocxWorkflow(Workflow[DocxWorkflowConfig, Document, Document], HTMLExporta
         
         # Translate headers/footers (if enabled)
         if self.config.translate_headers_footers:
-            from converter.x2md.docx_extras import extract_headers_footers, apply_headers_footers
+            from converter.x2md.docx_extras import (
+                extract_headers_footers, extract_headers_footers_flat,
+                apply_headers_footers_flat,
+            )
             try:
-                # Extract headers/footers from current document content to avoid overwriting body translation
-                items = extract_headers_footers(document.content)
+                # Save old-style items for bilingual export backward compat
+                old_items = extract_headers_footers(document.content)
+                if old_items:
+                    self._docx_extras_original["headers_footers"] = old_items
+
+                # Extract each paragraph/cell as an individual item for translation
+                items = extract_headers_footers_flat(document.content)
                 if items:
-                    self.logger.info(LogModule.WORKFLOW,f"Extracted {len(items)} header/footer texts")
-                    self._docx_extras_original["headers_footers"] = items
-                    # Batch translation
+                    self.logger.info(LogModule.WORKFLOW,f"Extracted {len(items)} header/footer items (flat)")
+                    # Batch translation — each cell/paragraph is a separate segment
                     texts = []
                     for item in items:
                         if isinstance(item, (list, tuple)) and len(item) == 2:
                             texts.append(item[1])
                         else:
-                            self.logger.warning(LogModule.WORKFLOW, f"Invalid header/footer item format: {item!r}, skipping")
+                            self.logger.warning(LogModule.WORKFLOW, f"Invalid header/footer flat item format: {item!r}, skipping")
                     if translator.translate_agent:
                         translated_list = translator.translate_agent.send_segments(texts, translator.chunk_size)
                     else:
@@ -106,7 +113,7 @@ class DocxWorkflow(Workflow[DocxWorkflowConfig, Document, Document], HTMLExporta
                             translated_map[key] = translated_text
                     if translated_map:
                         # Write back to current document content
-                        new_bytes = apply_headers_footers(document.content, translated_map)
+                        new_bytes = apply_headers_footers_flat(document.content, translated_map)
                         document.content = new_bytes
                         self.logger.info(LogModule.WORKFLOW,"Header/footer translation completed")
             except Exception as e:
@@ -216,26 +223,33 @@ class DocxWorkflow(Workflow[DocxWorkflowConfig, Document, Document], HTMLExporta
         
         # Translate headers/footers (if enabled)
         if self.config.translate_headers_footers:
-            from converter.x2md.docx_extras import extract_headers_footers, apply_headers_footers
+            from converter.x2md.docx_extras import (
+                extract_headers_footers, extract_headers_footers_flat,
+                apply_headers_footers_flat,
+            )
             try:
-                # Extract headers/footers from current document content to avoid overwriting body translation
-                items = extract_headers_footers(document.content)
-                if items:
-                    self.logger.info(LogModule.WORKFLOW,f"Extracted {len(items)} header/footer texts")
-                    self._docx_extras_original["headers_footers"] = items
+                # Save old-style items for bilingual export backward compat
+                old_items = extract_headers_footers(document.content)
+                if old_items:
+                    self._docx_extras_original["headers_footers"] = old_items
                     # Also save to task_state if task_id is available
                     if task_id:
-                        from app.services.task import task_manager
-                        ts = task_manager.get_task(task_id)
+                        from app.services.task import task_manager as _hf_tm
+                        ts = _hf_tm.get_task(task_id)
                         if ts:
-                            ts.setdefault("docx_extras_original", {})["headers_footers"] = items
-                    # Batch translation（异步）
+                            ts.setdefault("docx_extras_original", {})["headers_footers"] = old_items
+
+                # Extract each paragraph/cell as an individual item for translation
+                items = extract_headers_footers_flat(document.content)
+                if items:
+                    self.logger.info(LogModule.WORKFLOW,f"Extracted {len(items)} header/footer items (flat)")
+                    # Batch translation — each cell/paragraph is a separate segment
                     texts = []
                     for item in items:
                         if isinstance(item, (list, tuple)) and len(item) == 2:
                             texts.append(item[1])
                         else:
-                            self.logger.warning(LogModule.WORKFLOW, f"Invalid header/footer item format: {item!r}, skipping")
+                            self.logger.warning(LogModule.WORKFLOW, f"Invalid header/footer flat item format: {item!r}, skipping")
                     if translator.translate_agent:
                         translated_list = await translator.translate_agent.send_segments_async(texts, translator.chunk_size)
                     else:
@@ -249,9 +263,53 @@ class DocxWorkflow(Workflow[DocxWorkflowConfig, Document, Document], HTMLExporta
                             translated_map[key] = translated_text
                     if translated_map:
                         # Write back to current document content
-                        new_bytes = apply_headers_footers(document.content, translated_map)
+                        new_bytes = apply_headers_footers_flat(document.content, translated_map)
                         document.content = new_bytes
                         self.logger.info(LogModule.WORKFLOW,"Header/footer translation completed")
+
+                        # Add header/footer items to translation_segments for frontend display
+                        try:
+                            if task_id:
+                                from app.services.task import task_manager as _hf_seg_tm
+                                _hf_ts = _hf_seg_tm.get_task(task_id)
+                                if _hf_ts:
+                                    # Initialize translation_segments if body translation
+                                    # didn't create it (e.g. empty-body documents)
+                                    _hf_seg_data = _hf_ts.get("translation_segments")
+                                    if not isinstance(_hf_seg_data, dict):
+                                        _hf_seg_data = {"segments": [], "metadata": {}}
+                                        _hf_ts["translation_segments"] = _hf_seg_data
+                                    _hf_segs = _hf_seg_data.get("segments")
+                                    if isinstance(_hf_segs, list):
+                                        _max_idx = max(
+                                            (s.get("segment_index", -1) for s in _hf_segs
+                                             if isinstance(s.get("segment_index"), int)),
+                                            default=-1
+                                        ) + 1
+                                        _added = 0
+                                        for _hf_item in items:
+                                            if isinstance(_hf_item, (list, tuple)) and len(_hf_item) == 2:
+                                                _hf_key, _hf_source = _hf_item
+                                                _hf_target = str(translated_map.get(_hf_key, _hf_source))
+                                                _hf_segs.append({
+                                                    "segment_index": _max_idx + _added,
+                                                    "source_text": _hf_source,
+                                                    "target_text": _hf_target,
+                                                    "modified": False,
+                                                    "is_excluded": False,
+                                                    "is_image": False,
+                                                    "is_failed": False,
+                                                    "segment_type": "header_footer",
+                                                    "header_footer_key": str(_hf_key),
+                                                })
+                                                _added += 1
+                                        if _added > 0:
+                                            self.logger.info(
+                                                LogModule.WORKFLOW,
+                                                f"[HF-SEGMENTS] Added {_added} header/footer segments to translation_segments"
+                                            )
+                        except Exception as _hf_seg_err:
+                            self.logger.warning(LogModule.WORKFLOW, f"[HF-SEGMENTS] Failed to add header/footer segments: {_hf_seg_err}")
             except Exception as e:
                 self.logger.warning(LogModule.WORKFLOW,f"Header/footer translation failed: {e}")
         

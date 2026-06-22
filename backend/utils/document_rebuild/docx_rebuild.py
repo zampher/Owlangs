@@ -275,6 +275,13 @@ def rebuild_docx_document_from_segments(
         
         for segment in segments:
             segment_index = segment.get("segment_index", -1)
+
+            # Header/footer segments are already applied to the document by the
+            # workflow translation phase (apply_headers_footers_flat).  They do
+            # not have body segment_info and should not be rebuilt here.
+            if segment.get("segment_type") == "header_footer":
+                continue
+
             # CRITICAL: Use the same priority as frontend: modified_text ?? target_text ?? ''
             # Frontend uses: segment['modified_text'] ?? segment['target_text'] ?? ''
             # We must use the same logic to ensure consistency
@@ -428,9 +435,53 @@ def rebuild_docx_document_from_segments(
                 "[DOCX-REBUILD-TABLE1] No Table1 segments found in segment_data_map",
             )
         
+        hf_bilingual_segments = [
+            s for s in segments
+            if s.get("segment_type") == "header_footer"
+            and (s.get("source_text") or "").strip()
+            and not s.get("is_excluded")
+            and not s.get("is_failed")
+        ]
+
         if not segment_data_map:
-            logger.warning(LogModule.RESTOR,"No valid segment indices found")
-            return None
+            # All segments are non-body types (e.g. header_footer) that were
+            # already applied to the document by the workflow translation phase.
+            logger.info(LogModule.RESTOR,
+                "No body segments found in segment_data_map — "
+                "all segments are header/footer/textbox types already applied by workflow"
+            )
+            if bilingual_export and hf_bilingual_segments:
+                hf_inserted = _insert_bilingual_header_footer_flat_segments(
+                    doc,
+                    hf_bilingual_segments,
+                    target_first=target_first,
+                    source_text_italic=source_text_italic,
+                    source_text_color=source_text_color,
+                    target_text_italic=target_text_italic,
+                    target_text_color=target_text_color,
+                )
+                logger.info(
+                    LogModule.RESTOR,
+                    f"[BILINGUAL-DOCX] HF-only export inserted {hf_inserted} source items "
+                    f"from {len(hf_bilingual_segments)} header/footer segments",
+                )
+                output_io = io.BytesIO()
+                doc.save(output_io)
+                output_io.seek(0)
+                return Document.from_bytes(
+                    content=output_io.read(),
+                    suffix=translated_docx_document.suffix,
+                    stem=translated_docx_document.stem,
+                )
+            output_io = io.BytesIO()
+            doc.save(output_io)
+            output_io.seek(0)
+            new_doc = Document.from_bytes(
+                content=output_io.read(),
+                suffix=translated_docx_document.suffix,
+                stem=translated_docx_document.stem,
+            )
+            return new_doc
         
         # Build para_index_map similar to DocxTranslator._pre_translate_with_metadata
         # This maps (is_table_cell, table_idx, row_idx, cell_idx, para_local_idx) -> paragraph
@@ -1220,7 +1271,22 @@ def rebuild_docx_document_from_segments(
                 source_text_color=source_text_color,
                 target_text_italic=target_text_italic,
                 target_text_color=target_text_color,
+                skip_legacy_header_footer=bool(hf_bilingual_segments),
             )
+            if hf_bilingual_segments:
+                hf_inserted = _insert_bilingual_header_footer_flat_segments(
+                    doc,
+                    hf_bilingual_segments,
+                    target_first=target_first,
+                    source_text_italic=source_text_italic,
+                    source_text_color=source_text_color,
+                    target_text_italic=target_text_italic,
+                    target_text_color=target_text_color,
+                )
+                logger.info(
+                    LogModule.RESTOR,
+                    f"[BILINGUAL-DOCX] Flat header/footer export inserted {hf_inserted} source items",
+                )
         
         # Save modified DOCX back to bytes
         output_io = io.BytesIO()
@@ -1263,6 +1329,222 @@ def _normalize_key(k) -> tuple:
     return k
 
 
+def _parse_header_footer_key(raw: Any) -> Optional[tuple]:
+    """Parse header_footer_key from translation segment metadata."""
+    if raw is None:
+        return None
+    if isinstance(raw, tuple):
+        return raw
+    if isinstance(raw, list):
+        return tuple(raw)
+    if isinstance(raw, str):
+        try:
+            parsed = ast.literal_eval(raw)
+            if isinstance(parsed, (list, tuple)):
+                return tuple(parsed)
+        except (ValueError, SyntaxError):
+            pass
+    return None
+
+
+def _lookup_hf_source_text(
+    source_map: Dict[tuple, str],
+    name: str,
+    lookup_idx: int,
+    suffix: Tuple,
+) -> Optional[str]:
+    """Resolve source text for a header/footer flat key (mirrors apply lookup)."""
+    from converter.x2md.docx_extras import _PART_NAME_ALIASES
+
+    candidates = [name]
+    alias = _PART_NAME_ALIASES.get(name)
+    if alias and alias not in candidates:
+        candidates.append(alias)
+    for candidate in candidates:
+        key = _normalize_key((candidate, lookup_idx, *suffix))
+        if key in source_map:
+            return source_map[key]
+    return None
+
+
+def _insert_bilingual_header_footer_flat_segments(
+    doc,
+    hf_segments: List[Dict[str, Any]],
+    target_first: bool = False,
+    source_text_italic: bool = True,
+    source_text_color: str = "gray",
+    target_text_italic: bool = False,
+    target_text_color: Optional[str] = None,
+) -> int:
+    """Insert source paragraphs for flat header/footer translation segments."""
+    from docx.text.paragraph import Paragraph
+    from docx.shared import RGBColor
+    from converter.x2md.docx_extras import (
+        _cell_should_preserve_pagination,
+        _compute_part_fingerprint,
+        _is_merged_cell_skip,
+        _paragraph_should_preserve_pagination,
+        _part_element_id,
+    )
+    from utils.table_utils import get_all_merged_regions_docx
+
+    source_map: Dict[tuple, str] = {}
+    for seg in hf_segments:
+        source = (seg.get("source_text") or "").strip()
+        if not source:
+            continue
+        key = _parse_header_footer_key(seg.get("header_footer_key"))
+        if key is None:
+            continue
+        modified_text = seg.get("modified_text")
+        target_text = modified_text if modified_text is not None else seg.get("target_text", "")
+        if (target_text or "").strip() == source:
+            continue
+        source_map[_normalize_key(key)] = source
+
+    if not source_map:
+        logger.info(
+            LogModule.RESTOR,
+            "[BILINGUAL-DOCX] No flat header/footer source texts to insert "
+            f"(segments={len(hf_segments)})",
+        )
+        return 0
+
+    _SOURCE_COLOR_MAP = {
+        "gray": RGBColor(0x80, 0x80, 0x80),
+        "red": RGBColor(0xFF, 0x00, 0x00),
+        "blue": RGBColor(0x00, 0x00, 0xFF),
+        "green": RGBColor(0x00, 0x80, 0x00),
+        "orange": RGBColor(0xFF, 0xA5, 0x00),
+        "black": RGBColor(0x00, 0x00, 0x00),
+    }
+    _resolved_color = _SOURCE_COLOR_MAP.get(source_text_color) if source_text_color else None
+    _target_color = (
+        _SOURCE_COLOR_MAP.get(target_text_color) if target_text_color else None
+    )
+
+    def _apply_target_style(para: Paragraph) -> None:
+        if not para:
+            return
+        for run in para.runs:
+            if target_text_italic:
+                run.italic = True
+            if _target_color:
+                try:
+                    run.font.color.rgb = _target_color
+                except Exception:
+                    pass
+
+    def _apply_source_run_style(dst_run) -> None:
+        try:
+            if source_text_italic:
+                dst_run.italic = True
+            if _resolved_color:
+                dst_run.font.color.rgb = _resolved_color
+        except Exception:
+            pass
+
+    def _copy_source_format(src_para: Paragraph, dst_para: Paragraph) -> None:
+        paired = list(zip(src_para.runs, dst_para.runs))
+        for src_run, dst_run in paired:
+            try:
+                if src_run.font.name:
+                    dst_run.font.name = src_run.font.name
+                if src_run.bold is not None:
+                    dst_run.bold = src_run.bold
+                if src_run.font.size:
+                    dst_run.font.size = src_run.font.size
+                if not source_text_italic and src_run.italic is not None:
+                    dst_run.italic = src_run.italic
+            except Exception:
+                pass
+            _apply_source_run_style(dst_run)
+        if not dst_para.runs:
+            _apply_source_run_style(dst_para.add_run(dst_para.text))
+
+    def _insert_adjacent(target_para: Paragraph, source_text: str) -> bool:
+        try:
+            new_para = doc.add_paragraph(source_text)
+            _copy_source_format(target_para, new_para)
+            if target_first:
+                target_para._element.addnext(new_para._element)
+            else:
+                target_para._element.addprevious(new_para._element)
+            _apply_target_style(target_para)
+            return True
+        except Exception as e:
+            logger.warning(
+                LogModule.RESTOR,
+                f"[BILINGUAL-DOCX] Failed to insert flat header/footer source paragraph: {e}",
+            )
+            return False
+
+    inserted_count = 0
+    content_first_idx: Dict[int, int] = {}
+    processed_elements: set = set()
+
+    for idx, section in enumerate(doc.sections):
+        for name, part in (
+            ("header", section.header),
+            ("footer", section.footer),
+            ("header_first", section.first_page_header),
+            ("footer_first", section.first_page_footer),
+        ):
+            element_id = _part_element_id(part)
+            if element_id in processed_elements:
+                continue
+            processed_elements.add(element_id)
+
+            fp = _compute_part_fingerprint(part)
+            if fp not in content_first_idx:
+                content_first_idx[fp] = idx
+            lookup_idx = content_first_idx[fp]
+
+            for pi, para in enumerate(part.paragraphs):
+                if _paragraph_should_preserve_pagination(para._p, para.text):
+                    continue
+                source_text = _lookup_hf_source_text(
+                    source_map, name, lookup_idx, ("p", pi)
+                )
+                if source_text:
+                    if _insert_adjacent(para, source_text):
+                        inserted_count += 1
+
+            for ti, tbl in enumerate(part.tables):
+                merged_set: set = set()
+                if get_all_merged_regions_docx is not None:
+                    merged_set = set(get_all_merged_regions_docx(tbl))
+                for ri, row in enumerate(tbl.rows):
+                    for ci, cell in enumerate(row.cells):
+                        if merged_set and _is_merged_cell_skip(ri, ci, merged_set):
+                            continue
+                        if _cell_should_preserve_pagination(cell):
+                            continue
+                        source_text = _lookup_hf_source_text(
+                            source_map, name, lookup_idx, ("cell", ti, ri, ci)
+                        )
+                        if not source_text:
+                            continue
+                        target_para = None
+                        for p in cell.paragraphs:
+                            if p.text and p.text.strip():
+                                target_para = p
+                                break
+                        if target_para is None and cell.paragraphs:
+                            target_para = cell.paragraphs[0]
+                        if target_para is None:
+                            continue
+                        if _insert_adjacent(target_para, source_text):
+                            inserted_count += 1
+
+    logger.info(
+        LogModule.RESTOR,
+        f"[BILINGUAL-DOCX] Flat header/footer inserted {inserted_count} source items "
+        f"(target_first={target_first}, keys={len(source_map)})",
+    )
+    return inserted_count
+
+
 def _insert_bilingual_source_paragraphs(
     doc,
     segment_data_map: Dict[int, Dict[str, Any]],
@@ -1273,6 +1555,7 @@ def _insert_bilingual_source_paragraphs(
     source_text_color: str = "gray",
     target_text_italic: bool = False,
     target_text_color: Optional[str] = None,
+    skip_legacy_header_footer: bool = False,
 ) -> None:
     """Insert source-text paragraphs next to translated paragraphs for bilingual export.
 
@@ -1448,9 +1731,9 @@ def _insert_bilingual_source_paragraphs(
                 )
 
     # ------------------------------------------------------------------
-    # 2. Headers / footers
+    # 2. Headers / footers (legacy joined-text format; skip when flat segments exist)
     # ------------------------------------------------------------------
-    if extras_original:
+    if extras_original and not skip_legacy_header_footer:
         hf_items = extras_original.get("headers_footers", [])
         if hf_items:
             for idx, section in enumerate(doc.sections):

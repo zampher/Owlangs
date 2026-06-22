@@ -19,14 +19,14 @@ from logger.logger import LogModule
 def should_treat_as_failure(source: str, translated: str) -> Tuple[bool, str]:
     """
     Determine if translation result should be treated as failure.
-    
+
     This function checks if a translation result (same as source) represents
     a real translation failure or just untranslatable content (e.g., "1、2").
-    
+
     Args:
         source: Original source text
         translated: Translated text
-        
+
     Returns:
         Tuple of (is_failure: bool, reason: str)
         - is_failure: True if should be marked as failed, False otherwise
@@ -34,7 +34,7 @@ def should_treat_as_failure(source: str, translated: str) -> Tuple[bool, str]:
     """
     source = source.strip()
     translated = translated.strip()
-    
+
     # Empty translation is always failure
     if not translated:
         unified_logger.debug(LogModule.TRANS,
@@ -43,23 +43,33 @@ def should_treat_as_failure(source: str, translated: str) -> Tuple[bool, str]:
             f"  Translated text: (empty)"
         )
         return True, "Translation failed: empty response from AI platform"
-    
+
     # If different, it's a successful translation (no need to check)
     if source != translated:
         return False, "Translation successful"
-    
+
+    # Same text — check if it is a decorative line (repeated punctuation)
+    if _is_decorative_line(source):
+        return False, "Decorative separator line, no translation needed"
+
     # Same text - need to check if it's actually translatable content
     translatable_ratio = calculate_translatable_ratio(source)
     source_length = len(source)
-    
+
     # Check if source contains CJK characters (Chinese, Japanese, Korean)
     # If source contains CJK and target is same, it's definitely a failure
     has_cjk = any(is_cjk_char(c) for c in source)
-    
-    
+
+    # Count absolute alpha characters — short codes/abbreviations with few letters
+    # and no CJK are legitimately untranslatable (e.g. "N/A", "ABC", "pH")
+    alpha_count = sum(1 for c in source if c.isalpha())
+
     # If source has significant translatable content (>30%), it's a failure
     # OR if source contains CJK characters (which should always be translated), it's a failure
+    # BUT: short texts with few alpha chars and no CJK are likely codes/abbreviations
     if translatable_ratio > 0.3 or (has_cjk and source_length > 3):
+        if not has_cjk and alpha_count < 4:
+            return False, "Content likely doesn't need translation (short code/abbreviation)"
         unified_logger.debug(LogModule.TRANS,
             f"[TRANSLATION_FAILURE] Translation failed: response same as source\n"
             f"  Source text: {source[:500]!r}\n"
@@ -67,7 +77,7 @@ def should_treat_as_failure(source: str, translated: str) -> Tuple[bool, str]:
             f"  Source length: {source_length}, Translatable ratio: {translatable_ratio:.2%}, Has CJK: {has_cjk}"
         )
         return True, "Translation failed: platform returned untranslated content"
-    
+
     # If source is very short (<=3 chars) and mostly numbers/punctuation,
     # it might not need translation (e.g., "1、2", "①", "A.")
     if source_length <= 3:
@@ -81,7 +91,7 @@ def should_treat_as_failure(source: str, translated: str) -> Tuple[bool, str]:
             f"  Source length: {source_length}, Translatable ratio: {translatable_ratio:.2%}"
         )
         return True, "Translation failed: platform returned untranslated content"
-    
+
     # For longer texts (4+ chars), if same but has some translatable content (>10%),
     # it's likely a failure
     if translatable_ratio > 0.1:
@@ -92,9 +102,10 @@ def should_treat_as_failure(source: str, translated: str) -> Tuple[bool, str]:
             f"  Source length: {source_length}, Translatable ratio: {translatable_ratio:.2%}"
         )
         return True, "Translation failed: platform returned untranslated content"
-    
+
     # Very long text with low translatable ratio might be special cases
-    # (e.g., code, special formatting), but we'll be conservative and mark as failure
+    # (e.g., code, special formatting).  Decorative lines are already excluded
+    # above by _is_decorative_line.
     if source_length > 10:
         unified_logger.debug(LogModule.TRANS,
             f"[TRANSLATION_FAILURE] Translation failed: response same as source (long text)\n"
@@ -103,7 +114,7 @@ def should_treat_as_failure(source: str, translated: str) -> Tuple[bool, str]:
             f"  Source length: {source_length}, Translatable ratio: {translatable_ratio:.2%}"
         )
         return True, "Translation failed: platform returned untranslated content"
-    
+
     # Default: if same text and low translatable ratio, probably doesn't need translation
     unified_logger.debug(LogModule.TRANS,
         f"[TRANSLATION_FAILURE] NOT marking as failure: "
@@ -281,4 +292,20 @@ _COMMON_NON_TRANSLATABLE = {
     '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩',  # Circled numbers
     '❶', '❷', '❸', '❹', '❺', '❻', '❼', '❽', '❾', '❿',  # Dingbats
 }
+
+
+def _is_decorative_line(text: str) -> bool:
+    """Check if *text* is a purely decorative separator line.
+
+    Returns True when the text consists entirely of a single repeated
+    non-alphanumeric character (e.g. ``-----``, ``*****``, ``=====``).
+    These are visual dividers that should never be translated and should
+    never be flagged as translation failures.
+    """
+    if not text or len(text) < 2:
+        return False
+    first = text[0]
+    if first.isalpha() or first.isdigit():
+        return False
+    return len(set(text)) == 1
 

@@ -26,6 +26,7 @@ secrets.json
 configs/donor_license_private.pem
 .codebuddy/
 .cursor/
+.kimi/
 .vscode/
 .trae/
 .lingma/

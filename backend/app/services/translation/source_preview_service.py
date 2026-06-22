@@ -25,6 +25,38 @@ from backend.app.utils.encoding_utils import decode_with_detection
 from backend.app.config.pagination_config import SOURCE_PREVIEW_SEGMENTS_LIMIT
 
 
+def _extract_headers_footers_as_segments(file_contents: bytes) -> list:
+    """Extract header/footer/textbox/SDT content as a flat list of text segments.
+
+    Used as a fallback when ``DocxExtractor`` returns 0 body segments.
+    Part-level deduplication is handled by ``extract_headers_footers_flat()``
+    via content fingerprint, so no text-level dedup is needed here.
+    """
+    try:
+        from converter.x2md.docx_extras import extract_headers_footers_flat, extract_text_in_textboxes_and_sdts
+    except Exception:
+        return []
+
+    segments = []
+    try:
+        for _loc, text in extract_headers_footers_flat(file_contents):
+            stripped = text.strip() if text else ""
+            if stripped:
+                segments.append(stripped)
+    except Exception:
+        pass
+
+    try:
+        for _loc, text in extract_text_in_textboxes_and_sdts(file_contents):
+            stripped = text.strip() if text else ""
+            if stripped:
+                segments.append(stripped)
+    except Exception:
+        pass
+
+    return segments
+
+
 class SourcePreviewService:
     """Service for extracting source text and generating previews."""
     
@@ -138,7 +170,20 @@ class SourcePreviewService:
             
             result = DocxExtractor(file_contents, chunk_size=chunk_size).extract()
             if result.total_segments == 0:
-                return False
+                # Fall back to header/footer/textbox extraction for documents
+                # whose body is empty (e.g. cover-page templates).
+                fallback_segments = _extract_headers_footers_as_segments(file_contents)
+                if fallback_segments:
+                    from extractor.base import ExtractResult
+                    result = ExtractResult(segments=fallback_segments, segment_info=[])
+                    logger.info(
+                        LogModule.EXTRACT,
+                        f"[PREVIEW] Task {task_id}: body extraction returned 0 segments, "
+                        f"falling back to header/footer/textbox extraction "
+                        f"({len(fallback_segments)} segments)"
+                    )
+                else:
+                    return False
             
             # Mark excluded segments during extraction using unified exclusion detection
             # CRITICAL: Get target language using unified method that checks stored value first

@@ -14,26 +14,22 @@ Notes:
 """
 
 from io import BytesIO
-from typing import List, Tuple, Dict
+import re
+from typing import List, Tuple, Dict, Set, Optional, Any
 
 try:
     from docx import Document  # type: ignore
 except Exception:  # optional dependency
     Document = None  # type: ignore
 
+try:
+    from utils.table_utils import get_all_merged_regions_docx, is_cell_in_merged_region_docx
+except Exception:
+    get_all_merged_regions_docx = None
+    is_cell_in_merged_region_docx = None
+
 
 Location = Tuple[str, int]  # ("header"|"footer", section_index)
-
-
-def _set_paragraph_text(paragraph, text: str):
-    """Set text for a paragraph, clearing existing content."""
-    # Clear existing runs
-    for run in paragraph.runs:
-        run.text = ""
-
-    # Add new text as a single run
-    if text:
-        paragraph.add_run(text)
 
 
 def _set_paragraph_text_direct(p_element, text: str):
@@ -73,20 +69,152 @@ def _set_paragraph_text_direct(p_element, text: str):
         t_elem.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
 
 
+def _set_cell_text(cell, text: str):
+    """Write text to a table cell using direct lxml manipulation.
+
+    Avoids python-docx Paragraph API which may have issues in header/footer contexts.
+    """
+    from lxml import etree
+    from docx.oxml.ns import qn
+
+    tc = cell._tc  # w:tc element
+    p_elements = tc.findall(qn('w:p'))
+    for p_elem in p_elements[1:]:
+        _set_paragraph_text_direct(p_elem, "")
+    if p_elements:
+        _set_paragraph_text_direct(p_elements[0], text)
+    else:
+        # No paragraphs exist — create one
+        p_elem = etree.SubElement(tc, qn('w:p'))
+        r_elem = etree.SubElement(p_elem, qn('w:r'))
+        t_elem = etree.SubElement(r_elem, qn('w:t'))
+        t_elem.text = text
+        t_elem.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+
+
+def _is_merged_cell_skip(ri: int, ci: int, merged_region_set: Set[Tuple[int, int, int, int]]) -> bool:
+    """Check if a cell at (ri, ci) should be skipped because it is a merged cell continuation."""
+    for (start_row, start_col, end_row, end_col) in merged_region_set:
+        if ri == start_row and ci == start_col:
+            continue  # start cell, don't skip
+        if start_row <= ri <= end_row and start_col <= ci <= end_col:
+            return True  # continuation cell, skip
+    return False
+
+
+# Word field instructions that must stay dynamic (current page / total pages).
+_PAGE_FIELD_INSTR_RE = re.compile(
+    r"\b(PAGE|NUMPAGES|SECTIONPAGES|SECTION)\b",
+    re.IGNORECASE,
+)
+# Static display snapshots often look like "1/16", "16 / 16", or "3 of 10".
+_PAGE_DISPLAY_TEXT_RE = re.compile(
+    r"^\s*\d+\s*(?:/\s*\d+|of\s+\d+)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _paragraph_has_page_field(p_element) -> bool:
+    """True when paragraph XML contains PAGE/NUMPAGES/etc. field instructions."""
+    for instr in p_element.xpath('.//*[local-name()="instrText"]'):
+        if _PAGE_FIELD_INSTR_RE.search(instr.text or ""):
+            return True
+    return False
+
+
+def text_looks_like_page_number_display(text: str) -> bool:
+    """True for common page-number display strings (e.g. ``1/16``, ``3 of 10``)."""
+    if not text or not text.strip():
+        return False
+    return bool(_PAGE_DISPLAY_TEXT_RE.match(text.strip()))
+
+
+def _paragraph_should_preserve_pagination(p_element, display_text: str) -> bool:
+    """Do not translate/replace paragraphs that carry dynamic or page-number text."""
+    if _paragraph_has_page_field(p_element):
+        return True
+    return text_looks_like_page_number_display(display_text)
+
+
+def _cell_should_preserve_pagination(cell) -> bool:
+    """Do not translate/replace table cells that contain page fields or page numbers."""
+    for p in cell.paragraphs:
+        if _paragraph_should_preserve_pagination(p._p, p.text):
+            return True
+    joined = "\n".join(p.text for p in cell.paragraphs if p.text and p.text.strip())
+    return text_looks_like_page_number_display(joined)
+
+
+def _compute_part_fingerprint(part: Any) -> int:
+    """Return a hash of the text content of a header/footer part.
+
+    Used to deduplicate parts that share the same underlying content even when
+    python-docx wraps them in different object instances (e.g. different
+    sections referencing the same header XML file, or header vs first_page_header
+    returning the same part when ``different_first_page_header_footer`` is False).
+    """
+    texts: List[str] = []
+    for p in part.paragraphs:
+        t = p.text
+        if t:
+            texts.append(t)
+    for tbl in part.tables:
+        for row in tbl.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    t = p.text
+                    if t:
+                        texts.append(t)
+    # Use a fast hash — we only need to detect equality within one document
+    return hash("\n".join(texts))
+
+
+def _add_distinct_part(processed_parts: Set[int], parts: list,
+                        name: str, part: Any) -> None:
+    """Add *part* to *parts* if its content fingerprint hasn't been seen yet."""
+    fp = _compute_part_fingerprint(part)
+    if fp not in processed_parts:
+        processed_parts.add(fp)
+        parts.append((name, part))
+
+
 def extract_headers_footers(docx_bytes: bytes) -> List[Tuple[Location, str]]:
     if Document is None:
         return []
     doc = Document(BytesIO(docx_bytes))
     items: List[Tuple[Location, str]] = []
+    processed_parts: Set[int] = set()
     for idx, section in enumerate(doc.sections):
+        # Collect all distinct header/footer parts for this section.
+        # first_page_header/footer may be the same object as header/footer
+        # when different_first_page_header_footer is False — dedup by element id.
+        parts: List[Tuple[str, Any]] = []
         for name, part in (("header", section.header), ("footer", section.footer)):
+            _add_distinct_part(processed_parts, parts, name, part)
+        for name, part in (("header_first", section.first_page_header),
+                           ("footer_first", section.first_page_footer)):
+            _add_distinct_part(processed_parts, parts, name, part)
+        for name, part in parts:
             texts: List[str] = []
+            # Paragraphs
             for p in part.paragraphs:
+                if _paragraph_should_preserve_pagination(p._p, p.text):
+                    continue
                 texts.append(p.text)
+            # Tables — skip merged cell continuations
             for tbl in part.tables:
-                for row in tbl.rows:
-                    for cell in row.cells:
+                merged_set = set()
+                if get_all_merged_regions_docx is not None:
+                    merged_set = set(get_all_merged_regions_docx(tbl))
+                for ri, row in enumerate(tbl.rows):
+                    for ci, cell in enumerate(row.cells):
+                        if merged_set and _is_merged_cell_skip(ri, ci, merged_set):
+                            continue
+                        if _cell_should_preserve_pagination(cell):
+                            continue
                         for p in cell.paragraphs:
+                            if _paragraph_should_preserve_pagination(p._p, p.text):
+                                continue
                             texts.append(p.text)
             content = "\n".join(t for t in texts if t)
             if content.strip():
@@ -98,22 +226,241 @@ def apply_headers_footers(docx_bytes: bytes, translations: Dict[Location, str]) 
     if Document is None:
         return docx_bytes
     doc = Document(BytesIO(docx_bytes))
+    processed_parts: Set[int] = set()
     for idx, section in enumerate(doc.sections):
+        # Collect all distinct header/footer parts, same order as extraction
+        parts: List[Tuple[str, Any]] = []
         for name, part in (("header", section.header), ("footer", section.footer)):
+            _add_distinct_part(processed_parts, parts, name, part)
+        for name, part in (("header_first", section.first_page_header),
+                           ("footer_first", section.first_page_footer)):
+            _add_distinct_part(processed_parts, parts, name, part)
+        for name, part in parts:
             key: Location = (name, idx)
             if key not in translations:
                 continue
             new_text = translations[key]
-            # Clear existing paragraphs (preserve tables layout by editing cell texts)
-            # Paragraphs
-            if part.paragraphs:
-                # replace first paragraph text; remove extra paragraphs
-                part.paragraphs[0].clear() if hasattr(part.paragraphs[0], 'clear') else None
-                _set_paragraph_text(part.paragraphs[0], new_text)
-                for p in part.paragraphs[1:]:
+
+            # Count translatable structure elements (skip page-number fields/cells).
+            para_count = sum(
+                1 for p in part.paragraphs
+                if p.text and p.text.strip()
+                and not _paragraph_should_preserve_pagination(p._p, p.text)
+            )
+            cell_positions: List[Tuple[object, bool, bool]] = []
+            for tbl in part.tables:
+                merged_set = set()
+                if get_all_merged_regions_docx is not None:
+                    merged_set = set(get_all_merged_regions_docx(tbl))
+                for ri, row in enumerate(tbl.rows):
+                    for ci, cell in enumerate(row.cells):
+                        is_merged = bool(merged_set and _is_merged_cell_skip(ri, ci, merged_set))
+                        preserve = _cell_should_preserve_pagination(cell)
+                        cell_positions.append((cell, is_merged, preserve))
+
+            non_merged_cell_count = sum(
+                1 for _, is_merged, preserve in cell_positions
+                if not is_merged and not preserve
+            )
+            total_segments = para_count + non_merged_cell_count
+
+            lines = new_text.split('\n')
+            segment_texts = lines[:total_segments]
+            if len(segment_texts) < total_segments:
+                segment_texts.extend([''] * (total_segments - len(segment_texts)))
+
+            line_idx = 0
+            for p in part.paragraphs:
+                if not p.text or not p.text.strip():
                     _set_paragraph_text(p, "")
-            else:
-                part.add_paragraph(new_text)
+                    continue
+                if _paragraph_should_preserve_pagination(p._p, p.text):
+                    continue
+                if line_idx < len(segment_texts):
+                    _set_paragraph_text(p, segment_texts[line_idx])
+                    line_idx += 1
+
+            for cell, is_merged, preserve in cell_positions:
+                if is_merged or preserve:
+                    continue
+                if line_idx < len(segment_texts):
+                    _set_cell_text(cell, segment_texts[line_idx])
+                    line_idx += 1
+    bio = BytesIO()
+    doc.save(bio)
+    return bio.getvalue()
+
+
+# Type alias for flat key: variadic tuple carrying position info
+FlatKey = Tuple  # (str, int, str, ...)
+
+
+def extract_headers_footers_flat(docx_bytes: bytes) -> List[Tuple[FlatKey, str]]:
+    """Extract each paragraph and table cell from headers/footers as individual items.
+
+    Unlike :func:`extract_headers_footers` — which joins all texts from one
+    header/footer part into a single ``\\n``-delimited string — this function
+    returns each paragraph or table cell as a **separate** item.  This makes it
+    possible to translate individual cells reliably and to store translation
+    segments per cell.
+
+    Returns:
+        List of ``(key, text)`` pairs.  The key format is:
+
+        * Paragraph: ``(name, section_idx, "p", paragraph_idx)``
+        * Table cell: ``(name, section_idx, "cell", table_idx, row_idx, cell_idx)``
+
+        Only non-empty texts (after ``.strip()``) are included.
+        Paragraphs/cells with PAGE/NUMPAGES fields or page-number display
+        text (e.g. ``1/16``) are skipped so Word can keep them dynamic.
+        Merged-cell continuations are skipped (same logic as
+        :func:`extract_headers_footers`).
+    """
+    if Document is None:
+        return []
+    doc = Document(BytesIO(docx_bytes))
+    items: List[Tuple[FlatKey, str]] = []
+    processed_parts: Set[int] = set()
+    for idx, section in enumerate(doc.sections):
+        # Collect all distinct header/footer parts (same order as old functions)
+        parts: List[Tuple[str, Any]] = []
+        for name, part in (("header", section.header), ("footer", section.footer)):
+            _add_distinct_part(processed_parts, parts, name, part)
+        for name, part in (("header_first", section.first_page_header),
+                           ("footer_first", section.first_page_footer)):
+            _add_distinct_part(processed_parts, parts, name, part)
+        for name, part in parts:
+            # Paragraphs — one item per non-empty paragraph (skip page-number slots)
+            for pi, p in enumerate(part.paragraphs):
+                text = p.text
+                if not text or not text.strip():
+                    continue
+                if _paragraph_should_preserve_pagination(p._p, text):
+                    continue
+                items.append(((name, idx, "p", pi), text))
+
+            # Tables — one item per non-merged cell (combining all cell paragraphs)
+            for ti, tbl in enumerate(part.tables):
+                merged_set: set = set()
+                if get_all_merged_regions_docx is not None:
+                    merged_set = set(get_all_merged_regions_docx(tbl))
+                for ri, row in enumerate(tbl.rows):
+                    for ci, cell in enumerate(row.cells):
+                        if merged_set and _is_merged_cell_skip(ri, ci, merged_set):
+                            continue
+                        if _cell_should_preserve_pagination(cell):
+                            continue
+                        cell_texts = [
+                            p.text for p in cell.paragraphs
+                            if p.text and p.text.strip()
+                            and not _paragraph_should_preserve_pagination(p._p, p.text)
+                        ]
+                        if cell_texts:
+                            items.append(
+                                ((name, idx, "cell", ti, ri, ci), "\n".join(cell_texts))
+                            )
+    return items
+
+
+# Maps part names that share content with another part name during extraction.
+_PART_NAME_ALIASES: Dict[str, str] = {
+    "footer_first": "footer",
+}
+
+
+def _part_element_id(part: Any) -> int:
+    """Stable identity for a header/footer part (shared across sections)."""
+    return id(part._element)
+
+
+def _lookup_hf_translation(
+    translations: Dict[FlatKey, str],
+    name: str,
+    section_idx: int,
+    suffix: Tuple,
+) -> Tuple[Optional[FlatKey], Optional[str]]:
+    """Resolve a translation for *name*/*section_idx*, following part-name aliases."""
+    candidates = [name]
+    alias = _PART_NAME_ALIASES.get(name)
+    if alias and alias not in candidates:
+        candidates.append(alias)
+    for candidate in candidates:
+        key: FlatKey = (candidate, section_idx, *suffix)
+        if key in translations:
+            return key, translations[key]
+    return None, None
+
+
+def apply_headers_footers_flat(
+    docx_bytes: bytes, translations: Dict[FlatKey, str]
+) -> bytes:
+    """Apply translations to individual paragraphs and cells in headers/footers.
+
+    Counterpart to :func:`extract_headers_footers_flat`.  Translates keys
+    directly to the matching paragraph or table cell without relying on
+    positional ``\\n``-splitting (which is fragile when the LLM alters the
+    number of lines).
+
+    Args:
+        docx_bytes: Raw DOCX file content.
+        translations: Dict mapping flat keys (as produced by
+            :func:`extract_headers_footers_flat`) to translated text.
+
+    Returns:
+        Modified DOCX bytes.
+    """
+    if Document is None:
+        return docx_bytes
+    doc = Document(BytesIO(docx_bytes))
+    # Map fingerprint -> first section_idx where this part content was seen.
+    # Extraction uses content-fingerprint dedup, so translation keys use the
+    # first section's index.  During apply we must process EVERY distinct XML
+    # part (even ones whose fingerprint was seen before) because separate XML
+    # parts with identical content don't auto-propagate — but we look up
+    # translations using the first section's index to match the extraction keys.
+    content_first_idx: Dict[int, int] = {}
+    processed_elements: Set[int] = set()
+    for idx, section in enumerate(doc.sections):
+        for name, part in (("header", section.header), ("footer", section.footer),
+                           ("header_first", section.first_page_header),
+                           ("footer_first", section.first_page_footer)):
+            element_id = _part_element_id(part)
+            if element_id in processed_elements:
+                continue
+            processed_elements.add(element_id)
+
+            fp = _compute_part_fingerprint(part)
+            if fp not in content_first_idx:
+                content_first_idx[fp] = idx
+            lookup_idx = content_first_idx[fp]
+
+            # ---- paragraphs -------------------------------------------------
+            for pi, p in enumerate(part.paragraphs):
+                if _paragraph_should_preserve_pagination(p._p, p.text):
+                    continue
+                _, translated = _lookup_hf_translation(
+                    translations, name, lookup_idx, ("p", pi)
+                )
+                if translated is not None:
+                    _set_paragraph_text(p, translated)
+
+            # ---- table cells ------------------------------------------------
+            for ti, tbl in enumerate(part.tables):
+                merged_set: set = set()
+                if get_all_merged_regions_docx is not None:
+                    merged_set = set(get_all_merged_regions_docx(tbl))
+                for ri, row in enumerate(tbl.rows):
+                    for ci, cell in enumerate(row.cells):
+                        if merged_set and _is_merged_cell_skip(ri, ci, merged_set):
+                            continue
+                        if _cell_should_preserve_pagination(cell):
+                            continue
+                        _, translated = _lookup_hf_translation(
+                            translations, name, lookup_idx, ("cell", ti, ri, ci)
+                        )
+                        if translated is not None:
+                            _set_cell_text(cell, translated)
+
     bio = BytesIO()
     doc.save(bio)
     return bio.getvalue()
@@ -187,23 +534,13 @@ def _p_has_toc_field(paragraph) -> bool:
 
 
 def _set_paragraph_text(paragraph, text: str) -> None:
-    # simple setter that avoids losing style: clear runs then add one run
-    for run in list(getattr(paragraph, 'runs', [])):
-        try:
-            run.clear()  # type: ignore
-        except Exception:
-            try:
-                run.text = ""
-            except Exception:
-                pass
-    try:
-        run = paragraph.add_run()
-        run.text = text
-    except Exception:
-        try:
-            paragraph.text = text
-        except Exception:
-            pass
+    """Set text for a paragraph, clearing existing content.
+
+    Uses direct XML manipulation (same as _set_paragraph_text_direct) to ensure
+    reliability in header/footer contexts where python-docx paragraph.text setter
+    may produce inconsistent results.
+    """
+    _set_paragraph_text_direct(paragraph._p, text)
 
 
 def refresh_toc_fields(docx_bytes: bytes, method: str = "field_update") -> bytes:
