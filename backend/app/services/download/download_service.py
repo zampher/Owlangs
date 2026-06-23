@@ -563,17 +563,22 @@ def _resolve_bilingual_settings(
     """
     from utils.bilingual_export_utils import get_bilingual_config
 
-    stored_enabled, stored_target_first = get_bilingual_config(task_state)
-
+    # When the frontend unchecks the bilingual checkbox it omits the
+    # bilingual_export query parameter entirely.  In that case we must
+    # default to False rather than falling back to the value cached in
+    # task_state by a previous export (which would keep bilingual on
+    # forever once it had been enabled once).
     if bilingual_export is not None:
         enabled = bool(bilingual_export)
     else:
-        enabled = stored_enabled
+        enabled = False
 
     if bilingual_order is not None:
         target_first = str(bilingual_order).lower() == "target_before_source"
+    elif enabled:
+        _, target_first = get_bilingual_config(task_state)
     else:
-        target_first = stored_target_first if enabled else False
+        target_first = False
 
     # Resolve source text style
     italic = source_text_italic if source_text_italic is not None else task_state.get("source_text_italic", False)
