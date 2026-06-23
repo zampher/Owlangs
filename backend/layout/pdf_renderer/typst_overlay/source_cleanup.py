@@ -308,6 +308,7 @@ def _clip_rects_against_skipped_blocks(
     skip_block_indices: set,
     *,
     override_block_indices: Optional[set] = None,
+    unprotect_block_indices: Optional[set] = None,
 ) -> List[Tuple[float, float, float, float]]:
     """Clip redaction rects to exclude areas belonging to non-redacted blocks.
 
@@ -317,6 +318,11 @@ def _clip_rects_against_skipped_blocks(
         may still contain original PDF content
       - Chart / table / image blocks
 
+    Blocks listed in unprotect_block_indices are NOT protected (e.g. layout
+    images that will be re-embedded in the overlay PDF). Text redaction may
+    erase original PDF pixels in those regions so overlay text can sit on the
+    re-drawn image.
+
     Blocks in override_block_indices are NEVER protected, because the
     user has explicitly opted into erasing both the original and the
     override bbox areas.
@@ -325,6 +331,7 @@ def _clip_rects_against_skipped_blocks(
     overlapping portion is split away so the original content survives.
     """
     override_ids = override_block_indices or set()
+    unprotect_ids = unprotect_block_indices or set()
     protected_rects: List[Tuple[float, float, float, float]] = []
     for page in layout_doc.pages:
         if page.page_index != page_index:
@@ -335,6 +342,8 @@ def _clip_rects_against_skipped_blocks(
             # original area — the user has explicitly opted into erasing
             # both the original and override bbox areas.
             if blk_idx is not None and blk_idx in override_ids:
+                continue
+            if blk_idx is not None and blk_idx in unprotect_ids:
                 continue
             # Protect all blocks that _collect_redaction_rects would skip:
             #   1. skip_set blocks
@@ -400,6 +409,7 @@ def clean_source_pdf(
     extra_redaction_rects: Optional[Dict[int, List[Tuple[float, float, float, float]]]] = None,
     skip_block_indices: Optional[set] = None,
     bbox_override_by_block_index: Optional[Dict[int, tuple]] = None,
+    unprotect_block_indices: Optional[set] = None,
 ) -> bytes:
     """
     Clean original text from a source PDF and return the cleaned PDF bytes.
@@ -425,6 +435,8 @@ def clean_source_pdf(
             original block bbox and the overridden bbox are redacted
             so that any original PDF text in the expanded/moved region
             is erased.
+        unprotect_block_indices: Block indices whose bboxes must NOT be
+            protected from text redaction (re-embedded overlay images).
 
     Returns:
         Cleaned PDF file content as bytes
@@ -440,7 +452,9 @@ def clean_source_pdf(
     unified_logger.info(
         LogModule.RESTOR,
         f"[SOURCE_CLEANUP] Cleaning source PDF: {source_pdf_path}, "
-        f"skip_block_indices={sorted(skip_block_indices) if skip_block_indices else 'None/empty'}"
+        f"skip_block_indices={sorted(skip_block_indices) if skip_block_indices else 'None/empty'}, "
+        f"unprotect_block_indices="
+        f"{sorted(unprotect_block_indices) if unprotect_block_indices else 'None/empty'}"
     )
 
     # Open the source PDF
@@ -491,6 +505,7 @@ def clean_source_pdf(
                 rects = _clip_rects_against_skipped_blocks(
                     rects, layout_doc, page_idx, skip_block_indices or set(),
                     override_block_indices=override_block_indices,
+                    unprotect_block_indices=unprotect_block_indices,
                 )
 
             # Add original bboxes of override blocks AFTER clipping so
@@ -535,6 +550,20 @@ def clean_source_pdf(
             f"[SOURCE_CLEANUP] Redacted {total_rect_count} rects "
             f"across {redacted_page_count} pages"
         )
+
+        # Layout/MinerU bboxes and Typst overlay pages use rotation=0 coordinates.
+        # Normalize rotated source pages so overlay merge aligns with layout space.
+        for page_idx in range(len(doc)):
+            page = doc[page_idx]
+            rotation = page.rotation
+            if rotation == 0:
+                continue
+            page.remove_rotation()
+            unified_logger.info(
+                LogModule.RESTOR,
+                f"[SOURCE_CLEANUP] Page {page_idx}: normalized rotation "
+                f"{rotation}° → 0 for layout-aligned overlay merge",
+            )
 
         # Save to bytes
         if output_path:

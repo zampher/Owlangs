@@ -34,6 +34,24 @@ def _check_pymupdf():
         )
 
 
+def _normalize_page_rotations(doc: fitz.Document, log_prefix: str) -> int:
+    """Apply page rotation to content and set rotation metadata to 0."""
+    normalized = 0
+    for page_idx in range(len(doc)):
+        page = doc[page_idx]
+        rotation = page.rotation
+        if rotation == 0:
+            continue
+        page.remove_rotation()
+        normalized += 1
+        unified_logger.info(
+            LogModule.RESTOR,
+            f"{log_prefix} Page {page_idx}: normalized rotation "
+            f"{rotation}° → 0 for overlay coordinate alignment",
+        )
+    return normalized
+
+
 def merge_overlay_pdf(
     source_pdf_bytes: bytes,
     overlay_pdf_path: Path,
@@ -68,6 +86,7 @@ def merge_overlay_pdf(
     source_doc = fitz.open(stream=source_pdf_bytes, filetype="pdf")
     overlay_doc = fitz.open(overlay_pdf_path)
     try:
+        _normalize_page_rotations(source_doc, "[OVERLAY_MERGE]")
         if check_page_count:
             src_pages = len(source_doc)
             ovl_pages = len(overlay_doc)

@@ -30,7 +30,14 @@ class VisualImagePlacement:
     block_type: str  # "chart" | "table" | "equation"
 
 
-from layout.block_types import EQUATION_BLOCK_TYPES, VISUAL_BLOCK_TYPES, CHART_BODY, TABLE_BODY
+from layout.block_types import (
+    CHART_BODY,
+    EQUATION_BLOCK_TYPES,
+    IMAGE,
+    LEGACY_FIGURE,
+    TABLE_BODY,
+    VISUAL_BLOCK_TYPES,
+)
 
 
 def extract_equation_image_path(block) -> Optional[str]:
@@ -54,6 +61,25 @@ def extract_equation_image_path(block) -> Optional[str]:
             candidate = span.get("image_path")
             if isinstance(candidate, str) and candidate.strip():
                 return candidate.strip()
+    return None
+
+
+def extract_nested_sub_bbox(
+    block,
+    body_sub_type: str,
+) -> Optional[Tuple[float, float, float, float]]:
+    """Return bbox of a nested sub-block (e.g. table_body) when present."""
+    raw = getattr(block, "raw", None) or {}
+    if not isinstance(raw, dict):
+        return None
+    for sub in raw.get("blocks") or []:
+        if not isinstance(sub, dict):
+            continue
+        if str(sub.get("type", "")) != body_sub_type:
+            continue
+        bbox = _parse_bbox(sub.get("bbox"))
+        if bbox is not None:
+            return bbox
     return None
 
 
@@ -188,6 +214,22 @@ def collect_visual_image_placements(
                         inner_bbox=body_bbox,
                         image_path=image_path,
                         block_type="equation",
+                    ))
+
+            elif block.type in (IMAGE, LEGACY_FIGURE):
+                image_path = getattr(block, "image_path", None)
+                if isinstance(image_path, str) and image_path.strip():
+                    image_path = image_path.strip()
+                else:
+                    image_path = None
+                body_bbox = _parse_bbox(getattr(block, "bbox", None))
+                if body_bbox and image_path and lookup_image_bytes(image_data_map, image_path):
+                    placements.append(VisualImagePlacement(
+                        page_index=page.page_index,
+                        block_index=block_index,
+                        inner_bbox=body_bbox,
+                        image_path=image_path,
+                        block_type="image",
                     ))
 
     if placements:

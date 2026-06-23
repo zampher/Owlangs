@@ -123,6 +123,31 @@ class TestVisualImagePlacements(unittest.TestCase):
         self.assertEqual(placements[0].block_type, "equation")
         self.assertEqual(extract_equation_image_path(eq_block), "eqhash123.jpg")
 
+    def test_collect_layout_image_placements(self):
+        image_block = SimpleNamespace(
+            type="image",
+            index=12,
+            bbox=(50.0, 80.0, 250.0, 280.0),
+            image_path="banner_photo.jpg",
+            is_equation=lambda: False,
+        )
+        page = SimpleNamespace(page_index=0, blocks=[image_block])
+        layout_doc = SimpleNamespace(pages=[page])
+        image_map = {"banner_photo.jpg": b"photo-bytes"}
+
+        placements = collect_visual_image_placements(
+            layout_doc,
+            chart_body_format="image",
+            table_body_format="html",
+            equation_format="text",
+            image_data_map=image_map,
+        )
+
+        self.assertEqual(len(placements), 1)
+        self.assertEqual(placements[0].block_index, 12)
+        self.assertEqual(placements[0].block_type, "image")
+        self.assertEqual(placements[0].page_index, 0)
+
     def test_skip_equation_placements_when_format_text(self):
         eq_block = SimpleNamespace(
             type="interline_equation",
@@ -186,12 +211,13 @@ class TestVisualImagePlacements(unittest.TestCase):
                 table_body_format="image",
                 equation_format="text",
             )
-            renderer._append_visual_image_render_blocks(
+            extra_redaction, embedded_ids = renderer._append_visual_image_render_blocks(
                 layout_doc,
                 render_blocks_by_page,
                 work_dir=work_dir,
                 image_data_map=image_map,
             )
+            self.assertEqual(embedded_ids, {68})
             image_path = work_dir / "images" / "7fd5c0d0ae5e5fe06ac5bfa7c4c0b44aaa22355dfff50d590e0124085837b301.jpg"
             self.assertTrue(image_path.is_file())
             self.assertEqual(image_path.read_bytes(), b"table-jpg")

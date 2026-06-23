@@ -74,11 +74,12 @@ from layout.pdf_renderer.typst_overlay.visual_images import (
     collect_visual_image_placements,
     lookup_image_bytes,
     extract_equation_image_path,
+    extract_nested_sub_bbox,
 )
 from layout.block_types import (
     EQUATION_BLOCK_TYPES,
     TABLE_CAPTION, IMAGE_CAPTION, CHART_CAPTION, CAPTION,
-    TABLE_FOOTNOTE, CHART_BODY,
+    TABLE_FOOTNOTE, CHART_BODY, TABLE_BODY,
 )
 from layout.pdf_renderer.shared.block_processor import BlockProcessor
 from logger.logger import unified_logger, LogModule
@@ -471,6 +472,17 @@ class TypstOverlayRenderer(BasePDFRenderer):
             text = merged_text.strip()
             return (text if text else None, None, None)
 
+        # Extend multi-line HTML tables through closing </table>
+        start_line = lines[body_start].strip().lower()
+        if start_line.startswith("<table"):
+            for i in range(body_start + 1, len(lines)):
+                line_stripped = lines[i].strip()
+                if line_stripped:
+                    body_end = i
+                if "</table>" in line_stripped.lower():
+                    body_end = i
+                    break
+
         caption_parts = [l.strip() for l in lines[:body_start] if l.strip()]
         caption = '\n'.join(caption_parts) if caption_parts else None
 
@@ -567,6 +579,29 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 opaque_fill=True,
                 rotation=self._block_rotation(parent_index),
             ))
+        elif caption_text:
+            # Nested caption bbox missing — render on parent visual bbox.
+            unified_logger.info(
+                LogModule.RESTOR,
+                f"[TYPST_OVERLAY] Block {parent_index}: caption text without "
+                "nested bbox, using parent bbox for overlay",
+            )
+            result.append(RenderBlock(
+                block_id=f"caption-{parent_index}",
+                page_index=page_index,
+                inner_bbox=block.bbox,
+                markdown_text=caption_text,
+                plain_text=caption_text,
+                render_kind="plain_line" if len(caption_text) < 80 else "markdown",
+                font_size_pt=9.0,
+                leading_em=1.3,
+                font_weight="regular",
+                text_color=(0.0, 0.0, 0.0),
+                cover_fill=(1.0, 1.0, 1.0),
+                use_cover_fill=False,
+                opaque_fill=True,
+                rotation=self._block_rotation(parent_index),
+            ))
 
         if footnote_text and footnote_bboxes:
             for i, fn_bbox in enumerate(footnote_bboxes):
@@ -645,8 +680,11 @@ class TypstOverlayRenderer(BasePDFRenderer):
         *,
         work_dir: Path,
         image_data_map: Dict[str, bytes],
-    ) -> Dict[int, List[tuple]]:
-        """Write chart/table/equation images and append image RenderBlocks. Returns extra redaction rects."""
+    ) -> tuple[Dict[int, List[tuple]], set[int]]:
+        """Write chart/table/equation images and append image RenderBlocks.
+
+        Returns (extra_redaction_rects, embedded_block_indices).
+        """
         chart_fmt = getattr(self.config, "chart_body_format", "image") or "image"
         table_fmt = getattr(self.config, "table_body_format", "html") or "html"
         eq_fmt = getattr(self.config, "equation_format", "text") or "text"
@@ -683,11 +721,12 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     f"check layout_source_zip and interline_equation image_path)",
                 )
         if not placements:
-            return {}
+            return {}, set()
 
         images_dir = work_dir / "images"
         images_dir.mkdir(parents=True, exist_ok=True)
         extra_redaction: Dict[int, List[tuple]] = {}
+        embedded_block_indices: set[int] = set()
         margin_pt = 2.0
 
         for placement in placements:
@@ -715,6 +754,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
             )
             render_blocks_by_page.setdefault(placement.page_index, []).append(rb)
 
+            embedded_block_indices.add(placement.block_index)
             x0, y0, x1, y1 = placement.inner_bbox
             extra_redaction.setdefault(placement.page_index, []).append((
                 max(0, x0 - margin_pt),
@@ -729,7 +769,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 f"{filename}, bbox=({x0:.1f},{y0:.1f},{x1:.1f},{y1:.1f})",
             )
 
-        return extra_redaction
+        return extra_redaction, embedded_block_indices
 
     @staticmethod
     def _is_ref_text_block(block) -> bool:
@@ -986,6 +1026,9 @@ class TypstOverlayRenderer(BasePDFRenderer):
                                 block_id=f"block-{block_key}",
                             )
                             tb_rb.opaque_fill = True
+                            nested_body_bbox = extract_nested_sub_bbox(block, TABLE_BODY)
+                            if nested_body_bbox is not None:
+                                tb_rb.inner_bbox = nested_body_bbox
                             bbox_override = self._block_bbox_override(block_key)
                             if bbox_override is not None:
                                 tb_rb.inner_bbox = bbox_override
@@ -997,6 +1040,32 @@ class TypstOverlayRenderer(BasePDFRenderer):
                             tb_rb.table_stroke_pt = self._block_table_stroke_pt(block_key)
                             blocks.append(tb_rb)
                             total_blocks += 1
+                        elif translated.strip():
+                            # Table-classified region with free-form translated text
+                            # (not a markdown table body) — render as text overlay.
+                            free_rb = layout_block_to_render_block(
+                                block,
+                                page_index=page.page_index,
+                                translated_text=translated.strip(),
+                                block_id=f"block-{block_key}",
+                            )
+                            bbox_override = self._block_bbox_override(block_key)
+                            if bbox_override is not None:
+                                free_rb.inner_bbox = bbox_override
+                            free_rb = self._font_fit.calculate_fit_params(
+                                free_rb, page_width_pt=page_width_pt,
+                            )
+                            free_rb = self._apply_block_typography_overrides(
+                                free_rb, block_key,
+                            )
+                            free_rb.rotation = self._block_rotation(block_key)
+                            blocks.append(free_rb)
+                            total_blocks += 1
+                            unified_logger.info(
+                                LogModule.RESTOR,
+                                f"[TYPST_OVERLAY] Table block {block_key}: "
+                                "free-form text overlay (no markdown table body)",
+                            )
 
                     # Still skip (don't fall through to text handling) — the
                     # caption/footnote blocks above and the table body block here
@@ -1233,11 +1302,13 @@ class TypstOverlayRenderer(BasePDFRenderer):
         # ---- Step 1b: Embed chart/table/equation images when format=image ----
         temp_dir = Path(mkdtemp(prefix="owlangs_typst_"))
         image_data_map = self._load_image_data_map(layout_doc)
-        extra_redaction_rects = self._append_visual_image_render_blocks(
-            layout_doc,
-            render_blocks_by_page,
-            work_dir=temp_dir,
-            image_data_map=image_data_map,
+        extra_redaction_rects, embedded_image_block_indices = (
+            self._append_visual_image_render_blocks(
+                layout_doc,
+                render_blocks_by_page,
+                work_dir=temp_dir,
+                image_data_map=image_data_map,
+            )
         )
         title_extension_rects = self._collect_title_extension_redaction_rects(
             render_blocks_by_page,
@@ -1245,6 +1316,14 @@ class TypstOverlayRenderer(BasePDFRenderer):
         if title_extension_rects:
             for page_idx, rects in title_extension_rects.items():
                 extra_redaction_rects.setdefault(page_idx, []).extend(rects)
+
+        from layout.pdf_renderer.typst_overlay.layer_order import (
+            finalize_render_blocks_by_page,
+        )
+        render_blocks_by_page = finalize_render_blocks_by_page(
+            render_blocks_by_page,
+            layout_doc,
+        )
 
         # ---- Step 2: Clean source PDF ----
         # For image-based PDFs (scanned documents), redaction-based cleanup
@@ -1269,6 +1348,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 bbox_override_by_block_index=(
                     self.config.bbox_override_by_block_index or None
                 ),
+                unprotect_block_indices=embedded_image_block_indices or None,
             )
             diagnostics["cleanup_elapsed"] = time.perf_counter() - cleanup_started
         except Exception as e:

@@ -19,7 +19,10 @@ import re
 from pathlib import Path
 from typing import List
 
+from layout.pdf_renderer.shared.table_utils import TableUtils
 from layout.pdf_renderer.typst_overlay.formula_safety import formula_safety_insets_pt
+from layout.pdf_renderer.typst_overlay.layer_order import background_embed_force_opaque
+from logger.logger import LogModule, unified_logger
 from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
     DEFAULT_TABLE_STROKE_PT,
 )
@@ -863,6 +866,18 @@ def _render_image_block(block_id: str, block: RenderBlock) -> str:
     return "\n".join(parts) + "\n"
 
 
+def _parse_table_rows(table_text: str) -> list:
+    """Parse markdown, HTML, or TSV table text into a 2D cell grid."""
+    rows = _parse_markdown_table(table_text)
+    if rows:
+        return rows
+    if "<table" in table_text.lower():
+        html_rows, _ = TableUtils.parse_html_table(table_text)
+        if html_rows:
+            return html_rows
+    return TableUtils.parse_markdown_table(table_text)
+
+
 def _parse_markdown_table(table_text: str) -> list:
     """Parse markdown table text into a 2D list of cell strings.
 
@@ -970,8 +985,14 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
     if not table_text.strip():
         return ""
 
-    rows = _parse_markdown_table(table_text)
+    rows = _parse_table_rows(table_text)
     if not rows or not rows[0]:
+        snippet = table_text.strip().replace("\n", " ")[:120]
+        unified_logger.warning(
+            LogModule.RESTOR,
+            f"[TYPST_OVERLAY] Table block {block_id}: failed to parse table body "
+            f"(chars={len(table_text)}, snippet={snippet!r})",
+        )
         return ""
 
     col_count = max(len(r) for r in rows)
@@ -1022,6 +1043,13 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
         max(1.0, (layout_height - TABLE_CELL_PAD_PT * 2) / max(1, row_count)),
         1,
     )
+    inset_pt = round(
+        min(
+            TABLE_CELL_PAD_PT,
+            max(0.25, (row_h - data_font_pt) / 2 - 0.25),
+        ),
+        2,
+    )
     rows_spec = "(" + ", ".join([f"{row_h}pt"] * row_count) + ")"
     table_stroke_pt = max(
         0.0,
@@ -1037,13 +1065,13 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
         f"  columns: {columns_str},",
         f"  rows: {rows_spec},",
         f"  {stroke_arg}",
-        f"  inset: {TABLE_CELL_PAD_PT}pt,",
+        f"  inset: {inset_pt}pt,",
         f"  align: (left + horizon,) * {col_count},",
     ]
     parts.extend(cell_lines)
     parts.append(")")
 
-    fill_arg = _block_fill_arg(block, force_opaque=True)
+    fill_arg = _block_fill_arg(block, force_opaque=block.opaque_fill)
     bbox_w = round(width, 1)
     bbox_h = round(height, 1)
     layout_w = round(layout_width, 1)
@@ -1352,7 +1380,10 @@ def build_typst_background_source(
 
         for block_idx, block in enumerate(spec.blocks):
             block_id = f"bgp{page_idx}_{block.block_id}_{block_idx}"
-            block_source = render_block_to_typst(block_id, block, force_opaque=True)
+            force_opaque = background_embed_force_opaque(block, spec.blocks)
+            block_source = render_block_to_typst(
+                block_id, block, force_opaque=force_opaque,
+            )
             if block_source.strip():
                 lines.append(block_source)
 
