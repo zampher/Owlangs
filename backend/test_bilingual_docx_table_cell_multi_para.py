@@ -366,3 +366,47 @@ def test_bilingual_textbox_insertion_runs_when_skip_legacy_header_footer() -> No
         skip_legacy_header_footer=True,
     )
     assert docx_rebuild._parse_textbox_sdt_storage_items(extras_original["textboxes_sdts"])
+
+
+def test_bilingual_list_numbering_follows_source_when_source_first() -> None:
+    """When source is displayed first, list markers must move from target to source."""
+    from docx import Document
+    from docx.oxml.ns import qn
+
+    docx_rebuild = _load_docx_rebuild()
+    doc = Document()
+    target_para = doc.add_paragraph("Translated item", style="List Number")
+    source_para = doc.add_paragraph("Source item")
+
+    docx_rebuild._apply_bilingual_list_numbering(
+        source_para, target_para, target_first=False
+    )
+
+    assert docx_rebuild._paragraph_has_list_markers(source_para._element)
+    assert not docx_rebuild._paragraph_has_list_markers(target_para._element)
+
+
+def test_bilingual_list_numbering_follows_target_when_target_first() -> None:
+    """When target is displayed first, list markers must stay on the target paragraph."""
+    from docx import Document
+
+    docx_rebuild = _load_docx_rebuild()
+    doc = Document()
+    target_para = doc.add_paragraph("Translated item", style="List Number")
+    source_para = doc.add_paragraph("Source item")
+
+    docx_rebuild._apply_bilingual_list_numbering(
+        source_para, target_para, target_first=True
+    )
+
+    assert docx_rebuild._paragraph_has_list_markers(target_para._element)
+    assert not docx_rebuild._paragraph_has_list_markers(source_para._element)
+
+
+def _paragraph_num_pr_element(p_elem):
+    from docx.oxml.ns import qn
+
+    p_pr = p_elem.find(qn("w:pPr"))
+    if p_pr is None:
+        return None
+    return p_pr.find(qn("w:numPr"))

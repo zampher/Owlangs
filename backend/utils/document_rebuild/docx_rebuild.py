@@ -66,6 +66,121 @@ def _copy_paragraph_format(src_para, dst_para) -> None:
         pass
 
 
+def _paragraph_num_pr_element(p_elem):
+    """Return the w:numPr element on a paragraph, if any."""
+    from docx.oxml.ns import qn
+
+    p_pr = p_elem.find(qn("w:pPr"))
+    if p_pr is None:
+        return None
+    return p_pr.find(qn("w:numPr"))
+
+
+def _paragraph_has_list_markers(p_elem) -> bool:
+    from docx.oxml.ns import qn
+
+    p_pr = p_elem.find(qn("w:pPr"))
+    if p_pr is None:
+        return False
+    if p_pr.find(qn("w:numPr")) is not None:
+        return True
+    p_style = p_pr.find(qn("w:pStyle"))
+    if p_style is not None:
+        val = (p_style.get(qn("w:val")) or "").lower()
+        if val.startswith("list") or "number" in val or "bullet" in val:
+            return True
+    return False
+
+
+def _ensure_paragraph_p_pr(p_elem):
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    p_pr = p_elem.find(qn("w:pPr"))
+    if p_pr is None:
+        p_pr = OxmlElement("w:pPr")
+        p_elem.insert(0, p_pr)
+    return p_pr
+
+
+def _strip_paragraph_list_markers(p_elem) -> None:
+    """Remove list numbering markers from a paragraph."""
+    from docx.oxml.ns import qn
+
+    p_pr = p_elem.find(qn("w:pPr"))
+    if p_pr is None:
+        return
+    for tag in ("w:numPr", "w:pStyle"):
+        el = p_pr.find(qn(tag))
+        if el is not None:
+            p_pr.remove(el)
+
+
+def _move_paragraph_list_markers(src_p_elem, dst_p_elem) -> bool:
+    """Move list markers (numPr/pStyle/ind) from src to dst. Returns True if any moved."""
+    from copy import deepcopy
+    from docx.oxml.ns import qn
+
+    src_p_pr = src_p_elem.find(qn("w:pPr"))
+    if src_p_pr is None:
+        return False
+    dst_p_pr = _ensure_paragraph_p_pr(dst_p_elem)
+    moved = False
+    for tag in ("w:numPr", "w:pStyle", "w:ind"):
+        el = src_p_pr.find(qn(tag))
+        if el is None:
+            continue
+        existing = dst_p_pr.find(qn(tag))
+        if existing is not None:
+            dst_p_pr.remove(existing)
+        dst_p_pr.append(deepcopy(el))
+        src_p_pr.remove(el)
+        moved = True
+    return moved
+
+
+def _set_paragraph_num_pr(p_elem, num_pr_elem) -> None:
+    """Replace w:numPr on *p_elem* with a copy of *num_pr_elem*."""
+    from copy import deepcopy
+    from docx.oxml.ns import qn
+
+    if num_pr_elem is None:
+        return
+    p_pr = _ensure_paragraph_p_pr(p_elem)
+    existing = p_pr.find(qn("w:numPr"))
+    if existing is not None:
+        p_pr.remove(existing)
+    p_pr.append(deepcopy(num_pr_elem))
+
+
+def _remove_paragraph_num_pr(p_elem) -> None:
+    from docx.oxml.ns import qn
+
+    p_pr = p_elem.find(qn("w:pPr"))
+    if p_pr is None:
+        return
+    num_pr = p_pr.find(qn("w:numPr"))
+    if num_pr is not None:
+        p_pr.remove(num_pr)
+
+
+def _reassign_bilingual_list_numbering(first_para, second_para) -> None:
+    """Move list numbering markers to the paragraph that appears first in export."""
+    first_p = first_para._element
+    second_p = second_para._element
+    if _paragraph_has_list_markers(second_p):
+        _move_paragraph_list_markers(second_p, first_p)
+    _strip_paragraph_list_markers(second_p)
+
+
+def _apply_bilingual_list_numbering(source_para, target_para, target_first: bool) -> None:
+    """Assign list numbering to whichever bilingual paragraph is displayed first."""
+    if target_first:
+        _reassign_bilingual_list_numbering(target_para, source_para)
+    else:
+        _reassign_bilingual_list_numbering(source_para, target_para)
+
+
 def _get_effective_font_size_pt(run, paragraph=None) -> Optional[float]:
     """Return the effective font size of *run* in points.
 
@@ -1710,6 +1825,7 @@ def _insert_bilingual_header_footer_flat_segments(
             _apply_target_style(target_para)
             if source_text_font_size_delta != 0.0:
                 _apply_font_size_delta(new_para, source_text_font_size_delta)
+            _apply_bilingual_list_numbering(new_para, target_para, target_first)
             return True
         except Exception as e:
             logger.warning(
@@ -1859,6 +1975,7 @@ def _insert_bilingual_source_paragraphs(
         _apply_target_style_with_delta(target_para)
         if source_text_font_size_delta != 0.0:
             _apply_font_size_delta(new_para, source_text_font_size_delta)
+        _apply_bilingual_list_numbering(new_para, target_para, target_first)
 
     def _apply_source_run_style(dst_run) -> None:
         """Apply bilingual source italic/color to a single run."""
@@ -1983,6 +2100,7 @@ def _insert_bilingual_source_paragraphs(
                 _apply_target_style(element)
                 if source_text_font_size_delta != 0.0:
                     _apply_font_size_delta(new_para, source_text_font_size_delta)
+                _apply_bilingual_list_numbering(new_para, element, target_first)
                 inserted_count += 1
             except Exception as e:
                 logger.warning(
@@ -2023,6 +2141,7 @@ def _insert_bilingual_source_paragraphs(
                                 target_para._element.addprevious(new_para._element)
 
                             _apply_target_style_with_delta(target_para)
+                            _apply_bilingual_list_numbering(new_para, target_para, target_first)
                             inserted_count += 1
                     except Exception as e:
                         logger.warning(
