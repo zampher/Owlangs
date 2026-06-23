@@ -149,6 +149,17 @@ class DocxWorkflow(Workflow[DocxWorkflowConfig, Document, Document], HTMLExporta
                     
                     if filtered_items:
                         self._docx_extras_original["textboxes_sdts"] = filtered_items
+                        # Persist to task_state so the rebuild/bilingual-export
+                        # phase can access the original textbox/SDT source texts.
+                        try:
+                            task_id = getattr(getattr(self, 'config', None), 'task_id', None)
+                            if task_id:
+                                from app.services.task import task_manager as _tbx_tm
+                                _tbx_ts = _tbx_tm.get_task(task_id)
+                                if _tbx_ts:
+                                    _tbx_ts.setdefault("docx_extras_original", {})["textboxes_sdts"] = filtered_items
+                        except Exception:
+                            pass
                         texts = []
                         for item in filtered_items:
                             if isinstance(item, (list, tuple)) and len(item) == 2:

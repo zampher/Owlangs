@@ -276,3 +276,93 @@ def test_bilingual_rebuild_applies_target_delta_when_translation_already_present
 
     assert target_para.runs[0].font.size.pt == pytest.approx(14.0)
     assert source_para.runs[0].font.size.pt == pytest.approx(13.0)
+
+
+def test_parse_textbox_sdt_storage_items_from_string() -> None:
+    docx_rebuild = _load_docx_rebuild()
+    raw = [
+        "(('textbox', 0), '模板文档，如有雷同纯属巧合！')",
+        "(('textbox', 1), 'Second textbox')",
+    ]
+    parsed = docx_rebuild._parse_textbox_sdt_storage_items(raw)
+    assert len(parsed) == 2
+    assert docx_rebuild._normalize_key(parsed[0][0]) == ("textbox", 0)
+    assert "模板文档" in parsed[0][1]
+
+
+def test_is_duplicate_legacy_vtextbox_container() -> None:
+    docx_rebuild = _load_docx_rebuild()
+    from docx.oxml import parse_xml
+
+    alt_xml = """
+    <mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        xmlns:v="urn:schemas-microsoft-com:vml">
+      <mc:Choice Requires="wps">
+        <w:drawing><w:txbxContent><w:p><w:r><w:t>Target EN</w:t></w:r></w:p></w:txbxContent></w:drawing>
+      </mc:Choice>
+      <mc:Fallback>
+        <w:pict><v:textbox><w:txbxContent><w:p><w:r><w:t>Target EN</w:t></w:r></w:p></w:txbxContent></v:textbox></w:pict>
+      </mc:Fallback>
+    </mc:AlternateContent>
+    """
+    alt = parse_xml(alt_xml)
+    vtextbox = alt.xpath('.//*[local-name()="textbox"]')[0]
+    assert docx_rebuild._is_duplicate_legacy_vtextbox_container(vtextbox) is True
+
+
+def test_find_textbox_target_paragraph_element() -> None:
+    docx_rebuild = _load_docx_rebuild()
+    from docx.oxml import parse_xml
+
+    container_xml = """
+    <w:txbxContent xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:p><w:r><w:t>模板文档，如有雷同纯属巧合！</w:t></w:r></w:p>
+      <w:p><w:r><w:t>Template document, any resemblance is purely coincidental!</w:t></w:r></w:p>
+    </w:txbxContent>
+    """
+    container = parse_xml(container_xml)
+    target = docx_rebuild._find_textbox_target_paragraph_element(
+        container, "模板文档，如有雷同纯属巧合！"
+    )
+    assert target is not None
+    runs = target.xpath('.//*[local-name()="t"]')
+    text = "".join(t.text or "" for t in runs)
+    assert "Template document" in text
+
+
+def test_bilingual_textbox_insertion_runs_when_skip_legacy_header_footer() -> None:
+    """Textbox source insertion must not be gated on legacy header/footer path."""
+    from docx import Document
+
+    docx_rebuild = _load_docx_rebuild()
+    doc = Document()
+    doc.add_paragraph("Body")
+
+    segment_data_map = {
+        117: {
+            "source_text": "模板文档，如有雷同纯属巧合！",
+            "target_text": "Template document, any resemblance is purely coincidental!",
+            "segment_info": {},
+            "is_excluded": False,
+            "is_failed": False,
+            "segment_type": "textbox_sdt",
+            "textbox_key": "('textbox', 0)",
+        }
+    }
+
+    extras_original = {
+        "textboxes_sdts": [
+            "(('textbox', 0), '模板文档，如有雷同纯属巧合！')",
+        ]
+    }
+
+    docx_rebuild._insert_bilingual_source_paragraphs(
+        doc,
+        segment_data_map,
+        {},
+        target_first=False,
+        extras_original=extras_original,
+        skip_legacy_header_footer=True,
+    )
+    assert docx_rebuild._parse_textbox_sdt_storage_items(extras_original["textboxes_sdts"])

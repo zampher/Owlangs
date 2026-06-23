@@ -559,6 +559,8 @@ def rebuild_docx_document_from_segments(
                         "segment_info": segment_info,
                         "is_excluded": is_excluded,
                         "is_failed": is_failed,
+                        "segment_type": segment.get("segment_type"),
+                        "textbox_key": segment.get("textbox_key"),
                     }
                     if is_modified:
                         modified_segments.append(segment_index)
@@ -1250,6 +1252,130 @@ def _normalize_key(k) -> tuple:
     return k
 
 
+def _parse_textbox_sdt_storage_items(raw_items: List[Any]) -> List[Tuple[Any, str]]:
+    """Parse textbox/SDT (key, source_text) pairs from task state storage."""
+    parsed_items: List[Tuple[Any, str]] = []
+    for item in raw_items or []:
+        candidate = item
+        if isinstance(candidate, str):
+            try:
+                candidate = ast.literal_eval(candidate)
+            except Exception:
+                logger.warning(
+                    LogModule.RESTOR,
+                    f"[BILINGUAL-DOCX] Failed to parse textbox/SDT item: {item[:120]!r}",
+                )
+                continue
+        while isinstance(candidate, str):
+            try:
+                candidate = ast.literal_eval(candidate)
+            except Exception:
+                break
+        if isinstance(candidate, (list, tuple)) and len(candidate) >= 2:
+            key, text = candidate[0], candidate[1]
+            if text and str(text).strip():
+                parsed_items.append((key, str(text)))
+            continue
+        logger.warning(
+            LogModule.RESTOR,
+            f"[BILINGUAL-DOCX] Ignoring invalid textbox/SDT item: {item!r}",
+        )
+    return parsed_items
+
+
+def _parse_textbox_key(raw_key: Any) -> Optional[tuple]:
+    """Parse a textbox/SDT key from workflow segment metadata."""
+    if raw_key is None:
+        return None
+    if isinstance(raw_key, (list, tuple)):
+        return _normalize_key(raw_key)
+    if isinstance(raw_key, str):
+        try:
+            parsed = ast.literal_eval(raw_key)
+            if isinstance(parsed, (list, tuple)):
+                return _normalize_key(parsed)
+        except Exception:
+            pass
+    return None
+
+
+def _is_duplicate_legacy_vtextbox_container(element) -> bool:
+    """Return True when a legacy v:textbox duplicates a modern txbxContent path."""
+    tag = element.tag.split("}")[-1] if "}" in element.tag else element.tag
+    if tag != "textbox":
+        return False
+    alt = element.xpath('./ancestor::*[local-name()="AlternateContent"]')
+    if alt:
+        choice_txbx = alt[0].xpath(
+            './/*[local-name()="Choice"]//*[local-name()="txbxContent"]'
+        )
+        in_fallback = element.xpath('./ancestor::*[local-name()="Fallback"]')
+        if choice_txbx and in_fallback:
+            return True
+    for p in element.xpath('./ancestor::*[local-name()="p"]'):
+        if p.xpath('.//*[local-name()="txbxContent"]'):
+            return True
+        break
+    return False
+
+
+def _build_choice_to_fallback_txbx_map(doc) -> Dict[int, Any]:
+    """Map Choice txbxContent elements to their mc:Fallback counterparts."""
+    mapping: Dict[int, Any] = {}
+    for txbx in doc._element.xpath('.//*[local-name()="txbxContent"]'):
+        alt = txbx.xpath('./ancestor::*[local-name()="AlternateContent"]')
+        if not alt:
+            continue
+        in_fallback = txbx.xpath('./ancestor::*[local-name()="Fallback"]')
+        choice_txbx = alt[0].xpath(
+            './/*[local-name()="Choice"]//*[local-name()="txbxContent"]'
+        )
+        if in_fallback and choice_txbx:
+            mapping[id(choice_txbx[0])] = txbx
+    return mapping
+
+
+def _find_textbox_target_paragraph_element(container, original_text: str):
+    """Pick the paragraph that holds translated target text inside a textbox."""
+    paras = container.xpath('.//*[local-name()="p"]')
+    candidates = []
+    for p in paras:
+        runs = p.xpath('.//*[local-name()="t"]')
+        text = "".join(t.text or "" for t in runs).strip()
+        if text:
+            candidates.append((p, text))
+    if not candidates:
+        return None
+    normalized_source = _normalize_match_text(original_text)
+    for p, text in candidates:
+        if _normalize_match_text(text) != normalized_source:
+            return p
+    return candidates[-1][0]
+
+
+def _mirror_textbox_source_to_fallback(
+    choice_element,
+    new_p_elem,
+    target_first: bool,
+    choice_to_fallback: Dict[int, Any],
+) -> None:
+    """Mirror an inserted source paragraph to the mc:Fallback txbxContent twin."""
+    fallback = choice_to_fallback.get(id(choice_element))
+    if fallback is None:
+        return
+    fb_paras = fallback.xpath('.//*[local-name()="p"]')
+    if not fb_paras:
+        return
+    from copy import deepcopy
+
+    fb_target = fb_paras[0]
+    cloned = deepcopy(new_p_elem)
+    if target_first:
+        fb_target.addnext(cloned)
+    else:
+        fb_target.addprevious(cloned)
+
+
 def _normalize_match_text(text: str) -> str:
     """Collapse whitespace for fuzzy paragraph text comparison."""
     return re.sub(r"\s+", " ", (text or "").strip())
@@ -1723,6 +1849,17 @@ def _insert_bilingual_source_paragraphs(
         if target_text_font_size_delta != 0.0:
             _apply_font_size_delta(para, target_text_font_size_delta)
 
+    def _finalize_textbox_source_paragraph(
+        new_para: Paragraph, target_para: Paragraph
+    ) -> None:
+        """Style a textbox source paragraph without copying translated run fonts."""
+        _copy_paragraph_format(target_para, new_para)
+        for run in new_para.runs:
+            _apply_source_run_style(run)
+        _apply_target_style_with_delta(target_para)
+        if source_text_font_size_delta != 0.0:
+            _apply_font_size_delta(new_para, source_text_font_size_delta)
+
     def _apply_source_run_style(dst_run) -> None:
         """Apply bilingual source italic/color to a single run."""
         try:
@@ -1896,28 +2033,9 @@ def _insert_bilingual_source_paragraphs(
     # ------------------------------------------------------------------
     # 3. Textboxes / SDTs
     # ------------------------------------------------------------------
+    if extras_original and extras_original.get("textboxes_sdts"):
         raw_tb_items = extras_original.get("textboxes_sdts", [])
-        # Parse string items back to (key, text) tuples — task state data may have
-        # been serialized/deserialized, converting tuples to string representations.
-        tb_items = []
-        for item in raw_tb_items:
-            if isinstance(item, str):
-                try:
-                    parsed = ast.literal_eval(item)
-                    if isinstance(parsed, (list, tuple)) and len(parsed) >= 2:
-                        tb_items.append(parsed)
-                    else:
-                        logger.warning(
-                            LogModule.RESTOR,
-                            f"[BILINGUAL-DOCX] String item not a valid pair: {item[:120]!r}"
-                        )
-                except Exception:
-                    logger.warning(
-                        LogModule.RESTOR,
-                        f"[BILINGUAL-DOCX] Failed to parse string item: {item[:120]!r}"
-                    )
-            else:
-                tb_items.append(item)
+        tb_items = _parse_textbox_sdt_storage_items(raw_tb_items)
         logger.info(
             LogModule.RESTOR,
             f"[BILINGUAL-DOCX] Textbox/SDT section: extras_original has textboxes_sdts={bool(raw_tb_items)}, "
@@ -1930,16 +2048,41 @@ def _insert_bilingual_source_paragraphs(
                 LogModule.RESTOR,
                 f"[BILINGUAL-DOCX] Textbox/SDT keys in tb_items: {keys_found}"
             )
-            # Locate textbox containers in document XML
+            # Locate textbox containers in document XML.
+            # The iteration order and filtering must match _extract_textboxes
+            # in docx_extras.py exactly, otherwise the ("textbox", N) keys
+            # will be misaligned and source texts will not be found.
             try:
                 from lxml import etree
-                nsmap = doc._element.nsmap
-                # Search all w:txbxContent and legacy v:textbox nodes
-                txbx_nodes = doc._element.xpath('.//*[local-name()="txbxContent"]')
-                pict_nodes = doc._element.xpath('.//*[local-name()="pict"]//*[local-name()="textbox"]')
-                all_containers = txbx_nodes + pict_nodes
+                from docx.oxml import OxmlElement
 
-                # Also include drawing elements with text (same iteration order as extraction)
+                choice_to_fallback = _build_choice_to_fallback_txbx_map(doc)
+                all_containers = []
+
+                # Collect txbxContent nodes (skip those in mc:Fallback when
+                # mc:Choice already provides the same textbox).
+                txbx_nodes = doc._element.xpath('.//*[local-name()="txbxContent"]')
+                for txbx in txbx_nodes:
+                    _alt_content = txbx.xpath(
+                        './ancestor::*[local-name()="AlternateContent"]'
+                    )
+                    if _alt_content:
+                        _in_fallback = txbx.xpath(
+                            './ancestor::*[local-name()="Fallback"]'
+                        )
+                        if _in_fallback:
+                            _choice_txbx = _alt_content[0].xpath(
+                                './/*[local-name()="Choice"]//*[local-name()="txbxContent"]'
+                            )
+                            if _choice_txbx:
+                                continue  # skip duplicate
+                    all_containers.append(txbx)
+
+                # Add legacy v:textbox nodes
+                pict_nodes = doc._element.xpath('.//*[local-name()="pict"]//*[local-name()="textbox"]')
+                all_containers.extend(pict_nodes)
+
+                # Add drawing elements with text content
                 drawing_nodes = doc._element.xpath('.//*[local-name()="drawing"]')
                 for drawing in drawing_nodes:
                     text_elements = drawing.xpath('.//*[local-name()="t"]')
@@ -1948,61 +2091,126 @@ def _insert_bilingual_source_paragraphs(
 
                 logger.info(
                     LogModule.RESTOR,
-                    f"[BILINGUAL-DOCX] Found {len(txbx_nodes)} txbxContent nodes, {len(pict_nodes)} pict/textbox nodes, "
-                    f"{len(drawing_nodes)} drawing nodes -> {len(all_containers)} total containers"
+                    f"[BILINGUAL-DOCX] Textbox containers: {len(txbx_nodes)} txbxContent, "
+                    f"{len(pict_nodes)} pict/textbox, {len(drawing_nodes)} drawing "
+                    f"-> {len(all_containers)} total"
                 )
+
+                _tb_items_by_key: Dict[Tuple, str] = {}
+                for item in tb_items:
+                    if isinstance(item, (list, tuple)) and len(item) >= 2:
+                        _tb_items_by_key[_normalize_key(item[0])] = item[1]
+                for segment_data in segment_data_map.values():
+                    if segment_data.get("segment_type") != "textbox_sdt":
+                        continue
+                    source_text = (segment_data.get("source_text") or "").strip()
+                    if not source_text:
+                        continue
+                    key = _parse_textbox_key(segment_data.get("textbox_key"))
+                    if key is not None:
+                        _tb_items_by_key.setdefault(key, source_text)
 
                 container_idx = 0
                 for container in all_containers:
                     key = ("textbox", container_idx)
-                    # Try to match with saved original text
-                    original_text = None
-                    for item in tb_items:
-                        if not isinstance(item, (list, tuple)) or len(item) != 2:
+
+                    if container.tag.endswith('txbxContent') or container.tag.endswith('textbox'):
+                        # Skip textboxes inside SDTs (already handled by SDT
+                        # extraction) — must match extraction behaviour.
+                        if container.xpath('./ancestor::*[local-name()="sdt"]'):
+                            container_idx += 1
                             continue
-                        k, text = item
-                        if _normalize_key(k) == key and text and text.strip():
-                            original_text = text
-                            break
+                        if _is_duplicate_legacy_vtextbox_container(container):
+                            logger.debug(
+                                LogModule.RESTOR,
+                                f"[BILINGUAL-DOCX] Skipping duplicate legacy v:textbox container for key {key}",
+                            )
+                            container_idx += 1
+                            continue
+                        original_text = _tb_items_by_key.get(key)
+                        container_idx += 1
 
-                    container_idx += 1
+                        if not original_text:
+                            continue
 
-                    logger.info(
-                        LogModule.RESTOR,
-                        f"[BILINGUAL-DOCX] Textbox container {container_idx - 1}: key={key}, match_found={original_text is not None}"
-                    )
+                        target_p_elem = _find_textbox_target_paragraph_element(
+                            container, original_text
+                        )
+                        if target_p_elem is None:
+                            continue
 
-                    if not original_text:
-                        continue
-
-                    # Find first paragraph inside this container
-                    para_elems = container.xpath('.//*[local-name()="p"]')
-                    logger.info(
-                        LogModule.RESTOR,
-                        f"[BILINGUAL-DOCX] Textbox {key}: {len(para_elems)} paragraph(s) found in container"
-                    )
-                    if para_elems:
                         try:
-                            target_para = Paragraph(para_elems[0], None)
-                            new_para = doc.add_paragraph(original_text)
-                            _copy_source_format(target_para, new_para)
+                            parent = target_p_elem.getparent()
+                            target_para = Paragraph(target_p_elem, parent)
+
+                            # Create source paragraph directly in the textbox
+                            new_p_elem = OxmlElement('w:p')
+                            new_r_elem = OxmlElement('w:r')
+                            new_t_elem = OxmlElement('w:t')
+                            new_t_elem.text = original_text
+                            new_r_elem.append(new_t_elem)
+                            new_p_elem.append(new_r_elem)
 
                             if target_first:
-                                target_para._element.addnext(new_para._element)
+                                target_para._element.addnext(new_p_elem)
                             else:
-                                target_para._element.addprevious(new_para._element)
+                                target_para._element.addprevious(new_p_elem)
 
-                            _apply_target_style_with_delta(target_para)
+                            new_para = Paragraph(new_p_elem, parent)
+                            _finalize_textbox_source_paragraph(new_para, target_para)
+                            if container.tag.endswith('txbxContent'):
+                                _mirror_textbox_source_to_fallback(
+                                    container,
+                                    new_p_elem,
+                                    target_first,
+                                    choice_to_fallback,
+                                )
                             inserted_count += 1
-                            logger.info(
-                                LogModule.RESTOR,
-                                f"[BILINGUAL-DOCX] Successfully inserted bilingual textbox for {key}"
-                            )
                         except Exception as e:
                             logger.warning(
                                 LogModule.RESTOR,
                                 f"[BILINGUAL-DOCX] Failed to insert bilingual textbox for {key}: {e}"
                             )
+                    elif container.tag.endswith('drawing'):
+                        # Drawing elements with text — use same index alignment
+                        original_text = _tb_items_by_key.get(key)
+                        container_idx += 1
+
+                        if not original_text:
+                            continue
+
+                        target_p_elem = _find_textbox_target_paragraph_element(
+                            container, original_text
+                        )
+                        if target_p_elem is None:
+                            continue
+
+                        try:
+                            parent = target_p_elem.getparent()
+                            target_para = Paragraph(target_p_elem, parent)
+
+                            new_p_elem = OxmlElement('w:p')
+                            new_r_elem = OxmlElement('w:r')
+                            new_t_elem = OxmlElement('w:t')
+                            new_t_elem.text = original_text
+                            new_r_elem.append(new_t_elem)
+                            new_p_elem.append(new_r_elem)
+
+                            if target_first:
+                                target_para._element.addnext(new_p_elem)
+                            else:
+                                target_para._element.addprevious(new_p_elem)
+
+                            new_para = Paragraph(new_p_elem, parent)
+                            _finalize_textbox_source_paragraph(new_para, target_para)
+                            inserted_count += 1
+                        except Exception as e:
+                            logger.warning(
+                                LogModule.RESTOR,
+                                f"[BILINGUAL-DOCX] Failed to insert bilingual drawing text for {key}: {e}"
+                            )
+                    else:
+                        container_idx += 1
 
                 # Handle SDTs
                 sdt_elems = doc._element.body.xpath('.//*[local-name()="sdt"]')
@@ -2019,14 +2227,7 @@ def _insert_bilingual_source_paragraphs(
                     # Try sdt_content keys
                     for sub_idx in range(10):  # reasonable upper bound
                         key = ("sdt_content", sdt_index, sub_idx)
-                        original_text = None
-                        for item in tb_items:
-                            if not isinstance(item, (list, tuple)) or len(item) != 2:
-                                continue
-                            k, text = item
-                            if _normalize_key(k) == key and text and text.strip():
-                                original_text = text
-                                break
+                        original_text = _tb_items_by_key.get(key)
                         if not original_text:
                             continue
 
@@ -2035,16 +2236,23 @@ def _insert_bilingual_source_paragraphs(
                             para_elems = sdt_contents[sub_idx].xpath('.//*[local-name()="p"]')
                             if para_elems:
                                 try:
-                                    target_para = Paragraph(para_elems[0], None)
-                                    new_para = doc.add_paragraph(original_text)
-                                    _copy_source_format(target_para, new_para)
+                                    _parent = para_elems[0].getparent()
+                                    target_para = Paragraph(para_elems[0], _parent)
+
+                                    new_p_elem = OxmlElement('w:p')
+                                    new_r_elem = OxmlElement('w:r')
+                                    new_t_elem = OxmlElement('w:t')
+                                    new_t_elem.text = original_text
+                                    new_r_elem.append(new_t_elem)
+                                    new_p_elem.append(new_r_elem)
 
                                     if target_first:
-                                        target_para._element.addnext(new_para._element)
+                                        target_para._element.addnext(new_p_elem)
                                     else:
-                                        target_para._element.addprevious(new_para._element)
+                                        target_para._element.addprevious(new_p_elem)
 
-                                    _apply_target_style_with_delta(target_para)
+                                    new_para = Paragraph(new_p_elem, _parent)
+                                    _finalize_textbox_source_paragraph(new_para, target_para)
                                     inserted_count += 1
                                 except Exception as e:
                                     logger.warning(
@@ -2054,28 +2262,28 @@ def _insert_bilingual_source_paragraphs(
 
                     # Try direct sdt key
                     key = ("sdt", sdt_index)
-                    original_text = None
-                    for item in tb_items:
-                        if not isinstance(item, (list, tuple)) or len(item) != 2:
-                            continue
-                        k, text = item
-                        if _normalize_key(k) == key and text and text.strip():
-                            original_text = text
-                            break
+                    original_text = _tb_items_by_key.get(key)
                     if original_text:
                         para_elems = sdt.xpath('.//*[local-name()="p"]')
                         if para_elems:
                             try:
-                                target_para = Paragraph(para_elems[0], None)
-                                new_para = doc.add_paragraph(original_text)
-                                _copy_source_format(target_para, new_para)
+                                _parent = para_elems[0].getparent()
+                                target_para = Paragraph(para_elems[0], _parent)
+
+                                new_p_elem = OxmlElement('w:p')
+                                new_r_elem = OxmlElement('w:r')
+                                new_t_elem = OxmlElement('w:t')
+                                new_t_elem.text = original_text
+                                new_r_elem.append(new_t_elem)
+                                new_p_elem.append(new_r_elem)
 
                                 if target_first:
-                                    target_para._element.addnext(new_para._element)
+                                    target_para._element.addnext(new_p_elem)
                                 else:
-                                    target_para._element.addprevious(new_para._element)
+                                    target_para._element.addprevious(new_p_elem)
 
-                                _apply_target_style_with_delta(target_para)
+                                new_para = Paragraph(new_p_elem, _parent)
+                                _finalize_textbox_source_paragraph(new_para, target_para)
                                 inserted_count += 1
                             except Exception as e:
                                 logger.warning(
@@ -2087,29 +2295,29 @@ def _insert_bilingual_source_paragraphs(
                     child_sdts = sdt.xpath('.//*[local-name()="sdt"]')
                     for child_idx, child_sdt in enumerate(child_sdts):
                         key = ("sdt_child", sdt_index, child_idx)
-                        original_text = None
-                        for item in tb_items:
-                            if not isinstance(item, (list, tuple)) or len(item) != 2:
-                                continue
-                            k, text = item
-                            if _normalize_key(k) == key and text and text.strip():
-                                original_text = text
-                                break
+                        original_text = _tb_items_by_key.get(key)
                         if not original_text:
                             continue
                         para_elems = child_sdt.xpath('.//*[local-name()="p"]')
                         if para_elems:
                             try:
-                                target_para = Paragraph(para_elems[0], None)
-                                new_para = doc.add_paragraph(original_text)
-                                _copy_source_format(target_para, new_para)
+                                _parent = para_elems[0].getparent()
+                                target_para = Paragraph(para_elems[0], _parent)
+
+                                new_p_elem = OxmlElement('w:p')
+                                new_r_elem = OxmlElement('w:r')
+                                new_t_elem = OxmlElement('w:t')
+                                new_t_elem.text = original_text
+                                new_r_elem.append(new_t_elem)
+                                new_p_elem.append(new_r_elem)
 
                                 if target_first:
-                                    target_para._element.addnext(new_para._element)
+                                    target_para._element.addnext(new_p_elem)
                                 else:
-                                    target_para._element.addprevious(new_para._element)
+                                    target_para._element.addprevious(new_p_elem)
 
-                                _apply_target_style_with_delta(target_para)
+                                new_para = Paragraph(new_p_elem, _parent)
+                                _finalize_textbox_source_paragraph(new_para, target_para)
                                 inserted_count += 1
                             except Exception as e:
                                 logger.warning(
