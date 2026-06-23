@@ -403,6 +403,184 @@ def test_bilingual_list_numbering_follows_target_when_target_first() -> None:
     assert not docx_rebuild._paragraph_has_list_markers(source_para._element)
 
 
+def test_bilingual_heading_style_applied_to_both_paragraphs() -> None:
+    """Heading paragraphs must keep the same heading level on source and target."""
+    from docx import Document
+    from docx.oxml.ns import qn
+
+    docx_rebuild = _load_docx_rebuild()
+    doc = Document()
+    target_para = doc.add_paragraph("Translated heading", style="Heading 2")
+    source_para = doc.add_paragraph("Translated heading")
+
+    docx_rebuild._sync_bilingual_heading_styles(source_para, target_para, doc)
+
+    for para in (source_para, target_para):
+        style_val = docx_rebuild._paragraph_p_style_val(para._element)
+        assert style_val is not None
+        assert docx_rebuild._is_heading_style_id(style_val)
+
+
+def test_bilingual_paragraph_markers_preserve_heading_while_moving_list() -> None:
+    """List numbering moves to first paragraph without stripping heading from target."""
+    from docx import Document
+
+    docx_rebuild = _load_docx_rebuild()
+    doc = Document()
+    target_para = doc.add_paragraph("Translated heading", style="Heading 2")
+    source_para = doc.add_paragraph("Source heading")
+
+    docx_rebuild._apply_bilingual_paragraph_markers(
+        source_para, target_para, target_first=False, doc=doc
+    )
+
+    for para in (source_para, target_para):
+        style_val = docx_rebuild._paragraph_p_style_val(para._element)
+        assert style_val is not None
+        assert docx_rebuild._is_heading_style_id(style_val)
+
+
+def test_bilingual_heading_style_on_xml_inserted_source_paragraph() -> None:
+    """Source paragraphs inserted via XML (no document part) must keep heading style."""
+    from docx import Document
+    from docx.oxml import OxmlElement
+    from docx.text.paragraph import Paragraph
+
+    docx_rebuild = _load_docx_rebuild()
+    doc = Document()
+    target_para = doc.add_paragraph("Translated heading", style="Heading 2")
+
+    new_p_elem = OxmlElement("w:p")
+    new_r_elem = OxmlElement("w:r")
+    new_t_elem = OxmlElement("w:t")
+    new_t_elem.text = "Source heading"
+    new_r_elem.append(new_t_elem)
+    new_p_elem.append(new_r_elem)
+    target_para._element.addprevious(new_p_elem)
+    parent = target_para._element.getparent()
+    source_para = Paragraph(new_p_elem, parent)
+
+    docx_rebuild._apply_bilingual_paragraph_markers(
+        source_para, target_para, target_first=False, doc=doc
+    )
+
+    for para in (source_para, target_para):
+        style_val = docx_rebuild._paragraph_p_style_val(para._element)
+        assert style_val is not None
+        assert docx_rebuild._style_id_is_heading_in_doc(style_val, doc)
+
+
+def _add_localized_heading_style(
+    doc,
+    style_id: str,
+    display_name: str,
+    outline_level: int,
+    based_on: str = "Heading 2",
+) -> None:
+    """Add a localized heading style (e.g. French Titre2) for testing."""
+    from copy import deepcopy
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    base = doc.styles[based_on]
+    new_el = deepcopy(base.element)
+    new_el.set(qn("w:styleId"), style_id)
+    name_el = new_el.find(qn("w:name"))
+    if name_el is not None:
+        name_el.set(qn("w:val"), display_name)
+    p_pr = new_el.find(qn("w:pPr"))
+    if p_pr is None:
+        p_pr = OxmlElement("w:pPr")
+        new_el.insert(0, p_pr)
+    outline = p_pr.find(qn("w:outlineLvl"))
+    if outline is None:
+        outline = OxmlElement("w:outlineLvl")
+        p_pr.append(outline)
+    outline.set(qn("w:val"), str(outline_level))
+    doc.styles.element.append(new_el)
+
+
+def _apply_paragraph_style_id(paragraph, style_id: str) -> None:
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    p_pr = paragraph._element.find(qn("w:pPr"))
+    if p_pr is None:
+        p_pr = OxmlElement("w:pPr")
+        paragraph._element.insert(0, p_pr)
+    existing = p_pr.find(qn("w:pStyle"))
+    if existing is not None:
+        p_pr.remove(existing)
+    p_style = OxmlElement("w:pStyle")
+    p_style.set(qn("w:val"), style_id)
+    p_pr.append(p_style)
+
+
+def test_style_id_is_heading_via_outline_level_not_language_keywords() -> None:
+    """Localized style ids without 'heading' must still be recognized as headings."""
+    from docx import Document
+
+    docx_rebuild = _load_docx_rebuild()
+    doc = Document()
+    _add_localized_heading_style(doc, "Titre2", "Titre 2", outline_level=1)
+    _add_localized_heading_style(doc, "berschrift1", "Überschrift 1", outline_level=0)
+
+    assert docx_rebuild._style_id_is_heading_in_doc("Titre2", doc)
+    assert docx_rebuild._style_id_is_heading_in_doc("berschrift1", doc)
+    assert not docx_rebuild._is_heading_style_id("Titre2")
+
+
+def test_bilingual_heading_style_with_localized_french_style_id() -> None:
+    """Bilingual export must preserve localized heading style ids on source paragraphs."""
+    from docx import Document
+    from docx.oxml import OxmlElement
+    from docx.text.paragraph import Paragraph
+
+    docx_rebuild = _load_docx_rebuild()
+    doc = Document()
+    _add_localized_heading_style(doc, "Titre2", "Titre 2", outline_level=1)
+    target_para = doc.add_paragraph("Titre traduit")
+    _apply_paragraph_style_id(target_para, "Titre2")
+
+    new_p_elem = OxmlElement("w:p")
+    new_r_elem = OxmlElement("w:r")
+    new_t_elem = OxmlElement("w:t")
+    new_t_elem.text = "Source heading"
+    new_r_elem.append(new_t_elem)
+    new_p_elem.append(new_r_elem)
+    target_para._element.addprevious(new_p_elem)
+    parent = target_para._element.getparent()
+    source_para = Paragraph(new_p_elem, parent)
+
+    docx_rebuild._apply_bilingual_paragraph_markers(
+        source_para, target_para, target_first=False, doc=doc
+    )
+
+    for para in (source_para, target_para):
+        style_val = docx_rebuild._paragraph_p_style_val(para._element)
+        assert style_val == "Titre2"
+        assert docx_rebuild._style_id_is_heading_in_doc(style_val, doc)
+
+
+def test_heading_style_id_for_outline_level_uses_style_definitions() -> None:
+    """Outline-level lookup must resolve localized heading styles from the document."""
+    from docx import Document
+    from docx.oxml.ns import qn
+
+    docx_rebuild = _load_docx_rebuild()
+    doc = Document()
+    _add_localized_heading_style(doc, "Titre2", "Titre 2", outline_level=1)
+
+    h2 = doc.styles["Heading 2"]
+    p_pr = h2.element.find(qn("w:pPr"))
+    if p_pr is not None:
+        outline = p_pr.find(qn("w:outlineLvl"))
+        if outline is not None:
+            p_pr.remove(outline)
+
+    assert docx_rebuild._heading_style_id_for_outline_level(doc, 1) == "Titre2"
+
+
 def _paragraph_num_pr_element(p_elem):
     from docx.oxml.ns import qn
 

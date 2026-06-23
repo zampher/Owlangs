@@ -554,12 +554,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationExportTargetFontSizeDelta => '번역문 글꼴 크기 오프셋:';
 
   @override
-  String get translationExportSourceFontSizeDelta => 'Source font size delta:';
-
-  @override
-  String get translationExportTargetFontSizeDelta => 'Target font size delta:';
-
-  @override
   String get translationExportColorDefault => '기본값';
 
   @override

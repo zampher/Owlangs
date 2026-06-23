@@ -76,6 +76,239 @@ def _paragraph_num_pr_element(p_elem):
     return p_pr.find(qn("w:numPr"))
 
 
+def _is_heading_style_id(style_id: str) -> bool:
+    """Return True when a w:pStyle val likely names a heading style (heuristic)."""
+    if not style_id:
+        return False
+    val = style_id.lower().replace(" ", "")
+    if "heading" in val or val.startswith("标题"):
+        return True
+    if val in ("title", "subtitle", "tocheading"):
+        return True
+    return False
+
+
+def _outline_level_from_style_element(style_element) -> Optional[int]:
+    """Return w:outlineLvl from a style definition element, if present."""
+    from docx.oxml.ns import qn
+
+    if style_element is None:
+        return None
+    p_pr = style_element.find(qn("w:pPr"))
+    if p_pr is None:
+        return None
+    outline = p_pr.find(qn("w:outlineLvl"))
+    if outline is None:
+        return None
+    raw = outline.get(qn("w:val"))
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _find_paragraph_style_in_doc(doc, style_ref: str):
+    """Find a paragraph style by style id or localized display name."""
+    if not style_ref or doc is None:
+        return None
+    from docx.enum.style import WD_STYLE_TYPE
+
+    for style in doc.styles:
+        if style.type != WD_STYLE_TYPE.PARAGRAPH:
+            continue
+        if style.style_id == style_ref:
+            return style
+    try:
+        style = doc.styles[style_ref]
+        if style.type == WD_STYLE_TYPE.PARAGRAPH:
+            return style
+    except KeyError:
+        pass
+    return None
+
+
+def _style_is_heading(style) -> bool:
+    """Return True when a paragraph style is a heading (language-agnostic)."""
+    if style is None:
+        return False
+    outline = _outline_level_from_style_element(style.element)
+    if outline is not None and 0 <= outline <= 8:
+        return True
+    style_id = style.style_id or ""
+    if _is_heading_style_id(style_id):
+        return True
+    name = (style.name or "").lower()
+    if "heading" in name or name.startswith("标题"):
+        return True
+    if name in ("title", "subtitle"):
+        return True
+    return False
+
+
+def _style_id_is_heading_in_doc(style_id: str, doc) -> bool:
+    """Return True when *style_id* refers to a heading style in *doc*."""
+    if not style_id:
+        return False
+    if doc is None:
+        return _is_heading_style_id(style_id)
+    style = _find_paragraph_style_in_doc(doc, style_id)
+    if style is not None:
+        return _style_is_heading(style)
+    return _is_heading_style_id(style_id)
+
+
+def _paragraph_heading_p_style_element(p_elem, doc=None):
+    from docx.oxml.ns import qn
+
+    p_pr = p_elem.find(qn("w:pPr"))
+    if p_pr is None:
+        return None
+    p_style = p_pr.find(qn("w:pStyle"))
+    if p_style is None:
+        return None
+    val = p_style.get(qn("w:val")) or ""
+    if _style_id_is_heading_in_doc(val, doc):
+        return p_style
+    return None
+
+
+def _make_p_style_element(style_id: str):
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    p_style = OxmlElement("w:pStyle")
+    p_style.set(qn("w:val"), style_id)
+    return p_style
+
+
+def _apply_heading_style_id_to_paragraph(para, style_id: str) -> None:
+    """Apply a heading style id via XML (works for cell/body inserted paragraphs)."""
+    from docx.oxml.ns import qn
+
+    if not style_id:
+        return
+    p_pr = _ensure_paragraph_p_pr(para._element)
+    existing = p_pr.find(qn("w:pStyle"))
+    if existing is not None:
+        p_pr.remove(existing)
+    p_pr.append(_make_p_style_element(style_id))
+
+
+def _outline_level_from_paragraph(p_elem) -> Optional[int]:
+    from docx.oxml.ns import qn
+
+    p_pr = p_elem.find(qn("w:pPr"))
+    if p_pr is None:
+        return None
+    outline = p_pr.find(qn("w:outlineLvl"))
+    if outline is None:
+        return None
+    raw = outline.get(qn("w:val"))
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _heading_style_id_for_outline_level(doc, level: int) -> Optional[str]:
+    """Map an outline level to a document heading style id when possible."""
+    if doc is None or level < 0 or level > 8:
+        return None
+
+    from docx.enum.style import WD_STYLE_TYPE
+
+    candidates = []
+    for style in doc.styles:
+        if style.type != WD_STYLE_TYPE.PARAGRAPH:
+            continue
+        style_outline = _outline_level_from_style_element(style.element)
+        if style_outline != level:
+            continue
+        candidates.append(style)
+
+    if candidates:
+        for style in candidates:
+            if _is_heading_style_id(style.style_id or ""):
+                return style.style_id
+        for style in candidates:
+            name = (style.name or "").lower()
+            if "heading" in name or name.startswith("标题"):
+                return style.style_id
+        return candidates[0].style_id
+
+    heading_number = level + 1
+    for style_name in (
+        f"Heading {heading_number}",
+        f"Heading{heading_number}",
+        f"标题 {heading_number}",
+        f"标题{heading_number}",
+    ):
+        try:
+            return doc.styles[style_name].style_id
+        except KeyError:
+            continue
+    return None
+
+
+def _resolve_heading_style_id(para, doc=None) -> Optional[str]:
+    """Resolve the heading style id for a paragraph, if any."""
+    from docx.oxml.ns import qn
+
+    heading_el = _paragraph_heading_p_style_element(para._element, doc)
+    if heading_el is not None:
+        return heading_el.get(qn("w:val"))
+
+    try:
+        style = para.style
+        if style is not None and _style_is_heading(style):
+            return style.style_id or ""
+    except Exception:
+        pass
+
+    outline_level = _outline_level_from_paragraph(para._element)
+    if outline_level is not None:
+        return _heading_style_id_for_outline_level(doc, outline_level)
+
+    return None
+
+
+def _is_list_style_id(style_id: str) -> bool:
+    if not style_id:
+        return False
+    val = style_id.lower()
+    return val.startswith("list") or "number" in val or "bullet" in val
+
+
+def _paragraph_p_style_val(p_elem) -> Optional[str]:
+    from docx.oxml.ns import qn
+
+    p_pr = p_elem.find(qn("w:pPr"))
+    if p_pr is None:
+        return None
+    p_style = p_pr.find(qn("w:pStyle"))
+    if p_style is None:
+        return None
+    return p_style.get(qn("w:val"))
+
+
+def _paragraph_list_p_style_element(p_elem):
+    from docx.oxml.ns import qn
+
+    p_pr = p_elem.find(qn("w:pPr"))
+    if p_pr is None:
+        return None
+    p_style = p_pr.find(qn("w:pStyle"))
+    if p_style is None:
+        return None
+    if _is_list_style_id(p_style.get(qn("w:val")) or ""):
+        return p_style
+    return None
+
+
 def _paragraph_has_list_markers(p_elem) -> bool:
     from docx.oxml.ns import qn
 
@@ -84,12 +317,7 @@ def _paragraph_has_list_markers(p_elem) -> bool:
         return False
     if p_pr.find(qn("w:numPr")) is not None:
         return True
-    p_style = p_pr.find(qn("w:pStyle"))
-    if p_style is not None:
-        val = (p_style.get(qn("w:val")) or "").lower()
-        if val.startswith("list") or "number" in val or "bullet" in val:
-            return True
-    return False
+    return _paragraph_list_p_style_element(p_elem) is not None
 
 
 def _ensure_paragraph_p_pr(p_elem):
@@ -104,20 +332,22 @@ def _ensure_paragraph_p_pr(p_elem):
 
 
 def _strip_paragraph_list_markers(p_elem) -> None:
-    """Remove list numbering markers from a paragraph."""
+    """Remove list numbering markers from a paragraph (never heading styles)."""
     from docx.oxml.ns import qn
 
     p_pr = p_elem.find(qn("w:pPr"))
     if p_pr is None:
         return
-    for tag in ("w:numPr", "w:pStyle"):
-        el = p_pr.find(qn(tag))
-        if el is not None:
-            p_pr.remove(el)
+    num_pr = p_pr.find(qn("w:numPr"))
+    if num_pr is not None:
+        p_pr.remove(num_pr)
+    list_style = _paragraph_list_p_style_element(p_elem)
+    if list_style is not None:
+        p_pr.remove(list_style)
 
 
 def _move_paragraph_list_markers(src_p_elem, dst_p_elem) -> bool:
-    """Move list markers (numPr/pStyle/ind) from src to dst. Returns True if any moved."""
+    """Move list markers (numPr / list pStyle) from src to dst."""
     from copy import deepcopy
     from docx.oxml.ns import qn
 
@@ -126,17 +356,66 @@ def _move_paragraph_list_markers(src_p_elem, dst_p_elem) -> bool:
         return False
     dst_p_pr = _ensure_paragraph_p_pr(dst_p_elem)
     moved = False
-    for tag in ("w:numPr", "w:pStyle", "w:ind"):
-        el = src_p_pr.find(qn(tag))
-        if el is None:
-            continue
-        existing = dst_p_pr.find(qn(tag))
+
+    num_pr = src_p_pr.find(qn("w:numPr"))
+    if num_pr is not None:
+        existing = dst_p_pr.find(qn("w:numPr"))
         if existing is not None:
             dst_p_pr.remove(existing)
-        dst_p_pr.append(deepcopy(el))
-        src_p_pr.remove(el)
+        dst_p_pr.append(deepcopy(num_pr))
+        src_p_pr.remove(num_pr)
         moved = True
+
+    list_style = _paragraph_list_p_style_element(src_p_elem)
+    if list_style is not None:
+        existing_style = dst_p_pr.find(qn("w:pStyle"))
+        if existing_style is not None:
+            dst_p_pr.remove(existing_style)
+        dst_p_pr.append(deepcopy(list_style))
+        src_p_pr.remove(list_style)
+        moved = True
+
     return moved
+
+
+def _copy_p_pr_child_to_both(source_para, target_para, tag_local: str) -> None:
+    """Copy a single pPr child (e.g. outlineLvl) from target to both paragraphs."""
+    from copy import deepcopy
+    from docx.oxml.ns import qn
+
+    tag = qn(f"w:{tag_local}")
+    src_p_pr = target_para._element.find(qn("w:pPr"))
+    if src_p_pr is None:
+        return
+    child = src_p_pr.find(tag)
+    if child is None:
+        return
+    for para in (source_para, target_para):
+        p_pr = _ensure_paragraph_p_pr(para._element)
+        existing = p_pr.find(tag)
+        if existing is not None:
+            p_pr.remove(existing)
+        p_pr.append(deepcopy(child))
+
+
+def _sync_bilingual_heading_styles(source_para, target_para, doc=None) -> None:
+    """Ensure both bilingual paragraphs share the same heading level/style."""
+    style_id = _resolve_heading_style_id(target_para, doc)
+    if style_id is None:
+        style_id = _resolve_heading_style_id(source_para, doc)
+    if style_id is None:
+        return
+
+    for para in (source_para, target_para):
+        _apply_heading_style_id_to_paragraph(para, style_id)
+
+    _copy_p_pr_child_to_both(source_para, target_para, "outlineLvl")
+    _copy_p_pr_child_to_both(source_para, target_para, "keepNext")
+    _copy_p_pr_child_to_both(source_para, target_para, "keepLines")
+    logger.debug(
+        LogModule.RESTOR,
+        f"[BILINGUAL-DOCX] Applied heading style {style_id!r} to source/target paragraph pair",
+    )
 
 
 def _set_paragraph_num_pr(p_elem, num_pr_elem) -> None:
@@ -179,6 +458,14 @@ def _apply_bilingual_list_numbering(source_para, target_para, target_first: bool
         _reassign_bilingual_list_numbering(target_para, source_para)
     else:
         _reassign_bilingual_list_numbering(source_para, target_para)
+
+
+def _apply_bilingual_paragraph_markers(
+    source_para, target_para, target_first: bool, doc=None
+) -> None:
+    """Apply list numbering and heading styles for a bilingual paragraph pair."""
+    _apply_bilingual_list_numbering(source_para, target_para, target_first)
+    _sync_bilingual_heading_styles(source_para, target_para, doc)
 
 
 def _get_effective_font_size_pt(run, paragraph=None) -> Optional[float]:
@@ -1825,7 +2112,7 @@ def _insert_bilingual_header_footer_flat_segments(
             _apply_target_style(target_para)
             if source_text_font_size_delta != 0.0:
                 _apply_font_size_delta(new_para, source_text_font_size_delta)
-            _apply_bilingual_list_numbering(new_para, target_para, target_first)
+            _apply_bilingual_paragraph_markers(new_para, target_para, target_first, doc)
             return True
         except Exception as e:
             logger.warning(
@@ -1975,7 +2262,7 @@ def _insert_bilingual_source_paragraphs(
         _apply_target_style_with_delta(target_para)
         if source_text_font_size_delta != 0.0:
             _apply_font_size_delta(new_para, source_text_font_size_delta)
-        _apply_bilingual_list_numbering(new_para, target_para, target_first)
+        _apply_bilingual_paragraph_markers(new_para, target_para, target_first, doc)
 
     def _apply_source_run_style(dst_run) -> None:
         """Apply bilingual source italic/color to a single run."""
@@ -2100,7 +2387,7 @@ def _insert_bilingual_source_paragraphs(
                 _apply_target_style(element)
                 if source_text_font_size_delta != 0.0:
                     _apply_font_size_delta(new_para, source_text_font_size_delta)
-                _apply_bilingual_list_numbering(new_para, element, target_first)
+                _apply_bilingual_paragraph_markers(new_para, element, target_first, doc)
                 inserted_count += 1
             except Exception as e:
                 logger.warning(
@@ -2141,7 +2428,7 @@ def _insert_bilingual_source_paragraphs(
                                 target_para._element.addprevious(new_para._element)
 
                             _apply_target_style_with_delta(target_para)
-                            _apply_bilingual_list_numbering(new_para, target_para, target_first)
+                            _apply_bilingual_paragraph_markers(new_para, target_para, target_first, doc)
                             inserted_count += 1
                     except Exception as e:
                         logger.warning(

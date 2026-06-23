@@ -552,12 +552,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationExportTargetFontSizeDelta => '訳文フォントサイズオフセット:';
 
   @override
-  String get translationExportSourceFontSizeDelta => 'Source font size delta:';
-
-  @override
-  String get translationExportTargetFontSizeDelta => 'Target font size delta:';
-
-  @override
   String get translationExportColorDefault => 'デフォルト';
 
   @override
