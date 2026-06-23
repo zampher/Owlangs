@@ -216,6 +216,8 @@ async def service_update_format_settings_route(
     source_text_color: Optional[str] = FastApiQuery(None, description="Source text color: 'gray', 'blue', 'red', 'green', 'orange', 'black'"),
     target_text_italic: Optional[bool] = FastApiQuery(None, description="Target text italic: true or false"),
     target_text_color: Optional[str] = FastApiQuery(None, description="Target text color: 'gray', 'blue', 'red', 'green', 'orange', 'black'"),
+    source_text_font_size_delta: Optional[float] = FastApiQuery(None, description="Font size delta in points for source text (e.g., -1, 0, 2)."),
+    target_text_font_size_delta: Optional[float] = FastApiQuery(None, description="Font size delta in points for target text (e.g., -1, 0, 2)."),
     cover_color_mode: Optional[str] = FastApiQuery(None, description="Image overlay erase fill: 'max', 'min', or 'avg'"),
 ):
     """Update format settings for a task."""
@@ -230,6 +232,8 @@ async def service_update_format_settings_route(
         source_text_color=source_text_color,
         target_text_italic=target_text_italic,
         target_text_color=target_text_color,
+        source_text_font_size_delta=source_text_font_size_delta,
+        target_text_font_size_delta=target_text_font_size_delta,
         cover_color_mode=cover_color_mode,
     )
     return JSONResponse(content=result)

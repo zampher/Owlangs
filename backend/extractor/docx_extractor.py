@@ -213,8 +213,75 @@ class DocxExtractor(Extractor):
                 raise
         segments: List[str] = []
         segment_info: List[Dict[str, Any]] = []
-        
+
         para_index = 0
+
+        def _get_run_format(run) -> Dict[str, Any]:
+            """Extract run-level formatting from a single run."""
+            fmt: Dict[str, Any] = {}
+            try:
+                if run.font.name:
+                    fmt['font_name'] = run.font.name
+            except Exception:
+                pass
+            try:
+                if run.font.bold is not None:
+                    fmt['bold'] = run.font.bold
+            except Exception:
+                pass
+            try:
+                if run.font.italic is not None:
+                    fmt['italic'] = run.font.italic
+            except Exception:
+                pass
+            try:
+                if run.font.underline is not None:
+                    fmt['underline'] = run.font.underline
+            except Exception:
+                pass
+            try:
+                if run.font.size is not None:
+                    fmt['font_size_pt'] = round(run.font.size.pt, 2)
+            except Exception:
+                pass
+            try:
+                if run.font.color and run.font.color.rgb:
+                    fmt['font_color'] = str(run.font.color.rgb)
+            except Exception:
+                pass
+            return fmt
+
+        def _get_paragraph_format(para) -> Dict[str, Any]:
+            """Extract paragraph-level formatting (alignment, indentation, spacing)."""
+            fmt: Dict[str, Any] = {}
+            try:
+                if para.alignment is not None:
+                    fmt['alignment'] = str(para.alignment)
+            except Exception:
+                pass
+            try:
+                pf = para.paragraph_format
+                for key, attr in [
+                    ('left_indent_pt', 'left_indent'),
+                    ('right_indent_pt', 'right_indent'),
+                    ('first_line_indent_pt', 'first_line_indent'),
+                    ('space_before_pt', 'space_before'),
+                    ('space_after_pt', 'space_after'),
+                ]:
+                    try:
+                        val = getattr(pf, attr)
+                        if val is not None:
+                            fmt[key] = round(val.pt, 2)
+                    except Exception:
+                        pass
+                try:
+                    if pf.line_spacing is not None:
+                        fmt['line_spacing'] = round(float(pf.line_spacing), 2)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+            return fmt
 
         def process_paragraph(
             para,
@@ -227,13 +294,16 @@ class DocxExtractor(Extractor):
         ):
             """Process a paragraph and extract segments with format detection."""
             nonlocal para_index
-            
+
             # Skip TOC paragraphs (same logic as DocxTranslator)
             if paragraph_has_toc_field(para):
                 # Don't increment para_index for TOC paragraphs to match DocxTranslator behavior
                 # TOC paragraphs are skipped but don't affect the index
                 return
-            
+
+            # Extract paragraph-level formatting once (shared by all segments in this paragraph)
+            para_format = _get_paragraph_format(para)
+
             # Handle paragraphs with no runs (empty paragraphs or paragraphs with only formatting)
             # If paragraph has text but no runs, extract the text directly
             if not para.runs:
@@ -251,6 +321,7 @@ class DocxExtractor(Extractor):
                         # For non-table paragraphs this remains None
                         'cell_local_idx': cell_local_idx,
                     }
+                    seg_info.update(para_format)
                     if merge_range is not None:
                         seg_info['is_merged_cell'] = True
                         seg_info['merge_range'] = merge_range
@@ -258,11 +329,13 @@ class DocxExtractor(Extractor):
                     segment_info.append(seg_info)
                 para_index += 1
                 return
-            
+
             current_text_segment = ""
             current_run_start = 0
             previous_run_formatting = None
-            
+            # Capture run format of the first run in the current segment
+            current_segment_first_run_format: Dict[str, Any] = {}
+
             for run_idx, run in enumerate(para.runs):
                 if is_image_run(run):
                     # Encounter image, treat previously accumulated text as a segment
@@ -277,6 +350,8 @@ class DocxExtractor(Extractor):
                             'cell_index': cell_idx,
                             'cell_local_idx': cell_local_idx,
                         }
+                        seg_info.update(para_format)
+                        seg_info.update(current_segment_first_run_format)
                         # Add merge information if this is a merged cell
                         if merge_range is not None:
                             seg_info['is_merged_cell'] = True
@@ -287,13 +362,18 @@ class DocxExtractor(Extractor):
                     current_text_segment = ""
                     current_run_start = run_idx + 1
                     previous_run_formatting = None
+                    current_segment_first_run_format = {}
                 else:
+                    # Capture formatting of the first run in this segment
+                    if current_text_segment == "":
+                        current_segment_first_run_format = _get_run_format(run)
+
                     # Check if formatting changed
                     current_run_formatting = get_run_formatting_key(run)
-                    
+
                     # If formatting changed and we have accumulated text, start a new segment
-                    if (previous_run_formatting is not None and 
-                        current_run_formatting != previous_run_formatting and 
+                    if (previous_run_formatting is not None and
+                        current_run_formatting != previous_run_formatting and
                         current_text_segment.strip()):
                         # Save current segment
                         seg_info = {
@@ -306,6 +386,8 @@ class DocxExtractor(Extractor):
                             'cell_index': cell_idx,
                             'cell_local_idx': cell_local_idx,
                         }
+                        seg_info.update(para_format)
+                        seg_info.update(current_segment_first_run_format)
                         # Add merge information if this is a merged cell
                         if merge_range is not None:
                             seg_info['is_merged_cell'] = True
@@ -315,11 +397,13 @@ class DocxExtractor(Extractor):
                         # Start new segment
                         current_text_segment = ""
                         current_run_start = run_idx
-                    
+                        # Capture format of the first run of the NEW segment
+                        current_segment_first_run_format = _get_run_format(run)
+
                     # Accumulate text run
                     current_text_segment += run.text
                     previous_run_formatting = current_run_formatting
-            
+
             # Process the last text block at the end of the paragraph
             if current_text_segment.strip():
                 seg_info = {
@@ -332,13 +416,15 @@ class DocxExtractor(Extractor):
                     'cell_index': cell_idx,
                     'cell_local_idx': cell_local_idx,
                 }
+                seg_info.update(para_format)
+                seg_info.update(current_segment_first_run_format)
                 # Add merge information if this is a merged cell
                 if merge_range is not None:
                     seg_info['is_merged_cell'] = True
                     seg_info['merge_range'] = merge_range
                 segments.append(current_text_segment)
                 segment_info.append(seg_info)
-            
+
             para_index += 1
 
         # Process paragraphs in document body (skip TOC paragraphs to match DocxTranslator)

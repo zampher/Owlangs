@@ -545,6 +545,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationExportTargetTextColor => '译文颜色：';
 
   @override
+  String get translationExportSourceFontSizeDelta => '原文字号偏移：';
+
+  @override
+  String get translationExportTargetFontSizeDelta => '译文字号偏移：';
+
+  @override
   String get translationExportColorDefault => '默认';
 
   @override

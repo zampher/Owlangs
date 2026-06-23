@@ -378,6 +378,31 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
         queryParams['bilingual_export'] = 'true';
         queryParams['bilingual_order'] =
             formatSettings.bilingualOrder ?? 'target_after_source';
+        if (formatSettings.sourceTextItalic != null) {
+          queryParams['source_text_italic'] =
+              formatSettings.sourceTextItalic.toString();
+        }
+        if (formatSettings.sourceTextColor != null) {
+          queryParams['source_text_color'] = formatSettings.sourceTextColor!;
+        }
+        if (formatSettings.targetTextItalic != null) {
+          queryParams['target_text_italic'] =
+              formatSettings.targetTextItalic.toString();
+        }
+        if (formatSettings.targetTextColor != null &&
+            formatSettings.targetTextColor!.isNotEmpty) {
+          queryParams['target_text_color'] = formatSettings.targetTextColor!;
+        }
+        if (formatSettings.sourceTextFontSizeDelta != null &&
+            formatSettings.sourceTextFontSizeDelta != 0.0) {
+          queryParams['source_text_font_size_delta'] =
+              formatSettings.sourceTextFontSizeDelta.toString();
+        }
+        if (formatSettings.targetTextFontSizeDelta != null &&
+            formatSettings.targetTextFontSizeDelta != 0.0) {
+          queryParams['target_text_font_size_delta'] =
+              formatSettings.targetTextFontSizeDelta.toString();
+        }
       }
 
       downloadUrl = uri.replace(queryParameters: queryParams).toString();
@@ -1058,6 +1083,16 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
               queryParams['target_text_color'] =
                   formatSettings.targetTextColor!;
             }
+            if (formatSettings.sourceTextFontSizeDelta != null &&
+                formatSettings.sourceTextFontSizeDelta != 0.0) {
+              queryParams['source_text_font_size_delta'] =
+                  formatSettings.sourceTextFontSizeDelta.toString();
+            }
+            if (formatSettings.targetTextFontSizeDelta != null &&
+                formatSettings.targetTextFontSizeDelta != 0.0) {
+              queryParams['target_text_font_size_delta'] =
+                  formatSettings.targetTextFontSizeDelta.toString();
+            }
           }
 
           downloadUrl = uri.replace(queryParameters: queryParams).toString();
@@ -1133,6 +1168,16 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
               formatSettings.targetTextColor!.isNotEmpty) {
             queryParams['target_text_color'] =
                 formatSettings.targetTextColor!;
+          }
+          if (formatSettings.sourceTextFontSizeDelta != null &&
+              formatSettings.sourceTextFontSizeDelta != 0.0) {
+            queryParams['source_text_font_size_delta'] =
+                formatSettings.sourceTextFontSizeDelta.toString();
+          }
+          if (formatSettings.targetTextFontSizeDelta != null &&
+              formatSettings.targetTextFontSizeDelta != 0.0) {
+            queryParams['target_text_font_size_delta'] =
+                formatSettings.targetTextFontSizeDelta.toString();
           }
         }
 

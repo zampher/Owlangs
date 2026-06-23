@@ -554,12 +554,15 @@ def _resolve_bilingual_settings(
     source_text_color: Optional[str] = None,
     target_text_italic: Optional[bool] = None,
     target_text_color: Optional[str] = None,
-) -> Tuple[bool, bool, bool, Optional[str], bool, Optional[str]]:
+    source_text_font_size_delta: Optional[float] = None,
+    target_text_font_size_delta: Optional[float] = None,
+) -> Tuple[bool, bool, bool, Optional[str], bool, Optional[str], float, float]:
     """Return normalized bilingual export settings for export.
 
     Returns:
         (bilingual_enabled, target_first, source_text_italic, source_text_color,
-         target_text_italic, target_text_color)
+         target_text_italic, target_text_color, source_text_font_size_delta,
+         target_text_font_size_delta)
     """
     from utils.bilingual_export_utils import get_bilingual_config
 
@@ -592,6 +595,10 @@ def _resolve_bilingual_settings(
     if target_color and str(target_color).strip().lower() not in ("gray", "blue", "red", "green", "orange", "black"):
         target_color = None
 
+    # Resolve font size deltas (in points, relative to original size)
+    src_size_delta = float(source_text_font_size_delta) if source_text_font_size_delta is not None else float(task_state.get("source_text_font_size_delta", 0))
+    tgt_size_delta = float(target_text_font_size_delta) if target_text_font_size_delta is not None else float(task_state.get("target_text_font_size_delta", 0))
+
     resolved_source_color = str(color).strip().lower() if color else None
     resolved_target_color = str(target_color).strip().lower() if target_color else None
 
@@ -602,6 +609,8 @@ def _resolve_bilingual_settings(
         resolved_source_color,
         bool(target_italic),
         resolved_target_color,
+        round(src_size_delta, 2),
+        round(tgt_size_delta, 2),
     )
 
 
@@ -842,7 +851,7 @@ def _docx_stash_download_kwargs(task_state: Dict[str, Any]) -> Dict[str, Any]:
             kwargs["equation_format"] = eq
             kwargs["table_body_format"] = tbl
             kwargs["chart_body_format"] = chart
-    enabled, target_first, src_italic, src_color, tgt_italic, tgt_color = _resolve_bilingual_settings(
+    enabled, target_first, src_italic, src_color, tgt_italic, tgt_color, src_size_delta, tgt_size_delta = _resolve_bilingual_settings(
         task_state
     )
     if enabled:
@@ -854,6 +863,8 @@ def _docx_stash_download_kwargs(task_state: Dict[str, Any]) -> Dict[str, Any]:
         kwargs["target_text_italic"] = tgt_italic
         if tgt_color:
             kwargs["target_text_color"] = tgt_color
+        kwargs["source_text_font_size_delta"] = src_size_delta
+        kwargs["target_text_font_size_delta"] = tgt_size_delta
     return kwargs
 
 
@@ -2541,6 +2552,8 @@ class DownloadService:
         source_text_color: Optional[str] = None,
         target_text_italic: Optional[bool] = None,
         target_text_color: Optional[str] = None,
+        source_text_font_size_delta: Optional[float] = None,
+        target_text_font_size_delta: Optional[float] = None,
         renderer_type: Optional[str] = None,
         dirty_segments: Optional[str] = None,
         cover_color_mode: Optional[str] = None,
@@ -2668,14 +2681,16 @@ class DownloadService:
         )
 
         # Resolve bilingual settings from query params -> task_state -> payload
-        bilingual_enabled, target_first, source_italic, source_color, target_italic, target_color = _resolve_bilingual_settings(
-            task_state, payload, bilingual_export, bilingual_order, source_text_italic, source_text_color, target_text_italic, target_text_color
+        bilingual_enabled, target_first, source_italic, source_color, target_italic, target_color, source_font_size_delta, target_font_size_delta = _resolve_bilingual_settings(
+            task_state, payload, bilingual_export, bilingual_order, source_text_italic, source_text_color, target_text_italic, target_text_color, source_text_font_size_delta, target_text_font_size_delta
         )
         # Store resolved bilingual settings so markdown/DOCX rebuild applies styles consistently
         task_state["bilingual_export"] = bilingual_enabled
         task_state["bilingual_order"] = "target_before_source" if target_first else "target_after_source"
         task_state["source_text_italic"] = source_italic
         task_state["target_text_italic"] = target_italic
+        task_state["source_text_font_size_delta"] = source_font_size_delta
+        task_state["target_text_font_size_delta"] = target_font_size_delta
         if source_color:
             task_state["source_text_color"] = source_color
         elif "source_text_color" in task_state and not task_state.get("source_text_color"):
@@ -4711,6 +4726,8 @@ class DownloadService:
                                 source_text_color=source_color,
                                 target_text_italic=target_italic,
                                 target_text_color=target_color,
+                                source_text_font_size_delta=source_font_size_delta,
+                                target_text_font_size_delta=target_font_size_delta,
                             )
                         except Exception as rebuild_error:
                             logger.error(LogModule.EXPORT, f"Failed to rebuild DOCX document from segments for task {task_id}: {rebuild_error}", exc_info=True)

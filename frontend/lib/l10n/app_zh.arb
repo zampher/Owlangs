@@ -176,6 +176,8 @@
   "translationExportSourceTextColor": "原文颜色：",
   "translationExportTargetTextItalic": "译文斜体",
   "translationExportTargetTextColor": "译文颜色：",
+  "translationExportSourceFontSizeDelta": "原文字号偏移：",
+  "translationExportTargetFontSizeDelta": "译文字号偏移：",
   "translationExportColorDefault": "默认",
   "translationExportColorGray": "灰色",
   "translationExportColorBlue": "蓝色",

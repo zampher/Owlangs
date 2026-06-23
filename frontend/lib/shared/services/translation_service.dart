@@ -234,6 +234,8 @@ class TranslationService {
     String? sourceTextColor,
     bool? targetTextItalic,
     String? targetTextColor,
+    double? sourceTextFontSizeDelta,
+    double? targetTextFontSizeDelta,
     String? coverColorMode,
   }) async {
     final dio = _buildAuthedDio();
@@ -264,6 +266,12 @@ class TranslationService {
     }
     if (targetTextColor != null) {
       queryParams['target_text_color'] = targetTextColor;
+    }
+    if (sourceTextFontSizeDelta != null) {
+      queryParams['source_text_font_size_delta'] = sourceTextFontSizeDelta;
+    }
+    if (targetTextFontSizeDelta != null) {
+      queryParams['target_text_font_size_delta'] = targetTextFontSizeDelta;
     }
     if (coverColorMode != null) {
       queryParams['cover_color_mode'] = coverColorMode;

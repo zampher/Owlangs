@@ -183,6 +183,8 @@
   "translationExportSourceTextColor": "Source text color:",
   "translationExportTargetTextItalic": "Target text italic",
   "translationExportTargetTextColor": "Target text color:",
+  "translationExportSourceFontSizeDelta": "Source font size delta:",
+  "translationExportTargetFontSizeDelta": "Target font size delta:",
   "translationExportColorDefault": "Default",
   "translationExportColorGray": "Gray",
   "translationExportColorBlue": "Blue",

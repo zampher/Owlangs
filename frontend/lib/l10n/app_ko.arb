@@ -1304,6 +1304,8 @@
   "translationExportSourceTextColor": "원문 색상:",
   "translationExportTargetTextItalic": "번역문 기울임",
   "translationExportTargetTextColor": "번역문 색상:",
+  "translationExportSourceFontSizeDelta": "원문 글꼴 크기 오프셋:",
+  "translationExportTargetFontSizeDelta": "번역문 글꼴 크기 오프셋:",
   "translationExportColorDefault": "기본값",
   "translationExportColorGray": "회색",
   "translationExportColorBlue": "파란색",

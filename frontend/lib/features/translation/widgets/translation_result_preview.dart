@@ -6887,6 +6887,10 @@ class _TranslationResultPreviewState
           bool targetTextItalic = formatSettings.targetTextItalic ?? true;
           String targetTextColor =
               formatSettings.targetTextColor ?? 'gray';
+          double sourceTextFontSizeDelta =
+              formatSettings.sourceTextFontSizeDelta ?? 0.0;
+          double targetTextFontSizeDelta =
+              formatSettings.targetTextFontSizeDelta ?? 0.0;
 
           return StatefulBuilder(
             builder: (BuildContext context, setDialogState) {
@@ -7480,6 +7484,43 @@ class _TranslationResultPreviewState
                                     }).toList(),
                                   ],
                                 ),
+                                const SizedBox(height: 8),
+                                // Source font size delta
+                                _buildFontSizeDeltaRow(
+                                  label: l10n
+                                      .translationExportSourceFontSizeDelta,
+                                  value: sourceTextFontSizeDelta,
+                                  onChanged: (double delta) {
+                                    setDialogState(() {
+                                      sourceTextFontSizeDelta = delta;
+                                    });
+                                    ref
+                                        .read(
+                                          formatSettingsProviderFamily(
+                                                  _apiTaskId())
+                                              .notifier,
+                                        )
+                                        .setSourceTextFontSizeDelta(delta);
+                                  },
+                                ),
+                                // Target font size delta
+                                _buildFontSizeDeltaRow(
+                                  label: l10n
+                                      .translationExportTargetFontSizeDelta,
+                                  value: targetTextFontSizeDelta,
+                                  onChanged: (double delta) {
+                                    setDialogState(() {
+                                      targetTextFontSizeDelta = delta;
+                                    });
+                                    ref
+                                        .read(
+                                          formatSettingsProviderFamily(
+                                                  _apiTaskId())
+                                              .notifier,
+                                        )
+                                        .setTargetTextFontSizeDelta(delta);
+                                  },
+                                ),
                               ],
                             ),
                           ),
@@ -7622,6 +7663,71 @@ class _TranslationResultPreviewState
     );
   }
 
+  /// Build a font size delta adjustment row with +/- buttons.
+  Widget _buildFontSizeDeltaRow({
+    required String label,
+    required double value,
+    required ValueChanged<double> onChanged,
+  }) {
+    const double step = 0.5;
+    const double min = -10.0;
+    const double max = 10.0;
+    final bool atMin = value <= min;
+    final bool atMax = value >= max;
+    final bool atZero = value == 0.0;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: <Widget>[
+          SizedBox(
+            width: 130,
+            child: Text(label, style: const TextStyle(fontSize: 13)),
+          ),
+          IconButton(
+            icon: const Icon(Icons.remove, size: 18),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            onPressed: atMin ? null : () => onChanged(value - step),
+          ),
+          Container(
+            width: 44,
+            alignment: Alignment.center,
+            child: Text(
+              value >= 0
+                  ? '+${value.toStringAsFixed(1)}'
+                  : value.toStringAsFixed(1),
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: atZero
+                    ? Theme.of(context).colorScheme.onSurfaceVariant
+                    : Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add, size: 18),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            onPressed: atMax ? null : () => onChanged(value + step),
+          ),
+          if (!atZero)
+            TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: () => onChanged(0.0),
+              child: const Text('0', style: TextStyle(fontSize: 12)),
+            ),
+        ],
+      ),
+    );
+  }
+
   /// Handle format download with format parameters (for Preview Settings)
   Future<void> _handlePreviewFormatDownload(
     String fileType, {
@@ -7709,6 +7815,16 @@ class _TranslationResultPreviewState
         if (formatSettings.targetTextColor != null &&
             formatSettings.targetTextColor!.isNotEmpty) {
           queryParams['target_text_color'] = formatSettings.targetTextColor!;
+        }
+        if (formatSettings.sourceTextFontSizeDelta != null &&
+            formatSettings.sourceTextFontSizeDelta != 0.0) {
+          queryParams['source_text_font_size_delta'] =
+              formatSettings.sourceTextFontSizeDelta.toString();
+        }
+        if (formatSettings.targetTextFontSizeDelta != null &&
+            formatSettings.targetTextFontSizeDelta != 0.0) {
+          queryParams['target_text_font_size_delta'] =
+              formatSettings.targetTextFontSizeDelta.toString();
         }
       }
 

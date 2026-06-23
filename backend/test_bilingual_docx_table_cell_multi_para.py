@@ -207,3 +207,72 @@ def test_rebuild_returns_doc_when_translations_already_applied() -> None:
         bilingual_export=False,
     )
     assert rebuilt is not None
+
+
+def test_apply_font_size_delta_uses_default_when_run_has_no_explicit_size() -> None:
+    """Font delta must apply even when runs inherit size from document defaults."""
+    from docx import Document
+
+    docx_rebuild = _load_docx_rebuild()
+    doc = Document()
+    para = doc.add_paragraph("Sample text without explicit run size")
+
+    docx_rebuild._apply_font_size_delta(para, 2.0)
+
+    assert para.runs
+    size_pt = para.runs[0].font.size.pt
+    assert size_pt == pytest.approx(13.0)
+
+
+def test_bilingual_rebuild_applies_target_delta_when_translation_already_present() -> None:
+    """Target font delta must apply on skip path when doc already contains translation."""
+    pytest.importorskip("httpx")
+    from docx import Document as PyDocxDocument
+    from docx.shared import Pt
+    from ir.document import Document
+
+    docx_rebuild = _load_docx_rebuild()
+    doc = PyDocxDocument()
+    para = doc.add_paragraph("Hello world")
+    para.runs[0].font.size = Pt(11)
+
+    buf = BytesIO()
+    doc.save(buf)
+    translated_doc = Document.from_bytes(content=buf.getvalue(), suffix=".docx", stem="test")
+
+    task_state = {
+        "translation_segments": {
+            "segments": [
+                {
+                    "segment_index": 0,
+                    "source_text": "Hello source",
+                    "target_text": "Hello world",
+                    "modified": False,
+                    "is_excluded": False,
+                    "is_failed": False,
+                    "segment_info": {
+                        "para_index": 0,
+                        "is_table_cell": False,
+                        "run_start_index": 0,
+                        "run_end_index": 0,
+                    },
+                }
+            ]
+        }
+    }
+
+    rebuilt = docx_rebuild.rebuild_docx_document_from_segments(
+        task_state,
+        translated_doc,
+        bilingual_export=True,
+        target_text_font_size_delta=3.0,
+        source_text_font_size_delta=-1.0,
+    )
+    assert rebuilt is not None
+
+    out_doc = PyDocxDocument(BytesIO(rebuilt.content))
+    source_para = out_doc.paragraphs[0]
+    target_para = out_doc.paragraphs[1]
+
+    assert target_para.runs[0].font.size.pt == pytest.approx(14.0)
+    assert source_para.runs[0].font.size.pt == pytest.approx(13.0)

@@ -573,6 +573,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationExportTargetTextColor => 'Color del texto traducido:';
 
   @override
+  String get translationExportSourceFontSizeDelta => 'Desplazamiento de tamaño de fuente original:';
+
+  @override
+  String get translationExportTargetFontSizeDelta => 'Desplazamiento de tamaño de fuente traducida:';
+
+  @override
+  String get translationExportSourceFontSizeDelta => 'Source font size delta:';
+
+  @override
+  String get translationExportTargetFontSizeDelta => 'Target font size delta:';
+
+  @override
   String get translationExportColorDefault => 'Predeterminado';
 
   @override

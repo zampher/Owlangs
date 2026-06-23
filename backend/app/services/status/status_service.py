@@ -5604,11 +5604,13 @@ class StatusService:
         source_text_color: Optional[str] = None,
         target_text_italic: Optional[bool] = None,
         target_text_color: Optional[str] = None,
+        source_text_font_size_delta: Optional[float] = None,
+        target_text_font_size_delta: Optional[float] = None,
         cover_color_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Update format settings in task state.
-        
+
         Args:
             task_id: Unique task identifier
             table_body_format: Table format ('html' or 'image')
@@ -5646,7 +5648,11 @@ class StatusService:
             raise HTTPException(status_code=400, detail=f"Invalid target_text_color: {target_text_color}. Must be 'gray', 'blue', 'red', 'green', 'orange', or 'black'.")
         if cover_color_mode is not None and cover_color_mode not in ("max", "min", "avg"):
             raise HTTPException(status_code=400, detail=f"Invalid cover_color_mode: {cover_color_mode}. Must be 'max', 'min', or 'avg'.")
-        
+        if source_text_font_size_delta is not None and not (-10.0 <= float(source_text_font_size_delta) <= 10.0):
+            raise HTTPException(status_code=400, detail=f"Invalid source_text_font_size_delta: {source_text_font_size_delta}. Must be between -10.0 and 10.0.")
+        if target_text_font_size_delta is not None and not (-10.0 <= float(target_text_font_size_delta) <= 10.0):
+            raise HTTPException(status_code=400, detail=f"Invalid target_text_font_size_delta: {target_text_font_size_delta}. Must be between -10.0 and 10.0.")
+
         # Update task_state directly
         updates = {}
         if table_body_format is not None:
@@ -5667,6 +5673,10 @@ class StatusService:
             updates["target_text_italic"] = target_text_italic
         if target_text_color is not None:
             updates["target_text_color"] = target_text_color
+        if source_text_font_size_delta is not None:
+            updates["source_text_font_size_delta"] = round(float(source_text_font_size_delta), 2)
+        if target_text_font_size_delta is not None:
+            updates["target_text_font_size_delta"] = round(float(target_text_font_size_delta), 2)
         if cover_color_mode is not None:
             updates["cover_color_mode"] = cover_color_mode
         
@@ -5696,6 +5706,10 @@ class StatusService:
                     payload["target_text_italic"] = target_text_italic
                 if target_text_color is not None:
                     payload["target_text_color"] = target_text_color
+                if source_text_font_size_delta is not None:
+                    payload["source_text_font_size_delta"] = round(float(source_text_font_size_delta), 2)
+                if target_text_font_size_delta is not None:
+                    payload["target_text_font_size_delta"] = round(float(target_text_font_size_delta), 2)
                 if cover_color_mode is not None:
                     payload["cover_color_mode"] = cover_color_mode
             elif hasattr(payload, 'table_body_format') or hasattr(payload, 'equation_format'):
@@ -5717,6 +5731,10 @@ class StatusService:
                         setattr(payload, 'target_text_italic', target_text_italic)
                     if target_text_color is not None:
                         setattr(payload, 'target_text_color', target_text_color)
+                    if source_text_font_size_delta is not None:
+                        setattr(payload, 'source_text_font_size_delta', round(float(source_text_font_size_delta), 2))
+                    if target_text_font_size_delta is not None:
+                        setattr(payload, 'target_text_font_size_delta', round(float(target_text_font_size_delta), 2))
                     if chart_body_format is not None:
                         setattr(payload, 'chart_body_format', chart_body_format)
                     if cover_color_mode is not None:

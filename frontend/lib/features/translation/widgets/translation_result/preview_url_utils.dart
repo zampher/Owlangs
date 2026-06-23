@@ -45,6 +45,16 @@ Map<String, String> buildPreviewExportQueryParams(
         formatSettings.targetTextColor!.isNotEmpty) {
       params['target_text_color'] = formatSettings.targetTextColor!;
     }
+    if (formatSettings.sourceTextFontSizeDelta != null &&
+        formatSettings.sourceTextFontSizeDelta != 0.0) {
+      params['source_text_font_size_delta'] =
+          formatSettings.sourceTextFontSizeDelta.toString();
+    }
+    if (formatSettings.targetTextFontSizeDelta != null &&
+        formatSettings.targetTextFontSizeDelta != 0.0) {
+      params['target_text_font_size_delta'] =
+          formatSettings.targetTextFontSizeDelta.toString();
+    }
   }
   return params;
 }

@@ -1304,6 +1304,8 @@
   "translationExportSourceTextColor": "原文の色:",
   "translationExportTargetTextItalic": "訳文を斜体",
   "translationExportTargetTextColor": "訳文の色:",
+  "translationExportSourceFontSizeDelta": "原文フォントサイズオフセット:",
+  "translationExportTargetFontSizeDelta": "訳文フォントサイズオフセット:",
   "translationExportColorDefault": "デフォルト",
   "translationExportColorGray": "グレー",
   "translationExportColorBlue": "青",

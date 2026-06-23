@@ -201,6 +201,10 @@ Future<PreviewSelection?> showTranslationPreviewDialog({
         String sourceTextColor = formatSettings.sourceTextColor ?? '';
         bool targetTextItalic = formatSettings.targetTextItalic ?? true;
         String targetTextColor = formatSettings.targetTextColor ?? 'gray';
+        double sourceTextFontSizeDelta =
+            formatSettings.sourceTextFontSizeDelta ?? 0.0;
+        double targetTextFontSizeDelta =
+            formatSettings.targetTextFontSizeDelta ?? 0.0;
 
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setDialogState) {
@@ -655,6 +659,45 @@ Future<PreviewSelection?> showTranslationPreviewDialog({
                                                   .setTargetTextColor(value);
                                             },
                                           ),
+                                          const SizedBox(height: 8),
+                                          _FontSizeDeltaRow(
+                                            label: l10n
+                                                .translationExportSourceFontSizeDelta,
+                                            value: sourceTextFontSizeDelta,
+                                            onChanged: (double delta) {
+                                              setDialogState(() {
+                                                sourceTextFontSizeDelta =
+                                                    delta;
+                                              });
+                                              ref
+                                                  .read(
+                                                    formatSettingsProviderFamily(
+                                                            taskId)
+                                                        .notifier,
+                                                  )
+                                                  .setSourceTextFontSizeDelta(
+                                                      delta);
+                                            },
+                                          ),
+                                          _FontSizeDeltaRow(
+                                            label: l10n
+                                                .translationExportTargetFontSizeDelta,
+                                            value: targetTextFontSizeDelta,
+                                            onChanged: (double delta) {
+                                              setDialogState(() {
+                                                targetTextFontSizeDelta =
+                                                    delta;
+                                              });
+                                              ref
+                                                  .read(
+                                                    formatSettingsProviderFamily(
+                                                            taskId)
+                                                        .notifier,
+                                                  )
+                                                  .setTargetTextFontSizeDelta(
+                                                      delta);
+                                            },
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -811,6 +854,85 @@ class _ColorRow extends StatelessWidget {
                 ? Tooltip(message: tooltip, child: circle)
                 : circle;
           }),
+        ],
+      ),
+    );
+  }
+}
+
+/// Row widget for adjusting font size delta with +/- buttons.
+class _FontSizeDeltaRow extends StatelessWidget {
+  const _FontSizeDeltaRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  static const double _step = 0.5;
+  static const double _min = -10.0;
+  static const double _max = 10.0;
+
+  final String label;
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool atMin = value <= _min;
+    final bool atMax = value >= _max;
+    final bool atZero = value == 0.0;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: <Widget>[
+          SizedBox(
+            width: 130,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.remove, size: 18),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            onPressed: atMin ? null : () => onChanged(value - _step),
+          ),
+          Container(
+            width: 44,
+            alignment: Alignment.center,
+            child: Text(
+              value >= 0 ? '+${value.toStringAsFixed(1)}' : value.toStringAsFixed(1),
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: atZero
+                    ? Theme.of(context).colorScheme.onSurfaceVariant
+                    : Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add, size: 18),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            onPressed: atMax ? null : () => onChanged(value + _step),
+          ),
+          if (!atZero)
+            TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: () => onChanged(0.0),
+              child: const Text(
+                '0',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
         ],
       ),
     );

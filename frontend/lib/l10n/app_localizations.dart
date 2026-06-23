@@ -1101,6 +1101,18 @@ abstract class AppLocalizations {
   /// **'Target text color:'**
   String get translationExportTargetTextColor;
 
+  /// No description provided for @translationExportSourceFontSizeDelta.
+  ///
+  /// In en, this message translates to:
+  /// **'Source font size delta:'**
+  String get translationExportSourceFontSizeDelta;
+
+  /// No description provided for @translationExportTargetFontSizeDelta.
+  ///
+  /// In en, this message translates to:
+  /// **'Target font size delta:'**
+  String get translationExportTargetFontSizeDelta;
+
   /// No description provided for @translationExportColorDefault.
   ///
   /// In en, this message translates to:

@@ -1380,6 +1380,8 @@
   "translationExportSourceTextColor": "Color del texto original:",
   "translationExportTargetTextItalic": "Texto traducido en cursiva",
   "translationExportTargetTextColor": "Color del texto traducido:",
+  "translationExportSourceFontSizeDelta": "Desplazamiento de tamaño de fuente original:",
+  "translationExportTargetFontSizeDelta": "Desplazamiento de tamaño de fuente traducida:",
   "translationExportColorDefault": "Predeterminado",
   "translationExportColorGray": "Gris",
   "translationExportColorBlue": "Azul",

@@ -33,6 +33,85 @@ def _apply_run_style(run, style, font_name, font_size, is_bold, is_italic):
         run.italic = is_italic
 
 
+def _copy_paragraph_format(src_para, dst_para) -> None:
+    """Copy paragraph-level formatting from src_para to dst_para.
+
+    Preserves alignment (left/center/right/justify), indentation, and spacing
+    so the bilingual source paragraph matches the original layout.
+    """
+    try:
+        # Alignment (left, center, right, justify, etc.)
+        if src_para.alignment is not None:
+            dst_para.alignment = src_para.alignment
+    except Exception:
+        pass
+    try:
+        pf = src_para.paragraph_format
+        dpf = dst_para.paragraph_format
+        # Indentation
+        if pf.left_indent is not None:
+            dpf.left_indent = pf.left_indent
+        if pf.right_indent is not None:
+            dpf.right_indent = pf.right_indent
+        if pf.first_line_indent is not None:
+            dpf.first_line_indent = pf.first_line_indent
+        # Spacing
+        if pf.space_before is not None:
+            dpf.space_before = pf.space_before
+        if pf.space_after is not None:
+            dpf.space_after = pf.space_after
+        if pf.line_spacing is not None:
+            dpf.line_spacing = pf.line_spacing
+    except Exception:
+        pass
+
+
+def _get_effective_font_size_pt(run, paragraph=None) -> Optional[float]:
+    """Return the effective font size of *run* in points.
+
+    Tries the run's explicit size first, then paragraph style, then the
+    document Normal style, then the Word default (11 pt).
+    """
+    try:
+        if run.font.size is not None:
+            return run.font.size.pt
+    except Exception:
+        pass
+    if paragraph is not None:
+        try:
+            style = paragraph.style
+            if style is not None and style.font.size is not None:
+                return style.font.size.pt
+        except Exception:
+            pass
+        try:
+            doc = paragraph.part.document
+            normal = doc.styles["Normal"]
+            if normal.font.size is not None:
+                return normal.font.size.pt
+        except Exception:
+            pass
+    return 11.0
+
+
+def _apply_font_size_delta(paragraph, delta: float) -> None:
+    """Adjust font size of every run in *paragraph* by *delta* (in points).
+
+    When a run does not carry an explicit font size the effective size is
+    resolved from the paragraph style or document defaults before applying
+    the delta.  Minimum size is clamped to 0.5 pt.
+    """
+    if delta == 0.0:
+        return
+    from docx.shared import Pt
+    for run in paragraph.runs:
+        try:
+            cur_pt = _get_effective_font_size_pt(run, paragraph) or 11.0
+            run.font.size = Pt(max(0.5, cur_pt + delta))
+        except Exception:
+            pass
+
+
 def _add_image_to_paragraph(paragraph, image_entry, style, font_name, font_size, is_bold, is_italic) -> bool:
     data_uri = image_entry.get("data")
     if not data_uri or "," not in data_uri or not data_uri.startswith("data:image/"):
@@ -285,6 +364,8 @@ def rebuild_docx_document_from_segments(
     source_text_color: str = "gray",
     target_text_italic: bool = False,
     target_text_color: Optional[str] = None,
+    source_text_font_size_delta: float = 0.0,
+    target_text_font_size_delta: float = 0.0,
 ) -> Optional[Any]:
     """
     Rebuild DOCX Document from revised translation segments.
@@ -543,6 +624,8 @@ def rebuild_docx_document_from_segments(
                     source_text_color=source_text_color,
                     target_text_italic=target_text_italic,
                     target_text_color=target_text_color,
+                    source_text_font_size_delta=source_text_font_size_delta,
+                    target_text_font_size_delta=target_text_font_size_delta,
                 )
                 logger.info(
                     LogModule.RESTOR,
@@ -752,6 +835,7 @@ def rebuild_docx_document_from_segments(
         # Update elements with revised text using segment_info for precise location
         updated_count = 0
         skipped_count = 0
+        target_font_delta_applied: set = set()
         
         for segment_index, segment_data in rebuild_segments_sorted:
             target_text = segment_data["target_text"]
@@ -1019,7 +1103,7 @@ def rebuild_docx_document_from_segments(
                             None,
                             None,
                         )
-                
+
                 updated_count += 1
                 
                 # Log update for debugging (especially for table cells)
@@ -1058,6 +1142,14 @@ def rebuild_docx_document_from_segments(
                         f"[DOCX-REBUILD] Segment {segment_index} skipped (target_text matches current element text): "
                         f"'{target_text_stripped[:50] if target_text_stripped else '(empty)'}...'"
                     )
+
+            # Apply target font-size delta once per resolved paragraph, including
+            # segments skipped because translation is already present in the doc.
+            if target_text_font_size_delta != 0.0 and element is not None:
+                elem_key = id(element._element)
+                if elem_key not in target_font_delta_applied:
+                    _apply_font_size_delta(element, target_text_font_size_delta)
+                    target_font_delta_applied.add(elem_key)
         
         if updated_count == 0 and not bilingual_export:
             logger.info(
@@ -1097,6 +1189,8 @@ def rebuild_docx_document_from_segments(
                 target_text_italic=target_text_italic,
                 target_text_color=target_text_color,
                 skip_legacy_header_footer=bool(hf_bilingual_segments),
+                source_text_font_size_delta=source_text_font_size_delta,
+                target_text_font_size_delta=target_text_font_size_delta,
             )
             if hf_bilingual_segments:
                 hf_inserted = _insert_bilingual_header_footer_flat_segments(
@@ -1107,6 +1201,8 @@ def rebuild_docx_document_from_segments(
                     source_text_color=source_text_color,
                     target_text_italic=target_text_italic,
                     target_text_color=target_text_color,
+                    source_text_font_size_delta=source_text_font_size_delta,
+                    target_text_font_size_delta=target_text_font_size_delta,
                 )
                 logger.info(
                     LogModule.RESTOR,
@@ -1365,6 +1461,8 @@ def _insert_bilingual_header_footer_flat_segments(
     source_text_color: str = "gray",
     target_text_italic: bool = False,
     target_text_color: Optional[str] = None,
+    source_text_font_size_delta: float = 0.0,
+    target_text_font_size_delta: float = 0.0,
 ) -> int:
     """Insert source paragraphs for flat header/footer translation segments."""
     from docx.text.paragraph import Paragraph
@@ -1424,6 +1522,8 @@ def _insert_bilingual_header_footer_flat_segments(
                     run.font.color.rgb = _target_color
                 except Exception:
                     pass
+        if target_text_font_size_delta != 0.0:
+            _apply_font_size_delta(para, target_text_font_size_delta)
 
     def _apply_source_run_style(dst_run) -> None:
         try:
@@ -1435,6 +1535,7 @@ def _insert_bilingual_header_footer_flat_segments(
             pass
 
     def _copy_source_format(src_para: Paragraph, dst_para: Paragraph) -> None:
+        # Copy run-level formatting
         paired = list(zip(src_para.runs, dst_para.runs))
         for src_run, dst_run in paired:
             try:
@@ -1451,6 +1552,9 @@ def _insert_bilingual_header_footer_flat_segments(
             _apply_source_run_style(dst_run)
         if not dst_para.runs:
             _apply_source_run_style(dst_para.add_run(dst_para.text))
+        # Copy paragraph-level formatting (alignment, indentation, spacing)
+        # so the bilingual source paragraph matches the original layout.
+        _copy_paragraph_format(src_para, dst_para)
 
     def _insert_adjacent(target_para: Paragraph, source_text: str) -> bool:
         try:
@@ -1478,6 +1582,8 @@ def _insert_bilingual_header_footer_flat_segments(
             new_para = Paragraph(new_p_elem, parent)
             _copy_source_format(target_para, new_para)
             _apply_target_style(target_para)
+            if source_text_font_size_delta != 0.0:
+                _apply_font_size_delta(new_para, source_text_font_size_delta)
             return True
         except Exception as e:
             logger.warning(
@@ -1563,6 +1669,8 @@ def _insert_bilingual_source_paragraphs(
     target_text_italic: bool = False,
     target_text_color: Optional[str] = None,
     skip_legacy_header_footer: bool = False,
+    source_text_font_size_delta: float = 0.0,
+    target_text_font_size_delta: float = 0.0,
 ) -> None:
     """Insert source-text paragraphs next to translated paragraphs for bilingual export.
 
@@ -1609,6 +1717,12 @@ def _insert_bilingual_source_paragraphs(
                 except Exception:
                     pass
 
+    def _apply_target_style_with_delta(para: Paragraph) -> None:
+        """Apply target style plus font delta (HF/textbox paths not in main rebuild loop)."""
+        _apply_target_style(para)
+        if target_text_font_size_delta != 0.0:
+            _apply_font_size_delta(para, target_text_font_size_delta)
+
     def _apply_source_run_style(dst_run) -> None:
         """Apply bilingual source italic/color to a single run."""
         try:
@@ -1650,6 +1764,9 @@ def _insert_bilingual_source_paragraphs(
         if not paired and dst_para.runs:
             for dst_run in dst_para.runs:
                 _apply_source_run_style(dst_run)
+        # Copy paragraph-level formatting (alignment, indentation, spacing)
+        # so the bilingual source paragraph matches the original layout.
+        _copy_paragraph_format(src_para, dst_para)
 
     # ------------------------------------------------------------------
     # 1. Body paragraphs + table cells (from translation_segments)
@@ -1727,6 +1844,8 @@ def _insert_bilingual_source_paragraphs(
                 new_para = Paragraph(new_p_elem, parent)
                 _copy_source_format(element, new_para)
                 _apply_target_style(element)
+                if source_text_font_size_delta != 0.0:
+                    _apply_font_size_delta(new_para, source_text_font_size_delta)
                 inserted_count += 1
             except Exception as e:
                 logger.warning(
@@ -1766,7 +1885,7 @@ def _insert_bilingual_source_paragraphs(
                             else:
                                 target_para._element.addprevious(new_para._element)
 
-                            _apply_target_style(target_para)
+                            _apply_target_style_with_delta(target_para)
                             inserted_count += 1
                     except Exception as e:
                         logger.warning(
@@ -1873,7 +1992,7 @@ def _insert_bilingual_source_paragraphs(
                             else:
                                 target_para._element.addprevious(new_para._element)
 
-                            _apply_target_style(target_para)
+                            _apply_target_style_with_delta(target_para)
                             inserted_count += 1
                             logger.info(
                                 LogModule.RESTOR,
@@ -1925,7 +2044,7 @@ def _insert_bilingual_source_paragraphs(
                                     else:
                                         target_para._element.addprevious(new_para._element)
 
-                                    _apply_target_style(target_para)
+                                    _apply_target_style_with_delta(target_para)
                                     inserted_count += 1
                                 except Exception as e:
                                     logger.warning(
@@ -1956,7 +2075,7 @@ def _insert_bilingual_source_paragraphs(
                                 else:
                                     target_para._element.addprevious(new_para._element)
 
-                                _apply_target_style(target_para)
+                                _apply_target_style_with_delta(target_para)
                                 inserted_count += 1
                             except Exception as e:
                                 logger.warning(
@@ -1990,7 +2109,7 @@ def _insert_bilingual_source_paragraphs(
                                 else:
                                     target_para._element.addprevious(new_para._element)
 
-                                _apply_target_style(target_para)
+                                _apply_target_style_with_delta(target_para)
                                 inserted_count += 1
                             except Exception as e:
                                 logger.warning(

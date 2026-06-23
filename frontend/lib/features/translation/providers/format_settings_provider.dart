@@ -18,6 +18,8 @@ class FormatSettings {
     this.sourceTextColor,
     this.targetTextItalic,
     this.targetTextColor,
+    this.sourceTextFontSizeDelta,
+    this.targetTextFontSizeDelta,
     this.coverColorMode,
   });
 
@@ -53,6 +55,12 @@ class FormatSettings {
 
   /// Target text color: preset name ('gray', 'blue', 'red', 'green', 'orange', 'black')
   final String? targetTextColor;
+
+  /// Font size delta in points for source text (bilingual export only)
+  final double? sourceTextFontSizeDelta;
+
+  /// Font size delta in points for target text (all exports)
+  final double? targetTextFontSizeDelta;
 
   /// Image overlay erase fill: 'max' (brightest strip pixel) or 'min' (darkest)
   final String? coverColorMode;
@@ -91,6 +99,8 @@ class FormatSettings {
     String? sourceTextColor,
     bool? targetTextItalic,
     String? targetTextColor,
+    double? sourceTextFontSizeDelta,
+    double? targetTextFontSizeDelta,
     String? coverColorMode,
     bool clearTableFormat = false,
     bool clearEquationFormat = false,
@@ -101,6 +111,8 @@ class FormatSettings {
     bool clearSourceTextColor = false,
     bool clearTargetTextItalic = false,
     bool clearTargetTextColor = false,
+    bool clearSourceTextFontSizeDelta = false,
+    bool clearTargetTextFontSizeDelta = false,
     bool clearCoverColorMode = false,
   }) =>
       FormatSettings(
@@ -130,6 +142,12 @@ class FormatSettings {
         targetTextColor: clearTargetTextColor
             ? null
             : (targetTextColor ?? this.targetTextColor),
+        sourceTextFontSizeDelta: clearSourceTextFontSizeDelta
+            ? null
+            : (sourceTextFontSizeDelta ?? this.sourceTextFontSizeDelta),
+        targetTextFontSizeDelta: clearTargetTextFontSizeDelta
+            ? null
+            : (targetTextFontSizeDelta ?? this.targetTextFontSizeDelta),
         coverColorMode: clearCoverColorMode
             ? null
             : (coverColorMode ?? this.coverColorMode),
@@ -149,6 +167,8 @@ class FormatSettings {
           sourceTextColor == other.sourceTextColor &&
           targetTextItalic == other.targetTextItalic &&
           targetTextColor == other.targetTextColor &&
+          sourceTextFontSizeDelta == other.sourceTextFontSizeDelta &&
+          targetTextFontSizeDelta == other.targetTextFontSizeDelta &&
           coverColorMode == other.coverColorMode;
 
   @override
@@ -162,6 +182,8 @@ class FormatSettings {
       sourceTextColor.hashCode ^
       targetTextItalic.hashCode ^
       targetTextColor.hashCode ^
+      sourceTextFontSizeDelta.hashCode ^
+      targetTextFontSizeDelta.hashCode ^
       coverColorMode.hashCode;
 }
 
@@ -210,6 +232,8 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
       final String? sourceTextColor = flowSettings['source_text_color'] as String?;
       final bool? targetTextItalic = flowSettings['target_text_italic'] as bool?;
       final String? targetTextColor = flowSettings['target_text_color'] as String?;
+      final double? sourceTextFontSizeDelta = (flowSettings['source_text_font_size_delta'] as num?)?.toDouble();
+      final double? targetTextFontSizeDelta = (flowSettings['target_text_font_size_delta'] as num?)?.toDouble();
       final String? coverColorMode = flowSettings['cover_color_mode'] as String?;
 
         if (tableFormat != null ||
@@ -221,6 +245,8 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
             sourceTextColor != null ||
             targetTextItalic != null ||
             targetTextColor != null ||
+            sourceTextFontSizeDelta != null ||
+            targetTextFontSizeDelta != null ||
             coverColorMode != null) {
           state = FormatSettings(
             tableFormat: tableFormat,
@@ -232,6 +258,8 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
             sourceTextColor: sourceTextColor,
             targetTextItalic: targetTextItalic,
             targetTextColor: targetTextColor,
+            sourceTextFontSizeDelta: sourceTextFontSizeDelta,
+            targetTextFontSizeDelta: targetTextFontSizeDelta,
             coverColorMode: coverColorMode,
           );
           return; // Use Flow state settings
@@ -276,10 +304,14 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
           prefs.getBool('format_settings_target_text_italic_default');
       final String? targetTextColor =
           prefs.getString('format_settings_target_text_color_default');
+      final double? sourceTextFontSizeDelta =
+          prefs.getDouble('format_settings_source_text_font_size_delta_default');
+      final double? targetTextFontSizeDelta =
+          prefs.getDouble('format_settings_target_text_font_size_delta_default');
       final String? coverColorMode =
           prefs.getString('format_settings_cover_color_mode_default');
 
-      if (tableFormat != null || equationFormat != null || chartFormat != null || bilingualExport != null || bilingualOrder != null || sourceTextItalic != null || sourceTextColor != null || targetTextItalic != null || targetTextColor != null || coverColorMode != null) {
+      if (tableFormat != null || equationFormat != null || chartFormat != null || bilingualExport != null || bilingualOrder != null || sourceTextItalic != null || sourceTextColor != null || targetTextItalic != null || targetTextColor != null || sourceTextFontSizeDelta != null || targetTextFontSizeDelta != null || coverColorMode != null) {
         state = FormatSettings(
           tableFormat: tableFormat,
           equationFormat: equationFormat,
@@ -290,6 +322,8 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
           sourceTextColor: sourceTextColor,
           targetTextItalic: targetTextItalic,
           targetTextColor: targetTextColor,
+          sourceTextFontSizeDelta: sourceTextFontSizeDelta,
+          targetTextFontSizeDelta: targetTextFontSizeDelta,
           coverColorMode: coverColorMode,
         );
       }
@@ -379,6 +413,24 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
       } else {
         await prefs.remove('format_settings_target_text_color_default');
       }
+      if (state.sourceTextFontSizeDelta != null) {
+        await prefs.setDouble(
+          'format_settings_source_text_font_size_delta_default',
+          state.sourceTextFontSizeDelta!,
+        );
+      } else {
+        await prefs.remove(
+            'format_settings_source_text_font_size_delta_default');
+      }
+      if (state.targetTextFontSizeDelta != null) {
+        await prefs.setDouble(
+          'format_settings_target_text_font_size_delta_default',
+          state.targetTextFontSizeDelta!,
+        );
+      } else {
+        await prefs.remove(
+            'format_settings_target_text_font_size_delta_default');
+      }
       if (state.coverColorMode != null) {
         await prefs.setString(
           'format_settings_cover_color_mode_default',
@@ -458,6 +510,50 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
     state = state.copyWith(targetTextColor: color);
   }
 
+  /// Set source text font size delta in points (clamped to [-10, 10])
+  void setSourceTextFontSizeDelta(double delta) {
+    final double clamped = delta.clamp(-10.0, 10.0);
+    state = state.copyWith(sourceTextFontSizeDelta: clamped);
+    if (taskId != null) {
+      _saveToFlowState(
+        state.tableFormat,
+        state.equationFormat,
+        state.chartFormat,
+        state.bilingualExport,
+        state.bilingualOrder,
+        state.sourceTextItalic,
+        state.sourceTextColor,
+        state.targetTextItalic,
+        state.targetTextColor,
+        state.sourceTextFontSizeDelta,
+        state.targetTextFontSizeDelta,
+        state.coverColorMode,
+      );
+    }
+  }
+
+  /// Set target text font size delta in points (clamped to [-10, 10])
+  void setTargetTextFontSizeDelta(double delta) {
+    final double clamped = delta.clamp(-10.0, 10.0);
+    state = state.copyWith(targetTextFontSizeDelta: clamped);
+    if (taskId != null) {
+      _saveToFlowState(
+        state.tableFormat,
+        state.equationFormat,
+        state.chartFormat,
+        state.bilingualExport,
+        state.bilingualOrder,
+        state.sourceTextItalic,
+        state.sourceTextColor,
+        state.targetTextItalic,
+        state.targetTextColor,
+        state.sourceTextFontSizeDelta,
+        state.targetTextFontSizeDelta,
+        state.coverColorMode,
+      );
+    }
+  }
+
   /// Set image overlay erase background color mode
   void setCoverColorMode(String mode) {
     if (mode != 'max' && mode != 'min' && mode != 'avg') {
@@ -475,6 +571,8 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
         state.sourceTextColor,
         state.targetTextItalic,
         state.targetTextColor,
+        state.sourceTextFontSizeDelta,
+        state.targetTextFontSizeDelta,
         mode,
       );
     }
@@ -491,6 +589,8 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
     String? sourceTextColor,
     bool? targetTextItalic,
     String? targetTextColor,
+    double? sourceTextFontSizeDelta,
+    double? targetTextFontSizeDelta,
     String? coverColorMode,
   }) {
     state = state.copyWith(
@@ -503,11 +603,13 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
       sourceTextColor: sourceTextColor,
       targetTextItalic: targetTextItalic,
       targetTextColor: targetTextColor,
+      sourceTextFontSizeDelta: sourceTextFontSizeDelta,
+      targetTextFontSizeDelta: targetTextFontSizeDelta,
       coverColorMode: coverColorMode,
     );
     // Save to Flow state if taskId is available
     if (taskId != null) {
-      _saveToFlowState(tableFormat, equationFormat, chartFormat, bilingualExport, bilingualOrder, sourceTextItalic, sourceTextColor, targetTextItalic, targetTextColor, coverColorMode);
+      _saveToFlowState(tableFormat, equationFormat, chartFormat, bilingualExport, bilingualOrder, sourceTextItalic, sourceTextColor, targetTextItalic, targetTextColor, sourceTextFontSizeDelta, targetTextFontSizeDelta, coverColorMode);
     }
   }
 
@@ -522,6 +624,8 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
     String? sourceTextColor,
     bool? targetTextItalic,
     String? targetTextColor,
+    double? sourceTextFontSizeDelta,
+    double? targetTextFontSizeDelta,
     String? coverColorMode,
   ) async {
     if (taskId == null) {
@@ -541,6 +645,8 @@ class FormatSettingsNotifier extends StateNotifier<FormatSettings> {
         sourceTextColor: sourceTextColor,
         targetTextItalic: targetTextItalic,
         targetTextColor: targetTextColor,
+        sourceTextFontSizeDelta: sourceTextFontSizeDelta,
+        targetTextFontSizeDelta: targetTextFontSizeDelta,
         coverColorMode: coverColorMode,
       );
     } catch (e) {

@@ -561,6 +561,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationExportTargetTextColor => 'Target text color:';
 
   @override
+  String get translationExportSourceFontSizeDelta => 'Source font size delta:';
+
+  @override
+  String get translationExportTargetFontSizeDelta => 'Target font size delta:';
+
+  @override
   String get translationExportColorDefault => 'Default';
 
   @override
