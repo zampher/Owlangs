@@ -154,6 +154,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationToolbarGlossary => '用語集';
 
   @override
+  String get translationToolbarPrompt => 'プロンプト';
+
+  @override
+  String get translationToolbarOpenPromptTab => 'プロンプトタブを開く';
+
+  @override
   String get translationToolbarConvertHint => '書式変換・全段落除外・翻訳を実行し、「変換」タブから書き出し';
 
   @override
@@ -1029,6 +1035,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get quickSettingsTaskNoteHint => '例: 数式は変更しない；固有名詞に注釈を付ける';
 
   @override
+  String get promptTabDescription =>
+      'プロンプトモードと翻訳スタイルを選択します。有効時は下のテキスト欄に詳細なカスタム指示を入力できます。';
+
+  @override
+  String get promptTabLongInstructionLabel => 'カスタム指示';
+
+  @override
+  String get promptTabLongInstructionHint => '翻訳の長文指示（トーン、用語、書式ルール、分野要件など）。';
+
+  @override
   String get quickSettingsAdRegionF => '領域 F: クイック設定の下部\n(中長方形 300×250)';
 
   @override
@@ -1539,6 +1555,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get homePhaseGlossary => '用語集';
+
+  @override
+  String get homePhasePrompt => 'プロンプト';
 
   @override
   String get homePhaseTranslate => '翻訳';

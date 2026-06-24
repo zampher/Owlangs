@@ -161,6 +161,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get translationToolbarGlossary => 'Glossary';
 
   @override
+  String get translationToolbarPrompt => 'Prompt';
+
+  @override
+  String get translationToolbarOpenPromptTab => 'Open prompt tab';
+
+  @override
   String get translationToolbarConvertHint =>
       'Convert format, exclude all segments, translate, then export from the Convert tab';
 
@@ -1066,6 +1072,17 @@ class AppLocalizationsEn extends AppLocalizations {
       'e.g. Keep formulas unmodified; annotate proper nouns';
 
   @override
+  String get promptTabDescription =>
+      'Choose prompt mode and translation style. When enabled, add detailed custom instructions in the text area below.';
+
+  @override
+  String get promptTabLongInstructionLabel => 'Custom instruction';
+
+  @override
+  String get promptTabLongInstructionHint =>
+      'Long-form guidance for translation, e.g. tone, terminology, formatting rules, or domain-specific requirements.';
+
+  @override
   String get quickSettingsAdRegionF =>
       'Region F: Bottom of Quick Settings\n(Medium Rectangle 300×250)';
 
@@ -1601,6 +1618,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get homePhaseGlossary => 'Glossary';
+
+  @override
+  String get homePhasePrompt => 'Prompt';
 
   @override
   String get homePhaseTranslate => 'Translate';

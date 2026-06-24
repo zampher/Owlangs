@@ -167,6 +167,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationToolbarGlossary => 'Glosario';
 
   @override
+  String get translationToolbarPrompt => 'Prompt';
+
+  @override
+  String get translationToolbarOpenPromptTab => 'Abrir pestaña de prompt';
+
+  @override
   String get translationToolbarConvertHint =>
       'Convierte formato, excluye todos los segmentos, traduce y exporta desde la pestaña Convertir';
 
@@ -1093,6 +1099,17 @@ class AppLocalizationsEs extends AppLocalizations {
       'ej. Mantener fórmulas sin modificar; anotar nombres propios';
 
   @override
+  String get promptTabDescription =>
+      'Seleccione el modo de prompt y el estilo de traducción. Cuando esté activo, agregue instrucciones personalizadas detalladas abajo.';
+
+  @override
+  String get promptTabLongInstructionLabel => 'Instrucción personalizada';
+
+  @override
+  String get promptTabLongInstructionHint =>
+      'Guía extensa para la traducción: tono, terminología, reglas de formato o requisitos del dominio.';
+
+  @override
   String get quickSettingsAdRegionF =>
       'Región F: Parte inferior de Configuración Rápida\n(Rectángulo Mediano 300×250)';
 
@@ -1629,6 +1646,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get homePhaseGlossary => 'Glosario';
+
+  @override
+  String get homePhasePrompt => 'Prompt';
 
   @override
   String get homePhaseTranslate => 'Traducir';

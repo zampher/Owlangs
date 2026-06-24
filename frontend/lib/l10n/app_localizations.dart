@@ -386,6 +386,18 @@ abstract class AppLocalizations {
   /// **'Glossary'**
   String get translationToolbarGlossary;
 
+  /// No description provided for @translationToolbarPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Prompt'**
+  String get translationToolbarPrompt;
+
+  /// No description provided for @translationToolbarOpenPromptTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Open prompt tab'**
+  String get translationToolbarOpenPromptTab;
+
   /// No description provided for @translationToolbarConvertHint.
   ///
   /// In en, this message translates to:
@@ -1967,6 +1979,24 @@ abstract class AppLocalizations {
   /// **'e.g. Keep formulas unmodified; annotate proper nouns'**
   String get quickSettingsTaskNoteHint;
 
+  /// No description provided for @promptTabDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose prompt mode and translation style. When enabled, add detailed custom instructions in the text area below.'**
+  String get promptTabDescription;
+
+  /// No description provided for @promptTabLongInstructionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom instruction'**
+  String get promptTabLongInstructionLabel;
+
+  /// No description provided for @promptTabLongInstructionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Long-form guidance for translation, e.g. tone, terminology, formatting rules, or domain-specific requirements.'**
+  String get promptTabLongInstructionHint;
+
   /// No description provided for @quickSettingsAdRegionF.
   ///
   /// In en, this message translates to:
@@ -2866,6 +2896,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Glossary'**
   String get homePhaseGlossary;
+
+  /// No description provided for @homePhasePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Prompt'**
+  String get homePhasePrompt;
 
   /// No description provided for @homePhaseTranslate.
   ///

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 enum PreviewTabType {
   translationResult,
   glossary,
+  prompt,
   formatConversion,
 }
 
@@ -62,6 +63,8 @@ class PreviewTab {
         return Icons.translate;
       case PreviewTabType.glossary:
         return Icons.book;
+      case PreviewTabType.prompt:
+        return Icons.edit_note;
       case PreviewTabType.formatConversion:
         return Icons.transform;
     }

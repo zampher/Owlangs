@@ -154,6 +154,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationToolbarGlossary => '术语表';
 
   @override
+  String get translationToolbarPrompt => '提示词';
+
+  @override
+  String get translationToolbarOpenPromptTab => '打开提示词标签页';
+
+  @override
   String get translationToolbarConvertHint => '一键：格式转换、全部排除段落并翻译，随后在「转换」标签导出';
 
   @override
@@ -1020,6 +1026,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get quickSettingsTaskNoteHint => '例如：保持公式不变；标注专有名词';
 
   @override
+  String get promptTabDescription => '选择提示词模式与翻译风格。启用后，可在下方文本框填写详细自定义指令。';
+
+  @override
+  String get promptTabLongInstructionLabel => '自定义指令';
+
+  @override
+  String get promptTabLongInstructionHint => '长文本翻译指导，例如语气、术语、格式规则或领域要求等。';
+
+  @override
   String get quickSettingsAdRegionF => '区域 F：快速设置底部\n（中等矩形 300×250）';
 
   @override
@@ -1526,6 +1541,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get homePhaseGlossary => '术语表';
+
+  @override
+  String get homePhasePrompt => '提示词';
 
   @override
   String get homePhaseTranslate => '翻译';

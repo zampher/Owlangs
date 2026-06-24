@@ -155,6 +155,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationToolbarGlossary => '용어집';
 
   @override
+  String get translationToolbarPrompt => '프롬프트';
+
+  @override
+  String get translationToolbarOpenPromptTab => '프롬프트 탭 열기';
+
+  @override
   String get translationToolbarConvertHint =>
       '형식 변환 후 전체 제외·번역을 실행하고 「변환」 탭에서 내보내기';
 
@@ -1031,6 +1037,17 @@ class AppLocalizationsKo extends AppLocalizations {
   String get quickSettingsTaskNoteHint => '예: 수식 수정하지 않음; 고유 명사 주석 달기';
 
   @override
+  String get promptTabDescription =>
+      '프롬프트 모드와 번역 스타일을 선택하세요. 활성화 시 아래 텍스트 영역에 상세 지침을 입력할 수 있습니다.';
+
+  @override
+  String get promptTabLongInstructionLabel => '사용자 지침';
+
+  @override
+  String get promptTabLongInstructionHint =>
+      '번역용 장문 지침(어조, 용어, 서식 규칙, 도메인 요구사항 등).';
+
+  @override
   String get quickSettingsAdRegionF => '영역 F: 빠른 설정 하단\n(중간 직사각형 300×250)';
 
   @override
@@ -1539,6 +1556,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get homePhaseGlossary => '용어집';
+
+  @override
+  String get homePhasePrompt => '프롬프트';
 
   @override
   String get homePhaseTranslate => '번역';

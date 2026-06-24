@@ -50,6 +50,7 @@ import '../providers/format_settings_provider.dart';
 import '../widgets/translation_result/image_format_utils.dart';
 import '../widgets/translation_result_preview.dart';
 import '../widgets/glossary_preview.dart';
+import '../widgets/prompt_preview.dart';
 import '../widgets/extract_preview.dart';
 import '../../home/widgets/translation_stats_widget.dart';
 import '../widgets/convert_progress_widget.dart';
@@ -653,6 +654,11 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
               }
             },
           );
+          break;
+        case PreviewTabType.prompt:
+          final String? promptFlowId =
+              dataRef?['flowId'] as String? ?? widget.flowId;
+          content = PromptPreview(flowId: promptFlowId);
           break;
         case PreviewTabType.formatConversion:
           final String taskId = dataRef?['taskId'] as String? ?? '';
@@ -2256,6 +2262,40 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
                       vertical: 6, // Adjusted padding for 36px toolbar
                     ),
                     minimumSize: const Size(0, 32), // Increased button height
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+          // Prompt Button - Opens/switches to Prompt tab
+          Builder(
+            builder: (BuildContext context) {
+              final bool hasFile = state.pickedFile != null;
+              final bool hasText =
+                  _isTextMode && _textController.text.trim().isNotEmpty;
+              final bool canUsePrompt = hasFile || hasText;
+              final bool isEnabled = !isOperationInProgress &&
+                  canUsePrompt &&
+                  (!hasExtractTab || isExtractCompleted);
+              return Tooltip(
+                message: isEnabled
+                    ? l10n.translationToolbarOpenPromptTab
+                    : (!canUsePrompt
+                        ? l10n.translationSnackPleaseSelectFileOrText
+                        : (hasExtractTab && !isExtractCompleted
+                            ? l10n.translationToolbarHintWaitExtract
+                            : l10n.translationToolbarHintOperationInProgress)),
+                child: OutlinedButton.icon(
+                  onPressed: isEnabled ? () => _openPromptTab() : null,
+                  icon: const Icon(Icons.edit_note),
+                  label: Text(l10n.translationToolbarPrompt),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    minimumSize: const Size(0, 32),
                   ),
                 ),
               );
@@ -6579,6 +6619,38 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
         'glossaryData': glossaryData,
         'flowId': widget.flowId,
         'targetLang': targetLang,
+      },
+    );
+
+    tabsNotifier.updateOrAddTab(tab);
+  }
+
+  /// Open or switch to Prompt tab (one per flow).
+  void _openPromptTab() {
+    final PreviewTabsNotifier tabsNotifier = widget.flowId != null
+        ? ref.read(previewTabsProviderFamily(widget.flowId!).notifier)
+        : ref.read(previewTabsProvider.notifier);
+    final PreviewTabsState tabsState = widget.flowId != null
+        ? ref.read(previewTabsProviderFamily(widget.flowId!))
+        : ref.read(previewTabsProvider);
+
+    const String promptTabId = 'prompt_tab';
+    final int existingIndex =
+        tabsState.tabs.indexWhere((PreviewTab t) => t.id == promptTabId);
+
+    if (existingIndex >= 0) {
+      tabsNotifier.switchToTab(existingIndex);
+      return;
+    }
+
+    final PreviewTab tab = PreviewTab(
+      id: promptTabId,
+      type: PreviewTabType.prompt,
+      title: AppLocalizations.of(context)!.homePhasePrompt,
+      icon: Icons.edit_note,
+      content: PromptPreview(flowId: widget.flowId),
+      dataRef: <String, dynamic>{
+        'flowId': widget.flowId,
       },
     );
 
