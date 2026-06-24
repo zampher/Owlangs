@@ -147,6 +147,7 @@ hiddenimports = [
     'backend.utils.language_detector',
     'backend.utils.epub_fix',
     'backend.utils.ebook_metadata',
+    'backend.utils.epub_html_segments',
     'backend.utils.latex_formula_checker', 'backend.utils.latex_repair_llm',
     'backend.utils.latex_repair_payload', 'backend.utils.latex_formula_batch_repair',
     # Pandoc/DOCX math normalize & fragment repair (becc134; imported by format_convert_utils, md2docx_exporter, fragment services)
@@ -320,6 +321,7 @@ hiddenimports = [
     'translator.ai_translator',
     'translator.ai_translator.mobi_translator',
     'translator.ai_translator.epub_translator',
+    'translator.ai_translator.html_translator',
     # Additional extractor modules for mobi/epub
     'extractor.mobi_extractor',
     'extractor.epub_extractor',

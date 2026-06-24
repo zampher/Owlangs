@@ -68,6 +68,7 @@ if getattr(sys, "frozen", False):
         "pdf_splitter",
         "layout_merger",
         "mineru_zip_merger",
+        "epub_html_segments",
     )
     for _sub in _utils_submodules:
         _mod = getattr(_backend_utils, _sub, None)

@@ -119,6 +119,7 @@ hiddenimports = [
     'backend.utils.language_detector',
     'backend.utils.epub_fix',
     'backend.utils.ebook_metadata',
+    'backend.utils.epub_html_segments',
     # LaTeX integrity check service routes (utils.latex_formula_checker, utils.latex_repair_llm)
     'backend.utils.latex_formula_checker', 'backend.utils.latex_repair_llm',
     'backend.utils.latex_repair_payload', 'backend.utils.latex_formula_batch_repair',
@@ -285,6 +286,7 @@ hiddenimports = [
     'ir.document',
     'translator.ai_translator.mobi_translator',
     'translator.ai_translator.epub_translator',
+    'translator.ai_translator.html_translator',
     'extractor',
     'extractor.base',
     'extractor.mobi_extractor',

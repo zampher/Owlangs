@@ -70,7 +70,7 @@ hiddenimports = [
     'backend.utils.docx_algorithm_latex_wrap', 'backend.utils.docx_math_fragment_check',
     'backend.utils.docx_math_fragment_llm_repair', 'backend.utils.llm_client',
     'backend.utils.extract_segments_debug', 'backend.utils.bilingual_export_utils', 'backend.utils.epub_fix',
-    'backend.utils.ebook_metadata', 'backend.utils.pdf_splitter',
+    'backend.utils.ebook_metadata', 'backend.utils.epub_html_segments', 'backend.utils.pdf_splitter',
     'backend.utils.layout_merger', 'backend.utils.mineru_zip_merger', 'backend.utils.mineru_image_data_map',
     'app', 'app.app_main', 'app.factory', 'app.__init__',
     'app.middleware.request_id', 'app.middleware.https_redirect',
@@ -178,6 +178,9 @@ hiddenimports = [
     'exporter.base',
     # IR (intermediate representation) and glossary (imported by mobi/epub workflows)
     'ir.document', 'glossary.glossary',
+    'extractor.epub_extractor', 'extractor.mobi_extractor',
+    'translator.ai_translator.epub_translator', 'translator.ai_translator.mobi_translator',
+    'translator.ai_translator.html_translator',
     # Logger modules
     'backend.logger.logger', 'backend.logger.log_messages',
     'backend.logger.module_log_manager', 'backend.logger.module_logging',
