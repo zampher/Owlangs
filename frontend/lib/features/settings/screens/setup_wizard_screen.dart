@@ -33,9 +33,15 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
 
   String? _selectedPlatformKey;
 
-  // MinerU platform selection
-  String _selectedMineruPlatform = 'mineru'; // 'mineru' or 'mineru_local'
-  bool _mineruPlatformSelectionInitialized = false;
+  // Parsing platform selection (MinerU / PaddleOCR)
+  String _selectedParsingPlatform = 'mineru';
+  bool _parsingPlatformSelectionInitialized = false;
+
+  static bool _isMineruParsingPlatform(String platform) =>
+      platform == 'mineru' || platform == 'mineru_local';
+
+  static bool _isPaddleParsingPlatform(String platform) =>
+      platform == 'paddle' || platform == 'paddle_local';
 
   // MinerU Cloud config state (embedded form)
   late TextEditingController _mineruNameController;
@@ -65,6 +71,19 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   bool _mineruLocalFormulaOcr = true;
   bool _mineruLocalTableOcr = true;
   bool _mineruLocalInitializedFromSettings = false;
+
+  // PaddleOCR config state (shared form; synced when switching paddle / paddle_local)
+  late TextEditingController _paddleNameController;
+  late TextEditingController _paddleApiKeyController;
+  late TextEditingController _paddleApiUrlController;
+  bool _paddleObscureText = true;
+  bool _paddleHasApiKey = true;
+  String? _paddleTestResult;
+  bool? _paddleLastTestSuccess;
+  bool _paddleIsTestingConnection = false;
+  bool _paddleUseDocOrientationClassify = false;
+  bool _paddleRestructurePages = false;
+  String? _paddleFormSyncedFor;
 
   // LLM config state (embedded form for selected platform)
   String? _llmFormPlatformKey;
@@ -171,6 +190,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _mineruLocalApiUrlController = TextEditingController();
     _mineruLocalModelVersionController = TextEditingController(text: 'hybrid-auto-engine');
     _mineruLocalParserSubtypeController = TextEditingController(text: 'local');
+    _paddleNameController = TextEditingController();
+    _paddleApiKeyController = TextEditingController();
+    _paddleApiUrlController = TextEditingController();
     // LLM controllers
     _llmNameController = TextEditingController();
     _llmUrlController = TextEditingController();
@@ -205,6 +227,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _mineruLocalApiUrlController.dispose();
     _mineruLocalModelVersionController.dispose();
     _mineruLocalParserSubtypeController.dispose();
+    _paddleNameController.dispose();
+    _paddleApiKeyController.dispose();
+    _paddleApiUrlController.dispose();
     // LLM controllers
     _llmNameController.dispose();
     _llmUrlController.dispose();
@@ -257,7 +282,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _ensureMineruLocalInitialValues(aiSettings);
     _ensureSelectedPlatformInitialized(aiSettings);
     final GlobalSettings globalSettings = ref.watch(globalSettingsProvider);
-    _ensureMineruPlatformSelectionInitialized(globalSettings);
+    _ensureParsingPlatformSelectionInitialized(globalSettings);
     final GlobalSettingsNotifier globalNotifier =
         ref.read(globalSettingsProvider.notifier);
 
@@ -334,9 +359,11 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     final bool isTesting = isLLMStep
         ? _llmIsTestingConnection
         : isMineruStep
-            ? (_selectedMineruPlatform == 'mineru'
-                ? _mineruIsTestingConnection
-                : _mineruLocalIsTestingConnection)
+            ? (_isPaddleParsingPlatform(_selectedParsingPlatform)
+                ? _paddleIsTestingConnection
+                : _selectedParsingPlatform == 'mineru'
+                    ? _mineruIsTestingConnection
+                    : _mineruLocalIsTestingConnection)
             : false;
 
     // Determine current step's test result
@@ -346,7 +373,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       testResult = _llmTestResult;
       testSuccess = _llmLastTestSuccess;
     } else if (isMineruStep) {
-      if (_selectedMineruPlatform == 'mineru') {
+      if (_isPaddleParsingPlatform(_selectedParsingPlatform)) {
+        testResult = _paddleTestResult;
+        testSuccess = _paddleLastTestSuccess;
+      } else if (_selectedParsingPlatform == 'mineru') {
         testResult = _mineruTestResult;
         testSuccess = _mineruLastTestSuccess;
       } else {
@@ -433,7 +463,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                     if (isLLMStep) {
                       _testLlmConnection(aiNotifier);
                     } else if (isMineruStep) {
-                      if (_selectedMineruPlatform == 'mineru') {
+                      if (_isPaddleParsingPlatform(_selectedParsingPlatform)) {
+                        _testPaddleConnection(aiNotifier, _selectedParsingPlatform);
+                      } else if (_selectedParsingPlatform == 'mineru') {
                         _testMineruConnection(aiNotifier);
                       } else {
                         _testMineruLocalConnection(aiNotifier);
@@ -556,14 +588,104 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     _mineruLocalInitializedFromSettings = true;
   }
 
-  void _ensureMineruPlatformSelectionInitialized(GlobalSettings globalSettings) {
-    if (_mineruPlatformSelectionInitialized) return;
-    final engine = globalSettings.parsingEngine;
-    if (engine == 'mineru' || engine == 'mineru_local') {
-      _selectedMineruPlatform = engine;
+  void _ensureParsingPlatformSelectionInitialized(GlobalSettings globalSettings) {
+    if (_parsingPlatformSelectionInitialized) return;
+    final String engine = globalSettings.parsingEngine;
+    if (engine == 'mineru' ||
+        engine == 'mineru_local' ||
+        engine == 'paddle' ||
+        engine == 'paddle_local') {
+      _selectedParsingPlatform = engine;
     }
-    _mineruPlatformSelectionInitialized = true;
+    _parsingPlatformSelectionInitialized = true;
   }
+
+  void _syncPaddleFormFromPlatform(
+    AIPlatformSettings settings,
+    String platformKey,
+  ) {
+    final AIPlatformInfo? paddle = settings.platforms[platformKey];
+    if (paddle != null) {
+      _paddleNameController.text = paddle.name;
+      _paddleApiUrlController.text = paddle.url;
+      _paddleApiKeyController.text = paddle.apiKey ?? '';
+      _paddleHasApiKey = paddle.requiresApiKey;
+      _paddleUseDocOrientationClassify = paddle.useDocOrientationClassify;
+      _paddleRestructurePages = paddle.restructurePages;
+    }
+    _paddleFormSyncedFor = platformKey;
+  }
+
+  void _ensurePaddleFormSynced(AIPlatformSettings settings) {
+    if (!_isPaddleParsingPlatform(_selectedParsingPlatform)) return;
+    if (_paddleFormSyncedFor == _selectedParsingPlatform) return;
+    _syncPaddleFormFromPlatform(settings, _selectedParsingPlatform);
+  }
+
+  String _parsingPlatformDisplayName(AppLocalizations l10n, String code) {
+    switch (code) {
+      case 'mineru':
+        return l10n.settingsParsingEngineMineru;
+      case 'mineru_local':
+        return l10n.settingsParsingEngineMineruLocal;
+      case 'paddle':
+        return l10n.settingsParsingEnginePaddle;
+      case 'paddle_local':
+        return l10n.settingsParsingEnginePaddleLocal;
+      default:
+        return code;
+    }
+  }
+
+  String _parsingPlatformDescription(AppLocalizations l10n, String code) {
+    switch (code) {
+      case 'paddle':
+        return l10n.settingsParsingEnginePaddleDesc;
+      case 'paddle_local':
+        return l10n.settingsParsingEnginePaddleLocalDesc;
+      default:
+        return l10n.setupWizardMineruDescription;
+    }
+  }
+
+  Widget _buildPaddleOptionSwitches(AppLocalizations l10n) => Column(
+        children: <Widget>[
+          SwitchListTile.adaptive(
+            dense: true,
+            title: Text(
+              l10n.settingsPaddleUseDocOrientationClassify,
+              style: const TextStyle(fontSize: 13),
+            ),
+            subtitle: Text(
+              l10n.settingsPaddleUseDocOrientationClassifySubtitle,
+              style: const TextStyle(fontSize: 11),
+            ),
+            value: _paddleUseDocOrientationClassify,
+            onChanged: (bool value) {
+              setState(() {
+                _paddleUseDocOrientationClassify = value;
+              });
+            },
+          ),
+          SwitchListTile.adaptive(
+            dense: true,
+            title: Text(
+              l10n.settingsPaddleRestructurePages,
+              style: const TextStyle(fontSize: 13),
+            ),
+            subtitle: Text(
+              l10n.settingsPaddleRestructurePagesSubtitle,
+              style: const TextStyle(fontSize: 11),
+            ),
+            value: _paddleRestructurePages,
+            onChanged: (bool value) {
+              setState(() {
+                _paddleRestructurePages = value;
+              });
+            },
+          ),
+        ],
+      );
 
   void _ensureSelectedPlatformInitialized(AIPlatformSettings settings) {
     if (_selectedPlatformKey != null) return;
@@ -584,48 +706,51 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     AppLocalizations l10n,
     AIPlatformSettings settings,
     AIPlatformSettingsNotifier notifier,
-  ) => Column(
+  ) {
+    _ensurePaddleFormSynced(settings);
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        // MinerU Platform Selection
         Text(
-          l10n.setupWizardSelectMineruPlatform,
+          l10n.settingsParsingEngineLabel,
           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          initialValue: _selectedMineruPlatform,
+          initialValue: _selectedParsingPlatform,
           decoration: InputDecoration(
-            labelText: l10n.setupWizardSelectMineruPlatform,
+            labelText: l10n.settingsParsingEngineLabel,
             border: const OutlineInputBorder(),
             labelStyle: const TextStyle(fontSize: 12),
             hintStyle: const TextStyle(fontSize: 11),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           ),
-          items: <DropdownMenuItem<String>>[
-            DropdownMenuItem<String>(
-              value: 'mineru',
-              child: Text(l10n.setupWizardMineruCloudOption),
-            ),
-            DropdownMenuItem<String>(
-              value: 'mineru_local',
-              child: Text(l10n.setupWizardMineruLocalOption),
-            ),
-          ],
-          onChanged: (value) {
+          items: <String>['mineru', 'mineru_local', 'paddle', 'paddle_local']
+              .map(
+                (String code) => DropdownMenuItem<String>(
+                  value: code,
+                  child: Text(_parsingPlatformDisplayName(l10n, code)),
+                ),
+              )
+              .toList(),
+          onChanged: (String? value) {
             if (value == null) return;
             setState(() {
-              _selectedMineruPlatform = value;
+              _selectedParsingPlatform = value;
+              if (_isPaddleParsingPlatform(value)) {
+                _syncPaddleFormFromPlatform(settings, value);
+              }
             });
           },
         ),
         const SizedBox(height: 16),
-        // Show config form based on selected platform
-        if (_selectedMineruPlatform == 'mineru')
+        if (_selectedParsingPlatform == 'mineru')
           _buildEmbeddedMineruCloudForm(settings, notifier)
+        else if (_selectedParsingPlatform == 'mineru_local')
+          _buildEmbeddedMineruLocalForm(settings, notifier)
         else
-          _buildEmbeddedMineruLocalForm(settings, notifier),
+          _buildEmbeddedPaddleForm(settings, notifier, _selectedParsingPlatform),
         const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
@@ -637,13 +762,14 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
               border: Border.all(color: Colors.blue.shade200),
             ),
             child: Text(
-              l10n.setupWizardMineruDescription,
+              _parsingPlatformDescription(l10n, _selectedParsingPlatform),
               style: const TextStyle(fontSize: 12),
             ),
           ),
         ),
       ],
     );
+  }
 
   Widget _buildEmbeddedMineruCloudForm(
     AIPlatformSettings settings,
@@ -1027,6 +1153,184 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     );
   }
 
+  Widget _buildEmbeddedPaddleForm(
+    AIPlatformSettings settings,
+    AIPlatformSettingsNotifier notifier,
+    String platformKey,
+  ) {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    final AIPlatformInfo? paddle = settings.platforms[platformKey];
+    final Color statusColor = _platformStatusColor(paddle);
+    final String statusText = _platformStatusText(paddle, l10n);
+    final bool showUnavailableHint =
+        _platformConnectionUnavailable(paddle) &&
+            (_paddleLastTestSuccess != true);
+    final String? tokenLink = paddle?.tokenLink;
+    final String defaultName = platformKey == 'paddle'
+        ? l10n.settingsParsingEnginePaddle
+        : l10n.settingsParsingEnginePaddleLocal;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Text(
+              defaultName,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(width: 12),
+            Icon(Icons.circle, size: 10, color: statusColor),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                statusText,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: statusColor,
+                  fontWeight: FontWeight.w500,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: _paddleNameController,
+          decoration: InputDecoration(
+            labelText: l10n.aiPlatformDisplayName,
+            hintText: defaultName,
+            prefixIcon: const Icon(Icons.label_outline),
+            border: const OutlineInputBorder(),
+            labelStyle: const TextStyle(fontSize: 12),
+            hintStyle: const TextStyle(fontSize: 11),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          ),
+        ),
+        const SizedBox(height: 6),
+        _wrapIfUnavailable(
+          showUnavailableHint && _paddleHasApiKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              TextFormField(
+                controller: _paddleApiUrlController,
+                decoration: InputDecoration(
+                  labelText: l10n.aiPlatformApiUrl,
+                  prefixIcon: const Icon(Icons.link),
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+              ),
+              const SizedBox(height: 6),
+              _buildPaddleHasApiKeySwitch(l10n, tokenLink: tokenLink),
+              const SizedBox(height: 6),
+              TextFormField(
+                controller: _paddleApiKeyController,
+                obscureText: _paddleObscureText,
+                decoration: InputDecoration(
+                  labelText: _paddleHasApiKey
+                      ? l10n.aiPlatformApiKey
+                      : '${l10n.aiPlatformApiKey} (${l10n.optional})',
+                  hintText: _paddleHasApiKey
+                      ? null
+                      : l10n.aiPlatformApiKeyOptionalHint,
+                  prefixIcon: const Icon(Icons.vpn_key),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _paddleObscureText
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _paddleObscureText = !_paddleObscureText;
+                      });
+                    },
+                  ),
+                  border: const OutlineInputBorder(),
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintStyle: const TextStyle(fontSize: 11),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        _buildPaddleOptionSwitches(l10n),
+      ],
+    );
+  }
+
+  Widget _buildPaddleHasApiKeySwitch(
+    AppLocalizations l10n, {
+    String? tokenLink,
+  }) {
+    return SizedBox(
+      height: 36,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+        child: Row(
+          children: <Widget>[
+            Icon(
+              _paddleHasApiKey ? Icons.vpn_key : Icons.vpn_key_off_outlined,
+              size: 18,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                l10n.aiPlatformHasApiKey,
+                style:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (tokenLink != null && tokenLink.isNotEmpty)
+              TextButton(
+                onPressed: () => _openApiKeyUrl(tokenLink),
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  minimumSize: const Size(0, 24),
+                ),
+                child: Text(
+                  l10n.aiPlatformGetApiKey,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.blue.shade700,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            Switch(
+              value: _paddleHasApiKey,
+              onChanged: (bool value) {
+                setState(() {
+                  _paddleHasApiKey = value;
+                });
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Wraps [child] in an orange highlight box when [unavailable]; otherwise returns [child].
   Widget _wrapIfUnavailable(bool unavailable, {required Widget child}) {
     if (!unavailable) return child;
@@ -1159,6 +1463,65 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     }
   }
 
+  Future<void> _testPaddleConnection(
+    AIPlatformSettingsNotifier notifier,
+    String platformKey,
+  ) async {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    if (_paddleApiUrlController.text.trim().isEmpty) {
+      setState(() {
+        _paddleTestResult = l10n.aiPlatformPleaseEnterApiUrlFirst;
+        _paddleLastTestSuccess = false;
+      });
+      return;
+    }
+    if (_paddleHasApiKey && _paddleApiKeyController.text.trim().isEmpty) {
+      setState(() {
+        _paddleTestResult = l10n.aiPlatformPleaseEnterApiKeyFirst;
+        _paddleLastTestSuccess = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _paddleIsTestingConnection = true;
+      _paddleTestResult = null;
+      _paddleLastTestSuccess = null;
+    });
+
+    try {
+      final Map<String, dynamic> result = await notifier.testConnection(
+        platformKey,
+        _paddleApiKeyController.text.trim(),
+        baseUrlOverride: _paddleApiUrlController.text.trim(),
+      );
+      final bool success = result['success'] == true ||
+          result['success'] == 'true' ||
+          result['success'] == 1;
+      if (!mounted) return;
+      setState(() {
+        _paddleLastTestSuccess = success;
+        _paddleTestResult = success
+            ? buildPlatformTestSuccessMessage(l10n, platformKey, result)
+            : l10n.aiPlatformConnectionTestFailed(
+                result['message']?.toString() ?? '',
+              );
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _paddleLastTestSuccess = false;
+        _paddleTestResult = l10n.aiPlatformConnectionTestFailed(e.toString());
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _paddleIsTestingConnection = false;
+        });
+      }
+    }
+  }
+
   void _saveMineruConfig(
     AIPlatformSettings settings,
     AIPlatformSettingsNotifier notifier,
@@ -1263,6 +1626,62 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       );
     }
     notifier.updatePlatformConfig('mineru_local', updated);
+    if (showSnackBar && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.setupWizardMineruSaved),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _savePaddleConfig(
+    AIPlatformSettings settings,
+    AIPlatformSettingsNotifier notifier,
+    String platformKey, {
+    bool showSnackBar = true,
+  }) {
+    final AIPlatformInfo? current = settings.platforms[platformKey];
+    final String defaultName = platformKey == 'paddle'
+        ? AppLocalizations.of(context)!.settingsParsingEnginePaddle
+        : AppLocalizations.of(context)!.settingsParsingEnginePaddleLocal;
+    final AIPlatformInfo updated;
+    if (current == null) {
+      updated = AIPlatformInfo(
+        key: platformKey,
+        name: _paddleNameController.text.trim().isNotEmpty
+            ? _paddleNameController.text.trim()
+            : defaultName,
+        url: _paddleApiUrlController.text.trim(),
+        model: 'paddleocr-vl',
+        apiKey: _paddleApiKeyController.text.trim(),
+        parserSubtype: platformKey == 'paddle' ? 'cloud' : 'local',
+        maxTokens: 0,
+        temperature: 0,
+        temperatureMin: 0,
+        temperatureMax: 0,
+        thinkingModeSupported: false,
+        thinkingMode: 'disable',
+        platformType: 'parser',
+        parserEngine: 'paddle',
+        requiresApiKey: _paddleHasApiKey,
+        useDocOrientationClassify: _paddleUseDocOrientationClassify,
+        restructurePages: _paddleRestructurePages,
+      );
+    } else {
+      updated = current.copyWith(
+        name: _paddleNameController.text.trim().isNotEmpty
+            ? _paddleNameController.text.trim()
+            : current.name,
+        apiKey: _paddleApiKeyController.text.trim(),
+        url: _paddleApiUrlController.text.trim(),
+        requiresApiKey: _paddleHasApiKey,
+        useDocOrientationClassify: _paddleUseDocOrientationClassify,
+        restructurePages: _paddleRestructurePages,
+      );
+    }
+    notifier.updatePlatformConfig(platformKey, updated);
     if (showSnackBar && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -2388,8 +2807,15 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       // Save the selected platform as default
       notifier.setDefaultPlatform(_selectedPlatformKey!);
     }
-    // Save config for the selected MinerU platform (Cloud or Local)
-    if (_selectedMineruPlatform == 'mineru') {
+    // Save config for the selected parsing platform
+    if (_isPaddleParsingPlatform(_selectedParsingPlatform)) {
+      _savePaddleConfig(
+        settings,
+        notifier,
+        _selectedParsingPlatform,
+        showSnackBar: false,
+      );
+    } else if (_selectedParsingPlatform == 'mineru') {
       final AIPlatformInfo? mineru = settings.platforms['mineru'];
       _saveMineruConfig(settings, notifier, mineru, showSnackBar: false);
     } else {
@@ -2398,9 +2824,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     }
 
     // Update the parsing engine setting to match the selected platform
-    final globalNotifier = ref.read(globalSettingsProvider.notifier);
+    final GlobalSettingsNotifier globalNotifier =
+        ref.read(globalSettingsProvider.notifier);
     globalNotifier.updateParsingEngineSettings(
-      parsingEngine: _selectedMineruPlatform,
+      parsingEngine: _selectedParsingPlatform,
     );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
