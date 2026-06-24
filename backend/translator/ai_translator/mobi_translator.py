@@ -301,33 +301,21 @@ class MobiTranslator(AiTranslator):
             original_html = content.decode('utf-8') if isinstance(content, bytes) else content
             html_templates[item_id] = original_html
 
-            soup = BeautifulSoup(content, "html.parser")
-            segment_index = 0
-            for text_node in soup.find_all(string=True):
-                if (
-                        text_node.parent.name not in ['style', 'script', 'head', 'title', 'meta', '[document]']
-                        and not text_node.isspace()
-                ):
-                    text = text_node.get_text(strip=True)
-                    if text:
-                        segment_id = len(items_to_translate)
-                        item_info = {
-                            "item": item,
-                            "text_node": text_node,
-                            "original_text": text,
-                            "soup": soup,
-                            "segment_id": segment_id,  # Add segment_id for mapping
-                        }
-                        items_to_translate.append(item_info)
-                        original_texts.append(text)
-                        
-                        # Store segment mapping for delayed DOM generation
-                        segment_mapping.append({
-                            "segment_id": segment_id,
-                            "item_id": item_id,
-                            "original_text": text,
-                        })
-                        segment_index += 1
+            from utils.epub_html_segments import extract_paragraph_segments_from_html
+
+            file_segments = extract_paragraph_segments_from_html(
+                original_html,
+                chunk_size=self.chunk_size,
+                deep_split=True,
+            )
+            for text in file_segments:
+                segment_id = len(original_texts)
+                original_texts.append(text)
+                segment_mapping.append({
+                    "segment_id": segment_id,
+                    "item_id": item_id,
+                    "original_text": text,
+                })
 
         # OPTIMIZATION: Extract images and save to task_state (if available)
         # This allows images to be used in preview and export phases
@@ -1336,7 +1324,7 @@ class MobiTranslator(AiTranslator):
         Synchronously translate MOBI document.
         """
         book, items_to_translate, original_texts = self._pre_translate(document)
-        if not items_to_translate:
+        if not original_texts:
             self.logger.info(LogModule.TRANS, "\nNo plain text content found in file that needs translation.")
             return self
         if self.glossary_agent:
@@ -1347,9 +1335,35 @@ class MobiTranslator(AiTranslator):
             translated_texts = self.translate_agent.send_segments(original_texts, self.chunk_size)
         else:
             translated_texts = original_texts
-        document.content = self._after_translate(
-            book, items_to_translate, translated_texts, original_texts
-        )
+
+        task_id = getattr(self, '_task_id', None)
+        task_state = None
+        if task_id:
+            try:
+                from backend.app.services.task import task_manager
+                task_state = task_manager.get_task(task_id)
+            except Exception:
+                task_state = None
+
+        html_templates = (task_state or {}).get('mobi_html_templates', {})
+        segment_mapping = (task_state or {}).get('mobi_segment_mapping', [])
+        if html_templates and segment_mapping:
+            translated_segments = {
+                i: translated_texts[i] if i < len(translated_texts) else ""
+                for i in range(len(segment_mapping))
+            }
+            document.content = self.generate_dom_from_segments_template(
+                book=book,
+                html_templates=html_templates,
+                segment_mapping=segment_mapping,
+                translated_segments=translated_segments,
+                task_id=task_id,
+                task_state=task_state,
+            )
+        elif items_to_translate:
+            document.content = self._after_translate(
+                book, items_to_translate, translated_texts, original_texts
+            )
         return self
 
     async def translate_async(self, document: Document, progress_callback=None) -> Self:
@@ -1368,7 +1382,7 @@ class MobiTranslator(AiTranslator):
         book, items_to_translate, original_texts = await asyncio.to_thread(
             self._pre_translate, document
         )
-        if not items_to_translate:
+        if not original_texts:
             self.logger.info(LogModule.TRANS, "\nNo plain text content found in file that needs translation.")
             return self
 
