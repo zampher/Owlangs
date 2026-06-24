@@ -2182,6 +2182,33 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsGlossaryTooltipDeleteGlossary => '選択した用語集を完全に削除';
 
   @override
+  String get settingsGlossaryExportTemplate => 'テンプレートをエクスポート';
+
+  @override
+  String get settingsGlossaryTooltipExportTemplate =>
+      'ヘッダー行と1行のサンプルを含む CSV テンプレートをダウンロード';
+
+  @override
+  String get settingsGlossarySaveTemplateCsv => '用語集テンプレート CSV を保存';
+
+  @override
+  String get settingsGlossaryTemplateExportedSnack => '用語集テンプレートをダウンロードしました';
+
+  @override
+  String get settingsGlossaryTooltipFormatHelp => '用語集ファイルの形式要件を表示';
+
+  @override
+  String get settingsGlossaryFormatHelpTitle => '用語集ファイル形式';
+
+  @override
+  String get settingsGlossaryFormatHelpContent =>
+      'CSV 形式（一括編集に推奨）：\n\nファイルエンコード：UTF-8（UTF-8 BOM 推奨）\n\n列：\n• src — 原文（必須）\n• dst — 訳文（必須）\n• category — 分類（任意）\n• target_lang — 対象言語コード（任意、下記リスト参照）\n\nルール：\n• ヘッダー行に src と dst が必要\n• src または dst が空の行はインポート時にスキップ\n• TBX 形式のインポートもサポート\n\n「テンプレートをエクスポート」でサンプル1行付き CSV をダウンロードできます。';
+
+  @override
+  String get settingsGlossaryFormatHelpTargetLangListTitle =>
+      'target_lang の利用可能な値：';
+
+  @override
   String get settingsGlossaryBatchEditCategory => 'カテゴリを編集';
 
   @override

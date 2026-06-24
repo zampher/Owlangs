@@ -17,6 +17,7 @@ import 'package:desktop_drop/desktop_drop.dart'
 import '../../../shared/utils/html_stub.dart' if (dart.library.html) 'dart:html'
     as html;
 import '../../../shared/services/glossary_api_service.dart';
+import '../../../shared/utils/glossary_format_helper.dart';
 import '../../../shared/utils/app_logger.dart';
 import '../../../shared/utils/message_service.dart';
 import '../../tasks/models/flow.dart';
@@ -2021,6 +2022,17 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
                       ),
                     ],
                   ),
+                  Tooltip(
+                    message: AppLocalizations.of(context)!
+                        .settingsGlossaryTooltipFormatHelp,
+                    child: IconButton(
+                      icon: const Icon(Icons.help_outline, size: 18),
+                      padding: const EdgeInsets.all(4),
+                      constraints: const BoxConstraints(),
+                      onPressed: () =>
+                          GlossaryFormatHelper.showFormatHelpDialog(context),
+                    ),
+                  ),
                   const Spacer(), // Push buttons to the right
                   // Detect Glossary button (moved to the right)
                   if (widget.onGenerateGlossary != null &&
@@ -2162,6 +2174,27 @@ class _GlossaryPreviewState extends ConsumerState<GlossaryPreview> {
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 12,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Tooltip(
+                    message: AppLocalizations.of(context)!
+                        .settingsGlossaryTooltipExportTemplate,
+                    child: OutlinedButton.icon(
+                      onPressed: _busy
+                          ? null
+                          : () => GlossaryFormatHelper.exportTemplate(context),
+                      icon: const Icon(Icons.description_outlined, size: 16),
+                      label: Text(
+                        AppLocalizations.of(context)!
+                            .settingsGlossaryExportTemplate,
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
                     ),
                   ),

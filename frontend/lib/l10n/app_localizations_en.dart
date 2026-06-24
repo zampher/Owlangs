@@ -2265,6 +2265,35 @@ class AppLocalizationsEn extends AppLocalizations {
       'Delete the selected glossary permanently';
 
   @override
+  String get settingsGlossaryExportTemplate => 'Export Template';
+
+  @override
+  String get settingsGlossaryTooltipExportTemplate =>
+      'Download a CSV template with header row and one example entry';
+
+  @override
+  String get settingsGlossarySaveTemplateCsv => 'Save glossary template CSV';
+
+  @override
+  String get settingsGlossaryTemplateExportedSnack =>
+      'Glossary template downloaded';
+
+  @override
+  String get settingsGlossaryTooltipFormatHelp =>
+      'View glossary file format requirements';
+
+  @override
+  String get settingsGlossaryFormatHelpTitle => 'Glossary File Format';
+
+  @override
+  String get settingsGlossaryFormatHelpContent =>
+      'CSV format (recommended for bulk editing):\n\nFile encoding: UTF-8 (UTF-8 with BOM recommended)\n\nColumns:\n• src — source text (required)\n• dst — translated text (required)\n• category — optional grouping label\n• target_lang — optional target language code (see list below)\n\nRules:\n• Header row must include src and dst\n• Rows with empty src or dst are skipped on import\n• Import also supports TBX format\n\nUse \"Export Template\" to download a sample CSV with one example row.';
+
+  @override
+  String get settingsGlossaryFormatHelpTargetLangListTitle =>
+      'Available target_lang values:';
+
+  @override
   String get settingsGlossaryBatchEditCategory => 'Edit category';
 
   @override

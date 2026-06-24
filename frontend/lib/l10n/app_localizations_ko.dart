@@ -2185,6 +2185,33 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsGlossaryTooltipDeleteGlossary => '선택한 용어집을 영구적으로 삭제';
 
   @override
+  String get settingsGlossaryExportTemplate => '템플릿보내기';
+
+  @override
+  String get settingsGlossaryTooltipExportTemplate =>
+      '헤더 행과 예시 1행이 포함된 CSV 템플릿 다운로드';
+
+  @override
+  String get settingsGlossarySaveTemplateCsv => '용어집 템플릿 CSV 저장';
+
+  @override
+  String get settingsGlossaryTemplateExportedSnack => '용어집 템플릿이 다운로드되었습니다';
+
+  @override
+  String get settingsGlossaryTooltipFormatHelp => '용어집 파일 형식 요구 사항 보기';
+
+  @override
+  String get settingsGlossaryFormatHelpTitle => '용어집 파일 형식';
+
+  @override
+  String get settingsGlossaryFormatHelpContent =>
+      'CSV 형식(일괄 편집 권장):\n\n파일 인코딩: UTF-8(UTF-8 BOM 권장)\n\n열:\n• src — 원문(필수)\n• dst — 번역문(필수)\n• category — 분류(선택)\n• target_lang — 대상 언어 코드(선택, 아래 목록 참조)\n\n규칙:\n• 헤더 행에 src와 dst가 필요\n• src 또는 dst가 비어 있는 행은 가져오기 시 건너뜀\n• TBX 형식 가져오기도 지원\n\n「템플릿보내기」로 예시 1행이 포함된 CSV를 다운로드할 수 있습니다.';
+
+  @override
+  String get settingsGlossaryFormatHelpTargetLangListTitle =>
+      'target_lang 사용 가능 값:';
+
+  @override
   String get settingsGlossaryBatchEditCategory => '카테고리 편집';
 
   @override

@@ -2298,6 +2298,37 @@ class AppLocalizationsEs extends AppLocalizations {
       'Eliminar permanentemente el glosario seleccionado';
 
   @override
+  String get settingsGlossaryExportTemplate => 'Exportar plantilla';
+
+  @override
+  String get settingsGlossaryTooltipExportTemplate =>
+      'Descargar plantilla CSV con encabezado y una fila de ejemplo';
+
+  @override
+  String get settingsGlossarySaveTemplateCsv =>
+      'Guardar plantilla CSV del glosario';
+
+  @override
+  String get settingsGlossaryTemplateExportedSnack =>
+      'Plantilla del glosario descargada';
+
+  @override
+  String get settingsGlossaryTooltipFormatHelp =>
+      'Ver requisitos del formato de archivo del glosario';
+
+  @override
+  String get settingsGlossaryFormatHelpTitle =>
+      'Formato de archivo del glosario';
+
+  @override
+  String get settingsGlossaryFormatHelpContent =>
+      'Formato CSV (recomendado para edición masiva):\n\nCodificación: UTF-8 (se recomienda UTF-8 con BOM)\n\nColumnas:\n• src — texto de origen (obligatorio)\n• dst — texto traducido (obligatorio)\n• category — etiqueta de grupo (opcional)\n• target_lang — código de idioma destino (opcional, ver lista abajo)\n\nReglas:\n• La fila de encabezado debe incluir src y dst\n• Las filas con src o dst vacíos se omiten al importar\n• También se admite importación en formato TBX\n\nUse \"Exportar plantilla\" para descargar un CSV de ejemplo con una fila.';
+
+  @override
+  String get settingsGlossaryFormatHelpTargetLangListTitle =>
+      'Valores disponibles de target_lang:';
+
+  @override
   String get settingsGlossaryBatchEditCategory => 'Editar categoría';
 
   @override

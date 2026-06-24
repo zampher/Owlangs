@@ -4014,6 +4014,54 @@ abstract class AppLocalizations {
   /// **'Delete the selected glossary permanently'**
   String get settingsGlossaryTooltipDeleteGlossary;
 
+  /// No description provided for @settingsGlossaryExportTemplate.
+  ///
+  /// In en, this message translates to:
+  /// **'Export Template'**
+  String get settingsGlossaryExportTemplate;
+
+  /// No description provided for @settingsGlossaryTooltipExportTemplate.
+  ///
+  /// In en, this message translates to:
+  /// **'Download a CSV template with header row and one example entry'**
+  String get settingsGlossaryTooltipExportTemplate;
+
+  /// No description provided for @settingsGlossarySaveTemplateCsv.
+  ///
+  /// In en, this message translates to:
+  /// **'Save glossary template CSV'**
+  String get settingsGlossarySaveTemplateCsv;
+
+  /// No description provided for @settingsGlossaryTemplateExportedSnack.
+  ///
+  /// In en, this message translates to:
+  /// **'Glossary template downloaded'**
+  String get settingsGlossaryTemplateExportedSnack;
+
+  /// No description provided for @settingsGlossaryTooltipFormatHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'View glossary file format requirements'**
+  String get settingsGlossaryTooltipFormatHelp;
+
+  /// No description provided for @settingsGlossaryFormatHelpTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Glossary File Format'**
+  String get settingsGlossaryFormatHelpTitle;
+
+  /// No description provided for @settingsGlossaryFormatHelpContent.
+  ///
+  /// In en, this message translates to:
+  /// **'CSV format (recommended for bulk editing):\n\nFile encoding: UTF-8 (UTF-8 with BOM recommended)\n\nColumns:\n• src — source text (required)\n• dst — translated text (required)\n• category — optional grouping label\n• target_lang — optional target language code (see list below)\n\nRules:\n• Header row must include src and dst\n• Rows with empty src or dst are skipped on import\n• Import also supports TBX format\n\nUse \"Export Template\" to download a sample CSV with one example row.'**
+  String get settingsGlossaryFormatHelpContent;
+
+  /// No description provided for @settingsGlossaryFormatHelpTargetLangListTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Available target_lang values:'**
+  String get settingsGlossaryFormatHelpTargetLangListTitle;
+
   /// No description provided for @settingsGlossaryBatchEditCategory.
   ///
   /// In en, this message translates to:

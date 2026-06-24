@@ -2166,6 +2166,32 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsGlossaryTooltipDeleteGlossary => '永久删除选中的术语表';
 
   @override
+  String get settingsGlossaryExportTemplate => '导出模板';
+
+  @override
+  String get settingsGlossaryTooltipExportTemplate => '下载含表头和一行示例的 CSV 术语表模板';
+
+  @override
+  String get settingsGlossarySaveTemplateCsv => '保存术语表模板 CSV';
+
+  @override
+  String get settingsGlossaryTemplateExportedSnack => '术语表模板已下载';
+
+  @override
+  String get settingsGlossaryTooltipFormatHelp => '查看术语表文件格式要求';
+
+  @override
+  String get settingsGlossaryFormatHelpTitle => '术语表文件格式说明';
+
+  @override
+  String get settingsGlossaryFormatHelpContent =>
+      'CSV 格式（推荐用于批量编辑）：\n\n文件编码：UTF-8（建议使用带 BOM 的 UTF-8）\n\n列说明：\n• src — 原文（必填）\n• dst — 译文（必填）\n• category — 分类（可选）\n• target_lang — 目标语言代码（可选，见下方列表）\n\n规则：\n• 首行表头须包含 src 和 dst\n• 导入时 src 或 dst 为空的行会被跳过\n• 亦支持 TBX 格式导入\n\n可点击「导出模板」下载含一行示例的 CSV 文件。';
+
+  @override
+  String get settingsGlossaryFormatHelpTargetLangListTitle =>
+      'target_lang 可用值：';
+
+  @override
   String get settingsGlossaryBatchEditCategory => '编辑分类';
 
   @override

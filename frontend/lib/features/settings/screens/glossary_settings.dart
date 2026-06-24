@@ -11,6 +11,7 @@ import 'dart:io';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/services/glossary_api_service.dart';
 import '../../../shared/models/language_model.dart';
+import '../../../shared/utils/glossary_format_helper.dart';
 
 // 术语表设置状态管理
 final StateNotifierProvider<GlossarySettingsNotifier, GlossarySettings>
@@ -267,12 +268,23 @@ class GlossarySettingsScreen extends ConsumerWidget {
                   Icon(Icons.manage_accounts,
                       color: Theme.of(context).colorScheme.primary,),
                   const SizedBox(width: 8),
-                  Text(
-                    AppLocalizations.of(context)!.settingsGlossaryManagementTitle,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
+                  Expanded(
+                    child: Text(
+                      AppLocalizations.of(context)!
+                          .settingsGlossaryManagementTitle,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  Tooltip(
+                    message: AppLocalizations.of(context)!
+                        .settingsGlossaryTooltipFormatHelp,
+                    child: IconButton(
+                      icon: const Icon(Icons.help_outline),
+                      onPressed: () => GlossaryFormatHelper.showFormatHelpDialog(context),
                     ),
                   ),
                 ],
@@ -349,6 +361,14 @@ class GlossarySettingsScreen extends ConsumerWidget {
                           icon: const Icon(Icons.create_new_folder),
                           label: Text(AppLocalizations.of(context)!
                               .settingsGlossaryCreateGlossary,),
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: () =>
+                              GlossaryFormatHelper.exportTemplate(context),
+                          icon: const Icon(Icons.description_outlined),
+                          label: Text(AppLocalizations.of(context)!
+                              .settingsGlossaryExportTemplate,),
                         ),
                       ],
                     );
@@ -427,6 +447,21 @@ class GlossarySettingsScreen extends ConsumerWidget {
                               .settingsGlossaryImportCsv,),
 
                         ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Export CSV template
+                      Expanded(
+                        child: Tooltip(
+                          message: AppLocalizations.of(context)!
+                              .settingsGlossaryTooltipExportTemplate,
+                          child: OutlinedButton.icon(
+                            onPressed: () =>
+                                GlossaryFormatHelper.exportTemplate(context),
+                            icon: const Icon(Icons.description_outlined),
+                            label: Text(AppLocalizations.of(context)!
+                                .settingsGlossaryExportTemplate,),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
