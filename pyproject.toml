@@ -41,7 +41,8 @@ dependencies = [
     "pypandoc>=1.13",
     "concurrent-log-handler>=0.9.24",
     "html2text>=2024.2.26",
-    "cryptography>=44.0.0",
+    # <49: 49.0.0 may resolve to sdist on macOS x86_64 cross-builds (needs maturin/Rust).
+    "cryptography>=44.0.0,<49.0.0",
     "pillow>=10.0.0,<12.0.0",
     "latex2mathml>=3.77.0",
     "mathml2omml>=0.0.2",

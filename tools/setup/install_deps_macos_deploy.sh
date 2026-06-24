@@ -2,7 +2,7 @@
 # Install **optional** third-party dependencies for **deployment/runtime** on macOS.
 # For end users who run the packaged app (DMG). The app itself needs no extra deps;
 # this script installs: Redis (session), Pandoc (DOCX/PDF and format conversion),
-# Calibre (MOBI/EPUB export), and XeLaTeX (PDF math rendering).
+# Typst (PDF in-place translation), Calibre (MOBI/EPUB export), and XeLaTeX (PDF math rendering).
 #
 # Usage:
 #   ./tools/setup/install_deps_macos_deploy.sh
@@ -18,7 +18,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 echo "=== Owlangs macOS **deployment** optional dependencies ==="
-echo "Installing: Redis (session), Pandoc (DOCX/PDF and format conversion)."
+echo "Installing: Redis (session), Pandoc (DOCX/PDF), Typst (PDF in-place translation)."
 echo "Optional: Calibre (MOBI/EPUB export), XeLaTeX (PDF math rendering)."
 echo ""
 
@@ -46,6 +46,15 @@ else
   echo "[Pandoc] Installing Pandoc..."
   brew install pandoc
   echo "[Pandoc] Installed. Verify with: pandoc --version"
+fi
+
+# Typst (PDF in-place translation via typst_overlay)
+if command -v typst &>/dev/null; then
+  echo "[Typst] Already installed ($(typst --version 2>/dev/null | head -1 || echo typst))"
+else
+  echo "[Typst] Installing Typst..."
+  brew install typst
+  echo "[Typst] Installed. Verify with: typst --version"
 fi
 
 # Calibre (for MOBI/EPUB export via ebook-convert)

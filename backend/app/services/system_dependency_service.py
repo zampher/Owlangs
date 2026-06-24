@@ -148,6 +148,17 @@ def check_system_dependencies() -> Dict[str, any]:
         "linux_install": "sudo apt install pandoc",
     })
     
+    # Typst - PDF in-place translation (typst_overlay renderer)
+    dependencies.append({
+        "name": "typst",
+        "display_name": "Typst",
+        "installed": _check_command("typst"),
+        "required_for": "PDF in-place translation (typst_overlay)",
+        "optional": False,
+        "macos_install": "brew install typst",
+        "linux_install": "See https://github.com/typst/typst/releases",
+    })
+
     # XeLaTeX - essential for PDF math rendering
     dependencies.append({
         "name": "xelatex",

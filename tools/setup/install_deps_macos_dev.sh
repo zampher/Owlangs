@@ -115,7 +115,20 @@ else
   fi
 fi
 
-# 7. Calibre (for MOBI/EPUB export via ebook-convert)
+# 7. Typst (PDF in-place translation via typst_overlay)
+if [[ "$SKIP_OPTIONAL" == "true" ]]; then
+  echo "[Typst] Skipped (--skip-optional)"
+else
+  if command -v typst &>/dev/null; then
+    echo "[Typst] Already installed ($(typst --version 2>/dev/null | head -1 || echo typst))"
+  else
+    echo "[Typst] Installing Typst..."
+    brew install typst
+    echo "[Typst] Installed. Verify with: typst --version"
+  fi
+fi
+
+# 8. Calibre (for MOBI/EPUB export via ebook-convert)
 if [[ "$SKIP_OPTIONAL" == "true" ]]; then
   echo "[Calibre] Skipped (--skip-optional)"
 else
@@ -129,7 +142,7 @@ else
   fi
 fi
 
-# 8. XeLaTeX (for PDF math rendering via Pandoc)
+# 9. XeLaTeX (for PDF math rendering via Pandoc)
 if [[ "$SKIP_OPTIONAL" == "true" ]]; then
   echo "[XeLaTeX] Skipped (--skip-optional)"
 else

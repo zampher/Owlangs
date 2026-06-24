@@ -128,24 +128,91 @@ done
 echo "Frontend: Web"
 echo "  Backend serves Web UI at http://localhost:8800"
 
+# PyPI SSL is flaky on some networks; --trusted-host avoids cert verification failures.
+_pip_trusted_host_flags() {
+  echo --trusted-host pypi.org --trusted-host files.pythonhosted.org
+}
+
+# Remove pip interrupted-uninstall leftovers (~owlangs, ~backend, etc.)
+_clean_corrupted_site_packages() {
+  local sp
+  sp="$(python -c 'import site; print(site.getsitepackages()[0])' 2>/dev/null)" || return 0
+  if [[ -d "$sp" ]]; then
+    find "$sp" -maxdepth 1 -name '~*' -exec rm -rf {} + 2>/dev/null || true
+  fi
+}
+
+_venv_has_setuptools_build() {
+  python - <<'PY'
+try:
+    import setuptools
+    parts = [int(x) for x in setuptools.__version__.split(".")[:3]]
+    while len(parts) < 3:
+        parts.append(0)
+    print("yes" if tuple(parts) >= (80, 9, 0) else "no")
+except Exception:
+    print("no")
+PY
+}
+
+_pip_install_build_tools() {
+  # shellcheck disable=SC2046
+  if python -m pip install $(_pip_trusted_host_flags) --upgrade pip setuptools wheel; then
+    echo "[env] pip/setuptools/wheel ready"
+    return 0
+  fi
+  echo "[env] WARNING: Could not reach PyPI to upgrade pip/setuptools (SSL/network). Using venv copies."
+  return 0
+}
+
+_pip_install_project() {
+  local isolation_flag=()
+  if [[ "$(_venv_has_setuptools_build)" == "yes" ]]; then
+    isolation_flag=(--no-build-isolation)
+    echo "[env] Using --no-build-isolation (setuptools already in venv; avoids PyPI fetch during build)"
+  fi
+  # shellcheck disable=SC2046
+  python -m pip install $(_pip_trusted_host_flags) "${isolation_flag[@]}" "$@"
+}
+
+_pip_preinstall_x86_64_binary_deps() {
+  # cryptography 49+ can be sdist-only on macOS x86_64 under Rosetta; building needs maturin.
+  echo "[x86_64] Pre-installing cryptography wheel (avoid sdist/maturin build)..."
+  # shellcheck disable=SC2046
+  "$@" python -m pip install $(_pip_trusted_host_flags) \
+    --only-binary=cryptography \
+    'cryptography>=44.0.0,<49.0.0'
+}
+
+_pip_install_project_with_arch() {
+  local isolation_flag=()
+  if [[ "$(_venv_has_setuptools_build)" == "yes" ]]; then
+    isolation_flag=(--no-build-isolation)
+  fi
+  _pip_preinstall_x86_64_binary_deps "$@"
+  # shellcheck disable=SC2046
+  "$@" python -m pip install $(_pip_trusted_host_flags) "${isolation_flag[@]}" -e ".[pdf_export]" pyinstaller
+}
+
 ensure_venv() {
   if [[ ! -d .venv ]]; then
     python3 -m venv .venv
   fi
   # shellcheck disable=SC1091
   source .venv/bin/activate
-  python -m pip install --upgrade pip >/dev/null
+  _clean_corrupted_site_packages
+  _pip_install_build_tools
   # 检查是否已安装 numpy，如果没有则安装
   if ! python -c "import numpy" 2>/dev/null; then
     echo "[env] numpy not found, installing..."
-    python -m pip install numpy
+    _pip_install_project numpy
   else
     echo "[env] numpy already installed, skipping"
   fi
 
   # Install core dependencies (docling is not used on macOS)
   echo "[env] Installing dependencies..."
-  python -m pip install ".[pdf_export]" pyinstaller >/dev/null
+  _pip_install_project ".[pdf_export]" pyinstaller
 }
 
 get_version() {
@@ -156,6 +223,20 @@ PY
 }
 
 # Build Flutter Web and copy to backend/static/flutter-web (same as build_win.ps1)
+sync_macos_install_dependencies() {
+  local src="${ROOT_DIR}/tools/setup/install_dependencies_macos.sh"
+  local dst_dir="${ROOT_DIR}/3rdParty/macos"
+  local dst="${dst_dir}/install_dependencies.sh"
+  if [[ ! -f "$src" ]]; then
+    echo "[deps] WARNING: missing ${src}; Owlangs.app dependency installer will be unavailable" 1>&2
+    return 0
+  fi
+  mkdir -p "$dst_dir"
+  cp -f "$src" "$dst"
+  chmod +x "$dst"
+  echo "[deps] Synced install_dependencies.sh → 3rdParty/macos/ (for MenuBar bundle)"
+}
+
 build_flutter_web() {
   if [[ ! -d "${ROOT_DIR}/frontend" ]]; then
     echo "[frontend] WARNING: frontend directory not found, skipping Flutter Web build"
@@ -375,16 +456,16 @@ build_backend_for_arch() {
 
   # shellcheck disable=SC1091
   source "$venv_path/bin/activate"
+  _clean_corrupted_site_packages
+  _pip_install_build_tools
   echo "[${target_arch}] Installing dependencies..."
 
   if [[ "$target_arch" == "x86_64" ]]; then
-    arch -x86_64 pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org \
-      -e ".[pdf_export]" pyinstaller >/dev/null 2>&1
+    _pip_install_project_with_arch arch -x86_64
     echo "[${target_arch}] Running PyInstaller..."
     PYI_TARGET_ARCH=x86_64 arch -x86_64 python -m PyInstaller -y --clean macos.spec
   else
-    pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org \
-      -e ".[pdf_export]" pyinstaller >/dev/null 2>&1
+    _pip_install_project -e ".[pdf_export]" pyinstaller
     echo "[${target_arch}] Running PyInstaller..."
     PYI_TARGET_ARCH=arm64 pyinstaller -y --clean macos.spec
   fi
@@ -1052,6 +1133,8 @@ main() {
   ver=$(get_version)
 
   build_flutter_web
+
+  sync_macos_install_dependencies
 
   local app_name="Owlangs-${ver}-mac"
 

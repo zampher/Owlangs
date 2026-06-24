@@ -976,6 +976,7 @@ class OwlangsDelegate(NSObject):
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                env=self._backend_subprocess_env(),
                 cwd=str(Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent.parent.parent)
             )
             
@@ -1086,6 +1087,11 @@ class OwlangsDelegate(NSObject):
     def get_dependencies_script_path(self):
         """Get path to install_dependencies.sh script."""
         script_name = "install_dependencies.sh"
+        fallback = (
+            Path(__file__).resolve().parent.parent
+            / "setup"
+            / "install_dependencies_macos.sh"
+        )
         if getattr(sys, 'frozen', False):
             bundle_dir = Path(sys._MEIPASS)
             script_path = bundle_dir / "3rdParty" / "macos" / script_name
@@ -1095,7 +1101,24 @@ class OwlangsDelegate(NSObject):
             script_path = Path(__file__).resolve().parent.parent.parent / "3rdParty" / "macos" / script_name
             if script_path.exists():
                 return script_path
+            if fallback.exists():
+                return fallback
         return None
+
+    @objc.python_method
+    def _backend_subprocess_env(self):
+        """Augment PATH so bundled/GUI backend finds Homebrew and TeX tools (typst, pandoc, xelatex)."""
+        env = os.environ.copy()
+        extra_paths = [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/Library/TeX/texbin",
+        ]
+        current = env.get("PATH", "")
+        prefix = os.pathsep.join(p for p in extra_paths if p not in current.split(os.pathsep))
+        if prefix:
+            env["PATH"] = f"{prefix}{os.pathsep}{current}" if current else prefix
+        return env
     
     def _check_command_exists(self, cmd):
         """Check if a command exists, trying multiple methods to handle GUI app PATH limitations."""
@@ -1199,7 +1222,17 @@ class OwlangsDelegate(NSObject):
     </div>
 
     <div class="dep">
-        <h3>4. XeLaTeX（PDF 导出引擎）</h3>
+        <h3>4. Typst（PDF 原位翻译）</h3>
+        <p>Typst 用于 PDF 原位翻译导出（<code>typst_overlay</code>），在保留原 PDF 版式的前提下叠加译文。</p>
+        <p><strong>官网：</strong><a href="https://github.com/typst/typst/releases" target="_blank">https://github.com/typst/typst/releases</a></p>
+        <p>使用 Homebrew 安装：</p>
+        <pre>brew install typst</pre>
+        <p>验证安装：</p>
+        <pre>typst --version</pre>
+    </div>
+
+    <div class="dep">
+        <h3>5. XeLaTeX（PDF 重排导出引擎）</h3>
         <p>XeLaTeX 用于 PDF 导出功能。推荐安装 MacTeX（完整版）或 TinyTeX（轻量版）。</p>
         <p><strong>MacTeX 官网：</strong><a href="https://www.tug.org/mactex/" target="_blank">https://www.tug.org/mactex/</a></p>
         <p>使用 Homebrew 安装 MacTeX（约 4GB）：</p>
@@ -1242,6 +1275,7 @@ class OwlangsDelegate(NSObject):
             "Homebrew": "brew",
             "Redis": "redis-server",
             "Pandoc": "pandoc",
+            "Typst": "typst",
             "XeLaTeX": "xelatex",
         }
         
@@ -1256,7 +1290,11 @@ class OwlangsDelegate(NSObject):
                 log_message(f"Dependency not found: {name} ({cmd})")
         
         if not missing:
-            self._show_alert("Dependencies", "All dependencies are installed! ✓\\n\\nHomebrew, Redis, Pandoc, and XeLaTeX are all ready.")
+            self._show_alert(
+                "Dependencies",
+                "All dependencies are installed! ✓\\n\\n"
+                "Homebrew, Redis, Pandoc, Typst, and XeLaTeX are all ready.",
+            )
             log_message("All dependencies are installed")
             return
         
