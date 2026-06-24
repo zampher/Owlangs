@@ -4080,7 +4080,7 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
 
     notifier.setPickedFile(file);
 
-    // Queued mode: align Quick Settings target language with Settings default on import.
+    // Queued mode: apply Settings default only when quick settings have no local cache.
     if (widget.executionMode == 'queued' && !_isReeditMode) {
       final GlobalSettings globalSettings = ref.read(globalSettingsProvider);
       if (globalSettings.targetLanguage.isNotEmpty) {

@@ -230,6 +230,7 @@ class TranslationQuickSettingsNotifier
       // 2. Load sticky global quick settings as baseline.
       final String? globalQuickJson =
           prefs.getString('translation_quick_settings');
+      final bool hasStickyQuickSettings = globalQuickJson != null;
       if (globalQuickJson != null) {
         final Map<String, dynamic> settingsMap =
             jsonDecode(globalQuickJson) as Map<String, dynamic>;
@@ -238,11 +239,8 @@ class TranslationQuickSettingsNotifier
         state = loadedSettings.copyWith(autoSelectWorkflow: true);
       }
 
-      // 3. Apply global defaults for sourceLang and toLang from Settings.
-      //    - Desktop users: Settings defaults always apply (no sticky session across installs).
-      //    - Web first-time users: Settings defaults apply.
-      //    - Web returning users: keep the last-used toLang from the sticky cache (step 2),
-      //      so they pick up where they left off.
+      // 3. Apply Settings defaults when no sticky quick settings exist (first use).
+      //    Returning users keep cached toLang from step 2 across logins.
       final String? globalJson = prefs.getString('global_settings');
       if (globalJson != null) {
         final Map<String, dynamic> globalMap =
@@ -252,14 +250,10 @@ class TranslationQuickSettingsNotifier
         if (ocrLanguage.isNotEmpty) {
           state = state.copyWith(sourceLang: ocrLanguage);
         }
-        final String? targetLangCode =
-            globalMap['targetLanguage'] as String?;
-        if (targetLangCode != null && targetLangCode.isNotEmpty) {
-          // Desktop or first-time web: override with Settings default.
-          // Returning web users: keep the sticky toLang from step 2.
-          final bool isDesktop = !kIsWeb;
-          final bool isFirstTimeWeb = kIsWeb && globalQuickJson == null;
-          if (isDesktop || isFirstTimeWeb) {
+        if (!hasStickyQuickSettings) {
+          final String? targetLangCode =
+              globalMap['targetLanguage'] as String?;
+          if (targetLangCode != null && targetLangCode.isNotEmpty) {
             state = state.copyWith(toLang: targetLangCode);
           }
         }
@@ -287,13 +281,26 @@ class TranslationQuickSettingsNotifier
     }
   }
 
-  /// Apply Settings default target language when starting a new queued import.
-  void applyDefaultTargetLanguage(String targetLanguageCode) {
-    if (targetLanguageCode.isEmpty || state.toLang == targetLanguageCode) {
+  /// Apply Settings default target language only when quick settings were never cached.
+  Future<void> applyDefaultTargetLanguage(String targetLanguageCode) async {
+    if (targetLanguageCode.isEmpty) {
+      return;
+    }
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      if (prefs.getString('translation_quick_settings') != null) {
+        return;
+      }
+    } catch (e) {
+      print(
+        'Error reading quick settings cache in applyDefaultTargetLanguage: $e',
+      );
+    }
+    if (state.toLang == targetLanguageCode) {
       return;
     }
     state = state.copyWith(toLang: targetLanguageCode);
-    _saveSettings();
+    await _saveSettings();
   }
 
   void updateToLang(String toLang, {String? taskId}) {
