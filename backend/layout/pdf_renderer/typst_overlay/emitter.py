@@ -12,7 +12,7 @@ Design principles:
   - Pure string generation, no Typst runtime knowledge required
   - Each block is positioned using #place() at exact bbox coordinates
   - Text that overflows is automatically fit using pdftr_fit utilities
-  - Formulas are rendered through Typst's native $...$ math mode
+  - Formulas in $...$ (and normalized \\(...\\)) are rendered via cmarker + mitex
 """
 
 import re
@@ -45,6 +45,16 @@ def _escape_typst_string(text: str) -> str:
             .replace("\\", "\\\\")
             .replace('"', '\\"')
             .replace("\n", "\\n"))
+
+
+def _typst_cmarker_render_expr(var_name: str) -> str:
+    """Render user text through cmarker+mitex so LaTeX $...$ math compiles."""
+    return f"cmarker.render({var_name}, math: mitex)"
+
+
+def _prepare_user_text_for_typst(text: str) -> str:
+    """Sanitize and escape user-authored text for Typst string bindings."""
+    return _escape_typst_string(sanitize_typst_markdown_for_compile(text))
 
 
 def _typst_rgb(color) -> str:
@@ -378,13 +388,16 @@ def _typst_plain_text_expr(text_name: str, font_size_pt: float,
         f"{_typst_set_text_attrs(font_size_pt, font_weight, font_style, text_fill)}; "
         f"set par(leading: {leading_em}em, justify: {justify_text}); "
         f"if {first_line_indent_pt}pt > 0pt {{ h({first_line_indent_pt}pt) }}; "
-        f"{text_name}"
+        f"{_typst_cmarker_render_expr(text_name)}"
     )
 
 
 def sanitize_typst_markdown_for_compile(markdown: str) -> str:
     """Sanitize markdown to avoid common Typst compilation errors in overlay blocks."""
     text = str(markdown or "")
+    # Normalize LaTeX math delimiters to $...$ / $$...$$ for cmarker+mitex.
+    text = re.sub(r"\\\[(.+?)\\\]", r"$$\1$$", text, flags=re.DOTALL)
+    text = re.sub(r"\\\((.+?)\\\)", r"$\1$", text, flags=re.DOTALL)
     text = re.sub(r"\$\s*\^\s*\{\s*\\(?:circled|textcircled)\s*R\s*\}\s*\$", "®", text)
     text = re.sub(r"\$\s*\^\s*\{\s*\\(?:circled|textcircled)\s*\{\s*R\s*\}\s*\}\s*\$", "®", text)
     text = re.sub(r"\$\s*\^\s*\{\s*\\(?:textregistered|registered)\s*\}\s*\$", "®", text)
@@ -463,7 +476,7 @@ def _render_toc_entries(block_id: str, block: RenderBlock,
         title_y = round(max(0.0, eh * 0.08), 2)
         leader_y = round(eh * 0.55, 2)
         parts.extend([
-            f'#let {title_name} = "{_escape_typst_string(prefix_title)}"',
+            f'#let {title_name} = "{_prepare_user_text_for_typst(prefix_title)}"',
             f'#let {page_name} = "{_escape_typst_string(page_label)}"',
             f"#let {body_name} = block(width: {line_width}pt, height: {eh}pt)[#{{ "
             f"set text(size: {max_font_pt}pt, weight: \"{font_weight}\", fill: {text_fill}); "
@@ -500,7 +513,7 @@ def _typst_preserved_lines_expr(lines_name: str, font_size_pt: float,
         f"{_typst_set_text_attrs(font_size_pt, font_weight, font_style, text_fill)}; "
         f"stack(dir: ttb, spacing: {leading_em}em, ..{lines_name}.map(line => "
         f"block(width: {width_pt}pt)[#{{ "
-        f"set par(leading: {leading_em}em, justify: {justify_text}); line }}]))"
+        f"set par(leading: {leading_em}em, justify: {justify_text}); cmarker.render(line, math: mitex) }}]))"
     )
 
 
@@ -547,7 +560,7 @@ def _render_plain_block(block_id: str, block: RenderBlock,
                 block.font_weight, font_style, text_fill, first_indent, justify)
 
         parts = [
-            f"#let {text_var} = \"{_escape_typst_string(sanitized)}\"",
+            f"#let {text_var} = \"{_prepare_user_text_for_typst(sanitized)}\"",
             _typst_markdown_block(
                 body_var, layout_width, layout_height, block_fill, body_expr),
             _typst_place_flow_block(
@@ -562,9 +575,10 @@ def _render_plain_block(block_id: str, block: RenderBlock,
         text_var = f"{var_prefix}_txt"
         box_var = f"{var_prefix}_box"
         lines = [
-            f"#let {text_var} = \"{_escape_typst_string(text)}\"",
+            f"#let {text_var} = \"{_prepare_user_text_for_typst(text)}\"",
             f"#let {box_var} = block(width: {layout_width}pt, height: {layout_height}pt{block_fill})"
-            f"[#{{ {_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; {text_var} }}]",
+            f"[#{{ {_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; "
+            f"{_typst_cmarker_render_expr(text_var)} }}]",
             _typst_place_flow_block(
                 x0, y0, width, height, box_var, var_prefix, rotation,
                 fill_arg=block_fill if rotation in {90, 180, 270} else "",
@@ -580,8 +594,9 @@ def _render_plain_block(block_id: str, block: RenderBlock,
     rotate_fill = block_fill if rotation in {90, 180, 270} else ""
 
     lines = [
-        f"#let {text_var} = \"{_escape_typst_string(text)}\"",
-        f"#let {base_var} = box[#{{ {_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; {text_var} }}]",
+        f"#let {text_var} = \"{_prepare_user_text_for_typst(text)}\"",
+        f"#let {base_var} = box[#{{ {_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; "
+        f"{_typst_cmarker_render_expr(text_var)} }}]",
         "#context {",
         f"  let base-size = measure({base_var})",
         f"  let scaled-font = if base-size.width > {layout_width}pt "
@@ -589,7 +604,8 @@ def _render_plain_block(block_id: str, block: RenderBlock,
         f"else {{ {block.font_size_pt}pt }}",
         f"  let {inner_var} = block(width: {layout_width}pt, height: {layout_height}pt{block_fill})"
         f"[#{{ set text(size: scaled-font, weight: "
-        f"\"{block.font_weight}\"{_typst_font_style_clause(font_style)}, fill: {text_fill}); {text_var} }}]",
+        f"\"{block.font_weight}\"{_typst_font_style_clause(font_style)}, fill: {text_fill}); "
+        f"{_typst_cmarker_render_expr(text_var)} }}]",
         *_typst_emit_flow_placement_in_context(
             x0=x0,
             y0=y0,
@@ -648,7 +664,7 @@ def _render_preserved_line_boxes(block_id: str, block: RenderBlock,
                 0.0,
                 "false",
             )
-            parts.append(f"#let {line_name} = \"{_escape_typst_string(line.text)}\"")
+            parts.append(f"#let {line_name} = \"{_prepare_user_text_for_typst(line.text)}\"")
             parts.append(
                 _typst_markdown_block(body_name, lw, lh, block_fill, body_expr).rstrip())
             if rotation in {90, 180, 270}:
@@ -663,7 +679,7 @@ def _render_preserved_line_boxes(block_id: str, block: RenderBlock,
         max_font_pt = round(max(1.0, min(block.font_size_pt, lh * 0.86)), 2)
         min_font_pt = round(max(1.0, min(max_font_pt, lh * 0.58)), 2)
         parts.extend([
-            f"#let {line_name} = \"{_escape_typst_string(line.text)}\"",
+            f"#let {line_name} = \"{_prepare_user_text_for_typst(line.text)}\"",
             _typst_markdown_block(
                 body_name, lw, lh, block_fill,
                 f"set text(fill: {text_fill}); "
@@ -746,7 +762,7 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
             block.font_weight, font_style, text_fill, justify, layout_width)
         parts = [
             f"#let {lines_name} = (" + ", ".join(
-                f"\"{_escape_typst_string(v)}\"" for v in line_values) + ("," if len(line_values) == 1 else "") + ")",
+                f"\"{_prepare_user_text_for_typst(v)}\"" for v in line_values) + ("," if len(line_values) == 1 else "") + ")",
             _typst_markdown_block(
                 body_var, layout_width, layout_height, block_fill, body_expr,
                 content_top_inset_pt=formula_insets.top_pt,
@@ -770,7 +786,7 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
                 md_var, max_font_pt, min_font_pt, fit_w, fit_h,
                 block.font_weight, font_style, justify)
             parts = [
-                f"#let {md_var} = \"{_escape_typst_string(text)}\"",
+                f"#let {md_var} = \"{_prepare_user_text_for_typst(text)}\"",
                 _typst_markdown_block(
                     body_var, fit_w, layout_height, block_fill,
                     f"set text(fill: {text_fill}); {fit_call}",
@@ -793,7 +809,7 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
             justify,
         )
         parts = [
-            f"#let {md_var} = \"{_escape_typst_string(text)}\"",
+            f"#let {md_var} = \"{_prepare_user_text_for_typst(text)}\"",
             _typst_markdown_block(
                 body_var, layout_width, layout_height, block_fill,
                 f"set text(fill: {text_fill}); {fit_call}",
@@ -811,7 +827,7 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
             md_var, block.font_size_pt, block.leading_em,
             block.font_weight, font_style, text_fill, first_indent, justify)
         parts = [
-            f"#let {md_var} = \"{_escape_typst_string(text)}\"",
+            f"#let {md_var} = \"{_prepare_user_text_for_typst(text)}\"",
             _typst_markdown_block(
                 body_var, layout_width, layout_height, block_fill, body_expr,
                 content_top_inset_pt=formula_insets.top_pt,
@@ -1017,25 +1033,30 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
     header_font_pt = round(target_font_pt * TABLE_HEADER_FONT_SCALE, 1)
     data_font_pt = round(target_font_pt, 1)
 
-    # Generate table cells for Typst
+    # Generate table cells for Typst (cmarker+mitex so $...$ formulas compile)
+    cell_let_lines: list = []
     cell_lines: list = []
     total_cells = sum(len(r) for r in rows)
     cell_index = 0
     for row_idx, row in enumerate(rows):
         for cell in row:
-            escaped = _escape_typst_string(cell)
+            cell_var = f"{var_prefix}_cell_{cell_index}"
+            cell_let_lines.append(
+                f"#let {cell_var} = \"{_prepare_user_text_for_typst(cell)}\""
+            )
+            body_expr = _typst_cmarker_render_expr(cell_var)
             comma = "," if cell_index < total_cells - 1 else ""
             cell_index += 1
             if row_idx == 0:
                 cell_lines.append(
                     f"  table.cell(fill: {_typst_rgb(TABLE_HEADER_COLOR)})"
                     f"[#{{ set text(size: {header_font_pt}pt, weight: \"bold\""
-                    f", fill: {text_fill}); [{escaped}] }}]{comma}"
+                    f", fill: {text_fill}); {body_expr} }}]{comma}"
                 )
             else:
                 cell_lines.append(
                     f"  [ #{{ set text(size: {data_font_pt}pt, weight: \"regular\""
-                    f", fill: {text_fill}); [{escaped}] }} ]{comma}"
+                    f", fill: {text_fill}); {body_expr} }} ]{comma}"
                 )
 
     columns_str = "(" + ", ".join(["auto"] * col_count) + ")"
@@ -1061,6 +1082,7 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
     inner_var = f"{var_prefix}_inner"
 
     parts: list = [
+        *cell_let_lines,
         f"#let {table_var} = table(",
         f"  columns: {columns_str},",
         f"  rows: {rows_spec},",
