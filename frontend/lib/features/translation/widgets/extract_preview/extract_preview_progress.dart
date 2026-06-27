@@ -751,8 +751,8 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
           level: LogLevel.info,
         );
 
-        // Update translation progress
-        if (statusLower == 'processing' || statusLower == 'completed') {
+        // Update translation progress (in-flight only; terminal handled below)
+        if (statusLower == 'processing') {
           final oldProgress = translationProgress;
           final newProgress = progress.clamp(0, 100) / 100.0;
 
@@ -768,7 +768,7 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
           // on the Translate page also shows the correct progress.
           final extractWidget = widget as ExtractPreview;
           final flowId = extractWidget.flowId;
-          if (flowId != null) {
+          if (flowId != null && context.mounted) {
             final translationNotifier =
                 ref.read(translationStateProviderFamily(flowId).notifier);
             // Do not re-enable the progress bar for post-completion stash rebuild or
@@ -808,6 +808,16 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
         final isCancelledState = statusLower == 'cancelled';
 
         if (isCompletedState || isFailedState || isCancelledState) {
+          // Stop timer immediately so ref/context failures cannot leave polling alive.
+          translationTimer?.cancel();
+          translationTimer = null;
+
+          if (!context.mounted) {
+            translationInFlight = false;
+            translationInFlightStartTime = null;
+            return;
+          }
+
           AppLogger.log(
             'ExtractPreview',
             'Translation polling completed: status=$statusLower, progress=$progress, taskId=$taskId',
@@ -817,7 +827,7 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
           // Push downloads from status into translation state so Export dialog has formats
           final extractWidget = widget as ExtractPreview;
           final flowId = extractWidget.flowId;
-          if (flowId != null && mounted) {
+          if (flowId != null && mounted && context.mounted) {
             final dynamic dv = status['downloads'];
             if (dv != null && dv is Map && dv.isNotEmpty) {
               final map =
@@ -882,7 +892,9 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
                 // Force TranslationResultPreview to reload latest segments.
                 // This matters when backend runs post-translation normalization
                 // (e.g. auto formula repair) after the first segments fetch.
-                triggerTranslationRefresh(ref);
+                if (context.mounted) {
+                  triggerTranslationRefresh(ref);
+                }
               } catch (e) {
                 AppLogger.log(
                   'ExtractPreview',
@@ -899,7 +911,9 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
                 // Always trigger a refresh on completion so the Translate view
                 // can pick up any post-processing changes (e.g. auto formula repair),
                 // even if stats fetching failed.
-                triggerTranslationRefresh(ref);
+                if (context.mounted) {
+                  triggerTranslationRefresh(ref);
+                }
               }
             } else if (isFailedState) {
               translationNotifier.setStatusText('failed');
@@ -934,12 +948,7 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
             '_startTranslationPolling: TIMER CANCELLED - status=$statusLower (completed=$isCompletedState, failed=$isFailedState, cancelled=$isCancelledState)',
             level: LogLevel.info,
           );
-
-          translationTimer?.cancel();
-          translationTimer = null;
-          // CRITICAL: DO NOT clear currentTranslationTaskId here!
-          // Keep it to prevent build() from restarting polling when workflowId still exists in flow context
-          // currentTranslationTaskId = null;  // ❌ Removed to prevent infinite loop
+          return;
         }
       } catch (e) {
         AppLogger.log(

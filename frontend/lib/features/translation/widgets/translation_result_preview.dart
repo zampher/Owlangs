@@ -155,6 +155,9 @@ class _TranslationResultPreviewState
   /// TaskId for which we already fetched on-demand download links (so we only fetch once per task).
   String? _lastTaskIdForOnDemandDownloadsFetch;
 
+  /// Backend task id for API calls (cached for timer/async callbacks).
+  String? _resolvedApiTaskId;
+
   /// Backend task id for API calls.
   ///
   /// Priority (highest first):
@@ -166,27 +169,53 @@ class _TranslationResultPreviewState
   ///    [widget.taskId] is still `'pending'` (the real id hasn't arrived yet).
   /// 3. Fallback to [widget.taskId].
   String _apiTaskId() {
-    // Timer/async callbacks may run after dispose; ref is invalid then.
-    if (!mounted) {
-      return widget.taskId;
+    final String? resolved = _resolvedApiTaskId;
+    if (resolved != null && resolved.isNotEmpty && resolved != 'pending') {
+      return resolved;
     }
-    // When we have a flowId, always prefer the provider's taskId because it
-    // tracks the current phase. The widget.taskId may be the convert-phase ID
-    // while the actual translation (and its segments) live under a different
-    // workflow taskId.
+    // Timer/async callbacks may run after dispose; never touch ref then.
+    if (!mounted || !context.mounted) {
+      return widget.taskId != 'pending' ? widget.taskId : 'pending';
+    }
     if (widget.flowId != null) {
-      final dynamic st =
-          ref.read(translationStateProviderFamily(widget.flowId!));
-      final String? tid = st.taskId as String?;
-      if (tid != null && tid.isNotEmpty && tid != 'pending') {
-        return tid;
+      try {
+        final dynamic st =
+            ref.read(translationStateProviderFamily(widget.flowId!));
+        final String? tid = st.taskId as String?;
+        if (tid != null && tid.isNotEmpty && tid != 'pending') {
+          _resolvedApiTaskId = tid;
+          return tid;
+        }
+      } catch (_) {
+        // Element deactivated while mounted==true; use widget fallback.
       }
     }
-    // Fallback to widget taskId when there is no flowId or provider has no ID.
     if (widget.taskId != 'pending') {
       return widget.taskId;
     }
     return widget.taskId;
+  }
+
+  void _syncResolvedApiTaskId() {
+    if (!mounted || !context.mounted) {
+      return;
+    }
+    if (widget.flowId != null) {
+      try {
+        final dynamic st =
+            ref.read(translationStateProviderFamily(widget.flowId!));
+        final String? tid = st.taskId as String?;
+        if (tid != null && tid.isNotEmpty && tid != 'pending') {
+          _resolvedApiTaskId = tid;
+          return;
+        }
+      } catch (_) {
+        // Ignore when widget tree is tearing down.
+      }
+    }
+    if (widget.taskId != 'pending') {
+      _resolvedApiTaskId = widget.taskId;
+    }
   }
 
   bool _isPdfSourceFile() {
@@ -827,10 +856,13 @@ class _TranslationResultPreviewState
     // Starting source preview polling (logging removed)
     _sourcePreviewTimer =
         Timer.periodic(const Duration(milliseconds: 800), (Timer t) async {
+      if (!mounted || !context.mounted) {
+        t.cancel();
+        return;
+      }
       _sourcePreviewPolls++;
       await _loadSourcePreview();
-      if (!mounted) {
-        // Widget not mounted, stopping polling (logging removed)
+      if (!mounted || !context.mounted) {
         t.cancel();
         return;
       }
@@ -851,6 +883,9 @@ class _TranslationResultPreviewState
   }
 
   Future<void> _loadSourcePreview() async {
+    if (!mounted || !context.mounted) {
+      return;
+    }
     if (_loadingSourcePreview ||
         _apiTaskId().isEmpty ||
         _apiTaskId() == 'pending') {
@@ -959,6 +994,7 @@ class _TranslationResultPreviewState
         _startTranslationStatusPolling();
       } else {
         // TaskId changed to 'pending', stop polling
+        _sourcePreviewTimer?.cancel();
         _translationStatusTimer?.cancel();
       }
     }
@@ -971,7 +1007,7 @@ class _TranslationResultPreviewState
 
     _translationStatusTimer =
         Timer.periodic(const Duration(seconds: 2), (Timer t) async {
-      if (!mounted || _apiTaskId() == 'pending') {
+      if (!mounted || !context.mounted || _apiTaskId() == 'pending') {
         t.cancel();
         return;
       }
@@ -4408,6 +4444,7 @@ class _TranslationResultPreviewState
 
   @override
   Widget build(BuildContext context) {
+    _syncResolvedApiTaskId();
     // Watch refresh trigger and reload content when it changes
     // This allows external components (like batch retranslation) to trigger refresh
     final int refreshTrigger = ref.watch(translationRefreshProvider);
