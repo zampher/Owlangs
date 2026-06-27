@@ -1,4 +1,22 @@
-# Spec文件更新日志 (2026-06-08)
+# Spec文件更新日志
+
+## 2026-06-27 — PDF overlay 优化 (5fbef42)
+
+`Optimize overlay for PDF preview` 新增模块，已在 `lite.spec`、`launcher_portable_onedir.spec`、`macos.spec` 补充：
+
+- `layout.image_overlay.coordinate_space` — image_px 坐标空间（lazy import）
+- `layout.image_overlay.segment_overlay` — 单表 segment 直绘 overlay
+- `layout.ocr_provider.paddle.paddle_det_supplements` — Paddle det 补全（lazy import）
+- `layout.pdf_renderer.typst_overlay.visual_images` — chart/equation 视觉块判定
+
+**无需更新 spec 的 commit：**
+
+- `6655e0f` Bug fix - PDF preview fail with formula（仅改 `emitter.py`）
+- `5c49036` Remap segement sequence in prompt（仅改现有 agents/utils，无新模块）
+
+---
+
+## 更新日志 (2026-06-08)
 
 ## 更新原因
 

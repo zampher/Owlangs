@@ -148,6 +148,7 @@ hiddenimports = [
     'layout.ocr_provider.paddle.block_labels', 'layout.ocr_provider.paddle.converter_adapter',
     'layout.ocr_provider.paddle.layout_parser', 'layout.ocr_provider.paddle.provider',
     'layout.ocr_provider.paddle.zip_loader',
+    'layout.ocr_provider.paddle.paddle_det_supplements',
     # layout PDF renderer - Typst overlay (high-fidelity PDF export)
     'layout.pdf_renderer', 'layout.pdf_renderer.config',
     'layout.pdf_renderer.typst_overlay',
@@ -163,12 +164,15 @@ hiddenimports = [
     'layout.pdf_renderer.typst_overlay.text_metrics',
     'layout.pdf_renderer.typst_overlay.affected_pages',
     'layout.pdf_renderer.typst_overlay.pdf_preview_cache',
+    'layout.pdf_renderer.typst_overlay.visual_images',
     'layout.image_overlay',
     'layout.image_overlay.pipeline',
     'layout.image_overlay.renderer',
     'layout.image_overlay.models',
     'layout.image_overlay.font_resolver',
     'layout.image_overlay.block_text_map',
+    'layout.image_overlay.coordinate_space',
+    'layout.image_overlay.segment_overlay',
     'layout.image_overlay.debug_output',
     'layout.renderable_block_indices',
     # PyMuPDF (required by typst overlay source_cleanup and overlay_merge)

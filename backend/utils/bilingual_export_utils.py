@@ -322,7 +322,7 @@ def rebuild_bilingual_xlsx_html_from_segments(
         target_text_color,
     ) = get_bilingual_style_config(task_state)
 
-    content = _get_source_document_bytes(task_state, "xlsx")
+    content = _get_source_document_bytes(task_state, "xlsx", for_bilingual_rebuild=True)
     if not content:
         return None
 
@@ -343,7 +343,9 @@ def rebuild_bilingual_xlsx_html_from_segments(
                 for cell in row:
                     if isinstance(cell.value, str) and cell.data_type == "s":
                         seg = segments_by_index.get(segment_index)
-                        source = seg.get("source_text", "") if seg else ""
+                        source = _resolve_xlsx_bilingual_source_text(
+                            seg, cell.value, task_state, segment_index,
+                        )
                         target = seg.get("modified_text") or seg.get("target_text", "") if seg else ""
                         is_excluded = bool(seg.get("is_excluded", False)) if seg else False
                         is_cleared = bool(seg.get("status") == "cleared") if seg else False
@@ -697,6 +699,43 @@ def _xlsx_cell_display_text(value: Any) -> str:
     return str(value)
 
 
+def _cached_source_segment_text(task_state: Dict[str, Any], segment_index: int) -> str:
+    """Return extract-phase source text for a segment index from source_chunks_cache."""
+    cache_info = task_state.get("source_chunks_cache") or {}
+    segments = cache_info.get("segments") or []
+    if 0 <= segment_index < len(segments):
+        return str(segments[segment_index] or "")
+    return ""
+
+
+def _resolve_xlsx_bilingual_source_text(
+    seg: Optional[Dict[str, Any]],
+    cell_value: Any,
+    task_state: Dict[str, Any],
+    segment_index: int,
+) -> str:
+    """Resolve original source text for XLSX bilingual export.
+
+    Priority: segment.source_text -> source_chunks_cache -> original cell value.
+    """
+    if seg:
+        from_segment = (seg.get("source_text") or "").strip()
+        if from_segment:
+            return seg.get("source_text") or ""
+
+    cached = _cached_source_segment_text(task_state, segment_index).strip()
+    if cached:
+        return _cached_source_segment_text(task_state, segment_index)
+
+    cell_text = _xlsx_cell_display_text(cell_value).strip()
+    if cell_text:
+        return _xlsx_cell_display_text(cell_value)
+
+    if seg:
+        return seg.get("source_text") or ""
+    return ""
+
+
 def _xlsx_base_inline_font_kwargs(cell: Any) -> Dict[str, Any]:
     """Return base InlineFont fields required by Excel OOXML (rFont + sz at minimum)."""
     base: Dict[str, Any] = {"rFont": "Calibri", "sz": 11}
@@ -1005,17 +1044,24 @@ def _rebuild_srt_sequential(
     return "\n".join(lines)
 
 
-def _get_source_document_bytes(task_state: Dict[str, Any], suffix_hint: str) -> Optional[bytes]:
+def _get_source_document_bytes(
+    task_state: Dict[str, Any],
+    suffix_hint: str,
+    *,
+    for_bilingual_rebuild: bool = False,
+) -> Optional[bytes]:
     """Get document bytes for bilingual rebuild from multiple fallback sources.
 
     Priority:
     1. workflow_instance.document_original.content (in-memory original)
     2. task_state temp_dir + original_filename (file on disk)
     3. task_state temp_dir + output/<stem>_translated.<suffix> (translated output file)
+       — skipped when for_bilingual_rebuild=True (cells must be original text)
 
     Args:
         task_state: Task state dictionary.
         suffix_hint: File extension hint (e.g. "pptx", "xlsx").
+        for_bilingual_rebuild: When True, never use the translated output file as base.
 
     Returns:
         Document bytes, or None if all sources fail.
@@ -1038,8 +1084,8 @@ def _get_source_document_bytes(task_state: Dict[str, Any], suffix_hint: str) -> 
             with open(candidate, 'rb') as f:
                 return f.read()
 
-    # Priority 3: Read translated output file (same structure, text will be overwritten)
-    if temp_dir:
+    # Priority 3: translated output (non-bilingual rebuild only)
+    if not for_bilingual_rebuild and temp_dir:
         output_dir = os.path.join(str(temp_dir), "output")
         if os.path.isdir(output_dir):
             export_filename = task_state.get("original_filename_stem", "rebuilt")
@@ -1277,7 +1323,7 @@ def rebuild_bilingual_xlsx_from_segments(
     ) = get_bilingual_style_config(task_state)
 
     # Get source XLSX content from multiple fallback sources
-    content = _get_source_document_bytes(task_state, "xlsx")
+    content = _get_source_document_bytes(task_state, "xlsx", for_bilingual_rebuild=True)
     if not content:
         return None
 
@@ -1292,6 +1338,8 @@ def rebuild_bilingual_xlsx_from_segments(
     modified_rows_by_sheet: Dict[str, set] = {}
     for sheet in workbook.worksheets:
         modified_rows_by_sheet[sheet.title] = set()
+
+    processed_cells = 0
 
     sorted_segments = sorted(
         segments,
@@ -1320,7 +1368,10 @@ def rebuild_bilingual_xlsx_from_segments(
                 continue
 
             cell = workbook[sheet_name].cell(row=int(row), column=int(col))
-            source = seg.get("source_text", "")
+            seg_index = int(seg.get("segment_index", 0))
+            source = _resolve_xlsx_bilingual_source_text(
+                seg, cell.value, task_state, seg_index,
+            )
             target = seg.get("modified_text") or seg.get("target_text", "")
             is_excluded = bool(seg.get("is_excluded", False))
             is_cleared = bool(seg.get("status") == "cleared")
@@ -1346,6 +1397,7 @@ def rebuild_bilingual_xlsx_from_segments(
             from openpyxl.styles import Alignment as OpenpyxlAlignment
             cell.alignment = OpenpyxlAlignment(wrap_text=True)
             modified_rows_by_sheet[sheet_name].add(cell.row)
+            processed_cells += 1
     else:
         segment_index = 0
         for sheet in workbook.worksheets:
@@ -1355,7 +1407,9 @@ def rebuild_bilingual_xlsx_from_segments(
                         continue
 
                     seg = segments_by_index.get(segment_index)
-                    source = seg.get("source_text", "") if seg else ""
+                    source = _resolve_xlsx_bilingual_source_text(
+                        seg, cell.value, task_state, segment_index,
+                    )
                     target = seg.get("modified_text") or seg.get("target_text", "") if seg else ""
                     is_excluded = bool(seg.get("is_excluded", False)) if seg else False
                     is_cleared = bool(seg.get("status") == "cleared") if seg else False
@@ -1379,6 +1433,7 @@ def rebuild_bilingual_xlsx_from_segments(
 
                     modified_rows_by_sheet[sheet.title].add(cell.row)
                     segment_index += 1
+                    processed_cells += 1
 
     # Auto-fit row heights based on line count
     # Default Excel row height is 15 points; each line of text adds ~15 points
@@ -1405,7 +1460,7 @@ def rebuild_bilingual_xlsx_from_segments(
 
     logger.info(
         LogModule.EXPORT,
-        f"[BILINGUAL] Rebuilt XLSX: {segment_index} cells processed, "
+        f"[BILINGUAL] Rebuilt XLSX: {processed_cells} cells processed, "
         f"target_first={target_first}",
     )
     return result

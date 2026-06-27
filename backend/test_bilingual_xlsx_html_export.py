@@ -192,9 +192,58 @@ def test_bilingual_xlsx_html_is_not_zip_bytes():
     print("PASS test_bilingual_xlsx_html_is_not_zip_bytes")
 
 
+def test_bilingual_xlsx_source_fallback_from_cache():
+    try:
+        import openpyxl
+        from utils.bilingual_export_utils import rebuild_bilingual_xlsx_from_segments
+    except ImportError as exc:
+        print(f"PASS test_bilingual_xlsx_source_fallback_from_cache (skipped: {exc})")
+        return
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws["A1"] = "Hello"
+    bio = BytesIO()
+    wb.save(bio)
+    src_bytes = bio.getvalue()
+    wb.close()
+
+    class _Doc:
+        content = src_bytes
+
+    class _WF:
+        document_original = _Doc()
+
+    task_state = {
+        "workflow_instance": _WF(),
+        "source_chunks_cache": {"segments": ["Hello"]},
+        "translation_segments": {
+            "segments": [
+                {
+                    "segment_index": 0,
+                    "source_text": "",
+                    "target_text": "你好",
+                    "is_excluded": False,
+                },
+            ]
+        },
+    }
+
+    rebuilt_bytes = rebuild_bilingual_xlsx_from_segments(task_state, target_first=False)
+    assert rebuilt_bytes and rebuilt_bytes.startswith(b"PK")
+
+    out_wb = openpyxl.load_workbook(BytesIO(rebuilt_bytes))
+    cell_text = str(out_wb.active["A1"].value or "")
+    out_wb.close()
+    assert "Hello" in cell_text
+    assert "你好" in cell_text
+    print("PASS test_bilingual_xlsx_source_fallback_from_cache")
+
+
 if __name__ == "__main__":
     test_bilingual_segment_to_html_styles_and_line_breaks()
     test_rebuild_bilingual_xlsx_html_from_segments()
     test_rebuild_bilingual_pptx_html_from_segments()
     test_bilingual_xlsx_html_is_not_zip_bytes()
+    test_bilingual_xlsx_source_fallback_from_cache()
     print("\nAll bilingual XLSX HTML tests passed!")
