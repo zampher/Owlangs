@@ -7,6 +7,9 @@ def build_seg_system_prompt(to_lang_code: str, *, mention_markdown: bool = False
     """
     Build a shared SEG-tag system prompt using bracket format ([SEG n]:).
 
+    Segment IDs in each request are LOCAL and consecutive: [SEG 0], [SEG 1], ... [SEG n-1].
+    They are NOT global document indices and may skip numbers in the source document.
+
     Args:
         to_lang_code: Target language code (e.g. "zh", "en").
         mention_markdown: If True, add extra notes about preserving markdown / LaTeX.
@@ -32,6 +35,9 @@ Translate each segment below into {to_lang_name} ({to_lang_code}).
 Each segment uses a [SEG n]: header followed by the translated text.
 The next [SEG n]: header (or end of response) marks the segment boundary.
 
+IDs are LOCAL to this request: always start at [SEG 0] and increment by 1 ([SEG 0], [SEG 1], ...).
+Do NOT invent IDs that were not in the input. Do NOT renumber to fill gaps.
+
 Correct format:
 [SEG 0]:
 Hello
@@ -39,8 +45,8 @@ Hello
 World
 
 # Requirements
-1. Output EVERY input segment with the same ID, same count, same order.
-2. Start with [SEG <first_id>]: on the first line.
+1. Output EVERY input segment with the same LOCAL ID, same count, same order.
+2. Start with [SEG 0]: on the first line (or [SEG <first_local_id>] if the input starts elsewhere).
 3. End immediately after the last segment; no extra text.
 4. Preserve spaces, line breaks, punctuation, and formatting inside each segment.
 5. Keep [SEG n]: headers plain — no bold, no headings, no code fences around the entire output.
@@ -60,31 +66,103 @@ Party A: XX Company
 """
 
 
-def build_seg_user_prompt(chunk_dict: dict) -> str:
-    """Build a user prompt with [SEG n]: headers from a dict of {{segment_id: text}}.
+def build_seg_user_prompt_from_texts(texts: list[str]) -> str:
+    """Build a user prompt with LOCAL consecutive [SEG 0]..[SEG n-1] headers.
 
     Args:
-        chunk_dict: Dict mapping segment IDs (str or int keys) to source text.
+        texts: Source texts in chunk order.
 
     Returns:
-        Plain-text prompt with segments separated by [SEG n]: headers.
+        Plain-text prompt with segments separated by local [SEG n]: headers.
     """
     lines: list[str] = []
-    keys = sorted(chunk_dict.keys(), key=int)
-    for key in keys:
-        text = chunk_dict[key] or ""
-        lines.append(f"[SEG {key}]:")
-        lines.append(text)
-    if keys:
-        first_id = keys[0]
-        last_id = keys[-1]
-        count = len(keys)
+    count = len(texts)
+    for local_id, text in enumerate(texts):
+        lines.append(f"[SEG {local_id}]:")
+        lines.append(text or "")
+    if count > 0:
         lines.append("")
         lines.append(
-            f"# This request has {count} segment(s): [SEG {first_id}] through [SEG {last_id}]."
+            f"# This request has {count} segment(s): [SEG 0] through [SEG {count - 1}]."
         )
-        lines.append(f"# Output exactly {count} segment(s) with the same IDs. Do not skip any.")
+        lines.append(
+            f"# Output exactly {count} segment(s) with LOCAL IDs 0 through {count - 1}. Do not skip any."
+        )
     return "\n".join(lines)
+
+
+def build_seg_user_prompt(chunk_dict: dict) -> str:
+    """Build a user prompt with LOCAL [SEG 0]..[SEG n-1] headers from a chunk dict.
+
+    Global segment indices in chunk_dict keys are used only for ordering; they are NOT
+    sent to the model. Call parse_seg_output_to_global() when parsing the response.
+
+    Args:
+        chunk_dict: Dict mapping global segment IDs (str or int keys) to source text.
+
+    Returns:
+        Plain-text prompt with local consecutive [SEG n]: headers.
+    """
+    keys = sorted(chunk_dict.keys(), key=int)
+    texts = [chunk_dict[key] or "" for key in keys]
+    return build_seg_user_prompt_from_texts(texts)
+
+
+def global_indices_from_chunk_dict(chunk_dict: dict) -> list[int]:
+    """Return global segment indices for a chunk dict, sorted numerically."""
+    return [int(k) for k in sorted(chunk_dict.keys(), key=int)]
+
+
+def map_local_parse_to_global(
+    parsed_local: dict[int, str],
+    global_indices: list[int],
+) -> dict[int, str]:
+    """Map parsed LOCAL [SEG n] results to global segment indices.
+
+    Args:
+        parsed_local: Dict from parse_seg_output (local segment IDs).
+        global_indices: Global document indices in the same order as the prompt texts.
+
+    Returns:
+        Dict mapping global segment index to translated text.
+    """
+    n = len(global_indices)
+    if n == 0:
+        return {}
+
+    result: dict[int, str] = {}
+
+    for local_id in range(n):
+        if local_id in parsed_local:
+            result[global_indices[local_id]] = parsed_local[local_id]
+
+    if len(result) == n:
+        return result
+
+    for local_id, text in parsed_local.items():
+        if 0 <= local_id < n:
+            global_idx = global_indices[local_id]
+            if global_idx not in result or not (result[global_idx] or "").strip():
+                result[global_idx] = text
+
+    if len(result) == n:
+        return result
+
+    # Position fallback only when model returned consecutive LOCAL ids starting at 0
+    if len(parsed_local) == n:
+        sorted_ids = sorted(parsed_local.keys())
+        if sorted_ids == list(range(n)):
+            for i in range(n):
+                if global_indices[i] not in result:
+                    result[global_indices[i]] = parsed_local[i]
+
+    return result
+
+
+def parse_seg_output_to_global(text: str, global_indices: list[int]) -> dict[int, str]:
+    """Parse LLM SEG-tag output and map local IDs to global segment indices."""
+    parsed_local = parse_seg_output(text)
+    return map_local_parse_to_global(parsed_local, global_indices)
 
 
 def parse_seg_output(text: str) -> dict[int, str]:

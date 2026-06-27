@@ -5,7 +5,7 @@
 from dataclasses import dataclass
 
 from .agent import Agent, AgentConfig
-from .seg_prompt_utils import build_seg_system_prompt, parse_seg_output
+from .seg_prompt_utils import build_seg_system_prompt, build_seg_user_prompt_from_texts, parse_seg_output
 from glossary.glossary import Glossary
 from logger import unified_logger
 from logger.logger import LogModule
@@ -109,10 +109,10 @@ class MDTranslateAgent(Agent):
         """
         import re
 
-        # Build one SEG-tagged prompt per chunk; each chunk uses a local id starting from 0
+        # Build one SEG-tagged prompt per chunk; each chunk uses local [SEG 0]
         seg_prompts: list[str] = []
-        for idx, text in enumerate(prompts):
-            seg_prompts.append(f"[SEG {idx}]:\n{text or ''}")
+        for text in prompts:
+            seg_prompts.append(build_seg_user_prompt_from_texts([text or ""]))
 
         translated = await super().send_prompts_async(
             prompts=seg_prompts,

@@ -9,7 +9,7 @@ from typing import Self
 
 from agents import MDTranslateAgent
 from agents.markdown_agent import MDTranslateAgentConfig
-from agents.seg_prompt_utils import parse_seg_output
+from agents.seg_prompt_utils import build_seg_user_prompt_from_texts, parse_seg_output_to_global
 from context.md_mask_context import MDMaskUrisContext
 from ir.markdown_document import MarkdownDocument
 from translator.ai_translator.base import AiTranslatorConfig, AiTranslator
@@ -312,12 +312,9 @@ class MDTranslator(AiTranslator):
 
                 # If adding this segment would exceed max_size, flush current chunk first
                 if current_indices and (current_len + text_len) > max_size:
-                    # Build one plain-text prompt with [SEG i]: headers for all indices in this chunk
-                    lines: list[str] = []
-                    for i in current_indices:
-                        lines.append(f"[SEG {i}]:")
-                        lines.append(segments[i] or "")
-                    prompt_text = "\n".join(lines)
+                    prompt_text = build_seg_user_prompt_from_texts(
+                        [segments[i] or "" for i in current_indices]
+                    )
                     seg_prompts.append(prompt_text)
                     chunk_index_groups.append(list(current_indices))
 
@@ -329,11 +326,9 @@ class MDTranslator(AiTranslator):
 
             # Flush remaining indices
             if current_indices:
-                lines: list[str] = []
-                for i in current_indices:
-                    lines.append(f"[SEG {i}]:")
-                    lines.append(segments[i] or "")
-                prompt_text = "\n".join(lines)
+                prompt_text = build_seg_user_prompt_from_texts(
+                    [segments[i] or "" for i in current_indices]
+                )
                 seg_prompts.append(prompt_text)
                 chunk_index_groups.append(list(current_indices))
 
@@ -366,9 +361,8 @@ class MDTranslator(AiTranslator):
                     f"translated_chunks count mismatch: {len(translated_chunks)} != {len(seg_prompts)}"
                 )
 
-            # Parse tagged responses into index -> translated_text map
+            # Parse tagged responses into index -> translated_text map (local SEG ids -> global indices)
             index_to_translation: dict[int, str] = {}
-            import re
 
             def _write_chunk_debug(
                 _task_id: str | None,
@@ -441,8 +435,8 @@ class MDTranslator(AiTranslator):
                 step_results: list[str] = []
 
                 try:
-                    parsed = parse_seg_output(llm_str)
-                    for seg_id, text_block in parsed.items():
+                    parsed_global = parse_seg_output_to_global(llm_str, prompt_indices)
+                    for seg_id, text_block in parsed_global.items():
                         index_to_translation[seg_id] = text_block
                         parsed_indices.append(seg_id)
 

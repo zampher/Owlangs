@@ -16,7 +16,11 @@ from logger.logger import LogModule
 from typing import Optional
 from utils.json_utils import segments2json_chunks, fix_json_string
 from utils.language_utils import get_language_name_from_code
-from agents.seg_prompt_utils import build_seg_user_prompt, parse_seg_output
+from agents.seg_prompt_utils import (
+    build_seg_user_prompt,
+    global_indices_from_chunk_dict,
+    parse_seg_output_to_global,
+)
 
 
 def _resolve_segment_limit(config) -> int:
@@ -442,7 +446,7 @@ Note: Translate Chinese→English, keep English as-is, preserve formatting. Esca
 
     def send_segments(self, segments: list[str], chunk_size: int, progress_callback=None, segment_indices: Optional[list[int]] = None) -> list[str]:
         segment_limit = _resolve_segment_limit(self.config)
-        self.logger.debug(LogModule.TRANS, f"[SEGMENTS_AGENT] send_segments: {len(segments)} segments, chunk_size={chunk_size}, segment_limit={segment_limit}, segment_indices={'provided' if segment_indices else 'None'}")
+        self.logger.debug(LogModule.TRANS, f"[SEGMENTS_AGENT] send_segments: {len(segments)} segments, chunk_size={chunk_size}, segment_limit={segment_limit}, segment_indices={'provided' if segment_indices else 'None'}, use_seg_tags={self.use_seg_tags}")
         # Calculate text content token limit (excluding system prompt and overhead)
         from utils.chunk_size_converter import get_text_content_token_limit
         text_token_limit = get_text_content_token_limit(chunk_size)
@@ -465,30 +469,47 @@ Note: Translate Chinese→English, keep English as-is, preserve formatting. Esca
             self.logger.debug(LogModule.TRANS,
                 f"[SEGMENTS_AGENT] Sample chunk JSON (first 200 chars): {sample_prompt[:200]}..."
             )
-        
-        prompts = [json.dumps(chunk, ensure_ascii=False, indent=0) for chunk in chunks]
-        
-        # Log system prompt preview
-        if self.system_prompt:
-            self.logger.debug(LogModule.TRANS,
-                f"[SEGMENTS_AGENT] System prompt preview (first 300 chars): {self.system_prompt[:300]}..."
-            )
-        else:
-            self.logger.warning(LogModule.TRANS, "[SEGMENTS_AGENT] System prompt is empty!")
 
-        translated_chunks = super().send_prompts(prompts=prompts, pre_send_handler=self._pre_send_handler,
-                                                 result_handler=self._result_handler,
-                                                 error_result_handler=self._error_result_handler,
-                                                 progress_callback=progress_callback)
-        
-        # Save LLM API input and output for debugging
-        if hasattr(self, 'task_state') and self.task_state:
-            self.task_state['llm_api_input'] = prompts
-            self.task_state['llm_api_output'] = translated_chunks
-            # Save system prompt (may be modified by pre_send_handler with glossary)
-            # Only update if not already set by _pre_send_handler (which saves the modified version)
-            if 'llm_api_system_prompt' not in self.task_state or not self.task_state.get('llm_api_system_prompt'):
-                self.task_state['llm_api_system_prompt'] = self.system_prompt
+        if self.use_seg_tags:
+            chunk_global_indices_list: list[list[int]] = []
+            prompts: list[str] = []
+            for chunk_dict in chunks:
+                chunk_global_indices_list.append(global_indices_from_chunk_dict(chunk_dict))
+                prompts.append(build_seg_user_prompt(chunk_dict))
+
+            translated_raw = super().send_prompts(
+                prompts=prompts,
+                pre_send_handler=self._pre_send_handler,
+                progress_callback=progress_callback,
+            )
+
+            if hasattr(self, 'task_state') and self.task_state:
+                self.task_state['llm_api_input'] = prompts
+                self.task_state['llm_api_output'] = translated_raw
+                if 'llm_api_system_prompt' not in self.task_state or not self.task_state.get('llm_api_system_prompt'):
+                    self.task_state['llm_api_system_prompt'] = self.system_prompt
+
+            translated_chunks: list[dict[str, str]] = []
+            for raw, global_indices in zip(translated_raw, chunk_global_indices_list):
+                text = raw if isinstance(raw, str) else str(raw)
+                parsed_global = parse_seg_output_to_global(text, global_indices)
+                translated_chunks.append({str(k): v for k, v in parsed_global.items()})
+        else:
+            prompts = [json.dumps(chunk, ensure_ascii=False, indent=0) for chunk in chunks]
+
+            translated_chunks = super().send_prompts(
+                prompts=prompts,
+                pre_send_handler=self._pre_send_handler,
+                result_handler=self._result_handler,
+                error_result_handler=self._error_result_handler,
+                progress_callback=progress_callback,
+            )
+
+            if hasattr(self, 'task_state') and self.task_state:
+                self.task_state['llm_api_input'] = prompts
+                self.task_state['llm_api_output'] = translated_chunks
+                if 'llm_api_system_prompt' not in self.task_state or not self.task_state.get('llm_api_system_prompt'):
+                    self.task_state['llm_api_system_prompt'] = self.system_prompt
         
         # CRITICAL: Save llm_api_comparison.txt file directly in agent to ensure it's always created
         # This ensures files are saved even if called directly without chunk_translation_helper
@@ -718,8 +739,10 @@ Note: Translate Chinese→English, keep English as-is, preserve formatting. Esca
         if self.use_seg_tags:
 
             prompts: list[str] = []
+            chunk_global_indices_list: list[list[int]] = []
             for chunk_dict in chunks:
-                # chunk_dict: {"idx": "text", ...}
+                # chunk_dict keys are global indices; prompt uses local [SEG 0]..[SEG n-1]
+                chunk_global_indices_list.append(global_indices_from_chunk_dict(chunk_dict))
                 prompts.append(build_seg_user_prompt(chunk_dict))
 
             translated_raw = await super().send_prompts_async(
@@ -736,14 +759,13 @@ Note: Translate Chinese→English, keep English as-is, preserve formatting. Esca
                 if 'llm_api_system_prompt' not in self.task_state or not self.task_state.get('llm_api_system_prompt'):
                     self.task_state['llm_api_system_prompt'] = self.system_prompt
 
-            # Parse SEG-tag responses back into dict chunks {id: text}
+            # Parse SEG-tag responses and map local IDs back to global segment indices
             translated_chunks: list[dict[str, str]] = []
 
-            for raw in translated_raw:
+            for raw, global_indices in zip(translated_raw, chunk_global_indices_list):
                 text = raw if isinstance(raw, str) else str(raw)
-                parsed = parse_seg_output(text)
-                # Convert int keys to str for downstream JSON compatibility
-                chunk_result: dict[str, str] = {str(k): v for k, v in parsed.items()}
+                parsed_global = parse_seg_output_to_global(text, global_indices)
+                chunk_result: dict[str, str] = {str(k): v for k, v in parsed_global.items()}
                 translated_chunks.append(chunk_result)
         else:
             # Original JSON-based path

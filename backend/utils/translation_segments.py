@@ -16,7 +16,7 @@ from pathlib import Path
 
 # Delayed import to avoid circular import issues in PyInstaller frozen builds
 # from app.models.translation_segment import TranslationSegment, TranslationSegmentsMetadata
-from agents.seg_prompt_utils import parse_seg_output
+from agents.seg_prompt_utils import parse_seg_output, parse_seg_output_to_global, build_seg_user_prompt_from_texts
 from layout.block_types import TABLE_BODY, TABLE
 from logger import unified_logger as logger
 from logger.logger import LogModule
@@ -5213,7 +5213,7 @@ async def retranslate_segment(
             # MDTranslateAgent: use SEG-tag format even for single-segment retry so behavior
             # is consistent with the main markdown/PDF pipeline and never leaks marker lines.
 
-            prompt = f"[SEG {segment_index}]:\n{source_text}"
+            prompt = build_seg_user_prompt_from_texts([source_text])
             results = await agent.send_prompts_async(
                 prompts=[prompt],
                 pre_send_handler=agent._pre_send_handler,  # type: ignore[attr-defined]
@@ -5226,11 +5226,14 @@ async def retranslate_segment(
             if not isinstance(raw_output, str):
                 translated_text = str(raw_output)
             else:
-                parsed = parse_seg_output(raw_output)
-                translated_text = parsed.get(segment_index, "")
-                if not translated_text and parsed:
-                    # Found segments but not our idx — take first available
-                    translated_text = next(iter(parsed.values()))
+                parsed_global = parse_seg_output_to_global(raw_output, [segment_index])
+                translated_text = parsed_global.get(segment_index, "")
+                if not translated_text:
+                    parsed = parse_seg_output(raw_output)
+                    if 0 in parsed:
+                        translated_text = parsed[0]
+                    elif parsed:
+                        translated_text = next(iter(parsed.values()))
                 if not translated_text:
                     # Last resort: use raw output as-is
                     translated_text = raw_output.strip()
@@ -5751,19 +5754,15 @@ async def retranslate_segments_batch(
                 max_segs,  # max_segments_per_chunk (segment_limit cap)
             )
 
-            # Build SEG-tag prompts for each chunk
+            # Build SEG-tag prompts for each chunk (local [SEG 0]..[SEG n-1] in prompt)
             prompts: list[str] = []
             chunk_seg_indices: list[list[int]] = []
             for chunk_dict in chunks:
-                lines: list[str] = []
-                seg_indices: list[int] = []
-                for seg_idx_str, text in chunk_dict.items():
-                    seg_index = int(seg_idx_str)
-                    lines.append(f"[SEG {seg_index}]:")
-                    lines.append(text or "")
-                    seg_indices.append(seg_index)
-                prompts.append("\n".join(lines))
-                chunk_seg_indices.append(seg_indices)
+                sorted_keys = sorted(chunk_dict.keys(), key=int)
+                global_indices = [int(k) for k in sorted_keys]
+                texts = [chunk_dict[k] or "" for k in sorted_keys]
+                prompts.append(build_seg_user_prompt_from_texts(texts))
+                chunk_seg_indices.append(global_indices)
 
             logger.info(
                 LogModule.TRANS,
@@ -5794,8 +5793,8 @@ async def retranslate_segments_batch(
                 if not isinstance(llm_output, str):
                     llm_output = str(llm_output)
 
-                # Parse [SEG n]: headers back to index -> text
-                chunk_parsed: dict[int, str] = parse_seg_output(llm_output)
+                # Parse [SEG n]: headers and map local IDs to global segment indices
+                chunk_parsed: dict[int, str] = parse_seg_output_to_global(llm_output, seg_indices_in_chunk)
 
                 if not chunk_parsed:
                     logger.warning(

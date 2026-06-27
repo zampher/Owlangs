@@ -9,7 +9,10 @@ from pathlib import Path
 import tempfile
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from agents.seg_prompt_utils import parse_seg_output
+from agents.seg_prompt_utils import (
+    build_seg_user_prompt_from_texts,
+    parse_seg_output_to_global,
+)
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from utils.llm_client import LLMConfig, LLMMessage, llm_chat
@@ -264,23 +267,21 @@ Whole-document compile may fail with `You can't use \\eqno' in math mode` at a c
 - Replace corrupted placeholders like `\\textbackslash theta` with valid math, e.g. `$\\theta_0^{*}$`.
 
 # Output
-Return ONLY the repaired segments with the SAME [SEG n]: headers.
+Return ONLY the repaired segments with the SAME LOCAL [SEG n]: headers as the input (0 through n-1).
 """
-    lines: list[str] = [header]
-    for it in items:
-        # Use target_text as primary input; if missing, use source_text.
-        body = it.target_text if (it.target_text or "").strip() else it.source_text
-        lines.append(f"[SEG {it.segment_index}]:")
-        lines.append(body or "")
-    return "\n".join(lines).strip() + "\n"
+    global_indices = [it.segment_index for it in items]
+    bodies = [
+        (it.target_text if (it.target_text or "").strip() else it.source_text) or ""
+        for it in items
+    ]
+    return header + "\n" + build_seg_user_prompt_from_texts(bodies)
 
 
-def _parse_seg_tag_output(text: str) -> Dict[int, str]:
+def _parse_seg_tag_output(text: str, global_indices: list[int]) -> Dict[int, str]:
     """
-    Parse [SEG n]: header blocks into {n: content}.
-    This mirrors the translation SEG-tag parser.
+    Parse [SEG n]: header blocks and map local IDs to global segment indices.
     """
-    return parse_seg_output(text or "")
+    return parse_seg_output_to_global(text or "", global_indices)
 
 
 def batch_repair_formulas_with_llm(
@@ -371,7 +372,7 @@ def batch_repair_formulas_with_llm(
         _safe_write_text(debug_dir / f"batch_{bi + 1:03d}_raw.txt", raw or "")
         dt_ms = int((time.monotonic() - t0) * 1000)
 
-        parsed_map = _parse_seg_tag_output(raw)
+        parsed_map = _parse_seg_tag_output(raw, batch_indices)
         _safe_write_json(
             debug_dir / f"batch_{bi + 1:03d}_parsed_map.json",
             {str(k): v for k, v in (parsed_map or {}).items()},
