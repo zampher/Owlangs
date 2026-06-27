@@ -1471,7 +1471,13 @@ async def _image_overlay_file_response(
         segments = [s for s in raw_segments if isinstance(s, dict)]
 
     payload_obj = task_state.get("payload")
-    # eq_fmt, tbl_fmt, chart_fmt already resolved above for segment/bbox maps
+    eq_fmt, tbl_fmt, chart_fmt = _resolve_export_format_settings(
+        task_state,
+        payload_obj,
+        equation_format,
+        table_body_format,
+        chart_body_format,
+    )
     target_language = None
     if isinstance(payload_obj, dict):
         target_language = payload_obj.get("to_lang") or payload_obj.get("target_language")
