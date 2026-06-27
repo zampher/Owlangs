@@ -71,7 +71,9 @@ from layout.pdf_renderer.typst_overlay.overlay_merge import (
     patch_merged_pdf_pages_from_rendered,
 )
 from layout.pdf_renderer.typst_overlay.visual_images import (
+    collect_preserved_visual_protected_rects,
     collect_visual_image_placements,
+    extract_equation_content,
     lookup_image_bytes,
     extract_equation_image_path,
     extract_nested_sub_bbox,
@@ -461,6 +463,8 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 or stripped.startswith('<table')
                 or stripped.startswith('</table')
                 or stripped.startswith('<img')
+                or stripped.startswith('<svg')
+                or stripped.startswith('<div')
                 or stripped.startswith('![')  # Markdown image syntax: ![alt](path)
             ):
                 if body_start is None:
@@ -695,7 +699,16 @@ class TypstOverlayRenderer(BasePDFRenderer):
             equation_format=eq_fmt,
             image_data_map=image_data_map,
         )
-        if chart_fmt == "image":
+        chart_fmt_norm = chart_fmt.strip().lower()
+        table_fmt_norm = table_fmt.strip().lower()
+        eq_fmt_norm = eq_fmt.strip().lower()
+        if chart_fmt_norm == "image":
+            placements = [p for p in placements if p.block_type != "chart"]
+        if table_fmt_norm == "image":
+            placements = [p for p in placements if p.block_type != "table"]
+        if eq_fmt_norm == "image":
+            placements = [p for p in placements if p.block_type != "equation"]
+        if chart_fmt_norm != "image":
             chart_count = sum(
                 1 for page in layout_doc.pages for block in page.blocks if block.type == "chart"
             )
@@ -706,7 +719,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     f"image placements (zip_images={len(image_data_map)}, "
                     f"check layout_source_zip and chart_body nested image_path)",
                 )
-        if eq_fmt.strip().lower() == "image":
+        if eq_fmt_norm != "image":
             eq_count = sum(
                 1
                 for page in layout_doc.pages
@@ -850,6 +863,101 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 return None
         return None
 
+    def _build_per_segment_overlay_blocks(
+        self,
+        block,
+        block_key: int,
+        page_index: int,
+        page_width_pt: Optional[float],
+        skip_overlay: set,
+        segment_bbox_overlay_blocks: Optional[set] = None,
+    ) -> List[RenderBlock]:
+        """Paint overlay segments at individual bboxes; preserve skip-overlay regions."""
+        overlay_segments = getattr(self.config, "overlay_segments", None) or []
+        if not overlay_segments or block_key in skip_overlay:
+            return []
+
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            _read_segment_layout_bbox,
+            resolve_segment_layout_block_indices,
+            segment_overlay_export_text,
+            segment_skips_overlay,
+        )
+
+        overlay_task_state = getattr(self.config, "overlay_task_state", None) or {}
+        overlay_blocks = segment_bbox_overlay_blocks or set()
+        if block_key not in overlay_blocks:
+            return []
+
+        layout_doc = getattr(self, "_current_layout_doc", None)
+        result: List[RenderBlock] = []
+        for seg in overlay_segments:
+            if not isinstance(seg, dict) or segment_skips_overlay(seg):
+                continue
+            indices = resolve_segment_layout_block_indices(seg, overlay_task_state)
+            try:
+                mapped = {int(i) for i in indices if i is not None}
+            except (TypeError, ValueError):
+                continue
+            if block_key not in mapped:
+                continue
+            bbox = _read_segment_layout_bbox(seg, overlay_task_state, layout_doc)
+            text = segment_overlay_export_text(seg)
+            if bbox is None or not text:
+                continue
+            seg_idx = seg.get("segment_index", len(result))
+            rb = layout_block_to_render_block(
+                block,
+                page_index=page_index,
+                translated_text=text,
+                block_id=f"block-{block_key}-seg-{seg_idx}",
+            )
+            rb.inner_bbox = bbox
+            rb.opaque_fill = True
+            override_pt = self._block_font_override_pt(block_key)
+            if override_pt is not None:
+                rb = apply_user_font_override(
+                    rb,
+                    override_pt,
+                    calculator=self._font_fit,
+                )
+            else:
+                rb = self._font_fit.calculate_fit_params(
+                    rb,
+                    page_width_pt=page_width_pt,
+                )
+            rb = self._apply_block_typography_overrides(rb, block_key)
+            rb.rotation = self._block_rotation(block_key)
+            result.append(rb)
+
+        if result:
+            unified_logger.info(
+                LogModule.RESTOR,
+                f"[TYPST_OVERLAY] Block {block_key} ({getattr(block, 'type', '?')}): "
+                f"per-segment overlay for {len(result)} segment(s) "
+                "(skip-overlay regions preserved)",
+            )
+        return result
+
+    def _build_per_segment_table_overlay_blocks(
+        self,
+        block,
+        block_key: int,
+        page_index: int,
+        page_width_pt: Optional[float],
+        skip_overlay: set,
+        segment_bbox_overlay_blocks: Optional[set] = None,
+    ) -> List[RenderBlock]:
+        """Backward-compatible alias for table per-segment overlay."""
+        return self._build_per_segment_overlay_blocks(
+            block,
+            block_key,
+            page_index,
+            page_width_pt,
+            skip_overlay,
+            segment_bbox_overlay_blocks=segment_bbox_overlay_blocks,
+        )
+
     def _block_table_stroke_pt(self, block_key: int) -> float:
         """Return table grid stroke width for a layout block (default 0.5pt)."""
         from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
@@ -965,6 +1073,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 "source_pdf_path is required for TypstOverlayRenderer. "
                 "Set PDFRendererConfig.source_pdf_path to the original PDF file."
             )
+        self._current_layout_doc = layout_doc
 
         # ---- Step 1: Build RenderBlocks from LayoutDocument ----
         build_started = time.perf_counter()
@@ -972,10 +1081,37 @@ class TypstOverlayRenderer(BasePDFRenderer):
         total_blocks = 0
         skipped_blocks = []  # [(block_index, block_type, image_path or "no-image")]
         eq_fmt = (getattr(self.config, "equation_format", "text") or "text").strip().lower()
+        chart_fmt = (getattr(self.config, "chart_body_format", "image") or "image").strip().lower()
+        table_fmt = (getattr(self.config, "table_body_format", "html") or "html").strip().lower()
         unified_ref_font_pt, unified_ref_leading_em = self._collect_unified_ref_metrics(
             layout_doc,
         )
         skip_overlay: set = getattr(self.config, "skip_overlay_block_indices", None) or set()
+        overlay_segments = getattr(self.config, "overlay_segments", None) or []
+        overlay_task_state = getattr(self.config, "overlay_task_state", None) or {}
+        segment_bbox_overlay_block_indices: set = set()
+        partial_overlay_block_indices: set = set()
+        segment_redaction_rects: Dict[int, List[tuple]] = {}
+        if overlay_segments:
+            from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+                collect_partial_overlay_block_indices,
+                collect_segment_bbox_overlay_block_indices,
+            )
+            partial_overlay_block_indices = collect_partial_overlay_block_indices(
+                overlay_segments,
+                overlay_task_state,
+            )
+            segment_bbox_overlay_block_indices = collect_segment_bbox_overlay_block_indices(
+                overlay_segments,
+                layout_doc,
+                overlay_task_state,
+            )
+            if segment_bbox_overlay_block_indices:
+                unified_logger.info(
+                    LogModule.RESTOR,
+                    "[TYPST_OVERLAY] Per-segment bbox overlay/erase blocks: "
+                    f"{sorted(segment_bbox_overlay_block_indices)}",
+                )
 
         for page in layout_doc.pages:
             blocks: List[RenderBlock] = []
@@ -995,12 +1131,162 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     blocks.append(rb)
                     total_blocks += 1
 
-                if eq_fmt == "image" and block.is_equation():
-                    eq_img = extract_equation_image_path(block) or ""
+                block_type = getattr(block, 'type', '') or ''
+
+                if block.is_equation():
+                    if eq_fmt == "image":
+                        eq_img = extract_equation_image_path(block) or ""
+                        skipped_blocks.append((
+                            getattr(block, 'index', '?'),
+                            getattr(block, 'type', '?'),
+                            eq_img,
+                            block.bbox,
+                        ))
+                        continue
+                    block_key = block.index if block.index is not None else total_blocks
+                    per_segment_blocks = self._build_per_segment_overlay_blocks(
+                        block,
+                        block_key,
+                        page.page_index,
+                        page_width_pt,
+                        skip_overlay,
+                        segment_bbox_overlay_blocks=segment_bbox_overlay_block_indices,
+                    )
+                    if per_segment_blocks:
+                        blocks.extend(per_segment_blocks)
+                        total_blocks += len(per_segment_blocks)
+                        continue
+                    translated = ""
+                    if self.config.translated_text_by_block_index:
+                        translated = self.config.translated_text_by_block_index.get(block_key, "")
+                    if not translated:
+                        translated = extract_equation_content(block) or ""
+                    if translated and translated.strip():
+                        eq_text = translated.strip()
+                        if eq_fmt == "latex" and "$" not in eq_text:
+                            eq_text = f"${eq_text}$"
+                        eq_rb = layout_block_to_render_block(
+                            block,
+                            page_index=page.page_index,
+                            translated_text=eq_text,
+                            block_id=f"block-{block_key}",
+                        )
+                        eq_rb.opaque_fill = True
+                        eq_rb.render_kind = "markdown"
+                        bbox_override = self._block_bbox_override(block_key)
+                        if bbox_override is not None:
+                            eq_rb.inner_bbox = bbox_override
+                        eq_rb = self._font_fit.calculate_fit_params(
+                            eq_rb, page_width_pt=page_width_pt,
+                        )
+                        eq_rb = self._apply_block_typography_overrides(eq_rb, block_key)
+                        eq_rb.rotation = self._block_rotation(block_key)
+                        blocks.append(eq_rb)
+                        total_blocks += 1
+                        unified_logger.info(
+                            LogModule.RESTOR,
+                            f"[TYPST_OVERLAY] Equation block {block_key}: "
+                            f"overlay ({eq_fmt})",
+                        )
                     skipped_blocks.append((
                         getattr(block, 'index', '?'),
                         getattr(block, 'type', '?'),
-                        eq_img,
+                        "equation_overlay",
+                        block.bbox,
+                    ))
+                    continue
+
+                if block_type == "chart":
+                    if chart_fmt == "image":
+                        skipped_blocks.append((
+                            getattr(block, 'index', '?'),
+                            getattr(block, 'type', '?'),
+                            "chart_image_preserve_pdf",
+                            block.bbox,
+                        ))
+                        continue
+                    block_key = block.index if block.index is not None else total_blocks
+                    per_segment_blocks = self._build_per_segment_overlay_blocks(
+                        block,
+                        block_key,
+                        page.page_index,
+                        page_width_pt,
+                        skip_overlay,
+                        segment_bbox_overlay_blocks=segment_bbox_overlay_block_indices,
+                    )
+                    if per_segment_blocks:
+                        blocks.extend(per_segment_blocks)
+                        total_blocks += len(per_segment_blocks)
+                        skipped_blocks.append((
+                            getattr(block, 'index', '?'),
+                            getattr(block, 'type', '?'),
+                            "chart_per_segment_overlay",
+                            block.bbox,
+                        ))
+                        continue
+                    translated = ""
+                    if self.config.translated_text_by_block_index:
+                        translated = self.config.translated_text_by_block_index.get(block_key, "")
+                    if translated:
+                        _cap, chart_body, _fn = self._extract_caption_footnote_from_translated(
+                            translated,
+                        )
+                        if chart_body and chart_body.strip():
+                            body_text = chart_body.strip()
+                        elif translated.strip():
+                            body_text = translated.strip()
+                        else:
+                            body_text = ""
+                        if body_text:
+                            cb_rb = layout_block_to_render_block(
+                                block,
+                                page_index=page.page_index,
+                                translated_text=body_text,
+                                block_id=f"block-{block_key}",
+                            )
+                            cb_rb.opaque_fill = True
+                            nested_body_bbox = extract_nested_sub_bbox(block, CHART_BODY)
+                            if nested_body_bbox is not None:
+                                cb_rb.inner_bbox = nested_body_bbox
+                            bbox_override = self._block_bbox_override(block_key)
+                            if bbox_override is not None:
+                                cb_rb.inner_bbox = bbox_override
+                            cb_rb = self._font_fit.calculate_fit_params(
+                                cb_rb, page_width_pt=page_width_pt,
+                            )
+                            cb_rb = self._apply_block_typography_overrides(cb_rb, block_key)
+                            cb_rb.rotation = self._block_rotation(block_key)
+                            blocks.append(cb_rb)
+                            total_blocks += 1
+                        elif translated.strip():
+                            free_rb = layout_block_to_render_block(
+                                block,
+                                page_index=page.page_index,
+                                translated_text=translated.strip(),
+                                block_id=f"block-{block_key}",
+                            )
+                            bbox_override = self._block_bbox_override(block_key)
+                            if bbox_override is not None:
+                                free_rb.inner_bbox = bbox_override
+                            free_rb = self._font_fit.calculate_fit_params(
+                                free_rb, page_width_pt=page_width_pt,
+                            )
+                            free_rb = self._apply_block_typography_overrides(
+                                free_rb, block_key,
+                            )
+                            free_rb.rotation = self._block_rotation(block_key)
+                            free_rb.opaque_fill = True
+                            blocks.append(free_rb)
+                            total_blocks += 1
+                            unified_logger.info(
+                                LogModule.RESTOR,
+                                f"[TYPST_OVERLAY] Chart block {block_key}: "
+                                "free-form text overlay (no chart body markers)",
+                            )
+                    skipped_blocks.append((
+                        getattr(block, 'index', '?'),
+                        getattr(block, 'type', '?'),
+                        "chart_overlay",
                         block.bbox,
                     ))
                     continue
@@ -1008,13 +1294,31 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 # If a table block has translated content, extract the table body
                 # (markdown table) and create a RenderBlock for it.  The caption
                 # and footnote are already extracted above as separate blocks.
-                block_type = getattr(block, 'type', '') or ''
                 if block_type == 'table':
                     block_key = block.index if block.index is not None else total_blocks
                     translated = ""
                     if self.config.translated_text_by_block_index:
                         translated = self.config.translated_text_by_block_index.get(block_key, "")
                     if translated:
+                        per_segment_blocks = self._build_per_segment_table_overlay_blocks(
+                            block,
+                            block_key,
+                            page.page_index,
+                            page_width_pt,
+                            skip_overlay,
+                            segment_bbox_overlay_blocks=segment_bbox_overlay_block_indices,
+                        )
+                        if per_segment_blocks:
+                            blocks.extend(per_segment_blocks)
+                            total_blocks += len(per_segment_blocks)
+                            skipped_blocks.append((
+                                getattr(block, 'index', '?'),
+                                getattr(block, 'type', '?'),
+                                "table_per_segment_overlay",
+                                block.bbox,
+                            ))
+                            continue
+
                         _cap, table_body, _fn = self._extract_caption_footnote_from_translated(
                             translated,
                         )
@@ -1059,6 +1363,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                                 free_rb, block_key,
                             )
                             free_rb.rotation = self._block_rotation(block_key)
+                            free_rb.opaque_fill = True
                             blocks.append(free_rb)
                             total_blocks += 1
                             unified_logger.info(
@@ -1078,7 +1383,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     ))
                     continue
 
-                if not block.has_text():
+                if not block.has_recognized_text():
                     # Log skipped blocks (images, tables, etc.)
                     _img = getattr(block, 'image_path', None) or ""
                     
@@ -1120,6 +1425,19 @@ class TypstOverlayRenderer(BasePDFRenderer):
                         "skip_overlay",
                         block.bbox,
                     ))
+                    continue
+
+                per_segment_blocks = self._build_per_segment_overlay_blocks(
+                    block,
+                    block_key,
+                    page.page_index,
+                    page_width_pt,
+                    skip_overlay,
+                    segment_bbox_overlay_blocks=segment_bbox_overlay_block_indices,
+                )
+                if per_segment_blocks:
+                    blocks.extend(per_segment_blocks)
+                    total_blocks += len(per_segment_blocks)
                     continue
 
                 translated = ""
@@ -1325,10 +1643,136 @@ class TypstOverlayRenderer(BasePDFRenderer):
             layout_doc,
         )
 
+        overlay_segments = getattr(self.config, "overlay_segments", None) or []
+        overlay_task_state = getattr(self.config, "overlay_task_state", None) or {}
+        protected_segment_rects: Dict[int, List[tuple]] = {}
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            collect_bbox_override_redaction_rects,
+            collect_excluded_segment_protected_rects,
+            collect_empty_text_block_protected_rects,
+            collect_layout_block_indices_with_overlay_text,
+            collect_overlay_erase_block_indices,
+            collect_segment_layout_bbox_redaction_rects,
+            merge_redaction_rect_maps,
+        )
+        overlay_erase_block_indices = collect_overlay_erase_block_indices(
+            overlay_segments,
+            overlay_task_state,
+            skip_block_indices=skip_overlay or None,
+            block_text_map=getattr(self.config, "translated_text_by_block_index", None)
+            or None,
+            layout_doc=layout_doc,
+        )
+        overlay_text_block_indices = collect_layout_block_indices_with_overlay_text(
+            overlay_segments,
+            overlay_task_state,
+            getattr(self.config, "translated_text_by_block_index", None) or None,
+        )
+        if overlay_erase_block_indices:
+            unified_logger.info(
+                LogModule.RESTOR,
+                "[TYPST_OVERLAY] Overlay erase targets: "
+                f"{sorted(overlay_erase_block_indices)} layout block(s)",
+            )
+        if overlay_segments:
+            segment_rects = collect_segment_layout_bbox_redaction_rects(
+                overlay_segments,
+                layout_doc,
+                task_state=overlay_task_state,
+                skip_block_indices=skip_overlay or None,
+                equation_format=eq_fmt,
+                chart_body_format=chart_fmt,
+                table_body_format=table_fmt,
+                bbox_override_by_block_index=(
+                    self.config.bbox_override_by_block_index or None
+                ),
+            )
+            override_rects = collect_bbox_override_redaction_rects(
+                self.config.bbox_override_by_block_index or None,
+                layout_doc,
+                overlay_erase_block_indices,
+                skip_block_indices=skip_overlay or None,
+            )
+            segment_rects = merge_redaction_rect_maps(segment_rects, override_rects)
+            if segment_rects:
+                segment_redaction_rects = segment_rects
+                unified_logger.info(
+                    LogModule.RESTOR,
+                    "[TYPST_OVERLAY] Added "
+                    f"{sum(len(v) for v in segment_rects.values())} segment bbox "
+                    "redaction rect(s) for deep-split overlay erase",
+                )
+            protected_segment_rects = collect_excluded_segment_protected_rects(
+                overlay_segments,
+                layout_doc,
+                task_state=overlay_task_state,
+                chart_body_format=chart_fmt,
+                table_body_format=table_fmt,
+                equation_format=eq_fmt,
+                segment_bbox_overlay_blocks=segment_bbox_overlay_block_indices or None,
+            )
+            if protected_segment_rects:
+                unified_logger.info(
+                    LogModule.RESTOR,
+                    "[TYPST_OVERLAY] Protected "
+                    f"{sum(len(v) for v in protected_segment_rects.values())} skip-overlay "
+                    "segment bbox region(s) from redaction",
+                )
+
+        empty_text_protected = collect_empty_text_block_protected_rects(
+            layout_doc,
+            overlay_erase_block_indices=overlay_erase_block_indices or None,
+            overlay_text_block_indices=overlay_text_block_indices or None,
+            segments=overlay_segments or None,
+            task_state=overlay_task_state or None,
+            block_text_map=getattr(self.config, "translated_text_by_block_index", None)
+            or None,
+        )
+        if empty_text_protected:
+            empty_count = sum(len(v) for v in empty_text_protected.values())
+            unified_logger.info(
+                LogModule.RESTOR,
+                "[TYPST_OVERLAY] Empty OCR layout blocks (no erase in primary pass): "
+                f"{empty_count} region(s) — not added to segment protected rects "
+                "(segment bbox redaction must not be clipped by empty OCR bboxes)",
+            )
+
+        visual_protected = collect_preserved_visual_protected_rects(
+            layout_doc,
+            equation_format=eq_fmt,
+            chart_body_format=chart_fmt,
+            table_body_format=table_fmt,
+        )
+        if visual_protected:
+            for page_idx, rects in visual_protected.items():
+                protected_segment_rects.setdefault(page_idx, []).extend(rects)
+            unified_logger.info(
+                LogModule.RESTOR,
+                "[TYPST_OVERLAY] Protected "
+                f"{sum(len(v) for v in visual_protected.values())} image-format "
+                "visual body region(s) from redaction",
+            )
+
         # ---- Step 2: Clean source PDF ----
         # For image-based PDFs (scanned documents), redaction-based cleanup
         # is ineffective.  Use background-embed mode instead.
         is_image_based = self._is_image_based_pdf(self._source_pdf_path)
+
+        if is_image_based:
+            opaque_count = 0
+            for page_blocks in render_blocks_by_page.values():
+                for rb in page_blocks:
+                    if rb.render_kind in ("image", "skip"):
+                        continue
+                    if not rb.opaque_fill:
+                        rb.opaque_fill = True
+                        opaque_count += 1
+            if opaque_count:
+                unified_logger.info(
+                    LogModule.RESTOR,
+                    f"[TYPST_OVERLAY] Image-based PDF: forced opaque_fill on "
+                    f"{opaque_count} overlay text block(s)",
+                )
 
         unified_logger.info(
             LogModule.RESTOR,
@@ -1349,6 +1793,25 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     self.config.bbox_override_by_block_index or None
                 ),
                 unprotect_block_indices=embedded_image_block_indices or None,
+                protected_segment_rects=protected_segment_rects or None,
+                equation_format=eq_fmt,
+                chart_body_format=chart_fmt,
+                table_body_format=table_fmt,
+                segment_bbox_only_block_indices=(
+                    segment_bbox_overlay_block_indices
+                    if segment_bbox_overlay_block_indices
+                    else None
+                ),
+                overlay_erase_block_indices=overlay_erase_block_indices or None,
+                partial_overlay_block_indices=(
+                    partial_overlay_block_indices
+                    if partial_overlay_block_indices
+                    else None
+                ),
+                segment_redaction_rects=segment_redaction_rects or None,
+                overlay_segments=overlay_segments or None,
+                overlay_task_state=overlay_task_state or None,
+                overlay_text_block_indices=overlay_text_block_indices or None,
             )
             diagnostics["cleanup_elapsed"] = time.perf_counter() - cleanup_started
         except Exception as e:

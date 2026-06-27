@@ -31,6 +31,7 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
     required this.baseMode,
     required this.isPdfSource,
     this.isImageSource = false,
+    this.overlayBboxReferenceSize,
     required this.isPdfWorkflow,
     this.translatedPdfUrl,
     this.translatedImageUrl,
@@ -72,6 +73,9 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
   final TranslationPreviewMode baseMode;
   final bool isPdfSource;
   final bool isImageSource;
+
+  /// Raster reference size for bbox mapping (`overlay_source_image_size` from API).
+  final Size? overlayBboxReferenceSize;
   final bool isPdfWorkflow;
   final String? translatedPdfUrl;
   final String? translatedImageUrl;
@@ -736,6 +740,14 @@ class _TranslationFullComparePreviewTabState
     return null;
   }
 
+  Rect? _buildSourceHighlightRect() {
+    final List<double>? bbox = _sourceHighlightBbox;
+    if (bbox != null && bbox.length >= 4) {
+      return layoutBlockBboxToImageRect(bbox);
+    }
+    return _buildHighlightRect();
+  }
+
   Widget _buildTargetImagePreview(
     AppLocalizations l10n, {
     required String targetImageUrl,
@@ -744,6 +756,7 @@ class _TranslationFullComparePreviewTabState
       imageUrl: targetImageUrl,
       panelLabel: l10n.translationPreviewPanelTarget,
       highlightRect: _buildHighlightRect(),
+      bboxReferenceSize: widget.overlayBboxReferenceSize,
     );
   }
 
@@ -857,6 +870,8 @@ class _TranslationFullComparePreviewTabState
                 targetImageUrl: targetImageUrl,
                 linkedScroll: _revisionLinkedScrollEnabled,
                 highlightRect: _buildHighlightRect(),
+                sourceHighlightRect: _buildSourceHighlightRect(),
+                bboxReferenceSize: widget.overlayBboxReferenceSize,
                 viewportController: _viewportController,
               ),
             ),
@@ -956,6 +971,8 @@ class _TranslationFullComparePreviewTabState
           targetImageUrl: targetImageUrl,
           linkedScroll: _syncScrollEnabled,
           highlightRect: _buildHighlightRect(),
+          sourceHighlightRect: _buildSourceHighlightRect(),
+          bboxReferenceSize: widget.overlayBboxReferenceSize,
           viewportController: _viewportController,
         ),
       );

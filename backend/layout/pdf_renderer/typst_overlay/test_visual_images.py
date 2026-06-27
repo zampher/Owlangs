@@ -177,6 +177,7 @@ class TestVisualImagePlacements(unittest.TestCase):
             index=68,
             bbox=(76.0, 639.0, 295.0, 738.0),
             image_path=None,
+            is_equation=lambda: False,
             raw={
                 "blocks": [
                     {
@@ -217,15 +218,78 @@ class TestVisualImagePlacements(unittest.TestCase):
                 work_dir=work_dir,
                 image_data_map=image_map,
             )
-            self.assertEqual(embedded_ids, {68})
-            image_path = work_dir / "images" / "7fd5c0d0ae5e5fe06ac5bfa7c4c0b44aaa22355dfff50d590e0124085837b301.jpg"
-            self.assertTrue(image_path.is_file())
-            self.assertEqual(image_path.read_bytes(), b"table-jpg")
-            self.assertEqual(len(render_blocks_by_page.get(3, [])), 1)
-            self.assertEqual(
-                render_blocks_by_page[3][0].image_rel_path,
-                "images/7fd5c0d0ae5e5fe06ac5bfa7c4c0b44aaa22355dfff50d590e0124085837b301.jpg",
+            # Image format preserves original PDF — no embed or extra redaction.
+            self.assertEqual(extra_redaction, {})
+            self.assertEqual(embedded_ids, set())
+            self.assertEqual(render_blocks_by_page, {})
+
+    def test_append_visual_images_skips_chart_equation_when_image_format(self):
+        chart_block = SimpleNamespace(
+            type="chart",
+            index=82,
+            bbox=(110.0, 441.0, 302.0, 610.0),
+            image_path=None,
+            is_equation=lambda: False,
+            raw={
+                "blocks": [
+                    {
+                        "type": "chart_body",
+                        "bbox": [110.0, 441.0, 302.0, 610.0],
+                        "lines": [
+                            {
+                                "spans": [
+                                    {
+                                        "type": "chart",
+                                        "image_path": "chart.jpg",
+                                    }
+                                ]
+                            }
+                        ],
+                    }
+                ]
+            },
+        )
+        eq_block = SimpleNamespace(
+            type="interline_equation",
+            index=35,
+            bbox=(100.0, 200.0, 500.0, 240.0),
+            image_path=None,
+            is_equation=lambda: True,
+            raw={
+                "lines": [
+                    {
+                        "spans": [
+                            {
+                                "type": "interline_equation",
+                                "image_path": "eq.jpg",
+                            }
+                        ]
+                    }
+                ]
+            },
+        )
+        page = SimpleNamespace(page_index=0, blocks=[chart_block, eq_block])
+        layout_doc = SimpleNamespace(pages=[page])
+        image_map = {"chart.jpg": b"chart", "eq.jpg": b"eq"}
+        render_blocks_by_page: dict = {}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work_dir = Path(tmp)
+            renderer = TypstOverlayRenderer.__new__(TypstOverlayRenderer)
+            renderer.config = SimpleNamespace(
+                chart_body_format="image",
+                table_body_format="html",
+                equation_format="image",
             )
+            extra_redaction, embedded_ids = renderer._append_visual_image_render_blocks(
+                layout_doc,
+                render_blocks_by_page,
+                work_dir=work_dir,
+                image_data_map=image_map,
+            )
+            self.assertEqual(extra_redaction, {})
+            self.assertEqual(embedded_ids, set())
+            self.assertEqual(render_blocks_by_page, {})
 
 
 if __name__ == "__main__":

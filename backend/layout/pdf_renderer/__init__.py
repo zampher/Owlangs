@@ -95,6 +95,8 @@ def render_layout_pdf(
     base_merged_pdf_bytes: Optional[bytes] = None,
     cleaned_source_output_path: Optional[Path] = None,
     skip_overlay_block_indices: Optional[Set[int]] = None,
+    overlay_segments: Optional[list] = None,
+    overlay_task_state: Optional[dict] = None,
 ) -> bytes:
     """
     Unified PDF rendering entry point.
@@ -150,6 +152,8 @@ def render_layout_pdf(
         base_merged_pdf_bytes=base_merged_pdf_bytes,
         cleaned_source_output_path=cleaned_source_output_path,
         skip_overlay_block_indices=skip_overlay_block_indices,
+        overlay_segments=overlay_segments,
+        overlay_task_state=overlay_task_state,
     )
 
     # Select renderer

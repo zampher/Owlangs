@@ -48,6 +48,30 @@ class LayoutBlock:
         """Check if block has text content."""
         return bool(self.text and self.text.strip())
 
+    def has_recognized_text(self) -> bool:
+        """True when OCR/layout detected non-empty textual content in this block."""
+        if self.text and self.text.strip():
+            return True
+        raw = self.raw if isinstance(self.raw, dict) else {}
+        for key in ("block_content", "text", "content"):
+            value = raw.get(key)
+            if isinstance(value, str) and value.strip():
+                return True
+        for line in raw.get("lines") or []:
+            if not isinstance(line, dict):
+                continue
+            line_text = line.get("text")
+            if isinstance(line_text, str) and line_text.strip():
+                return True
+            for span in line.get("spans") or []:
+                if not isinstance(span, dict):
+                    continue
+                for key in ("content", "text"):
+                    span_text = span.get(key)
+                    if isinstance(span_text, str) and span_text.strip():
+                        return True
+        return False
+
     def has_image(self) -> bool:
         """Check if block has image."""
         return bool(self.image_path)

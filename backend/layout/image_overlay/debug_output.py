@@ -22,6 +22,28 @@ def resolve_image_overlay_debug_dir(temp_dir: Optional[str]) -> Optional[Path]:
     return debug_dir
 
 
+def _drawn_entry_label(entry: Dict[str, Any]) -> str:
+    block_index = entry.get("block_index")
+    if block_index is not None:
+        prefix = f"block {block_index}"
+    elif entry.get("segment_index") is not None:
+        prefix = f"segment {entry.get('segment_index')}"
+    else:
+        prefix = "entry"
+    return f"[{prefix}] type={entry.get('block_type')} page={entry.get('page_index')}"
+
+
+def _skipped_entry_label(entry: Dict[str, Any]) -> str:
+    block_index = entry.get("block_index")
+    if block_index is not None:
+        prefix = f"block {block_index}"
+    elif entry.get("segment_index") is not None:
+        prefix = f"segment {entry.get('segment_index')}"
+    else:
+        prefix = "entry"
+    return f"[{prefix}] type={entry.get('block_type')} reason={entry.get('reason')}"
+
+
 def write_image_overlay_debug(
     debug_dir: Path,
     *,
@@ -74,13 +96,11 @@ def write_image_overlay_debug(
             "=== DRAWN BLOCKS ===",
         ]
         for entry in drawn_blocks:
-            lines.append(
-                "[block {block_index}] type={block_type} page={page_index}".format(
-                    **entry,
-                )
-            )
+            lines.append(_drawn_entry_label(entry))
             lines.append(f"  layout_bbox={entry.get('layout_bbox')}")
             lines.append(f"  image_bbox={entry.get('image_bbox')}")
+            if entry.get("segment_index") is not None:
+                lines.append(f"  segment_index={entry.get('segment_index')}")
             lines.append(f"  layout_text={entry.get('layout_text', '')!r}")
             lines.append(f"  overlay_text={entry.get('overlay_text', '')!r}")
             if entry.get("source_segment_index") is not None:
@@ -110,11 +130,7 @@ def write_image_overlay_debug(
         if skipped_blocks:
             lines.append("=== SKIPPED BLOCKS ===")
             for entry in skipped_blocks:
-                lines.append(
-                    "[block {block_index}] type={block_type} reason={reason}".format(
-                        **entry,
-                    )
-                )
+                lines.append(_skipped_entry_label(entry))
                 if entry.get("layout_bbox") is not None:
                     lines.append(f"  layout_bbox={entry.get('layout_bbox')}")
                 if entry.get("layout_text"):

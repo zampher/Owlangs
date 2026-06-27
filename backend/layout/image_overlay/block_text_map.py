@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import html as html_module
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -32,6 +33,8 @@ _MINERU_DETAILS_IMAGE_SUMMARY_RE = re.compile(
 )
 _HTML_TABLE_RE = re.compile(r"^<table\b", re.IGNORECASE | re.DOTALL)
 _PLACEHOLDER_RE = re.compile(r"^<ph-[a-zA-Z0-9]+>\s*$")
+_HTML_TABLE_ROW_RE = re.compile(r"<tr[^>]*>.*?</tr>", re.IGNORECASE | re.DOTALL)
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 
 @dataclass
@@ -72,26 +75,18 @@ def _contains_overlay_skip_markup(text: str) -> bool:
 
 def _is_non_overlay_segment_text(text: str, segment: Dict[str, Any]) -> bool:
     """Return True when segment text should not be painted on text layout blocks."""
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        segment_skips_overlay,
+    )
+
+    if segment.get("is_image"):
+        return True
+    if segment_skips_overlay(segment, "target_text"):
+        return True
     normalized = (text or "").strip()
     if not normalized:
         return True
-    if segment.get("is_excluded"):
-        return True
-    if segment.get("is_image"):
-        return True
     if _contains_overlay_skip_markup(normalized):
-        return True
-    # Skip translation-failed segments (source == target, no manual edit)
-    is_excluded = bool(segment.get("is_excluded"))
-    source_text = (segment.get("source_text") or "").strip()
-    target_text = (segment.get("target_text") or "").strip()
-    modified_text = (segment.get("modified_text") or "").strip()
-    if (
-        not is_excluded
-        and source_text
-        and source_text == target_text
-        and not modified_text
-    ):
         return True
     return False
 
@@ -321,6 +316,525 @@ def _resolve_table_block_index(
     return table_blocks[0]
 
 
+def _plain_text_weight_for_bbox(text: str) -> int:
+    """Character count after stripping HTML for proportional table bbox splits."""
+    normalized = html.unescape((text or "").strip())
+    if not normalized:
+        return 0
+    plain = _HTML_TAG_RE.sub("", normalized)
+    plain = re.sub(r"\s+", " ", plain).strip()
+    return max(len(plain), 1)
+
+
+def _is_decomposed_table_region_segment(segment: Dict[str, Any], text: str) -> bool:
+    """True when a segment is a deep-split fragment inside a single layout table block."""
+    if _is_table_highlight_segment(segment, text):
+        return True
+    normalized = (text or "").strip().lower()
+    if not normalized:
+        return False
+    if "<td" in normalized or "</td>" in normalized or "<tr" in normalized:
+        return True
+    if segment.get("layout_block_indices_resolution") == "layout_table":
+        return True
+    return False
+
+
+def _find_fragment_offset(
+    table_html: str,
+    fragment: str,
+    start_cursor: int = 0,
+) -> Optional[tuple[int, int]]:
+    """Return (html_start, html_end) for fragment inside table HTML."""
+    needle = (fragment or "").strip()
+    if not needle or not table_html:
+        return None
+    pos = table_html.find(needle, start_cursor)
+    if pos >= 0:
+        return (pos, pos + len(needle))
+    short = needle[: min(32, len(needle))]
+    if len(short) >= 4:
+        pos = table_html.find(short, start_cursor)
+        if pos >= 0:
+            return (pos, pos + len(short))
+    return None
+
+
+def _table_row_layout_weight(row_html: str) -> float:
+    """Weight a table row for vertical band allocation (empty rows stay minimal)."""
+    plain = _HTML_TAG_RE.sub("", row_html or "")
+    plain = re.sub(r"\s+", " ", plain).strip()
+    if not plain:
+        return 0.05
+    line_count = max(1, plain.count("\n") + 1)
+    return max(float(len(plain)), float(line_count) * 12.0)
+
+
+def _build_table_row_y_spans(
+    table_html: str,
+    y0: float,
+    y1: float,
+) -> List[tuple[int, int, float, float]]:
+    """Map each HTML table row to a vertical band inside the table bbox."""
+    rows = list(_HTML_TABLE_ROW_RE.finditer(table_html))
+    if not rows:
+        return []
+    table_h = max(1.0, float(y1) - float(y0))
+    weights = [_table_row_layout_weight(match.group(0)) for match in rows]
+    total_weight = sum(weights) or float(len(rows))
+    spans: List[tuple[int, int, float, float]] = []
+    cursor_y = float(y0)
+    for idx, match in enumerate(rows):
+        share = table_h * weights[idx] / total_weight
+        top = cursor_y
+        bottom = float(y1) if idx == len(rows) - 1 else cursor_y + share
+        spans.append((match.start(), match.end(), top, bottom))
+        cursor_y = bottom
+    return spans
+
+
+def _bbox_vertical_overlap(
+    bbox_a: Sequence[float],
+    bbox_b: Sequence[float],
+) -> float:
+    top = max(float(bbox_a[1]), float(bbox_b[1]))
+    bottom = min(float(bbox_a[3]), float(bbox_b[3]))
+    return max(0.0, bottom - top)
+
+
+def _bbox_intersection_area(
+    bbox_a: Sequence[float],
+    bbox_b: Sequence[float],
+) -> float:
+    left = max(float(bbox_a[0]), float(bbox_b[0]))
+    top = max(float(bbox_a[1]), float(bbox_b[1]))
+    right = min(float(bbox_a[2]), float(bbox_b[2]))
+    bottom = min(float(bbox_a[3]), float(bbox_b[3]))
+    if right <= left or bottom <= top:
+        return 0.0
+    return (right - left) * (bottom - top)
+
+
+def _iter_paddle_det_layout_blocks(layout_doc: LayoutDocument) -> List[LayoutBlock]:
+    """Collect supplemental Paddle det blocks from layout pages or stored metadata."""
+    from layout.base import LayoutBlock
+    from layout.ocr_provider.paddle.block_labels import map_paddle_label
+    from layout.ocr_provider.paddle.paddle_det_supplements import (
+        paddle_det_boxes_from_layout_doc,
+    )
+
+    blocks: List[LayoutBlock] = []
+    for block in layout_doc.iter_blocks():
+        if "paddle_det" in (block.tags or []):
+            blocks.append(block)
+    if blocks:
+        return blocks
+
+    det_entries = paddle_det_boxes_from_layout_doc(layout_doc)
+    if not det_entries:
+        return blocks
+
+    page = layout_doc.pages[0] if layout_doc.pages else None
+    page_index = int(page.page_index) if page is not None else 0
+    for entry in det_entries:
+        label = str(entry.get("label") or entry.get("block_label") or "").lower()
+        bbox_raw = entry.get("bbox") or entry.get("coordinate") or entry.get("block_bbox") or []
+        if len(bbox_raw) < 4:
+            continue
+        try:
+            bbox_tuple = tuple(float(v) for v in bbox_raw[:4])
+        except (TypeError, ValueError):
+            continue
+        block_type, sub_type, tags, should_translate = map_paddle_label(label)
+        if block_type in (TABLE, IMAGE, LEGACY_FIGURE, CHART):
+            continue
+        det_text = str(
+            entry.get("text")
+            or entry.get("block_content")
+            or entry.get("content")
+            or ""
+        ).strip() or None
+        blocks.append(
+            LayoutBlock(
+                page_index=page_index,
+                bbox=bbox_tuple,
+                type=block_type,
+                sub_type=sub_type,
+                index=None,
+                text=det_text,
+                tags=[*list(tags), "paddle_det"],
+                should_translate=should_translate,
+                raw={"paddle_det_supplement": True, **entry},
+            )
+        )
+    return blocks
+
+
+def _refine_bbox_with_paddle_det_layout_blocks(
+    source_text: str,
+    layout_doc: LayoutDocument,
+    bbox: List[float],
+) -> List[float]:
+    """Snap subdivided table bbox to Paddle det boxes (text match or spatial overlap)."""
+    det_blocks = _iter_paddle_det_layout_blocks(layout_doc)
+    if not det_blocks:
+        return bbox
+
+    norm_source = _normalize_text_for_matching(source_text)
+    best_block = None
+    best_score = 0
+    for block in det_blocks:
+        layout_text = (block.text or "").strip()
+        if layout_text:
+            norm_layout = _normalize_text_for_matching(layout_text)
+            if not norm_layout:
+                continue
+            if norm_source == norm_layout:
+                score = 1000 + len(norm_layout)
+            elif norm_source in norm_layout or norm_layout in norm_source:
+                score = min(len(norm_source), len(norm_layout))
+            else:
+                continue
+            if score > best_score:
+                best_score = score
+                best_block = block
+
+    if best_block is not None and best_score >= 1000:
+        det_x0, det_y0, det_x1, det_y1 = best_block.bbox
+        return [float(det_x0), float(det_y0), float(det_x1), float(det_y1)]
+
+    plain_source = _HTML_TAG_RE.sub("", source_text or "")
+    plain_source = re.sub(r"\s+", " ", plain_source).strip()
+    overlapping = [
+        block
+        for block in det_blocks
+        if _bbox_vertical_overlap(bbox, block.bbox) > 0.0
+        or _bbox_intersection_area(bbox, block.bbox) > 0.0
+    ]
+    if plain_source and "<" not in source_text and ">" not in source_text:
+        if overlapping:
+            best_overlap = max(
+                overlapping,
+                key=lambda block: _bbox_intersection_area(bbox, block.bbox),
+            )
+            area = _bbox_intersection_area(bbox, best_overlap.bbox)
+            if area > 0.0 or _bbox_vertical_overlap(bbox, best_overlap.bbox) > 0.0:
+                det_x0, det_y0, det_x1, det_y1 = best_overlap.bbox
+                return [float(det_x0), float(det_y0), float(det_x1), float(det_y1)]
+
+    if best_block is not None and best_score > 0:
+        det_x0, det_y0, det_x1, det_y1 = best_block.bbox
+        return [
+            max(bbox[0], float(det_x0)),
+            max(bbox[1], float(det_y0)),
+            min(bbox[2], float(det_x1)),
+            min(bbox[3], float(det_y1)),
+        ]
+
+    if overlapping and plain_source:
+        ox0 = min(float(block.bbox[0]) for block in overlapping)
+        oy0 = min(float(block.bbox[1]) for block in overlapping)
+        ox1 = max(float(block.bbox[2]) for block in overlapping)
+        oy1 = max(float(block.bbox[3]) for block in overlapping)
+        return [
+            max(bbox[0], ox0),
+            max(bbox[1], oy0),
+            min(bbox[2], ox1),
+            min(bbox[3], oy1),
+        ]
+    return bbox
+
+
+def _strip_html_keep_newlines(text: str) -> str:
+    """Remove HTML tags but preserve newline structure for intra-row bbox splits."""
+    stripped = _HTML_TAG_RE.sub("", text or "")
+    return html_module.unescape(stripped)
+
+
+def _subdivide_row_band_for_fragment(
+    row_html: str,
+    fragment: str,
+    row_top: float,
+    row_bottom: float,
+) -> tuple[float, float]:
+    """Assign a vertical sub-band inside one table row for a deep-split fragment."""
+    row_h = max(1e-6, float(row_bottom) - float(row_top))
+    plain_row = _strip_html_keep_newlines(row_html)
+    frag_plain = _strip_html_keep_newlines(fragment).strip()
+    if not frag_plain:
+        return (row_top, row_bottom)
+
+    lines = [line.strip() for line in plain_row.split("\n") if line.strip()]
+    if len(lines) > 1:
+        norm_frag = _normalize_text_for_matching(frag_plain)
+        for idx, line in enumerate(lines):
+            norm_line = _normalize_text_for_matching(line)
+            if not norm_line:
+                continue
+            if (
+                norm_frag == norm_line
+                or norm_frag in norm_line
+                or norm_line in norm_frag
+            ):
+                line_h = row_h / len(lines)
+                top = row_top + idx * line_h
+                bottom = row_top + (idx + 1) * line_h
+                return (top, bottom)
+
+    if plain_row.strip():
+        pos = plain_row.find(frag_plain)
+        end = pos + len(frag_plain)
+        if pos < 0:
+            short = frag_plain[: min(24, len(frag_plain))]
+            if len(short) >= 4:
+                pos = plain_row.find(short)
+                end = pos + len(short) if pos >= 0 else pos
+        if pos >= 0:
+            row_len = max(1, len(plain_row))
+            top = row_top + row_h * (pos / row_len)
+            bottom = row_top + row_h * (min(row_len, end) / row_len)
+            min_h = max(row_h * 0.05, 1.0)
+            if bottom - top < min_h:
+                mid = (top + bottom) / 2.0
+                half = min_h / 2.0
+                top = max(row_top, mid - half)
+                bottom = min(row_bottom, mid + half)
+            return (top, bottom)
+
+    return (row_top, row_bottom)
+
+
+def _html_range_to_layout_y(
+    html_start: int,
+    html_end: int,
+    row_spans: List[tuple[int, int, float, float]],
+    *,
+    table_html: str = "",
+    fragment: str = "",
+) -> tuple[float, float]:
+    """Convert an HTML character range to layout Y bounds inside table row band(s)."""
+    if not row_spans:
+        return (0.0, 0.0)
+
+    overlapping = [
+        span
+        for span in row_spans
+        if html_start < span[1] and html_end > span[0]
+    ]
+    if not overlapping:
+        mid = (html_start + html_end) / 2.0
+        for span in row_spans:
+            if span[0] <= mid <= span[1]:
+                overlapping = [span]
+                break
+        if not overlapping:
+            return (row_spans[0][2], row_spans[-1][3])
+
+    if len(overlapping) == 1:
+        row_html_start, row_html_end, row_top, row_bottom = overlapping[0]
+        row_html = table_html[row_html_start:row_html_end] if table_html else ""
+        if row_html and fragment:
+            return _subdivide_row_band_for_fragment(
+                row_html,
+                fragment,
+                row_top,
+                row_bottom,
+            )
+        row_h = max(1e-6, float(row_bottom) - float(row_top))
+        row_len = max(1, row_html_end - row_html_start)
+        rel_start = max(0, min(row_len, html_start - row_html_start))
+        rel_end = max(rel_start + 1, min(row_len, html_end - row_html_start))
+        sub_top = row_top + row_h * (rel_start / row_len)
+        sub_bottom = row_top + row_h * (rel_end / row_len)
+        return (sub_top, sub_bottom)
+
+    first = overlapping[0]
+    last = overlapping[-1]
+    first_len = max(1, first[1] - first[0])
+    last_len = max(1, last[1] - last[0])
+    first_h = max(1e-6, float(first[3]) - float(first[2]))
+    last_h = max(1e-6, float(last[3]) - float(last[2]))
+    top = first[2] + first_h * max(0, min(1, (html_start - first[0]) / first_len))
+    bottom = last[2] + last_h * max(0, min(1, (html_end - last[0]) / last_len))
+    if bottom <= top:
+        bottom = min(float(last[3]), top + max(first_h * 0.05, 1.0))
+    return (top, bottom)
+
+
+def _resolve_table_block_html(table_block: LayoutBlock) -> str:
+    """Return table HTML for bbox subdivision (MinerU stores HTML on nested spans)."""
+    text = (table_block.text or "").strip()
+    if text:
+        return text
+    raw = getattr(table_block, "raw", None)
+    if isinstance(raw, dict):
+        from layout.mineru_layout_model import _extract_text_from_layout_block
+
+        extracted = (_extract_text_from_layout_block(raw) or "").strip()
+        if extracted:
+            return extracted
+    return ""
+
+
+def assign_proportional_bboxes_for_single_table_layout(
+    segments: List[Dict[str, Any]],
+    layout_doc: LayoutDocument,
+    task_state: Optional[Dict[str, Any]] = None,
+) -> int:
+    """Subdivide a full-page Paddle table block bbox across deep-split table segments."""
+    from layout.image_overlay.coordinate_space import layout_coordinate_space
+
+    table_blocks = [
+        block
+        for block in layout_doc.iter_blocks()
+        if block.type == TABLE and block.index is not None
+    ]
+    if len(table_blocks) != 1:
+        return 0
+
+    table_block = table_blocks[0]
+    table_idx = int(table_block.index)
+    x0, y0, x1, y1 = table_block.bbox
+    table_html = _resolve_table_block_html(table_block)
+    if not table_html:
+        return 0
+
+    page = None
+    if layout_doc.pages and 0 <= table_block.page_index < len(layout_doc.pages):
+        page = layout_doc.pages[table_block.page_index]
+    page_h = float(page.height) if page and page.height else max(float(y1), 1.0)
+    table_h = max(1.0, float(y1) - float(y0))
+    if table_h < page_h * 0.5:
+        return 0
+
+    row_spans = _build_table_row_y_spans(table_html, float(y0), float(y1))
+    def _segment_sort_key(seg: Dict[str, Any]) -> int:
+        try:
+            return int(seg.get("segment_index", 0))
+        except (TypeError, ValueError):
+            return 0
+
+    ordered_segments = sorted(
+        (seg for seg in segments if isinstance(seg, dict)),
+        key=_segment_sort_key,
+    )
+    if len(ordered_segments) < 2:
+        return 0
+
+    table_segment_indexes: set[int] = set()
+    for seg in ordered_segments:
+        source_text = _segment_source_text(seg)
+        seg_index = _segment_sort_key(seg)
+        if table_idx in (seg.get("layout_block_indices") or []):
+            table_segment_indexes.add(seg_index)
+        elif _is_decomposed_table_region_segment(seg, source_text):
+            table_segment_indexes.add(seg_index)
+
+    if len(table_segment_indexes) < 2:
+        indexed_blocks = [
+            block
+            for block in layout_doc.iter_blocks()
+            if block.index is not None
+        ]
+        if len(indexed_blocks) == 1 and len(ordered_segments) >= 2:
+            for seg in ordered_segments:
+                seg_index = _segment_sort_key(seg)
+                source_text = _segment_source_text(seg)
+                if _is_mineru_details_image_segment(source_text):
+                    continue
+                table_segment_indexes.add(seg_index)
+
+    if len(table_segment_indexes) < 2:
+        return 0
+
+    min_index = min(table_segment_indexes)
+    max_index = max(table_segment_indexes)
+    updated = 0
+    html_cursor = 0
+
+    for seg in ordered_segments:
+        seg_index = _segment_sort_key(seg)
+        if seg_index < min_index or seg_index > max_index:
+            continue
+        source_text = _segment_source_text(seg)
+        if _is_mineru_details_image_segment(source_text):
+            continue
+
+        if row_spans:
+            fragment_offset = _find_fragment_offset(table_html, source_text, html_cursor)
+            if fragment_offset is None:
+                continue
+            html_start, html_end = fragment_offset
+            html_cursor = html_end
+            sub_top, sub_bottom = _html_range_to_layout_y(
+                html_start,
+                html_end,
+                row_spans,
+                table_html=table_html,
+                fragment=source_text,
+            )
+        else:
+            # Weight-based fallback when table HTML has no <tr> rows.
+            region_segments = [
+                s for s in ordered_segments
+                if min_index <= _segment_sort_key(s) <= max_index
+            ]
+            weights = [
+                _plain_text_weight_for_bbox(_segment_source_text(s))
+                for s in region_segments
+            ]
+            total_weight = sum(weights) or len(weights)
+            cursor_y = float(y0)
+            sub_top = float(y0)
+            sub_bottom = float(y1)
+            for idx, candidate in enumerate(region_segments):
+                share = table_h * weights[idx] / total_weight
+                band_top = cursor_y
+                band_bottom = float(y1) if idx == len(region_segments) - 1 else cursor_y + share
+                if _segment_sort_key(candidate) == seg_index:
+                    sub_top, sub_bottom = band_top, band_bottom
+                    break
+                cursor_y = band_bottom
+
+        refined = _refine_bbox_with_paddle_det_layout_blocks(
+            source_text,
+            layout_doc,
+            [float(x0), sub_top, float(x1), sub_bottom],
+        )
+        seg["layout_block_bbox"] = [refined]
+        from layout.image_overlay.coordinate_space import clear_segment_bbox_image_mapping
+
+        clear_segment_bbox_image_mapping(seg)
+        if not seg.get("layout_block_indices"):
+            seg["layout_block_indices"] = [table_idx]
+            seg["layout_block_indices_resolution"] = "single_table_subdivide"
+        updated += 1
+
+    if updated > 0:
+        unified_logger.info(
+            LogModule.EXPORT,
+            "[IMAGE_OVERLAY] Subdivided single-table layout bbox for "
+            f"{updated} segment(s) (table block {table_idx}, "
+            f"rows={len(row_spans)}, "
+            f"coordinate_space={layout_coordinate_space(layout_doc)})",
+        )
+    return updated
+
+
+def ensure_image_overlay_segment_bboxes(
+    segments: List[Dict[str, Any]],
+    layout_doc: LayoutDocument,
+    *,
+    task_state: Optional[Dict[str, Any]] = None,
+) -> int:
+    """Single entry for Paddle raster overlay per-segment bbox subdivision."""
+    return assign_proportional_bboxes_for_single_table_layout(
+        segments,
+        layout_doc,
+        task_state=task_state,
+    )
+
+
 def _assign_segment_highlight_block(
     seg: Dict[str, Any],
     block_idx: int,
@@ -332,7 +846,9 @@ def _assign_segment_highlight_block(
     seg["layout_block_indices"] = new_indices
     seg["layout_block_indices_resolution"] = resolution
     seg.pop("layout_block_bbox", None)
-    seg.pop("layout_block_bbox_space", None)
+    from layout.image_overlay.coordinate_space import clear_segment_bbox_image_mapping
+
+    clear_segment_bbox_image_mapping(seg)
     return True
 
 
@@ -754,7 +1270,9 @@ def assign_overlay_layout_block_indices_for_segments(
                 seg["layout_block_indices"] = new_indices
                 seg["layout_block_indices_resolution"] = "mineru_text_image"
                 seg.pop("layout_block_bbox", None)
-                seg.pop("layout_block_bbox_space", None)
+                from layout.image_overlay.coordinate_space import clear_segment_bbox_image_mapping
+
+                clear_segment_bbox_image_mapping(seg)
                 updated += 1
                 unified_logger.debug(
                     LogModule.EXPORT,
@@ -783,8 +1301,9 @@ def assign_overlay_layout_block_indices_for_segments(
                 claimed_blocks.add(md_image_idx)
             continue
 
-        # Table segments: skip raster overlay text but keep table block bbox.
-        if _is_table_highlight_segment(seg, _segment_source_text(seg)):
+        # Full-table HTML wrapper only; decomposed cell fragments use text/det match.
+        source_stripped = _segment_source_text(seg)
+        if _HTML_TABLE_RE.match(source_stripped):
             table_idx = _resolve_table_block_index(
                 layout_doc,
                 claimed_blocks=claimed_blocks,
@@ -805,7 +1324,9 @@ def assign_overlay_layout_block_indices_for_segments(
             if seg.get("layout_block_indices"):
                 seg.pop("layout_block_indices", None)
                 seg.pop("layout_block_bbox", None)
-                seg.pop("layout_block_bbox_space", None)
+                from layout.image_overlay.coordinate_space import clear_segment_bbox_image_mapping
+
+                clear_segment_bbox_image_mapping(seg)
                 updated += 1
             continue
 
@@ -858,7 +1379,9 @@ def assign_overlay_layout_block_indices_for_segments(
             seg["layout_block_indices"] = new_indices
             seg["layout_block_indices_resolution"] = resolution_method
             seg.pop("layout_block_bbox", None)
-            seg.pop("layout_block_bbox_space", None)
+            from layout.image_overlay.coordinate_space import clear_segment_bbox_image_mapping
+
+            clear_segment_bbox_image_mapping(seg)
             updated += 1
             if old_indices and old_indices != new_indices:
                 unified_logger.debug(
@@ -899,7 +1422,9 @@ def assign_overlay_layout_block_indices_for_segments(
                 seg["layout_block_indices"] = [primary]
                 seg["layout_block_indices_resolution"] = "sequential_content_match"
                 seg.pop("layout_block_bbox", None)
-                seg.pop("layout_block_bbox_space", None)
+                from layout.image_overlay.coordinate_space import clear_segment_bbox_image_mapping
+
+                clear_segment_bbox_image_mapping(seg)
                 updated += 1
                 if claim_blocks:
                     claimed_blocks.add(primary)

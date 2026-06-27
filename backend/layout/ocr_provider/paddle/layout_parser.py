@@ -222,6 +222,7 @@ def parse_paddle_layout(
 
         pages: List[LayoutPage] = []
         global_block_idx = 0
+        collected_det_boxes: List[Dict[str, Any]] = []
 
         # Track the cumulative physical page index across all outer chunks
         # for pdf_page_dims lookup.
@@ -233,6 +234,12 @@ def parse_paddle_layout(
 
             data_info = page_payload.get("dataInfo", {})
             pages_meta = data_info.get("pages", [])
+            if not pages_meta and (
+                data_info.get("width") is not None or data_info.get("height") is not None
+            ):
+                # Image inputs often put width/height directly on dataInfo (no pages[]).
+                pages_meta = [data_info]
+
             inner_results = page_payload.get("layoutParsingResults", [])
 
             if not inner_results:
@@ -255,6 +262,10 @@ def parse_paddle_layout(
                 pruned = inner.get("prunedResult", {})
                 if not isinstance(pruned, dict):
                     continue
+                if image_w_raw is None and pruned.get("width") is not None:
+                    image_w_raw = pruned.get("width")
+                if image_h_raw is None and pruned.get("height") is not None:
+                    image_h_raw = pruned.get("height")
                 parsing_res_list = pruned.get("parsing_res_list", [])
                 if not parsing_res_list:
                     continue
@@ -368,11 +379,46 @@ def parse_paddle_layout(
                     blocks.append(lb)
                     global_block_idx += 1
 
+                page_w = float(
+                    max(
+                        pdf_w_pt or 0.0,
+                        image_w or 0.0,
+                        max_x1 or 0.0,
+                        1.0,
+                    )
+                )
+                page_h = float(
+                    max(
+                        pdf_h_pt or 0.0,
+                        image_h or 0.0,
+                        max_y1 or 0.0,
+                        1.0,
+                    )
+                )
+                from layout.ocr_provider.paddle.paddle_det_supplements import (
+                    append_paddle_det_supplement_blocks,
+                    extract_paddle_det_boxes_from_pruned,
+                )
+
+                det_boxes = extract_paddle_det_boxes_from_pruned(pruned)
+                if det_boxes:
+                    collected_det_boxes.extend(det_boxes)
+                    global_block_idx = append_paddle_det_supplement_blocks(
+                        blocks,
+                        det_boxes,
+                        page_index=physical_page_index,
+                        next_block_index=global_block_idx,
+                        page_w=page_w,
+                        page_h=page_h,
+                        scale_x=scale_x,
+                        scale_y=scale_y,
+                    )
+
                 pages.append(LayoutPage(
                     page_index=physical_page_index,
                     blocks=blocks,
-                    width=pdf_w_pt if pdf_w_pt else image_w,
-                    height=pdf_h_pt if pdf_h_pt else image_h,
+                    width=page_w,
+                    height=page_h,
                 ))
                 logger.info(
                     LogModule.LAYOUT,
@@ -383,6 +429,17 @@ def parse_paddle_layout(
                 physical_page_index += 1
 
         doc = LayoutDocument(pages=pages, engine=engine)
+        if not pdf_page_dims:
+            doc.metadata["coordinate_space"] = "image_px"
+        if collected_det_boxes:
+            doc.metadata["paddle_det_boxes"] = collected_det_boxes
+        if pages and not pdf_page_dims:
+            first_page = pages[0]
+            if first_page.width and first_page.height:
+                doc.metadata["paddle_layout_canvas_size"] = [
+                    float(first_page.width),
+                    float(first_page.height),
+                ]
         logger.info(LogModule.LAYOUT, f"Parsed PaddleOCR layout: {len(pages)} pages, {global_block_idx} blocks")
         return doc
 

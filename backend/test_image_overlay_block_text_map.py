@@ -483,6 +483,226 @@ class ImageOverlayBlockTextMapTest(unittest.TestCase):
         self.assertEqual(segment["layout_block_indices"], [0])
         self.assertEqual(segment["layout_block_indices_resolution"], "layout_table")
 
+    def test_single_table_layout_proportional_bbox_subdivision(self):
+        from layout.image_overlay.block_text_map import (
+            assign_proportional_bboxes_for_single_table_layout,
+        )
+
+        table_html = (
+            "<table><tr><td>Row A</td></tr><tr><td>Row B</td></tr>"
+            "<tr><td>Row C</td></tr></table>"
+        )
+        layout_doc = LayoutDocument(
+            pages=[
+                LayoutPage(
+                    page_index=0,
+                    width=309.0,
+                    height=910.0,
+                    blocks=[
+                        LayoutBlock(
+                            page_index=0,
+                            bbox=(5.0, 0.0, 306.0, 910.0),
+                            type="table",
+                            index=0,
+                            text=table_html,
+                        ),
+                    ],
+                )
+            ],
+            engine="paddle",
+            metadata={"coordinate_space": "image_px"},
+        )
+        segments = [
+            {
+                "segment_index": 0,
+                "source_text": "Row A",
+                "layout_block_indices": [0],
+            },
+            {
+                "segment_index": 1,
+                "source_text": "Row B",
+                "layout_block_indices": [0],
+            },
+            {
+                "segment_index": 2,
+                "source_text": "Row C",
+                "layout_block_indices": [0],
+            },
+        ]
+        updated = assign_proportional_bboxes_for_single_table_layout(
+            segments,
+            layout_doc,
+        )
+        self.assertEqual(updated, 3)
+        bboxes = [seg["layout_block_bbox"][0] for seg in segments]
+        self.assertLess(bboxes[0][3], bboxes[2][3])
+        self.assertNotIn("layout_block_bbox_space", segments[0])
+
+    def test_mineru_nested_table_html_enables_bbox_subdivision(self):
+        from layout.base import LayoutBlock, LayoutDocument, LayoutPage
+        from layout.image_overlay.block_text_map import (
+            _resolve_table_block_html,
+            assign_proportional_bboxes_for_single_table_layout,
+        )
+        from layout.mineru_layout_model import _extract_text_from_layout_block
+
+        table_html = (
+            "<table><tr><td>CLIENT:</td></tr><tr><td>DAYONE</td></tr>"
+            "<tr><td>ARCHITECT:</td></tr></table>"
+        )
+        raw_block = {
+            "type": "table_body",
+            "bbox": [2, 0, 109, 327],
+            "lines": [
+                {
+                    "spans": [
+                        {"type": "table", "html": table_html},
+                    ],
+                },
+            ],
+        }
+        self.assertEqual(_extract_text_from_layout_block(raw_block), table_html)
+
+        layout_doc = LayoutDocument(
+            pages=[
+                LayoutPage(
+                    page_index=0,
+                    width=111.0,
+                    height=327.0,
+                    blocks=[
+                        LayoutBlock(
+                            page_index=0,
+                            bbox=(2.0, 0.0, 109.0, 327.0),
+                            type="table",
+                            index=0,
+                            text=None,
+                            raw={
+                                "type": "table",
+                                "bbox": [2, 0, 109, 327],
+                                "blocks": [raw_block],
+                            },
+                        ),
+                    ],
+                )
+            ],
+            engine="mineru",
+        )
+        self.assertEqual(_resolve_table_block_html(layout_doc.pages[0].blocks[0]), table_html)
+
+        segments = [
+            {"segment_index": 0, "source_text": "CLIENT:", "layout_block_indices": [0]},
+            {"segment_index": 1, "source_text": "DAYONE"},
+            {"segment_index": 2, "source_text": "ARCHITECT:"},
+        ]
+        updated = assign_proportional_bboxes_for_single_table_layout(segments, layout_doc)
+        self.assertEqual(updated, 3)
+        self.assertLess(segments[0]["layout_block_bbox"][0][3], segments[2]["layout_block_bbox"][0][3])
+
+    def test_html_range_to_layout_y_uses_primary_row_not_union(self):
+        from layout.image_overlay.block_text_map import _html_range_to_layout_y
+
+        row_spans = [
+            (0, 10, 0.0, 10.0),
+            (10, 20, 10.0, 30.0),
+            (20, 30, 30.0, 60.0),
+        ]
+        table_html = "0123456789" + "0123456789" + "0123456789"
+        top, bottom = _html_range_to_layout_y(
+            12,
+            18,
+            row_spans,
+            table_html=table_html,
+            fragment="234567",
+        )
+        self.assertGreaterEqual(top, 10.0)
+        self.assertLessEqual(bottom, 30.0)
+        self.assertLess(bottom - top, 20.0)
+
+    def test_intra_row_line_split_assigns_distinct_bands(self):
+        from layout.image_overlay.block_text_map import (
+            assign_proportional_bboxes_for_single_table_layout,
+        )
+        from layout.base import LayoutBlock, LayoutDocument, LayoutPage
+
+        table_html = (
+            "<table><tr><td colspan=\"5\">DAYONE\n"
+            "UNIT 20-01, TEEGA TOWER\n"
+            "PUTERI HARBOUR, ISKANDAR PUTERI, JOHOR</td></tr></table>"
+        )
+        layout_doc = LayoutDocument(
+            pages=[
+                LayoutPage(
+                    page_index=0,
+                    width=111.0,
+                    height=327.0,
+                    blocks=[
+                        LayoutBlock(
+                            page_index=0,
+                            bbox=(2.0, 0.0, 109.0, 327.0),
+                            type="table",
+                            index=0,
+                            text=table_html,
+                        ),
+                    ],
+                )
+            ],
+            engine="mineru",
+        )
+        segments = [
+            {
+                "segment_index": 0,
+                "source_text": "UNIT 20-01, TEEGA TOWER",
+                "layout_block_indices": [0],
+            },
+            {
+                "segment_index": 1,
+                "source_text": "PUTERI HARBOUR, ISKANDAR PUTERI, JOHOR",
+            },
+        ]
+        updated = assign_proportional_bboxes_for_single_table_layout(
+            segments,
+            layout_doc,
+        )
+        self.assertEqual(updated, 2)
+        bbox0 = segments[0]["layout_block_bbox"][0]
+        bbox1 = segments[1]["layout_block_bbox"][0]
+        self.assertLess(bbox0[1], bbox1[1])
+        self.assertLess(bbox0[3], bbox1[3])
+
+    def test_extract_paddle_det_boxes_from_nested_layout_det_res(self):
+        from layout.ocr_provider.paddle.paddle_det_supplements import (
+            extract_paddle_det_boxes_from_pruned,
+        )
+
+        pruned = {
+            "layout_det_res": {
+                "boxes": [
+                    {"label": "text", "coordinate": [10, 20, 100, 40]},
+                    {"label": "table", "coordinate": [0, 0, 300, 900]},
+                ]
+            }
+        }
+        boxes = extract_paddle_det_boxes_from_pruned(pruned)
+        self.assertEqual(len(boxes), 2)
+        self.assertEqual(boxes[0]["label"], "text")
+
+    def test_weighted_table_row_spans_skip_empty_rows(self):
+        from layout.image_overlay.block_text_map import _build_table_row_y_spans
+
+        table_html = (
+            "<table>"
+            "<tr><td></td></tr><tr><td></td></tr><tr><td></td></tr>"
+            "<tr><td>REV.</td><td>DESCRIPTION</td></tr>"
+            "<tr><td colspan=\"4\">CLIENT :</td></tr>"
+            "</table>"
+        )
+        spans = _build_table_row_y_spans(table_html, 0.0, 910.0)
+        self.assertEqual(len(spans), 5)
+        empty_height = spans[0][3] - spans[0][2]
+        rev_height = spans[3][3] - spans[3][2]
+        self.assertLess(empty_height, rev_height)
+        self.assertLess(empty_height, 5.0)
+
 
 if __name__ == "__main__":
     unittest.main()

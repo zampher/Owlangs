@@ -40,6 +40,103 @@ from layout.block_types import (
 )
 
 
+def block_preserves_source_pdf_visual(
+    block,
+    *,
+    equation_format: str = "text",
+    chart_body_format: str = "image",
+    table_body_format: str = "html",
+) -> bool:
+    """Return True when original PDF pixels for this block must not be redacted."""
+    chart_fmt = (chart_body_format or "image").strip().lower()
+    table_fmt = (table_body_format or "html").strip().lower()
+    eq_fmt = (equation_format or "text").strip().lower()
+    if block.type == "chart":
+        return chart_fmt == "image"
+    if block.type == "table":
+        return table_fmt == "image"
+    is_equation = getattr(block, "is_equation", None)
+    if callable(is_equation) and is_equation():
+        return eq_fmt == "image"
+    if block.type in (IMAGE, LEGACY_FIGURE):
+        return True
+    return False
+
+
+def protected_bbox_for_layout_block(
+    block,
+    *,
+    equation_format: str = "text",
+    chart_body_format: str = "image",
+    table_body_format: str = "html",
+) -> Tuple[float, float, float, float]:
+    """Bbox region that must survive redaction for a preserve-pixels layout block."""
+    if block.type == "chart":
+        nested = extract_nested_sub_bbox(block, CHART_BODY)
+        return nested or tuple(block.bbox)
+    if block.type == "table":
+        nested = extract_nested_sub_bbox(block, TABLE_BODY)
+        return nested or tuple(block.bbox)
+    return tuple(block.bbox)
+
+
+def extract_equation_content(block) -> Optional[str]:
+    """Return LaTeX/text content from an interline_equation block."""
+    raw = getattr(block, "raw", None) or {}
+    if not isinstance(raw, dict):
+        return None
+    for line in raw.get("lines") or []:
+        if not isinstance(line, dict):
+            continue
+        for span in line.get("spans") or []:
+            if not isinstance(span, dict):
+                continue
+            if span.get("type") != "interline_equation":
+                continue
+            content = span.get("content")
+            if isinstance(content, str) and content.strip():
+                return content.strip()
+    text = getattr(block, "text", None)
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+    return None
+
+
+def collect_preserved_visual_protected_rects(
+    layout_doc: LayoutDocument,
+    *,
+    equation_format: str = "text",
+    chart_body_format: str = "image",
+    table_body_format: str = "html",
+    margin_pt: float = 2.0,
+) -> Dict[int, List[Tuple[float, float, float, float]]]:
+    """Per-page rects that must survive text redaction (image-format visual blocks)."""
+    by_page: Dict[int, List[Tuple[float, float, float, float]]] = {}
+    for page in layout_doc.pages:
+        for block in page.blocks:
+            if not block_preserves_source_pdf_visual(
+                block,
+                equation_format=equation_format,
+                chart_body_format=chart_body_format,
+                table_body_format=table_body_format,
+            ):
+                continue
+            if block.type == "chart":
+                bbox = extract_nested_sub_bbox(block, CHART_BODY) or tuple(block.bbox)
+            elif block.type == "table":
+                bbox = extract_nested_sub_bbox(block, TABLE_BODY) or tuple(block.bbox)
+            else:
+                bbox = tuple(block.bbox)
+            x0, y0, x1, y1 = bbox
+            by_page.setdefault(page.page_index, []).append((
+                max(0.0, x0 - margin_pt),
+                max(0.0, y0 - margin_pt),
+                x1 + margin_pt,
+                y1 + margin_pt,
+            ))
+    return by_page
+
+
 def extract_equation_image_path(block) -> Optional[str]:
     """Return MinerU-rendered equation image path for an equation block."""
     image_path = getattr(block, "image_path", None)

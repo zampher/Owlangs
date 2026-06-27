@@ -565,6 +565,8 @@ class _TranslationResultPreviewState
   // This allows Translate phase Segment Type Filters to align with Extract's
   // detected categories such as language_match, identifier, etc.
   Map<String, int>? _globalDetectedReasonCounts;
+  /// Bbox reference raster size from translation-segments metadata.
+  Size? _overlayBboxReferenceSize;
   int _totalSegmentsCount = 0;
   int _pdfPreviewRevision = 0;
   final ValueNotifier<int> _pdfPreviewRevisionNotifier = ValueNotifier<int>(0);
@@ -1279,7 +1281,7 @@ class _TranslationResultPreviewState
   }
 
   /// Parse `layout_block_bbox` from an API segment dict into
-  /// `List<List<double>>` (list of [x0, y0, x1, y1] entries in PDF points).
+  /// `List<List<double>>` (list of [x0, y0, x1, y1] entries in image pixels).
   static List<List<double>>? _parseLayoutBlockBbox(dynamic raw) {
     if (raw is! List || raw.isEmpty) {
       return null;
@@ -1821,7 +1823,10 @@ class _TranslationResultPreviewState
     try {
       final TranslationService svc = TranslationService();
       final Map<String, dynamic> segmentsData =
-          await svc.getTranslationSegments(_apiTaskId());
+          await svc.getTranslationSegments(
+        _apiTaskId(),
+        forceRefresh: _isImageSourceFile(),
+      );
       final List<dynamic>? segments =
           segmentsData['segments'] as List<dynamic>?;
 
@@ -1900,6 +1905,23 @@ class _TranslationResultPreviewState
     }
   }
 
+  /// Parse overlay preview raster reference size from translation-segments metadata.
+  void _readOverlayPreviewMetadata(Map<String, dynamic> metadata) {
+    final dynamic rawSize = metadata['overlay_source_image_size'];
+    if (rawSize is List && rawSize.length >= 2) {
+      final double? w = (rawSize[0] as num?)?.toDouble();
+      final double? h = (rawSize[1] as num?)?.toDouble();
+      if (w != null && h != null && w > 0 && h > 0) {
+        _overlayBboxReferenceSize = Size(w, h);
+        _translationResultLog(
+          '[IMAGE_OVERLAY] overlay_source_image_size=${w}x$h',
+        );
+        return;
+      }
+    }
+    _overlayBboxReferenceSize = null;
+  }
+
   /// Parse global detected exclusion reason counts from a translation-segments
   /// response and update _globalDetectedReasonCounts for Segment Type Filters.
   void _readGlobalDetectedReasonCounts(
@@ -1911,6 +1933,7 @@ class _TranslationResultPreviewState
     final dynamic rawMetadata = segmentsData['metadata'];
     if (rawMetadata is Map) {
       final Map<String, dynamic> metadata = rawMetadata.cast<String, dynamic>();
+      _readOverlayPreviewMetadata(metadata);
       _translationResultLog(
         '[EXCLUSION_FILTERS] Raw metadata keys from translation-segments: ${metadata.keys.toList()}',
       );
@@ -6347,6 +6370,9 @@ class _TranslationResultPreviewState
         PdfCompareLayoutMode.comparePreview,
     bool revisionMetadataPrefetched = false,
   }) async {
+    if (_isImageSourceFile()) {
+      await _loadAllSegmentsMetadata();
+    }
     final dynamic translationState = widget.flowId != null
         ? ref.read(translationStateProviderFamily(widget.flowId!))
         : null;
@@ -6432,6 +6458,7 @@ class _TranslationResultPreviewState
           baseMode: baseMode,
           isPdfSource: _isPdfSourceFile(),
           isImageSource: _isImageSourceFile(),
+          overlayBboxReferenceSize: _overlayBboxReferenceSize,
           isPdfWorkflow: _resolvedWorkflowType() == 'markdown_based' ||
               _isPdfSourceFile(),
           translatedPdfUrl: effectiveDownloads?['pdf'],

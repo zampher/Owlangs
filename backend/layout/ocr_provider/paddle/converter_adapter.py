@@ -154,6 +154,7 @@ class PaddleToConverterAdapter:
                         "engine": getattr(ld, "engine", "paddle"),
                         "page_count": ld.page_count,
                         "total_blocks": sum(len(p["blocks"]) for p in pages_data),
+                        "metadata": dict(getattr(ld, "metadata", {}) or {}),
                         "pages": pages_data,
                     }, ensure_ascii=False, indent=2))
             zip_bytes = zip_buffer.getvalue()

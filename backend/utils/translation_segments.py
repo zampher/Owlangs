@@ -2603,6 +2603,29 @@ def record_translation_segments(
                         f"(bbox_map blocks="
                         f"{len(normalize_layout_block_bbox_map(bbox_map))})",
                     )
+            if isinstance(layout_doc, _LD) and is_image_overlay_task(task_state):
+                try:
+                    from layout.image_overlay.block_text_map import (
+                        ensure_image_overlay_segment_bboxes,
+                    )
+
+                    subdivided = ensure_image_overlay_segment_bboxes(
+                        segments,
+                        layout_doc,
+                        task_state=task_state,
+                    )
+                    if subdivided > 0:
+                        logger.info(
+                            LogModule.TRANS,
+                            f"[RECORD_SEGMENTS] Task {task_id}: subdivided "
+                            f"single-table bbox for {subdivided} overlay segment(s)",
+                        )
+                except Exception as subdivide_err:
+                    logger.debug(
+                        LogModule.TRANS,
+                        f"[RECORD_SEGMENTS] Task {task_id}: single-table bbox "
+                        f"subdivision skipped: {subdivide_err}",
+                    )
             try:
                 from layout.image_overlay.renderer import (
                     transform_segment_bboxes_to_image_pixels,

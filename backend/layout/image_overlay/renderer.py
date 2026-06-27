@@ -17,6 +17,7 @@ from layout.image_overlay.debug_output import (
 )
 from layout.image_overlay.font_resolver import font_loader_for_family
 from layout.image_overlay.models import ImageOverlayConfig, ImageOverlayResult
+from layout.image_overlay.segment_overlay import SegmentOverlayDrawItem
 from layout.block_types import EQUATION_BLOCK_TYPES, VISUAL_BLOCK_TYPES, IMAGE, TABLE, CHART, LIST, LEGACY_FIGURE
 from layout.pdf_renderer.typst_overlay.visual_images import (
     VisualImagePlacement,
@@ -61,8 +62,17 @@ def _plain_overlay_text(text: str) -> str:
     return _normalize_overlay_line_endings(text)
 
 
-def _effective_page_dimensions(page: Optional[LayoutPage]) -> Tuple[Optional[float], Optional[float]]:
+def _effective_page_dimensions(
+    page: Optional[LayoutPage],
+    layout_doc: Optional[LayoutDocument] = None,
+) -> Tuple[Optional[float], Optional[float]]:
     """Resolve layout page size, inferring from block extents when MinerU omits page_size."""
+    if layout_doc is not None:
+        from layout.image_overlay.coordinate_space import layout_canvas_dimensions
+
+        canvas_w, canvas_h = layout_canvas_dimensions(layout_doc, page)
+        if canvas_w and canvas_h:
+            return canvas_w, canvas_h
     if page is None:
         return None, None
     page_w = getattr(page, "width", None)
@@ -87,10 +97,11 @@ def _effective_page_dimensions(page: Optional[LayoutPage]) -> Tuple[Optional[flo
 def _coord_scale_factors(
     page: Optional[LayoutPage],
     image_size: Tuple[int, int],
+    layout_doc: Optional[LayoutDocument] = None,
 ) -> Tuple[float, float]:
     """Map layout coordinates to raster pixels (MinerU page_size vs actual image pixels)."""
     img_w, img_h = image_size
-    page_w, page_h = _effective_page_dimensions(page)
+    page_w, page_h = _effective_page_dimensions(page, layout_doc)
     if not page_w or not page_h or page_w <= 0 or page_h <= 0:
         return 1.0, 1.0
     if abs(page_w - img_w) <= 1 and abs(page_h - img_h) <= 1:
@@ -193,7 +204,7 @@ def _estimate_overlay_font_size_pt(block: LayoutBlock, text: str) -> Optional[fl
 
 
 def _preferred_font_size_px(
-    block: LayoutBlock,
+    block: Optional[LayoutBlock],
     page: Optional[LayoutPage],
     image_size: Tuple[int, int],
     scaled_bbox: Tuple[int, int, int, int],
@@ -220,22 +231,23 @@ def _preferred_font_size_px(
         # Manual override: exact user pt in px; height may overflow OCR bbox.
         return user_px, bbox_cap_px
 
-    if layout_pt is None:
+    if layout_pt is None and block is not None:
         layout_pt = _mineru_layout_font_size_pt(block)
-    if estimated_pt is None and layout_pt is None:
+    if estimated_pt is None and layout_pt is None and block is not None:
         estimated_pt = _estimate_overlay_font_size_pt(block, text)
 
     candidates: List[float] = [bbox_cap_px]
     if layout_pt is not None and layout_pt > 0:
         candidates.append(_pt_to_image_px(layout_pt, sy))
 
-    _, y0, _, y1 = block.bbox
-    layout_line_h_px = max(1.0, float(y1) - float(y0)) * sy
-    candidates.append(
-        (layout_line_h_px / _overlay_line_count(text)) * 0.88,
-    )
+    if block is not None:
+        _, y0, _, y1 = block.bbox
+        layout_line_h_px = max(1.0, float(y1) - float(y0)) * sy
+        candidates.append(
+            (layout_line_h_px / _overlay_line_count(text)) * 0.88,
+        )
 
-    if layout_pt is None:
+    if layout_pt is None and block is not None:
         if estimated_pt is None:
             estimated_pt = _estimate_overlay_font_size_pt(block, text)
         if estimated_pt is not None and estimated_pt > 0:
@@ -280,6 +292,7 @@ def scale_layout_bboxes_to_image_pixels(
     *,
     page: Optional[LayoutPage],
     image_size: Tuple[int, int],
+    layout_doc: Optional[LayoutDocument] = None,
 ) -> List[List[float]]:
     """Map layout-space bbox lists to image pixel coordinates."""
     if not isinstance(bboxes, list) or not bboxes:
@@ -296,6 +309,7 @@ def scale_layout_bboxes_to_image_pixels(
             layout_bbox,
             page,
             image_size,
+            layout_doc=layout_doc,
         )
         scaled.append([float(left), float(top), float(right), float(bottom)])
     return scaled
@@ -307,22 +321,64 @@ def transform_segment_bboxes_to_image_pixels(
     layout_doc: Any,
     image_size: Tuple[int, int],
 ) -> bool:
-    """Scale one segment's layout_block_bbox to image pixels (idempotent)."""
-    if segment.get("layout_block_bbox_space") == "image_px":
-        return False
+    """Map segment layout_block_bbox from layout canvas to source raster pixels (idempotent)."""
+    from layout.image_overlay.coordinate_space import (
+        COORDINATE_SPACE_IMAGE_PX,
+        clamp_bbox_to_image_pixels,
+        clear_segment_bbox_image_mapping,
+        segment_bbox_exceeds_image_size,
+        segment_bbox_mapped_to_image_size,
+    )
+
+    if segment_bbox_mapped_to_image_size(segment, image_size):
+        if not segment_bbox_exceeds_image_size(segment, image_size):
+            raw_bboxes = segment.get("layout_block_bbox")
+            if not isinstance(raw_bboxes, list):
+                return False
+            clamped: List[Any] = []
+            changed = False
+            for entry in raw_bboxes:
+                fixed = clamp_bbox_to_image_pixels(entry, image_size)
+                if fixed is not None:
+                    clamped.append(fixed)
+                    if fixed != list(entry)[:4]:
+                        changed = True
+            if clamped:
+                segment["layout_block_bbox"] = clamped
+            return changed
+        unified_logger.warning(
+            LogModule.LAYOUT,
+            "[IMAGE_OVERLAY] Segment bbox exceeds reference image "
+            f"{image_size[0]}x{image_size[1]} despite cached mapping; remapping",
+        )
+        clear_segment_bbox_image_mapping(segment)
     raw_bboxes = segment.get("layout_block_bbox")
     if not raw_bboxes:
         return False
+
     page = resolve_layout_page_for_segment(layout_doc, segment)
+    sx, sy = _coord_scale_factors(page, image_size, layout_doc)
     scaled = scale_layout_bboxes_to_image_pixels(
         raw_bboxes,
         page=page,
         image_size=image_size,
+        layout_doc=layout_doc,
     )
     if not scaled:
         return False
     segment["layout_block_bbox"] = scaled
-    segment["layout_block_bbox_space"] = "image_px"
+    segment["layout_block_bbox_space"] = COORDINATE_SPACE_IMAGE_PX
+    segment["layout_block_bbox_image_size"] = [int(image_size[0]), int(image_size[1])]
+    if abs(sx - 1.0) > 0.001 or abs(sy - 1.0) > 0.001:
+        from layout.image_overlay.coordinate_space import layout_coordinate_space
+
+        unified_logger.debug(
+            LogModule.LAYOUT,
+            f"[IMAGE_OVERLAY] Mapped segment bbox to source image "
+            f"{image_size[0]}x{image_size[1]} "
+            f"(layout_space={layout_coordinate_space(layout_doc)}, "
+            f"sx={sx:.4f}, sy={sy:.4f})",
+        )
     return True
 
 
@@ -330,10 +386,12 @@ def _scale_bbox_to_image(
     bbox: Tuple[float, float, float, float],
     page: Optional[LayoutPage],
     image_size: Tuple[int, int],
+    *,
+    layout_doc: Optional[LayoutDocument] = None,
 ) -> Tuple[int, int, int, int]:
     x0, y0, x1, y1 = bbox
     img_w, img_h = image_size
-    sx, sy = _coord_scale_factors(page, image_size)
+    sx, sy = _coord_scale_factors(page, image_size, layout_doc)
     if sx != 1.0 or sy != 1.0:
         x0, x1 = x0 * sx, x1 * sx
         y0, y1 = y0 * sy, y1 * sy
@@ -694,6 +752,28 @@ def dry_run_overlay_font_size_pt(
     return overlay_render_pt_from_fitted_px(float(fitted_px), sy)
 
 
+def _segment_layout_bbox_to_image(
+    bbox: Tuple[float, float, float, float],
+    layout_doc: LayoutDocument,
+    page: Optional[LayoutPage],
+    image_size: Tuple[int, int],
+    *,
+    bbox_space: Optional[str] = None,
+) -> Tuple[int, int, int, int]:
+    """Map a segment layout bbox to source raster pixel coordinates."""
+    from layout.image_overlay.coordinate_space import COORDINATE_SPACE_IMAGE_PX
+
+    if bbox_space == COORDINATE_SPACE_IMAGE_PX:
+        img_w, img_h = image_size
+        x0, y0, x1, y1 = bbox
+        left = max(0, min(int(round(min(x0, x1))), img_w - 1))
+        top = max(0, min(int(round(min(y0, y1))), img_h - 1))
+        right = max(left + 1, min(img_w, int(round(max(x0, x1)))))
+        bottom = max(top + 1, min(img_h, int(round(max(y0, y1)))))
+        return left, top, right, bottom
+    return _scale_bbox_to_image(bbox, page, image_size, layout_doc=layout_doc)
+
+
 def _should_render_text_block(block: LayoutBlock, config: ImageOverlayConfig) -> bool:
     if block.type in _SKIP_TEXT_BLOCK_TYPES:
         return False
@@ -720,7 +800,9 @@ def _paste_visual_placement(
     except Exception:
         return False
     page = layout_doc.get_page(placement.page_index)
-    bbox = _scale_bbox_to_image(placement.inner_bbox, page, canvas.size)
+    bbox = _scale_bbox_to_image(
+        placement.inner_bbox, page, canvas.size, layout_doc=layout_doc,
+    )
     x0, y0, x1, y1 = bbox
     target_w = max(1, x1 - x0)
     target_h = max(1, y1 - y0)
@@ -750,6 +832,7 @@ class ImageOverlayRenderer:
         task_id: str = "",
         source_image_path: str = "",
         block_segment_meta: Optional[Dict[int, Dict[str, Any]]] = None,
+        segment_overlay_items: Optional[List[SegmentOverlayDrawItem]] = None,
     ) -> ImageOverlayResult:
         draw = ImageDraw.Draw(canvas)
         image_data_map = image_data_map or {}
@@ -759,8 +842,10 @@ class ImageOverlayRenderer:
         block_segment_meta = block_segment_meta or {}
 
         first_page = layout_doc.pages[0] if layout_doc.pages else None
-        coord_scale = _coord_scale_factors(first_page, canvas.size)
-        page_dimensions = _effective_page_dimensions(first_page) if first_page else (None, None)
+        coord_scale = _coord_scale_factors(first_page, canvas.size, layout_doc)
+        page_dimensions = (
+            _effective_page_dimensions(first_page, layout_doc) if first_page else (None, None)
+        )
 
         if first_page and (coord_scale[0] != 1.0 or coord_scale[1] != 1.0):
             page_w, page_h = page_dimensions
@@ -787,138 +872,213 @@ class ImageOverlayRenderer:
             visual_blocks.add(placement.block_index)
             if config.erase_original_text:
                 page = layout_doc.get_page(placement.page_index)
-                bbox = _scale_bbox_to_image(placement.inner_bbox, page, canvas.size)
+                bbox = _scale_bbox_to_image(
+                    placement.inner_bbox, page, canvas.size, layout_doc=layout_doc,
+                )
                 fill = _sample_cover_color(canvas, bbox, config.cover_color_mode)
                 _erase_region(draw, bbox, fill, config.cover_margin_px)
             if _paste_visual_placement(canvas, placement, image_data_map, layout_doc):
                 visual_count += 1
 
         text_count = 0
-        for block in layout_doc.iter_blocks():
-            if block.index is None:
-                continue
-            if block.index in visual_blocks:
-                skipped_debug.append(
+        if segment_overlay_items:
+            page = first_page
+            for item in segment_overlay_items:
+                if not (item.text or "").strip():
+                    continue
+                bbox = _segment_layout_bbox_to_image(
+                    item.layout_bbox,
+                    layout_doc,
+                    page,
+                    canvas.size,
+                )
+                if config.erase_original_text:
+                    fill = _sample_cover_color(canvas, bbox, config.cover_color_mode)
+                    _erase_region(draw, bbox, fill, config.cover_margin_px)
+                user_pt = item.user_font_size_pt
+                preferred_px, bbox_cap_px = _preferred_font_size_px(
+                    None,
+                    page,
+                    canvas.size,
+                    bbox,
+                    item.text,
+                    user_pt,
+                    layout_pt=None,
+                    estimated_pt=None,
+                )
+                bold = (item.font_weight or "regular") == "bold"
+                block_font_loader = font_loader_for_family(font_family, bold=bold) if bold else font_loader
+                plain_text = _plain_overlay_text(item.text)
+                user_font_locked = user_pt is not None and user_pt > 0
+                fitted_size_px, line_count = _draw_text_in_bbox(
+                    draw,
+                    item.text,
+                    bbox,
+                    block_font_loader,
+                    config,
+                    preferred_size_px=preferred_px,
+                    bold=bold,
+                    font_size_locked=user_font_locked,
+                )
+                _, sy = _coord_scale_factors(page, canvas.size, layout_doc)
+                render_font_size_pt = overlay_render_pt_from_fitted_px(
+                    float(fitted_size_px), sy,
+                )
+                drawn_debug.append(
+                    {
+                        "segment_index": item.segment_index,
+                        "block_type": "segment_overlay",
+                        "page_index": page.page_index if page else 0,
+                        "layout_bbox": [float(v) for v in item.layout_bbox],
+                        "image_bbox": list(bbox),
+                        "overlay_text": item.text,
+                        "plain_text": plain_text,
+                        "user_font_size_pt": user_pt,
+                        "bbox_font_cap_px": round(bbox_cap_px, 2),
+                        "preferred_font_size_px": round(preferred_px, 2),
+                        "fitted_font_size_px": fitted_size_px,
+                        "render_font_size_pt": render_font_size_pt,
+                        "line_count": line_count,
+                        "font_bold": bold,
+                        "coord_scale_sx": coord_scale[0],
+                        "coord_scale_sy": coord_scale[1],
+                    }
+                )
+                text_count += 1
+        else:
+            for block in layout_doc.iter_blocks():
+                if block.index is None:
+                    continue
+                if block.index in visual_blocks:
+                    skipped_debug.append(
+                        {
+                            "block_index": block.index,
+                            "block_type": block.type,
+                            "page_index": block.page_index,
+                            "reason": "visual_placement",
+                            "layout_bbox": list(block.bbox),
+                            "layout_text": (block.text or "").strip(),
+                        }
+                    )
+                    continue
+                if not _should_render_text_block(block, config):
+                    skipped_debug.append(
+                        {
+                            "block_index": block.index,
+                            "block_type": block.type,
+                            "page_index": block.page_index,
+                            "reason": "block_type_or_format",
+                            "layout_bbox": list(block.bbox),
+                            "layout_text": (block.text or "").strip(),
+                        }
+                    )
+                    continue
+                text = block_text_map.get(block.index) or ""
+                if not text.strip():
+                    skipped_debug.append(
+                        {
+                            "block_index": block.index,
+                            "block_type": block.type,
+                            "page_index": block.page_index,
+                            "reason": "no_overlay_text",
+                            "layout_bbox": list(block.bbox),
+                            "layout_text": (block.text or "").strip(),
+                        }
+                    )
+                    continue
+                page = layout_doc.get_page(block.page_index)
+                bbox = _scale_bbox_to_image(
+                    block.bbox, page, canvas.size, layout_doc=layout_doc,
+                )
+                if config.erase_original_text:
+                    fill = _sample_cover_color(canvas, bbox, config.cover_color_mode)
+                    _erase_region(draw, bbox, fill, config.cover_margin_px)
+                user_pt = font_size_by_block_index.get(block.index)
+                mineru_pt = _mineru_layout_font_size_pt(block)
+                estimated_pt = _estimate_overlay_font_size_pt(block, text)
+                preferred_px, bbox_cap_px = _preferred_font_size_px(
+                    block,
+                    page,
+                    canvas.size,
+                    bbox,
+                    text,
+                    user_pt,
+                    layout_pt=mineru_pt,
+                    estimated_pt=estimated_pt,
+                )
+                bold = (font_weight_by_block_index.get(block.index) or "regular") == "bold"
+                block_font_loader = font_loader_for_family(font_family, bold=bold) if bold else font_loader
+                plain_text = _plain_overlay_text(text)
+                segment_meta = block_segment_meta.get(block.index) or {}
+                user_font_locked = user_pt is not None and user_pt > 0
+                fitted_size_px, line_count = _draw_text_in_bbox(
+                    draw,
+                    text,
+                    bbox,
+                    block_font_loader,
+                    config,
+                    preferred_size_px=preferred_px,
+                    bold=bold,
+                    font_size_locked=user_font_locked,
+                )
+                _, sy = _coord_scale_factors(page, canvas.size, layout_doc)
+                render_font_size_pt = overlay_render_pt_from_fitted_px(
+                    float(fitted_size_px), sy,
+                )
+                drawn_debug.append(
                     {
                         "block_index": block.index,
                         "block_type": block.type,
                         "page_index": block.page_index,
-                        "reason": "visual_placement",
-                        "layout_bbox": list(block.bbox),
+                        "layout_bbox": [float(v) for v in block.bbox],
+                        "image_bbox": list(bbox),
                         "layout_text": (block.text or "").strip(),
+                        "overlay_text": text,
+                        "plain_text": plain_text,
+                        "source_segment_index": segment_meta.get("source_segment_index"),
+                        "segment_layout_block_indices": segment_meta.get("layout_block_indices"),
+                        "segment_text_block_indices": segment_meta.get("text_block_indices"),
+                        "resolution_method": segment_meta.get("resolution_method"),
+                        "matched_source_text": segment_meta.get("matched_source_text"),
+                        "mineru_font_size_pt": mineru_pt,
+                        "user_font_size_pt": user_pt,
+                        "estimated_font_size_pt": estimated_pt,
+                        "bbox_font_cap_px": round(bbox_cap_px, 2),
+                        "preferred_font_size_px": round(preferred_px, 2),
+                        "fitted_font_size_px": fitted_size_px,
+                        "render_font_size_pt": render_font_size_pt,
+                        "line_count": line_count,
+                        "font_bold": bold,
+                        "coord_scale_sx": coord_scale[0],
+                        "coord_scale_sy": coord_scale[1],
                     }
                 )
-                continue
-            if not _should_render_text_block(block, config):
-                skipped_debug.append(
-                    {
-                        "block_index": block.index,
-                        "block_type": block.type,
-                        "page_index": block.page_index,
-                        "reason": "block_type_or_format",
-                        "layout_bbox": list(block.bbox),
-                        "layout_text": (block.text or "").strip(),
-                    }
-                )
-                continue
-            text = block_text_map.get(block.index) or ""
-            if not text.strip():
-                skipped_debug.append(
-                    {
-                        "block_index": block.index,
-                        "block_type": block.type,
-                        "page_index": block.page_index,
-                        "reason": "no_overlay_text",
-                        "layout_bbox": list(block.bbox),
-                        "layout_text": (block.text or "").strip(),
-                    }
-                )
-                continue
-            page = layout_doc.get_page(block.page_index)
-            bbox = _scale_bbox_to_image(block.bbox, page, canvas.size)
-            if config.erase_original_text:
-                fill = _sample_cover_color(canvas, bbox, config.cover_color_mode)
-                _erase_region(draw, bbox, fill, config.cover_margin_px)
-            user_pt = font_size_by_block_index.get(block.index)
-            mineru_pt = _mineru_layout_font_size_pt(block)
-            estimated_pt = _estimate_overlay_font_size_pt(block, text)
-            preferred_px, bbox_cap_px = _preferred_font_size_px(
-                block,
-                page,
-                canvas.size,
-                bbox,
-                text,
-                user_pt,
-                layout_pt=mineru_pt,
-                estimated_pt=estimated_pt,
-            )
-            bold = (font_weight_by_block_index.get(block.index) or "regular") == "bold"
-            block_font_loader = font_loader_for_family(font_family, bold=bold) if bold else font_loader
-            plain_text = _plain_overlay_text(text)
-            segment_meta = block_segment_meta.get(block.index) or {}
-            user_font_locked = user_pt is not None and user_pt > 0
-            fitted_size_px, line_count = _draw_text_in_bbox(
-                draw,
-                text,
-                bbox,
-                block_font_loader,
-                config,
-                preferred_size_px=preferred_px,
-                bold=bold,
-                font_size_locked=user_font_locked,
-            )
-            _, sy = _coord_scale_factors(page, canvas.size)
-            render_font_size_pt = overlay_render_pt_from_fitted_px(
-                float(fitted_size_px), sy,
-            )
-            drawn_debug.append(
-                {
-                    "block_index": block.index,
-                    "block_type": block.type,
-                    "page_index": block.page_index,
-                    "layout_bbox": [float(v) for v in block.bbox],
-                    "image_bbox": list(bbox),
-                    "layout_text": (block.text or "").strip(),
-                    "overlay_text": text,
-                    "plain_text": plain_text,
-                    "source_segment_index": segment_meta.get("source_segment_index"),
-                    "segment_layout_block_indices": segment_meta.get("layout_block_indices"),
-                    "segment_text_block_indices": segment_meta.get("text_block_indices"),
-                    "resolution_method": segment_meta.get("resolution_method"),
-                    "matched_source_text": segment_meta.get("matched_source_text"),
-                    "mineru_font_size_pt": mineru_pt,
-                    "user_font_size_pt": user_pt,
-                    "estimated_font_size_pt": estimated_pt,
-                    "bbox_font_cap_px": round(bbox_cap_px, 2),
-                    "preferred_font_size_px": round(preferred_px, 2),
-                    "fitted_font_size_px": fitted_size_px,
-                    "render_font_size_pt": render_font_size_pt,
-                    "line_count": line_count,
-                    "font_bold": bold,
-                    "coord_scale_sx": coord_scale[0],
-                    "coord_scale_sy": coord_scale[1],
-                }
-            )
-            text_count += 1
+                text_count += 1
 
         debug_dir = resolve_image_overlay_debug_dir(temp_dir)
         if debug_dir is not None:
-            json_path, txt_path = write_image_overlay_debug(
-                debug_dir,
-                task_id=task_id,
-                source_image_path=source_image_path,
-                image_size=canvas.size,
-                output_format=config.output_format,
-                page_dimensions=page_dimensions,
-                coord_scale=coord_scale,
-                drawn_blocks=drawn_debug,
-                skipped_blocks=skipped_debug,
-            )
-            if json_path:
-                unified_logger.info(
-                    LogModule.RESTOR,
-                    f"[IMAGE_OVERLAY] Wrote overlay debug to {json_path}"
-                    + (f" and {txt_path}" if txt_path else ""),
+            try:
+                json_path, txt_path = write_image_overlay_debug(
+                    debug_dir,
+                    task_id=task_id,
+                    source_image_path=source_image_path,
+                    image_size=canvas.size,
+                    output_format=config.output_format,
+                    page_dimensions=page_dimensions,
+                    coord_scale=coord_scale,
+                    drawn_blocks=drawn_debug,
+                    skipped_blocks=skipped_debug,
+                )
+                if json_path:
+                    unified_logger.info(
+                        LogModule.RESTOR,
+                        f"[IMAGE_OVERLAY] Wrote overlay debug to {json_path}"
+                        + (f" and {txt_path}" if txt_path else ""),
+                    )
+            except Exception as debug_err:
+                unified_logger.warning(
+                    LogModule.EXPORT,
+                    f"[IMAGE_OVERLAY] Debug output skipped (export continues): {debug_err}",
                 )
 
         unified_logger.info(

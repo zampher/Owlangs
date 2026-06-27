@@ -1471,13 +1471,7 @@ async def _image_overlay_file_response(
         segments = [s for s in raw_segments if isinstance(s, dict)]
 
     payload_obj = task_state.get("payload")
-    eq_fmt, tbl_fmt, chart_fmt = _resolve_export_format_settings(
-        task_state,
-        payload_obj,
-        equation_format,
-        table_body_format,
-        chart_body_format,
-    )
+    # eq_fmt, tbl_fmt, chart_fmt already resolved above for segment/bbox maps
     target_language = None
     if isinstance(payload_obj, dict):
         target_language = payload_obj.get("to_lang") or payload_obj.get("target_language")
@@ -1614,6 +1608,15 @@ async def _typst_overlay_pdf_response(
         raw_segments = segments_data.get("segments") or []
         segments = [s for s in raw_segments if isinstance(s, dict)]
 
+    payload_obj = task_state.get("payload")
+    eq_fmt, tbl_fmt, chart_fmt = _resolve_export_format_settings(
+        task_state,
+        payload_obj,
+        equation_format,
+        table_body_format,
+        chart_body_format,
+    )
+
     block_text_map: Dict[int, str] = {}
     skip_overlay_block_indices: set[int] = set()
     font_size_by_block_index: Dict[int, float] = {}
@@ -1691,7 +1694,12 @@ async def _typst_overlay_pdf_response(
                 f"{sorted(table_stroke_pt_by_block_index.items())[:8]}",
             )
         bbox_override_by_block_index = build_block_bbox_override_map_from_segments(
-            segments, task_state,
+            segments,
+            task_state,
+            layout_doc,
+            chart_body_format=chart_fmt,
+            table_body_format=tbl_fmt,
+            equation_format=eq_fmt,
         )
         if bbox_override_by_block_index:
             logger.info(
@@ -1856,6 +1864,8 @@ async def _typst_overlay_pdf_response(
                     skip_overlay_block_indices=(
                         skip_overlay_block_indices if skip_overlay_block_indices else None
                     ),
+                    overlay_segments=segments if segments else None,
+                    overlay_task_state=task_state,
                 ),
             )
         except Exception as e:
@@ -1910,6 +1920,8 @@ async def _typst_overlay_pdf_response(
                             skip_overlay_block_indices=(
                                 skip_overlay_block_indices if skip_overlay_block_indices else None
                             ),
+                            overlay_segments=segments if segments else None,
+                            overlay_task_state=task_state,
                         ),
                     )
                 except Exception as retry_error:
@@ -1990,6 +2002,8 @@ async def _typst_overlay_pdf_response(
                         skip_overlay_block_indices=(
                             skip_overlay_block_indices if skip_overlay_block_indices else None
                         ),
+                        overlay_segments=segments if segments else None,
+                        overlay_task_state=task_state,
                     ),
                 )
             except Exception as retry_error:
@@ -2629,6 +2643,9 @@ class DownloadService:
 
         if file_type == "source-image":
             from utils.mineru_layout_utils import is_mineru_layout_image
+            from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+                read_oriented_overlay_source_image_bytes,
+            )
 
             original_filename = task_state.get("original_filename") or ""
             if not is_mineru_layout_image(original_filename):
@@ -2644,9 +2661,24 @@ class DownloadService:
                 )
             filename = Path(original_filename).name
             ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "png"
+            oriented = read_oriented_overlay_source_image_bytes(source_path)
+            if oriented is not None:
+                body, media_type = oriented
+                logger.info(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] Task {task_id}: Serving oriented source image "
+                    f"for compare preview ({len(body)} bytes)",
+                )
+                return Response(
+                    content=body,
+                    media_type=media_type,
+                    headers={
+                        "Content-Disposition": f'inline; filename="{filename}"',
+                    },
+                )
             logger.info(
                 LogModule.EXPORT,
-                f"[DOWNLOAD] Task {task_id}: Serving source image for compare preview",
+                f"[DOWNLOAD] Task {task_id}: Serving raw source image for compare preview",
             )
             return FileResponse(
                 path=source_path,

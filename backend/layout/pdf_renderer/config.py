@@ -42,6 +42,8 @@ class PDFRendererConfig:
         base_merged_pdf_bytes: Optional[bytes] = None,
         cleaned_source_output_path: Optional[Path] = None,
         skip_overlay_block_indices: Optional[Set[int]] = None,
+        overlay_segments: Optional[list] = None,
+        overlay_task_state: Optional[dict] = None,
     ):
         """
         Initialize PDF renderer configuration.
@@ -79,6 +81,8 @@ class PDFRendererConfig:
         self.base_merged_pdf_bytes = base_merged_pdf_bytes
         self.cleaned_source_output_path = cleaned_source_output_path
         self.skip_overlay_block_indices: Optional[Set[int]] = skip_overlay_block_indices
+        self.overlay_segments = overlay_segments or []
+        self.overlay_task_state = overlay_task_state or {}
         
         # These will be populated during rendering
         self.type_font_baselines: Dict[str, float] = {}

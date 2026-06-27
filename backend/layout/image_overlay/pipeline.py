@@ -20,6 +20,10 @@ from layout.image_overlay.block_text_map import (
 )
 from layout.image_overlay.models import ImageOverlayConfig, ImageOverlayInput, ImageOverlayResult
 from layout.image_overlay.renderer import ImageOverlayRenderer
+from layout.image_overlay.segment_overlay import (
+    build_segment_overlay_draw_items,
+    should_use_segment_direct_overlay,
+)
 from layout.pdf_renderer.shared.block_processor import BlockProcessor
 from logger.logger import LogModule, unified_logger
 
@@ -63,8 +67,24 @@ class ImageOverlayPipeline:
             overlay_input.layout_zip_bytes,
         )
 
+        segment_overlay_items = None
+        if should_use_segment_direct_overlay(layout_doc):
+            segment_overlay_items = build_segment_overlay_draw_items(
+                overlay_input.segments or [],
+                layout_doc,
+                text_field=config.text_field,
+                task_state=task_state if isinstance(task_state, dict) else {},
+                image_size=(canvas.width, canvas.height),
+            )
+            if segment_overlay_items:
+                unified_logger.info(
+                    LogModule.EXPORT,
+                    "[IMAGE_OVERLAY] Using segment-direct overlay for "
+                    f"{len(segment_overlay_items)} segment(s) (single-table layout)",
+                )
+
         block_segment_meta: Optional[Dict[int, Dict[str, Any]]] = None
-        if block_text_map is None:
+        if block_text_map is None and not segment_overlay_items:
             block_map_result = self._build_block_text_map(
                 layout_doc,
                 overlay_input.segments,
@@ -95,7 +115,7 @@ class ImageOverlayPipeline:
         stats = self._renderer.render(
             canvas,
             layout_doc,
-            block_text_map,
+            block_text_map or {},
             config,
             image_data_map=image_data_map,
             font_family=font_family,
@@ -105,6 +125,7 @@ class ImageOverlayPipeline:
             task_id=effective_task_id,
             source_image_path=str(source_path),
             block_segment_meta=block_segment_meta,
+            segment_overlay_items=segment_overlay_items,
         )
         encoded = self._renderer.encode_image(canvas, str(source_path), config)
         encoded.text_blocks_drawn = stats.text_blocks_drawn

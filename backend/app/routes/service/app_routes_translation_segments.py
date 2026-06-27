@@ -427,7 +427,35 @@ def _enrich_segments_layout_block_bbox(
 
     enriched = 0
     failed: List[str] = []
+    subdivided = 0
+    if is_image_overlay_task(task_state) and layout_doc is not None:
+        try:
+            from layout.image_overlay.block_text_map import (
+                ensure_image_overlay_segment_bboxes,
+            )
+
+            subdivided = ensure_image_overlay_segment_bboxes(
+                segments_list,
+                layout_doc,
+                task_state=task_state,
+            )
+            if subdivided > 0:
+                logger.info(
+                    LogModule.ROUTE,
+                    f"[LAYOUT-BBOX] Task {task_id}: subdivided single-table bbox "
+                    f"for {subdivided} overlay segment(s)",
+                )
+        except Exception as subdivide_err:
+            logger.debug(
+                LogModule.ROUTE,
+                f"[LAYOUT-BBOX] Task {task_id}: single-table bbox subdivision "
+                f"skipped: {subdivide_err}",
+            )
+
     for seg in needs_bbox:
+        if subdivided > 0 and seg.get("layout_block_bbox"):
+            enriched += 1
+            continue
         bidxs = seg.get("layout_block_indices", [])
         detail = bboxes_for_layout_block_indices(
             bidxs,
@@ -513,7 +541,9 @@ def _reassign_image_overlay_layout_block_indices(
     for seg in segments_list:
         if isinstance(seg, dict) and seg.get("layout_block_indices"):
             seg.pop("layout_block_bbox", None)
-            seg.pop("layout_block_bbox_space", None)
+            from layout.image_overlay.coordinate_space import clear_segment_bbox_image_mapping
+
+            clear_segment_bbox_image_mapping(seg)
 
 
 def _transform_image_overlay_bboxes_to_pixels(
@@ -544,7 +574,15 @@ def _transform_image_overlay_bboxes_to_pixels(
         return
 
     transformed = 0
-    for seg in segments_list:
+    stored_segments = task_state.get("translation_segments")
+    all_segments: List[Dict[str, Any]] = []
+    if isinstance(stored_segments, dict):
+        raw_list = stored_segments.get("segments")
+        if isinstance(raw_list, list):
+            all_segments = [seg for seg in raw_list if isinstance(seg, dict)]
+    targets = all_segments if all_segments else segments_list
+
+    for seg in targets:
         if not isinstance(seg, dict):
             continue
         if transform_segment_bboxes_to_image_pixels(
@@ -562,12 +600,45 @@ def _transform_image_overlay_bboxes_to_pixels(
         )
 
 
+def _enrich_image_overlay_preview_metadata(
+    task_id: str,
+    task_state: Dict[str, Any],
+    response_data: Dict[str, Any],
+) -> None:
+    """Attach raster reference dimensions so frontend bbox mapping matches backend overlay."""
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        is_image_overlay_task,
+        resolve_image_overlay_image_size,
+    )
+
+    if not is_image_overlay_task(task_state):
+        return
+    metadata = response_data.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+        response_data["metadata"] = metadata
+    layout_doc = task_state.get("layout_document")
+    image_size = resolve_image_overlay_image_size(task_state, layout_doc=layout_doc)
+    if image_size:
+        metadata["overlay_source_image_size"] = [int(image_size[0]), int(image_size[1])]
+    layout_meta = getattr(layout_doc, "metadata", None) if layout_doc is not None else None
+    if isinstance(layout_meta, dict) and layout_meta.get("paddle_layout_canvas_size"):
+        metadata["paddle_layout_canvas_size"] = layout_meta.get("paddle_layout_canvas_size")
+    metadata["layout_block_bbox_space"] = "image_px"
+
+
 def _enrich_segments_table_fields(
     task_state: Dict[str, Any],
     segments_list: List[Dict[str, Any]],
 ) -> None:
     """Attach table classification from layout_prepared_chunks when missing."""
     from layout.block_types import TABLE_BODY
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        is_image_overlay_task,
+    )
+
+    if is_image_overlay_task(task_state):
+        return
 
     chunks = task_state.get("layout_prepared_chunks") or []
     if not chunks or not segments_list:
@@ -843,6 +914,7 @@ async def get_translation_segments_api(
                 task_state,
                 segments_list,
             )
+            _enrich_image_overlay_preview_metadata(task_id, task_state, response_data)
 
     # Enrich PDF layout segments with computed/user font size metadata.
     if isinstance(response_data, dict):

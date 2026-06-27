@@ -61,21 +61,60 @@ def cache_overlay_source_image_size(
     image_path: str,
 ) -> None:
     """Persist raster dimensions on task_state for overlay typography dry-run."""
+    size = read_overlay_source_image_size(image_path)
+    if size is not None:
+        task_state["overlay_source_image_size"] = [size[0], size[1]]
+
+
+def read_overlay_source_image_size(image_path: str) -> Optional[Tuple[int, int]]:
+    """Read overlay raster dimensions with EXIF orientation applied (matches renderer)."""
     from utils.mineru_layout_utils import is_mineru_layout_image
 
     if not is_mineru_layout_image(image_path):
-        return
+        return None
     try:
         from PIL import Image, ImageOps
 
         with Image.open(image_path) as opened:
             oriented = ImageOps.exif_transpose(opened)
-            task_state["overlay_source_image_size"] = [
-                int(oriented.width),
-                int(oriented.height),
-            ]
+            return int(oriented.width), int(oriented.height)
     except OSError:
-        return
+        return None
+
+
+def read_oriented_overlay_source_image_bytes(
+    image_path: str,
+) -> Optional[Tuple[bytes, str]]:
+    """Encode source raster with EXIF orientation applied for browser preview."""
+    from utils.mineru_layout_utils import is_mineru_layout_image
+
+    if not is_mineru_layout_image(image_path):
+        return None
+    try:
+        import io
+
+        from PIL import Image, ImageOps
+
+        path = Path(image_path)
+        with Image.open(path) as opened:
+            oriented = ImageOps.exif_transpose(opened)
+            ext = path.suffix.lower()
+            buf = io.BytesIO()
+            if ext in (".jpg", ".jpeg"):
+                rgb = oriented.convert("RGB")
+                rgb.save(buf, format="JPEG", quality=95)
+                return buf.getvalue(), "image/jpeg"
+            if ext == ".png":
+                oriented.save(buf, format="PNG")
+                return buf.getvalue(), "image/png"
+            if ext == ".webp":
+                oriented.save(buf, format="WEBP", quality=95)
+                return buf.getvalue(), "image/webp"
+            rgb = oriented.convert("RGB")
+            rgb.save(buf, format="PNG")
+            return buf.getvalue(), "image/png"
+    except OSError:
+        return None
 
 
 def resolve_overlay_font_family(task_state: Optional[Dict[str, Any]]) -> str:
@@ -126,16 +165,11 @@ def resolve_image_overlay_image_size(
         return None
     if not Path(raw_path).is_file():
         return None
-    try:
-        from PIL import Image, ImageOps
-
-        with Image.open(raw_path) as opened:
-            oriented = ImageOps.exif_transpose(opened)
-            size = (int(oriented.width), int(oriented.height))
-            task_state["overlay_source_image_size"] = list(size)
-            return size
-    except OSError:
-        return None
+    size = read_overlay_source_image_size(raw_path)
+    if size is not None:
+        task_state["overlay_source_image_size"] = [size[0], size[1]]
+        return size
+    return None
 
 
 def clamp_font_size_pt(value: float) -> float:
@@ -871,27 +905,891 @@ def build_block_font_style_map_from_segments(
     return block_map
 
 
-def build_block_bbox_override_map_from_segments(
+def segment_overlay_export_text(
+    segment: Dict[str, Any],
+    text_field: str = "target_text",
+) -> str:
+    """Resolve overlay export text (modified_text falls back to target_text)."""
+    if text_field == "source_text":
+        return (segment.get("source_text") or "").strip()
+    return (segment.get("modified_text") or segment.get("target_text") or "").strip()
+
+
+def collect_layout_block_indices_with_overlay_text(
+    segments: Optional[List[Dict[str, Any]]],
+    task_state: Optional[Dict[str, Any]] = None,
+    block_text_map: Optional[Dict[int, str]] = None,
+) -> set[int]:
+    """Layout block indices that receive non-empty overlay text from segments."""
+    indices: set[int] = set()
+    if block_text_map:
+        for raw_idx, text in block_text_map.items():
+            if not (text or "").strip():
+                continue
+            try:
+                indices.add(int(raw_idx))
+            except (TypeError, ValueError):
+                continue
+    for seg in segments or []:
+        if not isinstance(seg, dict):
+            continue
+        if segment_skips_overlay(seg):
+            continue
+        if not segment_overlay_export_text(seg):
+            continue
+        for raw_idx in resolve_segment_layout_block_indices(seg, task_state):
+            try:
+                indices.add(int(raw_idx))
+            except (TypeError, ValueError):
+                continue
+    return indices
+
+
+def collect_overlay_erase_block_indices(
     segments: List[Dict[str, Any]],
     task_state: Optional[Dict[str, Any]] = None,
-) -> Dict[int, tuple]:
-    """Build block_index -> bbox_override map from segments with overrides."""
-    block_map: Dict[int, tuple] = {}
+    *,
+    skip_block_indices: Optional[set] = None,
+    block_text_map: Optional[Dict[int, str]] = None,
+    layout_doc: Any = None,
+) -> set[int]:
+    """Layout block indices that receive translated overlay and must be erased."""
+    skip = skip_block_indices or set()
+    erase: set[int] = set()
+    block_by_index: Dict[int, Any] = {}
+    if layout_doc is not None:
+        for page in layout_doc.pages:
+            for block in page.blocks:
+                idx = getattr(block, "index", None)
+                if idx is not None:
+                    block_by_index[int(idx)] = block
+
+    def _block_eligible_for_erase(idx: int, *, has_overlay_text: bool) -> bool:
+        if idx in skip:
+            return False
+        blk = block_by_index.get(idx)
+        if blk is not None and _layout_block_is_empty_ocr_text(blk):
+            # Empty OCR layout text: erase only when segment supplies overlay text.
+            return has_overlay_text
+        return True
+
+    if block_text_map:
+        for raw_idx, text in block_text_map.items():
+            try:
+                idx = int(raw_idx)
+            except (TypeError, ValueError):
+                continue
+            if not (text or "").strip():
+                continue
+            if _block_eligible_for_erase(idx, has_overlay_text=True):
+                erase.add(idx)
+    for seg in segments or []:
+        if not isinstance(seg, dict):
+            continue
+        if segment_skips_overlay(seg):
+            continue
+        if not segment_overlay_export_text(seg):
+            continue
+        for raw_idx in resolve_segment_layout_block_indices(seg, task_state):
+            try:
+                idx = int(raw_idx)
+            except (TypeError, ValueError):
+                continue
+            if _block_eligible_for_erase(idx, has_overlay_text=True):
+                erase.add(idx)
+    return erase
+
+
+def segment_skips_overlay(
+    segment: Dict[str, Any],
+    text_field: str = "target_text",
+) -> bool:
+    """True when overlay/redaction should preserve original PDF content for this segment."""
+    if bool(segment.get("is_excluded")):
+        return True
+    if bool(segment.get("is_failed")):
+        return True
+    status = str(segment.get("translation_status") or "").strip().lower()
+    if status in ("failed", "error", "failure"):
+        return True
+    if bool(segment.get("needs_retry")) and not segment_overlay_export_text(segment, text_field):
+        return True
+    source_text = (segment.get("source_text") or "").strip()
+    export_text = segment_overlay_export_text(segment, text_field)
+    modified_text = (segment.get("modified_text") or "").strip()
+    if (
+        text_field != "source_text"
+        and source_text
+        and source_text == (segment.get("target_text") or "").strip()
+        and not modified_text
+    ):
+        return True
+    if text_field != "source_text" and not export_text and source_text:
+        return True
+    return False
+
+
+def segment_preserves_source_pdf_pixels(
+    segment: Dict[str, Any],
+    *,
+    chart_body_format: str = "image",
+    table_body_format: str = "html",
+    equation_format: str = "text",
+    text_field: str = "target_text",
+) -> bool:
+    """True when segment region must keep original PDF pixels (failed/excluded/image-format)."""
+    if segment_skips_overlay(segment, text_field):
+        return True
+    chart_fmt = (chart_body_format or "image").strip().lower()
+    table_fmt = (table_body_format or "html").strip().lower()
+    eq_fmt = (equation_format or "text").strip().lower()
+    chunk = (segment.get("chunk_type") or "").strip().lower()
+    if chunk == "chart_body" and chart_fmt == "image":
+        return True
+    if chunk == "table_body" and table_fmt == "image":
+        return True
+    if chunk in ("interline_equation", "formula", "equation") and eq_fmt == "image":
+        return True
+    if bool(segment.get("is_image")):
+        if chunk == "chart_body" and chart_fmt == "image":
+            return True
+        if chunk == "table_body" and table_fmt == "image":
+            return True
+    return False
+
+
+def segment_skips_redaction(
+    segment: Dict[str, Any],
+    *,
+    chart_body_format: str = "image",
+    table_body_format: str = "html",
+    equation_format: str = "text",
+    text_field: str = "target_text",
+) -> bool:
+    """True when this segment must not be a redaction target."""
+    return segment_preserves_source_pdf_pixels(
+        segment,
+        chart_body_format=chart_body_format,
+        table_body_format=table_body_format,
+        equation_format=equation_format,
+        text_field=text_field,
+    )
+
+
+def resolve_segment_protected_bbox(
+    segment: Dict[str, Any],
+    layout_doc: Any,
+    task_state: Optional[Dict[str, Any]] = None,
+    *,
+    chart_body_format: str = "image",
+    table_body_format: str = "html",
+    equation_format: str = "text",
+    segment_bbox_overlay_blocks: Optional[set] = None,
+) -> Optional[tuple[float, float, float, float]]:
+    """Best bbox to protect for a preserve-pixels segment."""
+    from layout.block_types import CHART_BODY, TABLE_BODY
+    from layout.pdf_renderer.typst_overlay.visual_images import (
+        block_preserves_source_pdf_visual,
+        extract_nested_sub_bbox,
+    )
+
+    chart_fmt = (chart_body_format or "image").strip().lower()
+    table_fmt = (table_body_format or "html").strip().lower()
+    eq_fmt = (equation_format or "text").strip().lower()
+    overlay_blocks = segment_bbox_overlay_blocks or set()
+    block_by_index: Dict[int, Any] = {}
+    block_bbox_by_index = _layout_block_bbox_by_index(layout_doc)
+    for page in layout_doc.pages:
+        for block in page.blocks:
+            idx = getattr(block, "index", None)
+            if idx is not None:
+                block_by_index[int(idx)] = block
+
+    bbox = _read_segment_layout_bbox(segment, task_state, layout_doc)
+    indices = resolve_segment_layout_block_indices(segment, task_state)
+    for raw_idx in indices:
+        try:
+            blk = block_by_index.get(int(raw_idx))
+        except (TypeError, ValueError):
+            blk = None
+        if blk is None:
+            continue
+        if blk.type == "chart" and chart_fmt == "image":
+            nested = extract_nested_sub_bbox(blk, CHART_BODY)
+            return nested or tuple(blk.bbox)
+        if blk.type == "table" and table_fmt == "image":
+            nested = extract_nested_sub_bbox(blk, TABLE_BODY)
+            return nested or tuple(blk.bbox)
+        if block_preserves_source_pdf_visual(
+            blk,
+            equation_format=eq_fmt,
+            chart_body_format=chart_fmt,
+            table_body_format=table_fmt,
+        ):
+            if blk.type == "chart":
+                nested = extract_nested_sub_bbox(blk, CHART_BODY)
+                return nested or tuple(blk.bbox)
+            if blk.type == "table":
+                nested = extract_nested_sub_bbox(blk, TABLE_BODY)
+                return nested or tuple(blk.bbox)
+            return tuple(blk.bbox)
+    if bbox is not None:
+        return bbox
+    for raw_idx in indices:
+        try:
+            idx = int(raw_idx)
+        except (TypeError, ValueError):
+            idx = None
+        if idx is not None and idx in overlay_blocks:
+            continue
+        try:
+            fallback = block_bbox_by_index.get(int(raw_idx))
+        except (TypeError, ValueError):
+            fallback = None
+        if fallback is not None:
+            return fallback
+    return None
+
+
+def _block_has_recognized_text(block: Any) -> bool:
+    """Safe wrapper for LayoutBlock.has_recognized_text()."""
+    checker = getattr(block, "has_recognized_text", None)
+    if callable(checker):
+        return bool(checker())
+    has_text_fn = getattr(block, "has_text", None)
+    if callable(has_text_fn):
+        return bool(has_text_fn())
+    text = getattr(block, "text", None)
+    return bool(text and str(text).strip())
+
+
+def _layout_block_is_empty_ocr_text(block: Any) -> bool:
+    """True for text-like layout blocks whose OCR/content string is empty."""
+    if block is None:
+        return False
+    is_visual = getattr(block, "is_visual", None)
+    if callable(is_visual) and is_visual():
+        return False
+    is_equation = getattr(block, "is_equation", None)
+    if callable(is_equation) and is_equation():
+        return False
+    blk_type = (getattr(block, "type", None) or "").strip().lower()
+    if blk_type in (
+        "table",
+        "chart",
+        "image",
+        "interline_equation",
+        "inline_equation",
+    ):
+        return False
+    return not _block_has_recognized_text(block)
+
+
+def _overlay_block_bboxes_by_page(
+    layout_doc: Any,
+    block_indices: set[int],
+) -> Dict[int, List[tuple[float, float, float, float]]]:
+    """Per-page bboxes for layout blocks scheduled for overlay erase or text."""
+    by_page: Dict[int, List[tuple[float, float, float, float]]] = {}
+    if layout_doc is None or not block_indices:
+        return by_page
+    active = {int(i) for i in block_indices}
+    for page in layout_doc.pages:
+        page_idx = int(page.page_index)
+        for block in page.blocks:
+            idx = getattr(block, "index", None)
+            if idx is None or int(idx) not in active:
+                continue
+            try:
+                bbox = tuple(float(v) for v in block.bbox[:4])
+            except (TypeError, ValueError, IndexError):
+                continue
+            by_page.setdefault(page_idx, []).append(bbox)
+    return by_page
+
+
+def _bbox_overlaps_any(
+    bbox: tuple[float, float, float, float],
+    candidates: List[tuple[float, float, float, float]],
+) -> bool:
+    from layout.pdf_renderer.typst_overlay.layer_order import bboxes_overlap
+
+    for other in candidates:
+        if bboxes_overlap(bbox, other):
+            return True
+    return False
+
+
+def empty_ocr_block_overlaps_overlay_block_region(
+    block: Any,
+    layout_doc: Any,
+    overlay_block_indices: set[int],
+) -> bool:
+    """True when an empty OCR block shares area with an overlay-erase block bbox.
+
+    Paddle det supplements can duplicate the same physical region as a primary
+    OCR block (empty duplicate + text block). Protecting the empty duplicate
+    clips redaction rects and leaves original PDF text under Typst overlay.
+    """
+    if layout_doc is None or not overlay_block_indices or block is None:
+        return False
+    page_idx = getattr(block, "page_index", None)
+    if page_idx is None:
+        return False
+    overlay_bboxes = _overlay_block_bboxes_by_page(layout_doc, overlay_block_indices)
+    candidates = overlay_bboxes.get(int(page_idx), [])
+    if not candidates:
+        return False
+    try:
+        bbox = tuple(float(v) for v in block.bbox[:4])
+    except (TypeError, ValueError, IndexError):
+        return False
+    return _bbox_overlaps_any(bbox, candidates)
+
+
+def collect_partial_overlay_block_indices(
+    segments: List[Dict[str, Any]],
+    task_state: Optional[Dict[str, Any]] = None,
+) -> set[int]:
+    """Block indices with both skip-overlay and overlay segments (mixed deep-split blocks)."""
+    has_skip: Dict[int, bool] = {}
+    has_overlay: Dict[int, bool] = {}
+    for seg in segments or []:
+        if not isinstance(seg, dict):
+            continue
+        indices = resolve_segment_layout_block_indices(seg, task_state)
+        try:
+            idx_set = {int(i) for i in indices if i is not None}
+        except (TypeError, ValueError):
+            continue
+        for idx in idx_set:
+            if segment_skips_overlay(seg):
+                has_skip[idx] = True
+            elif segment_overlay_export_text(seg):
+                has_overlay[idx] = True
+    return {idx for idx in has_skip if has_skip[idx] and has_overlay.get(idx, False)}
+
+
+def _layout_block_bbox_by_index(layout_doc: Any) -> Dict[int, tuple[float, float, float, float]]:
+    block_map: Dict[int, tuple[float, float, float, float]] = {}
+    if layout_doc is None:
+        return block_map
+    for page in layout_doc.pages:
+        for block in page.blocks:
+            idx = getattr(block, "index", None)
+            if idx is None:
+                continue
+            try:
+                bbox = tuple(float(v) for v in block.bbox)
+            except (TypeError, ValueError):
+                continue
+            if len(bbox) == 4:
+                block_map[int(idx)] = bbox
+    return block_map
+
+
+def _read_segment_layout_bbox(
+    segment: Dict[str, Any],
+    task_state: Optional[Dict[str, Any]] = None,
+    layout_doc: Any = None,
+) -> Optional[tuple[float, float, float, float]]:
+    """Return layout bbox from segment override or computed layout_block_bbox."""
+    override = segment.get("layout_block_bbox_override")
+    if isinstance(override, (tuple, list)) and len(override) >= 4:
+        try:
+            return tuple(float(v) for v in override[:4])
+        except (TypeError, ValueError):
+            pass
+    raw = segment.get("layout_block_bbox")
+    if isinstance(raw, list) and raw:
+        first = raw[0]
+        if isinstance(first, (list, tuple)) and len(first) >= 4:
+            try:
+                return tuple(float(v) for v in first[:4])
+            except (TypeError, ValueError):
+                pass
+        elif len(raw) >= 4 and not isinstance(first, (list, tuple)):
+            try:
+                return tuple(float(v) for v in raw[:4])
+            except (TypeError, ValueError):
+                pass
+    if task_state is not None or layout_doc is not None:
+        from utils.format_convert_utils import bboxes_for_layout_block_indices
+
+        indices = resolve_segment_layout_block_indices(segment, task_state)
+        bboxes = bboxes_for_layout_block_indices(
+            indices,
+            task_state.get("layout_block_bbox") if task_state else None,
+            layout_document=layout_doc,
+        )
+        if len(bboxes) == 1:
+            try:
+                return tuple(float(v) for v in bboxes[0][:4])
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
+def _bbox_differs_from_block(
+    segment_bbox: tuple[float, float, float, float],
+    block_bbox: tuple[float, float, float, float],
+    tolerance: float = 1.0,
+) -> bool:
+    try:
+        for a, b in zip(segment_bbox, block_bbox):
+            if abs(float(a) - float(b)) > tolerance:
+                return True
+        return False
+    except (TypeError, ValueError):
+        return True
+
+
+def _infer_page_index_for_bbox(
+    bbox: tuple[float, float, float, float],
+    layout_doc: Any,
+) -> Optional[int]:
+    """Find page index whose block bbox contains the segment bbox center."""
+    if layout_doc is None:
+        return None
+    try:
+        cx = (float(bbox[0]) + float(bbox[2])) / 2.0
+        cy = (float(bbox[1]) + float(bbox[3])) / 2.0
+    except (TypeError, ValueError):
+        return None
+    for page in layout_doc.pages:
+        for block in page.blocks:
+            try:
+                bx0, by0, bx1, by1 = (
+                    float(block.bbox[0]),
+                    float(block.bbox[1]),
+                    float(block.bbox[2]),
+                    float(block.bbox[3]),
+                )
+            except (TypeError, ValueError, IndexError):
+                continue
+            if bx0 <= cx <= bx1 and by0 <= cy <= by1:
+                return int(page.page_index)
+    return None
+
+
+def collect_segment_bbox_overlay_block_indices(
+    segments: List[Dict[str, Any]],
+    layout_doc: Any,
+    task_state: Optional[Dict[str, Any]] = None,
+) -> set[int]:
+    """Layout blocks that need per-segment bbox overlay/erase instead of full block."""
+    result = collect_partial_overlay_block_indices(segments, task_state)
+    overlay_count: Dict[int, int] = {}
+    block_bbox_by_index = _layout_block_bbox_by_index(layout_doc)
+    block_by_index: Dict[int, Any] = {}
+    for page in layout_doc.pages:
+        for block in page.blocks:
+            idx = getattr(block, "index", None)
+            if idx is not None:
+                block_by_index[int(idx)] = block
+
+    for seg in segments or []:
+        if not isinstance(seg, dict):
+            continue
+        if segment_skips_overlay(seg):
+            continue
+        if not segment_overlay_export_text(seg):
+            continue
+        indices = resolve_segment_layout_block_indices(seg, task_state)
+        seg_bbox = _read_segment_layout_bbox(seg, task_state, layout_doc)
+        for raw_idx in indices:
+            try:
+                idx = int(raw_idx)
+            except (TypeError, ValueError):
+                continue
+            blk = block_by_index.get(idx)
+            if blk is not None and _layout_block_is_empty_ocr_text(blk):
+                continue
+            overlay_count[idx] = overlay_count.get(idx, 0) + 1
+            if seg_bbox is not None:
+                block_bbox = block_bbox_by_index.get(idx)
+                if block_bbox is not None and _bbox_differs_from_block(seg_bbox, block_bbox):
+                    result.add(idx)
+
+    for idx, count in overlay_count.items():
+        if count > 1:
+            result.add(idx)
+    return result
+
+
+def collect_segment_layout_bbox_redaction_rects(
+    segments: List[Dict[str, Any]],
+    layout_doc: Any,
+    task_state: Optional[Dict[str, Any]] = None,
+    *,
+    skip_block_indices: Optional[set] = None,
+    margin_pt: float = 2.0,
+    equation_format: str = "text",
+    chart_body_format: str = "image",
+    table_body_format: str = "html",
+    bbox_override_by_block_index: Optional[Dict[int, tuple]] = None,
+) -> Dict[int, List[tuple[float, float, float, float]]]:
+    """Collect per-page redaction rects from segment layout bboxes (deep-split erase)."""
+    if not segments or layout_doc is None:
+        return {}
+
+    from layout.pdf_renderer.typst_overlay.visual_images import block_preserves_source_pdf_visual
+
+    skip = skip_block_indices or set()
+    block_page: Dict[int, int] = {}
+    block_by_index: Dict[int, Any] = {}
+    for page in layout_doc.pages:
+        for block in page.blocks:
+            idx = getattr(block, "index", None)
+            if idx is not None:
+                block_by_index[int(idx)] = block
+                block_page[int(idx)] = int(page.page_index)
+
+    by_page: Dict[int, List[tuple[float, float, float, float]]] = {}
+    preserve_empty_by_page = collect_empty_text_block_protected_rects(
+        layout_doc,
+        margin_pt=margin_pt,
+        overlay_text_block_indices=collect_layout_block_indices_with_overlay_text(
+            segments,
+            task_state,
+        ),
+    )
     for seg in segments:
         if not isinstance(seg, dict):
             continue
-        override = seg.get("layout_block_bbox_override")
-        if not override:
+        if segment_skips_redaction(
+            seg,
+            chart_body_format=chart_body_format,
+            table_body_format=table_body_format,
+            equation_format=equation_format,
+        ):
             continue
-        if not isinstance(override, (tuple, list)) or len(override) != 4:
+        bbox = _read_segment_layout_bbox(seg, task_state, layout_doc)
+        indices = resolve_segment_layout_block_indices(seg, task_state)
+        if bbox is None and bbox_override_by_block_index and indices:
+            for raw_idx in indices:
+                try:
+                    idx = int(raw_idx)
+                except (TypeError, ValueError):
+                    continue
+                override_bbox = bbox_override_by_block_index.get(idx)
+                if override_bbox is None:
+                    continue
+                try:
+                    bbox = tuple(float(v) for v in override_bbox[:4])
+                    break
+                except (TypeError, ValueError):
+                    continue
+        if bbox is None:
             continue
-        try:
-            bbox = tuple(float(v) for v in override)
-        except (TypeError, ValueError):
+        if indices and all(int(i) in skip for i in indices if i is not None):
+            continue
+        preserve_all = bool(indices)
+        for raw_idx in indices:
+            try:
+                blk = block_by_index.get(int(raw_idx))
+            except (TypeError, ValueError):
+                blk = None
+                preserve_all = False
+                break
+            if blk is None:
+                preserve_all = False
+                break
+            if not block_preserves_source_pdf_visual(
+                blk,
+                equation_format=equation_format,
+                chart_body_format=chart_body_format,
+                table_body_format=table_body_format,
+            ):
+                preserve_all = False
+                break
+        if preserve_all:
+            continue
+        has_overlay_text = bool(segment_overlay_export_text(seg))
+        if indices:
+            all_empty_ocr_text = True
+            for raw_idx in indices:
+                try:
+                    blk = block_by_index.get(int(raw_idx))
+                except (TypeError, ValueError):
+                    blk = None
+                if blk is None or not _layout_block_is_empty_ocr_text(blk):
+                    all_empty_ocr_text = False
+                    break
+            # Empty OCR blocks without segment overlay text keep PDF background pixels.
+            if all_empty_ocr_text and not has_overlay_text:
+                continue
+        page_idx = None
+        for raw_idx in indices:
+            try:
+                page_idx = block_page.get(int(raw_idx))
+            except (TypeError, ValueError):
+                continue
+            if page_idx is not None:
+                break
+        if page_idx is None:
+            page_idx = _infer_page_index_for_bbox(bbox, layout_doc)
+        if page_idx is None:
+            continue
+        x0, y0, x1, y1 = bbox
+        expanded = (
+            max(0.0, x0 - margin_pt),
+            max(0.0, y0 - margin_pt),
+            x1 + margin_pt,
+            y1 + margin_pt,
+        )
+        preserve_on_page = preserve_empty_by_page.get(page_idx, [])
+        if preserve_on_page:
+            from layout.pdf_renderer.typst_overlay.source_cleanup import (
+                _clip_rects_against_protected_rects,
+            )
+
+            clipped = _clip_rects_against_protected_rects([expanded], preserve_on_page)
+            for rect in clipped:
+                by_page.setdefault(page_idx, []).append(rect)
+        else:
+            by_page.setdefault(page_idx, []).append(expanded)
+    return by_page
+
+
+def collect_empty_text_block_protected_rects(
+    layout_doc: Any,
+    *,
+    margin_pt: float = 2.0,
+    overlay_erase_block_indices: Optional[set] = None,
+    overlay_text_block_indices: Optional[set] = None,
+    segments: Optional[List[Dict[str, Any]]] = None,
+    task_state: Optional[Dict[str, Any]] = None,
+    block_text_map: Optional[Dict[int, str]] = None,
+) -> Dict[int, List[tuple[float, float, float, float]]]:
+    """Protect empty OCR layout blocks that have no segment overlay text."""
+    if layout_doc is None:
+        return {}
+
+    overlay_erase = overlay_erase_block_indices or set()
+    overlay_text = overlay_text_block_indices or set()
+    if segments is not None or block_text_map is not None:
+        overlay_text = overlay_text | collect_layout_block_indices_with_overlay_text(
+            segments,
+            task_state,
+            block_text_map,
+        )
+
+    by_page: Dict[int, List[tuple[float, float, float, float]]] = {}
+    for page in layout_doc.pages:
+        for block in page.blocks:
+            if not _layout_block_is_empty_ocr_text(block):
+                continue
+            idx = getattr(block, "index", None)
+            if idx is not None and int(idx) in overlay_erase:
+                continue
+            if idx is not None and int(idx) in overlay_text:
+                continue
+            if empty_ocr_block_overlaps_overlay_block_region(
+                block,
+                layout_doc,
+                overlay_erase | overlay_text,
+            ):
+                continue
+            raw = getattr(block, "raw", None) or {}
+            if isinstance(raw, dict) and raw.get("_cross_page_pair_of") is not None:
+                continue
+            x0, y0, x1, y1 = block.bbox
+            by_page.setdefault(page.page_index, []).append(
+                (
+                    max(0.0, x0 - margin_pt),
+                    max(0.0, y0 - margin_pt),
+                    x1 + margin_pt,
+                    y1 + margin_pt,
+                )
+            )
+    return by_page
+
+
+def collect_excluded_segment_protected_rects(
+    segments: List[Dict[str, Any]],
+    layout_doc: Any,
+    task_state: Optional[Dict[str, Any]] = None,
+    *,
+    margin_pt: float = 2.0,
+    chart_body_format: str = "image",
+    table_body_format: str = "html",
+    equation_format: str = "text",
+    segment_bbox_overlay_blocks: Optional[set] = None,
+) -> Dict[int, List[tuple[float, float, float, float]]]:
+    """Protected rects for segments that must keep original PDF pixels."""
+    if not segments or layout_doc is None:
+        return {}
+
+    block_page: Dict[int, int] = {}
+    for page in layout_doc.pages:
+        for block in page.blocks:
+            idx = getattr(block, "index", None)
+            if idx is not None:
+                block_page[int(idx)] = int(page.page_index)
+
+    by_page: Dict[int, List[tuple[float, float, float, float]]] = {}
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        if not segment_preserves_source_pdf_pixels(
+            seg,
+            chart_body_format=chart_body_format,
+            table_body_format=table_body_format,
+            equation_format=equation_format,
+        ):
+            continue
+        bbox = resolve_segment_protected_bbox(
+            seg,
+            layout_doc,
+            task_state,
+            chart_body_format=chart_body_format,
+            table_body_format=table_body_format,
+            equation_format=equation_format,
+            segment_bbox_overlay_blocks=segment_bbox_overlay_blocks,
+        )
+        if bbox is None:
+            continue
+        page_idx = None
+        for raw_idx in resolve_segment_layout_block_indices(seg, task_state):
+            try:
+                page_idx = block_page.get(int(raw_idx))
+            except (TypeError, ValueError):
+                continue
+            if page_idx is not None:
+                break
+        if page_idx is None:
+            continue
+        x0, y0, x1, y1 = bbox
+        by_page.setdefault(page_idx, []).append(
+            (
+                max(0.0, x0 - margin_pt),
+                max(0.0, y0 - margin_pt),
+                x1 + margin_pt,
+                y1 + margin_pt,
+            )
+        )
+    return by_page
+
+
+def build_block_bbox_override_map_from_segments(
+    segments: List[Dict[str, Any]],
+    task_state: Optional[Dict[str, Any]] = None,
+    layout_doc: Any = None,
+    *,
+    chart_body_format: str = "image",
+    table_body_format: str = "html",
+    equation_format: str = "text",
+) -> Dict[int, tuple]:
+    """Build block_index -> bbox_override map from segments with overrides."""
+    from layout.pdf_renderer.typst_overlay.visual_images import block_preserves_source_pdf_visual
+
+    block_map: Dict[int, tuple] = {}
+    chart_fmt = (chart_body_format or "image").strip().lower()
+    table_fmt = (table_body_format or "html").strip().lower()
+    eq_fmt = (equation_format or "text").strip().lower()
+    block_by_index: Dict[int, Any] = {}
+    if layout_doc is not None:
+        for page in layout_doc.pages:
+            for block in page.blocks:
+                idx = getattr(block, "index", None)
+                if idx is not None:
+                    block_by_index[int(idx)] = block
+
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        if segment_skips_redaction(
+            seg,
+            chart_body_format=chart_fmt,
+            table_body_format=table_fmt,
+            equation_format=eq_fmt,
+        ):
+            continue
+        bbox = _read_segment_layout_bbox(seg, task_state, layout_doc)
+        if bbox is None:
             continue
         for idx in resolve_segment_layout_block_indices(seg, task_state):
-            block_map[idx] = bbox
+            try:
+                idx_int = int(idx)
+            except (TypeError, ValueError):
+                continue
+            blk = block_by_index.get(idx_int)
+            if blk is not None and block_preserves_source_pdf_visual(
+                blk,
+                equation_format=eq_fmt,
+                chart_body_format=chart_fmt,
+                table_body_format=table_fmt,
+            ):
+                continue
+            block_map[idx_int] = bbox
     return block_map
+
+
+def collect_bbox_override_redaction_rects(
+    bbox_override_by_block_index: Optional[Dict[int, tuple]],
+    layout_doc: Any,
+    overlay_erase_block_indices: Optional[set],
+    *,
+    skip_block_indices: Optional[set] = None,
+    margin_pt: float = 2.0,
+) -> Dict[int, List[tuple[float, float, float, float]]]:
+    """Redaction rects for user bbox overrides on overlay-erase layout blocks."""
+    if not bbox_override_by_block_index or layout_doc is None:
+        return {}
+
+    overlay_erase = overlay_erase_block_indices or set()
+    skip = skip_block_indices or set()
+    block_page: Dict[int, int] = {}
+    for page in layout_doc.pages:
+        for block in page.blocks:
+            idx = getattr(block, "index", None)
+            if idx is not None:
+                block_page[int(idx)] = int(page.page_index)
+
+    by_page: Dict[int, List[tuple[float, float, float, float]]] = {}
+    for raw_idx, override_bbox in bbox_override_by_block_index.items():
+        try:
+            idx = int(raw_idx)
+        except (TypeError, ValueError):
+            continue
+        if idx not in overlay_erase or idx in skip:
+            continue
+        if not isinstance(override_bbox, (tuple, list)) or len(override_bbox) < 4:
+            continue
+        try:
+            x0, y0, x1, y1 = (
+                float(override_bbox[0]),
+                float(override_bbox[1]),
+                float(override_bbox[2]),
+                float(override_bbox[3]),
+            )
+        except (TypeError, ValueError):
+            continue
+        page_idx = block_page.get(idx)
+        if page_idx is None:
+            continue
+        expanded = (
+            max(0.0, x0 - margin_pt),
+            max(0.0, y0 - margin_pt),
+            x1 + margin_pt,
+            y1 + margin_pt,
+        )
+        by_page.setdefault(page_idx, []).append(expanded)
+    return by_page
+
+
+def merge_redaction_rect_maps(
+    base: Dict[int, List[tuple[float, float, float, float]]],
+    extra: Dict[int, List[tuple[float, float, float, float]]],
+) -> Dict[int, List[tuple[float, float, float, float]]]:
+    """Merge per-page redaction rect lists."""
+    if not extra:
+        return base
+    merged = dict(base)
+    for page_idx, rects in extra.items():
+        merged.setdefault(page_idx, []).extend(rects)
+    return merged
 
 
 def normalize_table_stroke_pt(value: Any) -> Optional[float]:

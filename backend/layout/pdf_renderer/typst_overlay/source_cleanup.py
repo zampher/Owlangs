@@ -15,6 +15,17 @@ from typing import Dict, List, Optional, Tuple
 
 from logger.logger import unified_logger, LogModule
 from layout.base import LayoutDocument
+from layout.block_types import CHART_BODY, TABLE_BODY
+from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+    _layout_block_is_empty_ocr_text,
+    collect_empty_text_block_protected_rects,
+    empty_ocr_block_overlaps_overlay_block_region,
+)
+from layout.pdf_renderer.typst_overlay.visual_images import (
+    block_preserves_source_pdf_visual,
+    extract_nested_sub_bbox,
+    protected_bbox_for_layout_block,
+)
 
 try:
     import fitz  # PyMuPDF
@@ -29,6 +40,12 @@ def _collect_redaction_rects(
     *,
     skip_block_indices: Optional[set] = None,
     bbox_override_by_block_index: Optional[Dict[int, tuple]] = None,
+    equation_format: str = "text",
+    chart_body_format: str = "image",
+    table_body_format: str = "html",
+    segment_bbox_only_block_indices: Optional[set] = None,
+    overlay_erase_block_indices: Optional[set] = None,
+    partial_overlay_block_indices: Optional[set] = None,
 ) -> Tuple[
     Dict[int, List[Tuple[float, float, float, float]]],
     Dict[int, List[Tuple[float, float, float, float]]],
@@ -60,6 +77,9 @@ def _collect_redaction_rects(
             [x0, y0, x1, y1] override.  The override area is also redacted.
     """
     skip_set = skip_block_indices or set()
+    segment_bbox_only = segment_bbox_only_block_indices or set()
+    overlay_erase = overlay_erase_block_indices or set()
+    partial_overlay = partial_overlay_block_indices or set()
     bbox_overrides = bbox_override_by_block_index or {}
     redaction_map: Dict[int, List[Tuple[float, float, float, float]]] = {}
     # Original bboxes of blocks that have overrides.  These are added
@@ -71,10 +91,26 @@ def _collect_redaction_rects(
     merge_prev_rect_count = 0
     skipped_by_skip_set = 0
     skipped_no_text = 0
+    skipped_empty_recognized = 0
     skipped_chart = 0
     skipped_table = 0
+    skipped_equation_image = 0
+    chart_html_redacted = 0
+    equation_text_redacted = 0
     override_rect_count = 0
     redacted_blocks: list[tuple] = []  # (page, idx, type, bbox)
+    chart_fmt = (chart_body_format or "image").strip().lower()
+    eq_fmt = (equation_format or "text").strip().lower()
+    table_fmt = (table_body_format or "html").strip().lower()
+
+    def _expand_bbox(bbox: tuple) -> Tuple[float, float, float, float]:
+        x0, y0, x1, y1 = bbox
+        return (
+            max(0, x0 - margin_pt),
+            max(0, y0 - margin_pt),
+            x1 + margin_pt,
+            y1 + margin_pt,
+        )
 
     for page in layout_doc.pages:
         rects: List[Tuple[float, float, float, float]] = []
@@ -90,31 +126,98 @@ def _collect_redaction_rects(
                 skipped_by_skip_set += 1
                 continue
 
+            if block_index is not None and block_index in segment_bbox_only:
+                continue
+
             raw = getattr(block, "raw", None) or {}
             is_cross_page_pair = isinstance(raw, dict) and raw.get("_cross_page_pair_of") is not None
 
-            # Skip chart and table blocks - they should always stay on original PDF
-            # Chart and table visual content (images) must not be redacted
-            if block.should_skip_redaction():
-                if block.type == "chart":
+            if block.type == "chart":
+                if chart_fmt == "image":
                     skipped_chart += 1
-                else:
+                    continue
+                body_bbox = extract_nested_sub_bbox(block, CHART_BODY) or tuple(block.bbox)
+                rects.append(_expand_bbox(body_bbox))
+                chart_html_redacted += 1
+                redacted_blocks.append(
+                    (page.page_index, block_index, block.type, body_bbox),
+                )
+                if block_index is not None and block_index in bbox_overrides:
+                    override_original_map.setdefault(page.page_index, []).append(
+                        _expand_bbox(body_bbox),
+                    )
+                    override_bbox = bbox_overrides[block_index]
+                    if isinstance(override_bbox, (tuple, list)) and len(override_bbox) == 4:
+                        try:
+                            ox0, oy0, ox1, oy1 = (
+                                float(override_bbox[0]), float(override_bbox[1]),
+                                float(override_bbox[2]), float(override_bbox[3]),
+                            )
+                            rects.append(_expand_bbox((ox0, oy0, ox1, oy1)))
+                            override_rect_count += 1
+                        except (TypeError, ValueError):
+                            pass
+                continue
+
+            if block.is_equation():
+                if eq_fmt == "image":
+                    skipped_equation_image += 1
+                    continue
+                rects.append(_expand_bbox(tuple(block.bbox)))
+                equation_text_redacted += 1
+                redacted_blocks.append(
+                    (page.page_index, block_index, block.type, block.bbox),
+                )
+                if block_index is not None and block_index in bbox_overrides:
+                    override_original_map.setdefault(page.page_index, []).append(
+                        _expand_bbox(tuple(block.bbox)),
+                    )
+                    override_bbox = bbox_overrides[block_index]
+                    if isinstance(override_bbox, (tuple, list)) and len(override_bbox) == 4:
+                        try:
+                            ox0, oy0, ox1, oy1 = (
+                                float(override_bbox[0]), float(override_bbox[1]),
+                                float(override_bbox[2]), float(override_bbox[3]),
+                            )
+                            rects.append(_expand_bbox((ox0, oy0, ox1, oy1)))
+                            override_rect_count += 1
+                        except (TypeError, ValueError):
+                            pass
+                continue
+
+            if block.type == "table":
+                if table_fmt == "image":
                     skipped_table += 1
+                    continue
+                body_bbox = extract_nested_sub_bbox(block, TABLE_BODY) or tuple(block.bbox)
+                rects.append(_expand_bbox(body_bbox))
+                redacted_blocks.append(
+                    (page.page_index, block_index, block.type, body_bbox),
+                )
+                if block_index is not None and block_index in bbox_overrides:
+                    override_original_map.setdefault(page.page_index, []).append(
+                        _expand_bbox(body_bbox),
+                    )
+                    override_bbox = bbox_overrides[block_index]
+                    if isinstance(override_bbox, (tuple, list)) and len(override_bbox) == 4:
+                        try:
+                            ox0, oy0, ox1, oy1 = (
+                                float(override_bbox[0]), float(override_bbox[1]),
+                                float(override_bbox[2]), float(override_bbox[3]),
+                            )
+                            rects.append(_expand_bbox((ox0, oy0, ox1, oy1)))
+                            override_rect_count += 1
+                        except (TypeError, ValueError):
+                            pass
                 continue
 
-            # Skip blocks that are neither text blocks nor cross-page paired blocks
-            if not block.has_text() and not is_cross_page_pair:
-                skipped_no_text += 1
-                continue
+            # Empty OCR text regions may still contain background graphics in the PDF.
+            if _layout_block_is_empty_ocr_text(block) and not is_cross_page_pair:
+                if block_index is None or block_index not in overlay_erase:
+                    skipped_empty_recognized += 1
+                    continue
 
-            x0, y0, x1, y1 = block.bbox
-            # Expand rect slightly to ensure complete coverage
-            rects.append((
-                max(0, x0 - margin_pt),
-                max(0, y0 - margin_pt),
-                x1 + margin_pt,
-                y1 + margin_pt,
-            ))
+            rects.append(_expand_bbox(tuple(block.bbox)))
             text_block_count += 1
             redacted_blocks.append((page.page_index, block_index, block.type, block.bbox))
 
@@ -127,30 +230,31 @@ def _collect_redaction_rects(
             # (images, empty text blocks) cannot protect the original area
             # and prevent its erasure.
             if block_index is not None and block_index in bbox_overrides:
-                # Record the original bbox so it bypasses _clip_rects —
-                # no other block may protect this area from erasure.
-                override_original_map.setdefault(page.page_index, []).append((
-                    max(0, x0 - margin_pt),
-                    max(0, y0 - margin_pt),
-                    x1 + margin_pt,
-                    y1 + margin_pt,
-                ))
-                override_bbox = bbox_overrides[block_index]
-                if isinstance(override_bbox, (tuple, list)) and len(override_bbox) == 4:
-                    try:
-                        ox0, oy0, ox1, oy1 = (
-                            float(override_bbox[0]), float(override_bbox[1]),
-                            float(override_bbox[2]), float(override_bbox[3]),
-                        )
-                        rects.append((
-                            max(0, ox0 - margin_pt),
-                            max(0, oy0 - margin_pt),
-                            ox1 + margin_pt,
-                            oy1 + margin_pt,
-                        ))
-                        override_rect_count += 1
-                    except (TypeError, ValueError):
-                        pass
+                preserve_pixels = block_preserves_source_pdf_visual(
+                    block,
+                    equation_format=eq_fmt,
+                    chart_body_format=chart_fmt,
+                    table_body_format=table_fmt,
+                )
+                if not preserve_pixels:
+                    override_original_map.setdefault(page.page_index, []).append(
+                        _expand_bbox(tuple(block.bbox)),
+                    )
+                    override_bbox = bbox_overrides[block_index]
+                    if isinstance(override_bbox, (tuple, list)) and len(override_bbox) == 4:
+                        try:
+                            ox0, oy0, ox1, oy1 = (
+                                float(override_bbox[0]), float(override_bbox[1]),
+                                float(override_bbox[2]), float(override_bbox[3]),
+                            )
+                            expanded_override = _expand_bbox((ox0, oy0, ox1, oy1))
+                            rects.append(expanded_override)
+                            override_original_map.setdefault(page.page_index, []).append(
+                                expanded_override,
+                            )
+                            override_rect_count += 1
+                        except (TypeError, ValueError):
+                            pass
 
             # Detect cross-page lines inside this block's raw data.
             # MinerU marks cross-page spans (not lines) with "cross_page": true.
@@ -220,8 +324,16 @@ def _collect_redaction_rects(
         visual_blocks_excluded = len(page_images)
 
         # Also count all chart and table blocks (they are all excluded from redaction)
-        chart_table_count = sum(1 for block in page.blocks if block.should_skip_redaction())
-        visual_blocks_excluded += chart_table_count
+        visual_blocks_excluded += sum(
+            1
+            for block in page.blocks
+            if block_preserves_source_pdf_visual(
+                block,
+                equation_format=eq_fmt,
+                chart_body_format=chart_fmt,
+                table_body_format=table_fmt,
+            )
+        )
         
         if visual_blocks_excluded:
             image_block_count += visual_blocks_excluded
@@ -248,8 +360,13 @@ def _collect_redaction_rects(
         f"skip_set={sorted(skip_set) if skip_set else '[]'}, "
         f"skipped_by_set={skipped_by_skip_set}, "
         f"skipped_no_text={skipped_no_text}, "
+        f"skipped_empty_recognized={skipped_empty_recognized}, "
         f"skipped_chart={skipped_chart}, "
-        f"skipped_table={skipped_table}"
+        f"skipped_table={skipped_table}, "
+        f"skipped_equation_image={skipped_equation_image}, "
+        f"chart_html_redacted={chart_html_redacted}, "
+        f"equation_text_redacted={equation_text_redacted}, "
+        f"chart_fmt={chart_fmt}, eq_fmt={eq_fmt}, table_fmt={table_fmt}"
     )
     if override_original_map:
         for p_idx, orects in sorted(override_original_map.items()):
@@ -266,6 +383,52 @@ def _collect_redaction_rects(
                 f"type={blk_type} bbox=({blk_bbox[0]:.1f},{blk_bbox[1]:.1f},"
                 f"{blk_bbox[2]:.1f},{blk_bbox[3]:.1f})",
             )
+
+    # Overlay-erase blocks deferred to per-segment redaction still need their
+    # full layout bbox erased after clipping (unless mixed skip+overlay on same block).
+    overlay_erase_original_count = 0
+    for page in layout_doc.pages:
+        for block in page.blocks:
+            block_index = getattr(block, "index", None)
+            if block_index is None:
+                continue
+            if block_index in skip_set:
+                continue
+            if block_index not in overlay_erase:
+                continue
+            if block_index not in segment_bbox_only:
+                continue
+            if block_index in partial_overlay:
+                continue
+            if block_preserves_source_pdf_visual(
+                block,
+                equation_format=eq_fmt,
+                chart_body_format=chart_fmt,
+                table_body_format=table_fmt,
+            ):
+                continue
+            override_original_map.setdefault(page.page_index, []).append(
+                _expand_bbox(tuple(block.bbox)),
+            )
+            override_bbox = bbox_overrides.get(block_index)
+            if isinstance(override_bbox, (tuple, list)) and len(override_bbox) == 4:
+                try:
+                    ox0, oy0, ox1, oy1 = (
+                        float(override_bbox[0]), float(override_bbox[1]),
+                        float(override_bbox[2]), float(override_bbox[3]),
+                    )
+                    override_original_map.setdefault(page.page_index, []).append(
+                        _expand_bbox((ox0, oy0, ox1, oy1)),
+                    )
+                except (TypeError, ValueError):
+                    pass
+            overlay_erase_original_count += 1
+    if overlay_erase_original_count:
+        unified_logger.info(
+            LogModule.RESTOR,
+            f"[SOURCE_CLEANUP] Queued {overlay_erase_original_count} overlay-erase "
+            "block bbox(es) for post-clip redaction",
+        )
 
     return redaction_map, override_original_map
 
@@ -301,6 +464,49 @@ def _merge_overlapping_rects(
     return merged
 
 
+def _combine_protected_rect_lists(
+    *rect_lists: Optional[List[Tuple[float, float, float, float]]],
+) -> Optional[List[Tuple[float, float, float, float]]]:
+    """Merge multiple protected-rect lists (skip None/empty)."""
+    combined: List[Tuple[float, float, float, float]] = []
+    for rect_list in rect_lists:
+        if rect_list:
+            combined.extend(rect_list)
+    return combined or None
+
+
+def _clip_rects_against_protected_rects(
+    rects: List[Tuple[float, float, float, float]],
+    protected_rects: List[Tuple[float, float, float, float]],
+) -> List[Tuple[float, float, float, float]]:
+    """Remove portions of redaction rects that overlap protected areas."""
+    if not protected_rects:
+        return rects
+
+    clipped: List[Tuple[float, float, float, float]] = []
+    for rx0, ry0, rx1, ry1 in rects:
+        fragments = [(rx0, ry0, rx1, ry1)]
+        for px0, py0, px1, py1 in protected_rects:
+            next_fragments: List[Tuple[float, float, float, float]] = []
+            for fx0, fy0, fx1, fy1 in fragments:
+                if fx0 >= px1 or fx1 <= px0 or fy0 >= py1 or fy1 <= py0:
+                    next_fragments.append((fx0, fy0, fx1, fy1))
+                    continue
+                if fx0 < px0:
+                    next_fragments.append((fx0, fy0, px0, fy1))
+                if fx1 > px1:
+                    next_fragments.append((px1, fy0, fx1, fy1))
+                clip_x0 = max(fx0, px0)
+                clip_x1 = min(fx1, px1)
+                if fy0 < py0:
+                    next_fragments.append((clip_x0, fy0, clip_x1, py0))
+                if fy1 > py1:
+                    next_fragments.append((clip_x0, py1, clip_x1, fy1))
+            fragments = next_fragments
+        clipped.extend(fragments)
+    return clipped
+
+
 def _clip_rects_against_skipped_blocks(
     rects: List[Tuple[float, float, float, float]],
     layout_doc: LayoutDocument,
@@ -309,13 +515,18 @@ def _clip_rects_against_skipped_blocks(
     *,
     override_block_indices: Optional[set] = None,
     unprotect_block_indices: Optional[set] = None,
+    extra_protected_rects: Optional[List[Tuple[float, float, float, float]]] = None,
+    equation_format: str = "text",
+    chart_body_format: str = "image",
+    table_body_format: str = "html",
+    overlay_erase_block_indices: Optional[set] = None,
 ) -> List[Tuple[float, float, float, float]]:
     """Clip redaction rects to exclude areas belonging to non-redacted blocks.
 
     Protects every block on the page whose content must NOT be erased:
       - Blocks in skip_block_indices (translation unchanged / failed)
-      - Blocks with no detected text (has_text()=False) — their bbox
-        may still contain original PDF content
+      - Blocks with no recognized text (has_recognized_text()=False) — may
+        still contain background graphics in the PDF
       - Chart / table / image blocks
 
     Blocks listed in unprotect_block_indices are NOT protected (e.g. layout
@@ -332,6 +543,10 @@ def _clip_rects_against_skipped_blocks(
     """
     override_ids = override_block_indices or set()
     unprotect_ids = unprotect_block_indices or set()
+    overlay_erase = overlay_erase_block_indices or set()
+    chart_fmt = (chart_body_format or "image").strip().lower()
+    eq_fmt = (equation_format or "text").strip().lower()
+    table_fmt = (table_body_format or "html").strip().lower()
     protected_rects: List[Tuple[float, float, float, float]] = []
     for page in layout_doc.pages:
         if page.page_index != page_index:
@@ -339,54 +554,54 @@ def _clip_rects_against_skipped_blocks(
         for block in page.blocks:
             blk_idx = getattr(block, "index", None)
             # Blocks with a bbox override should NOT protect their
-            # original area — the user has explicitly opted into erasing
-            # both the original and override bbox areas.
-            if blk_idx is not None and blk_idx in override_ids:
+            # original area — unless the block must preserve source PDF pixels.
+            preserve_pixels = block_preserves_source_pdf_visual(
+                block,
+                equation_format=eq_fmt,
+                chart_body_format=chart_fmt,
+                table_body_format=table_fmt,
+            )
+            if blk_idx is not None and blk_idx in override_ids and not preserve_pixels:
                 continue
             if blk_idx is not None and blk_idx in unprotect_ids:
                 continue
-            # Protect all blocks that _collect_redaction_rects would skip:
-            #   1. skip_set blocks
-            #   2. blocks without text (has_text()=False)
-            #   3. chart / table blocks
             if blk_idx is not None and blk_idx in skip_block_indices:
+                if preserve_pixels:
+                    protected_rects.append(
+                        protected_bbox_for_layout_block(
+                            block,
+                            equation_format=eq_fmt,
+                            chart_body_format=chart_fmt,
+                            table_body_format=table_fmt,
+                        )
+                    )
+                else:
+                    protected_rects.append(block.bbox)
+            elif preserve_pixels:
+                protected_rects.append(
+                    protected_bbox_for_layout_block(
+                        block,
+                        equation_format=eq_fmt,
+                        chart_body_format=chart_fmt,
+                        table_body_format=table_fmt,
+                    )
+                )
+            elif _layout_block_is_empty_ocr_text(block):
+                if blk_idx is not None and blk_idx in overlay_erase:
+                    continue
+                if empty_ocr_block_overlaps_overlay_block_region(
+                    block, layout_doc, overlay_erase,
+                ):
+                    continue
                 protected_rects.append(block.bbox)
-            elif not block.has_text():
-                protected_rects.append(block.bbox)
-            elif block.should_skip_redaction():
-                protected_rects.append(block.bbox)
+
+    if extra_protected_rects:
+        protected_rects.extend(extra_protected_rects)
 
     if not protected_rects:
         return rects
 
-    clipped: List[Tuple[float, float, float, float]] = []
-    for rx0, ry0, rx1, ry1 in rects:
-        fragments = [(rx0, ry0, rx1, ry1)]
-        for px0, py0, px1, py1 in protected_rects:
-            next_fragments: List[Tuple[float, float, float, float]] = []
-            for fx0, fy0, fx1, fy1 in fragments:
-                # No overlap — keep fragment as-is
-                if fx0 >= px1 or fx1 <= px0 or fy0 >= py1 or fy1 <= py0:
-                    next_fragments.append((fx0, fy0, fx1, fy1))
-                    continue
-                # Split fragment around the protected rect (4 sub-rects)
-                # Left of protected rect
-                if fx0 < px0:
-                    next_fragments.append((fx0, fy0, px0, fy1))
-                # Right of protected rect
-                if fx1 > px1:
-                    next_fragments.append((px1, fy0, fx1, fy1))
-                # Top of protected rect (between px0 and px1 in x)
-                clip_x0 = max(fx0, px0)
-                clip_x1 = min(fx1, px1)
-                if fy0 < py0:
-                    next_fragments.append((clip_x0, fy0, clip_x1, py0))
-                # Bottom of protected rect
-                if fy1 > py1:
-                    next_fragments.append((clip_x0, py1, clip_x1, fy1))
-            fragments = next_fragments
-        clipped.extend(fragments)
-
+    clipped = _clip_rects_against_protected_rects(rects, protected_rects)
     clipped_count = len(clipped) - len(rects)
     if clipped_count != 0:
         unified_logger.info(
@@ -395,7 +610,6 @@ def _clip_rects_against_skipped_blocks(
             f"extra redaction fragment(s) to protect non-redacted blocks "
             f"(protected={len(protected_rects)}, before={len(rects)}, after={len(clipped)})",
         )
-
     return clipped
 
 
@@ -410,6 +624,17 @@ def clean_source_pdf(
     skip_block_indices: Optional[set] = None,
     bbox_override_by_block_index: Optional[Dict[int, tuple]] = None,
     unprotect_block_indices: Optional[set] = None,
+    protected_segment_rects: Optional[Dict[int, List[Tuple[float, float, float, float]]]] = None,
+    equation_format: str = "text",
+    chart_body_format: str = "image",
+    table_body_format: str = "html",
+    segment_bbox_only_block_indices: Optional[set] = None,
+    overlay_erase_block_indices: Optional[set] = None,
+    partial_overlay_block_indices: Optional[set] = None,
+    segment_redaction_rects: Optional[Dict[int, List[Tuple[float, float, float, float]]]] = None,
+    overlay_segments: Optional[List[Dict]] = None,
+    overlay_task_state: Optional[Dict] = None,
+    overlay_text_block_indices: Optional[set] = None,
 ) -> bytes:
     """
     Clean original text from a source PDF and return the cleaned PDF bytes.
@@ -457,6 +682,14 @@ def clean_source_pdf(
         f"{sorted(unprotect_block_indices) if unprotect_block_indices else 'None/empty'}"
     )
 
+    empty_ocr_protected = collect_empty_text_block_protected_rects(
+        layout_doc,
+        overlay_erase_block_indices=overlay_erase_block_indices,
+        overlay_text_block_indices=overlay_text_block_indices,
+        segments=overlay_segments,
+        task_state=overlay_task_state,
+    )
+
     # Open the source PDF
     doc = fitz.open(source_pdf_path)
     try:
@@ -468,6 +701,12 @@ def clean_source_pdf(
             layout_doc,
             skip_block_indices=skip_block_indices,
             bbox_override_by_block_index=bbox_override_by_block_index,
+            equation_format=equation_format,
+            chart_body_format=chart_body_format,
+            table_body_format=table_body_format,
+            segment_bbox_only_block_indices=segment_bbox_only_block_indices,
+            overlay_erase_block_indices=overlay_erase_block_indices,
+            partial_overlay_block_indices=partial_overlay_block_indices,
         )
 
         if extra_redaction_rects:
@@ -481,15 +720,25 @@ def clean_source_pdf(
                 f"extra redaction rect(s) for embedded chart/table images",
             )
 
+        if segment_redaction_rects:
+            unified_logger.info(
+                LogModule.RESTOR,
+                f"[SOURCE_CLEANUP] Segment redaction rects (applied after clip): "
+                f"{sum(len(v) for v in segment_redaction_rects.values())}",
+            )
+
         redacted_page_count = 0
         total_rect_count = 0
 
         for page_idx in range(len(doc)):
-            if page_idx not in redaction_map:
+            has_segment_rects = bool(
+                segment_redaction_rects and segment_redaction_rects.get(page_idx),
+            )
+            if page_idx not in redaction_map and not has_segment_rects:
                 continue
 
             page = doc[page_idx]
-            rects = redaction_map[page_idx]
+            rects = list(redaction_map.get(page_idx, []))
 
             if merge_rects:
                 rects = _merge_overlapping_rects(rects)
@@ -501,12 +750,19 @@ def clean_source_pdf(
             override_block_indices: Optional[set] = None
             if bbox_override_by_block_index:
                 override_block_indices = set(bbox_override_by_block_index.keys())
-            if skip_block_indices or override_block_indices:
-                rects = _clip_rects_against_skipped_blocks(
-                    rects, layout_doc, page_idx, skip_block_indices or set(),
-                    override_block_indices=override_block_indices,
-                    unprotect_block_indices=unprotect_block_indices,
-                )
+            page_extra_protected = None
+            if protected_segment_rects and page_idx in protected_segment_rects:
+                page_extra_protected = protected_segment_rects[page_idx]
+            rects = _clip_rects_against_skipped_blocks(
+                rects, layout_doc, page_idx, skip_block_indices or set(),
+                override_block_indices=override_block_indices,
+                unprotect_block_indices=unprotect_block_indices,
+                extra_protected_rects=page_extra_protected,
+                equation_format=equation_format,
+                chart_body_format=chart_body_format,
+                table_body_format=table_body_format,
+                overlay_erase_block_indices=overlay_erase_block_indices,
+            )
 
             # Add original bboxes of override blocks AFTER clipping so
             # they bypass protected-block exclusion entirely.  The user
@@ -521,7 +777,16 @@ def clean_source_pdf(
                 ]
                 if merge_rects:
                     orig_rects = _merge_overlapping_rects(orig_rects)
-                rects.extend(orig_rects)
+                post_clip_protected = _combine_protected_rect_lists(
+                    page_extra_protected,
+                    empty_ocr_protected.get(page_idx),
+                )
+                if post_clip_protected:
+                    orig_rects = _clip_rects_against_protected_rects(
+                        orig_rects, post_clip_protected,
+                    )
+                if orig_rects:
+                    rects.extend(orig_rects)
                 orig_details = [
                     (round(r[0], 1), round(r[1], 1), round(r[2], 1), round(r[3], 1))
                     for r in orig_rects
@@ -534,15 +799,34 @@ def clean_source_pdf(
                     f"total={len(rects)}",
                 )
 
+            if segment_redaction_rects and page_idx in segment_redaction_rects:
+                seg_rects = list(segment_redaction_rects[page_idx])
+                if merge_rects:
+                    seg_rects = _merge_overlapping_rects(seg_rects)
+                post_clip_protected = _combine_protected_rect_lists(
+                    page_extra_protected,
+                    empty_ocr_protected.get(page_idx),
+                )
+                if post_clip_protected:
+                    seg_rects = _clip_rects_against_protected_rects(
+                        seg_rects, post_clip_protected,
+                    )
+                if seg_rects:
+                    rects.extend(seg_rects)
+
+            if not rects:
+                continue
+
             for rx0, ry0, rx1, ry1 in rects:
                 rect = fitz.Rect(rx0, ry0, rx1, ry1)
                 # Add redaction annotation
                 page.add_redact_annot(rect, fill=fill_color)
                 total_rect_count += 1
 
-            # Apply redaction (images=NONE is already the default, so
-            # images that overlap with text block areas are preserved)
-            page.apply_redactions()
+            # Erase raster pixels inside text redaction rects so scanned / title-block
+            # PDFs do not keep original text baked into background images.
+            redact_images = getattr(fitz, "PDF_REDACT_IMAGE_PIXELS", 2)
+            page.apply_redactions(images=redact_images)
             redacted_page_count += 1
 
         unified_logger.info(

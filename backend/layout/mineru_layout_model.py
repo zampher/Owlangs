@@ -38,11 +38,8 @@ def _extract_text_from_layout_block(block_data: Dict[str, Any]) -> Optional[str]
         return str(text)
     
     # Extract from lines -> spans -> content
-    lines = block_data.get("lines", [])
-    if not lines:
-        return None
-    
-    text_parts = []
+    lines = block_data.get("lines", []) or []
+    text_parts: List[str] = []
     for line in lines:
         if not isinstance(line, dict):
             continue
@@ -54,12 +51,27 @@ def _extract_text_from_layout_block(block_data: Dict[str, Any]) -> Optional[str]
             content = span.get("content")
             if content:
                 text_parts.append(str(content))
+            # Table spans store full HTML for title-block style raster tables
+            elif span.get("type") == "table":
+                html = span.get("html")
+                if html:
+                    return str(html)
             # Also check for 'text' field as fallback
             elif span.get("type") == "text":
                 text = span.get("text")
                 if text:
                     text_parts.append(str(text))
-    
+
+    nested_blocks = block_data.get("blocks") or []
+    if isinstance(nested_blocks, list):
+        for sub in nested_blocks:
+            if isinstance(sub, dict):
+                sub_text = _extract_text_from_layout_block(sub)
+                if sub_text:
+                    if sub_text.lstrip().lower().startswith("<table"):
+                        return sub_text
+                    text_parts.append(sub_text)
+
     if text_parts:
         return " ".join(text_parts)
     return None

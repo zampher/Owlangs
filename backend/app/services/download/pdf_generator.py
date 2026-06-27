@@ -112,6 +112,7 @@ class PDFGenerator:
                 font_weight_by_block_index: Dict[int, str] = {}
                 font_style_by_block_index: Dict[int, str] = {}
                 leading_em_by_block_index: Dict[int, float] = {}
+                segments = []
             else:
                 segments = segments_data.get("segments") or []
                 is_deep_split_enabled = bool(task_state.get("deep_split"))
@@ -299,6 +300,8 @@ class PDFGenerator:
                             else:
                                 render_kwargs["source_pdf_path"] = source_pdf
                                 render_kwargs["output_path"] = pdf_file
+                                render_kwargs["overlay_segments"] = segments if segments else None
+                                render_kwargs["overlay_task_state"] = task_state
                         else:
                             render_kwargs["output_path"] = output_dir / f"{file_stem}_reportlab_debug.pdf" if logger.level <= 10 else None
 
@@ -441,10 +444,13 @@ class PDFGenerator:
         """
         from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
             resolve_segment_layout_block_indices,
+            segment_skips_overlay,
         )
 
         block_text_map: Dict[int, str] = {}
         block_text_sequences = defaultdict(list) if is_deep_split_enabled else None
+        block_has_overlay: Dict[int, bool] = {}
+        block_only_skip: Dict[int, bool] = {}
         layout_chunk_block_texts: List[List[str]] = task_state.get("layout_chunk_block_texts") or []
         
         # Build block index to type mapping, original texts, and raw data for hints
@@ -523,10 +529,7 @@ class PDFGenerator:
             return _split_by_weights(normalized_text, weights)
         
         # Build set of block indices that should skip overlay rendering.
-        # A segment skips overlay when:
-        #   - is_excluded is truthy (explicitly excluded from translation), OR
-        #   - source_text == target_text and no modified_text override
-        #     (translation engine returned unchanged text)
+        # A block is skipped only when every segment mapped to it skips overlay.
         skip_overlay_block_indices: set[int] = set()
 
         # Map text from segments to blocks
@@ -589,30 +592,17 @@ class PDFGenerator:
                 continue
 
             # Detect segments that should skip overlay rendering.
-            #   - Excluded: seg["is_excluded"] is truthy (pre-determined exclusion)
-            #   - Translation failed: source_text == target_text and no modified_text
-            #     (translation engine returned unchanged text, meaning no translation occurred)
-            #   - Empty target: target_text/modified_text is empty but source_text exists
-            #     (translation failed to produce output — preserve original PDF content)
-            is_excluded = bool(seg.get("is_excluded"))
-            source_text = (seg.get("source_text") or "").strip()
-            target_text = (seg.get("target_text") or "").strip()
-            modified_text = (seg.get("modified_text") or "").strip()
-            translation_unchanged = (
-                not is_excluded
-                and source_text
-                and source_text == target_text
-                and not modified_text
-            )
-            translation_failed = (
-                not is_excluded
-                and not text
-                and source_text
-                and text_field != "source_text"
-            )
-            if is_excluded or translation_unchanged or translation_failed:
-                for idx in text_block_indices:
-                    skip_overlay_block_indices.add(idx)
+            skip_seg = segment_skips_overlay(seg, text_field)
+            for idx in text_block_indices:
+                if skip_seg:
+                    if not block_has_overlay.get(idx, False):
+                        block_only_skip[idx] = True
+                elif text:
+                    block_has_overlay[idx] = True
+                    block_only_skip[idx] = False
+
+            if skip_seg:
+                continue
 
             if not text:
                 continue
@@ -665,6 +655,12 @@ class PDFGenerator:
                 merged = "\n".join(part for part in parts if part).strip()
                 if merged:
                     block_text_map[idx] = merged
+
+        skip_overlay_block_indices = {
+            idx
+            for idx, only_skip in block_only_skip.items()
+            if only_skip and not block_has_overlay.get(idx, False)
+        }
 
         self._reconcile_block_text_map_lengths(
             block_text_map,

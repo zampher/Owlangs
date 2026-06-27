@@ -122,6 +122,7 @@ class ImageOverlayRendererTest(unittest.TestCase):
         )
         self.assertEqual(segment["layout_block_bbox_space"], "image_px")
         self.assertEqual(segment["layout_block_bbox"], [[20.0, 20.0, 180.0, 80.0]])
+        self.assertEqual(segment["layout_block_bbox_image_size"], [400, 200])
         self.assertFalse(
             transform_segment_bboxes_to_image_pixels(
                 segment,
@@ -129,6 +130,92 @@ class ImageOverlayRendererTest(unittest.TestCase):
                 image_size=(400, 200),
             )
         )
+
+    def test_transform_paddle_canvas_to_smaller_source_image(self):
+        """Paddle layout canvas can exceed source PNG dimensions; bbox must scale down."""
+        from layout.image_overlay.renderer import transform_segment_bboxes_to_image_pixels
+
+        page = LayoutPage(page_index=0, width=612.0, height=910.0, blocks=[])
+        layout_doc = LayoutDocument(
+            pages=[page],
+            engine="paddle",
+            metadata={"coordinate_space": "image_px"},
+        )
+        segment = {
+            "segment_index": 0,
+            "layout_block_bbox": [[0.0, 0.0, 612.0, 300.0]],
+            "layout_block_bbox_space": "image_px",
+        }
+        image_size = (306, 455)
+        self.assertTrue(
+            transform_segment_bboxes_to_image_pixels(
+                segment,
+                layout_doc=layout_doc,
+                image_size=image_size,
+            )
+        )
+        self.assertEqual(segment["layout_block_bbox"], [[0.0, 0.0, 306.0, 150.0]])
+        self.assertEqual(segment["layout_block_bbox_image_size"], [306, 455])
+        self.assertFalse(
+            transform_segment_bboxes_to_image_pixels(
+                segment,
+                layout_doc=layout_doc,
+                image_size=image_size,
+            )
+        )
+
+    def test_transform_remaps_when_cached_mapping_but_bbox_exceeds_image(self):
+        """Stale layout_block_bbox_image_size must not skip rescale when bbox is oversized."""
+        from layout.image_overlay.renderer import transform_segment_bboxes_to_image_pixels
+
+        page = LayoutPage(page_index=0, width=600.0, height=910.0, blocks=[])
+        layout_doc = LayoutDocument(
+            pages=[page],
+            engine="paddle",
+            metadata={"coordinate_space": "image_px"},
+        )
+        segment = {
+            "segment_index": 0,
+            "layout_block_bbox": [[0.0, 0.0, 600.0, 800.0]],
+            "layout_block_bbox_space": "image_px",
+            "layout_block_bbox_image_size": [309, 910],
+        }
+        image_size = (309, 910)
+        self.assertTrue(
+            transform_segment_bboxes_to_image_pixels(
+                segment,
+                layout_doc=layout_doc,
+                image_size=image_size,
+            )
+        )
+        bbox = segment["layout_block_bbox"][0]
+        self.assertLessEqual(bbox[2], image_size[0])
+        self.assertLessEqual(bbox[3], image_size[1])
+        self.assertEqual(segment["layout_block_bbox_image_size"], [309, 910])
+
+    def test_segment_layout_bbox_to_image_skips_rescale_when_already_image_px(self):
+        from layout.image_overlay.coordinate_space import COORDINATE_SPACE_IMAGE_PX
+        from layout.image_overlay.renderer import _segment_layout_bbox_to_image
+
+        page = LayoutPage(page_index=0, width=111.0, height=327.0, blocks=[])
+        layout_doc = LayoutDocument(pages=[page], engine="mineru")
+        image_size = (309, 910)
+        bbox = (6.0, 75.0, 303.0, 287.0)
+        scaled = _segment_layout_bbox_to_image(
+            bbox,
+            layout_doc,
+            page,
+            image_size,
+            bbox_space=COORDINATE_SPACE_IMAGE_PX,
+        )
+        self.assertEqual(scaled, (6, 75, 303, 287))
+        double_scaled = _segment_layout_bbox_to_image(
+            bbox,
+            layout_doc,
+            page,
+            image_size,
+        )
+        self.assertNotEqual(double_scaled, scaled)
 
     def test_sample_cover_color_picks_brightest_pixel_in_strips(self):
         image = Image.new("RGB", (120, 40), color=(200, 200, 200))

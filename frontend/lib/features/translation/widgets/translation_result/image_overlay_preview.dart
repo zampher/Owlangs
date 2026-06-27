@@ -26,12 +26,16 @@ class ImageOverlayPreviewView extends StatefulWidget {
     this.panelLabel,
     this.viewportController,
     this.highlightRect,
+    this.bboxReferenceSize,
   });
 
   final String imageUrl;
   final String? panelLabel;
   final PreviewViewportController? viewportController;
   final Rect? highlightRect;
+
+  /// Bbox coordinate reference size from API (`overlay_source_image_size`).
+  final Size? bboxReferenceSize;
 
   @override
   State<ImageOverlayPreviewView> createState() =>
@@ -112,7 +116,8 @@ class _ImageOverlayPreviewViewState extends State<ImageOverlayPreviewView> {
   Rect? _computeDisplayRect(BoxConstraints constraints) {
     return layoutImageRectToDisplayRect(
       layoutRect: widget.highlightRect,
-      imageSize: _imageSize,
+      displayImageSize: _imageSize,
+      bboxReferenceSize: widget.bboxReferenceSize,
       containerWidth: constraints.maxWidth,
       containerHeight: constraints.maxHeight,
     );
@@ -186,13 +191,19 @@ class _ImageOverlayPreviewViewState extends State<ImageOverlayPreviewView> {
 }
 
 /// Map a bbox in image pixel space to widget coordinates for [BoxFit.contain].
+///
+/// [layoutRect] is in [bboxReferenceSize] when provided, otherwise in
+/// [displayImageSize] pixel space. [displayImageSize] is the decoded bitmap
+/// used for aspect ratio and contain scaling (may differ from reference after
+/// EXIF or export normalization).
 Rect? layoutImageRectToDisplayRect({
   required Rect? layoutRect,
-  required Size? imageSize,
+  required Size? displayImageSize,
+  Size? bboxReferenceSize,
   required double containerWidth,
   required double containerHeight,
 }) {
-  if (layoutRect == null || imageSize == null) {
+  if (layoutRect == null || displayImageSize == null) {
     return null;
   }
   if (!_isFinitePositive(layoutRect.width) ||
@@ -202,11 +213,38 @@ Rect? layoutImageRectToDisplayRect({
     return null;
   }
 
-  final double imageW = imageSize.width;
-  final double imageH = imageSize.height;
+  final Size refSize = bboxReferenceSize ?? displayImageSize;
+  final double refW = refSize.width;
+  final double refH = refSize.height;
+  if (!_isFinitePositive(refW) || !_isFinitePositive(refH)) {
+    return null;
+  }
+
+  final double imageW = displayImageSize.width;
+  final double imageH = displayImageSize.height;
   if (!_isFinitePositive(imageW) || !_isFinitePositive(imageH)) {
     return null;
   }
+
+  final Rect clampedRef = Rect.fromLTRB(
+    math.max(0.0, math.min(layoutRect.left, refW)),
+    math.max(0.0, math.min(layoutRect.top, refH)),
+    math.max(0.0, math.min(layoutRect.right, refW)),
+    math.max(0.0, math.min(layoutRect.bottom, refH)),
+  );
+  if (!_isFinitePositive(clampedRef.width) ||
+      !_isFinitePositive(clampedRef.height)) {
+    return null;
+  }
+
+  final double refToDisplaySx = imageW / refW;
+  final double refToDisplaySy = imageH / refH;
+  final Rect layoutInDisplay = Rect.fromLTRB(
+    clampedRef.left * refToDisplaySx,
+    clampedRef.top * refToDisplaySy,
+    clampedRef.right * refToDisplaySx,
+    clampedRef.bottom * refToDisplaySy,
+  );
 
   double effectiveWidth = containerWidth;
   double effectiveHeight = containerHeight;
@@ -239,10 +277,10 @@ Rect? layoutImageRectToDisplayRect({
   final double offsetX = (effectiveWidth - displayW) / 2;
   final double offsetY = (effectiveHeight - displayH) / 2;
   final Rect screenRect = Rect.fromLTWH(
-    layoutRect.left * scale + offsetX,
-    layoutRect.top * scale + offsetY,
-    layoutRect.width * scale,
-    layoutRect.height * scale,
+    layoutInDisplay.left * scale + offsetX,
+    layoutInDisplay.top * scale + offsetY,
+    layoutInDisplay.width * scale,
+    layoutInDisplay.height * scale,
   );
   if (!_isFinitePositive(screenRect.width) ||
       !_isFinitePositive(screenRect.height) ||
@@ -306,6 +344,8 @@ class ImageOverlayCompareView extends StatefulWidget {
     required this.linkedScroll,
     super.key,
     this.highlightRect,
+    this.sourceHighlightRect,
+    this.bboxReferenceSize,
     this.viewportController,
   });
 
@@ -313,8 +353,14 @@ class ImageOverlayCompareView extends StatefulWidget {
   final String targetImageUrl;
   final bool linkedScroll;
 
-  /// Bbox rectangle (in image pixel coordinates) to highlight on both panes.
+  /// Bbox rectangle (image pixel coords) to highlight on the target pane.
   final Rect? highlightRect;
+
+  /// Bbox for the source pane; defaults to [highlightRect] when null.
+  final Rect? sourceHighlightRect;
+
+  /// Bbox coordinate reference from API (`overlay_source_image_size`).
+  final Size? bboxReferenceSize;
 
   /// When provided, [InteractiveViewer] zoom is bidirectionally synced with
   /// this controller so toolbar buttons (zoom In/Out/Reset) mirror the child's
@@ -516,10 +562,15 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
     }
   }
 
-  Widget _buildBboxOverlay(BoxConstraints constraints, Size? imageSize) {
+  Widget _buildBboxOverlay(
+    BoxConstraints constraints,
+    Size? imageSize,
+    Rect? highlightRect,
+  ) {
     final Rect? screenRect = layoutImageRectToDisplayRect(
-      layoutRect: widget.highlightRect,
-      imageSize: imageSize,
+      layoutRect: highlightRect,
+      displayImageSize: imageSize,
+      bboxReferenceSize: widget.bboxReferenceSize,
       containerWidth: constraints.maxWidth,
       containerHeight: constraints.maxHeight,
     );
@@ -533,9 +584,10 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
     required String label,
     required Uint8List bytes,
     required Size? imageSize,
-    required bool showHighlight,
+    required Rect? highlightRect,
     required TransformationController transformController,
   }) {
+    final bool showHighlight = highlightRect != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -572,7 +624,7 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
                           child: Image.memory(bytes, fit: BoxFit.contain),
                         ),
                         if (showHighlight)
-                          _buildBboxOverlay(constraints, imageSize),
+                          _buildBboxOverlay(constraints, imageSize, highlightRect),
                       ],
                     ),
                   );
@@ -590,7 +642,8 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
     required Uint8List source,
     required Uint8List target,
   }) {
-    final bool showHighlight = widget.highlightRect != null;
+    final Rect? sourceHighlight =
+        widget.sourceHighlightRect ?? widget.highlightRect;
     return Listener(
       onPointerSignal: _onPointerSignal,
       child: Row(
@@ -601,7 +654,7 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
               label: l10n.translationPreviewPanelSource,
               bytes: source,
               imageSize: _sourceImageSize,
-              showHighlight: showHighlight,
+              highlightRect: sourceHighlight,
               transformController: _sourceTransformController,
             ),
           ),
@@ -611,7 +664,7 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
               label: l10n.translationPreviewPanelTarget,
               bytes: target,
               imageSize: _targetImageSize,
-              showHighlight: showHighlight,
+              highlightRect: widget.highlightRect,
               transformController: _targetTransformController,
             ),
           ),
