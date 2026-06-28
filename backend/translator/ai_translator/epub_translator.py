@@ -1,4 +1,4 @@
-﻿# SPDX-FileCopyrightText: 2026 Zampher
+# SPDX-FileCopyrightText: 2026 Zampher
 # SPDX-License-Identifier: MPL-2.0
 import asyncio
 import xml.etree.ElementTree as ET
@@ -171,13 +171,25 @@ class EpubTranslator(AiTranslator):
                     f"[EPUB_TRANSLATOR] Task {task_id}: Found {len(excluded_indices)} excluded segments",
                 )
 
+        from utils.translation_segments import _is_image_segment
+
         included_indices: List[int] = []
         included_texts: List[str] = []
+        image_skip_count = 0
         for idx, text in enumerate(original_texts):
             if idx in excluded_indices:
                 continue
+            if _is_image_segment(text):
+                image_skip_count += 1
+                continue
             included_indices.append(idx)
             included_texts.append(text)
+        if image_skip_count:
+            self.logger.info(
+                LogModule.TRANS,
+                f"[EPUB_TRANSLATOR] Task {task_id}: skipping {image_skip_count} image placeholder "
+                f"segment(s) from LLM requests",
+            )
         return included_indices, included_texts, list(original_texts)
 
     def translate(self, document: Document) -> Self:

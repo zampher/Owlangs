@@ -1573,6 +1573,14 @@ class StatusService:
                                     break
                             
                             if matched_image_path:
+                                from utils.ebook_image_utils import segment_list_has_html_extractor_image
+                                if segment_list_has_html_extractor_image(all_segments, matched_image_path):
+                                    logger.debug(
+                                        LogModule.WORKFLOW,
+                                        f"[PREVIEW-API] Task {task_id}: Skipping duplicate MOBI image preview "
+                                        f"segment; [Image: ...] already present for {matched_image_path}",
+                                    )
+                                    continue
                                 # Create placeholder ID from image path
                                 placeholder_id = matched_image_path
                                 

@@ -176,8 +176,15 @@ class MobiExtractor(Extractor):
         items_to_process = []
         if spine:
             for spine_item in spine:
-                item_id = spine_item[0]
-                item = book.get_item_with_id(item_id)
+                if isinstance(spine_item, tuple):
+                    item_id = spine_item[0]
+                    item = book.get_item_with_id(item_id)
+                elif isinstance(spine_item, str) and spine_item == "nav":
+                    continue
+                elif hasattr(spine_item, "get_id"):
+                    item = spine_item
+                else:
+                    continue
                 if item and item.get_type() == ebooklib.ITEM_DOCUMENT:
                     items_to_process.append(item)
         else:

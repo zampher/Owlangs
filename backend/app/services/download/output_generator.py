@@ -67,6 +67,104 @@ def _calibre_cmd_path() -> Optional[str]:
     return None
 
 
+def _is_epub_zip_bytes(data: bytes) -> bool:
+    from utils.ebook_mobi_utils import is_epub_zip_bytes
+
+    return is_epub_zip_bytes(data)
+
+
+def _is_valid_mobi_bytes(data: bytes) -> bool:
+    from utils.ebook_mobi_utils import is_valid_mobi_bytes
+
+    return is_valid_mobi_bytes(data)
+
+
+def _convert_epub_bytes_to_mobi(
+    epub_content: bytes,
+    timeout: int = 300,
+    *,
+    ebook_metadata: Optional[Dict[str, Any]] = None,
+    file_stem: Optional[str] = None,
+) -> Optional[bytes]:
+    """Convert EPUB bytes to MOBI via Calibre after preparing images for MOBI embedding."""
+    cmd = _calibre_cmd_path()
+    if not cmd or not epub_content:
+        return None
+
+    import tempfile
+
+    from utils.ebook_image_utils import prepare_epub_bytes_for_mobi
+    from utils.ebook_metadata import extract_from_epub_bytes, merge_metadata
+
+    raw = epub_content if isinstance(epub_content, bytes) else epub_content.encode("utf-8")
+    try:
+        prepared = prepare_epub_bytes_for_mobi(raw)
+    except Exception as prep_err:
+        logger.warning(
+            LogModule.EXPORT,
+            f"prepare_epub_bytes_for_mobi failed, using raw EPUB: {prep_err}",
+            exc_info=True,
+        )
+        prepared = raw
+    if not prepared:
+        prepared = raw
+
+    meta = dict(ebook_metadata or {})
+    if not (meta.get("title") or "").strip() or not (meta.get("author") or "").strip():
+        embedded = extract_from_epub_bytes(prepared)
+        meta = merge_metadata(embedded, meta)
+
+    convert_extra: list[str] = ["--dont-compress"]
+    title = (meta.get("title") or "").strip() or _ebook_title_from_stem(file_stem or "")
+    if title:
+        convert_extra.extend(["--title", title])
+    author = (meta.get("author") or "").strip()
+    if author:
+        convert_extra.extend(["--authors", author])
+    lang = (meta.get("language") or "").strip()
+    if lang:
+        convert_extra.extend(["--language", lang])
+
+    tmp_epub_path = None
+    tmp_mobi_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".epub") as tmp_epub:
+            tmp_epub.write(prepared)
+            tmp_epub_path = tmp_epub.name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mobi") as tmp_mobi:
+            tmp_mobi_path = tmp_mobi.name
+        result = _run_ebook_convert_sync(
+            cmd,
+            tmp_epub_path,
+            tmp_mobi_path,
+            *convert_extra,
+            timeout=timeout,
+        )
+        if result.returncode != 0 or not os.path.exists(tmp_mobi_path):
+            logger.warning(
+                LogModule.EXPORT,
+                f"ebook-convert EPUB->MOBI failed: returncode={result.returncode}, "
+                f"stderr={(result.stderr or '')[:300]}",
+            )
+            return None
+        with open(tmp_mobi_path, "rb") as mobi_file:
+            mobi_bytes = mobi_file.read()
+        if not _is_valid_mobi_bytes(mobi_bytes):
+            logger.warning(
+                LogModule.EXPORT,
+                "ebook-convert output is not a valid MOBI file (possibly EPUB/ZIP mislabeled)",
+            )
+            return None
+        return mobi_bytes
+    finally:
+        for path in (tmp_epub_path, tmp_mobi_path):
+            if path and os.path.exists(path):
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+
+
 def _ebook_title_from_stem(file_stem: str) -> str:
     """Build a human-readable book title from file stem for EPUB/MOBI metadata."""
     if not file_stem or not str(file_stem).strip():
@@ -76,6 +174,22 @@ def _ebook_title_from_stem(file_stem: str) -> str:
     while "  " in s:
         s = s.replace("  ", " ")
     return s or "Untitled"
+
+
+def _resolved_export_ebook_metadata(
+    task_state: Optional[Dict[str, Any]],
+    file_stem: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Resolve title/author for EPUB/MOBI export (plain text, no bilingual HTML)."""
+    from utils.ebook_metadata import resolve_ebook_metadata_for_export
+
+    original_filename = (task_state or {}).get("original_filename")
+    if not original_filename and file_stem:
+        original_filename = f"{file_stem}.mobi"
+    return resolve_ebook_metadata_for_export(
+        task_state,
+        original_filename=original_filename,
+    )
 
 
 def get_ebook_converters_availability() -> Dict[str, bool]:
@@ -323,41 +437,50 @@ class OutputGenerator:
         )
         
         try:
-            # Build translated_segments dictionary from translated_texts
-            translated_segments = {
-                i: translated_texts[i] if i < len(translated_texts) else ""
-                for i in range(len(segment_mapping))
-            }
-            
-            # Check for user-edited segments (from translation_segments)
-            revised_segments = task_state.get('revised_segments', {})
-            if revised_segments:
+            from utils.epub_html_segments import (
+                build_translated_segments_map,
+                rebuild_mobi_segment_mapping_from_cache,
+            )
+
+            segment_mapping = rebuild_mobi_segment_mapping_from_cache(
+                task_state,
+                html_templates,
+                fallback_mapping=segment_mapping,
+            )
+
+            translated_segments = build_translated_segments_map(
+                segment_mapping,
+                task_state,
+                translated_texts,
+            )
+
+            from utils.bilingual_export_utils import get_bilingual_config
+
+            bilingual_enabled, target_first = get_bilingual_config(task_state)
+            if bilingual_enabled:
+                sample_sid = next(iter(translated_segments), None)
+                sample_text = translated_segments.get(sample_sid, "") if sample_sid is not None else ""
                 logger.info(
                     LogModule.EXPORT,
-                    f"[OUTPUT-GENERATOR] Task {task_id}: Found {len(revised_segments)} user-edited segments, "
-                    f"applying revisions",
+                    f"[OUTPUT-GENERATOR] Task {task_id}: Bilingual MOBI/EPUB DOM export "
+                    f"(target_first={target_first}, segments={len(translated_segments)}, "
+                    f"sample_has_html={'<span' in sample_text})",
                 )
-                # Update translated_segments with user edits
-                for seg_id, seg_data in revised_segments.items():
-                    if isinstance(seg_data, dict):
-                        target_text = seg_data.get('target_text')
-                        if target_text:
-                            try:
-                                seg_id_int = int(seg_id)
-                                translated_segments[seg_id_int] = target_text
-                            except (ValueError, TypeError):
-                                pass
             
             # Generate EPUB content using template-based replacement
             from translator.ai_translator.mobi_translator import MobiTranslator
-            epub_content = MobiTranslator.generate_dom_from_segments_template(
-                book=mobi_book,
-                html_templates=html_templates,
-                segment_mapping=segment_mapping,
-                translated_segments=translated_segments,
-                task_id=task_id,
-                task_state=task_state,
-            )
+
+            def _generate_epub_bytes() -> bytes:
+                return MobiTranslator.generate_dom_from_segments_template(
+                    book=mobi_book,
+                    html_templates=html_templates,
+                    segment_mapping=segment_mapping,
+                    translated_segments=translated_segments,
+                    task_id=task_id,
+                    task_state=task_state,
+                )
+
+            epub_content = await asyncio.to_thread(_generate_epub_bytes)
             
             # Update workflow's document_translated.content
             if hasattr(workflow, 'document_translated') and workflow.document_translated:
@@ -395,7 +518,7 @@ class OutputGenerator:
                 exc_info=True,
             )
             self.task_manager.add_log(task_id, "error", f"Failed to generate MOBI/EPUB: {str(e)}")
-            # Don't raise - fall back to existing document_translated.content if available
+            raise
     
     async def generate_html(
         self,
@@ -537,14 +660,20 @@ class OutputGenerator:
         import subprocess
         from utils.format_convert_utils import _get_pandoc_path
         from utils.document_rebuild import rebuild_markdown_document_from_segments
+        from utils.bilingual_export_utils import get_bilingual_config
 
         pandoc_path = _get_pandoc_path()
         if not pandoc_path:
             logger.warning(LogModule.EXPORT, "[OUTPUT-GENERATOR] Pandoc not found, cannot use pandoc EPUB path")
             return None
 
+        bilingual_enabled, target_first = get_bilingual_config(task_state)
         rebuilt = rebuild_markdown_document_from_segments(
-            task_state, file_stem=file_stem, output_dir=output_dir
+            task_state,
+            file_stem=file_stem,
+            output_dir=output_dir,
+            bilingual_export=bilingual_enabled,
+            target_first=target_first,
         )
         if not rebuilt or not getattr(rebuilt, "content", None):
             logger.warning(LogModule.EXPORT, f"[OUTPUT-GENERATOR] Task {task_id}: No markdown content from segments for Pandoc EPUB")
@@ -574,7 +703,7 @@ class OutputGenerator:
             logger.error(LogModule.EXPORT, f"[OUTPUT-GENERATOR] Task {task_id}: Failed to write MD for Pandoc: {e}", exc_info=True)
             return None
 
-        ebook_meta = task_state.get("ebook_metadata") or {}
+        ebook_meta = _resolved_export_ebook_metadata(task_state, file_stem)
         title = (ebook_meta.get("title") or "").strip() or _ebook_title_from_stem(file_stem)
         author = (ebook_meta.get("author") or "").strip() or None
         cmd = str(pandoc_path)
@@ -641,7 +770,7 @@ class OutputGenerator:
             return None
         import subprocess
         out_file = output_dir / f"{file_stem}_translated.{target_ext}"
-        ebook_meta = task_state.get("ebook_metadata") or {}
+        ebook_meta = _resolved_export_ebook_metadata(task_state, file_stem)
         title = (ebook_meta.get("title") or "").strip() or _ebook_title_from_stem(file_stem)
         author = (ebook_meta.get("author") or "").strip()
         ebook_args = [str(html_file), str(out_file), "--title", title]
@@ -1375,28 +1504,43 @@ class OutputGenerator:
         EPUB via Pandoc then convert to MOBI with Calibre; otherwise from workflow (EPUB)
         or translated HTML via Calibre.
         """
+        from utils.bilingual_export_utils import get_bilingual_config
+
+        bilingual_enabled, _ = get_bilingual_config(task_state)
+        export_meta = _resolved_export_ebook_metadata(task_state, file_stem)
+        use_mobi_dom = bool(task_state.get("mobi_html_templates"))
+        if mobi_engine == "pandoc" and bilingual_enabled and use_mobi_dom:
+            logger.info(
+                LogModule.EXPORT,
+                f"[OUTPUT-GENERATOR] Task {task_id}: Bilingual MOBI uses DOM EPUB pipeline "
+                f"(Pandoc MD rebuild cannot interleave source/target in MOBI templates)",
+            )
+            mobi_engine = None
+
         if mobi_engine == "pandoc":
             epub_path = await asyncio.to_thread(
                 self._generate_epub_via_pandoc_sync,
                 task_id, task_state, output_dir, file_stem,
             )
             if epub_path:
-                cmd = self._find_ebook_convert_cmd()
-                if cmd:
-                    mobi_path = output_dir / f"{file_stem}_translated.mobi"
-                    result = await asyncio.to_thread(
-                        _run_ebook_convert_sync,
-                        cmd, str(epub_path), str(mobi_path), "--dont-compress",
-                        timeout=300,
-                    )
-                    if result.returncode == 0 and mobi_path.exists() and mobi_path.stat().st_size > 0:
-                        task_state.setdefault("downloadable_files", {})["mobi"] = {
-                            "path": str(mobi_path),
-                            "filename": mobi_path.name,
-                        }
-                        self.task_manager.add_log(task_id, "success", f"MOBI generated via Pandoc+Calibre: {mobi_path}")
-                        logger.info(LogModule.EXPORT, f"[OUTPUT-GENERATOR] Task {task_id}: MOBI via Pandoc+Calibre: {mobi_path}")
-                        return
+                mobi_path = output_dir / f"{file_stem}_translated.mobi"
+                epub_bytes = epub_path.read_bytes()
+                mobi_bytes = await asyncio.to_thread(
+                    _convert_epub_bytes_to_mobi,
+                    epub_bytes,
+                    300,
+                    ebook_metadata=export_meta,
+                    file_stem=file_stem,
+                )
+                if mobi_bytes:
+                    mobi_path.write_bytes(mobi_bytes)
+                    task_state.setdefault("downloadable_files", {})["mobi"] = {
+                        "path": str(mobi_path),
+                        "filename": mobi_path.name,
+                    }
+                    self.task_manager.add_log(task_id, "success", f"MOBI generated via Pandoc+Calibre: {mobi_path}")
+                    logger.info(LogModule.EXPORT, f"[OUTPUT-GENERATOR] Task {task_id}: MOBI via Pandoc+Calibre: {mobi_path}")
+                    return
                 self.task_manager.add_log(task_id, "info", "Pandoc EPUB ok but Calibre MOBI failed, falling back to workflow/HTML")
 
         logger.info(LogModule.EXPORT, f"[OUTPUT-GENERATOR] Task {task_id}: Checking MOBI export for workflow type: mobi")
@@ -1437,117 +1581,44 @@ class OutputGenerator:
                 
                 if epub_content:
                     mobi_file = output_dir / f"{file_stem}_translated.mobi"
-                    
-                    # Try to convert EPUB to MOBI using calibre's ebook-convert
                     mobi_content = None
                     try:
-                        import subprocess
-                        import tempfile
-                        import os
-                        import shutil
-                        
-                        # Check if ebook-convert is available
-                        ebook_convert_cmd = shutil.which('ebook-convert')
-                        if not ebook_convert_cmd:
-                            # Try common paths on Windows
-                            if os.name == 'nt':
-                                calibre_paths = [
-                                    r'C:\Program Files\Calibre2\ebook-convert.exe',
-                                    r'C:\Program Files (x86)\Calibre2\ebook-convert.exe',
-                                ]
-                                for path in calibre_paths:
-                                    if os.path.exists(path):
-                                        ebook_convert_cmd = path
-                                        break
-                        
-                        if ebook_convert_cmd:
-                            # Create temporary EPUB file
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.epub') as tmp_epub:
-                                if isinstance(epub_content, bytes):
-                                    tmp_epub.write(epub_content)
-                                else:
-                                    tmp_epub.write(epub_content.encode('utf-8'))
-                                tmp_epub_path = tmp_epub.name
-                            
-                            # Create temporary MOBI file path
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.mobi') as tmp_mobi:
-                                tmp_mobi_path = tmp_mobi.name
-                            
-                            try:
-                                # Convert EPUB to MOBI using calibre (run in thread pool to avoid blocking event loop)
-                                logger.info(
-                                    LogModule.EXPORT,
-                                    f"[OUTPUT-GENERATOR] Task {task_id}: Converting EPUB to MOBI using calibre: {ebook_convert_cmd}",
-                                )
-                                # --dont-compress speeds up MOBI conversion (slightly larger file)
-                                result = await asyncio.to_thread(
-                                    _run_ebook_convert_sync,
-                                    ebook_convert_cmd,
-                                    tmp_epub_path,
-                                    tmp_mobi_path,
-                                    "--dont-compress",
-                                    timeout=300,
-                                )
-                                if result.returncode == 0 and os.path.exists(tmp_mobi_path):
-                                    # Read converted MOBI file
-                                    with open(tmp_mobi_path, 'rb') as f:
-                                        mobi_content = f.read()
-                                    logger.info(
-                                        LogModule.EXPORT,
-                                        f"[OUTPUT-GENERATOR] Task {task_id}: Successfully converted EPUB to MOBI (size: {len(mobi_content)} bytes)",
-                                    )
-                                else:
-                                    logger.warning(
-                                        LogModule.EXPORT,
-                                        f"[OUTPUT-GENERATOR] Task {task_id}: ebook-convert failed: returncode={result.returncode}, "
-                                        f"stderr={result.stderr[:200]}",
-                                    )
-                                    # Try HTML->MOBI when EPUB->MOBI conversion failed
-                                    html_mobi_path = await asyncio.to_thread(
-                                        self._generate_ebook_from_html,
-                                        task_id, output_dir, file_stem, "mobi", task_state
-                                    )
-                                    if html_mobi_path:
-                                        mobi_content = html_mobi_path.read_bytes()
-                                        mobi_file = html_mobi_path
-                            finally:
-                                # Clean up temporary files
-                                try:
-                                    if os.path.exists(tmp_epub_path):
-                                        os.unlink(tmp_epub_path)
-                                    if os.path.exists(tmp_mobi_path):
-                                        os.unlink(tmp_mobi_path)
-                                except Exception as cleanup_error:
-                                    logger.warning(
-                                        LogModule.EXPORT,
-                                        f"[OUTPUT-GENERATOR] Task {task_id}: Failed to cleanup temp files: {cleanup_error}",
-                                    )
-                        else:
-                            # ebook-convert not found: try generating MOBI from HTML first (real MOBI, readable)
+                        epub_bytes = (
+                            epub_content
+                            if isinstance(epub_content, bytes)
+                            else epub_content.encode("utf-8")
+                        )
+                        logger.info(
+                            LogModule.EXPORT,
+                            f"[OUTPUT-GENERATOR] Task {task_id}: Converting EPUB to MOBI "
+                            f"(inline images for MOBI compatibility)",
+                        )
+                        mobi_content = await asyncio.to_thread(
+                            _convert_epub_bytes_to_mobi,
+                            epub_bytes,
+                            300,
+                            ebook_metadata=export_meta,
+                            file_stem=file_stem,
+                        )
+                        if mobi_content:
                             logger.info(
                                 LogModule.EXPORT,
-                                f"[OUTPUT-GENERATOR] Task {task_id}: ebook-convert not found for EPUB->MOBI, trying HTML->MOBI...",
+                                f"[OUTPUT-GENERATOR] Task {task_id}: Successfully converted EPUB to MOBI "
+                                f"(size: {len(mobi_content)} bytes)",
+                            )
+                        else:
+                            logger.warning(
+                                LogModule.EXPORT,
+                                f"[OUTPUT-GENERATOR] Task {task_id}: EPUB->MOBI conversion failed, "
+                                f"trying HTML->MOBI fallback",
                             )
                             html_mobi_path = await asyncio.to_thread(
                                 self._generate_ebook_from_html,
-                                task_id, output_dir, file_stem, "mobi", task_state
+                                task_id, output_dir, file_stem, "mobi", task_state,
                             )
                             if html_mobi_path:
                                 mobi_content = html_mobi_path.read_bytes()
                                 mobi_file = html_mobi_path
-                            # If HTML->MOBI 也失败，则不再“伪造”一个 EPUB 下载项；只提示用户需要安装 Calibre。
-                            else:
-                                self.task_manager.add_log(
-                                    task_id,
-                                    "warning",
-                                    "MOBI requires Calibre (ebook-convert). Install Calibre to enable MOBI/EPUB conversion.",
-                                )
-                                logger.warning(
-                                    LogModule.EXPORT,
-                                    f"[OUTPUT-GENERATOR] Task {task_id}: No ebook-convert; EPUB download not offered. MOBI not generated.",
-                                )
-                                # Skip writing fake .mobi; mobi_content stays None, we will not register mobi
-                                mobi_file = None
                     except Exception as convert_error:
                         logger.warning(
                             LogModule.EXPORT,
@@ -1557,33 +1628,53 @@ class OutputGenerator:
                         )
                         html_mobi_path = await asyncio.to_thread(
                             self._generate_ebook_from_html,
-                            task_id, output_dir, file_stem, "mobi", task_state
+                            task_id, output_dir, file_stem, "mobi", task_state,
                         )
                         if html_mobi_path:
                             mobi_content = html_mobi_path.read_bytes()
                             mobi_file = html_mobi_path
                     
                     # Write MOBI file only when we have real MOBI content (never write EPUB bytes to .mobi - readers show blank)
-                    if mobi_content:
+                    if mobi_content and _is_valid_mobi_bytes(mobi_content):
                         out_path = output_dir / f"{file_stem}_translated.mobi"
                         with open(out_path, 'wb') as f:
                             f.write(mobi_content)
                         mobi_file = out_path
+                    elif mobi_content:
+                        logger.warning(
+                            LogModule.EXPORT,
+                            f"[OUTPUT-GENERATOR] Task {task_id}: Skipping invalid MOBI bytes "
+                            f"(looks like EPUB/ZIP, size={len(mobi_content)})",
+                        )
+                        mobi_content = None
                     elif mobi_file is None:
                         pass  # Already handled (EPUB saved, or HTML fallback failed)
                     # Do NOT write EPUB bytes to .mobi - readers display blank; we already saved as .epub when no calibre
                     
                     if mobi_file and mobi_file.exists() and mobi_file.stat().st_size > 0:
                         file_size = mobi_file.stat().st_size
-                        if mobi_content:
-                            self.task_manager.add_log(task_id, "success", f"MOBI file generated: {mobi_file} (size: {file_size} bytes)")
+                        on_disk = mobi_file.read_bytes()
+                        if not _is_valid_mobi_bytes(on_disk):
+                            logger.warning(
+                                LogModule.EXPORT,
+                                f"[OUTPUT-GENERATOR] Task {task_id}: MOBI file at {mobi_file} "
+                                f"is not valid MOBI (size={file_size}), not registering for download",
+                            )
                         else:
-                            self.task_manager.add_log(task_id, "warning", f"MOBI file is EPUB content (install Calibre for real MOBI): {mobi_file}")
-                        logger.info(LogModule.EXPORT, f"[OUTPUT-GENERATOR] Task {task_id}: MOBI file: {mobi_file} (size: {file_size} bytes)")
-                        task_state.setdefault("downloadable_files", {})["mobi"] = {
-                            "path": str(mobi_file),
-                            "filename": mobi_file.name,
-                        }
+                            self.task_manager.add_log(
+                                task_id,
+                                "success",
+                                f"MOBI file generated: {mobi_file} (size: {file_size} bytes)",
+                            )
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[OUTPUT-GENERATOR] Task {task_id}: MOBI file: {mobi_file} "
+                                f"(size: {file_size} bytes)",
+                            )
+                            task_state.setdefault("downloadable_files", {})["mobi"] = {
+                                "path": str(mobi_file),
+                                "filename": mobi_file.name,
+                            }
                     elif not task_state.get("downloadable_files", {}).get("epub") and epub_content:
                         file_size = 0
                         self.task_manager.add_log(task_id, "error", "MOBI file is empty or not generated. Install Calibre for MOBI, or use EPUB/HTML.")
@@ -1635,24 +1726,42 @@ class OutputGenerator:
         elif hasattr(workflow, 'export_to_mobi'):
             self.task_manager.add_log(task_id, "info", "Generating MOBI file using export_to_mobi...")
             try:
-                mobi_content = workflow.export_to_mobi()
-                if mobi_content:
-                    mobi_file = output_dir / f"{file_stem}_translated.mobi"
-                    with open(mobi_file, 'wb') as f:
-                        if isinstance(mobi_content, bytes):
-                            f.write(mobi_content)
-                        else:
-                            f.write(mobi_content.encode('utf-8'))
-                    if mobi_file.exists():
+                epub_content = workflow.export_to_mobi()
+                if epub_content:
+                    epub_bytes = (
+                        epub_content
+                        if isinstance(epub_content, bytes)
+                        else epub_content.encode("utf-8")
+                    )
+                    mobi_content = await asyncio.to_thread(
+                        _convert_epub_bytes_to_mobi,
+                        epub_bytes,
+                        300,
+                        ebook_metadata=export_meta,
+                        file_stem=file_stem,
+                    )
+                    if mobi_content:
+                        mobi_file = output_dir / f"{file_stem}_translated.mobi"
+                        mobi_file.write_bytes(mobi_content)
                         task_state["downloadable_files"]["mobi"] = {
                             "path": str(mobi_file),
-                            "filename": f"{file_stem}_translated.mobi"
+                            "filename": f"{file_stem}_translated.mobi",
                         }
                         self.task_manager.add_log(task_id, "success", f"MOBI file generated: {mobi_file}")
-                        logger.info(LogModule.EXPORT,f"[OUTPUT-GENERATOR] Task {task_id}: MOBI file generated: {mobi_file}", )
+                        logger.info(
+                            LogModule.EXPORT,
+                            f"[OUTPUT-GENERATOR] Task {task_id}: MOBI file generated: {mobi_file}",
+                        )
                     else:
-                        self.task_manager.add_log(task_id, "error", f"MOBI file not found after generation: {mobi_file}")
-                        logger.warning(LogModule.EXPORT, f"[OUTPUT-GENERATOR] Task {task_id}: MOBI file not found after generation: {mobi_file}", )
+                        self.task_manager.add_log(
+                            task_id,
+                            "warning",
+                            "MOBI requires Calibre (ebook-convert). Install Calibre to enable MOBI conversion.",
+                        )
+                        logger.warning(
+                            LogModule.EXPORT,
+                            f"[OUTPUT-GENERATOR] Task {task_id}: EPUB->MOBI conversion failed (Calibre required)",
+                        )
                 else:
                     self.task_manager.add_log(task_id, "error", "export_to_mobi returned empty content")
                     logger.warning(LogModule.EXPORT, f"[OUTPUT-GENERATOR] Task {task_id}: export_to_mobi returned empty content", )

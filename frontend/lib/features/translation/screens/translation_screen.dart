@@ -5957,7 +5957,11 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
             widget.executionMode != 'queued' &&
             !_autoPersistedQueueTaskIds.contains(taskId)) {
           _autoPersistedQueueTaskIds.add(taskId);
-          unawaited(_persistQueueSnapshotAuto(taskId));
+          // Defer stash rebuild so translation preview APIs stay responsive right after completion.
+          Future<void>.delayed(const Duration(seconds: 10), () {
+            if (!mounted) return;
+            unawaited(_persistQueueSnapshotAuto(taskId));
+          });
         }
 
         // Automatically switch to Review phase after translation completes (or fails)

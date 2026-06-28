@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import '../../../shared/utils/ebook_image_helper.dart';
 
 /// Height calculator for segment items
 /// Pre-calculates actual heights of all items without rendering them
@@ -66,21 +67,32 @@ class SegmentHeightCalculator {
     );
 
     // Check if text contains images
-    final RegExp phPattern = RegExp('<ph-([a-zA-Z0-9]+)>');
+    final RegExp phPattern = ebookPlaceholderRe;
     final RegExp base64ImagePattern =
         RegExp(r'data:image/[^;]+;base64,[^\s)]+');
     final RegExp filenameImagePattern =
         RegExp(r'!\[([^\]]*)\]\(([^)]+\.(jpg|jpeg|png|gif|webp))\)');
 
+    final bool hasHtmlExtractorImage =
+        parseHtmlExtractorImageSegment(text.trim()) != null;
     final bool hasPlaceholders = phPattern.hasMatch(text);
     final bool hasBase64Images = base64ImagePattern.hasMatch(text);
     final bool hasFilenameImages = filenameImagePattern.hasMatch(text);
-    final bool hasImages =
-        hasPlaceholders || hasBase64Images || hasFilenameImages;
+    final bool hasImages = hasPlaceholders ||
+        hasBase64Images ||
+        hasFilenameImages ||
+        hasHtmlExtractorImage;
 
     double totalHeight = 0;
 
-    if (hasImages && imageDataMap != null && imageDataMap!.isNotEmpty) {
+    if (hasHtmlExtractorImage &&
+        imageDataMap != null &&
+        imageDataMap!.isNotEmpty) {
+      final path = parseHtmlExtractorImageSegment(text.trim());
+      if (path != null && lookupImageData(imageDataMap, path) != null) {
+        totalHeight += 400.0.clamp(100.0, 400.0);
+      }
+    } else if (hasImages && imageDataMap != null && imageDataMap!.isNotEmpty) {
       // For text with images, we need to calculate height more carefully
       // Split text by image placeholders and calculate each part
       final List<String> parts = <String>[];
@@ -103,9 +115,12 @@ class SegmentHeightCalculator {
         if (phPattern.hasMatch(part)) {
           // This is an image placeholder
           final String? placeholderId = phPattern.firstMatch(part)?.group(1);
-          if (placeholderId != null &&
-              imageDataMap!.containsKey(placeholderId)) {
-            final Map<String, String> imageData = imageDataMap![placeholderId]!;
+          final htmlPath = parseHtmlExtractorImageSegment(part.trim());
+          final lookupKey = placeholderId ?? htmlPath;
+          final imageData = lookupKey != null
+              ? lookupImageData(imageDataMap, lookupKey)
+              : null;
+          if (imageData != null) {
             final String? imageDataUri = imageData['data'];
             if (imageDataUri != null &&
                 imageDataUri.startsWith('data:image/')) {

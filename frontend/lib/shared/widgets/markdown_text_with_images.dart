@@ -1,11 +1,10 @@
 // SPDX-FileCopyrightText: 2025 QinHan
 // SPDX-License-Identifier: MPL-2.0
 
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import '../../shared/utils/app_logger.dart';
+import '../../shared/utils/ebook_image_helper.dart';
 
 /// Widget that displays markdown text with image placeholders replaced by actual images
 /// Supports both selectable and non-selectable text
@@ -60,8 +59,9 @@ class MarkdownTextWithImages extends StatelessWidget {
     // Check if text contains image placeholders
     // Support path characters (/, ., -, _) in placeholder IDs for MOBI/EPUB images
     // Example: <ph-mobi7/Images/image00044.jpeg>
-    final phPattern = RegExp('<ph-([a-zA-Z0-9_./-]+)>');
-    final hasPlaceholders = phPattern.hasMatch(text);
+    final hasPlaceholders = ebookPlaceholderRe.hasMatch(text);
+    final htmlExtractorPath = parseHtmlExtractorImageSegment(text.trim());
+    final hasHtmlExtractorImage = htmlExtractorPath != null;
     // Placeholder detection (logging removed to reduce noise)
 
     // Check if text contains base64 image data (data:image/...;base64,...)
@@ -79,7 +79,33 @@ class MarkdownTextWithImages extends StatelessWidget {
       return _buildWithLaTeX(text);
     }
 
+    // Standalone HtmlExtractor image line: [Image: path]
+    if (hasHtmlExtractorImage &&
+        imageDataMap != null &&
+        imageDataMap!.isNotEmpty) {
+      final imageData = lookupImageData(imageDataMap, htmlExtractorPath);
+      if (imageData != null) {
+        return _buildImageWidget(imageData);
+      }
+    }
+
+    // Standalone <ph-...> placeholder (single image segment)
+    if (hasPlaceholders &&
+        imageDataMap != null &&
+        imageDataMap!.isNotEmpty) {
+      final phMatch = ebookPlaceholderRe.firstMatch(text.trim());
+      if (phMatch != null &&
+          phMatch.group(0) == text.trim() &&
+          phMatch.group(1) != null) {
+        final imageData = lookupImageData(imageDataMap, phMatch.group(1)!);
+        if (imageData != null) {
+          return _buildImageWidget(imageData);
+        }
+      }
+    }
+
     if ((!hasPlaceholders || imageDataMap == null || imageDataMap!.isEmpty) &&
+        !hasHtmlExtractorImage &&
         !hasBase64Images &&
         (!hasFilenameImages || imageDataMap == null || imageDataMap!.isEmpty)) {
       // No placeholders, no image data map, and no base64 images, render as plain text
@@ -119,8 +145,8 @@ class MarkdownTextWithImages extends StatelessWidget {
 
     // Parse text and replace placeholders with images
     final parts = <Widget>[];
-    final textParts = text.split(phPattern);
-    final matches = phPattern.allMatches(text);
+    final textParts = text.split(ebookPlaceholderRe);
+    final matches = ebookPlaceholderRe.allMatches(text);
     int matchIndex = 0;
 
     for (int i = 0; i < textParts.length; i++) {
@@ -149,106 +175,12 @@ class MarkdownTextWithImages extends StatelessWidget {
         final placeholderId = match.group(1);
         matchIndex++;
 
-        if (placeholderId != null && imageDataMap!.containsKey(placeholderId)) {
-          final imageData = imageDataMap![placeholderId]!;
-          final base64Data = imageData['data'];
-          final altText = imageData['alt'] ?? '';
-
-          if (base64Data != null && base64Data.startsWith('data:image/')) {
-            try {
-              // Extract base64 string (remove "data:image/type;base64," prefix)
-              final base64String = base64Data.split(',')[1];
-              final imageBytes = base64Decode(base64String);
-
-              parts.add(
-                RepaintBoundary(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: imageMaxWidth ?? double.infinity,
-                              maxHeight: imageMaxHeight ?? double.infinity,
-                            ),
-                            child: Image.memory(
-                              imageBytes,
-                              fit: BoxFit.scaleDown,
-                              // Use gaplessPlayback to prevent flickering
-                              gaplessPlayback: true,
-                              // Use frameBuilder to ensure stable rendering
-                              frameBuilder: (
-                                context,
-                                child,
-                                frame,
-                                wasSynchronouslyLoaded,
-                              ) {
-                                // Always return child to prevent layout shift
-                                return child;
-                              },
-                              errorBuilder: (
-                                context,
-                                error,
-                                stackTrace,
-                              ) {
-                                // Error placeholder with stable size
-                                return Container(
-                                  constraints: BoxConstraints(
-                                    maxWidth: imageMaxWidth ?? double.infinity,
-                                    maxHeight: imageMaxHeight ?? 400,
-                                  ),
-                                  padding: const EdgeInsets.all(8),
-                                  color: Colors.grey.shade200,
-                                  child: Center(
-                                    child: Text(
-                                      altText.isNotEmpty ? altText : 'Image',
-                                      style: TextStyle(
-                                        fontSize: (style?.fontSize ?? 14) * 0.9,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        if (altText.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              altText,
-                              style: TextStyle(
-                                fontSize: (style?.fontSize ?? 14) * 0.85,
-                                color: Colors.grey.shade600,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            } catch (e) {
-              // If image decode fails, show placeholder text
-              parts.add(
-                Text(
-                  '<ph-$placeholderId>',
-                  style: TextStyle(
-                    fontSize: style?.fontSize ?? 14,
-                    color: Colors.grey.shade600,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              );
-            }
+        if (placeholderId != null) {
+          final imageData = lookupImageData(imageDataMap, placeholderId);
+          if (imageData != null) {
+            parts.add(_buildImageWidget(imageData));
+            continue;
           }
-        } else {
           // Placeholder ID not found in map, show placeholder text
           AppLogger.log(
             'MarkdownTextWithImages',
@@ -627,21 +559,20 @@ class MarkdownTextWithImages extends StatelessWidget {
   Widget _buildWithPlaceholdersAndFilenameImages(String text) {
     // First, replace placeholders with filename-based image references
     String processedText = text;
-    // Support path characters in placeholder IDs for MOBI/EPUB images
-    final phPattern = RegExp('<ph-([a-zA-Z0-9_./-]+)>');
 
     if (imageDataMap != null) {
-      processedText = processedText.replaceAllMapped(phPattern, (match) {
+      processedText = processedText.replaceAllMapped(ebookPlaceholderRe, (match) {
         final placeholderId = match.group(1);
-        if (placeholderId != null && imageDataMap!.containsKey(placeholderId)) {
-          final imageData = imageDataMap![placeholderId]!;
-          final base64Data = imageData['data'];
-          final altText = imageData['alt'] ?? '';
-          if (base64Data != null && base64Data.startsWith('data:image/')) {
-            // Replace placeholder with markdown image syntax using filename from alt text
-            final filename = altText.split('/').last.split(r'\').last;
-            if (filename.isNotEmpty && filename.contains('.')) {
-              return '![$altText]($filename)';
+        if (placeholderId != null) {
+          final imageData = lookupImageData(imageDataMap, placeholderId);
+          if (imageData != null) {
+            final base64Data = imageData['data'];
+            final altText = imageData['alt'] ?? '';
+            if (base64Data != null && base64Data.startsWith('data:image/')) {
+              final filename = altText.split('/').last.split(r'\').last;
+              if (filename.isNotEmpty && filename.contains('.')) {
+                return '![$altText]($filename)';
+              }
             }
           }
         }
@@ -765,6 +696,104 @@ class MarkdownTextWithImages extends StatelessWidget {
     );
   }
 
+  /// Render a single image from image_data_map entry.
+  Widget _buildImageWidget(Map<String, String> imageData) {
+    final base64Data = imageData['data'];
+    final altText = imageData['alt'] ?? '';
+
+    if (base64Data == null || !base64Data.startsWith('data:image/')) {
+      return Text(
+        altText.isNotEmpty ? altText : 'Image',
+        style: TextStyle(
+          fontSize: style?.fontSize ?? 14,
+          color: Colors.grey.shade600,
+          fontStyle: FontStyle.italic,
+        ),
+      );
+    }
+
+    try {
+      final base64String = base64Data.split(',')[1];
+      final imageBytes = base64Decode(base64String);
+      return RepaintBoundary(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: imageMaxWidth ?? double.infinity,
+                    maxHeight: imageMaxHeight ?? double.infinity,
+                  ),
+                  child: Image.memory(
+                    imageBytes,
+                    fit: BoxFit.scaleDown,
+                    gaplessPlayback: true,
+                    frameBuilder: (
+                      context,
+                      child,
+                      frame,
+                      wasSynchronouslyLoaded,
+                    ) =>
+                        child,
+                    errorBuilder: (
+                      context,
+                      error,
+                      stackTrace,
+                    ) {
+                      return Container(
+                        constraints: BoxConstraints(
+                          maxWidth: imageMaxWidth ?? double.infinity,
+                          maxHeight: imageMaxHeight ?? 400,
+                        ),
+                        padding: const EdgeInsets.all(8),
+                        color: Colors.grey.shade200,
+                        child: Center(
+                          child: Text(
+                            altText.isNotEmpty ? altText : 'Image',
+                            style: TextStyle(
+                              fontSize: (style?.fontSize ?? 14) * 0.9,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              if (altText.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    altText,
+                    style: TextStyle(
+                      fontSize: (style?.fontSize ?? 14) * 0.85,
+                      color: Colors.grey.shade600,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      return Text(
+        altText.isNotEmpty ? altText : 'Image',
+        style: TextStyle(
+          fontSize: style?.fontSize ?? 14,
+          color: Colors.grey.shade600,
+          fontStyle: FontStyle.italic,
+        ),
+      );
+    }
+  }
+
   /// Build widget with LaTeX formulas rendered using KaTeX (Web) or plain text (Desktop)
   Widget _buildWithLaTeX(String text) {
     // Pattern to match LaTeX block formulas: $$...$$
@@ -780,13 +809,13 @@ class MarkdownTextWithImages extends StatelessWidget {
       // Add text part (non-LaTeX content)
       if (textParts[i].isNotEmpty) {
         // Check if this text part contains images or placeholders
-        // Support path characters in placeholder IDs for MOBI/EPUB images
-        final phPattern = RegExp('<ph-([a-zA-Z0-9_./-]+)>');
         final base64ImagePattern = RegExp(r'data:image/[^;]+;base64,[^\s)]+');
-        final hasPlaceholders = phPattern.hasMatch(textParts[i]);
+        final hasPlaceholders = ebookPlaceholderRe.hasMatch(textParts[i]);
+        final hasHtmlExtractorPart =
+            parseHtmlExtractorImageSegment(textParts[i].trim()) != null;
         final hasBase64Images = base64ImagePattern.hasMatch(textParts[i]);
 
-        if (hasPlaceholders || hasBase64Images) {
+        if (hasPlaceholders || hasBase64Images || hasHtmlExtractorPart) {
           // This text part contains images, render it recursively
           parts.add(
             MarkdownTextWithImages(

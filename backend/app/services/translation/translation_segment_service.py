@@ -757,12 +757,20 @@ class TranslationSegmentService:
         if not isinstance(segments_list, list):
             return
         sorted_image_segments = sorted(image_segments_info, key=lambda x: x.get("insert_index", 0))
+        from utils.ebook_image_utils import segment_list_has_html_extractor_image
         images_inserted_count = 0
         for img_seg_info in sorted_image_segments:
+            image_path = img_seg_info.get("image_path", "")
+            if image_path and segment_list_has_html_extractor_image(segments_list, image_path):
+                logger.debug(
+                    LogModule.TRANS,
+                    f"[TRANSLATION] Task {task_id}: _inject_mobi_image_segments skipping {image_path}; "
+                    f"[Image: ...] segment already exists",
+                )
+                continue
             insert_idx = img_seg_info.get("insert_index", len(segments_list) + images_inserted_count)
             placeholder_text = img_seg_info.get("placeholder_text", "")
             placeholder_id = img_seg_info.get("placeholder_id", "")
-            image_path = img_seg_info.get("image_path", "")
             image_data = img_seg_info.get("image_data", "")
             image_segment = {
                 "segment_index": insert_idx + images_inserted_count,
@@ -989,6 +997,14 @@ class TranslationSegmentService:
                                             break
                                     
                                     if matched_image_path:
+                                        from utils.ebook_image_utils import segment_list_has_html_extractor_image
+                                        if segment_list_has_html_extractor_image(cache_segments, matched_image_path):
+                                            logger.debug(
+                                                LogModule.TRANS,
+                                                f"[TRANSLATION] Task {task_id}: Skipping duplicate MOBI image "
+                                                f"segment; [Image: ...] already present for {matched_image_path}",
+                                            )
+                                            continue
                                         placeholder_id = matched_image_path
                                         
                                         # Try to find the position of this img tag relative to text segments

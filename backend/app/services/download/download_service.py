@@ -2793,6 +2793,41 @@ class DownloadService:
         # Generate missing file on-demand if not in downloadable_files
         downloadable_files = task_state.get("downloadable_files", {})
         need_generate = not downloadable_files or file_type not in downloadable_files
+        if file_type == "mobi":
+            from app.services.download.output_generator import _is_valid_mobi_bytes
+
+            mobi_info = downloadable_files.get("mobi")
+            mobi_path = mobi_info.get("path") if isinstance(mobi_info, dict) else None
+            if mobi_path and os.path.isfile(mobi_path):
+                try:
+                    with open(mobi_path, "rb") as mobi_f:
+                        if not _is_valid_mobi_bytes(mobi_f.read()):
+                            logger.warning(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Task {task_id}: Cached MOBI is invalid "
+                                f"(EPUB/ZIP mislabeled), will regenerate",
+                            )
+                            task_state.get("downloadable_files", {}).pop("mobi", None)
+                            need_generate = True
+                except OSError:
+                    need_generate = True
+        # Bilingual MOBI/EPUB on MOBI workflow must regenerate via DOM template (not Pandoc MD or cached single-lang).
+        if (
+            bilingual_enabled
+            and file_type in ("epub", "mobi")
+            and task_state.get("mobi_html_templates")
+        ):
+            from workflow.mobi_workflow import MobiWorkflow
+
+            workflow_for_mobi = task_state.get("workflow_instance")
+            if isinstance(workflow_for_mobi, MobiWorkflow):
+                need_generate = True
+                task_state.get("downloadable_files", {}).pop(file_type, None)
+                logger.info(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] Task {task_id}: Bilingual {file_type} on MOBI workflow, "
+                    "forcing DOM template regeneration",
+                )
         if need_generate:
             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Task {task_id}: Requested file_type={file_type} not available, generating on-demand...")
             try:
@@ -4098,7 +4133,19 @@ class DownloadService:
             has_revisions = True
 
         # Bilingual export for TXT/SRT/DOCX/HTML/EPUB/MOBI requires segment rebuild to interleave source/target text.
-        if bilingual_enabled and workflow_type in ("txt", "srt", "docx", "html", "epub", "mobi", "pptx", "xlsx") and task_state.get("translation_segments", {}).get("segments"):
+        # MOBI workflow EPUB/MOBI uses DOM template replacement (same pipeline as single-language MOBI).
+        _mobi_dom_bilingual = (
+            bilingual_enabled
+            and workflow_type == "mobi"
+            and file_type in ("epub", "mobi")
+            and task_state.get("mobi_html_templates")
+        )
+        if (
+            bilingual_enabled
+            and workflow_type in ("txt", "srt", "docx", "html", "epub", "mobi", "pptx", "xlsx")
+            and task_state.get("translation_segments", {}).get("segments")
+            and not _mobi_dom_bilingual
+        ):
             logger.info(
                 LogModule.EXPORT,
                 f"[DOWNLOAD] Bilingual export enabled for {workflow_type} workflow, forcing segment rebuild",
@@ -4106,6 +4153,24 @@ class DownloadService:
             has_revisions = True
     
         # If there are revisions (or forced for md), rebuild the document and regenerate the file
+        from workflow.mobi_workflow import MobiWorkflow
+
+        _use_mobi_dom_export = (
+            file_type in ("epub", "mobi")
+            and task_state.get("mobi_html_templates")
+            and (
+                workflow_type == "mobi"
+                or isinstance(task_state.get("workflow_instance"), MobiWorkflow)
+            )
+        )
+        if has_revisions and _use_mobi_dom_export:
+            logger.info(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Task {task_id}: Skipping markdown rebuild for {file_type}; "
+                "using MOBI DOM template export",
+            )
+            has_revisions = False
+
         if has_revisions and workflow_type:
             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Found revised segments for task {task_id}, rebuilding {file_type} file with revisions")
         
@@ -4639,7 +4704,7 @@ class DownloadService:
                             )
                     
                         elif file_type in ("epub", "mobi") and bilingual_enabled:
-                            # Export bilingual MD as EPUB/MOBI via Pandoc
+                            # Export bilingual MD as EPUB/MOBI via Pandoc (+ Calibre for MOBI).
                             logger.info(
                                 LogModule.EXPORT,
                                 f"[DOWNLOAD] Exporting bilingual {file_type} from rebuilt markdown for task {task_id}",
@@ -4650,6 +4715,23 @@ class DownloadService:
                                     md_content = md_content.decode("utf-8", errors="replace")
                                 try:
                                     from utils.format_convert_utils import _get_pandoc_path
+                                    from app.services.download.output_generator import (
+                                        _convert_epub_bytes_to_mobi,
+                                        _is_valid_mobi_bytes,
+                                        _resolved_export_ebook_metadata,
+                                        _ebook_title_from_stem,
+                                    )
+
+                                    export_meta = _resolved_export_ebook_metadata(task_state, file_stem)
+                                    title = (export_meta.get("title") or "").strip() or _ebook_title_from_stem(file_stem)
+                                    author = (export_meta.get("author") or "").strip()
+                                    pandoc_meta_args: list[str] = ["--metadata", f"title={title}"]
+                                    if author:
+                                        pandoc_meta_args.extend(["--metadata", f"author={author}"])
+                                    lang = (export_meta.get("language") or "").strip()
+                                    if lang:
+                                        pandoc_meta_args.extend(["--metadata", f"lang={lang}"])
+
                                     pandoc_path = _get_pandoc_path()
                                     if pandoc_path:
                                         md_temp = tempfile.NamedTemporaryFile(
@@ -4657,30 +4739,71 @@ class DownloadService:
                                         )
                                         md_temp.write(md_content)
                                         md_temp.close()
-                                        out_temp = tempfile.NamedTemporaryFile(
-                                            mode="wb", suffix=f".{file_type}", delete=False
+                                        epub_temp = tempfile.NamedTemporaryFile(
+                                            mode="wb", suffix=".epub", delete=False
                                         )
-                                        out_temp.close()
+                                        epub_temp.close()
                                         import subprocess
                                         result = subprocess.run(
-                                            [str(pandoc_path), md_temp.name, "-o", out_temp.name],
+                                            [str(pandoc_path), md_temp.name, "-o", epub_temp.name, *pandoc_meta_args],
                                             capture_output=True, text=True, timeout=300,
                                         )
-                                        if result.returncode == 0 and os.path.getsize(out_temp.name) > 0:
-                                            filename = f"{file_stem}{sfx}.{file_type}"
-                                            media_type = MEDIA_TYPES.get(file_type, "application/octet-stream")
-                                            logger.info(
-                                                LogModule.EXPORT,
-                                                f"[DOWNLOAD] Generated bilingual {file_type} via Pandoc "
-                                                f"(size={os.path.getsize(out_temp.name)} bytes)",
-                                            )
-                                            return FileResponse(
-                                                path=out_temp.name, media_type=media_type, filename=filename
-                                            )
+                                        if (
+                                            result.returncode == 0
+                                            and os.path.getsize(epub_temp.name) > 0
+                                        ):
+                                            if file_type == "mobi":
+                                                with open(epub_temp.name, "rb") as epub_file:
+                                                    epub_bytes = epub_file.read()
+                                                mobi_bytes = _convert_epub_bytes_to_mobi(
+                                                    epub_bytes,
+                                                    ebook_metadata=export_meta,
+                                                    file_stem=file_stem,
+                                                )
+                                                if mobi_bytes and _is_valid_mobi_bytes(mobi_bytes):
+                                                    out_temp = tempfile.NamedTemporaryFile(
+                                                        mode="wb", suffix=".mobi", delete=False
+                                                    )
+                                                    out_temp.write(mobi_bytes)
+                                                    out_temp.close()
+                                                    filename = f"{file_stem}{sfx}.mobi"
+                                                    media_type = MEDIA_TYPES.get(
+                                                        file_type, "application/octet-stream"
+                                                    )
+                                                    logger.info(
+                                                        LogModule.EXPORT,
+                                                        f"[DOWNLOAD] Generated bilingual MOBI via Pandoc EPUB + Calibre "
+                                                        f"(size={os.path.getsize(out_temp.name)} bytes)",
+                                                    )
+                                                    return FileResponse(
+                                                        path=out_temp.name,
+                                                        media_type=media_type,
+                                                        filename=filename,
+                                                    )
+                                                logger.warning(
+                                                    LogModule.EXPORT,
+                                                    f"[DOWNLOAD] Calibre EPUB→MOBI failed for bilingual export "
+                                                    f"task {task_id}",
+                                                )
+                                            elif file_type == "epub":
+                                                filename = f"{file_stem}{sfx}.epub"
+                                                media_type = MEDIA_TYPES.get(
+                                                    file_type, "application/epub+zip"
+                                                )
+                                                logger.info(
+                                                    LogModule.EXPORT,
+                                                    f"[DOWNLOAD] Generated bilingual EPUB via Pandoc "
+                                                    f"(size={os.path.getsize(epub_temp.name)} bytes)",
+                                                )
+                                                return FileResponse(
+                                                    path=epub_temp.name,
+                                                    media_type=media_type,
+                                                    filename=filename,
+                                                )
                                         else:
                                             logger.warning(
                                                 LogModule.EXPORT,
-                                                f"[DOWNLOAD] Pandoc {file_type} conversion failed: "
+                                                f"[DOWNLOAD] Pandoc EPUB conversion failed: "
                                                 f"returncode={result.returncode}, stderr={result.stderr[:200]}",
                                             )
                                 except Exception as e:
@@ -5935,55 +6058,94 @@ class DownloadService:
             
             # Special handling for MOBI workflow: if mobi file not in downloadable_files, try to get from workflow
             if workflow_type == "mobi" and file_type == "mobi":
-                # First check downloadable_files
+                from app.services.download.output_generator import (
+                    _convert_epub_bytes_to_mobi,
+                    _is_valid_mobi_bytes,
+                    _resolved_export_ebook_metadata,
+                )
+
+                # First check downloadable_files (must be valid MOBI, not EPUB mislabeled)
                 file_info = task_state.get("downloadable_files", {}).get(file_type)
                 if file_info and os.path.exists(file_info.get("path")):
                     file_path = file_info["path"]
-                    filename = file_info.get("filename") or os.path.basename(file_path)
-                    media_type = MEDIA_TYPES.get(file_type, "application/x-mobipocket-ebook")
-                    logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using pre-generated {file_type} file: {file_path}")
-                    return FileResponse(path=file_path, media_type=media_type, filename=filename)
-                
-                # If not in downloadable_files, try to get from workflow's translated document
+                    try:
+                        with open(file_path, "rb") as mobi_f:
+                            mobi_on_disk = mobi_f.read()
+                        if _is_valid_mobi_bytes(mobi_on_disk):
+                            filename = file_info.get("filename") or os.path.basename(file_path)
+                            media_type = MEDIA_TYPES.get(file_type, "application/x-mobipocket-ebook")
+                            logger.info(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Using pre-generated {file_type} file: {file_path}",
+                            )
+                            return FileResponse(
+                                path=file_path, media_type=media_type, filename=filename,
+                            )
+                        logger.warning(
+                            LogModule.EXPORT,
+                            f"[DOWNLOAD] Cached {file_type} at {file_path} is not valid MOBI "
+                            f"(likely EPUB/ZIP), regenerating",
+                        )
+                        task_state.get("downloadable_files", {}).pop(file_type, None)
+                    except OSError as read_err:
+                        logger.warning(
+                            LogModule.EXPORT,
+                            f"[DOWNLOAD] Failed to read cached MOBI {file_path}: {read_err}",
+                        )
+
                 workflow_instance = task_state.get("workflow_instance")
-                if workflow_instance and hasattr(workflow_instance, 'document_translated'):
+                if workflow_instance and hasattr(workflow_instance, "export_to_mobi"):
                     try:
-                        translated_doc = workflow_instance.document_translated
-                        if translated_doc and hasattr(translated_doc, 'content'):
-                            # Create temporary file from translated document
-                            file_stem = task_state.get("original_filename_stem", "translated")
-                            temp_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.mobi', delete=False)
-                            if isinstance(translated_doc.content, bytes):
-                                temp_file.write(translated_doc.content)
-                            else:
-                                temp_file.write(translated_doc.content.encode('utf-8'))
-                            temp_file.close()
-                            filename = f"{file_stem}{sfx}.mobi"
-                            media_type = MEDIA_TYPES.get(file_type, "application/x-mobipocket-ebook")
-                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated MOBI from workflow's translated document: {temp_file.name}")
-                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
-                    except Exception as e:
-                        logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to get MOBI from workflow instance: {e}", exc_info=True)
-                
-                # If workflow instance doesn't have translated document, try to export from workflow
-                if workflow_instance and hasattr(workflow_instance, 'export_to_mobi'):
-                    try:
-                        logger.info(LogModule.EXPORT, f"[DOWNLOAD] Attempting to export MOBI from workflow instance for task {task_id}")
-                        mobi_content = workflow_instance.export_to_mobi()
-                        if mobi_content:
-                            file_stem = task_state.get("original_filename_stem", "translated")
-                            temp_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.mobi', delete=False)
-                            if isinstance(mobi_content, bytes):
+                        logger.info(
+                            LogModule.EXPORT,
+                            f"[DOWNLOAD] Converting workflow EPUB to MOBI for task {task_id}",
+                        )
+                        epub_content = workflow_instance.export_to_mobi()
+                        if epub_content:
+                            epub_bytes = (
+                                epub_content
+                                if isinstance(epub_content, bytes)
+                                else epub_content.encode("utf-8")
+                            )
+                            on_demand_stem = task_state.get("original_filename_stem", "translated")
+                            export_meta = _resolved_export_ebook_metadata(task_state, on_demand_stem)
+                            mobi_content = _convert_epub_bytes_to_mobi(
+                                epub_bytes,
+                                ebook_metadata=export_meta,
+                                file_stem=on_demand_stem,
+                            )
+                            if mobi_content and _is_valid_mobi_bytes(mobi_content):
+                                file_stem = on_demand_stem
+                                temp_file = tempfile.NamedTemporaryFile(
+                                    mode="wb", suffix=".mobi", delete=False,
+                                )
                                 temp_file.write(mobi_content)
-                            else:
-                                temp_file.write(mobi_content.encode('utf-8'))
-                            temp_file.close()
-                            filename = f"{file_stem}{sfx}.mobi"
-                            media_type = MEDIA_TYPES.get(file_type, "application/x-mobipocket-ebook")
-                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully exported MOBI from workflow: {temp_file.name}")
-                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                                temp_file.close()
+                                filename = f"{file_stem}{sfx}.mobi"
+                                media_type = MEDIA_TYPES.get(
+                                    file_type, "application/x-mobipocket-ebook",
+                                )
+                                logger.info(
+                                    LogModule.EXPORT,
+                                    f"[DOWNLOAD] Successfully exported MOBI from workflow EPUB: "
+                                    f"{temp_file.name}",
+                                )
+                                return FileResponse(
+                                    path=temp_file.name,
+                                    media_type=media_type,
+                                    filename=filename,
+                                )
+                            logger.warning(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] EPUB->MOBI conversion failed for task {task_id} "
+                                f"(Calibre required or conversion error)",
+                            )
                     except Exception as e:
-                        logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to export MOBI from workflow instance: {e}", exc_info=True)
+                        logger.warning(
+                            LogModule.EXPORT,
+                            f"[DOWNLOAD] Failed to export MOBI from workflow instance: {e}",
+                            exc_info=True,
+                        )
             
             # Special handling for EPUB workflow: if epub file not in downloadable_files, try to get from workflow
             if workflow_type == "epub" and file_type == "epub":
@@ -6126,6 +6288,32 @@ class DownloadService:
                         dirty_segment_indices=dirty_segment_indices,
                     )
                 file_path = file_info["path"]
+                if file_type == "mobi":
+                    from app.services.download.output_generator import _is_valid_mobi_bytes
+
+                    try:
+                        with open(file_path, "rb") as mobi_f:
+                            mobi_bytes = mobi_f.read()
+                        if not _is_valid_mobi_bytes(mobi_bytes):
+                            logger.warning(
+                                LogModule.EXPORT,
+                                f"[DOWNLOAD] Pre-generated MOBI at {file_path} is invalid "
+                                f"(EPUB/ZIP mislabeled), refusing download",
+                            )
+                            raise HTTPException(
+                                status_code=500,
+                                detail=(
+                                    "MOBI export failed: generated file is not a valid MOBI. "
+                                    "Ensure Calibre (ebook-convert) is installed, or download EPUB instead."
+                                ),
+                            )
+                    except HTTPException:
+                        raise
+                    except OSError as read_err:
+                        logger.warning(
+                            LogModule.EXPORT,
+                            f"[DOWNLOAD] Failed to read MOBI at {file_path}: {read_err}",
+                        )
                 filename = file_info.get("filename") or os.path.basename(file_path)
                 media_type = MEDIA_TYPES.get(file_type, "application/octet-stream")
                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using pre-generated {file_type} file: {file_path}")

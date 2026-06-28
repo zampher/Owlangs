@@ -49,6 +49,11 @@ def _is_image_segment_text(text: str) -> bool:
     if re.match(markdown_img_pattern, stripped):
         return True
 
+    # 4) HtmlExtractor MOBI/EPUB: "[Image: path]"
+    html_extractor_image_pattern = r"^\[Image:\s*.+?\]\s*$"
+    if re.match(html_extractor_image_pattern, stripped, re.IGNORECASE):
+        return True
+
     return False
 
 

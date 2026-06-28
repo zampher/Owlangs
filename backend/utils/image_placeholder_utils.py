@@ -14,6 +14,12 @@ from logger.logger import LogModule
 # Characters allowed: letters, numbers, underscore, dot, slash, hyphen
 PLACEHOLDER_PATTERN = re.compile(r"<ph-([a-zA-Z0-9_./-]+)>")
 
+# HtmlExtractor standalone image lines: [Image: path]
+HTML_EXTRACTOR_IMAGE_LINE_PATTERN = re.compile(
+    r"^\[Image:\s*(.+?)\]\s*$",
+    re.MULTILINE | re.IGNORECASE,
+)
+
 
 def _replace_placeholders_with_images(
     markdown_content: str, 
@@ -53,7 +59,9 @@ def _replace_placeholders_with_images(
     def _replacement(match: re.Match) -> str:
         # Use module-level logger (closure will capture it)
         placeholder_id = match.group(1)
-        image_entry = image_data_map.get(placeholder_id)
+        from utils.ebook_image_utils import resolve_image_data_entry
+
+        image_entry = resolve_image_data_entry(image_data_map, placeholder_id)
         if not image_entry:
             logger.debug(LogModule.RESTOR,f"Placeholder {placeholder_id} not found in image_data_map (available keys: {list(image_data_map.keys())[:5]})")
             return match.group(0)
@@ -136,6 +144,65 @@ def _replace_placeholders_with_images(
         logger.debug(LogModule.RESTOR,f"Placeholder {i+1}/{len(placeholder_matches)}: {placeholder_id}, found in image_data_map: {placeholder_id in image_data_map}")
     
     modified_content = PLACEHOLDER_PATTERN.sub(_replacement, markdown_content)
+
+    def _replace_html_extractor_image_line(match: re.Match) -> str:
+        from utils.ebook_image_utils import resolve_image_data_entry
+
+        image_path = match.group(1).strip()
+        image_entry = resolve_image_data_entry(image_data_map, image_path)
+        if not image_entry:
+            logger.debug(
+                LogModule.RESTOR,
+                f"[Image: ...] path not found in image_data_map: {image_path}",
+            )
+            return match.group(0)
+        data_uri = image_entry.get("data")
+        if not data_uri:
+            return match.group(0)
+        alt_text = image_entry.get("alt") if image_entry.get("alt") is not None else ""
+        if output_dir and images_dir and data_uri.startswith("data:image/"):
+            try:
+                import base64
+                import hashlib
+                import mimetypes
+
+                header, base64_data = data_uri.split(",", 1)
+                mime_type = header.split(";")[0].split(":")[1] if ":" in header else "image/png"
+                extension = mimetypes.guess_extension(mime_type) or ".png"
+                n = _save_counter[0]
+                _save_counter[0] += 1
+                hash_input = (image_path + base64_data[:80]).encode("utf-8")
+                image_id = hashlib.md5(hash_input).hexdigest()[:8]
+                image_filename = f"image_{n:04d}_{image_id}{extension}"
+                image_path_out = images_dir / image_filename
+                image_bytes = base64.b64decode(base64_data)
+                image_path_out.write_bytes(image_bytes)
+                saved_image_paths.append(image_path_out)
+                relative_path = f"./{image_folder_name}/{image_filename}"
+                if update_image_data_map:
+                    image_data_map[relative_path] = image_entry.copy()
+                    image_data_map[image_filename] = image_entry.copy()
+                    image_data_map[f"{image_folder_name}/{image_filename}"] = image_entry.copy()
+                return f"![{alt_text}]({relative_path})"
+            except Exception as e:
+                logger.warning(
+                    LogModule.RESTOR,
+                    f"Failed to save [Image: ...] for {image_path}: {e}, using data URI",
+                )
+        return f"![{alt_text}]({data_uri})"
+
+    html_extractor_matches = list(
+        HTML_EXTRACTOR_IMAGE_LINE_PATTERN.finditer(modified_content)
+    )
+    if html_extractor_matches:
+        logger.debug(
+            LogModule.RESTOR,
+            f"Found {len(html_extractor_matches)} [Image: ...] line(s) in markdown content",
+        )
+        modified_content = HTML_EXTRACTOR_IMAGE_LINE_PATTERN.sub(
+            _replace_html_extractor_image_line,
+            modified_content,
+        )
     
     # Count image references after replacement
     image_refs_after = re.findall(r'!\[([^\]]*)\]\(([^)]+)\)', modified_content)

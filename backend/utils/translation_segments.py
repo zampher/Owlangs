@@ -261,6 +261,11 @@ def _is_image_segment(text: str) -> bool:
     if re.match(rf"^{markdown_image_pattern}\s*$", text_stripped):
         return True
 
+    # HtmlExtractor (MOBI/EPUB): standalone image block as "[Image: path]"
+    from utils.ebook_image_utils import parse_html_extractor_image_segment
+    if parse_html_extractor_image_segment(text_stripped):
+        return True
+
     # MinerU JPG/PNG: embedded OCR images export as <details><summary>text_image</summary>
     if re.search(r"<details\b", text_stripped, re.IGNORECASE) and re.search(
         r"<summary\b[^>]*>\s*(text_image|natural_image)\s*</summary>",

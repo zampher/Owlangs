@@ -61,6 +61,131 @@ class MobiTranslator(AiTranslator):
         self.insert_mode = config.insert_mode
         self.separator = config.separator
 
+    def _get_excluded_segments(self, task_id: str | None) -> set[int]:
+        """Return excluded segment indices from task_state (Extract phase metadata)."""
+        if not task_id:
+            return set()
+        try:
+            from backend.app.services.task import task_manager
+            from exclusion.core import ExclusionManager
+        except ImportError:
+            return set()
+        task_state = task_manager.get_task(task_id)
+        if not task_state:
+            return set()
+        excluded = ExclusionManager.get_excluded_segments(task_state)
+        return set(excluded.keys())
+
+    def _resolve_translation_segments(
+        self,
+        task_state: dict | None,
+        original_texts: list[str],
+        task_id: str | None,
+    ) -> tuple[list[str], list[int], list[int]]:
+        """Pick segment source (cache vs pre_translate) and indices to send to LLM."""
+        cache_segments: list[str] = []
+        if task_state:
+            cache_info = task_state.get("source_chunks_cache") or {}
+            raw = cache_info.get("segments") or []
+            cache_segments = [str(s) for s in raw]
+
+        if cache_segments:
+            segments = cache_segments
+            if len(segments) != len(original_texts):
+                self.logger.warning(
+                    LogModule.TRANS,
+                    f"[MOBI_TRANSLATOR] Task {task_id}: segment count mismatch "
+                    f"cache={len(segments)} pre_translate={len(original_texts)}, using cache",
+                )
+        else:
+            segments = list(original_texts)
+
+        excluded_set = self._get_excluded_segments(task_id)
+        from utils.translation_segments import _is_image_segment
+
+        indices_to_translate: list[int] = []
+        image_skip_count = 0
+        for i in range(len(segments)):
+            if i in excluded_set:
+                continue
+            if _is_image_segment(segments[i]):
+                image_skip_count += 1
+                continue
+            indices_to_translate.append(i)
+
+        if excluded_set:
+            self.logger.info(
+                LogModule.TRANS,
+                f"[MOBI_TRANSLATOR] Task {task_id}: skipping {len(excluded_set)} excluded segment(s) "
+                f"from LLM requests (sample: {sorted(excluded_set)[:10]})",
+            )
+        if image_skip_count:
+            self.logger.info(
+                LogModule.TRANS,
+                f"[MOBI_TRANSLATOR] Task {task_id}: skipping {image_skip_count} image placeholder "
+                f"segment(s) from LLM requests",
+            )
+        return segments, indices_to_translate, [segments[i] for i in indices_to_translate]
+
+    async def _translate_segment_list_async(
+        self,
+        segments: list[str],
+        indices_to_translate: list[int],
+        texts_to_send: list[str],
+        progress_callback=None,
+    ) -> list[str]:
+        """Translate MOBI segments; merge partial results back into full list order."""
+        if not self.translate_agent:
+            return list(segments)
+        if not indices_to_translate:
+            return list(segments)
+        if len(indices_to_translate) == len(segments):
+            return await self.translate_agent.send_segments_async(
+                texts_to_send,
+                self.chunk_size,
+                progress_callback=progress_callback,
+            )
+        translated_partial = await self.translate_agent.send_segments_async(
+            texts_to_send,
+            self.chunk_size,
+            progress_callback=progress_callback,
+            segment_indices=indices_to_translate,
+        )
+        result = list(segments)
+        for local_i, global_idx in enumerate(indices_to_translate):
+            if local_i < len(translated_partial):
+                result[global_idx] = translated_partial[local_i]
+        return result
+
+    def _translate_segment_list_sync(
+        self,
+        segments: list[str],
+        indices_to_translate: list[int],
+        texts_to_send: list[str],
+        progress_callback=None,
+    ) -> list[str]:
+        if not self.translate_agent:
+            return list(segments)
+        if not indices_to_translate:
+            return list(segments)
+        if len(indices_to_translate) == len(segments):
+            return self.translate_agent.send_segments(
+                texts_to_send,
+                self.chunk_size,
+                progress_callback=progress_callback,
+            )
+        translated_partial = self.translate_agent.send_segments(
+            texts_to_send,
+            self.chunk_size,
+            progress_callback=progress_callback,
+            segment_indices=indices_to_translate,
+        )
+        result = list(segments)
+        for local_i, global_idx in enumerate(indices_to_translate):
+            if local_i < len(translated_partial):
+                result[global_idx] = translated_partial[local_i]
+        return result
+
     def _pre_translate(self, document: Document) -> tuple[
         Any, List[Dict[str, Any]], List[str]
     ]:
@@ -285,37 +410,69 @@ class MobiTranslator(AiTranslator):
         else:
             items_to_process = html_items
 
+        task_id = getattr(self, "_task_id", None)
+        task_state = None
+        if task_id:
+            try:
+                from backend.app.services.task import task_manager
+                task_state = task_manager.get_task(task_id)
+            except Exception:
+                task_state = None
+
+        cache_info = (task_state or {}).get("source_chunks_cache") or {}
+        cache_segments = cache_info.get("segments") or []
+        cache_chunk_size = cache_info.get("chunk_size")
+        if cache_chunk_size:
+            self.chunk_size = int(cache_chunk_size)
+
+        inherited_templates = (task_state or {}).get("mobi_html_templates") or {}
+
         # OPTIMIZATION: Store original HTML templates for delayed DOM generation
-        # This allows us to skip DOM operations during translation and generate DOM only when exporting
-        html_templates = {}  # item_id -> original_html_content
-        segment_mapping = []  # List of segment info: {segment_id, item_id, original_text}
-        
-        # Extract text from each item
-        for item in items_to_process:
-            content = item.get_content()
-            if not content:
-                continue
+        html_templates = {}
+        segment_mapping = []
 
-            # OPTIMIZATION: Save original HTML template (for delayed DOM generation)
-            item_id = item.get_id()
-            original_html = content.decode('utf-8') if isinstance(content, bytes) else content
-            html_templates[item_id] = original_html
+        if cache_segments and inherited_templates:
+            from utils.epub_html_segments import rebuild_mobi_segment_mapping_from_cache
 
-            from utils.epub_html_segments import extract_paragraph_segments_from_html
-
-            file_segments = extract_paragraph_segments_from_html(
-                original_html,
-                chunk_size=self.chunk_size,
-                deep_split=True,
+            html_templates = dict(inherited_templates)
+            segment_mapping = rebuild_mobi_segment_mapping_from_cache(
+                task_state,
+                html_templates,
+                fallback_mapping=[],
             )
-            for text in file_segments:
-                segment_id = len(original_texts)
-                original_texts.append(text)
-                segment_mapping.append({
-                    "segment_id": segment_id,
-                    "item_id": item_id,
-                    "original_text": text,
-                })
+            original_texts = [str(s) for s in cache_segments]
+            self.logger.info(
+                LogModule.TRANS,
+                f"[MOBI_TRANSLATOR] _pre_translate: Reusing {len(html_templates)} inherited "
+                f"HTML template(s) and {len(cache_segments)} cache segments, task_id={task_id}",
+            )
+        else:
+            original_texts = []
+            # Extract text from each item
+            for item in items_to_process:
+                content = item.get_content()
+                if not content:
+                    continue
+
+                item_id = item.get_id()
+                original_html = content.decode('utf-8') if isinstance(content, bytes) else content
+                html_templates[item_id] = original_html
+
+                from utils.epub_html_segments import extract_paragraph_segments_from_html
+
+                file_segments = extract_paragraph_segments_from_html(
+                    original_html,
+                    chunk_size=self.chunk_size,
+                    deep_split=True,
+                )
+                for text in file_segments:
+                    segment_id = len(original_texts)
+                    original_texts.append(text)
+                    segment_mapping.append({
+                        "segment_id": segment_id,
+                        "item_id": item_id,
+                        "original_text": text,
+                    })
 
         # OPTIMIZATION: Extract images and save to task_state (if available)
         # This allows images to be used in preview and export phases
@@ -396,8 +553,17 @@ class MobiTranslator(AiTranslator):
                 from backend.app.services.task import task_manager
                 task_state = task_manager.get_task(task_id) if task_id else None
                 if task_state:
+                    from utils.epub_html_segments import rebuild_mobi_segment_mapping_from_cache
+
+                    segment_mapping = rebuild_mobi_segment_mapping_from_cache(
+                        task_state,
+                        html_templates,
+                        fallback_mapping=segment_mapping,
+                    )
+                    cache_chunk = (task_state.get("source_chunks_cache") or {}).get("chunk_size")
                     task_state['mobi_html_templates'] = html_templates
                     task_state['mobi_segment_mapping'] = segment_mapping
+                    task_state['mobi_chunk_size'] = cache_chunk or self.chunk_size
                     # Save images to task_state (similar to DOCX workflow)
                     if image_data_map:
                         # Store in both mobi_image_data_map and image_data_map for compatibility
@@ -565,6 +731,14 @@ class MobiTranslator(AiTranslator):
                                 break
                         
                         if matched_image_path:
+                            from utils.ebook_image_utils import segment_list_has_html_extractor_image
+                            if segment_list_has_html_extractor_image(cache_segments, matched_image_path):
+                                self.logger.debug(
+                                    LogModule.TRANS,
+                                    f"[MOBI_TRANSLATOR] _generate_image_segments_info: Skipping duplicate image "
+                                    f"segment; [Image: ...] already present for {matched_image_path}",
+                                )
+                                continue
                             placeholder_id = matched_image_path
                             
                             # Try to find the position of this img tag relative to text segments
@@ -1198,6 +1372,29 @@ class MobiTranslator(AiTranslator):
         # Step 1: Replace text in HTML templates using string replacement
         replacement_start = time.time()
         items_updated = 0
+
+        from utils.epub_html_segments import (
+            apply_segment_translations_to_html_with_stats,
+            rebuild_mobi_segment_mapping_from_cache,
+            require_segment_replacements,
+        )
+
+        segment_mapping = rebuild_mobi_segment_mapping_from_cache(
+            task_state,
+            html_templates,
+            fallback_mapping=segment_mapping,
+        )
+
+        excluded_segment_ids: set[int] = set()
+        if task_state:
+            try:
+                from exclusion.core import ExclusionManager
+
+                excluded_segment_ids = {
+                    int(k) for k in ExclusionManager.get_excluded_segments(task_state).keys()
+                }
+            except ImportError:
+                excluded_segment_ids = set()
         
         for item in book.get_items():
             if item.get_type() != ebooklib.ITEM_DOCUMENT:
@@ -1208,33 +1405,36 @@ class MobiTranslator(AiTranslator):
                 continue
             
             original_html = html_templates[item_id]
-            modified_html = original_html
-            
-            # Get all segments for this item
             item_segments = [
                 seg for seg in segment_mapping
                 if seg['item_id'] == item_id
             ]
-            
-            # Sort segments by position in HTML (reverse order to avoid index shifting)
-            # Use a simple heuristic: longer text first (more unique), then by segment_id (descending)
-            # Process from end to start to avoid index shifting when replacing
-            item_segments_sorted = sorted(
-                item_segments,
-                key=lambda s: (-len(s['original_text']), -s['segment_id']),  # Negative segment_id for descending
-                reverse=False  # Longer text first, then higher segment_id first
+            chunk_size = (task_state or {}).get("mobi_chunk_size", 3000)
+            deep_split = True
+            modified_html, replacements_made, missed_replacements = (
+                apply_segment_translations_to_html_with_stats(
+                    original_html,
+                    item_segments,
+                    translated_segments,
+                    chunk_size=chunk_size,
+                    deep_split=deep_split,
+                    excluded_segment_ids=excluded_segment_ids,
+                    task_id=task_id,
+                    item_id=item_id,
+                )
             )
-            
-            replacements_made = 0
-            for seg_info in item_segments_sorted:
-                segment_id = seg_info['segment_id']
-                original_text = seg_info['original_text']
-                translated_text = translated_segments.get(segment_id)
-                
-                if translated_text and original_text in modified_html:
-                    # Replace first occurrence (text should be unique in HTML)
-                    modified_html = modified_html.replace(original_text, translated_text, 1)
-                    replacements_made += 1
+            require_segment_replacements(
+                replacements_made,
+                missed_replacements,
+                item_id=item_id,
+                task_id=task_id,
+            )
+            if logger:
+                logger.info(
+                    LogModule.TRANS,
+                    f"[MOBI_TRANSLATOR] generate_dom_from_segments_template: item_id={item_id} "
+                    f"applied={replacements_made} segment replacement(s), task_id={task_id}",
+                )
 
             # Sanitize for EPUB 3 (fix font/mbp:pagebreak/deprecated attrs, image path 一mages)
             from utils.epub_fix import sanitize_html_for_epub
@@ -1260,19 +1460,42 @@ class MobiTranslator(AiTranslator):
                 f"task_id={task_id}, duration={replacement_duration:.2f}s, items_updated={items_updated}"
             )
         
-        # Step 2: Verify images are preserved in book object
-        image_items_count = sum(1 for item in book.get_items() if item.get_type() == ebooklib.ITEM_IMAGE)
+        # Step 2: Ensure binary image items exist in the EPUB package (HTML keeps img refs)
+        image_data_map = None
+        if task_state:
+            image_data_map = task_state.get("image_data_map") or task_state.get("mobi_image_data_map")
+        from utils.ebook_image_utils import ensure_ebooklib_images, reconcile_epub_image_links
+        images_added = ensure_ebooklib_images(book, image_data_map)
+        links_fixed = reconcile_epub_image_links(book)
+        image_items_count = sum(
+            1 for item in book.get_items() if item.get_type() == ebooklib.ITEM_IMAGE
+        )
         if logger:
             logger.info(
                 LogModule.TRANS,
-                f"[MOBI_TRANSLATOR] generate_dom_from_segments_template: Book object contains {image_items_count} image items before EPUB write"
+                f"[MOBI_TRANSLATOR] generate_dom_from_segments_template: Book contains "
+                f"{image_items_count} image item(s) before EPUB write "
+                f"(added={images_added}, links_fixed={links_fixed}), task_id={task_id}",
             )
-        
+
         # Step 3: Apply full ebook_metadata from task_state so exported EPUB has correct metadata
-        ebook_meta = (task_state or {}).get("ebook_metadata") or {}
+        from utils.ebook_metadata import apply_to_ebooklib_book, resolve_ebook_metadata_for_export
+
+        original_filename = (task_state or {}).get("original_filename")
+        ebook_meta = resolve_ebook_metadata_for_export(
+            task_state,
+            html_templates=html_templates,
+            original_filename=original_filename,
+        )
         if ebook_meta:
-            from utils.ebook_metadata import apply_to_ebooklib_book
             apply_to_ebooklib_book(book, ebook_meta)
+            if logger:
+                logger.info(
+                    LogModule.TRANS,
+                    "[MOBI_TRANSLATOR] generate_dom_from_segments_template: "
+                    f"Applied ebook metadata title={ebook_meta.get('title')!r}, "
+                    f"author={ebook_meta.get('author')!r}, task_id={task_id}",
+                )
         elif not (book.get_metadata("DC", "title") and book.get_metadata("DC", "title")[0] and (book.get_metadata("DC", "title")[0][0] or "").strip()):
             book.set_title("Untitled")
 
@@ -1327,15 +1550,6 @@ class MobiTranslator(AiTranslator):
         if not original_texts:
             self.logger.info(LogModule.TRANS, "\nNo plain text content found in file that needs translation.")
             return self
-        if self.glossary_agent:
-            self.glossary_dict_gen = self.glossary_agent.send_segments(original_texts, self.chunk_size)
-            if self.translate_agent:
-                self.translate_agent.update_glossary_dict(self.glossary_dict_gen)
-        if self.translate_agent:
-            translated_texts = self.translate_agent.send_segments(original_texts, self.chunk_size)
-        else:
-            translated_texts = original_texts
-
         task_id = getattr(self, '_task_id', None)
         task_state = None
         if task_id:
@@ -1344,6 +1558,20 @@ class MobiTranslator(AiTranslator):
                 task_state = task_manager.get_task(task_id)
             except Exception:
                 task_state = None
+        segments, indices_to_translate, texts_to_send = self._resolve_translation_segments(
+            task_state, original_texts, task_id,
+        )
+        if self.glossary_agent and indices_to_translate:
+            glossary_texts = [segments[i] for i in indices_to_translate]
+            self.glossary_dict_gen = self.glossary_agent.send_segments(glossary_texts, self.chunk_size)
+            if self.translate_agent:
+                self.translate_agent.update_glossary_dict(self.glossary_dict_gen)
+        if self.translate_agent:
+            translated_texts = self._translate_segment_list_sync(
+                segments, indices_to_translate, texts_to_send,
+            )
+        else:
+            translated_texts = segments
 
         html_templates = (task_state or {}).get('mobi_html_templates', {})
         segment_mapping = (task_state or {}).get('mobi_segment_mapping', [])
@@ -1386,65 +1614,65 @@ class MobiTranslator(AiTranslator):
             self.logger.info(LogModule.TRANS, "\nNo plain text content found in file that needs translation.")
             return self
 
-        if self.glossary_agent:
-            self.glossary_dict_gen = await self.glossary_agent.send_segments_async(original_texts, self.chunk_size)
+        task_id = getattr(self, '_task_id', None)
+        task_state = None
+        if task_id:
+            try:
+                from backend.app.services.task import task_manager
+                task_state = task_manager.get_task(task_id) if task_id else None
+            except Exception:
+                task_state = None
+
+        segments, indices_to_translate, texts_to_send = self._resolve_translation_segments(
+            task_state, original_texts, task_id,
+        )
+
+        if self.glossary_agent and indices_to_translate:
+            glossary_texts = [segments[i] for i in indices_to_translate]
+            self.glossary_dict_gen = await self.glossary_agent.send_segments_async(
+                glossary_texts, self.chunk_size,
+            )
             if self.translate_agent:
                 self.translate_agent.update_glossary_dict(self.glossary_dict_gen)
+
         if self.translate_agent:
-            # Set task_state on agent for API debug output
-            task_id = getattr(self, '_task_id', None)
-            if task_id:
-                try:
-                    from backend.app.services.task import task_manager
-                    task_state = task_manager.get_task(task_id) if task_id else None
-                    if task_state and self.translate_agent:
-                        self.translate_agent.task_state = task_state
-                        self.translate_agent.task_id = task_id
-                        # Save original_texts to task_state for segment recording
-                        task_state['mobi_original_texts'] = original_texts
-                except Exception as e:
-                    self.logger.debug(LogModule.TRANS, f"[MOBI_TRANSLATOR] Failed to set task_state on agent or save original_texts: {e}")
-            
-            # CRITICAL: Log before passing progress_callback to send_segments_async
+            if task_state and self.translate_agent:
+                self.translate_agent.task_state = task_state
+                self.translate_agent.task_id = task_id
+                task_state['mobi_original_texts'] = segments
+
             if progress_callback:
                 self.logger.info(LogModule.TRANS, f"[MOBI_TRANSLATOR] Passing progress_callback to send_segments_async: {progress_callback}")
             else:
                 self.logger.warning(LogModule.TRANS, f"[MOBI_TRANSLATOR] progress_callback is None when calling send_segments_async!")
-            
-            translated_texts = await self.translate_agent.send_segments_async(
-                original_texts, self.chunk_size, progress_callback=progress_callback
+
+            translated_texts = await self._translate_segment_list_async(
+                segments, indices_to_translate, texts_to_send,
+                progress_callback=progress_callback,
             )
-            
-            # CRITICAL: Save original_texts and translated_texts to task_state for segment recording
-            # This allows record_translation_segments to access them later
-            if task_id:
+
+            if task_id and task_state:
                 try:
-                    from backend.app.services.task import task_manager
-                    task_state = task_manager.get_task(task_id) if task_id else None
-                    if task_state:
-                        # Save texts for segment recording
-                        task_state['mobi_original_texts'] = original_texts
-                        task_state['mobi_translated_texts'] = translated_texts
-                        self.logger.debug(
-                            LogModule.TRANS,
-                            f"[MOBI_TRANSLATOR] Saved {len(original_texts)} original_texts and "
-                            f"{len(translated_texts)} translated_texts to task_state for segment recording"
-                        )
-                        
-                        # Save API logs to temp directory
-                        from utils.chunk_translation_helper import save_api_logs_to_temp_dir
-                        save_api_logs_to_temp_dir(
-                            task_state=task_state,
-                            task_id=task_id,
-                            subfolder="translation",
-                            llm_api_input=task_state.get('llm_api_input'),
-                            llm_api_output=task_state.get('llm_api_output'),
-                            llm_api_system_prompt=task_state.get('llm_api_system_prompt'),
-                        )
+                    task_state['mobi_original_texts'] = segments
+                    task_state['mobi_translated_texts'] = translated_texts
+                    self.logger.debug(
+                        LogModule.TRANS,
+                        f"[MOBI_TRANSLATOR] Saved {len(segments)} source segments and "
+                        f"{len(translated_texts)} translated_texts to task_state for segment recording",
+                    )
+                    from utils.chunk_translation_helper import save_api_logs_to_temp_dir
+                    save_api_logs_to_temp_dir(
+                        task_state=task_state,
+                        task_id=task_id,
+                        subfolder="translation",
+                        llm_api_input=task_state.get('llm_api_input'),
+                        llm_api_output=task_state.get('llm_api_output'),
+                        llm_api_system_prompt=task_state.get('llm_api_system_prompt'),
+                    )
                 except Exception as log_e:
                     self.logger.warning(LogModule.TRANS, f"[MOBI_TRANSLATOR] Failed to save texts or API logs: {log_e}", exc_info=True)
         else:
-            translated_texts = original_texts
+            translated_texts = segments
         
         # OPTIMIZATION: Skip _after_translate during translation phase
         # DOM generation will be deferred to export phase (when user downloads/previews)
@@ -1457,7 +1685,7 @@ class MobiTranslator(AiTranslator):
                     # Save book and items for later DOM generation
                     task_state['mobi_book'] = book
                     task_state['mobi_items_to_translate'] = items_to_translate
-                    task_state['mobi_original_texts'] = original_texts
+                    task_state['mobi_original_texts'] = segments
                     task_state['mobi_translated_texts'] = translated_texts
                     
                     self.logger.info(

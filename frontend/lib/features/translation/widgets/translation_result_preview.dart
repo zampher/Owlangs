@@ -2298,17 +2298,25 @@ class _TranslationResultPreviewState
             // Loaded ${originalSourceSegments.length} original segments from Source Preview API (logging removed)
           } catch (e) {
             _translationResultLog(
-              '[LOAD_SEGMENTS] ERROR: Source Preview API is required but unavailable: $e. Cannot load translation content without original text.',
-              level: LogLevel.error,
+              '[LOAD_SEGMENTS] Source Preview API unavailable: $e. '
+              'Falling back to source_text from translation_segments.',
+              level: LogLevel.warn,
             );
-            if (mounted) {
-              setState(() {
-                _loadingError =
-                    'Source Preview API unavailable. Cannot load translation content. Please ensure the file has been extracted.';
-                _isLoading = false;
-              });
+            originalSourceSegments = segments.map((dynamic seg) {
+              if (seg is! Map) return '';
+              return (seg['source_text'] as String?) ?? '';
+            }).toList();
+            if (originalSourceSegments.isEmpty ||
+                originalSourceSegments.every((String s) => s.isEmpty)) {
+              if (mounted) {
+                setState(() {
+                  _loadingError =
+                      'Source Preview API unavailable. Cannot load translation content. Please ensure the file has been extracted.';
+                  _isLoading = false;
+                });
+              }
+              return;
             }
-            return; // Stop processing - no fallback
           }
 
           // Initialize source and target lists
