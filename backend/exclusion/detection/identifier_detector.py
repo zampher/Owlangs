@@ -23,6 +23,11 @@ def _is_all_consonants(s: str) -> bool:
     return not any(c in _LATIN_VOWELS for c in letters)
 
 
+def _is_single_letter_identifier(text: str) -> bool:
+    """Single ASCII letter segments (A, B, E, outline markers) are identifiers."""
+    return len(text) == 1 and text.isascii() and text.isalpha()
+
+
 def _is_pure_number(text: str) -> bool:
     """Check if text is pure numbers (with optional separators like spaces, commas, periods, hyphens)."""
     if not text or not text.strip():
@@ -301,7 +306,10 @@ def is_identifier_pattern(text: str, exclude_language_match: bool = True) -> boo
     
     if _is_pure_number(text_stripped):
         return True
-    
+
+    if _is_single_letter_identifier(text_stripped):
+        return True
+
     if _is_url(text_stripped):
         return True
     
