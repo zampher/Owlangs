@@ -3,7 +3,8 @@
 
 from __future__ import annotations
 
-from typing import List
+from logger import unified_logger as logger
+from logger.logger import LogModule
 
 from .base import Extractor, ExtractResult
 from utils.epub_html_segments import (
@@ -45,5 +46,10 @@ class EpubExtractor(Extractor):
                     {"source": "epub", "index": idx} for idx in range(len(segments))
                 ],
             )
-        except Exception:
+        except Exception as exc:
+            logger.error(
+                f"EPUB extraction failed: {exc}",
+                module=LogModule.EXTRACT,
+                exc_info=True,
+            )
             return ExtractResult(segments=[])

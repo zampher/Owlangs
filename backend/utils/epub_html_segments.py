@@ -19,11 +19,95 @@ EPUB_HTML_MEDIA_TYPES = frozenset({
     "application/xml",
 })
 
-BLOCK_TAGS = frozenset({
-    "p", "h1", "h2", "h3", "h4", "h5", "h6",
-    "blockquote", "pre", "code", "div", "section", "article",
-    "ul", "ol", "table",
-})
+OPF_NS = "http://www.idpf.org/2007/opf"
+
+
+def _local_xml_name(tag: str) -> str:
+    if tag and "}" in tag:
+        return tag.rsplit("}", 1)[-1]
+    return tag or ""
+
+
+def _normalize_epub_zip_path(*parts: str) -> str:
+    from urllib.parse import unquote
+
+    cleaned = [p.replace("\\", "/").strip("/") for p in parts if p]
+    joined = unquote("/".join(cleaned))
+    while "//" in joined:
+        joined = joined.replace("//", "/")
+    return joined.lstrip("/")
+
+
+def _lookup_epub_file(all_files: Dict[str, bytes], path: str) -> Optional[bytes]:
+    norm = _normalize_epub_zip_path(path)
+    if norm in all_files:
+        return all_files[norm]
+    norm_lower = norm.lower()
+    for key, data in all_files.items():
+        if key.replace("\\", "/").lower() == norm_lower:
+            return data
+    return None
+
+
+def _find_container_opf_path(container_root: Any) -> Optional[str]:
+    for el in container_root.iter():
+        if _local_xml_name(el.tag) == "rootfile":
+            full_path = el.get("full-path")
+            if full_path:
+                return full_path.replace("\\", "/")
+    return None
+
+
+def _parse_opf_manifest_and_spine(
+    opf_root: Any,
+    opf_dir: str,
+) -> Tuple[Dict[str, dict], List[str]]:
+    """Parse manifest items and spine order from OPF (default or prefixed namespace)."""
+    manifest_items: Dict[str, dict] = {}
+    manifest_el = opf_root.find(f"{{{OPF_NS}}}manifest")
+    if manifest_el is not None:
+        for item in manifest_el.findall(f"{{{OPF_NS}}}item"):
+            item_id = item.get("id")
+            href = item.get("href")
+            if not item_id or not href:
+                continue
+            manifest_items[item_id] = {
+                "href": _normalize_epub_zip_path(opf_dir, href),
+                "media_type": (item.get("media-type") or "").strip(),
+            }
+
+    spine_itemrefs: List[str] = []
+    spine_el = opf_root.find(f"{{{OPF_NS}}}spine")
+    if spine_el is not None:
+        for itemref in spine_el.findall(f"{{{OPF_NS}}}itemref"):
+            idref = itemref.get("idref")
+            if idref:
+                spine_itemrefs.append(idref)
+
+    return manifest_items, spine_itemrefs
+
+
+def _fallback_epub_html_files(all_files: Dict[str, bytes]) -> List[Tuple[str, bytes]]:
+    """Last-resort: collect HTML/XHTML files from the EPUB archive."""
+    html_files: List[Tuple[str, bytes]] = []
+    for name in sorted(all_files.keys()):
+        norm = name.replace("\\", "/")
+        lower = norm.lower()
+        if not lower.endswith((".xhtml", ".html", ".htm")):
+            continue
+        if lower.startswith("meta-inf/"):
+            continue
+        data = all_files.get(name)
+        if data:
+            html_files.append((norm, data))
+    return html_files
+
+
+def _is_epub_html_media_type(media_type: str) -> bool:
+    mt = (media_type or "").split(";")[0].strip().lower()
+    if mt in EPUB_HTML_MEDIA_TYPES:
+        return True
+    return mt.endswith("+xml") and ("html" in mt or "xhtml" in mt)
 
 
 def read_epub_all_files(epub_bytes: bytes) -> Dict[str, bytes]:
@@ -32,51 +116,36 @@ def read_epub_all_files(epub_bytes: bytes) -> Dict[str, bytes]:
         return {name: zf.read(name) for name in zf.namelist()}
 
 
+BLOCK_TAGS = frozenset({
+    "p", "h1", "h2", "h3", "h4", "h5", "h6",
+    "blockquote", "pre", "code", "div", "section", "article",
+    "ul", "ol", "table",
+})
+
+
 def get_epub_html_files_in_reading_order(all_files: Dict[str, bytes]) -> List[Tuple[str, bytes]]:
     """
     Return (file_path, html_bytes) pairs in spine reading order.
 
-    Falls back to manifest order when spine is empty.
+    Falls back to manifest order when spine is empty, then to archive HTML scan.
     """
-    container_xml = all_files.get("META-INF/container.xml")
+    container_xml = _lookup_epub_file(all_files, "META-INF/container.xml")
     if not container_xml:
-        return []
+        return _fallback_epub_html_files(all_files)
 
     container_root = ET.fromstring(container_xml)
-    ns = {"cn": "urn:oasis:names:tc:opendocument:xmlns:container"}
-    rootfile = container_root.find("cn:rootfiles/cn:rootfile", ns)
-    if not rootfile:
-        return []
-
-    opf_path = rootfile.get("full-path")
+    opf_path = _find_container_opf_path(container_root)
     if not opf_path:
-        return []
+        return _fallback_epub_html_files(all_files)
 
-    opf_content = all_files.get(opf_path)
+    opf_content = _lookup_epub_file(all_files, opf_path)
     if not opf_content:
-        return []
+        return _fallback_epub_html_files(all_files)
 
     opf_root = ET.fromstring(opf_content)
-    ns_opf = {"opf": "http://www.idpf.org/2007/opf"}
-    opf_dir = os.path.dirname(opf_path)
+    opf_dir = os.path.dirname(opf_path.replace("\\", "/"))
 
-    manifest_items: Dict[str, dict] = {}
-    for item in opf_root.findall("opf:manifest/opf:item", ns_opf):
-        item_id = item.get("id")
-        href = item.get("href")
-        if not item_id or not href:
-            continue
-        full_href = os.path.join(opf_dir, href).replace("\\", "/")
-        manifest_items[item_id] = {
-            "href": full_href,
-            "media_type": item.get("media-type", ""),
-        }
-
-    spine_itemrefs = [
-        item.get("idref")
-        for item in opf_root.findall("opf:spine/opf:itemref", ns_opf)
-        if item.get("idref")
-    ]
+    manifest_items, spine_itemrefs = _parse_opf_manifest_and_spine(opf_root, opf_dir)
     reading_order = spine_itemrefs or list(manifest_items.keys())
 
     html_files: List[Tuple[str, bytes]] = []
@@ -84,13 +153,16 @@ def get_epub_html_files_in_reading_order(all_files: Dict[str, bytes]) -> List[Tu
         item = manifest_items.get(item_id)
         if not item:
             continue
-        if item["media_type"] not in EPUB_HTML_MEDIA_TYPES:
+        if not _is_epub_html_media_type(item["media_type"]):
             continue
         file_path = item["href"]
-        html_bytes = all_files.get(file_path)
+        html_bytes = _lookup_epub_file(all_files, file_path)
         if html_bytes:
             html_files.append((file_path, html_bytes))
-    return html_files
+
+    if html_files:
+        return html_files
+    return _fallback_epub_html_files(all_files)
 
 
 def extract_paragraph_segments_from_html(
