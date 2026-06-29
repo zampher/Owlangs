@@ -74,9 +74,10 @@ from layout.pdf_renderer.typst_overlay.visual_images import (
     collect_preserved_visual_protected_rects,
     collect_visual_image_placements,
     extract_equation_content,
-    lookup_image_bytes,
     extract_equation_image_path,
     extract_nested_sub_bbox,
+    lookup_image_bytes,
+    normalize_equation_content_for_typst,
 )
 from layout.block_types import (
     EQUATION_BLOCK_TYPES,
@@ -1163,8 +1164,12 @@ class TypstOverlayRenderer(BasePDFRenderer):
                         translated = extract_equation_content(block) or ""
                     if translated and translated.strip():
                         eq_text = translated.strip()
-                        if eq_fmt == "latex" and "$" not in eq_text:
-                            eq_text = f"${eq_text}$"
+                        raw_eq_text = eq_text
+                        # Make sure the equation has math delimiters so cmarker + mitex
+                        # render it as a formula instead of plain LaTeX text.
+                        normalized = normalize_equation_content_for_typst(eq_text)
+                        if normalized:
+                            eq_text = normalized
                         eq_rb = layout_block_to_render_block(
                             block,
                             page_index=page.page_index,
@@ -1173,6 +1178,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                         )
                         eq_rb.opaque_fill = True
                         eq_rb.render_kind = "markdown"
+                        eq_rb.math_map = [{"latex": raw_eq_text}]
                         bbox_override = self._block_bbox_override(block_key)
                         if bbox_override is not None:
                             eq_rb.inner_bbox = bbox_override

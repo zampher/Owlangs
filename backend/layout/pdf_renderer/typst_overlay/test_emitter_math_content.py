@@ -4,6 +4,7 @@
 """Tests for $...$ / LaTeX math in Typst overlay emitter."""
 
 from layout.pdf_renderer.typst_overlay.emitter import (
+    _render_markdown_block,
     _render_table_block,
     _typst_plain_text_expr,
     sanitize_typst_markdown_for_compile,
@@ -23,6 +24,21 @@ def test_typst_plain_text_expr_uses_cmarker():
         "myvar", 10.0, 1.2, "regular", "normal", "rgb(0, 0, 0)", 0.0, "false",
     )
     assert "cmarker.render(myvar, math: mitex)" in expr
+
+
+def test_render_markdown_block_wraps_bare_equation_in_display_math():
+    block = RenderBlock(
+        block_id="eq-bare",
+        page_index=0,
+        inner_bbox=(10.0, 20.0, 200.0, 120.0),
+        markdown_text="$$x = 1$$",
+        font_size_pt=10.0,
+        render_kind="markdown",
+        opaque_fill=True,
+    )
+    src = _render_markdown_block("block-eq", block)
+    assert "cmarker.render(" in src
+    assert "x = 1" in src
 
 
 def test_render_table_block_inline_math_uses_cmarker_not_raw_content():

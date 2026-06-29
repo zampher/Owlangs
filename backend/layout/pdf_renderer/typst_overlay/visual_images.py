@@ -12,6 +12,7 @@ the source PDF layer (which may be erased during text redaction).
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -100,6 +101,33 @@ def extract_equation_content(block) -> Optional[str]:
     if isinstance(text, str) and text.strip():
         return text.strip()
     return None
+
+
+# Regex to detect existing TeX math delimiters.
+_EQUATION_DELIMITED_RE = re.compile(
+    r"^(\$\$.*\$\$|\$.*\$|\\\[.*\\\]|\\\(.*\\\))$",
+    re.DOTALL,
+)
+
+
+def normalize_equation_content_for_typst(content: Optional[str]) -> Optional[str]:
+    r"""Ensure extracted equation LaTeX has math delimiters for Typst rendering.
+
+    MinerU may return bare LaTeX source (e.g. ``x = 1``) without ``$...$`` or
+    ``\(...\)`` delimiters. When such content is passed to cmarker it is
+    rendered as plain text, so the formula source becomes visible in the PDF.
+    This helper wraps bare LaTeX in ``$$...$$`` (display math) while keeping
+    existing delimiters untouched so downstream sanitization can normalize
+    them.
+    """
+    if not isinstance(content, str):
+        return None
+    text = content.strip()
+    if not text:
+        return None
+    if _EQUATION_DELIMITED_RE.match(text):
+        return text
+    return f"$${text}$$"
 
 
 def collect_preserved_visual_protected_rects(
