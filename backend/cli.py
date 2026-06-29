@@ -69,9 +69,16 @@ if getattr(sys, "frozen", False):
         "layout_merger",
         "mineru_zip_merger",
         "epub_html_segments",
+        "ebook_mobi_utils",
+        "ebook_image_utils",
+        "ebook_metadata",
     )
+    import importlib
     for _sub in _utils_submodules:
-        _mod = getattr(_backend_utils, _sub, None)
+        try:
+            _mod = importlib.import_module(f"backend.utils.{_sub}")
+        except ModuleNotFoundError:
+            _mod = getattr(_backend_utils, _sub, None)
         if _mod is not None:
             sys.modules[f"utils.{_sub}"] = _mod
 

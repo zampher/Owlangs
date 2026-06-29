@@ -140,6 +140,8 @@ hiddenimports = [
     'backend.utils.table_utils',
     'backend.utils.image_placeholder_utils',
     'backend.utils.ebook_image_utils',
+    'backend.utils.ebook_mobi_utils',
+    'utils.ebook_mobi_utils',
     'backend.utils.mineru_layout_utils',
     'backend.utils.format_convert_utils',
     'backend.utils.mixed_formula_text',
