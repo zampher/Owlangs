@@ -6,6 +6,8 @@
 
 <img width="512" height="512" alt="3dbe724efe2622363cc092da2c352de6" src="https://github.com/user-attachments/assets/7223558f-4dc5-40d1-8b05-49f89d888600" />
 
+<img width="1914" height="1036" alt="2026-06-30_145533_229" src="https://github.com/user-attachments/assets/611477dd-473f-4f01-9ff3-e0e92480bb97" />
+
 ## 关键功能
 
 ### 多格式支持与高保真排版
