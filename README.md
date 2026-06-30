@@ -252,7 +252,7 @@ Owlangs builds on or is inspired by the following open-source projects and tools
 
 欢迎加入技术交流微信群（有时会过期，可加微信号）：
 
-<img src="WeChat_Help_技术交流微信群.png" alt="WeChat Help" width="280">
+<img src="WeChat_Help.png" alt="WeChat Help" width="280">
 
 ---
 
