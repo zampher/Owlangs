@@ -6,6 +6,7 @@ A powerful AI-powered document translation platform designed for professionals w
 
 <img width="1000" height="1000" alt="40db738c439a580cc6fa49c0b3b0fc86" src="https://github.com/user-attachments/assets/131afdf3-c0a2-4b1f-a4a3-03c170b678d8" />
 
+<img width="1914" height="1036" alt="2026-06-30_145533_229" src="https://github.com/user-attachments/assets/611477dd-473f-4f01-9ff3-e0e92480bb97" />
 
 ## Key Features
 
