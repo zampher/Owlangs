@@ -246,7 +246,7 @@ Owlangs 在以下开源项目或工具的基础上构建，或从中获得灵感
 交流微信号 Wechat：**zzmaimeng**  
 欢迎加入技术交流微信群（群二维码可能过期，可加微信号入群）：
 
-<img src="WeChat_Help_技术交流微信群.png" alt="WeChat Help" width="280">
+<img src="WeChat_Help.png" alt="WeChat Help" width="280">
 
 ---
 
