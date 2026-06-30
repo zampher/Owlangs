@@ -108,14 +108,100 @@ def remove_task_from_all_batches(task_id: str) -> None:
     with _lock:
         index = _load_index()
         changed = False
+        empty_batch_ids: List[str] = []
         for batch_id, batch in list(index["batches"].items()):
             task_ids = list(batch.get("task_ids") or [])
-            if task_id in task_ids:
-                batch["task_ids"] = [t for t in task_ids if t != task_id]
+            if task_id not in task_ids:
+                continue
+            remaining = [t for t in task_ids if t != task_id]
+            if remaining:
+                batch["task_ids"] = remaining
                 index["batches"][batch_id] = batch
-                changed = True
+            else:
+                empty_batch_ids.append(batch_id)
+            changed = True
+        for batch_id in empty_batch_ids:
+            index["batches"].pop(batch_id, None)
         if changed:
             _save_index(index)
+
+
+def set_batch_task_ids(batch_id: str, task_ids: List[str]) -> None:
+    with _lock:
+        index = _load_index()
+        batch = index["batches"].get(batch_id)
+        if batch is None:
+            return
+        batch["task_ids"] = list(task_ids)
+        index["batches"][batch_id] = batch
+        _save_index(index)
+
+
+def task_id_in_any_batch(task_id: str) -> bool:
+    with _lock:
+        for batch in _load_index()["batches"].values():
+            if task_id in (batch.get("task_ids") or []):
+                return True
+    return False
+
+
+def _task_has_live_resources(task_id: str) -> bool:
+    """True when task data exists in memory or on-disk stash (not batch index alone)."""
+    from backend.app.services.task.task_manager import task_manager
+    from backend.app.services.translation.translation_result_stash import (
+        load_meta,
+        stash_root,
+    )
+
+    if task_manager.get_task(task_id) is not None:
+        return True
+    stash_dir = stash_root() / task_id
+    if not stash_dir.is_dir():
+        return False
+    meta = load_meta(task_id)
+    if meta is None:
+        return True
+    from backend.app.services.translation.translation_result_stash import _has_stash_content
+
+    return _has_stash_content(meta)
+
+
+def reconcile_batches_to_task_rows(
+    *,
+    owner_username: Optional[str] = None,
+    guest_view: bool = False,
+) -> int:
+    """Drop stale task_ids from batches and delete batches whose tasks are all gone.
+
+    Never deletes a batch that was created with ``task_ids=[]`` and is still awaiting uploads.
+    """
+    removed_batches = 0
+    with _lock:
+        index = _load_index()
+        changed = False
+        to_delete: List[str] = []
+        for batch_id, batch in list(index["batches"].items()):
+            if not guest_view and owner_username is not None:
+                if batch.get("owner_username") != owner_username:
+                    continue
+            task_ids = [str(t) for t in (batch.get("task_ids") or [])]
+            if not task_ids:
+                continue
+            live = [t for t in task_ids if _task_has_live_resources(t)]
+            if not live:
+                to_delete.append(batch_id)
+                continue
+            if live != task_ids:
+                batch["task_ids"] = live
+                index["batches"][batch_id] = batch
+                changed = True
+        for batch_id in to_delete:
+            index["batches"].pop(batch_id, None)
+            removed_batches += 1
+            changed = True
+        if changed:
+            _save_index(index)
+    return removed_batches
 
 
 def delete_batch(batch_id: str) -> Optional[Dict[str, Any]]:

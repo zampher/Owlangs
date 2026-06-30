@@ -17,6 +17,8 @@ import time
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
+from fastapi import HTTPException
+
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from utils.translation_validator import log_segment_translation_stats

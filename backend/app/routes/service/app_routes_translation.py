@@ -396,63 +396,47 @@ async def service_cancel_translate(task_id: str):
 
 
 @router.post(
+    "/clear-my-queue",
+    summary="Clear all translation tasks for the current viewer",
+    description="""
+Release every in-memory task, on-disk stash entry, and upload batch visible to the
+current user (or all tasks in guest mode). Use this instead of releasing tasks one-by-one
+so batch metadata and orphaned stash shells are removed together.
+""",
+)
+async def clear_my_translation_queue(user: User = Depends(get_current_user)):
+    from backend.app.services.task.queue_cleanup import clear_viewer_queue
+
+    result = await clear_viewer_queue(user)
+    return JSONResponse(content=result)
+
+
+@router.post(
     "/release/{task_id}",
     summary="Release task resources",
     description="""Release all resources occupied by the task on the server based on task ID, including status, logs, and cached translation result files. If the task is in progress, it will first try to cancel the task. This operation is irreversible."""
 )
 async def service_release_task(task_id: str):
-    """Release task resources."""
-    import os
-    import shutil
-
-    from backend.app.services.translation.translation_result_stash import delete_task_stash, load_meta
+    from backend.app.services.task.queue_cleanup import (
+        release_task_resources,
+        task_has_queue_resources,
+    )
 
     logger.info(LogModule.ROUTE, f"[RELEASE-TASK] Release task resources request: task_id={task_id}")
 
-    task_state = task_manager.get_task(task_id)
-
-    if task_state is None:
-        if load_meta(task_id):
-            delete_task_stash(task_id)
-            logger.info(LogModule.ROUTE, f"[RELEASE-TASK] Removed stashed results only: task_id={task_id}")
-            return JSONResponse(
-                content={
-                    "released": True,
-                    "message": f"Stashed results for task '{task_id}' were removed.",
-                }
-            )
+    if not task_has_queue_resources(task_id):
         logger.warning(LogModule.ROUTE, f"[RELEASE-TASK] Task ID '{task_id}' not found")
-        return JSONResponse(status_code=404, content={"released": False, "message": f"Task ID '{task_id}' not found."})
+        return JSONResponse(
+            status_code=404,
+            content={"released": False, "message": f"Task ID '{task_id}' not found."},
+        )
 
-    message_parts = []
-
-    if task_state and task_state.get("is_processing") and task_state.get("current_task_ref"):
-        try:
-            # Task is in progress, will try to cancel before release
-            translation_service.cancel_translation(task_id)
-            message_parts.append("Task has been cancelled.")
-            logger.info(LogModule.ROUTE, f"[RELEASE-TASK] Task {task_id} cancelled before release")
-        except HTTPException as e:
-            # Expected situation when cancelling task (may have been completed)
-            message_parts.append(f"Task cancellation step skipped (may have been completed or cancelled).")
-            logger.debug(LogModule.ROUTE, f"[RELEASE-TASK] Task {task_id} cancellation skipped: {e.detail}")
-    
-    if task_state:
-        temp_dir = task_state.get("temp_dir")
-        if temp_dir and os.path.isdir(temp_dir):
-            try:
-                shutil.rmtree(temp_dir)
-                message_parts.append("Temporary files cleaned up.")
-                logger.debug(LogModule.ROUTE, f"[RELEASE-TASK] Cleaned up temp directory for task {task_id}: {temp_dir}")
-            except Exception as e:
-                message_parts.append(f"Error cleaning up temporary files: {e}.")
-                logger.warning(LogModule.ROUTE, f"[RELEASE-TASK] Failed to clean up temp directory for task {task_id}: {e}")
-
-    if delete_task_stash(task_id):
-        message_parts.append("Cached translation outputs removed.")
-
-    task_manager.cleanup_task_resources(task_id)
-    message_parts.append(f"Resources for task '{task_id}' have been released.")
+    await release_task_resources(task_id)
     logger.info(LogModule.ROUTE, f"[RELEASE-TASK] Task resources released successfully: task_id={task_id}")
-    return JSONResponse(content={"released": True, "message": " ".join(message_parts)})
+    return JSONResponse(
+        content={
+            "released": True,
+            "message": f"Resources for task '{task_id}' have been released.",
+        }
+    )
 

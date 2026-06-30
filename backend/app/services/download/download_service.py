@@ -2540,9 +2540,91 @@ def _markdown_based_html_file_response_from_segments(
 
 
 
-def _get_output_suffix(task_state: dict, default: str = "_translated") -> str:
-    """Read configurable filename suffix from task state."""
-    return task_state.get("output_suffix") or default
+def _get_output_suffix(task_state: dict, default: str | None = None) -> str:
+    from utils.output_suffix import get_output_suffix
+
+    return get_output_suffix(task_state, default=default)
+
+
+def _task_context_from_stash_meta(meta: dict) -> dict:
+    original_filename = meta.get("original_filename") or "translated"
+    return {
+        "output_suffix": meta.get("output_suffix"),
+        "is_format_conversion": meta.get("is_format_conversion"),
+        "convert_only": meta.get("is_format_conversion"),
+        "owner_username": meta.get("owner_username"),
+        "original_filename": original_filename,
+        "original_filename_stem": Path(original_filename).stem,
+        "original_relative_path": meta.get("original_relative_path") or "",
+    }
+
+
+def _try_stashed_file_response(
+    task_id: str,
+    file_type: str,
+    embed_images: Optional[bool],
+    equation_format: Optional[str],
+    table_body_format: Optional[str],
+) -> Optional[FileResponse]:
+    """Serve on-disk stashed outputs when the task is no longer in memory."""
+    from backend.app.services.translation.translation_result_stash import (
+        get_stashed_file_path,
+        load_meta,
+    )
+
+    meta = load_meta(task_id)
+    if not meta:
+        return None
+
+    ctx = _task_context_from_stash_meta(meta)
+    sfx = _get_output_suffix(ctx)
+    stem = ctx["original_filename_stem"]
+
+    if file_type == "md" and embed_images is False:
+        stashed_zip = get_stashed_file_path(task_id, "md_zip")
+        if stashed_zip and os.path.isfile(stashed_zip):
+            filename = f"{stem}{sfx}_with_images.zip"
+            logger.info(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Task {task_id}: Serving stashed md_zip from disk (no in-memory task)",
+            )
+            return FileResponse(
+                path=stashed_zip,
+                media_type="application/zip",
+                filename=filename,
+            )
+
+        stashed_md = get_stashed_file_path(task_id, "md")
+        if stashed_md and os.path.isfile(stashed_md):
+            with open(stashed_md, encoding="utf-8-sig") as md_file:
+                md_body = md_file.read()
+            logger.info(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Task {task_id}: Packaging stashed MD as ZIP (embed_images=false)",
+            )
+            return _file_response_for_md_download(
+                md_body,
+                ctx,
+                stem,
+                False,
+                equation_format,
+                table_body_format,
+            )
+        return None
+
+    stashed = get_stashed_file_path(task_id, file_type)
+    if not stashed or not os.path.isfile(stashed):
+        return None
+
+    ext = Path(stashed).suffix or ""
+    filename = f"{stem}{sfx}{ext}"
+    media_type = MEDIA_TYPES.get(file_type, "application/octet-stream")
+    logger.info(
+        LogModule.EXPORT,
+        f"[DOWNLOAD] Task {task_id}: Serving stashed {file_type} from disk (no in-memory task)",
+    )
+    return FileResponse(path=stashed, media_type=media_type, filename=filename)
+
 
 class DownloadService:
     """Service for handling file downloads."""
@@ -2599,23 +2681,15 @@ class DownloadService:
         # Get task state from task manager
         task_state = self.task_manager.get_task(task_id)
         if not task_state:
-            from backend.app.services.translation.translation_result_stash import (
-                get_stashed_file_path,
-                load_meta,
+            stashed_resp = _try_stashed_file_response(
+                task_id,
+                file_type,
+                embed_images,
+                equation_format,
+                table_body_format,
             )
-
-            stashed = get_stashed_file_path(task_id, file_type)
-            if stashed and os.path.isfile(stashed):
-                meta = load_meta(task_id)
-                stem = Path((meta or {}).get("original_filename") or "translated").stem
-                ext = Path(stashed).suffix or ""
-                filename = f"{stem}_translated{ext}"
-                media_type = MEDIA_TYPES.get(file_type, "application/octet-stream")
-                logger.info(
-                    LogModule.EXPORT,
-                    f"[DOWNLOAD] Task {task_id}: Serving stashed {file_type} from disk (no in-memory task)",
-                )
-                return FileResponse(path=stashed, media_type=media_type, filename=filename)
+            if stashed_resp is not None:
+                return stashed_resp
             raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
 
         sfx = _get_output_suffix(task_state)

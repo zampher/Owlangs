@@ -136,6 +136,10 @@ hiddenimports = [
     'backend.utils.llm_client',
     'backend.utils.extract_segments_debug',
     'backend.utils.bilingual_export_utils',
+    'backend.utils.output_suffix',
+    'backend.utils.batch_download_zip',
+    'utils.output_suffix',
+    'utils.batch_download_zip',
     # backend.app (uvicorn "app.factory:app"; app = backend/app when backend_dir on path)
     'backend.app',
     'backend.app.factory',
@@ -172,6 +176,7 @@ hiddenimports = [
     # backend.app.services (task, translation, download, status, platform, etc.)
     'backend.app.services.task',
     'backend.app.services.task.batch_manager',
+    'backend.app.services.task.queue_cleanup',
     'backend.app.services.translation',
     'backend.app.services.translation.workflow_factory',
     'backend.app.services.translation.workflow_config_builder',

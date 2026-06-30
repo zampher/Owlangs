@@ -122,6 +122,27 @@ def _config_value(key: str, fallback: Any = None) -> Any:
     return cfg
 
 
+def _output_suffix_for_cli(args_suffix: Optional[str], *, convert: bool) -> str:
+    """Resolve local output-dir suffix: CLI flag > config.toml > app_config.json > default."""
+    if args_suffix is not None:
+        return args_suffix
+    cfg_key = "converter_output_suffix" if convert else "translator_output_suffix"
+    default = "_converted" if convert else "_translated"
+    cfg = _get_user_config()
+    if isinstance(cfg, dict) and cfg_key in cfg:
+        return str(cfg[cfg_key])
+    try:
+        from config import get_app_config
+
+        app_cfg = get_app_config()
+        value = getattr(app_cfg, cfg_key, None)
+        if value is not None:
+            return str(value)
+    except Exception:
+        pass
+    return default
+
+
 def _resolve_translate_options(args: argparse.Namespace) -> Dict[str, Any]:
     """Merge CLI flags with config.toml defaults (CLI wins when explicitly set)."""
     glossary = list(args.glossary) if args.glossary else None
@@ -356,7 +377,8 @@ async def cmd_translate(args: argparse.Namespace) -> int:
         )
 
     # Download results
-    out_dir = _resolve_output_dir(args.output, file_path, args.output_suffix or _config_value("translator_output_suffix", "_translated"), source_stem=source_stem)
+    suffix = _output_suffix_for_cli(args.output_suffix, convert=False)
+    out_dir = _resolve_output_dir(args.output, file_path, suffix, source_stem=source_stem)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     downloaded = []
@@ -435,7 +457,8 @@ async def cmd_convert(args: argparse.Namespace) -> int:
             EXIT_TASK_FAILED,
         )
 
-    out_dir = _resolve_output_dir(args.output, file_path, args.output_suffix or _config_value("converter_output_suffix", "_converted"))
+    suffix = _output_suffix_for_cli(args.output_suffix, convert=True)
+    out_dir = _resolve_output_dir(args.output, file_path, suffix)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     downloaded = []

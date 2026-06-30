@@ -106,6 +106,20 @@ class GlobalSettings {
     },
   });
 
+  static String _readSuffixFromJson(
+    Map<String, dynamic> json,
+    String camelKey,
+    String snakeKey,
+  ) {
+    if (json.containsKey(camelKey)) {
+      return json[camelKey]?.toString() ?? '';
+    }
+    if (json.containsKey(snakeKey)) {
+      return json[snakeKey]?.toString() ?? '';
+    }
+    return camelKey == 'translateOutputSuffix' ? '_translated' : '_converted';
+  }
+
   factory GlobalSettings.fromJson(Map<String, dynamic> json) => GlobalSettings(
         darkMode: json['darkMode'] ?? false,
         language: json['language'] ?? 'en',
@@ -147,10 +161,16 @@ class GlobalSettings {
         useGlossary: json['useGlossary'] ?? false,
         usePrompt: json['usePrompt'] ?? false,
         targetLanguage: json['targetLanguage'] ?? 'en',
-        translateOutputSuffix:
-            json['translateOutputSuffix'] ?? '_translated',
-        convertOutputSuffix:
-            json['convertOutputSuffix'] ?? '_converted',
+        translateOutputSuffix: _readSuffixFromJson(
+          json,
+          'translateOutputSuffix',
+          'translator_output_suffix',
+        ),
+        convertOutputSuffix: _readSuffixFromJson(
+          json,
+          'convertOutputSuffix',
+          'converter_output_suffix',
+        ),
         temperature: (json['temperature'] ?? 0.3).toDouble(),
         retry: json['retry'] ?? 3,
         segmentAutoRetryRounds: json['segment_auto_retry_rounds'] ?? 3,
@@ -535,6 +555,26 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
               final code = nameToCode(targetLangName) ?? 'en';
               backendSettings['targetLanguage'] = code;
             }
+          }
+
+          // Map output suffix settings from backend (empty string is valid)
+          if (appConfig.containsKey('translateOutputSuffix') ||
+              appConfig.containsKey('translator_output_suffix')) {
+            backendSettings['translateOutputSuffix'] =
+                GlobalSettings._readSuffixFromJson(
+              appConfig,
+              'translateOutputSuffix',
+              'translator_output_suffix',
+            );
+          }
+          if (appConfig.containsKey('convertOutputSuffix') ||
+              appConfig.containsKey('converter_output_suffix')) {
+            backendSettings['convertOutputSuffix'] =
+                GlobalSettings._readSuffixFromJson(
+              appConfig,
+              'convertOutputSuffix',
+              'converter_output_suffix',
+            );
           }
 
           // Restore UI language from backend or system locale on first run

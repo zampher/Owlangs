@@ -297,6 +297,13 @@ class TranslationService {
     return (resp.data as Map).cast<String, dynamic>();
   }
 
+  /// 清空当前用户可见的翻译队列（含 batch 与 stash）
+  Future<Map<String, dynamic>> clearMyQueue() async {
+    final dio = _buildAuthedDio();
+    final resp = await dio.post('/service/clear-my-queue');
+    return (resp.data as Map).cast<String, dynamic>();
+  }
+
   /// Writes rebuilt exports to server-side stash so [listTranslationTasks] / queue downloads match current segments.
   ///
   /// [exportScope]: `full` (default) generates every format; `primary_only` stashes only the

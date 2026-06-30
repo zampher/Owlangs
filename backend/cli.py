@@ -72,6 +72,9 @@ if getattr(sys, "frozen", False):
         "ebook_mobi_utils",
         "ebook_image_utils",
         "ebook_metadata",
+        # Batch download + configurable output suffix (app_routes_download, MCP service_layer)
+        "output_suffix",
+        "batch_download_zip",
     )
     import importlib
     for _sub in _utils_submodules:

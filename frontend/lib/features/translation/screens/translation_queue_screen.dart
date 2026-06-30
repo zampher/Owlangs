@@ -22,6 +22,7 @@ import '../../../shared/providers/settings_provider.dart';
 import '../../../shared/services/translation_service.dart';
 import '../../../shared/utils/message_service.dart';
 import '../../../shared/utils/download_filename_builder.dart';
+import '../../../shared/utils/batch_download_archive_helper.dart';
 
 /// Lists backend translation tasks (immediate + queued + stashed) with polling.
 class TranslationQueueScreen extends ConsumerStatefulWidget {
@@ -1032,6 +1033,9 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     required String filename,
     required String ext,
   }) async {
+    if (ext == 'zip' && !_looksLikeZipBytes(bytes)) {
+      throw Exception('Downloaded file is not a valid ZIP archive');
+    }
     if (kIsWeb) {
       await FileSaver.instance.saveFile(
         name: filename.replaceAll(RegExp(r'\.[^.]+$'), ''),
@@ -1094,6 +1098,16 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
         );
       }
     }
+  }
+
+  bool _looksLikeZipBytes(List<int> bytes) {
+    if (bytes.length < 4) {
+      return false;
+    }
+    return bytes[0] == 0x50 &&
+        bytes[1] == 0x4B &&
+        (bytes[2] == 0x03 || bytes[2] == 0x05 || bytes[2] == 0x07) &&
+        (bytes[3] == 0x04 || bytes[3] == 0x06 || bytes[3] == 0x08);
   }
 
   String _stripExtension(String name) {
@@ -1232,30 +1246,33 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     if (ok != true || !mounted) {
       return;
     }
-    int success = 0;
-    int fail = 0;
-    for (final Map<String, dynamic> row in _tasks) {
-      final String taskId = row['task_id']?.toString() ?? '';
-      if (taskId.isEmpty) continue;
-      try {
-        await _svc.releaseTask(taskId);
-        success++;
-      } catch (_) {
-        fail++;
+    try {
+      final Map<String, dynamic> result = await _svc.clearMyQueue();
+      if (!mounted) {
+        return;
       }
-    }
-    if (!mounted) {
-      return;
-    }
-    if (fail == 0) {
-      MessageService.showInfo(context, l10n.translationQueueClearMyQueueSuccess);
-    } else {
+      if (result['ok'] == true) {
+        MessageService.showInfo(context, l10n.translationQueueClearMyQueueSuccess);
+      } else {
+        final List<dynamic> errors =
+            (result['errors'] as List<dynamic>?) ?? <dynamic>[];
+        MessageService.showWarning(
+          context,
+          l10n.translationQueueClearMyQueueFailed(
+            errors.isNotEmpty ? errors.first.toString() : 'partial',
+          ),
+        );
+      }
+      await _refresh();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
       MessageService.showWarning(
         context,
-        l10n.translationQueueClearMyQueueFailed('$fail/$success'),
+        l10n.translationQueueClearMyQueueFailed(e.toString()),
       );
     }
-    await _refresh();
   }
 
   @override
@@ -1548,11 +1565,12 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
           final String ft = e.key.toString();
           // Skip non-file entries
           if (ft.isEmpty || e.value == null) continue;
-          entries.add(_TaskDownloadEntry(
+        entries.add(_TaskDownloadEntry(
             taskId: tid,
             baseName: baseName,
             format: ft,
             url: e.value.toString(),
+            isFormatConversion: row['is_format_conversion'] == true,
           ));
         }
       }
@@ -1572,9 +1590,10 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
       for (final _TaskDownloadEntry dl in entries) {
         try {
           final List<int> fileBytes = await _svc.downloadFile(dl.url);
-          final String ext = _extensionForFormat(dl.format);
+          final String suffix = dl.isFormatConversion
+              ? ref.read(globalSettingsProvider).convertOutputSuffix
+              : ref.read(globalSettingsProvider).translateOutputSuffix;
 
-          // Look up relative path for this task
           String relativePath = '';
           for (final Map<String, dynamic> row in _tasks) {
             if (row['task_id']?.toString() == dl.taskId) {
@@ -1584,24 +1603,16 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
             }
           }
 
-          String entryName;
-          if (relativePath.isNotEmpty) {
-            String name = '${dl.baseName}_${dl.format}.$ext';
-            // Windows-style conflict resolution
-            final String key = '$relativePath/$name';
-            final int count = (dirCounters[key] ?? 0) + 1;
-            dirCounters[key] = count;
-            if (count > 1) {
-              final String baseNameNoExt =
-                  name.substring(0, name.lastIndexOf('.'));
-              name = '$baseNameNoExt ($count).$ext';
-            }
-            entryName = '$relativePath/$name';
-          } else {
-            entryName = '${dl.taskId}/${dl.baseName}_${dl.format}.$ext';
-          }
-
-          archive.addFile(ArchiveFile(entryName, fileBytes.length, fileBytes));
+          addDownloadBytesToBatchArchive(
+            archive: archive,
+            fileBytes: fileBytes,
+            formatKey: dl.format,
+            baseName: dl.baseName,
+            suffix: suffix,
+            relativePath: relativePath,
+            taskId: dl.taskId,
+            dirCounters: dirCounters,
+          );
         } catch (_) {
           // Skip failed individual downloads
         }
@@ -1744,6 +1755,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
           baseName: baseName,
           format: format,
           url: url.toString(),
+          isFormatConversion: row['is_format_conversion'] == true,
         ));
       }
 
@@ -1762,9 +1774,10 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
       for (final _TaskDownloadEntry dl in entries) {
         try {
           final List<int> fileBytes = await _svc.downloadFile(dl.url);
-          final String ext = _extensionForFormat(dl.format);
+          final String suffix = dl.isFormatConversion
+              ? ref.read(globalSettingsProvider).convertOutputSuffix
+              : ref.read(globalSettingsProvider).translateOutputSuffix;
 
-          // Look up relative path for this task
           String relativePath = '';
           for (final Map<String, dynamic> row in _tasks) {
             if (row['task_id']?.toString() == dl.taskId) {
@@ -1774,29 +1787,16 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
             }
           }
 
-          String entryName;
-          if (relativePath.isNotEmpty) {
-            final suffix = ref.read(globalSettingsProvider).translateOutputSuffix;
-            String name = buildDownloadFilename(
-              originalName: dl.baseName,
-              extension: ext,
-              suffix: suffix,
-            );
-            // Windows-style conflict resolution
-            final String key = '$relativePath/$name';
-            final int count = (dirCounters[key] ?? 0) + 1;
-            dirCounters[key] = count;
-            if (count > 1) {
-              final String baseNameNoExt =
-                  name.substring(0, name.lastIndexOf('.'));
-              name = '$baseNameNoExt ($count).$ext';
-            }
-            entryName = '$relativePath/$name';
-          } else {
-            entryName = '${dl.taskId}/${dl.baseName}_${dl.format}.$ext';
-          }
-
-          archive.addFile(ArchiveFile(entryName, fileBytes.length, fileBytes));
+          addDownloadBytesToBatchArchive(
+            archive: archive,
+            fileBytes: fileBytes,
+            formatKey: dl.format,
+            baseName: dl.baseName,
+            suffix: suffix,
+            relativePath: relativePath,
+            taskId: dl.taskId,
+            dirCounters: dirCounters,
+          );
         } catch (_) {
           // Skip failed individual downloads
         }
@@ -2291,20 +2291,6 @@ bool _isOriginalImageDownloadFormat(String formatKey) {
   return imageFormats.contains(formatKey.toLowerCase());
 }
 
-/// Map download format key to a localized button label.
-String _extensionForFormat(String formatKey) {
-  switch (formatKey) {
-    case 'docx': return 'docx';
-    case 'html': return 'html';
-    case 'md': return 'md';
-    case 'md_zip': return 'zip';
-    case 'pdf':
-    case 'pdf_reflow': return 'pdf';
-    case 'txt': return 'txt';
-    default: return formatKey;
-  }
-}
-
 String _downloadFormatButtonLabel(String formatKey, AppLocalizations l10n) {
   switch (formatKey) {
     case 'md':
@@ -2455,11 +2441,13 @@ class _TaskDownloadEntry {
   final String baseName;
   final String format;
   final String url;
+  final bool isFormatConversion;
   const _TaskDownloadEntry({
     required this.taskId,
     required this.baseName,
     required this.format,
     required this.url,
+    this.isFormatConversion = false,
   });
 }
 

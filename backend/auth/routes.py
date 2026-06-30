@@ -797,6 +797,10 @@ async def get_app_config_api(
         config_dict['formulaOcr'] = config_dict['translator_formula_ocr']
     if 'translator_table_ocr' in config_dict:
         config_dict['tableOcr'] = config_dict['translator_table_ocr']
+    if 'translator_output_suffix' in config_dict:
+        config_dict['translateOutputSuffix'] = config_dict['translator_output_suffix']
+    if 'converter_output_suffix' in config_dict:
+        config_dict['convertOutputSuffix'] = config_dict['converter_output_suffix']
     
     # Step 4: Get local configuration (optional, can fail gracefully)
     try:
@@ -3522,11 +3526,11 @@ async def batch_update_settings(
                             app_config.translator_target_language = str(value) if value else "English"
                             logger.info(LogModule.AUTH, f"[SETTINGS] Synced targetLanguage={value} to app_config.translator_target_language")
                         elif backend_key == 'translator_output_suffix':
-                            app_config.translator_output_suffix = str(value) if value else "_translated"
-                            logger.info(LogModule.AUTH, f"[SETTINGS] Synced translator_output_suffix={value} to app_config")
+                            app_config.translator_output_suffix = "" if value in (None, "") else str(value)
+                            logger.info(LogModule.AUTH, f"[SETTINGS] Synced translator_output_suffix={value!r} to app_config")
                         elif backend_key == 'converter_output_suffix':
-                            app_config.converter_output_suffix = str(value) if value else "_converted"
-                            logger.info(LogModule.AUTH, f"[SETTINGS] Synced converter_output_suffix={value} to app_config")
+                            app_config.converter_output_suffix = "" if value in (None, "") else str(value)
+                            logger.info(LogModule.AUTH, f"[SETTINGS] Synced converter_output_suffix={value!r} to app_config")
 
                         app_config_needs_save = True
                     except Exception as e:

@@ -771,9 +771,17 @@ async def download_batch_results(
     import io
 
     from backend.app.services.task import task_manager
+    from backend.app.services.translation.translation_result_stash import load_meta
+    from utils.batch_download_zip import (
+        add_md_zip_download_to_batch_archive,
+        make_batch_folder_name,
+        strip_legacy_output_suffix,
+    )
+    from utils.output_suffix import get_output_suffix
 
     buf = io.BytesIO()
     manifest: Dict[str, Dict[str, str]] = {}
+    zip_dir_records: set[str] = set()
 
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for task_id in task_ids:
@@ -801,35 +809,33 @@ async def download_batch_results(
                 # Determine extension from file_type
                 ext = file_type if file_type != "target" else Path(file_name).suffix.lstrip(".")
 
-                # Build clean filename with configurable suffix from task_state
+                # Build clean filename with configurable suffix from task_state or stash meta
                 ts = task_manager.get_task(task_id)
-                original_filename = ""
-                if ts:
-                    original_filename = ts.get("original_filename") or ""
+                meta = load_meta(task_id) if not ts else None
+                ctx = ts or meta or {}
+                original_filename = ctx.get("original_filename") or ""
                 if original_filename:
-                    base_name = Path(original_filename).stem
+                    base_name = strip_legacy_output_suffix(Path(original_filename).stem)
                 else:
-                    base_name = Path(file_name).stem
-                # Use task_state output_suffix, fall back to hardcoded defaults
-                is_conv = False
-                if ts:
-                    is_conv = bool(ts.get("is_format_conversion") or ts.get("convert_only"))
-                suffix = ts.get("output_suffix") if ts else None
-                if not suffix:
-                    suffix = "_converted" if is_conv else "_translated"
-                # Suffix now includes leading underscore from config (e.g. "_translated")
+                    base_name = strip_legacy_output_suffix(Path(file_name).stem)
+                suffix = get_output_suffix(ctx)
                 if file_type == "md_zip":
-                    # Flatten: extract inner ZIP and place contents under a folder
-                    folder_name = f"{base_name}{suffix}"
+                    folder_name = make_batch_folder_name(base_name, task_id, suffix)
                     try:
-                        with zipfile.ZipFile(io.BytesIO(raw_bytes), "r") as inner_zf:
-                            for inner_name in inner_zf.namelist():
-                                inner_bytes = inner_zf.read(inner_name)
-                                # Rename _translated → actual suffix inside the folder
-                                renamed = inner_name.replace("_translated", suffix)
-                                zf.writestr(f"{folder_name}/{renamed}", inner_bytes)
-                        safe_name = f"{folder_name}/"
-                    except Exception:
+                        safe_name = add_md_zip_download_to_batch_archive(
+                            zf,
+                            raw_bytes,
+                            folder_name,
+                            base_name,
+                            suffix,
+                            lambda name: name,
+                            written_dirs=zip_dir_records,
+                        )
+                    except Exception as flatten_err:
+                        logger.warning(
+                            LogModule.ROUTE,
+                            f"[MCP-BATCH-DOWNLOAD] task_id={task_id}: md_zip flatten failed, nesting zip: {flatten_err}",
+                        )
                         safe_name = f"{base_name}{suffix}.zip"
                         zf.writestr(safe_name, raw_bytes)
                 else:

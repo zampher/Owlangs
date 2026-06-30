@@ -111,6 +111,8 @@ def record_generated_result(
         meta.setdefault("original_filename", task_state.get("original_filename"))
         if task_state.get("batch_id"):
             meta["batch_id"] = task_state.get("batch_id")
+        if task_state.get("original_relative_path"):
+            meta["original_relative_path"] = task_state.get("original_relative_path")
         _qa = float(task_state.get("queued_at") or 0)
         _ta = float(task_state.get("task_start_time") or 0)
         meta.setdefault("started_at", _qa if _qa > 0 else _ta)
@@ -188,6 +190,37 @@ def delete_task_stash(task_id: str) -> bool:
         return False
 
 
+def _has_stash_content(meta: Dict[str, Any]) -> bool:
+    """True when stash meta has a filename and/or generated output files."""
+    filename = (meta.get("original_filename") or "").strip()
+    files_map = meta.get("files")
+    if isinstance(files_map, dict) and files_map:
+        return True
+    return bool(filename)
+
+
+def clear_stash_for_viewer(is_guest: bool, username: str) -> int:
+    """Delete all stash directories visible to the viewer (sweep after release)."""
+    root = stash_root()
+    if not root.is_dir():
+        return 0
+    removed = 0
+    for child in list(root.iterdir()):
+        if not child.is_dir():
+            continue
+        task_id = child.name
+        meta = load_meta(task_id)
+        if meta is not None:
+            owner = meta.get("owner_username")
+            if not is_guest and owner != username:
+                continue
+        elif not is_guest:
+            continue
+        if delete_task_stash(task_id):
+            removed += 1
+    return removed
+
+
 def list_summaries_visible_to_user(is_guest: bool, username: str) -> List[Dict[str, Any]]:
     """
     Return one summary dict per stashed task (disk-only), filtered like ``GET /tasks``.
@@ -205,6 +238,14 @@ def list_summaries_visible_to_user(is_guest: bool, username: str) -> List[Dict[s
         task_id = child.name
         meta = load_meta(task_id)
         if not meta:
+            delete_task_stash(task_id)
+            continue
+        if not _has_stash_content(meta):
+            logger.info(
+                LogModule.SYSTEM,
+                f"[RESULT-STASH] Removing empty shell stash task_id={task_id}",
+            )
+            delete_task_stash(task_id)
             continue
         exp = float(meta.get("expires_at") or 0)
         if exp and time.time() > exp:

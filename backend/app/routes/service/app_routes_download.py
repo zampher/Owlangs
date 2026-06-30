@@ -20,8 +20,15 @@ from pydantic import BaseModel
 from backend.app.services.download import DownloadService
 from backend.app.services.download.output_generator import get_ebook_converters_availability
 from backend.app.services.task import task_manager
+from backend.app.services.translation.translation_result_stash import load_meta
 from logger import unified_logger as logger
 from logger.logger import LogModule
+from utils.batch_download_zip import (
+    add_md_zip_download_to_batch_archive,
+    make_batch_folder_name,
+    strip_legacy_output_suffix,
+)
+from utils.output_suffix import get_output_suffix
 
 router = APIRouter()
 
@@ -189,6 +196,7 @@ async def service_batch_download_route(body: BatchDownloadRequest):
     buf = io.BytesIO()
     manifest: Dict[str, Dict[str, str]] = {}
     entry_counts: Dict[str, int] = {}
+    zip_dir_records: set[str] = set()
 
     def _resolve_conflict(name: str) -> str:
         """Resolve ZIP entry name conflicts Windows-style: file (1).ext, file (2).ext"""
@@ -215,11 +223,10 @@ async def service_batch_download_route(body: BatchDownloadRequest):
         for task_id in body.task_ids:
             try:
                 ts = task_manager.get_task(task_id)
-                original_filename = ""
-                relative_path = ""
-                if ts:
-                    original_filename = ts.get("original_filename") or ""
-                    relative_path = ts.get("original_relative_path") or ""
+                meta = load_meta(task_id) if not ts else None
+                ctx = ts or meta or {}
+                original_filename = ctx.get("original_filename") or ""
+                relative_path = ctx.get("original_relative_path") or ""
 
                 # Map md_zip → md with embed_images=False; pdf_reflow → pdf with pandoc renderer
                 dl_file_type = body.file_type
@@ -258,37 +265,40 @@ async def service_batch_download_route(body: BatchDownloadRequest):
                     ext = "pdf"
                 base_name = task_id
                 if original_filename:
-                    base_name = original_filename.rsplit(".", 1)[0] if "." in original_filename else original_filename
-                is_conv = False
-                if ts:
-                    is_conv = bool(ts.get("is_format_conversion") or ts.get("convert_only"))
-                suffix = "converted" if is_conv else "translated"
+                    stem = original_filename.rsplit(".", 1)[0] if "." in original_filename else original_filename
+                    base_name = strip_legacy_output_suffix(stem)
+                suffix = get_output_suffix(ctx)
+                logger.debug(
+                    LogModule.ROUTE,
+                    f"[BATCH-DOWNLOAD] task_id={task_id}: output_suffix={suffix!r}, base_name={base_name!r}",
+                )
 
                 # Build path prefix from relative directory
                 path_prefix = f"{relative_path}/" if relative_path else ""
 
                 if body.file_type == "md_zip":
-                    # Flatten: extract inner ZIP and place contents under a folder
-                    folder_name = f"{base_name}_{suffix}"
+                    folder_name = make_batch_folder_name(base_name, task_id, suffix)
                     folder_prefix = f"{path_prefix}{folder_name}"
                     try:
-                        with zipfile.ZipFile(io.BytesIO(file_bytes), "r") as inner_zf:
-                            for inner_name in inner_zf.namelist():
-                                inner_bytes = inner_zf.read(inner_name)
-                                # Rename _translated → actual suffix inside the folder
-                                renamed = inner_name.replace("_translated", f"_{suffix}")
-                                inner_entry = f"{folder_prefix}/{renamed}"
-                                inner_entry = _resolve_conflict(inner_entry)
-                                zf.writestr(inner_entry, inner_bytes)
-                        entry_name = f"{folder_prefix}/"
-                        entry_name = _resolve_conflict(entry_name)
-                    except Exception:
-                        # Not a valid ZIP, fall back to single entry
-                        entry_name = f"{path_prefix}{folder_name}.{ext}"
+                        entry_name = add_md_zip_download_to_batch_archive(
+                            zf,
+                            file_bytes,
+                            folder_prefix,
+                            base_name,
+                            suffix,
+                            _resolve_conflict,
+                            written_dirs=zip_dir_records,
+                        )
+                    except Exception as flatten_err:
+                        logger.warning(
+                            LogModule.ROUTE,
+                            f"[BATCH-DOWNLOAD] task_id={task_id}: md_zip flatten failed: {flatten_err}",
+                        )
+                        entry_name = f"{path_prefix}{folder_name}.zip"
                         entry_name = _resolve_conflict(entry_name)
                         zf.writestr(entry_name, file_bytes)
                 else:
-                    entry_name = f"{path_prefix}{base_name}_{suffix}.{ext}"
+                    entry_name = f"{path_prefix}{base_name}{suffix}.{ext}"
                     entry_name = _resolve_conflict(entry_name)
                     zf.writestr(entry_name, file_bytes)
                 manifest[task_id] = {"status": "success", "file": entry_name}
@@ -321,10 +331,13 @@ async def service_batch_download_route(body: BatchDownloadRequest):
             content={"success": False, "message": "All tasks failed or were skipped", "manifest": manifest},
         )
 
-    return StreamingResponse(
-        iter([content]),
+    return Response(
+        content=content,
         media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename=batch_download_{body.file_type}.zip"},
+        headers={
+            "Content-Disposition": f"attachment; filename=batch_download_{body.file_type}.zip",
+            "Content-Length": str(len(content)),
+        },
     )
 
 

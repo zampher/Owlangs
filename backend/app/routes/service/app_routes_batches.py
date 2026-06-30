@@ -7,8 +7,6 @@ Upload batch routes: list, create, delete, and batch-scoped download.
 
 from __future__ import annotations
 
-import os
-import shutil
 from typing import Any, Dict, List
 
 from auth.models import User
@@ -22,13 +20,11 @@ from backend.app.routes.service.app_routes_download import (
     service_batch_download_route,
 )
 from backend.app.services.task import batch_manager
+from backend.app.services.task.queue_cleanup import release_task_resources
 from backend.app.services.task.task_manager import task_manager
 from backend.app.services.translation.translation_result_stash import (
-    delete_task_stash,
     list_summaries_visible_to_user,
-    load_meta,
 )
-from backend.app.routes.service.app_routes_translation import translation_service
 from logger import unified_logger as logger
 from logger.logger import LogModule
 
@@ -210,7 +206,7 @@ async def list_upload_batches(
     for batch in batches_raw:
         summary = _batch_summary(batch, task_rows)
         batches.append(summary)
-        for tid in summary.get("task_ids") or []:
+        for tid in batch.get("task_ids") or []:
             batched_task_ids.add(str(tid))
     ungrouped: List[Dict[str, Any]] = []
     for tid, row in task_rows.items():
@@ -230,35 +226,6 @@ async def list_upload_batches(
             "limit": limit,
         }
     )
-
-
-async def _release_task_resources(task_id: str) -> None:
-    """Release one task (same behavior as POST /service/release/{task_id})."""
-    task_state = task_manager.get_task(task_id)
-    if task_state is None:
-        if load_meta(task_id):
-            delete_task_stash(task_id)
-        batch_manager.remove_task_from_all_batches(task_id)
-        return
-
-    if task_state.get("is_processing") and task_state.get("current_task_ref"):
-        try:
-            translation_service.cancel_translation(task_id)
-        except HTTPException:
-            pass
-
-    temp_dir = task_state.get("temp_dir")
-    if temp_dir and os.path.isdir(temp_dir):
-        try:
-            shutil.rmtree(temp_dir)
-        except Exception as e:
-            logger.warning(
-                LogModule.ROUTE,
-                f"[BATCH] Failed to cleanup temp_dir for {task_id}: {e}",
-            )
-    delete_task_stash(task_id)
-    task_manager.cleanup_task_resources(task_id)
-    batch_manager.remove_task_from_all_batches(task_id)
 
 
 @router.delete(
@@ -283,7 +250,7 @@ async def delete_upload_batch(
     errors: List[str] = []
     for tid in task_ids:
         try:
-            await _release_task_resources(str(tid))
+            await release_task_resources(str(tid))
             released.append(str(tid))
         except Exception as e:
             errors.append(f"{tid}: {e}")
