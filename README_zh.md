@@ -10,6 +10,8 @@
 
 ### 多格式支持与高保真排版
 - **15+ 种格式**：PDF、DOCX、XLSX、PPTX、HTML、TXT、PNG、EPUB、MOBI 等
+- **PDF 原位翻译**：在保持原始页面版式的前提下翻译 PDF，译文替换到原文所在位置，公式原地重新渲染
+- **PDF 重排版翻译**：另一种 PDF 输出模式，基于翻译后的 Markdown 重新排版生成清晰易读的文档
 - **版式保留**：翻译后保持原文排版、布局与样式
 - **超大文件**：支持超大 PDF 和电子书的自动拆分翻译处理
 
@@ -226,6 +228,16 @@ MIT License，详见 [LICENSE](LICENSE)。
 2. 搜索已有 Issue  
 3. 新建 Issue  
 4. 联系维护者  
+
+## 参考项目与相关工具
+
+Owlangs 在以下开源项目或工具的基础上构建，或从中获得灵感：
+
+- **[PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)** — OCR 与版面检测工具包，用于文档解析流程。
+- **[MinerU](https://github.com/opendatalab/MinerU)** — PDF 内容提取工具，支持公式、表格与版面识别。
+- **[DocuTranslate](https://github.com/xunbu/docutranslate)** — 基于大语言模型的多格式文档翻译工具。
+- **[Retain-PDF](https://github.com/chocolatedesue/retain-pdf)** — 保留排版的 PDF 翻译工具。
+- **[Calibre](https://github.com/kovidgoyal/calibre)** — 电子书管理与转换套件，用于 EPUB/MOBI 处理。
 
 ## 社区
 

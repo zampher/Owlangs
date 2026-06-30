@@ -11,6 +11,8 @@ A powerful AI-powered document translation platform designed for professionals w
 
 ### Multi-Format Support with High-Fidelity Layout
 - **15+ formats**: PDF, DOCX, XLSX, PPTX, HTML, TXT, PNG, EPUB, MOBI, and more
+- **In-place PDF translation**: Translates PDFs while preserving the original page layout — text is replaced in its original position, and formulas are re-rendered in place
+- **Reflow PDF translation**: Alternative PDF output that re-typesets the translated Markdown content for a clean, readable document
 - **Layout preservation**: Maintains original formatting, layout, and styles in translated output
 - **Large files**: Handles massive PDFs and e-books with automatic split-file processing
 
@@ -230,6 +232,16 @@ For issues, questions, or contributions:
 2. Search existing issues
 3. Create a new issue
 4. Contact the maintainers
+
+## References & Related Projects
+
+Owlangs builds on or is inspired by the following open-source projects and tools:
+
+- **[PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)** — OCR and layout detection toolkit used in document parsing pipelines.
+- **[MinerU](https://github.com/opendatalab/MinerU)** — PDF content extraction with formula, table, and layout recognition.
+- **[DocuTranslate](https://github.com/xunbu/docutranslate)** — LLM-based document translation tool supporting multiple formats.
+- **[Retain-PDF](https://github.com/chocolatedesue/retain-pdf)** — PDF translation with layout retention.
+- **[Calibre](https://github.com/kovidgoyal/calibre)** — E-book management and conversion suite used for EPUB/MOBI processing.
 
 ## Community
 
