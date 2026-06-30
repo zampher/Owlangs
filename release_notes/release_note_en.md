@@ -1,5 +1,26 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.5.0.0
+
+### New Features
+
+1. **Layout-preserving PDF preview, editing, and download**: For layout-preserving PDF translation tasks, view original and translated PDFs side-by-side with the segment list. Supports segment filtering, batch font adjustments, linked scrolling, and **Follow segment page** for segment-by-segment review with live layout preview. The download panel also offers layout-preserving translated document export.
+2. **Task management page**: Manage each uploaded task (list and download). For batch jobs, download all completed results as a package or download individual translated files. Quick selection for all files in a batch is supported. When starting a batch, you can enter a batch remark for later batch selection by remark.
+3. **Console config shortcuts**: Added **Clear** and **Restore defaults** buttons on the console.
+4. **PaddleOCR configuration**: Added PaddleOCR-related configuration options.
+
+### Optimizations
+
+1. **PDF chart recognition and parsing**: Improved recognition and parsing of charts in PDF documents.
+2. **Glossary templates and help**: Added template download and help information in the glossary section.
+3. **Dedicated prompt settings page**: Moved prompt configuration from Quick Settings to a standalone page for easier management.
+
+### Bug Fixes
+
+1. **Image file translation export**: Fixed an issue where exported results from image file translation showed text only and missing images.
+
+---
+
 ## Owlangs 1.4.0.0
 
 ### New Features
