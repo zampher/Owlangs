@@ -102,9 +102,9 @@ with open("overlay_debug.typ", "w") as f:
 
 ## 依赖项
 
-- **Typst CLI**: 系统安装 (https://github.com/typst/typst/releases)
+- **Typst CLI**: 系统安装或 `3rdParty/windows/typst-*/typst.exe`
 - **PyMuPDF**: `pip install PyMuPDF` (Owlangs 已有)
-- **Typst 包**: 首次编译时自动下载 `@preview/cmarker:0.5.0` 和 `@preview/mitex:0.5.0`
+- **Typst 包**: `@preview/cmarker:0.1.8` 与 `@preview/mitex:0.2.6`；生产包应预置于 `3rdParty/typst/packages/`（运行 `tools/build/fetch_typst_packages.ps1`）
 - **字体**: Noto Sans CJK SC 或其他 CJK 字体
 
 ## 后续优化方向

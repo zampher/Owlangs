@@ -170,6 +170,7 @@ hiddenimports = [
     'layout.pdf_renderer.typst_overlay.affected_pages',
     'layout.pdf_renderer.typst_overlay.pdf_preview_cache',
     'layout.pdf_renderer.typst_overlay.visual_images',
+    'layout.pdf_renderer.typst_overlay.typst_packages',
     'layout.image_overlay',
     'layout.image_overlay.pipeline',
     'layout.image_overlay.renderer',

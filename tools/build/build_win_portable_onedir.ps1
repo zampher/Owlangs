@@ -376,6 +376,17 @@ if (-not $SkipDesktop) {
 }
 
 # ── Step 8: Stage 3rdParty files to package root ──
+Write-Host "[staging] Staging Typst CLI + offline packages under 3rdParty..." -ForegroundColor Cyan
+$stageTypstScript = Join-Path $ScriptDir "stage_typst_3rdparty.ps1"
+if (Test-Path $stageTypstScript) {
+    & $stageTypstScript -Dest3rdPartyRoot (Join-Path $RootDir "3rdParty") -Label "staging" -Fetch
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[staging] WARNING: stage_typst_3rdparty.ps1 failed; offline Typst may require network" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "[staging] WARNING: stage_typst_3rdparty.ps1 not found" -ForegroundColor Yellow
+}
+
 Write-Host "[staging] Staging 3rdParty files to package root..." -ForegroundColor Cyan
 $src3rdParty = Join-Path $RootDir "3rdParty"
 if (Test-Path $src3rdParty) {

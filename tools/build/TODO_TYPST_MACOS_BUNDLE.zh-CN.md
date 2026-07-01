@@ -37,7 +37,7 @@ typst --version
 | `build_macos.sh` | 按 `--arm64` / `--x86_64` / `--dual-arch` 复制到 `Owlangs.app/Contents/Resources/3rdParty/` |
 | MenuBar | 可选：优先使用 bundle 内 typst，再 fallback 到 PATH |
 | universal2 | 两套二进制或运行时按 `uname -m` 选择 |
-| Typst 包缓存 | 首次编译需联网下载 `@preview/cmarker`、`@preview/mitex`；离线需预缓存 |
+| Typst 包缓存 | 运行 `tools/build/fetch_typst_packages.ps1`（或 `.sh`）；`stage_typst_3rdparty.ps1` 随包拷贝；`compiler.py` 传 `--package-cache-path` |
 | 体积 | 每个架构约 12–14 MB |
 
 ## 决策参考

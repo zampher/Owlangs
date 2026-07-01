@@ -71,6 +71,8 @@ dev = [
     # Match docling optional constraint for local dev
     "opencv-python>=4.8,<4.12",
     "docling>=2.40.0",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
 ]
 [project.scripts]
 backend = "backend.cli:main"

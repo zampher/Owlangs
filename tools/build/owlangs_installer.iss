@@ -79,8 +79,16 @@ Source: "LICENSE_ZH.txt"; DestDir: "{app}"; Flags: ignoreversion
 ; pdflatex (TinyTeX/XeLaTeX) goes to {commonappdata} so it can write fmt files
 ; and font caches at runtime without admin privileges.
 #ifdef INCLUDE_PANDOC
-Source: "..\..\build\installer_stage\3rdParty\windows\*"; DestDir: "{app}\3rdParty\windows"; Excludes: "pdflatex"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\build\installer_stage\3rdParty\windows\*"; DestDir: "{app}\3rdParty\windows"; Excludes: "pdflatex,typst-*"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\build\installer_stage\3rdParty\windows\pdflatex"; DestDir: "{commonappdata}\Owlangs\3rdParty\windows\pdflatex"; Flags: ignoreversion recursesubdirs createallsubdirs
+#endif
+
+; Typst CLI + offline @preview packages for typst_overlay PDF export (staged by Stage-TypstForInstaller)
+#ifexist "..\..\build\installer_stage\.typst_cli_staged"
+Source: "..\..\build\installer_stage\3rdParty\windows\typst-*"; DestDir: "{app}\3rdParty\windows"; Flags: ignoreversion recursesubdirs createallsubdirs
+#endif
+#ifexist "..\..\build\installer_stage\.typst_packages_staged"
+Source: "..\..\build\installer_stage\3rdParty\typst\packages"; DestDir: "{app}\3rdParty\typst\packages"; Flags: ignoreversion recursesubdirs createallsubdirs
 #endif
 
 [UninstallDelete]

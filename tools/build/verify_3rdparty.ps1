@@ -62,6 +62,31 @@ function Test-3rdPartyModules {
         $issues += "MISSING: Redis-8.8.0-Windows-x64-msys2-with-Service\redis-server.exe not found"
     }
 
+    # Check Typst CLI (optional but recommended for typst_overlay PDF export)
+    $typstDirs = Get-ChildItem -Path $tpDir -Directory -Filter "typst*" -ErrorAction SilentlyContinue
+    if ($typstDirs) {
+        foreach ($d in $typstDirs) {
+            $typstExe = Join-Path $d.FullName "typst.exe"
+            if (Test-Path $typstExe) {
+                Write-Host "  OK: Typst found: $($d.Name)\typst.exe" -ForegroundColor Green
+            } else {
+                $issues += "WARNING: $($d.Name) exists but typst.exe is missing"
+            }
+        }
+    } else {
+        $issues += "WARNING: No typst-* directory found (typst_overlay PDF export needs Typst CLI)"
+    }
+
+    # Check bundled Typst @preview packages for offline typst_overlay
+    $pkgRoot = Join-Path $Dir "3rdParty\typst\packages"
+    $cmarkerDir = Join-Path $pkgRoot "preview\cmarker\0.1.8"
+    $mitexDir = Join-Path $pkgRoot "preview\mitex\0.2.6"
+    if ((Test-Path $cmarkerDir) -and (Test-Path $mitexDir)) {
+        Write-Host "  OK: Typst offline packages: cmarker/0.1.8 + mitex/0.2.6" -ForegroundColor Green
+    } elseif ($typstDirs) {
+        $issues += "MISSING: Typst offline packages under 3rdParty\typst\packages (run tools/build/fetch_typst_packages.ps1 before build)"
+    }
+
     return $issues
 }
 

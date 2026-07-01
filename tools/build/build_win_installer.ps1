@@ -240,6 +240,22 @@ function Update-InnoScript {
     return $true
 }
 
+# Stage Typst CLI + offline packages for Inno Setup (typst_overlay PDF export)
+function Stage-TypstForInstaller {
+    $stageRoot = "build\installer_stage\3rdParty"
+    $markerRoot = "build\installer_stage"
+    if (Test-Path $markerRoot) {
+        Remove-Item -Path (Join-Path $markerRoot ".typst_cli_staged") -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path (Join-Path $markerRoot ".typst_packages_staged") -Force -ErrorAction SilentlyContinue
+    }
+    $stageScript = Join-Path $ScriptDir "stage_typst_3rdparty.ps1"
+    if (Test-Path $stageScript) {
+        & $stageScript -Dest3rdPartyRoot $stageRoot -Label "installer" -Fetch
+    } else {
+        Write-Host "[installer] WARNING: stage_typst_3rdparty.ps1 not found" -ForegroundColor Yellow
+    }
+}
+
 # Stage Pandoc and pdflatex for Inno Setup when -IncludePandoc is set (same layout as build_win.ps1)
 function Stage-PandocForInstaller {
     $stageRoot = "build\installer_stage\3rdParty\windows"
@@ -362,7 +378,8 @@ try {
         Build-PyInstaller "full.spec"
     }
 
-    # Stage Pandoc + pdflatex for installer when -IncludePandoc (Inno path)
+    # Stage Typst + optional Pandoc/pdflatex for installer (Inno path)
+    Stage-TypstForInstaller
     if ($IncludePandoc) {
         Write-Host "Including Pandoc/pdflatex in installer (staging for Inno Setup)..." -ForegroundColor Cyan
         Stage-PandocForInstaller

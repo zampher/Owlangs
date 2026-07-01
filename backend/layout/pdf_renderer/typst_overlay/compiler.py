@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import List, Optional
 from tempfile import mkdtemp
 
+from layout.pdf_renderer.typst_overlay.typst_packages import bundled_packages_complete
+
 _typst_bin_cache: Optional[str] = None
 _typst_search_logged = False
 
@@ -97,6 +99,26 @@ def _third_party_search_roots() -> List[Path]:
 
     _add(Path.cwd() / "3rdParty")
     return roots
+
+
+def _resolve_typst_package_cache_path() -> Optional[Path]:
+    """
+    Resolve bundled Typst package cache for offline @preview imports.
+
+    When complete, returns ``3rdParty/typst/packages`` (or equivalent install path).
+    Honors ``TYPST_PACKAGE_CACHE_PATH`` when set and the directory exists.
+    """
+    explicit = os.environ.get("TYPST_PACKAGE_CACHE_PATH", "").strip()
+    if explicit:
+        path = Path(explicit)
+        if path.is_dir():
+            return path
+
+    for root in _third_party_search_roots():
+        candidate = root / "typst" / "packages"
+        if bundled_packages_complete(candidate):
+            return candidate
+    return None
 
 
 def _get_typst_bin_path() -> Optional[str]:
@@ -296,10 +318,19 @@ class TypstCompiler:
             if font_path.exists():
                 command.extend(["--font-path", str(font_path)])
 
+        package_cache = _resolve_typst_package_cache_path()
+        if package_cache is not None:
+            command.extend(["--package-cache-path", str(package_cache)])
+
         command.extend([str(typ_path), str(pdf_path)])
 
         from logger.logger import unified_logger, LogModule as _lm
 
+        if package_cache is not None:
+            unified_logger.info(
+                _lm.RESTOR,
+                f"[TYPST_OVERLAY] Using bundled Typst package cache: {package_cache}",
+            )
         unified_logger.info(
             _lm.RESTOR,
             f"[TYPST_OVERLAY] Running: {' '.join(command)}",

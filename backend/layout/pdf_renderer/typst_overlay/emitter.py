@@ -19,6 +19,8 @@ import re
 from pathlib import Path
 from typing import List
 
+from layout.pdf_renderer.typst_overlay.typst_packages import typst_preview_import_lines
+
 from layout.pdf_renderer.shared.table_utils import TableUtils
 from layout.pdf_renderer.typst_overlay.formula_safety import formula_safety_insets_pt
 from layout.pdf_renderer.typst_overlay.layer_order import background_embed_force_opaque
@@ -1303,8 +1305,7 @@ def build_typst_overlay_source(
     """
     lines = [TYPST_PRELUDE]
     lines.append("// Typst packages for markdown and math rendering")
-    lines.append("#import \"@preview/cmarker:0.1.8\"")
-    lines.append("#import \"@preview/mitex:0.2.6\": mitex")
+    lines.extend(typst_preview_import_lines())
     lines.append("")
 
     lines.append(f'#set text(font: "{font_family}", size: 10pt, fallback: true)')
@@ -1370,8 +1371,7 @@ def build_typst_background_source(
     source_rel = os.path.relpath(background_pdf_path, work_dir)
 
     lines = [TYPST_PRELUDE]
-    lines.append("#import \"@preview/cmarker:0.1.8\"")
-    lines.append("#import \"@preview/mitex:0.2.6\": mitex")
+    lines.extend(typst_preview_import_lines())
     lines.append("")
     lines.append(f'#set text(font: "{font_family}", size: 10pt, fallback: true)')
     lines.append("")

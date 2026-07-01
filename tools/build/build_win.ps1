@@ -795,6 +795,14 @@ function Make-WinPackage {
         Write-Host "[$packageType] Pandoc/pdflatex: not included (use -IncludePandoc to bundle for PDF workflow DOCX/PDF export)" -ForegroundColor Gray
     }
 
+    # Bundle Typst CLI + offline @preview packages for typst_overlay PDF export
+    $stageTypstScript = Join-Path $ScriptDir "stage_typst_3rdparty.ps1"
+    if (Test-Path $stageTypstScript) {
+        & $stageTypstScript -Dest3rdPartyRoot "$packageRoot\3rdParty" -Label $packageType -Fetch
+    } else {
+        Write-Host "[$packageType] WARNING: stage_typst_3rdparty.ps1 not found; Typst offline packages may be missing" -ForegroundColor Yellow
+    }
+
     # Copy Flutter Windows frontend build output
     # Flutter Windows builds to x64\runner\Release (architecture-specific path)
     $flutterWindowsBuildDir = "frontend\build\windows\x64\runner\Release"

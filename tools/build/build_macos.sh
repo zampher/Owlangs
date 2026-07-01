@@ -237,6 +237,16 @@ sync_macos_install_dependencies() {
   echo "[deps] Synced install_dependencies.sh → 3rdParty/macos/ (for MenuBar bundle)"
 }
 
+fetch_typst_packages() {
+  local fetch_script="${ROOT_DIR}/tools/build/fetch_typst_packages.sh"
+  if [[ ! -f "${fetch_script}" ]]; then
+    echo "[deps] WARNING: fetch_typst_packages.sh not found; offline Typst may require network"
+    return 0
+  fi
+  echo "[deps] Fetching Typst @preview packages for offline typst_overlay..."
+  bash "${fetch_script}" || echo "[deps] WARNING: fetch_typst_packages.sh failed; offline Typst may require network"
+}
+
 build_flutter_web() {
   if [[ ! -d "${ROOT_DIR}/frontend" ]]; then
     echo "[frontend] WARNING: frontend directory not found, skipping Flutter Web build"
@@ -1135,6 +1145,8 @@ main() {
   build_flutter_web
 
   sync_macos_install_dependencies
+
+  fetch_typst_packages
 
   local app_name="Owlangs-${ver}-mac"
 
