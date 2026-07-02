@@ -69,6 +69,7 @@ datas = [
     # Legacy config template (for backward compatibility)
     ('./configs/app_config.json.template', 'configs/'),  # Application configuration template
     ('./configs/local_users.json.template', 'configs/'),  # Local users template file
+    ('./configs/launcher_config.json.template', 'configs/'),  # Launcher settings template
     ('./backend/config/templates/default_profile.json', 'backend/config/templates/'),  # Default user profile template
     ('./setup_secrets.py', '.'),  # Sensitive configuration initialization script
     ('./setup_first_deploy.py', '.'),  # First deployment setup script

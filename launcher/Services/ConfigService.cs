@@ -58,6 +58,7 @@ namespace OwlangsLauncher.Services
 
             try
             {
+                EnsureLauncherConfigFile();
                 var path = GetLauncherConfigPath();
                 if (!File.Exists(path))
                 {
@@ -74,6 +75,51 @@ namespace OwlangsLauncher.Services
             {
                 LauncherLogger.Error($"ConfigService: Failed to load {LauncherConfigFile}: {ex.Message}");
                 return null;
+            }
+        }
+
+        /// <summary>
+        /// Create launcher_config.json from launcher_config.json.template on first run.
+        /// </summary>
+        private static void EnsureLauncherConfigFile()
+        {
+            var configPath = GetLauncherConfigPath();
+            if (File.Exists(configPath))
+                return;
+
+            var templatePath = Path.Combine(GetConfigDir(), "launcher_config.json.template");
+            try
+            {
+                var configDir = GetConfigDir();
+                if (!Directory.Exists(configDir))
+                {
+                    Directory.CreateDirectory(configDir);
+                }
+
+                if (File.Exists(templatePath))
+                {
+                    File.Copy(templatePath, configPath);
+                    LauncherLogger.Info(
+                        $"ConfigService: Created {LauncherConfigFile} from template at {templatePath}");
+                    return;
+                }
+
+                const string defaultJson = """
+                    {
+                      "_schema_version": 1,
+                      "launcher_auto_start_backend": true,
+                      "launcher_auto_start_frontend": true,
+                      "launcher_auto_open_browser": false
+                    }
+                    """;
+                File.WriteAllText(configPath, defaultJson);
+                LauncherLogger.Info(
+                    $"ConfigService: Created {LauncherConfigFile} with built-in defaults at {configPath}");
+            }
+            catch (Exception ex)
+            {
+                LauncherLogger.Error(
+                    $"ConfigService: Failed to create {LauncherConfigFile} from template: {ex.Message}");
             }
         }
 

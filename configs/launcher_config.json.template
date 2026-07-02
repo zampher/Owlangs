@@ -1,0 +1,6 @@
+{
+  "_schema_version": 1,
+  "launcher_auto_start_backend": true,
+  "launcher_auto_start_frontend": true,
+  "launcher_auto_open_browser": false
+}

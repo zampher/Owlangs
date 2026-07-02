@@ -103,6 +103,7 @@ class ConfigManager:
             'static.json.template',
             'app_config.json.template',
             'local_users.json.template',
+            'launcher_config.json.template',
         ]
         
         initialized_files = []

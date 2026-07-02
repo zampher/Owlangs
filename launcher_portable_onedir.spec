@@ -230,6 +230,7 @@ custom_datas = [
     ('./configs/static.json.template', 'configs/'),
     ('./configs/app_config.json.template', 'configs/'),
     ('./configs/local_users.json.template', 'configs/'),
+    ('./configs/launcher_config.json.template', 'configs/'),
     ('./backend/config/templates/default_profile.json', 'backend/config/templates/'),
     ('./setup_secrets.py', '.'),
     ('./setup_first_deploy.py', '.'),

@@ -45,6 +45,9 @@ datas = [
     ('./configs/static.json.template', 'config/templates/'),
     ('./configs/local_users.json.template', 'config/templates/'),
 ]
+if os.path.isfile('./configs/launcher_config.json.template'):
+    datas.append(('./configs/launcher_config.json.template', 'configs/'))
+    datas.append(('./configs/launcher_config.json.template', 'config/templates/'))
 # Flutter Web frontend (built by build_macos.sh; include only if present)
 if os.path.isdir('./backend/static/flutter-web'):
     # make sure flutter-web directory is included corrrectly.

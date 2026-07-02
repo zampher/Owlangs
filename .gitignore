@@ -37,6 +37,7 @@ coding-standards/
 # 用户配置文件
 user_profiles/
 auth_config.json
+configs/launcher_config.json
 
 # AI platform test status (auto-generated per instance, do not commit)
 configs/ai_platform_status.json
