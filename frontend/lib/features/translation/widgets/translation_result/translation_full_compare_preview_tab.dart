@@ -1141,187 +1141,203 @@ class _TranslationFullComparePreviewTabState
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ],
-            if (showRevisionControls) ...<Widget>[
-              const SizedBox(width: 8),
-              Tooltip(
-                message: l10n.translationPreviewAutoRefreshPdf,
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                clipBehavior: Clip.none,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Checkbox(
-                      value: _autoRefreshPdf,
-                      onChanged: (bool? value) {
-                        _setAutoRefreshPdf(value ?? false);
-                      },
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    Text(
-                      l10n.translationPreviewAutoRefreshPdf,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              if (widget.autoFollowSegmentPdfPageListenable != null &&
-                  widget.onAutoFollowSegmentPdfPageChanged != null)
-                Tooltip(
-                  message: l10n.translationPreviewFollowSegmentPageDesc,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      Checkbox(
-                        value: _autoFollowSegmentPdfPage,
-                        onChanged: _previewSignalsAlive
-                            ? (bool? value) {
-                                widget.onAutoFollowSegmentPdfPageChanged!(
-                                  value ?? false,
-                                );
-                              }
-                            : null,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      Text(
-                        l10n.translationPreviewFollowSegmentPage,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-              if (widget.showSelectedSegmentMarkerListenable != null &&
-                  widget.onShowSelectedSegmentMarkerChanged != null)
-                Tooltip(
-                  message: l10n.translationPreviewMarkSelectedSegmentDesc,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      Checkbox(
-                        value: _showSelectedSegmentMarker,
-                        onChanged: _previewSignalsAlive
-                            ? (bool? value) {
-                                widget.onShowSelectedSegmentMarkerChanged!(
-                                  value ?? false,
-                                );
-                              }
-                            : null,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      Text(
-                        l10n.translationPreviewMarkSelectedSegment,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-              if (widget.bboxEditModeListenable != null)
-                Tooltip(
-                  message: l10n.translationPreviewEditSegmentBboxDesc,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      Checkbox(
-                        value: _bboxEditMode,
-                        onChanged: (bool? value) {
-                          widget.onBboxEditModeChanged
-                              ?.call(value ?? false);
-                        },
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      Text(
-                        l10n.translationPreviewEditSegmentBbox,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-              if (kPdfLeadingTypographyUiEnabled &&
-                  widget.onBatchLeadingApply != null)
-                ValueListenableBuilder<Set<int>>(
-                  valueListenable: _selectedSegmentIndicesNotifier,
-                  builder: (
-                    BuildContext context,
-                    Set<int> selectedSegmentIndices,
-                    Widget? _,
-                  ) {
-                    if (selectedSegmentIndices.isEmpty) {
-                      return const SizedBox.shrink();
-                    }
-                    return Tooltip(
-                      message: l10n.translationPreviewBatchLeadingTooltip,
-                      child: TextButton.icon(
-                        onPressed: _applyBatchLeading,
-                        icon: const Icon(
-                          Icons.format_line_spacing,
-                          size: 16,
+                    if (showRevisionControls) ...<Widget>[
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: l10n.translationPreviewAutoRefreshPdf,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Checkbox(
+                              value: _autoRefreshPdf,
+                              onChanged: (bool? value) {
+                                _setAutoRefreshPdf(value ?? false);
+                              },
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            Text(
+                              l10n.translationPreviewAutoRefreshPdf,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
                         ),
-                        label: Text(l10n.translationPreviewBatchLeading),
                       ),
-                    );
-                  },
-                ),
-            ],
-            if (_layoutMode == PdfCompareLayoutMode.comparePreview &&
-                (_isPdfCompare ||
-                    widget.baseMode.usesHtmlPreview ||
-                    _isImageCompare)) ...<Widget>[
-              const SizedBox(width: 16),
-              Tooltip(
-                message: l10n.translationPreviewSyncScrollDesc,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Checkbox(
-                      value: _syncScrollEnabled,
-                      onChanged: (bool? value) {
-                        _setSyncScrollEnabled(value ?? false);
-                      },
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    Text(
-                      l10n.translationPreviewSyncScroll,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
+                      if (widget.autoFollowSegmentPdfPageListenable != null &&
+                          widget.onAutoFollowSegmentPdfPageChanged != null)
+                        Tooltip(
+                          message: l10n.translationPreviewFollowSegmentPageDesc,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Checkbox(
+                                value: _autoFollowSegmentPdfPage,
+                                onChanged: _previewSignalsAlive
+                                    ? (bool? value) {
+                                        widget
+                                            .onAutoFollowSegmentPdfPageChanged!(
+                                          value ?? false,
+                                        );
+                                      }
+                                    : null,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              Text(
+                                l10n.translationPreviewFollowSegmentPage,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (widget.showSelectedSegmentMarkerListenable != null &&
+                          widget.onShowSelectedSegmentMarkerChanged != null)
+                        Tooltip(
+                          message:
+                              l10n.translationPreviewMarkSelectedSegmentDesc,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Checkbox(
+                                value: _showSelectedSegmentMarker,
+                                onChanged: _previewSignalsAlive
+                                    ? (bool? value) {
+                                        widget
+                                            .onShowSelectedSegmentMarkerChanged!(
+                                          value ?? false,
+                                        );
+                                      }
+                                    : null,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              Text(
+                                l10n.translationPreviewMarkSelectedSegment,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (widget.bboxEditModeListenable != null)
+                        Tooltip(
+                          message: l10n.translationPreviewEditSegmentBboxDesc,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Checkbox(
+                                value: _bboxEditMode,
+                                onChanged: (bool? value) {
+                                  widget.onBboxEditModeChanged
+                                      ?.call(value ?? false);
+                                },
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              Text(
+                                l10n.translationPreviewEditSegmentBbox,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (kPdfLeadingTypographyUiEnabled &&
+                          widget.onBatchLeadingApply != null)
+                        ValueListenableBuilder<Set<int>>(
+                          valueListenable: _selectedSegmentIndicesNotifier,
+                          builder: (
+                            BuildContext context,
+                            Set<int> selectedSegmentIndices,
+                            Widget? _,
+                          ) {
+                            if (selectedSegmentIndices.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            return Tooltip(
+                              message:
+                                  l10n.translationPreviewBatchLeadingTooltip,
+                              child: TextButton.icon(
+                                onPressed: _applyBatchLeading,
+                                icon: const Icon(
+                                  Icons.format_line_spacing,
+                                  size: 16,
+                                ),
+                                label: Text(l10n.translationPreviewBatchLeading),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                    if (_layoutMode == PdfCompareLayoutMode.comparePreview &&
+                        (_isPdfCompare ||
+                            widget.baseMode.usesHtmlPreview ||
+                            _isImageCompare)) ...<Widget>[
+                      const SizedBox(width: 16),
+                      Tooltip(
+                        message: l10n.translationPreviewSyncScrollDesc,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Checkbox(
+                              value: _syncScrollEnabled,
+                              onChanged: (bool? value) {
+                                _setSyncScrollEnabled(value ?? false);
+                              },
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            Text(
+                              l10n.translationPreviewSyncScroll,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (_showsRevisionLinkedScroll) ...<Widget>[
+                      const SizedBox(width: 16),
+                      Tooltip(
+                        message: l10n.translationPreviewRevisionSyncScrollDesc,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Checkbox(
+                              value: _revisionLinkedScrollEnabled,
+                              onChanged: (bool? value) {
+                                _setRevisionLinkedScrollEnabled(value ?? false);
+                              },
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            Text(
+                              l10n.translationPreviewSyncScroll,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (_layoutMode == PdfCompareLayoutMode.comparePreview &&
+                        _isPdfCompare &&
+                        _comparePdfTotalPages > 0) ...<Widget>[
+                      const SizedBox(width: 12),
+                      Text(
+                        l10n.translationPreviewPdfPageIndicator(
+                          _comparePdfCurrentPage.toString(),
+                          _comparePdfTotalPages.toString(),
+                        ),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-            ],
-            if (_showsRevisionLinkedScroll) ...<Widget>[
-              const SizedBox(width: 16),
-              Tooltip(
-                message: l10n.translationPreviewRevisionSyncScrollDesc,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Checkbox(
-                      value: _revisionLinkedScrollEnabled,
-                      onChanged: (bool? value) {
-                        _setRevisionLinkedScrollEnabled(value ?? false);
-                      },
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    Text(
-                      l10n.translationPreviewSyncScroll,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            if (_layoutMode == PdfCompareLayoutMode.comparePreview &&
-                _isPdfCompare &&
-                _comparePdfTotalPages > 0) ...<Widget>[
-              const SizedBox(width: 12),
-              Text(
-                l10n.translationPreviewPdfPageIndicator(
-                  _comparePdfCurrentPage.toString(),
-                  _comparePdfTotalPages.toString(),
-                ),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-            ],
-            const Spacer(),
+            ),
             if (showRevisionControls)
               IconButton(
                 icon: const Icon(Icons.refresh, size: 18),
