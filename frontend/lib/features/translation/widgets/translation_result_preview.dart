@@ -56,8 +56,6 @@ void _translationResultLog(String message, {LogLevel level = LogLevel.debug}) {
   AppLogger.log('TranslationResultPreview', message, level: level);
 }
 
-const String _kTranslationPreviewTabId = 'translation_preview_tab';
-
 // Intent classes for keyboard shortcuts
 class _GlobalUndoIntent extends Intent {
   const _GlobalUndoIntent();
@@ -679,6 +677,7 @@ class _TranslationResultPreviewState
   bool _loadingHtmlPreview = false;
   bool _revisionPreviewOpening = false;
   final GlobalKey _fullComparePreviewTabKey = GlobalKey();
+  PreviewTabsNotifier? _previewTabsNotifierCache;
   // Format settings are now managed by formatSettingsProviderFamily
   // Removed: String? _selectedTableFormat;
   // Removed: String? _selectedEquationFormat;
@@ -699,6 +698,9 @@ class _TranslationResultPreviewState
   @override
   void initState() {
     super.initState();
+    _previewTabsNotifierCache = widget.flowId != null
+        ? ref.read(previewTabsProviderFamily(widget.flowId!).notifier)
+        : ref.read(previewTabsProvider.notifier);
     _isMergedView = widget.initialMergedView;
     // Initialize with provided paragraphs if available
     _sourceParagraphs = widget.initialSourceParagraphs ?? <String>[];
@@ -1076,21 +1078,11 @@ class _TranslationResultPreviewState
   @override
   void dispose() {
     _closeTranslationPreviewTabSilently();
-    _selectedExclusionFiltersNotifier.dispose();
-    _selectedPdfPageNumbersNotifier.dispose();
-    _pdfPreviewJumpPageNotifier.dispose();
-    _pdfPreviewJumpPageTriggerNotifier.dispose();
-    _pdfHighlightBboxPageNotifier.dispose();
-    _pdfHighlightBboxNotifier.dispose();
-    _pdfSourceHighlightBboxNotifier.dispose();
-    _autoFollowSegmentPdfPageNotifier.dispose();
-    _showSelectedSegmentMarkerNotifier.dispose();
-    _bboxEditModeNotifier.dispose();
-    _highlightedIndexNotifier.dispose();
-    _pdfPreviewRevisionNotifier.dispose();
-    _pdfPreviewDirtySegmentsNotifier.dispose();
     _pdfPreviewRevisionDebounceTimer?.cancel();
-    _segmentUiRevisionNotifier.dispose();
+    _sourcePreviewTimer?.cancel();
+    _translationStatusTimer?.cancel();
+    _fullscreenOverlayEntry?.remove();
+    _fullscreenOverlayEntry = null;
     _scrollManager?.dispose();
     _comparisonScrollController.dispose();
     _pdfRevisionScrollController.dispose();
@@ -1098,11 +1090,33 @@ class _TranslationResultPreviewState
       _segmentsPaginationController!.removeListener(_onPaginationChanged);
       _segmentsPaginationController!.dispose();
     }
-    _fullscreenOverlayEntry?.remove();
-    _fullscreenOverlayEntry = null;
-    _sourcePreviewTimer?.cancel();
-    _translationStatusTimer?.cancel();
+    _deferDisposePreviewSignalNotifiers();
     super.dispose();
+  }
+
+  /// Dispose parent-owned [ValueNotifier]s after preview tab children unmount.
+  void _deferDisposePreviewSignalNotifiers() {
+    final List<ChangeNotifier> notifiers = <ChangeNotifier>[
+      _selectedExclusionFiltersNotifier,
+      _selectedPdfPageNumbersNotifier,
+      _pdfPreviewJumpPageNotifier,
+      _pdfPreviewJumpPageTriggerNotifier,
+      _pdfHighlightBboxPageNotifier,
+      _pdfHighlightBboxNotifier,
+      _pdfSourceHighlightBboxNotifier,
+      _autoFollowSegmentPdfPageNotifier,
+      _showSelectedSegmentMarkerNotifier,
+      _bboxEditModeNotifier,
+      _highlightedIndexNotifier,
+      _pdfPreviewRevisionNotifier,
+      _pdfPreviewDirtySegmentsNotifier,
+      _segmentUiRevisionNotifier,
+    ];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final ChangeNotifier notifier in notifiers) {
+        notifier.dispose();
+      }
+    });
   }
 
   /// Initialize pagination controller for translation segments
@@ -6024,14 +6038,16 @@ class _TranslationResultPreviewState
   }
 
   PreviewTabsNotifier _previewTabsNotifier() {
-    return widget.flowId != null
-        ? ref.read(previewTabsProviderFamily(widget.flowId!).notifier)
-        : ref.read(previewTabsProvider.notifier);
+    return _previewTabsNotifierCache ??
+        (widget.flowId != null
+            ? ref.read(previewTabsProviderFamily(widget.flowId!).notifier)
+            : ref.read(previewTabsProvider.notifier));
   }
 
   void _closeTranslationPreviewTabSilently() {
     try {
-      _previewTabsNotifier().closeTabByIdSilently(_kTranslationPreviewTabId);
+      _previewTabsNotifier()
+          .closeTabByIdSilently(kTranslationPreviewTabId);
     } catch (e) {
       _translationResultLog(
         '[REVISION_PREVIEW] Failed to close stale translation preview tab: $e',
@@ -6334,7 +6350,7 @@ class _TranslationResultPreviewState
     );
 
     final AppLocalizations l10n = AppLocalizations.of(context)!;
-    const String tabId = _kTranslationPreviewTabId;
+    const String tabId = kTranslationPreviewTabId;
     _previewTabsNotifier().updateOrAddTab(
       PreviewTab(
         id: tabId,
@@ -6391,7 +6407,7 @@ class _TranslationResultPreviewState
 
     final String imageUrl = _buildImageOverlayPreviewUrl(effectiveDownloads);
     final AppLocalizations l10n = AppLocalizations.of(context)!;
-    const String tabId = _kTranslationPreviewTabId;
+    const String tabId = kTranslationPreviewTabId;
     _previewTabsNotifier().updateOrAddTab(
       PreviewTab(
         id: tabId,
@@ -6457,7 +6473,7 @@ class _TranslationResultPreviewState
     }
 
     final AppLocalizations l10n = AppLocalizations.of(context)!;
-    const String tabId = _kTranslationPreviewTabId;
+    const String tabId = kTranslationPreviewTabId;
 
     final PreviewTabsState tabsState = widget.flowId != null
         ? ref.read(previewTabsProviderFamily(widget.flowId!))
@@ -6676,7 +6692,7 @@ class _TranslationResultPreviewState
         ? l10n.translationExportPdfPreserveLayout
         : l10n.translationExportPdfReflow;
 
-    const String tabId = _kTranslationPreviewTabId;
+    const String tabId = kTranslationPreviewTabId;
     _previewTabsNotifier().updateOrAddTab(
       PreviewTab(
         id: tabId,

@@ -6411,6 +6411,16 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           });
         }
 
+        // Close revision/full-compare preview when its parent translate tab goes away.
+        // PreviewPanel keeps inactive tabs mounted (IndexedStack); the preview tab
+        // holds listenables owned by TranslationResultPreview inside translate_tab.
+        if (tab.id == 'translate_tab' || tab.id == 'translate_reedit_tab') {
+          final PreviewTabsNotifier tabsNotifier = widget.flowId != null
+              ? ref.read(previewTabsProviderFamily(widget.flowId!).notifier)
+              : ref.read(previewTabsProvider.notifier);
+          tabsNotifier.closeTabByIdSilently(kTranslationPreviewTabId);
+        }
+
         // IMPORTANT: Do NOT release task resources when closing the Translate tab.
         // Users may close the translation result tab and go back to Extract to adjust
         // target language or exclusions. Releasing the task here would make subsequent

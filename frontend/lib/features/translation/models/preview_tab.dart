@@ -3,6 +3,9 @@
 
 import 'package:flutter/material.dart';
 
+/// Preview tab id for full-document / revision compare preview.
+const String kTranslationPreviewTabId = 'translation_preview_tab';
+
 /// Preview tab types
 enum PreviewTabType {
   translationResult,

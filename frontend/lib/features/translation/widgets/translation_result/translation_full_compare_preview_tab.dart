@@ -141,6 +141,8 @@ class _TranslationFullComparePreviewTabState
   /// Original (non-overridden) bbox for source-side PDF highlight.
   List<double>? _sourceHighlightBbox;
   bool _bboxEditMode = false;
+  bool _autoFollowSegmentPdfPage = true;
+  bool _showSelectedSegmentMarker = true;
 
   final ValueNotifier<Set<int>> _selectedSegmentIndicesNotifier =
       ValueNotifier<Set<int>>(<int>{});
@@ -198,6 +200,8 @@ class _TranslationFullComparePreviewTabState
     _previewSignalsAlive = _bindPreviewSignalListeners();
     if (_previewSignalsAlive) {
       _onPdfBboxHighlightChanged();
+      _onAutoFollowSegmentPdfPageChanged();
+      _onShowSelectedSegmentMarkerChanged();
     }
   }
 
@@ -263,6 +267,28 @@ class _TranslationFullComparePreviewTabState
       );
       if (_previewSignalsAlive) {
         _onBboxEditModeChanged();
+      }
+    }
+    if (oldWidget.autoFollowSegmentPdfPageListenable !=
+        widget.autoFollowSegmentPdfPageListenable) {
+      _rebindPreviewSignal(
+        oldWidget.autoFollowSegmentPdfPageListenable,
+        widget.autoFollowSegmentPdfPageListenable,
+        _onAutoFollowSegmentPdfPageChanged,
+      );
+      if (_previewSignalsAlive) {
+        _onAutoFollowSegmentPdfPageChanged();
+      }
+    }
+    if (oldWidget.showSelectedSegmentMarkerListenable !=
+        widget.showSelectedSegmentMarkerListenable) {
+      _rebindPreviewSignal(
+        oldWidget.showSelectedSegmentMarkerListenable,
+        widget.showSelectedSegmentMarkerListenable,
+        _onShowSelectedSegmentMarkerChanged,
+      );
+      if (_previewSignalsAlive) {
+        _onShowSelectedSegmentMarkerChanged();
       }
     }
     if (oldWidget.pdfRenderRevision != widget.pdfRenderRevision &&
@@ -375,6 +401,16 @@ class _TranslationFullComparePreviewTabState
           _onBboxEditModeChanged,
         ) &&
         alive;
+    alive = _tryAddPreviewSignalListener(
+          widget.autoFollowSegmentPdfPageListenable,
+          _onAutoFollowSegmentPdfPageChanged,
+        ) &&
+        alive;
+    alive = _tryAddPreviewSignalListener(
+          widget.showSelectedSegmentMarkerListenable,
+          _onShowSelectedSegmentMarkerChanged,
+        ) &&
+        alive;
     _previewSignalsAlive = alive;
     return alive;
   }
@@ -443,6 +479,26 @@ class _TranslationFullComparePreviewTabState
     if (mounted) {
       setState(() {
         _bboxEditMode = editMode;
+      });
+    }
+  }
+
+  void _onAutoFollowSegmentPdfPageChanged() {
+    final bool enabled =
+        widget.autoFollowSegmentPdfPageListenable?.value ?? true;
+    if (mounted) {
+      setState(() {
+        _autoFollowSegmentPdfPage = enabled;
+      });
+    }
+  }
+
+  void _onShowSelectedSegmentMarkerChanged() {
+    final bool enabled =
+        widget.showSelectedSegmentMarkerListenable?.value ?? true;
+    if (mounted) {
+      setState(() {
+        _showSelectedSegmentMarker = enabled;
       });
     }
   }
@@ -1108,60 +1164,53 @@ class _TranslationFullComparePreviewTabState
               ),
               if (widget.autoFollowSegmentPdfPageListenable != null &&
                   widget.onAutoFollowSegmentPdfPageChanged != null)
-                ValueListenableBuilder<bool>(
-                  valueListenable: widget.autoFollowSegmentPdfPageListenable!,
-                  builder: (BuildContext context, bool enabled, Widget? _) {
-                    return Tooltip(
-                      message: l10n.translationPreviewFollowSegmentPageDesc,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          Checkbox(
-                            value: enabled,
-                            onChanged: (bool? value) {
-                              widget.onAutoFollowSegmentPdfPageChanged!(
-                                value ?? false,
-                              );
-                            },
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          Text(
-                            l10n.translationPreviewFollowSegmentPage,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
+                Tooltip(
+                  message: l10n.translationPreviewFollowSegmentPageDesc,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Checkbox(
+                        value: _autoFollowSegmentPdfPage,
+                        onChanged: _previewSignalsAlive
+                            ? (bool? value) {
+                                widget.onAutoFollowSegmentPdfPageChanged!(
+                                  value ?? false,
+                                );
+                              }
+                            : null,
+                        visualDensity: VisualDensity.compact,
                       ),
-                    );
-                  },
+                      Text(
+                        l10n.translationPreviewFollowSegmentPage,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
                 ),
               if (widget.showSelectedSegmentMarkerListenable != null &&
                   widget.onShowSelectedSegmentMarkerChanged != null)
-                ValueListenableBuilder<bool>(
-                  valueListenable: widget.showSelectedSegmentMarkerListenable!,
-                  builder: (BuildContext context, bool enabled, Widget? _) {
-                    return Tooltip(
-                      message:
-                          l10n.translationPreviewMarkSelectedSegmentDesc,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          Checkbox(
-                            value: enabled,
-                            onChanged: (bool? value) {
-                              widget.onShowSelectedSegmentMarkerChanged!(
-                                value ?? false,
-                              );
-                            },
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          Text(
-                            l10n.translationPreviewMarkSelectedSegment,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
+                Tooltip(
+                  message: l10n.translationPreviewMarkSelectedSegmentDesc,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Checkbox(
+                        value: _showSelectedSegmentMarker,
+                        onChanged: _previewSignalsAlive
+                            ? (bool? value) {
+                                widget.onShowSelectedSegmentMarkerChanged!(
+                                  value ?? false,
+                                );
+                              }
+                            : null,
+                        visualDensity: VisualDensity.compact,
                       ),
-                    );
-                  },
+                      Text(
+                        l10n.translationPreviewMarkSelectedSegment,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
                 ),
               if (widget.bboxEditModeListenable != null)
                 Tooltip(
