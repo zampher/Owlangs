@@ -1007,20 +1007,31 @@ def segment_skips_overlay(
     """True when overlay/redaction should preserve original PDF content for this segment."""
     if bool(segment.get("is_excluded")):
         return True
-    if bool(segment.get("is_failed")):
-        return True
-    status = str(segment.get("translation_status") or "").strip().lower()
-    if status in ("failed", "error", "failure"):
-        return True
-    if bool(segment.get("needs_retry")) and not segment_overlay_export_text(segment, text_field):
-        return True
-    source_text = (segment.get("source_text") or "").strip()
+
     export_text = segment_overlay_export_text(segment, text_field)
+    source_text = (segment.get("source_text") or "").strip()
     modified_text = (segment.get("modified_text") or "").strip()
+    target_text = (segment.get("target_text") or "").strip()
+
+    status = str(segment.get("translation_status") or "").strip().lower()
+    is_failed = bool(segment.get("is_failed")) or status in (
+        "failed",
+        "error",
+        "failure",
+    )
+
+    # Failed segments with renderable text (e.g. English bibliography entries returned
+    # unchanged) must still be overlaid. Image-based PDF cleanup can erase neighboring
+    # regions; skip_overlay alone leaves blank holes when no overlay text is placed.
+    if is_failed:
+        return not bool(export_text)
+
+    if bool(segment.get("needs_retry")) and not export_text:
+        return True
     if (
         text_field != "source_text"
         and source_text
-        and source_text == (segment.get("target_text") or "").strip()
+        and source_text == target_text
         and not modified_text
     ):
         return True

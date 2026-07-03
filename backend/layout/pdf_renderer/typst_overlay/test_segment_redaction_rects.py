@@ -98,6 +98,29 @@ class TestSegmentRedactionRects(unittest.TestCase):
         self.assertEqual(len(protected.get(0, [])), 1)
         self.assertTrue(segment_skips_overlay(segments[0]))
 
+    def test_translation_failed_same_as_source_still_overlays(self):
+        """English references returned unchanged must render, not leave blank holes."""
+        ref = (
+            "[1] Smith J, et al. CT-FFR validation study. "
+            "Journal of Cardiology. 2020;12(3):45-52."
+        )
+        seg = {
+            "segment_index": 150,
+            "is_failed": True,
+            "needs_retry": True,
+            "chunk_type": "ref_text",
+            "layout_block_indices": [0],
+            "layout_block_bbox": [[10.0, 20.0, 90.0, 120.0]],
+            "source_text": ref,
+            "target_text": ref,
+        }
+        self.assertFalse(segment_skips_overlay(seg))
+
+        layout_doc = self._layout_doc()
+        redact = collect_segment_layout_bbox_redaction_rects([seg], layout_doc)
+        protected = collect_excluded_segment_protected_rects([seg], layout_doc)
+        self.assertEqual(len(redact.get(0, [])), 1)
+        self.assertEqual(protected, {})
 
     def test_partial_overlay_block_indices(self):
         segments = [

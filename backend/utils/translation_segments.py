@@ -284,7 +284,10 @@ def _is_formula_segment(text: str) -> bool:
     Formula segments are identified by:
     - Containing LaTeX inline math: $...$ or \\(...\\)
     - Containing LaTeX display math: $$...$$ or \\[...\\]
-    - Being primarily LaTeX content (more than 50% LaTeX syntax)
+    - Being primarily LaTeX content (command density), excluding mixed prose
+    
+    Mixed Chinese/English paragraphs that embed a few inline tokens such as
+    ``\\mathrm{FFR}`` or ``\\pm`` must remain translatable and are NOT formulas.
     
     Args:
         text: Segment text to check
@@ -296,14 +299,20 @@ def _is_formula_segment(text: str) -> bool:
         return False
     
     text_stripped = text.strip()
-    total_chars = len(text_stripped)  # CRITICAL: Initialize total_chars before any conditional blocks
+    total_chars = len(text_stripped)
+    if total_chars == 0:
+        return False
+
+    from utils.translation_validator import is_cjk_char
+
+    cjk_count = sum(1 for c in text_stripped if is_cjk_char(c))
     
     # Check for LaTeX inline math: $...$ or \(...\)
     inline_math_pattern = r'\$[^$]+\$|\\\([^)]+\\\)'
-    if re.search(inline_math_pattern, text_stripped):
-        # If the segment is primarily math (more than 50% is math), consider it a formula segment
-        math_chars = len(re.findall(inline_math_pattern, text_stripped))
-        if math_chars > 0 and (math_chars * 2) > total_chars * 0.5:
+    inline_matches = re.findall(inline_math_pattern, text_stripped)
+    if inline_matches:
+        math_chars = sum(len(m) for m in inline_matches)
+        if math_chars > total_chars * 0.5:
             return True
     
     # Check for LaTeX display math: $$...$$ or \[...\]
@@ -311,15 +320,26 @@ def _is_formula_segment(text: str) -> bool:
     if re.search(display_math_pattern, text_stripped):
         return True
     
-    # Check if segment is primarily LaTeX content (contains many LaTeX commands)
-    latex_command_pattern = r'\\[a-zA-Z]+\{?[^}]*\}?'
+    # Match command names only. Do NOT use \{?[^}]*\}? — without braces it greedily
+    # consumes the rest of the line (e.g. "\pm 0.04 ..." swallows all following text).
+    latex_command_pattern = r'\\[a-zA-Z@]+'
     latex_commands = re.findall(latex_command_pattern, text_stripped)
-    if len(latex_commands) > 0:
-        # If more than 30% of the text is LaTeX commands, consider it a formula
-        latex_chars = sum(len(cmd) for cmd in latex_commands)
-        if latex_chars > total_chars * 0.3:
-            return True
-    
+    if not latex_commands:
+        return False
+
+    latex_chars = sum(len(cmd) for cmd in latex_commands)
+
+    # Prose with inline math symbols should be translated, not excluded as formula.
+    if cjk_count >= 5:
+        return False
+
+    if latex_chars > total_chars * 0.3:
+        return True
+
+    # MinerU interline_equation text export: pure LaTeX without $ delimiters or CJK.
+    if cjk_count == 0 and len(latex_commands) >= 3 and latex_chars > total_chars * 0.15:
+        return True
+
     return False
 
 
