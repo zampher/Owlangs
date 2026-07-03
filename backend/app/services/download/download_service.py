@@ -22,11 +22,15 @@ from urllib.parse import urlencode
 from typing import Optional, Dict, Any, List, Tuple
 from pathlib import Path
 
-from layout.block_types import CHART_BODY
+from utils.http_content_disposition import (
+    bytes_download_response,
+    file_download_response,
+)
 
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, Response
 
+from layout.block_types import CHART_BODY
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from app.services.task import TaskManager
@@ -1007,7 +1011,7 @@ def _file_response_for_md_download(
             LogModule.EXPORT,
             f"[DOWNLOAD] MD response: embedded single file, len={len(md_out)}",
         )
-        return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+        return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
 
     zip_temp_dir = None
     temp_dir = task_state.get("temp_dir")
@@ -1065,7 +1069,7 @@ def _file_response_for_md_download(
             LogModule.EXPORT,
             f"[DOWNLOAD] MD response: ZIP (embed_images=false), md_len={len(md_with_image_paths)}, image_files={len(saved_image_paths)}",
         )
-        return FileResponse(path=zip_temp_file.name, media_type=media_type, filename=filename)
+        return file_download_response(path=zip_temp_file.name, media_type=media_type, filename=filename)
     finally:
         shutil.rmtree(zip_temp_dir, ignore_errors=True)
 
@@ -1418,7 +1422,7 @@ def _pre_generated_pdf_file_response(
                 if isinstance(pdf_info, dict)
                 else None
             ) or os.path.basename(pdf_path) or f"{file_stem}{suffix}.pdf"
-            return FileResponse(
+            return file_download_response(
                 path=pdf_path,
                 media_type=MEDIA_TYPES.get("pdf", "application/pdf"),
                 filename=filename,
@@ -1427,7 +1431,7 @@ def _pre_generated_pdf_file_response(
     output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
     candidate = output_dir / f"{file_stem}{suffix}.pdf"
     if candidate.exists():
-        return FileResponse(
+        return file_download_response(
             path=str(candidate),
             media_type=MEDIA_TYPES.get("pdf", "application/pdf"),
             filename=candidate.name,
@@ -1540,7 +1544,7 @@ async def _image_overlay_file_response(
         "path": str(out_path),
         "filename": out_name,
     }
-    return FileResponse(
+    return file_download_response(
         path=str(out_path),
         media_type=result.media_type,
         filename=out_name,
@@ -1766,7 +1770,7 @@ async def _typst_overlay_pdf_response(
         task_state.setdefault("downloadable_files", {})["pdf"] = {
             "path": str(cached_pdf),
         }
-        return FileResponse(
+        return file_download_response(
             path=str(cached_pdf),
             media_type="application/pdf",
             filename=cached_pdf.name,
@@ -2038,7 +2042,7 @@ async def _typst_overlay_pdf_response(
             f"(partial={'yes' if render_page_indices else 'no'})",
         )
 
-    return FileResponse(
+    return file_download_response(
         path=str(pdf_file),
         media_type="application/pdf",
         filename=pdf_file.name,
@@ -2171,10 +2175,10 @@ def _pandoc_pdf_file_response_from_md(
         )
         filename = pdf_file_path.name
         media_type = MEDIA_TYPES.get("pdf", "application/pdf")
-        response = Response(
-            content=pdf_bytes,
+        response = bytes_download_response(
+            pdf_bytes,
+            filename=filename,
             media_type=media_type,
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
         response.owlangs_stash_path = str(pdf_file_path)  # type: ignore[attr-defined]
         return response
@@ -2310,10 +2314,10 @@ async def _pandoc_pdf_file_response_from_html(
         )
         filename = pdf_file_path.name
         media_type = MEDIA_TYPES.get("pdf", "application/pdf")
-        response = Response(
-            content=pdf_bytes,
+        response = bytes_download_response(
+            pdf_bytes,
+            filename=filename,
             media_type=media_type,
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
         response.owlangs_stash_path = str(pdf_file_path)  # type: ignore[attr-defined]
         return response
@@ -2536,7 +2540,7 @@ def _markdown_based_html_file_response_from_segments(
     filename = f"{file_stem}{sfx}.html"
     media_type = MEDIA_TYPES.get("html", "text/html; charset=utf-8")
     logger.info(LogModule.EXPORT, f"[DOWNLOAD] HTML from segments on-demand task_id={task_id}")
-    return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+    return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
 
 
 
@@ -2588,7 +2592,7 @@ def _try_stashed_file_response(
                 LogModule.EXPORT,
                 f"[DOWNLOAD] Task {task_id}: Serving stashed md_zip from disk (no in-memory task)",
             )
-            return FileResponse(
+            return file_download_response(
                 path=stashed_zip,
                 media_type="application/zip",
                 filename=filename,
@@ -2623,7 +2627,7 @@ def _try_stashed_file_response(
         LogModule.EXPORT,
         f"[DOWNLOAD] Task {task_id}: Serving stashed {file_type} from disk (no in-memory task)",
     )
-    return FileResponse(path=stashed, media_type=media_type, filename=filename)
+    return file_download_response(path=stashed, media_type=media_type, filename=filename)
 
 
 class DownloadService:
@@ -2715,7 +2719,7 @@ class DownloadService:
                 LogModule.EXPORT,
                 f"[DOWNLOAD] Task {task_id}: Serving source PDF for compare preview",
             )
-            return FileResponse(
+            return file_download_response(
                 path=source_path,
                 media_type="application/pdf",
                 filename=filename,
@@ -2749,18 +2753,17 @@ class DownloadService:
                     f"[DOWNLOAD] Task {task_id}: Serving oriented source image "
                     f"for compare preview ({len(body)} bytes)",
                 )
-                return Response(
-                    content=body,
+                return bytes_download_response(
+                    body,
+                    filename=filename,
                     media_type=media_type,
-                    headers={
-                        "Content-Disposition": f'inline; filename="{filename}"',
-                    },
+                    disposition="inline",
                 )
             logger.info(
                 LogModule.EXPORT,
                 f"[DOWNLOAD] Task {task_id}: Serving raw source image for compare preview",
             )
-            return FileResponse(
+            return file_download_response(
                 path=source_path,
                 media_type=MEDIA_TYPES.get(ext, "application/octet-stream"),
                 filename=filename,
@@ -3062,7 +3065,7 @@ class DownloadService:
                         LogModule.EXPORT,
                         f"[DOWNLOAD] Using Pandoc-generated DOCX for markdown_based workflow (task {task_id}): {docx_path}",
                     )
-                    return FileResponse(path=docx_path, media_type=media_type, filename=filename)
+                    return file_download_response(path=docx_path, media_type=media_type, filename=filename)
         
         # Check if this is a format conversion task
         is_format_conversion = task_state.get("is_format_conversion", False) or task_state.get("convert_only", False)
@@ -3587,7 +3590,7 @@ class DownloadService:
                                     filename = f"{file_stem}{sfx}.html"
                                     media_type = MEDIA_TYPES.get(file_type, "text/html; charset=utf-8")
                                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated HTML from translated segments with equation_format={eq_format}, table_body_format={table_format}, images embedded")
-                                    return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                                    return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                                 finally:
                                     # Restore original document
                                     workflow.document_translated = original_doc
@@ -3616,7 +3619,7 @@ class DownloadService:
                                     filename = f"{file_stem}{sfx}.md"
                                     media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
                                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD with embedded images from translated segments with equation_format={eq_format}, table_body_format={table_format}")
-                                    return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                                    return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                                 else:
                                     # Save images to folder and create ZIP (MD file + images folder)
                                     # Use task_state temp_dir if available, otherwise create independent temp directory
@@ -3675,7 +3678,7 @@ class DownloadService:
                                         filename = f"{file_stem}{sfx}_with_images.zip"
                                         media_type = "application/zip"
                                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD with images folder (ZIP) from translated segments with equation_format={eq_format}, table_body_format={table_format}, images_count={len(saved_image_paths)}")
-                                        return FileResponse(path=zip_temp_file.name, media_type=media_type, filename=filename)
+                                        return file_download_response(path=zip_temp_file.name, media_type=media_type, filename=filename)
                                     finally:
                                         # Clean up temporary directory
                                         try:
@@ -3731,7 +3734,7 @@ class DownloadService:
                                 filename = f"{file_stem}{sfx}.docx"
                                 media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated DOCX from translated segments with equation_format={eq_format}, table_body_format={table_format}")
-                                return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                                return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                     else:
                         # For format conversion tasks or when no translation segments exist,
                         # regenerate from original layout (this is the original behavior)
@@ -4048,7 +4051,7 @@ class DownloadService:
                             filename = f"{file_stem}{sfx}.html"
                             media_type = MEDIA_TYPES.get(file_type, "text/html; charset=utf-8")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated HTML from layout_document with equation_format={eq_format}, table_body_format={table_format}, images embedded")
-                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                            return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                         finally:
                             # Restore original document
                             workflow.document_translated = original_doc
@@ -4077,7 +4080,7 @@ class DownloadService:
                             filename = f"{file_stem}{sfx}.md"
                             media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD with embedded images from layout_document (equation_format={eq_format}, table_body_format={table_format})")
-                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                            return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                         else:
                             # Save images to folder and create ZIP (MD file + images folder)
                             # Use task_state temp_dir if available, otherwise create independent temp directory
@@ -4136,7 +4139,7 @@ class DownloadService:
                                 filename = f"{file_stem}{sfx}_with_images.zip"
                                 media_type = "application/zip"
                                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD with images folder (ZIP) from layout_document with equation_format={eq_format}, table_body_format={table_format}, images_count={len(saved_image_paths)}")
-                                return FileResponse(path=zip_temp_file.name, media_type=media_type, filename=filename)
+                                return file_download_response(path=zip_temp_file.name, media_type=media_type, filename=filename)
                             finally:
                                 # Clean up temporary directory
                                 try:
@@ -4191,7 +4194,7 @@ class DownloadService:
                         filename = f"{file_stem}{sfx}.docx"
                         media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated DOCX from layout_document (equation_format={eq_format}, table_body_format={table_format})")
-                        return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                        return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
             except Exception as e:
                 logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to regenerate from layout_document with format parameters: {e}, falling back to normal flow", exc_info=True)
                 should_regenerate_from_layout = False
@@ -4336,7 +4339,7 @@ class DownloadService:
                             filename = f"{file_stem}{sfx}.html"
                             media_type = MEDIA_TYPES.get(file_type, "text/html; charset=utf-8")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated revised html file: {temp_file.name} (size: {os.path.getsize(temp_file.name)} bytes)")
-                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                            return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                     
                         elif file_type == "md":
                             md_content = workflow.export_to_markdown()
@@ -4494,7 +4497,7 @@ class DownloadService:
                                             filename = f"{file_stem}{sfx}.docx"
                                             media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Exported DOCX via Pandoc (formulas preserved, font by language)")
-                                            return FileResponse(path=_tf.name, media_type=media_type, filename=filename)
+                                            return file_download_response(path=_tf.name, media_type=media_type, filename=filename)
                                         try:
                                             os.unlink(_tf.name)
                                         except Exception:
@@ -4629,7 +4632,7 @@ class DownloadService:
                                         filename = os.path.basename(pdf_path) or f"{file_stem}{sfx}.pdf"
                                         media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using pre-generated PDF for MOBI/EPUB workflow: {pdf_path}")
-                                        return FileResponse(path=pdf_path, media_type=media_type, filename=filename)
+                                        return file_download_response(path=pdf_path, media_type=media_type, filename=filename)
                                 # If PDF doesn't exist, check output_dir (may have been generated but not added to downloadable_files)
                                 output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
                                 pdf_file_path = output_dir / f"{file_stem}{sfx}.pdf"
@@ -4637,7 +4640,7 @@ class DownloadService:
                                     filename = f"{file_stem}{sfx}.pdf"
                                     media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Found PDF in output_dir for MOBI/EPUB: {pdf_file_path}")
-                                    return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
+                                    return file_download_response(path=str(pdf_file_path), media_type=media_type, filename=filename)
                                 else:
                                     logger.error(LogModule.EXPORT, f"[DOWNLOAD] PDF not found for MOBI/EPUB workflow. It should have been generated in generate_all_outputs.")
                                     raise HTTPException(
@@ -4718,13 +4721,13 @@ class DownloadService:
                                         if pdf_path and os.path.exists(pdf_path):
                                             filename = os.path.basename(pdf_path) or f"{file_stem}{sfx}.pdf"
                                             media_type = MEDIA_TYPES.get(file_type, "application/pdf")
-                                            return FileResponse(path=pdf_path, media_type=media_type, filename=filename)
+                                            return file_download_response(path=pdf_path, media_type=media_type, filename=filename)
 
                                     pdf_file_path = output_dir / f"{file_stem}{sfx}.pdf"
                                     if pdf_file_path.exists():
                                         filename = f"{file_stem}{sfx}.pdf"
                                         media_type = MEDIA_TYPES.get(file_type, "application/pdf")
-                                        return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
+                                        return file_download_response(path=str(pdf_file_path), media_type=media_type, filename=filename)
                                 except NotImplementedError as not_impl_error:
                                     logger.warning(
                                         LogModule.EXPORT,
@@ -4738,12 +4741,12 @@ class DownloadService:
                                         filename = os.path.basename(gen_pdf["path"]) or f"{file_stem}{sfx}.pdf"
                                         media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] PDF generated successfully despite NotImplementedError")
-                                        return FileResponse(path=gen_pdf["path"], media_type=media_type, filename=filename)
+                                        return file_download_response(path=gen_pdf["path"], media_type=media_type, filename=filename)
                                     if pdf_file_path.exists():
                                         filename = f"{file_stem}{sfx}.pdf"
                                         media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] PDF generated successfully despite NotImplementedError (found in output_dir)")
-                                        return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
+                                        return file_download_response(path=str(pdf_file_path), media_type=media_type, filename=filename)
                                     logger.error(LogModule.EXPORT, f"[DOWNLOAD] PDF was not generated despite NotImplementedError")
                                     raise HTTPException(
                                         status_code=500,
@@ -4849,7 +4852,7 @@ class DownloadService:
                                                         f"[DOWNLOAD] Generated bilingual MOBI via Pandoc EPUB + Calibre "
                                                         f"(size={os.path.getsize(out_temp.name)} bytes)",
                                                     )
-                                                    return FileResponse(
+                                                    return file_download_response(
                                                         path=out_temp.name,
                                                         media_type=media_type,
                                                         filename=filename,
@@ -4869,7 +4872,7 @@ class DownloadService:
                                                     f"[DOWNLOAD] Generated bilingual EPUB via Pandoc "
                                                     f"(size={os.path.getsize(epub_temp.name)} bytes)",
                                                 )
-                                                return FileResponse(
+                                                return file_download_response(
                                                     path=epub_temp.name,
                                                     media_type=media_type,
                                                     filename=filename,
@@ -4900,7 +4903,7 @@ class DownloadService:
                         if temp_file and os.path.exists(temp_file.name):
                             file_size = os.path.getsize(temp_file.name)
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated revised {file_type} file: {temp_file.name} (size: {file_size} bytes)")
-                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                            return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                         else:
                             temp_file_info = temp_file.name if temp_file else 'None'
                             logger.error(LogModule.EXPORT, f"[DOWNLOAD] Failed to generate revised {file_type} file, temp_file: {temp_file}, exists: {temp_file_info}")
@@ -4919,7 +4922,7 @@ class DownloadService:
                                     media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
                                     if os.path.exists(temp_file.name):
                                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully generated MD from rebuilt document content")
-                                        return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                                        return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                                 except Exception as e2:
                                     logger.error(LogModule.EXPORT, f"[DOWNLOAD] Failed to generate MD from rebuilt document: {e2}", exc_info=True)
                             # Fall through to original logic
@@ -5006,7 +5009,7 @@ class DownloadService:
                                         filename = f"{file_stem}{sfx}.html"
                                         media_type = MEDIA_TYPES.get(file_type, "text/html; charset=utf-8")
                                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated revised HTML file from DOCX: {temp_file.name} (size: {os.path.getsize(temp_file.name)} bytes)")
-                                        return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                                        return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                                     except Exception as html_error:
                                         logger.error(LogModule.EXPORT, f"Failed to export HTML for task {task_id}: {html_error}", exc_info=True)
                                         raise HTTPException(
@@ -5089,7 +5092,7 @@ class DownloadService:
                                                 filename = os.path.basename(pdf_path) or f"{file_stem}{sfx}.pdf"
                                                 media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using pre-generated PDF for MOBI/EPUB workflow (regenerate branch): {pdf_path}")
-                                                return FileResponse(path=pdf_path, media_type=media_type, filename=filename)
+                                                return file_download_response(path=pdf_path, media_type=media_type, filename=filename)
                                         logger.error(LogModule.EXPORT, f"[DOWNLOAD] Pre-generated PDF not found for MOBI/EPUB workflow in regenerate branch.")
                                         raise HTTPException(
                                             status_code=404,
@@ -5129,14 +5132,14 @@ class DownloadService:
                                         if gen_pdf and os.path.exists(gen_pdf.get("path", "")):
                                             filename = os.path.basename(gen_pdf["path"]) or f"{file_stem}{sfx}.pdf"
                                             media_type = MEDIA_TYPES.get(file_type, "application/pdf")
-                                            return FileResponse(path=gen_pdf["path"], media_type=media_type, filename=filename)
+                                            return file_download_response(path=gen_pdf["path"], media_type=media_type, filename=filename)
                                         
                                         # Also check if PDF file exists in output_dir
                                         pdf_file_path = output_dir / f"{file_stem}{sfx}.pdf"
                                         if pdf_file_path.exists():
                                             filename = f"{file_stem}{sfx}.pdf"
                                             media_type = MEDIA_TYPES.get(file_type, "application/pdf")
-                                            return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
+                                            return file_download_response(path=str(pdf_file_path), media_type=media_type, filename=filename)
                                     except NotImplementedError as not_impl_error:
                                         # Windows asyncio limitation - check if PDF was still generated
                                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] NotImplementedError during PDF generation (Windows asyncio limitation): {not_impl_error}")
@@ -5148,12 +5151,12 @@ class DownloadService:
                                             filename = os.path.basename(gen_pdf["path"]) or f"{file_stem}{sfx}.pdf"
                                             media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] PDF generated successfully despite NotImplementedError")
-                                            return FileResponse(path=gen_pdf["path"], media_type=media_type, filename=filename)
+                                            return file_download_response(path=gen_pdf["path"], media_type=media_type, filename=filename)
                                         elif pdf_file_path.exists():
                                             filename = f"{file_stem}{sfx}.pdf"
                                             media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] PDF generated successfully despite NotImplementedError (found in output_dir)")
-                                            return FileResponse(path=str(pdf_file_path), media_type=media_type, filename=filename)
+                                            return file_download_response(path=str(pdf_file_path), media_type=media_type, filename=filename)
                                         else:
                                             logger.error(LogModule.EXPORT, f"[DOWNLOAD] PDF was not generated despite NotImplementedError")
                                             raise HTTPException(
@@ -5179,7 +5182,7 @@ class DownloadService:
                         
                             if temp_file and os.path.exists(temp_file.name):
                                 logger.info(LogModule.EXPORT, f"Generated revised {file_type} file from DOCX: {temp_file.name}")
-                                return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                                return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                             else:
                                 logger.error(LogModule.EXPORT, f"Failed to generate revised {file_type} file from DOCX, falling back to original")
                                 has_revisions = False
@@ -5203,7 +5206,7 @@ class DownloadService:
                         filename = f"{file_stem}{sfx}.txt"
                         media_type = MEDIA_TYPES.get(file_type, "text/plain; charset=utf-8")
                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual TXT file: {temp_file.name}")
-                        return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                        return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                     else:
                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Bilingual TXT rebuild produced empty content, falling back")
                         has_revisions = False
@@ -5222,7 +5225,7 @@ class DownloadService:
                         filename = f"{file_stem}{sfx}.srt"
                         media_type = MEDIA_TYPES.get(file_type, "text/plain; charset=utf-8")
                         logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual SRT file: {temp_file.name}")
-                        return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                        return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                     else:
                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Bilingual SRT rebuild produced empty content, falling back")
                         has_revisions = False
@@ -5254,7 +5257,7 @@ class DownloadService:
                                 LogModule.EXPORT,
                                 f"[DOWNLOAD] Generated bilingual HTML from PPTX segments: {temp_file.name}",
                             )
-                            return FileResponse(
+                            return file_download_response(
                                 path=temp_file.name, media_type=media_type, filename=filename
                             )
                         else:
@@ -5272,7 +5275,7 @@ class DownloadService:
                                 LogModule.EXPORT,
                                 f"[DOWNLOAD] Generated bilingual MD from PPTX segments: {temp_file.name}",
                             )
-                            return FileResponse(
+                            return file_download_response(
                                 path=temp_file.name, media_type=media_type, filename=filename
                             )
                     elif file_type == "pptx":
@@ -5291,7 +5294,7 @@ class DownloadService:
                                 "application/vnd.openxmlformats-officedocument.presentationml.presentation",
                             )
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual PPTX file: {temp_file.name}")
-                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                            return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Bilingual PPTX rebuild produced empty content, falling back")
                         has_revisions = False
                     else:
@@ -5328,7 +5331,7 @@ class DownloadService:
                                 LogModule.EXPORT,
                                 f"[DOWNLOAD] Generated bilingual HTML from XLSX segments: {temp_file.name}",
                             )
-                            return FileResponse(
+                            return file_download_response(
                                 path=temp_file.name, media_type=media_type, filename=filename
                             )
                         else:
@@ -5346,7 +5349,7 @@ class DownloadService:
                                 LogModule.EXPORT,
                                 f"[DOWNLOAD] Generated bilingual MD from XLSX segments: {temp_file.name}",
                             )
-                            return FileResponse(
+                            return file_download_response(
                                 path=temp_file.name, media_type=media_type, filename=filename
                             )
                     elif file_type == "xlsx":
@@ -5365,7 +5368,7 @@ class DownloadService:
                                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             )
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated bilingual XLSX file: {temp_file.name}")
-                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                            return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Bilingual XLSX rebuild produced empty content, falling back")
                         has_revisions = False
                     else:
@@ -5488,7 +5491,7 @@ class DownloadService:
                                 filename = os.path.basename(file_path) or f"{file_stem}{sfx}.pdf"
                                 media_type = MEDIA_TYPES.get(file_type, "application/pdf")
                                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Returning generated PDF for MOBI/EPUB original file: {file_path}")
-                                return FileResponse(path=file_path, media_type=media_type, filename=filename)
+                                return file_download_response(path=file_path, media_type=media_type, filename=filename)
                         logger.error(LogModule.EXPORT, f"[DOWNLOAD] Generated PDF not found for MOBI/EPUB original file. Original filename: {original_filename}")
                         raise HTTPException(
                             status_code=404,
@@ -5991,7 +5994,7 @@ class DownloadService:
                     file_path = file_info["path"]
                     filename = file_info["filename"]
                     media_type = MEDIA_TYPES.get(file_type, "text/markdown; charset=utf-8")
-                    return FileResponse(path=file_path, media_type=media_type, filename=filename)
+                    return file_download_response(path=file_path, media_type=media_type, filename=filename)
                 else:
                     # MD doesn't exist and we couldn't regenerate it
                     # Log detailed info for debugging
@@ -6025,7 +6028,7 @@ class DownloadService:
                                 f"[DOWNLOAD] Rebuilt HTML from html_translated_texts "
                                 f"(chars={len(html_rebuilt)}); task_id={task_id}",
                             )
-                            return FileResponse(
+                            return file_download_response(
                                 path=temp_file.name,
                                 media_type=MEDIA_TYPES.get("html", "text/html; charset=utf-8"),
                                 filename=f"{file_stem}{sfx}.html",
@@ -6041,7 +6044,7 @@ class DownloadService:
                     filename = html_info.get("filename") or os.path.basename(html_path)
                     media_type = MEDIA_TYPES.get(file_type, "text/html; charset=utf-8")
                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using pre-generated html: {html_path}")
-                    return FileResponse(path=html_path, media_type=media_type, filename=filename)
+                    return file_download_response(path=html_path, media_type=media_type, filename=filename)
                 if workflow_type == "markdown_based":
                     html_resp = _markdown_based_html_file_response_from_segments(
                         task_state,
@@ -6073,7 +6076,7 @@ class DownloadService:
                     filename = file_info.get("filename") or os.path.basename(file_path)
                     media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using pre-generated {file_type} file: {file_path}")
-                    return FileResponse(path=file_path, media_type=media_type, filename=filename)
+                    return file_download_response(path=file_path, media_type=media_type, filename=filename)
                 
                 # If not in downloadable_files, try to get from workflow's translated document
                 workflow_instance = task_state.get("workflow_instance")
@@ -6092,7 +6095,7 @@ class DownloadService:
                             filename = f"{file_stem}{sfx}.docx"
                             media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated DOCX from workflow's translated document: {temp_file.name}")
-                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                            return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                     except Exception as e:
                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to get DOCX from workflow instance: {e}", exc_info=True)
                 
@@ -6112,7 +6115,7 @@ class DownloadService:
                             filename = f"{file_stem}{sfx}.docx"
                             media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully exported DOCX from workflow: {temp_file.name}")
-                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                            return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                     except Exception as e:
                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to export DOCX from workflow instance: {e}", exc_info=True)
                 
@@ -6122,7 +6125,7 @@ class DownloadService:
                     filename = os.path.basename(original_file_path) or f"{task_state.get('original_filename_stem', 'translated')}{sfx}.docx"
                     media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using original DOCX file as fallback: {original_file_path}")
-                    return FileResponse(path=original_file_path, media_type=media_type, filename=filename)
+                    return file_download_response(path=original_file_path, media_type=media_type, filename=filename)
                 
                 # Last resort: log error and raise 404 with helpful message
                 logger.error(LogModule.EXPORT, f"[DOWNLOAD] Task {task_id}: Cannot find DOCX file. "
@@ -6152,7 +6155,7 @@ class DownloadService:
                                 LogModule.EXPORT,
                                 f"[DOWNLOAD] Using pre-generated {file_type} file: {file_path}",
                             )
-                            return FileResponse(
+                            return file_download_response(
                                 path=file_path, media_type=media_type, filename=filename,
                             )
                         logger.warning(
@@ -6204,7 +6207,7 @@ class DownloadService:
                                     f"[DOWNLOAD] Successfully exported MOBI from workflow EPUB: "
                                     f"{temp_file.name}",
                                 )
-                                return FileResponse(
+                                return file_download_response(
                                     path=temp_file.name,
                                     media_type=media_type,
                                     filename=filename,
@@ -6230,7 +6233,7 @@ class DownloadService:
                     filename = file_info.get("filename") or os.path.basename(file_path)
                     media_type = MEDIA_TYPES.get(file_type, "application/epub+zip")
                     logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using pre-generated {file_type} file: {file_path}")
-                    return FileResponse(path=file_path, media_type=media_type, filename=filename)
+                    return file_download_response(path=file_path, media_type=media_type, filename=filename)
                 
                 # If not in downloadable_files, try to get from workflow's translated document
                 workflow_instance = task_state.get("workflow_instance")
@@ -6249,7 +6252,7 @@ class DownloadService:
                             filename = f"{file_stem}{sfx}.epub"
                             media_type = MEDIA_TYPES.get(file_type, "application/epub+zip")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Generated EPUB from workflow's translated document: {temp_file.name}")
-                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                            return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                     except Exception as e:
                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to get EPUB from workflow instance: {e}", exc_info=True)
                 
@@ -6269,7 +6272,7 @@ class DownloadService:
                             filename = f"{file_stem}{sfx}.epub"
                             media_type = MEDIA_TYPES.get(file_type, "application/epub+zip")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully exported EPUB from workflow: {temp_file.name}")
-                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                            return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                     except Exception as e:
                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to export EPUB from workflow instance: {e}", exc_info=True)
             
@@ -6295,7 +6298,7 @@ class DownloadService:
                                 filename = f"{file_stem}{sfx}.docx"
                                 media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully converted HTML to DOCX for TXT workflow: {temp_file.name}")
-                                return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                                return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                     except Exception as html_error:
                         logger.warning(LogModule.EXPORT, f"[DOWNLOAD] Failed to convert HTML to DOCX for TXT workflow: {html_error}, trying MD conversion", exc_info=True)
                 
@@ -6323,7 +6326,7 @@ class DownloadService:
                             filename = f"{file_stem}{sfx}.docx"
                             media_type = MEDIA_TYPES.get(file_type, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
                             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Successfully converted MD to DOCX for TXT workflow: {temp_file.name}")
-                            return FileResponse(path=temp_file.name, media_type=media_type, filename=filename)
+                            return file_download_response(path=temp_file.name, media_type=media_type, filename=filename)
                     except Exception as md_error:
                         logger.error(LogModule.EXPORT, f"[DOWNLOAD] Failed to convert MD to DOCX for TXT workflow: {md_error}", exc_info=True)
                 
@@ -6391,7 +6394,7 @@ class DownloadService:
                 filename = file_info.get("filename") or os.path.basename(file_path)
                 media_type = MEDIA_TYPES.get(file_type, "application/octet-stream")
                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Using pre-generated {file_type} file: {file_path}")
-                return FileResponse(path=file_path, media_type=media_type, filename=filename)
+                return file_download_response(path=file_path, media_type=media_type, filename=filename)
         
         # File doesn't exist
         raise HTTPException(status_code=404,
@@ -6566,7 +6569,7 @@ class DownloadService:
             media_type = "application/octet-stream"
         
         filename = os.path.basename(file_path)
-        return FileResponse(path=file_path, media_type=media_type, filename=filename)
+        return file_download_response(path=file_path, media_type=media_type, filename=filename)
     
     def _export_debug_segments(self, task_id: str, task_state: Dict[str, Any], docx_file_path: str):
         """

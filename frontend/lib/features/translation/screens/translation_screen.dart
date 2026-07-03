@@ -6009,9 +6009,45 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     if (state.downloading[fileType] == true) return; // Already downloading
 
     // URL (including any format settings) is built by caller widgets.
-    // Keep this method free of ref.read to avoid using Riverpod ref after
-    // this widget is disposed.
     final String finalUrl = url;
+
+    // Resolve filename and suffix before any async work (avoid ref-after-dispose).
+    final Uri uri = Uri.parse(finalUrl);
+    final String? embedImagesParam = uri.queryParameters['embed_images'];
+    final bool isMdWithImagesFolder = fileType.toLowerCase() == 'md' &&
+        embedImagesParam != null &&
+        embedImagesParam.toLowerCase() == 'false';
+    final String originalName = state.pickedFile?.name ??
+        widget.reeditFileName ??
+        'translated';
+    final String suffix = isConvertDownload
+        ? ref.read(globalSettingsProvider).convertOutputSuffix
+        : ref.read(globalSettingsProvider).translateOutputSuffix;
+    final String actualFileType = isMdWithImagesFolder ? 'zip' : fileType;
+    final String filename = buildDownloadFilename(
+      originalName: originalName,
+      extension: actualFileType,
+      suffix: suffix,
+    );
+    final String baseName = filename.endsWith('.$actualFileType')
+        ? filename.substring(0, filename.length - actualFileType.length - 1)
+        : filename;
+
+    // Desktop: prompt save location before long-running export generation.
+    String? desktopSavePath;
+    if (!kIsWeb) {
+      desktopSavePath = await FilePicker.platform.saveFile(
+        dialogTitle: isConvertDownload
+            ? 'Save Converted File'
+            : 'Save Translated File',
+        fileName: filename,
+        type: FileType.custom,
+        allowedExtensions: <String>[actualFileType],
+      );
+      if (desktopSavePath == null) {
+        return;
+      }
+    }
 
     notifier.setDownloading(fileType, true);
     if (mounted) {
@@ -6021,31 +6057,6 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
     try {
       final TranslationService svc = TranslationService();
       final List<int> bytes = await svc.downloadFile(finalUrl);
-
-      // Check if this is MD with images folder (embed_images=false)
-      // In this case, backend returns a ZIP file, so we need to use .zip extension
-      final Uri uri = Uri.parse(finalUrl);
-      final String? embedImagesParam = uri.queryParameters['embed_images'];
-      final bool isMdWithImagesFolder = fileType.toLowerCase() == 'md' &&
-          embedImagesParam != null &&
-          embedImagesParam.toLowerCase() == 'false';
-
-      // Generate filename with configurable suffix
-      final originalName = state.pickedFile?.name ??
-          widget.reeditFileName ??
-          'translated';
-      final String suffix = isConvertDownload
-          ? ref.read(globalSettingsProvider).convertOutputSuffix
-          : ref.read(globalSettingsProvider).translateOutputSuffix;
-      final String actualFileType = isMdWithImagesFolder ? 'zip' : fileType;
-      final String filename = buildDownloadFilename(
-        originalName: originalName,
-        extension: actualFileType,
-        suffix: suffix,
-      );
-      final String baseName = filename.endsWith('.$actualFileType')
-          ? filename.substring(0, filename.length - actualFileType.length - 1)
-          : filename;
 
       // Save file
       if (kIsWeb) {
@@ -6063,21 +6074,10 @@ class _TranslationScreenState extends ConsumerState<TranslationScreen> {
           _showSnackBar('File downloaded: $filename', Colors.green);
         }
       } else {
-        // Desktop: use FilePicker to save
-        final String? path = await FilePicker.platform.saveFile(
-          dialogTitle: isConvertDownload
-              ? 'Save Converted File'
-              : 'Save Translated File',
-          fileName: filename,
-          type: FileType.custom,
-          allowedExtensions: <String>[actualFileType],
-        );
-        if (path != null) {
-          final File file = File(path);
-          await file.writeAsBytes(bytes, flush: true);
-          if (mounted) {
-            _showSnackBar('File saved: $filename', Colors.green);
-          }
+        final File file = File(desktopSavePath!);
+        await file.writeAsBytes(bytes, flush: true);
+        if (mounted) {
+          _showSnackBar('File saved: $filename', Colors.green);
         }
       }
     } catch (e) {

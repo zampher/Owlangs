@@ -75,6 +75,8 @@ if getattr(sys, "frozen", False):
         # Batch download + configurable output suffix (app_routes_download, MCP service_layer)
         "output_suffix",
         "batch_download_zip",
+        # RFC 5987 Content-Disposition (download_service, auth/routes, export routes)
+        "http_content_disposition",
     )
     import importlib
     for _sub in _utils_submodules:

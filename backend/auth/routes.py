@@ -23,6 +23,10 @@ from backend.config.secrets_manager import get_secrets_manager
 from .local_users import get_local_user_store, LocalUserRole
 from logger import unified_logger as logger
 from logger.logger import LogModule
+from utils.http_content_disposition import (
+    bytes_download_response,
+    file_download_response,
+)
 
 def _is_desktop_localhost(request: Request) -> bool:
     """True if request is from localhost with X-Client: desktop (desktop app, no login → treat as admin)."""
@@ -1419,7 +1423,6 @@ async def export_all_glossaries(
     - format=csvzip: ZIP archive with per-glossary CSVs (five columns)
     """
     from glossary.manager import get_glossary_manager
-    from fastapi.responses import FileResponse
     from openpyxl import Workbook
     import tempfile
     import re
@@ -1490,7 +1493,7 @@ async def export_all_glossaries(
                 add_csv_for_glossary(personal_glossary.name or personal_glossary.id, data)
 
         filename = "glossaries_export.zip"
-        return FileResponse(tmp.name, filename=filename, media_type="application/zip")
+        return file_download_response(tmp.name, filename=filename, media_type="application/zip")
 
     # Default: XLSX multi-sheet
     wb = Workbook()
@@ -1541,7 +1544,7 @@ async def export_all_glossaries(
     tmp.flush()
 
     filename = "glossaries_export.xlsx"
-    return FileResponse(tmp.name, filename=filename, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return file_download_response(tmp.name, filename=filename, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @auth_router.post("/glossaries/parse-tbx")
@@ -1719,7 +1722,6 @@ async def download_glossary(
     """
     from glossary.manager import get_glossary_manager
     from glossary.tbx_converter import entries_to_tbx_bytes
-    from fastapi.responses import FileResponse
     import tempfile
 
     manager = get_glossary_manager()
@@ -1750,7 +1752,7 @@ async def download_glossary(
         tmp.write(tbx_bytes)
         tmp.close()
 
-        return FileResponse(
+        return file_download_response(
             path=tmp.name,
             filename=f"{base_name}.tbx",
             media_type='application/xml'
@@ -1772,7 +1774,7 @@ async def download_glossary(
             ])
         tmp.close()
 
-        return FileResponse(
+        return file_download_response(
             path=tmp.name,
             filename=f"{base_name}.csv",
             media_type='text/csv'
@@ -2754,10 +2756,10 @@ async def download_prompt(
     import json
     content = json.dumps(prompts_dict, ensure_ascii=False, indent=2)
     
-    return Response(
-        content=content,
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-        media_type='application/json'
+    return bytes_download_response(
+        content.encode("utf-8"),
+        filename=filename,
+        media_type="application/json",
     )
 
 

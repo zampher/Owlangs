@@ -16,6 +16,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from backend.app.models.service import PdfExportHtmlRequest, PdfExportRequest
+from utils.http_content_disposition import streaming_download_response
 
 # Create router
 router = APIRouter()
@@ -62,10 +63,10 @@ async def export_pdf(req: PdfExportRequest):
             await browser.close()
 
             # Return PDF as streaming response
-            return StreamingResponse(
+            return streaming_download_response(
                 io.BytesIO(pdf_buffer),
+                filename=req.filename or "document.pdf",
                 media_type="application/pdf",
-                headers={"Content-Disposition": f"attachment; filename={req.filename or 'document.pdf'}"}
             )
 
     except Exception as e:
@@ -159,10 +160,10 @@ async def export_pdf_from_html(req: PdfExportHtmlRequest):
             await browser.close()
 
             # Return PDF as streaming response
-            return StreamingResponse(
+            return streaming_download_response(
                 io.BytesIO(pdf_buffer),
+                filename=req.filename or "document.pdf",
                 media_type="application/pdf",
-                headers={"Content-Disposition": f"attachment; filename={req.filename or 'document.pdf'}"}
             )
 
     except Exception as e:

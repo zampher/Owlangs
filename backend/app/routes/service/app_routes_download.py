@@ -23,6 +23,10 @@ from backend.app.services.task import task_manager
 from backend.app.services.translation.translation_result_stash import load_meta
 from logger import unified_logger as logger
 from logger.logger import LogModule
+from utils.http_content_disposition import (
+    apply_content_disposition_header,
+    bytes_download_response,
+)
 from utils.batch_download_zip import (
     add_md_zip_download_to_batch_archive,
     make_batch_folder_name,
@@ -47,7 +51,7 @@ def _apply_inline_preview_headers(
     if not preview or file_type not in _PREVIEW_INLINE_FILE_TYPES:
         return
     filename = getattr(resp, "filename", None) or "preview.html"
-    resp.headers["Content-Disposition"] = f'inline; filename="{filename}"'
+    apply_content_disposition_header(resp, filename, disposition="inline")
 
 
 class BatchDownloadRequest(BaseModel):
@@ -331,13 +335,11 @@ async def service_batch_download_route(body: BatchDownloadRequest):
             content={"success": False, "message": "All tasks failed or were skipped", "manifest": manifest},
         )
 
-    return Response(
-        content=content,
+    return bytes_download_response(
+        content,
+        filename=f"batch_download_{body.file_type}.zip",
         media_type="application/zip",
-        headers={
-            "Content-Disposition": f"attachment; filename=batch_download_{body.file_type}.zip",
-            "Content-Length": str(len(content)),
-        },
+        headers={"Content-Length": str(len(content))},
     )
 
 

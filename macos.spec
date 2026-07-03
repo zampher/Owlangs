@@ -143,6 +143,8 @@ hiddenimports = [
     'backend.utils.batch_download_zip',
     'utils.output_suffix',
     'utils.batch_download_zip',
+    'backend.utils.http_content_disposition',
+    'utils.http_content_disposition',
     # backend.app (uvicorn "app.factory:app"; app = backend/app when backend_dir on path)
     'backend.app',
     'backend.app.factory',

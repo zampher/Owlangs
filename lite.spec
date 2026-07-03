@@ -167,6 +167,8 @@ hiddenimports = [
     'backend.utils.batch_download_zip',
     'utils.output_suffix',
     'utils.batch_download_zip',
+    'backend.utils.http_content_disposition',
+    'utils.http_content_disposition',
     # Ensure app module is imported
     'app',
     'app.app_main',

@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from starlette.responses import FileResponse
+from utils.http_content_disposition import file_download_response
 
 from backend.app.routes.service.app_routes_download import _apply_inline_preview_headers
 
@@ -19,7 +19,7 @@ class TestDownloadPreviewInline(unittest.TestCase):
         with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tmp:
             path = tmp.name
         try:
-            resp = FileResponse(path=path, filename="doc.html")
+            resp = file_download_response(path=path, filename="doc.html")
             _apply_inline_preview_headers(resp, "html", True)
             self.assertEqual(
                 resp.headers["Content-Disposition"],
@@ -32,7 +32,7 @@ class TestDownloadPreviewInline(unittest.TestCase):
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             path = tmp.name
         try:
-            resp = FileResponse(path=path, filename="doc.pdf")
+            resp = file_download_response(path=path, filename="doc.pdf")
             _apply_inline_preview_headers(resp, "pdf", True)
             self.assertNotIn(
                 "inline",

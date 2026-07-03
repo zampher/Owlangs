@@ -73,6 +73,7 @@ hiddenimports = [
     'backend.utils.extract_segments_debug', 'backend.utils.bilingual_export_utils',
     'backend.utils.output_suffix', 'backend.utils.batch_download_zip',
     'utils.output_suffix', 'utils.batch_download_zip',
+    'backend.utils.http_content_disposition', 'utils.http_content_disposition',
     'backend.utils.epub_fix',
     'backend.utils.ebook_metadata', 'backend.utils.epub_html_segments', 'backend.utils.pdf_splitter',
     'backend.utils.layout_merger', 'backend.utils.mineru_zip_merger', 'backend.utils.mineru_image_data_map',

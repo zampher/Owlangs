@@ -3,7 +3,12 @@
 
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +20,7 @@ import '../../../shared/services/config_service.dart';
 import '../../../shared/utils/app_logger.dart';
 import '../../../shared/utils/message_service.dart';
 import '../../../shared/utils/dialog_helper.dart';
+import '../../../shared/utils/download_filename_builder.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../settings/screens/ai_platform_settings.dart';
 import '../services/translation_content_parser.dart';
@@ -6345,7 +6351,7 @@ class _TranslationResultPreviewState
       taskId: _apiTaskId(),
       flowId: widget.flowId,
       downloads: downloads,
-      onDownload: widget.onDownload,
+      onDownload: _downloadExportFile,
       onRequestPreviewSettings: _handlePreviewSettingsRequest,
     );
 
@@ -6536,7 +6542,7 @@ class _TranslationResultPreviewState
             _lastSyncScroll = enabled;
           },
           onRequestPreviewSettings: _handlePreviewSettingsRequest,
-          onDownload: widget.onDownload,
+          onDownload: _downloadExportFile,
           onShowDownload: _showDownloadDialog,
           segmentScrollController: _supportsRevisionForMode(baseMode)
               ? _pdfRevisionScrollController
@@ -6743,7 +6749,7 @@ class _TranslationResultPreviewState
       downloadUrl: finalUrl,
       viewerUrl: viewerUrl,
       rendererType: rendererType,
-      onDownload: widget.onDownload,
+      onDownload: _downloadExportFile,
       onRequestPreviewSettings: _handlePreviewSettingsRequest,
     );
   }
@@ -6773,6 +6779,9 @@ class _TranslationResultPreviewState
     } catch (e) {
       // If status fetch fails, continue without format options
       status = null;
+    }
+    if (!mounted) {
+      return;
     }
     final bool isDocWorkflow = fileNameLower.endsWith('.docx') ||
         fileNameLower.endsWith('.doc') ||
@@ -7816,6 +7825,127 @@ class _TranslationResultPreviewState
     );
   }
 
+  /// Download export bytes and save locally. Runs inside [TranslationResultPreview]
+  /// so Riverpod [ref] stays valid while the export dialog / preview tab is open.
+  Future<void> _downloadExportFile(String fileType, String downloadUrl) async {
+    if (!mounted) {
+      return;
+    }
+
+    final dynamic translationState = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!))
+        : ref.read(translationStateProvider);
+    final dynamic translationNotifier = widget.flowId != null
+        ? ref.read(translationStateProviderFamily(widget.flowId!).notifier)
+        : ref.read(translationStateProvider.notifier);
+
+    if (translationState.downloading[fileType] == true) {
+      return;
+    }
+
+    final Uri uri = Uri.parse(downloadUrl);
+    final String? embedImagesParam = uri.queryParameters['embed_images'];
+    final bool isMdWithImagesFolder = fileType.toLowerCase() == 'md' &&
+        embedImagesParam != null &&
+        embedImagesParam.toLowerCase() == 'false';
+    final String originalName = widget.fileName ?? 'translated';
+    final String suffix =
+        ref.read(globalSettingsProvider).translateOutputSuffix;
+    final String actualFileType = isMdWithImagesFolder ? 'zip' : fileType;
+    final String filename = buildDownloadFilename(
+      originalName: originalName,
+      extension: actualFileType,
+      suffix: suffix,
+    );
+    final String baseName = filename.endsWith('.$actualFileType')
+        ? filename.substring(0, filename.length - actualFileType.length - 1)
+        : filename;
+
+    String? desktopSavePath;
+    if (!kIsWeb) {
+      desktopSavePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Translated File',
+        fileName: filename,
+        type: FileType.custom,
+        allowedExtensions: <String>[actualFileType],
+      );
+      if (desktopSavePath == null) {
+        return;
+      }
+    }
+
+    translationNotifier.setDownloading(fileType, true);
+    if (mounted) {
+      MessageService.showInfo(context, 'Export task has been started, please wait.');
+    }
+
+    try {
+      final List<int> bytes =
+          await TranslationService().downloadFile(downloadUrl);
+
+      if (kIsWeb) {
+        final MimeType mimeType = _exportMimeType(actualFileType);
+        await FileSaver.instance.saveFile(
+          name: baseName,
+          bytes: Uint8List.fromList(bytes),
+          ext: actualFileType,
+          mimeType: mimeType,
+        );
+        if (mounted) {
+          MessageService.showSuccess(context, 'File downloaded: $filename');
+        }
+      } else {
+        await File(desktopSavePath!).writeAsBytes(bytes, flush: true);
+        if (mounted) {
+          MessageService.showSuccess(context, 'File saved: $filename');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        String message = 'Failed to download $fileType: $e';
+        if (e is DioException) {
+          final dynamic data = e.response?.data;
+          if (data is Map && data['detail'] is String) {
+            message = data['detail'] as String;
+          } else if (data is List<int> && data.isNotEmpty) {
+            try {
+              final String text = utf8.decode(data, allowMalformed: true).trim();
+              if (text.isNotEmpty) {
+                final dynamic parsed = jsonDecode(text);
+                if (parsed is Map && parsed['detail'] is String) {
+                  message = parsed['detail'] as String;
+                }
+              }
+            } catch (_) {
+              // keep default message
+            }
+          } else if (data is String) {
+            final String s = data.trim();
+            if (s.isNotEmpty && s.length <= 2000) {
+              message = s;
+            }
+          }
+        }
+        MessageService.showError(context, message);
+      }
+    } finally {
+      translationNotifier.setDownloading(fileType, false);
+    }
+  }
+
+  MimeType _exportMimeType(String fileType) {
+    switch (fileType.toLowerCase()) {
+      case 'docx':
+        return MimeType.microsoftWord;
+      case 'pdf':
+        return MimeType.pdf;
+      case 'zip':
+        return MimeType.zip;
+      default:
+        return MimeType.other;
+    }
+  }
+
   /// Handle format download with format parameters (for Preview Settings)
   Future<void> _handlePreviewFormatDownload(
     String fileType, {
@@ -7826,11 +7956,6 @@ class _TranslationResultPreviewState
     String? ebookEngine,
     String? rendererType,
   }) async {
-    if (widget.onDownload == null) {
-      MessageService.showError(context, 'Download not available');
-      return;
-    }
-
     try {
       final TranslationService svc = TranslationService();
       var downloadUrl = svc.buildDownloadUrl(_apiTaskId(), fileType);
@@ -7917,7 +8042,7 @@ class _TranslationResultPreviewState
       }
 
       downloadUrl = uri.replace(queryParameters: queryParams).toString();
-      widget.onDownload!(fileType, downloadUrl);
+      await _downloadExportFile(fileType, downloadUrl);
     } catch (e) {
       if (mounted) {
         MessageService.showError(context, 'Failed to download $fileType: $e');
