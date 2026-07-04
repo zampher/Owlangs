@@ -894,14 +894,13 @@ async def get_translation_segments_api(
     # can display categories like language_match even when segments are not excluded.
     _enrich_translation_segments_with_detected_reasons(task_id, response_data)
 
-    # Attach has_latex flag to each segment so frontend can decide whether to show
-    # the "Test PDF Compatibility" button (only useful for segments with LaTeX).
-    from utils.latex_repair_payload import has_latex_content
+    # Attach latex_flags / has_latex so frontend can show PDF-compat check for LaTeX segments.
+    from utils.segment_latex_flags import attach_latex_flags_to_segment
     segments_list = response_data.get("segments", []) if isinstance(response_data, dict) else []
     for seg in segments_list:
         if isinstance(seg, dict):
             text = seg.get("modified_text") or seg.get("target_text") or seg.get("source_text") or ""
-            seg["has_latex"] = has_latex_content(text)
+            attach_latex_flags_to_segment(seg, text=text, recompute=True)
 
     # Enrich segments with layout_block_bbox on demand (for segments that have
     # layout_block_indices but lack stored bbox, e.g. from older tasks).

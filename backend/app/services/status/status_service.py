@@ -2296,13 +2296,27 @@ class StatusService:
                     # Last resort: set as unknown
                     seg_obj["exclusion_reason"] = "unknown"
             
-            # Attach has_latex flag so frontend knows whether to show PDF-compat check button
+            # Attach latex_flags / has_latex for PDF-compat check and mixed render dispatch
             try:
-                from utils.latex_repair_payload import has_latex_content
-                _preview_text = seg_obj.get("target_text") or seg_obj.get("text") or seg_obj.get("source_text", "")
-                seg_obj["has_latex"] = has_latex_content(_preview_text)
+                from utils.segment_latex_flags import attach_latex_flags_to_segment
+                _preview_text = (
+                    seg_obj.get("modified_text")
+                    or seg_obj.get("target_text")
+                    or seg_obj.get("text")
+                    or seg_obj.get("source_text", "")
+                )
+                attach_latex_flags_to_segment(
+                    seg_obj,
+                    text=_preview_text,
+                    recompute=True,
+                )
             except Exception:
                 seg_obj["has_latex"] = False
+                seg_obj["latex_flags"] = {
+                    "present": False,
+                    "mixed": False,
+                    "needs_delimiter_wrap": False,
+                }
 
             # Attach cached PDF compat result if available
             _pdf_compat_results = st.get("pdf_compat_results")
@@ -3544,7 +3558,16 @@ class StatusService:
                 "is_table_body": is_table_body,  # Mark if this is table_body (for frontend display)
                 "is_chart_body": is_chart_body,  # Mark if this is chart_body (for frontend display)
             }
-            
+            chunk_type_value = getattr(chunk, "chunk_type", None)
+            if chunk_type_value:
+                segment_data["chunk_type"] = chunk_type_value
+            from utils.segment_latex_flags import attach_latex_flags_to_segment
+            attach_latex_flags_to_segment(
+                segment_data,
+                text=chunk_text,
+                block_type=block_type,
+            )
+
             # Add exclusion_reason if segment is excluded
             # This will be populated after we detect exclusion reasons for all segments
             # For now, set to None - it will be updated later in the function
@@ -4133,6 +4156,14 @@ class StatusService:
                 "is_image": chunk_type == "image",
                 "is_excluded": is_chunk_excluded,  # CRITICAL: Mark excluded chunks for MDTranslator
             }
+            chunk_block_type = None
+            if chunk_segment_indices and chunk_segment_indices[0] < len(all_segments):
+                chunk_block_type = all_segments[chunk_segment_indices[0]].get("block_type")
+            from utils.segment_latex_flags import classify_latex_flags
+            chunk_info["latex_flags"] = classify_latex_flags(
+                chunk_text,
+                block_type=chunk_block_type,
+            )
             
             # CRITICAL: Log excluded chunks for debugging
             if is_chunk_excluded:

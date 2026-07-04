@@ -116,6 +116,7 @@ def layout_block_to_render_block(
     leading_em: float = 1.25,
     font_weight: str = "regular",
     font_style: str = "normal",
+    latex_flags: Optional[dict] = None,
 ) -> RenderBlock:
     """
     Convert an Owlangs LayoutBlock to a Typst RenderBlock.
@@ -154,9 +155,23 @@ def layout_block_to_render_block(
     else:
         render_kind = "markdown"
 
+    from utils.segment_latex_flags import (
+        classify_latex_flags,
+        normalize_text_for_typst_overlay,
+    )
+    if latex_flags is None:
+        latex_flags = classify_latex_flags(translated_text, block_type=block_type)
+    if latex_flags.get("present"):
+        translated_text = normalize_text_for_typst_overlay(
+            translated_text,
+            latex_flags,
+            block_type=block_type,
+        )
+        if render_kind in ("plain", "plain_line"):
+            render_kind = "markdown"
+
     # Detect if the text appears to contain formula tokens ($...$)
-    # Use  $  as a simple heuristic
-    if '$' in translated_text and render_kind == "plain":
+    if "$" in translated_text and render_kind in ("plain", "plain_line"):
         render_kind = "markdown"
 
     # Read font info from raw MinerU data if available

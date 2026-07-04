@@ -1,5 +1,4 @@
 # SPDX-FileCopyrightText: 2026 Zampher
-# SPDX-FileCopyrightText: 2026 Zampher
 # SPDX-License-Identifier: MPL-2.0
 
 """
@@ -28,10 +27,9 @@ DEFAULT_PDF_RENDERER_TYPE: str = "typst_overlay"
 
 
 def _segment_export_text(segment: Dict[str, Any], text_field: str) -> str:
-    """Resolve per-segment export text (modified_text falls back to target_text)."""
-    if text_field == "source_text":
-        return (segment.get("source_text") or "").strip()
-    return (segment.get("modified_text") or segment.get("target_text") or "").strip()
+    """Resolve per-segment export text with LaTeX normalization for Typst overlay."""
+    from utils.segment_latex_flags import prepare_segment_export_text
+    return prepare_segment_export_text(segment, text_field=text_field, for_typst=True)
 
 
 _expand_renderable_block_indices = expand_renderable_block_indices

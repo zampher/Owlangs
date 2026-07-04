@@ -12,12 +12,14 @@ Produces Markdown with $...$ around formula parts so downstream export can rende
 import re
 from typing import List, Tuple
 
-
-def is_math_token(token: str) -> bool:
-    """True if token looks like LaTeX (contains \\command, _{}, or ^{})."""
-    if not token:
-        return False
-    return "\\" in token or "_{" in token or "^{" in token
+# Inline math spans: LaTeX commands and identifier sub/superscripts (e.g. R_{m}, C_{d}).
+# Scan the full string instead of whitespace tokens so CJK punctuation glued to a
+# subscript (``C_{d}，都是...``) does not swallow the rest of the paragraph as math.
+_MATH_SPAN_RE = re.compile(
+    r"(?:\\(?:mathrm|mathbf|mathit|operatorname|text)\{[^{}]*\}"
+    r"|\\[a-zA-Z]+(?:\{[^{}]*\})*"
+    r"|[A-Za-z]+(?:_\{[^{}]*\}|\^\{[^{}]*\})+)"
+)
 
 
 def segment_mixed_text_into_md_segments(text: str) -> List[Tuple[bool, str]]:
@@ -30,33 +32,15 @@ def segment_mixed_text_into_md_segments(text: str) -> List[Tuple[bool, str]]:
     """
     if not text:
         return []
-    parts = re.split(r"(\s+)", text)
     segments: List[Tuple[bool, str]] = []
-    current_math: List[str] = []
-    current_plain: List[str] = []
-
-    def flush_math() -> None:
-        if current_math:
-            segments.append((True, " ".join(current_math)))
-            current_math.clear()
-
-    def flush_plain() -> None:
-        if current_plain:
-            segments.append((False, "".join(current_plain)))
-            current_plain.clear()
-
-    for p in parts:
-        if re.match(r"^\s+$", p):
-            flush_math()
-            current_plain.append(p)
-        elif is_math_token(p):
-            flush_plain()
-            current_math.append(p)
-        else:
-            flush_math()
-            current_plain.append(p)
-    flush_math()
-    flush_plain()
+    last = 0
+    for match in _MATH_SPAN_RE.finditer(text):
+        if match.start() > last:
+            segments.append((False, text[last : match.start()]))
+        segments.append((True, match.group()))
+        last = match.end()
+    if last < len(text):
+        segments.append((False, text[last:]))
     return segments
 
 

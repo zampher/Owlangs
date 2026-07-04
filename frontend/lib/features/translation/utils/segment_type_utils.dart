@@ -76,10 +76,15 @@ Map<String, dynamic> segmentClassificationFieldsFromApi(
   final String? chunkType = segment['chunk_type'] as String? ??
       segInfo?['chunk_type'] as String?;
 
+  final dynamic latexFlagsRaw =
+      segment['latex_flags'] ?? segInfo?['latex_flags'];
+
   return <String, dynamic>{
     if (blockType != null && blockType.isNotEmpty) 'block_type': blockType,
     if (isTableBody) 'is_table_body': true,
     if (chunkType != null && chunkType.isNotEmpty) 'chunk_type': chunkType,
+    if (latexFlagsRaw is Map)
+      'latex_flags': Map<String, dynamic>.from(latexFlagsRaw),
   };
 }
 

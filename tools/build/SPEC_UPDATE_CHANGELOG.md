@@ -1,5 +1,19 @@
 # Spec文件更新日志
 
+## 2026-07-04 — LaTeX 混排标记层 (latex_flags)
+
+未提交改动新增 `backend/utils/segment_latex_flags.py`，并在 extract / API / PDF Typst overlay / Pandoc rebuild 路径中 lazy import。已在 `lite.spec`、`launcher_portable_onedir.spec`、`macos.spec` 补充：
+
+- `backend.utils.segment_latex_flags` — 片段 `latex_flags: {present, mixed, needs_delimiter_wrap}` 分类与 Typst/Pandoc 导出预处理（依赖 `backend.utils.mixed_formula_text`）
+
+**同批改动无需新增 spec 条目的模块：**
+
+- `backend/utils/mixed_formula_text.py` — 已有 hiddenimport；仅修复 CJK 标点粘连时的 `$...$` 包裹逻辑
+- `backend/test_segment_latex_flags.py` — 测试文件，不打包
+- `frontend/lib/features/translation/utils/segment_type_utils.dart` — 前端，不进 PyInstaller
+
+---
+
 ## 2026-06-27 — PDF overlay 优化 (5fbef42)
 
 `Optimize overlay for PDF preview` 新增模块，已在 `lite.spec`、`launcher_portable_onedir.spec`、`macos.spec` 补充：

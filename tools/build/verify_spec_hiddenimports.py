@@ -101,7 +101,7 @@ def main():
 
     spec_files = [
         project_root / 'lite.spec',
-        project_root / 'launcher_portable.spec',
+        project_root / 'launcher_portable_onedir.spec',
         project_root / 'macos.spec',
     ]
 

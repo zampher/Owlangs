@@ -909,10 +909,9 @@ def segment_overlay_export_text(
     segment: Dict[str, Any],
     text_field: str = "target_text",
 ) -> str:
-    """Resolve overlay export text (modified_text falls back to target_text)."""
-    if text_field == "source_text":
-        return (segment.get("source_text") or "").strip()
-    return (segment.get("modified_text") or segment.get("target_text") or "").strip()
+    """Resolve overlay export text with LaTeX normalization for Typst rendering."""
+    from utils.segment_latex_flags import prepare_segment_export_text
+    return prepare_segment_export_text(segment, text_field=text_field, for_typst=True)
 
 
 def collect_layout_block_indices_with_overlay_text(

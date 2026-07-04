@@ -146,6 +146,7 @@ hiddenimports = [
     'backend.utils.mineru_layout_utils',
     'backend.utils.format_convert_utils',
     'backend.utils.mixed_formula_text',
+    'backend.utils.segment_latex_flags',
     'backend.utils.markdown_chunk_merger',
     'backend.utils.language_detection_utils',
     'backend.utils.language_detector',

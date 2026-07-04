@@ -14,7 +14,7 @@ from logger.logger import LogModule
 from utils.translation_segments import get_translation_segments
 from utils.markdown_splitter import join_markdown_texts
 from utils.image_placeholder_utils import _replace_placeholders_with_images, PLACEHOLDER_PATTERN
-from utils.mixed_formula_text import mixed_text_to_md, has_mixed_formula_content
+from utils.segment_latex_flags import prepare_text_for_latex_render, resolve_segment_latex_flags
 from .html_tag_utils import _close_unclosed_inline_tags
 from .table_layout_utils import (
     _extract_chart_from_layout_block,
@@ -628,24 +628,21 @@ def _rebuild_markdown_from_layout_segments(
                                     formatted = f"$$\n{eq_content}\n$$"
                                 # If format doesn't match available data, keep original target_text
 
-                    # Additional handling for non-equation blocks that still contain LaTeX (e.g. algorithm lines)
-                    # when exporting equations as text. This covers segments like ALGORITHM1 where block_type is
-                    # "text" but content mixes plain text and LaTeX commands.
-                    if (
-                        equation_format == "text"
-                        and "interline_equation" not in block_types
-                        and formatted
-                    ):
-                        raw_non_eq = formatted
-                        is_mixed_non_eq = has_mixed_formula_content(raw_non_eq)
-                        if is_mixed_non_eq:
+                    # Mixed text + LaTeX in non-equation blocks (text, table_body, etc.)
+                    if equation_format == "text" and "interline_equation" not in block_types and formatted:
+                        latex_flags = resolve_segment_latex_flags(
+                            segment,
+                            text=formatted,
+                            recompute=True,
+                        )
+                        if latex_flags.get("needs_delimiter_wrap"):
                             logger.info(
                                 LogModule.RESTOR,
                                 f"[REBUILD] Mixed text with formula (non-equation block): "
                                 f"segment_index={segment_index}, block_indices={segment.get('layout_block_indices', [])}, "
-                                f"is_mixed={is_mixed_non_eq}, preview={repr((raw_non_eq or '')[:120])}..."
+                                f"latex_flags={latex_flags}, preview={repr((formatted or '')[:120])}..."
                             )
-                            formatted = mixed_text_to_md(raw_non_eq)
+                            formatted = prepare_text_for_latex_render(formatted, latex_flags)
             
             # Handle title formatting (independent of format parameters)
             if "title" in block_types:
