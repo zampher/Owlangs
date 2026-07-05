@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2025 QinHan
 // SPDX-License-Identifier: MPL-2.0
 
+import 'dart:async';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../l10n/app_localizations.dart';
@@ -13,6 +15,7 @@ import '../../../../shared/services/translation_service.dart';
 import '../common/exclusion_reason_editor.dart';
 import 'segment_pdf_typography_dialog.dart';
 import '../../utils/segment_type_utils.dart';
+import '../../utils/layout_bbox_text_split.dart';
 
 // Intent classes for keyboard shortcuts
 class _CancelEditingIntent extends Intent {
@@ -98,6 +101,10 @@ class TranslationSegmentItem extends StatefulWidget {
     this.tableStrokePt = 0,
     this.onTableStrokeChanged,
     this.showTableStroke = false,
+    this.layoutBlockBboxes,
+    this.layoutBlockIndices,
+    this.layoutGroupTextParts,
+    this.onLayoutGroupPartsEdit,
   });
   final String text;
   final String?
@@ -169,6 +176,14 @@ class TranslationSegmentItem extends StatefulWidget {
   final double tableStrokePt; // Table grid stroke width in pt (0 = hidden)
   final void Function(int index, double tableStrokePt)? onTableStrokeChanged;
   final bool showTableStroke;
+  /// Layout group bboxes (image pixel coords) for area-proportional text split.
+  final List<List<double>>? layoutBlockBboxes;
+  /// Layout block indices aligned with [layoutBlockBboxes].
+  final List<int>? layoutBlockIndices;
+  /// Stored per-block texts when user has edited layout group parts.
+  final Map<String, dynamic>? layoutGroupTextParts;
+  final Future<void> Function(int index, Map<int, String> parts)?
+      onLayoutGroupPartsEdit;
 
   @override
   State<TranslationSegmentItem> createState() => _TranslationSegmentItemState();
@@ -198,6 +213,13 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
   bool _localNeedsRetry = false;
   bool _localIsExcluded = false;
   bool _localIsCleared = false;
+
+  final Map<int, TextEditingController> _layoutPartControllers =
+      <int, TextEditingController>{};
+  List<int>? _layoutPartControllerIndices;
+  String _layoutPartsSnapshot = '';
+  bool _isLayoutGroupEditing = false;
+  bool _layoutPartsSaving = false;
 
   @override
   void initState() {
@@ -283,14 +305,56 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     if (oldWidget.isCleared != widget.isCleared) {
       _localIsCleared = widget.isCleared;
     }
+    if (!_layoutPartsSaving &&
+        _isLayoutGroupEditing &&
+        (oldWidget.layoutBlockIndices != widget.layoutBlockIndices ||
+            oldWidget.layoutBlockBboxes != widget.layoutBlockBboxes ||
+            oldWidget.layoutGroupTextParts != widget.layoutGroupTextParts ||
+            (oldWidget.text != widget.text && !_isEditing))) {
+      _syncLayoutPartControllers();
+    }
   }
 
   @override
   void dispose() {
+    _disposeLayoutPartControllers();
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _editFocusNode.dispose();
     super.dispose();
+  }
+
+  void _handleDoubleTapEdit() {
+    if (widget.isSource) {
+      return;
+    }
+    if (_canEditLayoutGroupParts()) {
+      _startLayoutGroupEditing();
+      return;
+    }
+    if (widget.onEdit != null) {
+      _startEditing();
+    }
+  }
+
+  void _startLayoutGroupEditing() {
+    if (!_canEditLayoutGroupParts() || _isLayoutGroupEditing || _isEditing) {
+      return;
+    }
+    widget.onEditingStarted?.call(widget.index);
+    _syncLayoutPartControllers(force: true);
+    setState(() => _isLayoutGroupEditing = true);
+  }
+
+  void _cancelLayoutGroupEditing() {
+    if (!_isLayoutGroupEditing) {
+      return;
+    }
+    setState(() {
+      _isLayoutGroupEditing = false;
+      _layoutPartsSaving = false;
+    });
+    _disposeLayoutPartControllers();
   }
 
   void _startEditing() {
@@ -581,21 +645,16 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
   Widget build(BuildContext context) => GestureDetector(
         key: widget.itemKey,
         behavior: HitTestBehavior.opaque, // Ensure entire area is clickable
-        onTap: _isEditing ? null : widget.onTap, // Click anywhere to select
-        onDoubleTap: widget.isSource || widget.onEdit == null
+        onTap: (_isEditing || _isLayoutGroupEditing) ? null : widget.onTap,
+        onDoubleTap: widget.isSource ||
+                (widget.onEdit == null && !_canEditLayoutGroupParts())
             ? null
-            : () {
-                AppLogger.log(
-                  'TranslationSegmentItem',
-                  'OUTER GestureDetector.onDoubleTap: index=${widget.index}, isSource=${widget.isSource}, onEdit=${widget.onEdit != null}, _isEditing=$_isEditing',
-                  level: LogLevel.info,
-                );
-                _startEditing();
-              },
+            : _handleDoubleTapEdit,
         child: Container(
-          // Use ValueKey to force ItemWithHeightMeasurement to remeasure when edit mode changes
-          // This ensures height cache is updated when switching between edit and preview modes
-          key: ValueKey('segment_${widget.index}_editing_$_isEditing'),
+          key: ValueKey(
+            'segment_${widget.index}_editing_${_isEditing}_'
+            'layoutGroup_$_isLayoutGroupEditing',
+          ),
           margin: const EdgeInsets.only(
             bottom: 1,
           ), // Further reduced from 2 to 1 for more compact display
@@ -633,7 +692,11 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
             ),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: _isEditing ? _buildEditMode() : _buildViewMode(),
+          child: _isEditing
+              ? _buildEditMode()
+              : (_isLayoutGroupEditing
+                  ? _buildLayoutGroupEditMode()
+                  : _buildViewMode()),
         ),
       );
 
@@ -739,6 +802,379 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     return widget.computedLeadingEm ??
         widget.leadingEm ??
         kPdfLeadingEmDefault;
+  }
+
+  bool _canUseLayoutGroupSplit() {
+    return widget.pdfRevisionMode &&
+        !widget.isSource &&
+        widget.layoutBlockBboxes != null &&
+        widget.layoutBlockBboxes!.length > 1 &&
+        widget.layoutBlockIndices != null &&
+        widget.layoutBlockIndices!.length > 1 &&
+        widget.text.trim().isNotEmpty;
+  }
+
+  bool _canEditLayoutGroupParts() {
+    return _canUseLayoutGroupSplit() &&
+        widget.onLayoutGroupPartsEdit != null;
+  }
+
+  void _disposeLayoutPartControllers() {
+    for (final TextEditingController controller
+        in _layoutPartControllers.values) {
+      controller.dispose();
+    }
+    _layoutPartControllers.clear();
+    _layoutPartControllerIndices = null;
+    _layoutPartsSnapshot = '';
+  }
+
+  void _syncLayoutPartControllers({bool force = false}) {
+    final List<int>? indices = widget.layoutBlockIndices;
+    final List<List<double>>? bboxes = widget.layoutBlockBboxes;
+    if (indices == null || bboxes == null || indices.length < 2) {
+      _disposeLayoutPartControllers();
+      return;
+    }
+    final Map<int, String>? stored =
+        parseLayoutGroupTextParts(widget.layoutGroupTextParts);
+    final List<String> texts = resolveLayoutGroupDisplayTexts(
+      text: widget.text,
+      bboxes: bboxes,
+      indices: indices,
+      storedParts: stored,
+    );
+    final String snapshot = texts.join('\u0001');
+    if (!force &&
+        _layoutPartControllerIndices != null &&
+        listEquals(_layoutPartControllerIndices!, indices) &&
+        _layoutPartsSnapshot == snapshot &&
+        _layoutPartControllers.isNotEmpty) {
+      return;
+    }
+    _disposeLayoutPartControllers();
+    for (int i = 0; i < indices.length; i++) {
+      final int blockIndex = indices[i];
+      final String initial = i < texts.length ? texts[i] : '';
+      _layoutPartControllers[blockIndex] =
+          TextEditingController(text: initial);
+    }
+    _layoutPartControllerIndices = List<int>.from(indices);
+    _layoutPartsSnapshot = snapshot;
+  }
+
+  Map<int, String> _collectLayoutGroupParts() {
+    final Map<int, String> parts = <int, String>{};
+    _layoutPartControllers.forEach((int idx, TextEditingController controller) {
+      parts[idx] = controller.text.trim();
+    });
+    return parts;
+  }
+
+  String _layoutPartsControllersSignature() {
+    final List<int>? indices = _layoutPartControllerIndices;
+    if (indices == null) {
+      return '';
+    }
+    return indices
+        .map((int idx) => (_layoutPartControllers[idx]?.text ?? '').trim())
+        .join('\u0001');
+  }
+
+  bool _layoutPartsDirty() {
+    return _layoutPartsControllersSignature() != _layoutPartsSnapshot;
+  }
+
+  Future<void> _saveLayoutGroupParts() async {
+    if (!mounted || widget.onLayoutGroupPartsEdit == null) {
+      return;
+    }
+    if (!_layoutPartsDirty()) {
+      _cancelLayoutGroupEditing();
+      return;
+    }
+    final List<int>? indices = widget.layoutBlockIndices;
+    if (indices == null || indices.length < 2) {
+      return;
+    }
+    final Map<int, String> parts = _collectLayoutGroupParts();
+    setState(() => _layoutPartsSaving = true);
+    try {
+      await widget.onLayoutGroupPartsEdit!(widget.index, parts);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLayoutGroupEditing = false;
+        _layoutPartsSaving = false;
+      });
+      _disposeLayoutPartControllers();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLayoutGroupEditing = false;
+          _layoutPartsSaving = false;
+        });
+        _disposeLayoutPartControllers();
+        MessageService.showError(
+          context,
+          AppLocalizations.of(context)!.segmentItemSaveFailed('$e'),
+        );
+      }
+    }
+  }
+
+  TextStyle _segmentPreviewTextStyle(BuildContext context) {
+    return TextStyle(
+      fontSize: widget.previewFontSize ?? 14.0,
+      color: Theme.of(context).colorScheme.onSurface,
+      decoration: widget.isModified ? TextDecoration.none : null,
+    );
+  }
+
+  Widget _buildSegmentPreviewText(BuildContext context) {
+    if (_canUseLayoutGroupSplit()) {
+      return _buildLayoutGroupSplitPreview(context);
+    }
+    return MarkdownTextWithImages(
+      text: widget.text,
+      imageDataMap:
+          widget.imageDataMap.isEmpty ? null : widget.imageDataMap,
+      style: _segmentPreviewTextStyle(context),
+      imageMaxWidth: double.infinity,
+      imageMaxHeight: 400,
+    );
+  }
+
+  Widget _buildLayoutGroupSplitEditor(BuildContext context) {
+    final List<List<double>> bboxes = widget.layoutBlockBboxes!;
+    final List<int> indices = widget.layoutBlockIndices!;
+    final Map<int, String>? stored =
+        parseLayoutGroupTextParts(widget.layoutGroupTextParts);
+    final bool usesStoredParts = stored != null &&
+        layoutGroupTextPartsCoverIndices(stored, indices);
+    final double totalArea = bboxes.fold<double>(
+      0,
+      (double sum, List<double> bbox) => sum + layoutBboxArea(bbox),
+    );
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final Color accent = colors.error.withValues(alpha: 0.75);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: List<Widget>.generate(indices.length, (int i) {
+        final int blockIndex = indices[i];
+        final TextEditingController? controller =
+            _layoutPartControllers[blockIndex];
+        final double area = i < bboxes.length ? layoutBboxArea(bboxes[i]) : 0;
+        final double sharePct =
+            totalArea > 0 ? area / totalArea * 100 : 100 / indices.length;
+        final String labelSuffix = usesStoredParts
+            ? 'edited'
+            : '${sharePct.toStringAsFixed(0)}%';
+        return Padding(
+          padding: EdgeInsets.only(bottom: i < indices.length - 1 ? 8 : 0),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: widget.isHighlighted
+                  ? colors.errorContainer.withValues(alpha: 0.25)
+                  : colors.surfaceContainerHighest.withValues(alpha: 0.35),
+              border: Border(
+                left: BorderSide(color: accent, width: 3),
+              ),
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(4),
+                bottomRight: Radius.circular(4),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Text(
+                        'Block $blockIndex ($labelSuffix)',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: colors.error,
+                        ),
+                      ),
+                      if (_layoutPartsSaving) ...<Widget>[
+                        const SizedBox(width: 6),
+                        SizedBox(
+                          width: 10,
+                          height: 10,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            color: colors.error.withValues(alpha: 0.7),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: controller,
+                    maxLines: null,
+                    style: _segmentPreviewTextStyle(context).copyWith(
+                      fontSize: widget.editFontSize ?? 13,
+                    ),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.all(8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildLayoutGroupEditMode() {
+    final AppLocalizations l10n = AppLocalizations.of(context)!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Shortcuts(
+          shortcuts: const <ShortcutActivator, Intent>{
+            SingleActivator(LogicalKeyboardKey.escape):
+                _CancelEditingIntent(),
+            SingleActivator(LogicalKeyboardKey.enter, control: true):
+                _SaveEditingIntent(),
+            SingleActivator(LogicalKeyboardKey.enter, meta: true):
+                _SaveEditingIntent(),
+          },
+          child: Actions(
+            actions: <Type, Action<Intent>>{
+              _CancelEditingIntent: CallbackAction<_CancelEditingIntent>(
+                onInvoke: (_) {
+                  _cancelLayoutGroupEditing();
+                  return null;
+                },
+              ),
+              _SaveEditingIntent: CallbackAction<_SaveEditingIntent>(
+                onInvoke: (_) {
+                  unawaited(_saveLayoutGroupParts());
+                  return null;
+                },
+              ),
+            },
+            child: _buildLayoutGroupSplitEditor(context),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: <Widget>[
+            TextButton(
+              onPressed: _layoutPartsSaving ? null : _cancelLayoutGroupEditing,
+              child: Text(l10n.segmentItemCancel),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed:
+                  _layoutPartsSaving ? null : () => unawaited(_saveLayoutGroupParts()),
+              icon: _layoutPartsSaving
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Theme.of(context).colorScheme.onPrimary,
+                      ),
+                    )
+                  : const Icon(Icons.save, size: 18),
+              label: Text(l10n.segmentItemSave),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLayoutGroupSplitPreview(BuildContext context) {
+    final List<List<double>> bboxes = widget.layoutBlockBboxes!;
+    final List<int> indices = widget.layoutBlockIndices!;
+    final Map<int, String>? stored =
+        parseLayoutGroupTextParts(widget.layoutGroupTextParts);
+    final List<String> parts = resolveLayoutGroupDisplayTexts(
+      text: widget.text,
+      bboxes: bboxes,
+      indices: indices,
+      storedParts: stored,
+    );
+    final bool usesStoredParts = stored != null &&
+        layoutGroupTextPartsCoverIndices(stored, indices);
+    final double totalArea = bboxes.fold<double>(
+      0,
+      (double sum, List<double> bbox) => sum + layoutBboxArea(bbox),
+    );
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final Color accent = colors.error.withValues(alpha: 0.75);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: List<Widget>.generate(indices.length, (int i) {
+        final double area = i < bboxes.length ? layoutBboxArea(bboxes[i]) : 0;
+        final double sharePct =
+            totalArea > 0 ? area / totalArea * 100 : 100 / indices.length;
+        final int blockLabel = indices[i];
+        final String partText = i < parts.length ? parts[i] : '';
+        final String labelSuffix = usesStoredParts
+            ? 'edited'
+            : '${sharePct.toStringAsFixed(0)}%';
+        return Padding(
+          padding: EdgeInsets.only(bottom: i < indices.length - 1 ? 8 : 0),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: widget.isHighlighted
+                  ? colors.errorContainer.withValues(alpha: 0.25)
+                  : colors.surfaceContainerHighest.withValues(alpha: 0.35),
+              border: Border(
+                left: BorderSide(color: accent, width: 3),
+              ),
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(4),
+                bottomRight: Radius.circular(4),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    'Block $blockLabel ($labelSuffix)',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: colors.error,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  MarkdownTextWithImages(
+                    text: partText.isEmpty ? '—' : partText,
+                    imageDataMap: widget.imageDataMap.isEmpty
+                        ? null
+                        : widget.imageDataMap,
+                    style: _segmentPreviewTextStyle(context),
+                    imageMaxWidth: double.infinity,
+                    imageMaxHeight: 400,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }),
+    );
   }
 
   Future<void> _openFontSizeDialog() async {
@@ -1277,10 +1713,15 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                   },
                   onPointerUp: (_) {
                     // If user wasn't selecting text, trigger segment selection
-                    if (!_isSelectingText && !_isEditing) {
+                    if (!_isSelectingText &&
+                        !_isEditing &&
+                        !_isLayoutGroupEditing) {
                       // Small delay to check if text selection occurred
                       Future.delayed(const Duration(milliseconds: 100), () {
-                        if (mounted && !_isSelectingText && !_isEditing) {
+                        if (mounted &&
+                            !_isSelectingText &&
+                            !_isEditing &&
+                            !_isLayoutGroupEditing) {
                           widget.onTap();
                         }
                       });
@@ -1292,38 +1733,22 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                     // but also trigger the onTap callback when clicking on text
                     behavior: HitTestBehavior.translucent,
                     onDoubleTap: () {
-                      // Use GestureDetector to avoid focusing inputs during pointer down on Web.
                       if (!widget.isSource &&
-                          widget.onEdit != null &&
-                          !_isEditing) {
-                        AppLogger.log(
-                          'TranslationSegmentItem',
-                          'GestureDetector.onDoubleTap: Starting edit for index=${widget.index}',
-                          level: LogLevel.info,
-                        );
-                        _startEditing();
+                          !_isEditing &&
+                          !_isLayoutGroupEditing &&
+                          (widget.onEdit != null ||
+                              _canEditLayoutGroupParts())) {
+                        _handleDoubleTapEdit();
                       }
                     },
                     onTap: () {
-                      // Only trigger if not selecting text and not editing
-                      if (!_isSelectingText && !_isEditing) {
+                      if (!_isSelectingText &&
+                          !_isEditing &&
+                          !_isLayoutGroupEditing) {
                         widget.onTap();
                       }
                     },
-                    child: MarkdownTextWithImages(
-                      text: widget.text,
-                      imageDataMap: widget.imageDataMap.isEmpty
-                          ? null
-                          : widget.imageDataMap,
-                      style: TextStyle(
-                        fontSize: widget.previewFontSize ?? 14.0,
-                        color: Theme.of(context).colorScheme.onSurface,
-                        decoration:
-                            widget.isModified ? TextDecoration.none : null,
-                      ),
-                      imageMaxWidth: double.infinity,
-                      imageMaxHeight: 400,
-                    ),
+                    child: _buildSegmentPreviewText(context),
                   ),
                 ),
               ),

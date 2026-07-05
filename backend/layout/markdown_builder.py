@@ -17,6 +17,10 @@ from layout.block_types import (
     IMAGE_CAPTION, TABLE_CAPTION, CHART_CAPTION, CAPTION,
     TABLE_BODY, CHART_BODY,
 )
+from layout.layout_group_pair_utils import (
+    is_layout_companion_block,
+    resolve_layout_group_pairs_for_block,
+)
 from logger import unified_logger as logger
 from logger.logger import LogModule
 
@@ -1139,6 +1143,10 @@ def _build_layout_markdown(
         if not text:
             continue
 
+        raw = getattr(block, "raw", None) or {}
+        if isinstance(raw, dict) and is_layout_companion_block(raw):
+            continue
+
         # Convert title blocks to markdown heading format
         # Use heading level inferred from MinerU font size data.
         # heading_level=0 means false-positive title (body text) — no heading prefix.
@@ -1167,15 +1175,18 @@ def _build_layout_markdown(
         # Chunking (merging multiple segments) is handled separately by chunk merging logic
         # deep_split only controls whether to split a single block's text by paragraphs
 
-        # Collect cross-page paired block indices so both blocks map to the same segment
-        raw = getattr(block, "raw", None) or {}
+        # Collect cross-page and layout-group companion indices for multi-bbox segments.
         pair_indices: List[int] = []
         if isinstance(raw, dict):
             for pair in raw.get("_cross_page_pairs", []):
                 if isinstance(pair, dict):
                     pidx = pair.get("index")
                     if pidx is not None:
-                        pair_indices.append(pidx)
+                        pair_indices.append(int(pidx))
+        for pair in resolve_layout_group_pairs_for_block(block, layout_doc):
+            pidx = pair.get("index")
+            if pidx is not None:
+                pair_indices.append(int(pidx))
 
         def _make_block_indices(base_idx: int) -> List[int]:
             if base_idx < 0:
@@ -1186,6 +1197,24 @@ def _build_layout_markdown(
             texts = [base_text] if block_index >= 0 else []
             texts.extend([""] * len(pair_indices))
             return texts
+
+        def _deep_split_block_mapping(
+            para_idx: int,
+            para_count: int,
+            para_text: str,
+        ) -> tuple[List[int], List[str]]:
+            """Map deep-split paragraphs to layout blocks without duplicating companions."""
+            if not pair_indices or para_count <= 1:
+                return _make_block_indices(block_index), _make_block_texts(para_text)
+            if para_idx == 0:
+                indices = [block_index] if block_index >= 0 else []
+                return indices, [para_text]
+            companion_idx = (
+                pair_indices[para_idx - 1]
+                if para_idx - 1 < len(pair_indices)
+                else pair_indices[-1]
+            )
+            return [companion_idx], [para_text]
 
         if builder.deep_split:
             # Split block text by paragraphs, but each paragraph becomes a separate segment
@@ -1201,18 +1230,25 @@ def _build_layout_markdown(
                     )
                 )
             else:
-                paragraphs = _paragraph_split(text)
-                for para in paragraphs:
-                    if not para:
-                        continue
+                paragraphs = [
+                    para.strip()
+                    for para in _paragraph_split(text)
+                    if para and para.strip()
+                ]
+                for para_idx, para in enumerate(paragraphs):
+                    block_indices, block_texts = _deep_split_block_mapping(
+                        para_idx,
+                        len(paragraphs),
+                        para,
+                    )
                     # Even if paragraph is longer than max_chunk_chars, keep it as one segment
                     # The chunk merging logic will handle splitting if needed
                     chunks.append(
                         LayoutChunk(
-                            text=para.strip(),
+                            text=para,
                             chunk_type="text",
-                            block_indices=_make_block_indices(block_index),
-                            block_texts=_make_block_texts(para.strip()),
+                            block_indices=block_indices,
+                            block_texts=block_texts,
                             image_path=None,
                         )
                     )

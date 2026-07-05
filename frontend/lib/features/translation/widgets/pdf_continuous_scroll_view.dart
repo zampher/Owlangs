@@ -99,9 +99,8 @@ class PdfContinuousScrollController {
 
 /// Word-style continuous vertical scroll through all PDF pages (pixel rendering).
 ///
-/// When both [highlightPageNumber] and [highlightBbox] are non-null, a
-/// semi-transparent blue rectangle is rendered on the specified page at the
-/// given bounding box coordinates (in PDF points).
+/// When both [highlightPageNumber] and [highlightBboxes] are non-null, red
+/// outlines are rendered on the specified page for each bbox (PDF points).
 class PdfContinuousScrollView extends StatefulWidget {
   const PdfContinuousScrollView({
     required this.document,
@@ -114,7 +113,7 @@ class PdfContinuousScrollView extends StatefulWidget {
     this.onPageVisible,
     this.showScrollbar = true,
     this.highlightPageNumber,
-    this.highlightBbox,
+    this.highlightBboxes,
     this.bboxEditMode = false,
     this.onEditBboxChanged,
     this.onEditBboxReset,
@@ -132,8 +131,8 @@ class PdfContinuousScrollView extends StatefulWidget {
   /// 1-based page number to render the highlight rectangle on.
   final int? highlightPageNumber;
 
-  /// Bounding box in PDF points: [x0, y0, x1, y1].
-  final List<double>? highlightBbox;
+  /// Bounding boxes in PDF points: each `[x0, y0, x1, y1]`.
+  final List<List<double>>? highlightBboxes;
 
   /// Whether bbox edit mode is active.
   final bool bboxEditMode;
@@ -338,9 +337,9 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
             itemCount: pageCount,
             itemBuilder: (BuildContext context, int index) {
               final int pageNumber = index + 1;
-              final List<double>? pageHighlightBbox =
+              final List<List<double>>? pageHighlightBboxes =
                   (widget.highlightPageNumber == pageNumber)
-                      ? widget.highlightBbox
+                      ? widget.highlightBboxes
                       : null;
               final bool pageEditMode =
                   widget.bboxEditMode && widget.highlightPageNumber == pageNumber;
@@ -352,7 +351,7 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
                   document: widget.document,
                   pageNumber: pageNumber,
                   maxWidth: pageWidth,
-                  highlightBbox: pageHighlightBbox,
+                  highlightBboxes: pageHighlightBboxes,
                   bboxEditMode: pageEditMode,
                   onEditBboxChanged: pageEditMode ? widget.onEditBboxChanged : null,
                   onEditBboxReset: pageEditMode ? widget.onEditBboxReset : null,
@@ -386,7 +385,7 @@ class PdfContinuousPreviewLoader extends StatefulWidget {
     this.onPageVisible,
     this.showScrollbar = true,
     this.highlightPageNumber,
-    this.highlightBbox,
+    this.highlightBboxes,
     this.bboxEditMode = false,
     this.onEditBboxChanged,
     this.onEditBboxReset,
@@ -403,8 +402,8 @@ class PdfContinuousPreviewLoader extends StatefulWidget {
   /// 1-based page number to render the highlight rectangle on.
   final int? highlightPageNumber;
 
-  /// Bounding box in PDF points: [x0, y0, x1, y1].
-  final List<double>? highlightBbox;
+  /// Bounding boxes in PDF points: each `[x0, y0, x1, y1]`.
+  final List<List<double>>? highlightBboxes;
 
   /// Whether bbox edit mode is active.
   final bool bboxEditMode;
@@ -563,7 +562,7 @@ class _PdfContinuousPreviewLoaderState extends State<PdfContinuousPreviewLoader>
       onPageVisible: widget.onPageVisible,
       showScrollbar: widget.showScrollbar,
       highlightPageNumber: widget.highlightPageNumber,
-      highlightBbox: widget.highlightBbox,
+      highlightBboxes: widget.highlightBboxes,
       bboxEditMode: widget.bboxEditMode,
       onEditBboxChanged: widget.onEditBboxChanged,
       onEditBboxReset: widget.onEditBboxReset,

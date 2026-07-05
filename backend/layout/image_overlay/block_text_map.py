@@ -19,6 +19,7 @@ from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
     segment_has_user_font_weight_override,
 )
 from layout.renderable_block_indices import expand_renderable_block_indices
+from layout.layout_group_pair_utils import is_layout_companion_block
 from logger.logger import LogModule, unified_logger
 
 _LOCAL_SKIP_OVERLAY_BLOCK_TYPES = frozenset({IMAGE, LEGACY_FIGURE, LIST, TABLE})
@@ -1120,7 +1121,7 @@ def build_image_overlay_block_text_map(
                 continue
             block_type = block_index_to_type.get(block_index_int, "text")
             raw = block_index_to_raw.get(block_index_int, {})
-            if isinstance(raw, dict) and raw.get("_cross_page_pair_of") is not None:
+            if is_layout_companion_block(raw):
                 continue
             if block_type in _LOCAL_SKIP_OVERLAY_BLOCK_TYPES:
                 continue

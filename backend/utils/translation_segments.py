@@ -3349,6 +3349,8 @@ def update_translation_segment(
     table_stroke_pt: Optional[float] = None,
     layout_block_bbox_override: Optional[list] = None,
     layout_block_bbox_reset: bool = False,
+    layout_group_text_parts: Optional[dict] = None,
+    layout_group_text_parts_reset: bool = False,
     task_state: Optional[dict] = None,
 ) -> Optional[dict]:
     """
@@ -3365,6 +3367,8 @@ def update_translation_segment(
         table_stroke_pt: Optional table grid stroke width in pt (0 = hidden).
         layout_block_bbox_override: Optional bbox override [x0, y0, x1, y1].
         layout_block_bbox_reset: If True, clear the bbox override (restore default).
+        layout_group_text_parts: Optional per-layout-block text map for multi-bbox groups.
+        layout_group_text_parts_reset: If True, clear stored per-block text parts.
         task_state: Task state dictionary (if None, will be imported)
 
     Returns:
@@ -3408,6 +3412,9 @@ def update_translation_segment(
         segment["modified_by"] = modified_by
         segment["modified_at"] = time.time()
         segment["status"] = "modified"
+        if layout_group_text_parts is None and not layout_group_text_parts_reset:
+            if segment.get("layout_group_text_parts"):
+                del segment["layout_group_text_parts"]
         logger.info(LogModule.TRANS, f"Updated segment {segment_index} for task {task_id}: modified=True, old_length={len(old_text)}, new_length={len(target_text)}")
         
         # CRITICAL: Sync manual edit back to html_translated_texts for html workflow rebuild
@@ -3547,6 +3554,52 @@ def update_translation_segment(
                         f"{old_override} -> {normalized}",
                     )
                     typography_changed = True
+
+    if layout_group_text_parts_reset:
+        if "layout_group_text_parts" in segment:
+            del segment["layout_group_text_parts"]
+            segment["modified"] = True
+            segment["modified_by"] = modified_by or segment.get("modified_by")
+            segment["modified_at"] = time.time()
+            logger.info(
+                LogModule.TRANS,
+                f"Reset layout_group_text_parts for segment {segment_index} on task {task_id}",
+            )
+            typography_changed = True
+    elif layout_group_text_parts is not None:
+        from layout.layout_group_pair_utils import (
+            merge_layout_group_text_parts,
+            normalize_layout_group_text_parts,
+            serialize_layout_group_text_parts,
+        )
+
+        normalized_parts = normalize_layout_group_text_parts(layout_group_text_parts)
+        if normalized_parts is None:
+            logger.warning(
+                LogModule.TRANS,
+                f"Ignoring empty layout_group_text_parts for segment {segment_index} "
+                f"on task {task_id}",
+            )
+        else:
+            indices = segment.get("layout_block_indices") or []
+            merged_text = merge_layout_group_text_parts(normalized_parts, indices)
+            serialized = serialize_layout_group_text_parts(normalized_parts)
+            old_parts = segment.get("layout_group_text_parts")
+            segment["layout_group_text_parts"] = serialized
+            segment["target_text"] = merged_text
+            segment["modified_text"] = merged_text
+            segment["target_length"] = len(merged_text)
+            segment["modified"] = True
+            segment["modified_by"] = modified_by or segment.get("modified_by")
+            segment["modified_at"] = time.time()
+            segment["status"] = "modified"
+            if old_parts != serialized:
+                logger.info(
+                    LogModule.TRANS,
+                    f"Updated layout_group_text_parts for segment {segment_index} "
+                    f"on task {task_id}: blocks={sorted(normalized_parts.keys())}",
+                )
+                typography_changed = True
 
     if typography_changed:
         from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
@@ -5351,6 +5404,8 @@ async def retranslate_segment(
         segment["modified"] = True
         # CRITICAL: Clear old manual modification so get_source_preview doesn't fallback to stale text
         segment["modified_text"] = None
+        if "layout_group_text_parts" in segment:
+            del segment["layout_group_text_parts"]
         
         # Clear any remaining exclusion flags after successful retranslation
         if segment.get("is_excluded", False):
@@ -5968,6 +6023,8 @@ async def retranslate_segments_batch(
         segment["modified"] = True
         # CRITICAL: Clear old manual modification so get_source_preview doesn't fallback to stale text
         segment["modified_text"] = None
+        if "layout_group_text_parts" in segment:
+            del segment["layout_group_text_parts"]
         
         # Clear any remaining exclusion flags after successful retranslation
         if segment.get("is_excluded", False):

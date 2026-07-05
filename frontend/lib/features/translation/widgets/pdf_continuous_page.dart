@@ -12,15 +12,15 @@ import 'pdf_page_utils.dart';
 
 /// Renders one PDF page at [maxWidth] using pdfium/pdf.js for pixel-accurate output.
 ///
-/// When [highlightBbox] is provided (list of 4 doubles in PDF points:
+/// When [highlightBboxes] is provided (each entry is PDF points:
 /// [x0, y0, x1, y1]), a 1px red outline is overlaid on the
-/// page image to indicate the segment's bounding box.
+/// page image for every bbox in the group.
 class PdfContinuousPage extends StatefulWidget {
   const PdfContinuousPage({
     required this.document,
     required this.pageNumber,
     required this.maxWidth,
-    this.highlightBbox,
+    this.highlightBboxes,
     this.transformController,
     this.scaleEnabled = true,
     this.bboxEditMode = false,
@@ -33,8 +33,8 @@ class PdfContinuousPage extends StatefulWidget {
   final int pageNumber;
   final double maxWidth;
 
-  /// Optional highlight bounding box in PDF points: [x0, y0, x1, y1].
-  final List<double>? highlightBbox;
+  /// Optional highlight bounding boxes in PDF points.
+  final List<List<double>>? highlightBboxes;
 
   /// Optional controller to enable zoom/pan via [InteractiveViewer].
   final TransformationController? transformController;
@@ -192,22 +192,29 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
       return const SizedBox.shrink();
     }
 
-    Rect? screenRect;
+    List<Rect> highlightRects = const <Rect>[];
     Rect? editBboxRect;
-    if (widget.highlightBbox != null &&
+    if (widget.highlightBboxes != null &&
         _pdfPageWidth > 0 &&
         _pdfPageHeight > 0) {
       final double scale = widget.maxWidth / _pdfPageWidth;
-      final List<double> bbox = widget.highlightBbox!;
-      if (bbox.length >= 4) {
-        screenRect = Rect.fromLTWH(
-          bbox[0] * scale,
-          bbox[1] * scale,
-          (bbox[2] - bbox[0]) * scale,
-          (bbox[3] - bbox[1]) * scale,
+      final List<Rect> rects = <Rect>[];
+      for (final List<double> bbox in widget.highlightBboxes!) {
+        if (bbox.length < 4) {
+          continue;
+        }
+        rects.add(
+          Rect.fromLTWH(
+            bbox[0] * scale,
+            bbox[1] * scale,
+            (bbox[2] - bbox[0]) * scale,
+            (bbox[3] - bbox[1]) * scale,
+          ),
         );
-        // The edit overlay uses the same initial bbox in display pixels.
-        editBboxRect = screenRect;
+      }
+      highlightRects = rects;
+      if (rects.isNotEmpty) {
+        editBboxRect = rects.first;
       }
     }
 
@@ -215,7 +222,7 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
       width: widget.maxWidth,
       height: _displayHeight,
       imageBytes: image.bytes,
-      highlightRect: screenRect,
+      highlightRects: highlightRects,
       transformController: widget.transformController,
       scaleEnabled: widget.scaleEnabled,
       bboxEditMode: widget.bboxEditMode,
@@ -228,14 +235,14 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
 
 /// Word-like white page tile on a neutral canvas.
 ///
-/// When [highlightRect] is provided (in display-pixel coordinates relative
-/// to the page image), a 1px red outline is rendered on top of the page.
+/// When [highlightRects] is provided (in display-pixel coordinates relative
+/// to the page image), a 1px red outline is rendered for each bbox.
 class PdfContinuousPageFrame extends StatelessWidget {
   const PdfContinuousPageFrame({
     required this.width,
     required this.height,
     required this.imageBytes,
-    this.highlightRect,
+    this.highlightRects = const <Rect>[],
     this.transformController,
     this.scaleEnabled = true,
     this.bboxEditMode = false,
@@ -248,7 +255,7 @@ class PdfContinuousPageFrame extends StatelessWidget {
   final double width;
   final double height;
   final Uint8List imageBytes;
-  final Rect? highlightRect;
+  final List<Rect> highlightRects;
 
   /// Optional controller to enable zoom/pan via [InteractiveViewer].
   final TransformationController? transformController;
@@ -328,19 +335,12 @@ class PdfContinuousPageFrame extends StatelessWidget {
       );
     }
 
-    // View mode: show red highlight (existing behavior)
-    if (highlightRect != null) {
+    // View mode: show red highlight(s) for layout group / multi-block segments.
+    if (highlightRects.isNotEmpty) {
       return Stack(
         children: <Widget>[
           pageContent,
-          layoutBboxHighlightPositioned(
-            bboxRect: highlightRect!,
-            child: IgnorePointer(
-              child: Container(
-                decoration: layoutBboxHighlightDecoration(),
-              ),
-            ),
-          ),
+          ...layoutBboxHighlightOverlays(highlightRects),
         ],
       );
     }

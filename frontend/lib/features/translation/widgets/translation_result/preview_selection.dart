@@ -73,6 +73,26 @@ TranslationPreviewMode defaultPreviewModeForDialog({
   return TranslationPreviewMode.html;
 }
 
+/// Default export option index for the download dialog.
+/// PDF source tasks prefer preserve-layout PDF (typst_overlay).
+int defaultExportDownloadOptionIndex(
+  List<Map<String, dynamic>> downloadOptions, {
+  required bool isPdfFile,
+  required String resolvedWorkflowType,
+}) {
+  if (isPdfFile && resolvedWorkflowType != 'html') {
+    final int preserveLayoutIndex = downloadOptions.indexWhere(
+      (Map<String, dynamic> option) =>
+          option['type'] == 'pdf' &&
+          option['rendererType'] == 'typst_overlay',
+    );
+    if (preserveLayoutIndex >= 0) {
+      return preserveLayoutIndex;
+    }
+  }
+  return 0;
+}
+
 /// Result of the preview settings dialog.
 class PreviewSelection {
   const PreviewSelection({

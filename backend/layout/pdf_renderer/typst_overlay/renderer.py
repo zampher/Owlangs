@@ -439,6 +439,243 @@ class TypstOverlayRenderer(BasePDFRenderer):
         return {"main_text": main_text, "main_bbox": main_bbox, "cross_page_parts": cross_page_parts}
 
     @staticmethod
+    def _segment_for_layout_block(
+        block_key: int,
+        overlay_segments: Optional[List[dict]] = None,
+    ) -> Optional[dict]:
+        """Find overlay segment dict that maps to a layout block index."""
+        if not overlay_segments:
+            return None
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            resolve_segment_layout_block_indices,
+        )
+
+        for seg in overlay_segments:
+            if not isinstance(seg, dict):
+                continue
+            indices = resolve_segment_layout_block_indices(seg, None)
+            try:
+                mapped = {int(i) for i in indices if i is not None}
+            except (TypeError, ValueError):
+                continue
+            if block_key in mapped:
+                return seg
+        return None
+
+    @staticmethod
+    def _split_layout_group_text(
+        block,
+        translated_text: str,
+        layout_doc=None,
+        segment: Optional[dict] = None,
+    ) -> dict:
+        """Split translated text across same-page column companion bboxes."""
+        from layout.layout_group_pair_utils import (
+            layout_group_pairs_from_raw,
+            resolve_layout_group_pairs_for_block,
+            split_translated_text_for_layout_group_with_parts,
+        )
+
+        raw = getattr(block, "raw", None) or {}
+        pairs = resolve_layout_group_pairs_for_block(block, layout_doc)
+        if not pairs:
+            return {"main_text": translated_text, "group_parts": []}
+
+        bbox = getattr(block, "bbox", None)
+        if not bbox or len(bbox) != 4:
+            return {"main_text": translated_text, "group_parts": []}
+        try:
+            primary_bbox = tuple(float(v) for v in bbox[:4])
+            primary_index = int(getattr(block, "index", 0))
+        except (TypeError, ValueError):
+            return {"main_text": translated_text, "group_parts": []}
+
+        main_text, group_parts = split_translated_text_for_layout_group_with_parts(
+            segment,
+            primary_index,
+            primary_bbox,
+            translated_text,
+            pairs,
+        )
+        block_key = getattr(block, "index", 0)
+        for idx, part in enumerate(group_parts):
+            part["block_id"] = f"block-{block_key}-group-{part.get('index', idx)}"
+
+        if group_parts:
+            source = (
+                "parts"
+                if segment
+                and segment.get("layout_group_text_parts")
+                else (
+                    "raw"
+                    if layout_group_pairs_from_raw(raw)
+                    else "reverse_lookup"
+                )
+            )
+            unified_logger.info(
+                LogModule.RESTOR,
+                "[TYPST_OVERLAY] Layout group split block "
+                f"{block_key}: {len(group_parts)} companion part(s), source={source}, "
+                f"main_chars={len(main_text)}, "
+                f"companion_chars={sum(len(p.get('text') or '') for p in group_parts)}",
+            )
+        return {"main_text": main_text, "group_parts": group_parts}
+
+    def _build_layout_group_companion_render_blocks(
+        self,
+        group_parts: List[dict],
+        *,
+        block_key: int,
+        page_index: int,
+        page_width_pt: Optional[float],
+        ref_rb: RenderBlock,
+        ref_unified,
+        unified_ref_leading_em,
+    ) -> List[tuple[int, RenderBlock]]:
+        """Build RenderBlocks for layout group companion bboxes."""
+        from layout.layout_group_pair_utils import (
+            bboxes_nearly_equal,
+            lookup_layout_block_bbox,
+        )
+
+        layout_doc = getattr(self, "_current_layout_doc", None)
+        rendered: List[tuple[int, RenderBlock]] = []
+        for gp in group_parts:
+            gp_text = gp.get("text") or ""
+            if not gp_text.strip():
+                continue
+            gp_block_key = gp.get("index")
+            try:
+                gp_block_key_int = int(gp_block_key) if gp_block_key is not None else block_key
+            except (TypeError, ValueError):
+                gp_block_key_int = block_key
+            gp_bbox = lookup_layout_block_bbox(layout_doc, gp_block_key_int)
+            if gp_bbox is None:
+                gp_bbox = gp.get("bbox")
+            if not isinstance(gp_bbox, (list, tuple)) or len(gp_bbox) != 4:
+                continue
+            try:
+                gx0, gy0, gx1, gy1 = (
+                    float(gp_bbox[0]),
+                    float(gp_bbox[1]),
+                    float(gp_bbox[2]),
+                    float(gp_bbox[3]),
+                )
+            except (TypeError, ValueError):
+                continue
+            metadata_bbox = gp.get("bbox")
+            if (
+                isinstance(metadata_bbox, (list, tuple))
+                and len(metadata_bbox) == 4
+                and (
+                    abs(float(metadata_bbox[0]) - gx0) > 0.5
+                    or abs(float(metadata_bbox[1]) - gy0) > 0.5
+                    or abs(float(metadata_bbox[2]) - gx1) > 0.5
+                    or abs(float(metadata_bbox[3]) - gy1) > 0.5
+                )
+            ):
+                unified_logger.info(
+                    LogModule.RESTOR,
+                    "[TYPST_OVERLAY] Layout group companion bbox corrected "
+                    f"block {gp_block_key_int}: metadata={metadata_bbox} "
+                    f"layout_doc=({gx0}, {gy0}, {gx1}, {gy1})",
+                )
+            gp_page = gp.get("page_index")
+            try:
+                resolved_group_page = int(gp_page) if gp_page is not None else page_index
+            except (TypeError, ValueError):
+                resolved_group_page = page_index
+            gp_height = max(1.0, gy1 - gy0)
+            gp_block = RenderBlock(
+                block_id=str(gp.get("block_id") or f"block-{block_key}-group"),
+                page_index=resolved_group_page,
+                inner_bbox=(gx0, gy0, gx1, gy1),
+                markdown_text=gp_text,
+                plain_text=gp_text,
+                render_kind="plain_line" if len(gp_text) < 80 else "plain",
+                font_size_pt=ref_rb.font_size_pt,
+                leading_em=ref_rb.leading_em,
+                font_weight=ref_rb.font_weight,
+                font_style=getattr(ref_rb, "font_style", "normal"),
+                rotation=self._block_rotation(gp_block_key_int),
+                use_cover_fill=False,
+                opaque_fill=True,
+                cover_fill=(1.0, 1.0, 1.0),
+            )
+            gp_override = self._block_bbox_override(gp_block_key_int)
+            if gp_override is not None:
+                primary_override = self._block_bbox_override(block_key)
+                layout_companion_bbox = (gx0, gy0, gx1, gy1)
+                if (
+                    primary_override is not None
+                    and bboxes_nearly_equal(gp_override, primary_override)
+                    and not bboxes_nearly_equal(
+                        layout_companion_bbox,
+                        primary_override,
+                    )
+                ):
+                    unified_logger.info(
+                        LogModule.RESTOR,
+                        "[TYPST_OVERLAY] Ignoring primary bbox override on "
+                        f"layout group companion block {gp_block_key_int} "
+                        f"(using layout_doc bbox)",
+                    )
+                    gp_override = None
+            if gp_override is not None:
+                gp_block.inner_bbox = gp_override
+            gp_override_pt = self._block_font_override_pt(gp_block_key_int)
+            if gp_override_pt is not None:
+                gp_block = apply_user_font_override(
+                    gp_block,
+                    gp_override_pt,
+                    calculator=self._font_fit,
+                )
+            elif ref_unified is None:
+                gp_estimate = self._font_fit.estimate_font_size(gp_block, layout_raw=None)
+                gp_font_size = min(ref_rb.font_size_pt, gp_estimate)
+                gp_block = RenderBlock(
+                    **{
+                        **gp_block.__dict__,
+                        "font_size_pt": gp_font_size,
+                    }
+                )
+            if gp_override_pt is None:
+                gp_block = self._font_fit.calculate_fit_params(
+                    gp_block,
+                    preserve_font_size=ref_unified is None,
+                    layout_raw=None,
+                    ref_unified_font_pt=ref_unified,
+                    ref_unified_leading_em=unified_ref_leading_em,
+                    page_width_pt=page_width_pt,
+                )
+            if (
+                gp_override_pt is None
+                and ref_unified is None
+                and not gp_block.fit_to_box
+            ):
+                gp_block = RenderBlock(
+                    **{
+                        **gp_block.__dict__,
+                        "fit_to_box": True,
+                        "fit_max_height_pt": gp_height * 0.9,
+                        "fit_min_font_size_pt": max(
+                            self._font_fit.min_size_pt,
+                            gp_block.font_size_pt * 0.5,
+                        ),
+                    }
+                )
+            gp_block = self._apply_block_typography_overrides(gp_block, gp_block_key_int)
+            rendered.append((resolved_group_page, gp_block))
+            unified_logger.info(
+                LogModule.RESTOR,
+                "[TYPST_OVERLAY] Layout group companion render block "
+                f"{gp_block.block_id}: page={resolved_group_page}, "
+                f"layout_block={gp_block_key_int}, chars={len(gp_text)}, "
+                f"bbox={gp_block.inner_bbox}",
+            )
+        return rendered
+
+    @staticmethod
     def _extract_caption_footnote_from_translated(merged_text: str):
         """Extract caption, body, and footnote from a merged table/image translation.
 
@@ -902,10 +1139,23 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 continue
             if block_key not in mapped:
                 continue
-            bbox = _read_segment_layout_bbox(seg, overlay_task_state, layout_doc)
+            bbox = _read_segment_layout_bbox_for_block(
+                seg,
+                block_key,
+                overlay_task_state,
+                layout_doc,
+            )
             text = segment_overlay_export_text(seg)
             if bbox is None or not text:
                 continue
+            group_info = self._split_layout_group_text(
+                block,
+                text,
+                layout_doc,
+                segment=seg,
+            )
+            text = group_info["main_text"]
+            group_parts = group_info["group_parts"]
             seg_idx = seg.get("segment_index", len(result))
             rb = layout_block_to_render_block(
                 block,
@@ -930,6 +1180,18 @@ class TypstOverlayRenderer(BasePDFRenderer):
             rb = self._apply_block_typography_overrides(rb, block_key)
             rb.rotation = self._block_rotation(block_key)
             result.append(rb)
+            if group_parts:
+                companion_blocks = self._build_layout_group_companion_render_blocks(
+                    group_parts,
+                    block_key=block_key,
+                    page_index=page_index,
+                    page_width_pt=page_width_pt,
+                    ref_rb=rb,
+                    ref_unified=None,
+                    unified_ref_leading_em=None,
+                )
+                for _, gp_block in companion_blocks:
+                    result.append(gp_block)
 
         if result:
             unified_logger.info(
@@ -1075,6 +1337,15 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 "Set PDFRendererConfig.source_pdf_path to the original PDF file."
             )
         self._current_layout_doc = layout_doc
+        from layout.ocr_provider.paddle.zip_loader import (
+            _enrich_layout_group_pairs_on_document,
+        )
+
+        _enrich_layout_group_pairs_on_document(layout_doc, None)
+        unified_logger.info(
+            LogModule.RESTOR,
+            "[TYPST_OVERLAY] Ensured layout group pair metadata before render",
+        )
 
         # ---- Step 1: Build RenderBlocks from LayoutDocument ----
         build_started = time.perf_counter()
@@ -1452,6 +1723,19 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 if not translated:
                     translated = block.text or ""
 
+                segment_for_block = self._segment_for_layout_block(
+                    block_key,
+                    overlay_segments,
+                )
+                group_info = self._split_layout_group_text(
+                    block,
+                    translated,
+                    layout_doc,
+                    segment=segment_for_block,
+                )
+                translated = group_info["main_text"]
+                group_parts = group_info["group_parts"]
+
                 # Detect and split cross-page lines.
                 # When a text block has lines marked "cross_page": true,
                 # those lines render on the *next* page. We need to:
@@ -1585,6 +1869,21 @@ class TypstOverlayRenderer(BasePDFRenderer):
                         )
                     cp_block = self._apply_block_typography_overrides(cp_block, block_key)
                     render_blocks_by_page.setdefault(resolved_page, []).append(cp_block)
+                    total_blocks += 1
+
+                for resolved_group_page, gp_block in self._build_layout_group_companion_render_blocks(
+                    group_parts,
+                    block_key=block_key,
+                    page_index=page.page_index,
+                    page_width_pt=page_width_pt,
+                    ref_rb=rb,
+                    ref_unified=ref_unified,
+                    unified_ref_leading_em=unified_ref_leading_em,
+                ):
+                    if resolved_group_page == page.page_index:
+                        blocks.append(gp_block)
+                    else:
+                        render_blocks_by_page.setdefault(resolved_group_page, []).append(gp_block)
                     total_blocks += 1
 
             if blocks:

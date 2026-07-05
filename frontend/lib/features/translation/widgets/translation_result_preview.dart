@@ -57,6 +57,7 @@ import '../utils/segment_height_cache.dart';
 import '../utils/text_utils.dart';
 import '../widgets/common/exclusion_panel_widget.dart';
 import '../utils/segment_type_utils.dart';
+import '../utils/layout_bbox_text_split.dart';
 
 void _translationResultLog(String message, {LogLevel level = LogLevel.debug}) {
   AppLogger.log('TranslationResultPreview', message, level: level);
@@ -662,11 +663,11 @@ class _TranslationResultPreviewState
   int _pdfPreviewJumpPageTrigger = 0;
   late final ValueNotifier<int?> _pdfHighlightBboxPageNotifier =
       ValueNotifier<int?>(null);
-  late final ValueNotifier<List<double>?> _pdfHighlightBboxNotifier =
-      ValueNotifier<List<double>?>(null);
-  /// Original (non-overridden) bbox for source-side PDF preview highlight.
-  late final ValueNotifier<List<double>?> _pdfSourceHighlightBboxNotifier =
-      ValueNotifier<List<double>?>(null);
+  late final ValueNotifier<List<List<double>>?> _pdfHighlightBboxNotifier =
+      ValueNotifier<List<List<double>>?>(null);
+  /// Original (non-overridden) bboxes for source-side PDF preview highlight.
+  late final ValueNotifier<List<List<double>>?> _pdfSourceHighlightBboxNotifier =
+      ValueNotifier<List<List<double>>?>(null);
   late final ValueNotifier<bool> _autoFollowSegmentPdfPageNotifier =
       ValueNotifier<bool>(true);
   late final ValueNotifier<bool> _showSelectedSegmentMarkerNotifier =
@@ -971,7 +972,7 @@ class _TranslationResultPreviewState
     // If taskId changed (e.g., from 'pending' to real taskId, or new translation task),
     // reload the content
     if (oldWidget.taskId != widget.taskId) {
-      _closeTranslationPreviewTabSilently();
+      _deferCloseTranslationPreviewTabSilently();
       // Reset status tracking
       _lastKnownStatus = null;
 
@@ -1083,7 +1084,7 @@ class _TranslationResultPreviewState
 
   @override
   void dispose() {
-    _closeTranslationPreviewTabSilently();
+    _deferCloseTranslationPreviewTabSilently();
     _pdfPreviewRevisionDebounceTimer?.cancel();
     _sourcePreviewTimer?.cancel();
     _translationStatusTimer?.cancel();
@@ -1367,39 +1368,79 @@ class _TranslationResultPreviewState
     return result.isNotEmpty ? result : null;
   }
 
+  /// Read all layout block bboxes for a segment, in image pixel coords.
+  /// Prefers [layout_block_bbox_override] for the first bbox when present.
+  List<List<double>>? _readSegmentBboxes(int index) {
+    final Map<String, dynamic>? metadata = _allSegmentsMetadata[index];
+    final List<List<double>>? parsed =
+        _parseLayoutBlockBbox(metadata?['layout_block_bbox']);
+    if (parsed == null || parsed.isEmpty) {
+      return null;
+    }
+    final List<double>? override =
+        _parseBboxList(metadata?['layout_block_bbox_override']);
+    if (override == null) {
+      return parsed
+          .map(
+            (List<double> bbox) => <double>[
+              bbox[0],
+              bbox[1],
+              bbox[2],
+              bbox[3],
+            ],
+          )
+          .toList(growable: false);
+    }
+    final List<List<double>> result = <List<double>>[];
+    for (int i = 0; i < parsed.length; i++) {
+      if (i == 0) {
+        result.add(override);
+      } else {
+        final List<double> bbox = parsed[i];
+        result.add(<double>[bbox[0], bbox[1], bbox[2], bbox[3]]);
+      }
+    }
+    return result;
+  }
+
   /// Read the primary (first) layout block bbox for a segment, in image pixel coords.
   /// Returns `[x0, y0, x1, y1]` or null.
   /// Prefers [layout_block_bbox_override] when present.
   List<double>? _readSegmentBbox(int index) {
-    final Map<String, dynamic>? metadata = _allSegmentsMetadata[index];
-    // Prefer the override bbox if it exists.
-    final dynamic overrideRaw = metadata?['layout_block_bbox_override'];
-    if (overrideRaw is List && overrideRaw.length == 4) {
-      final List<double>? parsed = _parseBboxList(overrideRaw);
-      if (parsed != null) {
-        return parsed;
-      }
-    }
-    final dynamic raw = metadata?['layout_block_bbox'];
-    final List<List<double>>? parsed = _parseLayoutBlockBbox(raw);
-    if (parsed == null || parsed.isEmpty || parsed.first.length < 4) {
+    final List<List<double>>? bboxes = _readSegmentBboxes(index);
+    if (bboxes == null || bboxes.isEmpty) {
       return null;
     }
-    final List<double> first = parsed.first;
-    return <double>[first[0], first[1], first[2], first[3]];
+    return bboxes.first;
   }
 
-  /// Read the original (non-overridden) layout block bbox for a segment.
-  /// Always returns the [layout_block_bbox] value, ignoring any override.
-  List<double>? _readSegmentOriginalBbox(int index) {
+  /// Read the original (non-overridden) layout block bboxes for a segment.
+  List<List<double>>? _readSegmentOriginalBboxes(int index) {
     final Map<String, dynamic>? metadata = _allSegmentsMetadata[index];
-    final dynamic raw = metadata?['layout_block_bbox'];
-    final List<List<double>>? parsed = _parseLayoutBlockBbox(raw);
-    if (parsed == null || parsed.isEmpty || parsed.first.length < 4) {
+    final List<List<double>>? parsed =
+        _parseLayoutBlockBbox(metadata?['layout_block_bbox']);
+    if (parsed == null || parsed.isEmpty) {
       return null;
     }
-    final List<double> first = parsed.first;
-    return <double>[first[0], first[1], first[2], first[3]];
+    return parsed
+        .map(
+          (List<double> bbox) => <double>[
+            bbox[0],
+            bbox[1],
+            bbox[2],
+            bbox[3],
+          ],
+        )
+        .toList(growable: false);
+  }
+
+  /// Read the original (non-overridden) primary layout block bbox for a segment.
+  List<double>? _readSegmentOriginalBbox(int index) {
+    final List<List<double>>? bboxes = _readSegmentOriginalBboxes(index);
+    if (bboxes == null || bboxes.isEmpty) {
+      return null;
+    }
+    return bboxes.first;
   }
 
   /// Parse a single bbox list `[x0, y0, x1, y1]` from dynamic source.
@@ -1491,9 +1532,8 @@ class _TranslationResultPreviewState
     }
     final Map<String, dynamic>? meta = _allSegmentsMetadata[index];
     final int? page = _readPdfPageNumber(meta);
-    final List<double>? bbox = _readSegmentBbox(index);
-    // Always read the original (non-overridden) bbox for source-side highlight.
-    final List<double>? originalBbox = _readSegmentOriginalBbox(index);
+    final List<List<double>>? bboxes = _readSegmentBboxes(index);
+    final List<List<double>>? originalBboxes = _readSegmentOriginalBboxes(index);
     final dynamic indicesRaw = meta?['layout_block_indices'];
     final dynamic bboxRaw = meta?['layout_block_bbox'];
     final dynamic resolution = meta?['layout_block_indices_resolution'];
@@ -1506,16 +1546,17 @@ class _TranslationResultPreviewState
       '[BBOX-HIGHLIGHT] segment=$index page=$page '
       'indices=$indicesRaw resolution=$resolution '
       'mineru_text_image=$mineruTextImage '
-      'metadata_bbox=$bboxRaw resolved_bbox=${bbox?.toString() ?? "null"}',
-      level: bbox != null ? LogLevel.debug : LogLevel.warn,
+      'metadata_bbox=$bboxRaw resolved_bbox_count=${bboxes?.length ?? 0}',
+      level: bboxes != null && bboxes.isNotEmpty
+          ? LogLevel.debug
+          : LogLevel.warn,
     );
-    if (bbox != null) {
+    if (bboxes != null && bboxes.isNotEmpty) {
       final int? resolvedPage =
           page ?? (_isImageSourceFile() ? 1 : null);
       _pdfHighlightBboxPageNotifier.value = resolvedPage;
-      _pdfHighlightBboxNotifier.value = bbox;
-      // Source-side bbox always shows the original (non-overridden) value.
-      _pdfSourceHighlightBboxNotifier.value = originalBbox;
+      _pdfHighlightBboxNotifier.value = bboxes;
+      _pdfSourceHighlightBboxNotifier.value = originalBboxes;
     } else {
       _clearPdfBboxHighlight();
     }
@@ -3150,18 +3191,99 @@ class _TranslationResultPreviewState
 
   /// Update segment metadata with new target text
   /// This ensures pagination controller uses the updated data
-  void _updateSegmentMetadata(int index, {required String targetText}) {
+  void _updateSegmentMetadata(
+    int index, {
+    required String targetText,
+    Map<String, String>? layoutGroupTextParts,
+    bool clearLayoutGroupTextParts = false,
+  }) {
+    final Map<String, dynamic> patch = <String, dynamic>{
+      'target_text': targetText,
+      'modified_text': targetText,
+    };
+    if (layoutGroupTextParts != null) {
+      patch['layout_group_text_parts'] = layoutGroupTextParts;
+    }
     if (_allSegmentsMetadata.containsKey(index)) {
-      _allSegmentsMetadata[index] = <String, dynamic>{
+      final Map<String, dynamic> updated = <String, dynamic>{
         ..._allSegmentsMetadata[index]!,
-        'target_text': targetText,
-        'modified_text': targetText,
+        ...patch,
       };
+      if (clearLayoutGroupTextParts) {
+        updated.remove('layout_group_text_parts');
+      }
+      _allSegmentsMetadata[index] = updated;
     } else {
-      _allSegmentsMetadata[index] = <String, dynamic>{
-        'target_text': targetText,
-        'modified_text': targetText,
-      };
+      _allSegmentsMetadata[index] = patch;
+    }
+  }
+
+  /// Save per-block layout group texts (plan A: user-edited parts).
+  Future<void> _handleLayoutGroupPartsEdit(
+    int index,
+    Map<int, String> parts,
+  ) async {
+    try {
+      final Map<String, dynamic>? metadata = _allSegmentsMetadata[index];
+      final List<int>? indices = metadata != null
+          ? parseLayoutBlockIndices(metadata['layout_block_indices'])
+          : null;
+      if (indices == null || indices.length < 2) {
+        return;
+      }
+      final String oldText = _targetParagraphs[index];
+      final Map<String, String> serialized =
+          serializeLayoutGroupTextParts(parts);
+      final String mergedText =
+          mergeLayoutGroupTextParts(parts, indices);
+
+      final TranslationService svc = TranslationService();
+      await svc.updateTranslationSegment(
+        _apiTaskId(),
+        index,
+        layoutGroupTextParts: serialized,
+        modifiedBy: 'user',
+      );
+
+      _updateSegmentMetadata(
+        index,
+        targetText: mergedText,
+        layoutGroupTextParts: serialized,
+      );
+
+      if (mounted) {
+        setState(() {
+          _targetParagraphs[index] = mergedText;
+          _modifiedSegments[index] = mergedText;
+          if (index < _mergedTargetParagraphs.length) {
+            _mergedTargetParagraphs[index] = mergedText;
+          }
+        });
+        if (_segmentsPaginationController != null) {
+          await _segmentsPaginationController!.refresh();
+        }
+        if (_shouldRefreshOverlayPreviewRevision) {
+          _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
+        }
+      }
+
+      final TranslationSegmentsUndoRedoNotifier undoRedoNotifier =
+          ref.read(translationSegmentsUndoRedoProvider(_apiTaskId()).notifier);
+      undoRedoNotifier.pushRevision(index, mergedText, oldText: oldText);
+      _notifyTranslationWorkspaceMutation();
+    } catch (e) {
+      AppLogger.log(
+        'TranslationResultPreview',
+        '_handleLayoutGroupPartsEdit: Error saving index=$index: $e',
+        level: LogLevel.error,
+      );
+      if (mounted) {
+        MessageService.showError(
+          context,
+          'Failed to save layout block text: $e',
+        );
+      }
+      rethrow;
     }
   }
 
@@ -3181,7 +3303,11 @@ class _TranslationResultPreviewState
 
       // CRITICAL: Update _allSegmentsMetadata so pagination controller uses updated data
       // Without this, the pagination controller will reload old text from metadata
-      _updateSegmentMetadata(index, targetText: newText);
+      _updateSegmentMetadata(
+        index,
+        targetText: newText,
+        clearLayoutGroupTextParts: true,
+      );
 
       if (mounted) {
         setState(() {
@@ -5282,6 +5408,7 @@ class _TranslationResultPreviewState
       onFontSizeChanged: null,
       onRotationChanged: null,
       onTableStrokeChanged: null,
+      onLayoutGroupPartsEdit: _handleLayoutGroupPartsEdit,
     );
   }
 
@@ -5390,6 +5517,7 @@ class _TranslationResultPreviewState
       onRotationChanged: _handleRotationChanged,
       onTableStrokeChanged: _handleTableStrokeChanged,
       showSegmentScrollbar: showSegmentScrollbar,
+      onLayoutGroupPartsEdit: _handleLayoutGroupPartsEdit,
     );
   }
 
@@ -6064,6 +6192,24 @@ class _TranslationResultPreviewState
         level: LogLevel.warn,
       );
     }
+  }
+
+  /// Riverpod forbids provider writes during widget lifecycle; defer tab cleanup.
+  void _deferCloseTranslationPreviewTabSilently() {
+    final PreviewTabsNotifier? tabsNotifier = _previewTabsNotifierCache;
+    if (tabsNotifier == null) {
+      return;
+    }
+    Future<void>.microtask(() {
+      try {
+        tabsNotifier.closeTabByIdSilently(kTranslationPreviewTabId);
+      } catch (e) {
+        _translationResultLog(
+          '[REVISION_PREVIEW] Failed to close stale translation preview tab: $e',
+          level: LogLevel.warn,
+        );
+      }
+    });
   }
 
   void _switchToPreviewTab(String tabId) {
@@ -6955,7 +7101,11 @@ class _TranslationResultPreviewState
       {'value': 'black', 'color': Colors.black, 'label': l10n.translationExportColorBlack},
     ];
 
-    int selectedDownloadIndex = 0;
+    int selectedDownloadIndex = defaultExportDownloadOptionIndex(
+      downloadOptions,
+      isPdfFile: isPdfFile,
+      resolvedWorkflowType: resolvedWorkflowType,
+    );
 
     DialogHelper.showGeneralDialog(
       context: context,

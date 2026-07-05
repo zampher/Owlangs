@@ -2040,6 +2040,76 @@ def bboxes_for_layout_block_indices(
     return result
 
 
+def expand_segment_layout_group_bboxes(
+    segment: Dict[str, Any],
+    layout_doc: Any,
+    bbox_map: Optional[Dict[Any, Any]] = None,
+) -> bool:
+    """Ensure segment lists layout group companion indices and bboxes for preview."""
+    if layout_doc is None or not isinstance(segment, dict):
+        return False
+
+    from layout.layout_group_pair_utils import resolve_layout_group_pairs_for_block
+
+    indices_raw = segment.get("layout_block_indices") or []
+    indices: List[int] = []
+    for raw_idx in indices_raw:
+        try:
+            indices.append(int(raw_idx))
+        except (TypeError, ValueError):
+            continue
+    if not indices:
+        return False
+
+    block_by_index: Dict[int, Any] = {}
+    for block in layout_doc.iter_blocks():
+        if block.index is not None:
+            block_by_index[int(block.index)] = block
+
+    expanded_indices = list(indices)
+    changed = False
+    for idx in list(indices):
+        block = block_by_index.get(idx)
+        if block is None:
+            continue
+        for pair in resolve_layout_group_pairs_for_block(block, layout_doc):
+            companion_index = pair.get("index")
+            if companion_index is None:
+                continue
+            try:
+                companion_int = int(companion_index)
+            except (TypeError, ValueError):
+                continue
+            if companion_int not in expanded_indices:
+                expanded_indices.append(companion_int)
+                changed = True
+
+    existing_bboxes = segment.get("layout_block_bbox")
+    needs_bbox_refresh = (
+        changed
+        or not isinstance(existing_bboxes, list)
+        or len(existing_bboxes) < len(expanded_indices)
+    )
+    if not needs_bbox_refresh:
+        return False
+
+    if changed:
+        segment["layout_block_indices"] = expanded_indices
+
+    seg_bboxes = bboxes_for_layout_block_indices(
+        expanded_indices,
+        bbox_map,
+        layout_document=layout_doc,
+    )
+    if not seg_bboxes:
+        return changed
+
+    if seg_bboxes != existing_bboxes:
+        segment["layout_block_bbox"] = seg_bboxes
+        return True
+    return changed
+
+
 def segment_needs_layout_block_bbox(segment: Dict[str, Any]) -> bool:
     """True when segment has block indices but no usable layout_block_bbox."""
     if not segment.get("layout_block_indices"):

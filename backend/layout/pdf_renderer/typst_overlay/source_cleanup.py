@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Tuple
 from logger.logger import unified_logger, LogModule
 from layout.base import LayoutDocument
 from layout.block_types import CHART_BODY, TABLE_BODY
+from layout.layout_group_pair_utils import is_layout_companion_block
 from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
     _layout_block_is_empty_ocr_text,
     collect_empty_text_block_protected_rects,
@@ -130,7 +131,7 @@ def _collect_redaction_rects(
                 continue
 
             raw = getattr(block, "raw", None) or {}
-            is_cross_page_pair = isinstance(raw, dict) and raw.get("_cross_page_pair_of") is not None
+            is_layout_companion = is_layout_companion_block(raw)
 
             if block.type == "chart":
                 if chart_fmt == "image":
@@ -212,7 +213,7 @@ def _collect_redaction_rects(
                 continue
 
             # Empty OCR text regions may still contain background graphics in the PDF.
-            if _layout_block_is_empty_ocr_text(block) and not is_cross_page_pair:
+            if _layout_block_is_empty_ocr_text(block) and not is_layout_companion:
                 if block_index is None or block_index not in overlay_erase:
                     skipped_empty_recognized += 1
                     continue
@@ -261,7 +262,7 @@ def _collect_redaction_rects(
             # If any span in a line has cross_page, the whole line belongs to
             # the *next* page (page_index + 1).
             # (Skip this for paired blocks; their bbox already covers the target area.)
-            if not is_cross_page_pair:
+            if not is_layout_companion:
                 raw_lines = raw.get("lines") or []
                 if raw_lines:
                     next_page_idx = page.page_index + 1

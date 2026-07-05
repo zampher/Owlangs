@@ -97,9 +97,9 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
   final ValueListenable<int>? pdfPreviewJumpPageTriggerListenable;
   final ValueListenable<bool>? autoFollowSegmentPdfPageListenable;
   final ValueListenable<int?>? pdfHighlightBboxPageListenable;
-  final ValueListenable<List<double>?>? pdfHighlightBboxListenable;
-  /// Original (non-overridden) bbox for source-side PDF preview highlight.
-  final ValueListenable<List<double>?>? sourceHighlightBboxListenable;
+  final ValueListenable<List<List<double>>?>? pdfHighlightBboxListenable;
+  /// Original (non-overridden) bboxes for source-side PDF preview highlight.
+  final ValueListenable<List<List<double>>?>? sourceHighlightBboxListenable;
   final ValueListenable<bool>? showSelectedSegmentMarkerListenable;
   final ValueChanged<bool>? onShowSelectedSegmentMarkerChanged;
   final ValueChanged<bool>? onAutoFollowSegmentPdfPageChanged;
@@ -137,9 +137,9 @@ class _TranslationFullComparePreviewTabState
   int _displayPdfRevision = 0;
   Set<int> _displayDirtySegmentIndices = <int>{};
   int? _highlightBboxPage;
-  List<double>? _highlightBbox;
-  /// Original (non-overridden) bbox for source-side PDF highlight.
-  List<double>? _sourceHighlightBbox;
+  List<List<double>>? _highlightBboxes;
+  /// Original (non-overridden) bboxes for source-side PDF highlight.
+  List<List<double>>? _sourceHighlightBboxes;
   bool _bboxEditMode = false;
   bool _autoFollowSegmentPdfPage = true;
   bool _showSelectedSegmentMarker = true;
@@ -448,15 +448,14 @@ class _TranslationFullComparePreviewTabState
 
   void _onPdfBboxHighlightChanged() {
     final int? page = widget.pdfHighlightBboxPageListenable?.value;
-    final List<double>? bbox = widget.pdfHighlightBboxListenable?.value;
-    // Source highlight always uses the original (non-overridden) bbox.
-    final List<double>? sourceBbox =
+    final List<List<double>>? bboxes =
+        widget.pdfHighlightBboxListenable?.value;
+    final List<List<double>>? sourceBboxes =
         widget.sourceHighlightBboxListenable?.value;
-    if (bbox != null && bbox.length >= 4) {
+    if (bboxes != null && bboxes.isNotEmpty) {
       setState(() {
-        _highlightBbox = bbox;
-        _sourceHighlightBbox = sourceBbox;
-        // Image overlay bbox uses image pixel coords; page is optional.
+        _highlightBboxes = bboxes;
+        _sourceHighlightBboxes = sourceBboxes;
         if (page != null) {
           _highlightBboxPage = page;
         } else if (_isImageRevisionSource) {
@@ -469,8 +468,8 @@ class _TranslationFullComparePreviewTabState
     }
     setState(() {
       _highlightBboxPage = null;
-      _highlightBbox = null;
-      _sourceHighlightBbox = null;
+      _highlightBboxes = null;
+      _sourceHighlightBboxes = null;
     });
   }
 
@@ -741,8 +740,8 @@ class _TranslationFullComparePreviewTabState
       linkedScroll: linkedScroll,
       navigationController: navigationController,
       highlightPageNumber: _highlightBboxPage,
-      highlightBbox: _highlightBbox,
-      sourceHighlightBbox: _sourceHighlightBbox,
+      highlightBboxes: _highlightBboxes,
+      sourceHighlightBboxes: _sourceHighlightBboxes,
       viewportController: _viewportController,
       bboxEditMode: _bboxEditMode,
       onEditBboxChanged: _onEditBboxChanged,
@@ -788,20 +787,40 @@ class _TranslationFullComparePreviewTabState
         : '${AppConfig.baseUrl}$downloadUrl';
   }
 
-  Rect? _buildHighlightRect() {
-    final List<double>? bbox = _highlightBbox;
-    if (bbox != null && bbox.length >= 4) {
-      return layoutBlockBboxToImageRect(bbox);
+  List<Rect> _buildHighlightRects() {
+    final List<List<double>>? bboxes = _highlightBboxes;
+    if (bboxes == null || bboxes.isEmpty) {
+      return const <Rect>[];
     }
-    return null;
+    final List<Rect> rects = <Rect>[];
+    for (final List<double> bbox in bboxes) {
+      if (bbox.length < 4) {
+        continue;
+      }
+      final Rect? rect = layoutBlockBboxToImageRect(bbox);
+      if (rect != null) {
+        rects.add(rect);
+      }
+    }
+    return rects;
   }
 
-  Rect? _buildSourceHighlightRect() {
-    final List<double>? bbox = _sourceHighlightBbox;
-    if (bbox != null && bbox.length >= 4) {
-      return layoutBlockBboxToImageRect(bbox);
+  List<Rect> _buildSourceHighlightRects() {
+    final List<List<double>>? bboxes = _sourceHighlightBboxes;
+    if (bboxes == null || bboxes.isEmpty) {
+      return _buildHighlightRects();
     }
-    return _buildHighlightRect();
+    final List<Rect> rects = <Rect>[];
+    for (final List<double> bbox in bboxes) {
+      if (bbox.length < 4) {
+        continue;
+      }
+      final Rect? rect = layoutBlockBboxToImageRect(bbox);
+      if (rect != null) {
+        rects.add(rect);
+      }
+    }
+    return rects;
   }
 
   Widget _buildTargetImagePreview(
@@ -811,7 +830,7 @@ class _TranslationFullComparePreviewTabState
     return ImageOverlayPreviewView(
       imageUrl: targetImageUrl,
       panelLabel: l10n.translationPreviewPanelTarget,
-      highlightRect: _buildHighlightRect(),
+      highlightRects: _buildHighlightRects(),
       bboxReferenceSize: widget.overlayBboxReferenceSize,
     );
   }
@@ -834,7 +853,7 @@ class _TranslationFullComparePreviewTabState
       scrollController: scrollController,
       showScrollbar: showScrollbar,
       highlightPageNumber: _highlightBboxPage,
-      highlightBbox: _highlightBbox,
+      highlightBboxes: _highlightBboxes,
       bboxEditMode: _bboxEditMode,
       onEditBboxChanged: _onEditBboxChanged,
       onEditBboxReset: widget.onBboxOverrideReset,
@@ -925,8 +944,8 @@ class _TranslationFullComparePreviewTabState
                 sourceImageUrl: svc.buildSourceImageUrl(widget.taskId),
                 targetImageUrl: targetImageUrl,
                 linkedScroll: _revisionLinkedScrollEnabled,
-                highlightRect: _buildHighlightRect(),
-                sourceHighlightRect: _buildSourceHighlightRect(),
+                highlightRects: _buildHighlightRects(),
+                sourceHighlightRects: _buildSourceHighlightRects(),
                 bboxReferenceSize: widget.overlayBboxReferenceSize,
                 viewportController: _viewportController,
               ),
@@ -1026,8 +1045,8 @@ class _TranslationFullComparePreviewTabState
           sourceImageUrl: svc.buildSourceImageUrl(widget.taskId),
           targetImageUrl: targetImageUrl,
           linkedScroll: _syncScrollEnabled,
-          highlightRect: _buildHighlightRect(),
-          sourceHighlightRect: _buildSourceHighlightRect(),
+          highlightRects: _buildHighlightRects(),
+          sourceHighlightRects: _buildSourceHighlightRects(),
           bboxReferenceSize: widget.overlayBboxReferenceSize,
           viewportController: _viewportController,
         ),

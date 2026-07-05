@@ -1,5 +1,23 @@
 # Spec文件更新日志
 
+## 2026-07-05 — PDF 双栏跨段配对与 1.5.1.0 修复批次
+
+未提交改动新增 `backend/layout/layout_group_pair_utils.py`、`backend/layout/ocr_provider/paddle/layout_group_pairs.py`，并在 Paddle zip 加载、markdown 分块、Typst overlay、PDF 生成、片段 API 等路径中 lazy import。已在 `lite.spec`、`launcher_portable_onedir.spec`、`macos.spec` 补充：
+
+- `layout.layout_group_pair_utils` — 跨栏/跨页 layout group 配对、过滤、分块文本 parts 合并
+- `layout.ocr_provider.paddle.layout_group_pairs` — Paddle `group_id` 与空间配对（同页双栏续段）
+
+**同批改动无需新增 spec 条目的模块：**
+
+- `backend/layout/markdown_builder.py` — deep-split 段落→block 映射（已有 `layout.markdown_builder`）
+- `backend/utils/segment_latex_flags.py` — 已有 hiddenimport；行内 `$...$` 空格 trim
+- `backend/utils/http_content_disposition.py` — 非 ASCII 文件名（若已有则无需重复）
+- `backend/layout/pdf_renderer/typst_overlay/*.py` — 已有 typst_overlay 子模块列表
+- `frontend/**` — Flutter 前端，不进 PyInstaller
+- `backend/tools/diag_*.py`、`backend/layout/test_*.py` — 诊断/测试，不打包
+
+---
+
 ## 2026-07-04 — LaTeX 混排标记层 (latex_flags)
 
 未提交改动新增 `backend/utils/segment_latex_flags.py`，并在 extract / API / PDF Typst overlay / Pandoc rebuild 路径中 lazy import。已在 `lite.spec`、`launcher_portable_onedir.spec`、`macos.spec` 补充：

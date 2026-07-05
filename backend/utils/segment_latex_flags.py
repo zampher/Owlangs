@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Optional
 
 from layout.block_types import INTERLINE_EQUATION
@@ -22,6 +23,29 @@ _EMPTY_FLAGS: LatexFlags = {
     "mixed": False,
     "needs_delimiter_wrap": False,
 }
+
+_INLINE_MATH_TRIM_RE = re.compile(
+    r"(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)",
+    re.DOTALL,
+)
+
+
+def _trim_inline_math_delimiter_whitespace(text: str) -> str:
+    """Normalize ``$  ^{1}  $`` to ``$^{1}$`` for mitex/cmarker rendering."""
+
+    def _repl(match: re.Match[str]) -> str:
+        return f"${match.group(1).strip()}$"
+
+    return _INLINE_MATH_TRIM_RE.sub(_repl, text)
+
+
+def _text_has_prose_outside_math_delimiters(text: str) -> bool:
+    """True when non-empty natural language remains after removing math spans."""
+    stripped = _INLINE_MATH_TRIM_RE.sub("", text)
+    stripped = re.sub(r"\$\$.+?\$\$", "", stripped, flags=re.DOTALL)
+    stripped = re.sub(r"\\\[(.+?)\\\]", "", stripped, flags=re.DOTALL)
+    stripped = re.sub(r"\\\((.+?)\\\)", "", stripped, flags=re.DOTALL)
+    return bool(stripped.strip())
 
 
 def classify_latex_flags(text: str, *, block_type: Optional[str] = None) -> LatexFlags:
@@ -49,14 +73,20 @@ def classify_latex_flags(text: str, *, block_type: Optional[str] = None) -> Late
             "needs_delimiter_wrap": not delimited,
         }
 
+    delimited = _has_existing_math_delimiters(text)
+    if delimited:
+        return {
+            "present": True,
+            "mixed": _text_has_prose_outside_math_delimiters(text),
+            "needs_delimiter_wrap": False,
+        }
+
     from utils.translation_segments import _is_formula_segment
 
     if _is_formula_segment(text):
         return {"present": True, "mixed": False, "needs_delimiter_wrap": False}
 
-    delimited = _has_existing_math_delimiters(text)
-    present = bool(delimited or has_latex_content(text))
-
+    present = bool(has_latex_content(text))
     return {
         "present": present,
         "mixed": False,
@@ -166,6 +196,7 @@ def normalize_text_for_typst_overlay(
     if not flags.get("present"):
         return text
     prepared = prepare_text_for_latex_render(text, flags)
+    prepared = _trim_inline_math_delimiter_whitespace(prepared)
     return _unwrap_spurious_display_math_wrapper(prepared, flags)
 
 

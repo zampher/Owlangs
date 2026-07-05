@@ -16,23 +16,22 @@ import 'layout_bbox_highlight.dart';
 
 /// Single-pane overlay image preview (translated raster export).
 ///
-/// When [highlightRect] is provided (in **image pixel** coordinates:
-/// [x0, y0, x1, y1] relative to the raster), a semi-transparent rectangle
-/// is overlaid on the image and follows zoom/pan transforms.
+/// When [highlightRects] is provided (in **image pixel** coordinates), red
+/// outlines are overlaid for every bbox in the layout group.
 class ImageOverlayPreviewView extends StatefulWidget {
   const ImageOverlayPreviewView({
     required this.imageUrl,
     super.key,
     this.panelLabel,
     this.viewportController,
-    this.highlightRect,
+    this.highlightRects = const <Rect>[],
     this.bboxReferenceSize,
   });
 
   final String imageUrl;
   final String? panelLabel;
   final PreviewViewportController? viewportController;
-  final Rect? highlightRect;
+  final List<Rect> highlightRects;
 
   /// Bbox coordinate reference size from API (`overlay_source_image_size`).
   final Size? bboxReferenceSize;
@@ -113,20 +112,32 @@ class _ImageOverlayPreviewViewState extends State<ImageOverlayPreviewView> {
     }));
   }
 
-  Rect? _computeDisplayRect(BoxConstraints constraints) {
-    return layoutImageRectToDisplayRect(
-      layoutRect: widget.highlightRect,
-      displayImageSize: _imageSize,
-      bboxReferenceSize: widget.bboxReferenceSize,
-      containerWidth: constraints.maxWidth,
-      containerHeight: constraints.maxHeight,
-    );
+  List<Rect> _computeDisplayRects(BoxConstraints constraints) {
+    final List<Rect> rects = <Rect>[];
+    for (final Rect layoutRect in widget.highlightRects) {
+      final Rect? screenRect = layoutImageRectToDisplayRect(
+        layoutRect: layoutRect,
+        displayImageSize: _imageSize,
+        bboxReferenceSize: widget.bboxReferenceSize,
+        containerWidth: constraints.maxWidth,
+        containerHeight: constraints.maxHeight,
+      );
+      if (screenRect != null) {
+        rects.add(screenRect);
+      }
+    }
+    return rects;
   }
 
   Widget _buildHighlightOverlay(BoxConstraints constraints) {
-    final Rect? screenRect = _computeDisplayRect(constraints);
-    if (screenRect == null) return const SizedBox.shrink();
-    return buildImageBboxHighlightOverlay(screenRect);
+    final List<Rect> screenRects = _computeDisplayRects(constraints);
+    if (screenRects.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Stack(
+      clipBehavior: Clip.none,
+      children: layoutBboxHighlightOverlays(screenRects),
+    );
   }
 
   Widget _buildImageStack(Uint8List bytes, BoxConstraints constraints) {
@@ -343,8 +354,8 @@ class ImageOverlayCompareView extends StatefulWidget {
     required this.targetImageUrl,
     required this.linkedScroll,
     super.key,
-    this.highlightRect,
-    this.sourceHighlightRect,
+    this.highlightRects = const <Rect>[],
+    this.sourceHighlightRects = const <Rect>[],
     this.bboxReferenceSize,
     this.viewportController,
   });
@@ -353,11 +364,11 @@ class ImageOverlayCompareView extends StatefulWidget {
   final String targetImageUrl;
   final bool linkedScroll;
 
-  /// Bbox rectangle (image pixel coords) to highlight on the target pane.
-  final Rect? highlightRect;
+  /// Bbox rectangles (image pixel coords) to highlight on the target pane.
+  final List<Rect> highlightRects;
 
-  /// Bbox for the source pane; defaults to [highlightRect] when null.
-  final Rect? sourceHighlightRect;
+  /// Bboxes for the source pane; defaults to [highlightRects] when empty.
+  final List<Rect> sourceHighlightRects;
 
   /// Bbox coordinate reference from API (`overlay_source_image_size`).
   final Size? bboxReferenceSize;
@@ -562,32 +573,44 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
     }
   }
 
-  Widget _buildBboxOverlay(
+  Widget _buildBboxOverlays(
     BoxConstraints constraints,
     Size? imageSize,
-    Rect? highlightRect,
+    List<Rect> highlightRects,
   ) {
-    final Rect? screenRect = layoutImageRectToDisplayRect(
-      layoutRect: highlightRect,
-      displayImageSize: imageSize,
-      bboxReferenceSize: widget.bboxReferenceSize,
-      containerWidth: constraints.maxWidth,
-      containerHeight: constraints.maxHeight,
-    );
-    if (screenRect == null) {
+    if (highlightRects.isEmpty) {
       return const SizedBox.shrink();
     }
-    return buildImageBboxHighlightOverlay(screenRect);
+    final List<Rect> screenRects = <Rect>[];
+    for (final Rect layoutRect in highlightRects) {
+      final Rect? screenRect = layoutImageRectToDisplayRect(
+        layoutRect: layoutRect,
+        displayImageSize: imageSize,
+        bboxReferenceSize: widget.bboxReferenceSize,
+        containerWidth: constraints.maxWidth,
+        containerHeight: constraints.maxHeight,
+      );
+      if (screenRect != null) {
+        screenRects.add(screenRect);
+      }
+    }
+    if (screenRects.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Stack(
+      clipBehavior: Clip.none,
+      children: layoutBboxHighlightOverlays(screenRects),
+    );
   }
 
   Widget _buildPane({
     required String label,
     required Uint8List bytes,
     required Size? imageSize,
-    required Rect? highlightRect,
+    required List<Rect> highlightRects,
     required TransformationController transformController,
   }) {
-    final bool showHighlight = highlightRect != null;
+    final bool showHighlight = highlightRects.isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -624,7 +647,11 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
                           child: Image.memory(bytes, fit: BoxFit.contain),
                         ),
                         if (showHighlight)
-                          _buildBboxOverlay(constraints, imageSize, highlightRect),
+                          _buildBboxOverlays(
+                            constraints,
+                            imageSize,
+                            highlightRects,
+                          ),
                       ],
                     ),
                   );
@@ -642,8 +669,9 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
     required Uint8List source,
     required Uint8List target,
   }) {
-    final Rect? sourceHighlight =
-        widget.sourceHighlightRect ?? widget.highlightRect;
+    final List<Rect> sourceHighlights = widget.sourceHighlightRects.isNotEmpty
+        ? widget.sourceHighlightRects
+        : widget.highlightRects;
     return Listener(
       onPointerSignal: _onPointerSignal,
       child: Row(
@@ -654,7 +682,7 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
               label: l10n.translationPreviewPanelSource,
               bytes: source,
               imageSize: _sourceImageSize,
-              highlightRect: sourceHighlight,
+              highlightRects: sourceHighlights,
               transformController: _sourceTransformController,
             ),
           ),
@@ -664,7 +692,7 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
               label: l10n.translationPreviewPanelTarget,
               bytes: target,
               imageSize: _targetImageSize,
-              highlightRect: widget.highlightRect,
+              highlightRects: widget.highlightRects,
               transformController: _targetTransformController,
             ),
           ),

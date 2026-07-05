@@ -15,6 +15,7 @@ import '../../providers/segment_undo_redo_provider.dart';
 import '../../models/segment_pair.dart';
 import '../../utils/segment_height_cache.dart';
 import '../../utils/segment_type_utils.dart';
+import '../../utils/layout_bbox_text_split.dart';
 import 'translation_segment_item.dart';
 import 'segment_pdf_typography_dialog.dart';
 
@@ -85,6 +86,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
     this.pdfPageFilterListenable,
     this.onPdfPageFilterChanged,
     this.showSegmentScrollbar = true,
+    this.onLayoutGroupPartsEdit,
   });
 
   final String taskId;
@@ -149,6 +151,8 @@ class TranslationComparisonPanel extends ConsumerWidget {
   final ValueListenable<Set<int>>? pdfPageFilterListenable;
   final void Function(Set<int> pages, {int? jumpToPage})? onPdfPageFilterChanged;
   final bool showSegmentScrollbar;
+  final Future<void> Function(int index, Map<int, String> parts)?
+      onLayoutGroupPartsEdit;
 
   /// Check if a segment is cleared based on metadata
   bool _isSegmentCleared(Map<String, dynamic> metadata) {
@@ -1303,6 +1307,21 @@ class TranslationComparisonPanel extends ConsumerWidget {
               showTableStroke: isPdfTableSegment(metadata),
               onFontSizeChanged: onFontSizeChanged,
               pdfRevisionMode: pdfRevisionMode,
+              layoutBlockBboxes: pdfRevisionMode
+                  ? readSegmentLayoutBlockBboxes(metadata)
+                  : null,
+              layoutBlockIndices: pdfRevisionMode
+                  ? parseLayoutBlockIndices(metadata['layout_block_indices'])
+                  : null,
+              layoutGroupTextParts: pdfRevisionMode &&
+                      metadata['layout_group_text_parts'] is Map
+                  ? Map<String, dynamic>.from(
+                      metadata['layout_group_text_parts'] as Map,
+                    )
+                  : null,
+              onLayoutGroupPartsEdit: pdfRevisionMode
+                  ? onLayoutGroupPartsEdit
+                  : null,
             ),
           );
 

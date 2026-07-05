@@ -135,7 +135,8 @@ class PaddleToConverterAdapter:
                         blocks_data = []
                         for block in page.blocks:
                             bbox = block.bbox if hasattr(block, "bbox") else None
-                            blocks_data.append({
+                            raw_meta = getattr(block, "raw", None) or {}
+                            block_entry: Dict[str, Any] = {
                                 "page_index": block.page_index,
                                 "block_index": block.index,
                                 "type": getattr(block, "type", "?"),
@@ -143,7 +144,18 @@ class PaddleToConverterAdapter:
                                 "bbox": list(bbox) if bbox else None,
                                 "text": (getattr(block, "text", "") or ""),
                                 "tags": list(getattr(block, "tags", []) or []),
-                            })
+                            }
+                            if isinstance(raw_meta, dict):
+                                if raw_meta.get("group_id") is not None:
+                                    block_entry["group_id"] = raw_meta.get("group_id")
+                                if raw_meta.get("_layout_group_pair_of") is not None:
+                                    block_entry["_layout_group_pair_of"] = raw_meta.get(
+                                        "_layout_group_pair_of"
+                                    )
+                                group_pairs = raw_meta.get("_layout_group_pairs")
+                                if group_pairs:
+                                    block_entry["_layout_group_pairs"] = group_pairs
+                            blocks_data.append(block_entry)
                         pages_data.append({
                             "page_index": page.page_index,
                             "page_width": page.width,

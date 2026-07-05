@@ -377,6 +377,9 @@ def _enrich_segments_layout_block_bbox(
             f"(total={len(segments_list)}, with_indices={has_indices}, "
             f"with_nonempty_bbox={has_bbox})",
         )
+        _expand_segments_layout_group_bboxes(
+            task_id, task_state, segments_list, layout_doc,
+        )
         return
 
     logger.info(
@@ -500,6 +503,49 @@ def _enrich_segments_layout_block_bbox(
             LogModule.ROUTE,
             f"[LAYOUT-BBOX] Task {task_id}: {len(failed)} segment(s) still "
             f"without bbox after enrich: {preview}",
+        )
+
+    if layout_doc is not None:
+        _expand_segments_layout_group_bboxes(
+            task_id, task_state, segments_list, layout_doc, bbox_map,
+        )
+
+
+def _expand_segments_layout_group_bboxes(
+    task_id: str,
+    task_state: Dict[str, Any],
+    segments_list: List[Dict[str, Any]],
+    layout_doc: Any,
+    bbox_map: Optional[Dict[Any, Any]] = None,
+) -> None:
+    """Append layout group companion bboxes for multi-block segment preview."""
+    if layout_doc is None:
+        layout_doc = _resolve_layout_document(task_id, task_state)
+    if layout_doc is None or not segments_list:
+        return
+
+    from layout.ocr_provider.paddle.zip_loader import (
+        _enrich_layout_group_pairs_on_document,
+    )
+    from utils.format_convert_utils import (
+        expand_segment_layout_group_bboxes,
+        normalize_layout_block_bbox_map,
+    )
+
+    _enrich_layout_group_pairs_on_document(layout_doc, None)
+    if bbox_map is None:
+        bbox_map = normalize_layout_block_bbox_map(task_state.get("layout_block_bbox"))
+    group_expanded = 0
+    for seg in segments_list:
+        if not isinstance(seg, dict):
+            continue
+        if expand_segment_layout_group_bboxes(seg, layout_doc, bbox_map):
+            group_expanded += 1
+    if group_expanded > 0:
+        logger.info(
+            LogModule.ROUTE,
+            f"[LAYOUT-BBOX] Task {task_id}: expanded layout group bboxes "
+            f"for {group_expanded} segment(s)",
         )
 
 
@@ -1069,6 +1115,10 @@ async def update_segment_api(
     table_stroke_pt = body.get("table_stroke_pt")
     layout_block_bbox_override = body.get("layout_block_bbox_override")
     layout_block_bbox_reset = bool(body.get("layout_block_bbox_reset", False))
+    layout_group_text_parts = body.get("layout_group_text_parts")
+    layout_group_text_parts_reset = bool(
+        body.get("layout_group_text_parts_reset", False)
+    )
 
     segment = _ts_module().update_translation_segment(
         task_id=task_id,
@@ -1090,6 +1140,8 @@ async def update_segment_api(
         table_stroke_pt=table_stroke_pt,
         layout_block_bbox_override=layout_block_bbox_override,
         layout_block_bbox_reset=layout_block_bbox_reset,
+        layout_group_text_parts=layout_group_text_parts,
+        layout_group_text_parts_reset=layout_group_text_parts_reset,
     )
 
     if segment is None:

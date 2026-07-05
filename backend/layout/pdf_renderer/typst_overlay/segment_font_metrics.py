@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from layout.base import LayoutBlock, LayoutDocument, LayoutPage
 from layout.block_types import NON_TEXT_BLOCK_TYPES as _NON_TEXT_BLOCK_TYPES
+from layout.layout_group_pair_utils import is_layout_companion_block
 from layout.pdf_renderer.typst_overlay.font_fit import (
     DEFAULT_LEADING_EM,
     FontFitCalculator,
@@ -1298,12 +1299,88 @@ def _layout_block_bbox_by_index(layout_doc: Any) -> Dict[int, tuple[float, float
     return block_map
 
 
+def _read_segment_layout_bbox_for_block(
+    segment: Dict[str, Any],
+    block_key: int,
+    task_state: Optional[Dict[str, Any]] = None,
+    layout_doc: Any = None,
+) -> Optional[tuple[float, float, float, float]]:
+    """Return layout bbox for a specific block within a multi-block segment."""
+    indices = resolve_segment_layout_block_indices(segment, task_state)
+    is_primary_block = True
+    if indices:
+        try:
+            is_primary_block = int(block_key) == int(indices[0])
+        except (TypeError, ValueError):
+            is_primary_block = True
+
+    override = segment.get("layout_block_bbox_override")
+    if is_primary_block and isinstance(override, (tuple, list)) and len(override) >= 4:
+        try:
+            return tuple(float(v) for v in override[:4])
+        except (TypeError, ValueError):
+            pass
+
+    raw = segment.get("layout_block_bbox")
+    nested_bboxes: List[tuple[float, float, float, float]] = []
+    if isinstance(raw, list) and raw:
+        for item in raw:
+            if isinstance(item, (list, tuple)) and len(item) >= 4:
+                try:
+                    nested_bboxes.append(tuple(float(v) for v in item[:4]))
+                except (TypeError, ValueError):
+                    continue
+            elif len(raw) >= 4 and not isinstance(item, (list, tuple)):
+                try:
+                    return tuple(float(v) for v in raw[:4])
+                except (TypeError, ValueError):
+                    break
+
+    if nested_bboxes and indices:
+        try:
+            normalized_indices = [int(i) for i in indices]
+            pos = normalized_indices.index(int(block_key))
+            if pos < len(nested_bboxes):
+                return nested_bboxes[pos]
+        except (TypeError, ValueError):
+            pass
+        if len(nested_bboxes) == 1:
+            return nested_bboxes[0]
+
+    if task_state is not None or layout_doc is not None:
+        from utils.format_convert_utils import bboxes_for_layout_block_indices
+
+        bboxes = bboxes_for_layout_block_indices(
+            [block_key],
+            task_state.get("layout_block_bbox") if task_state else None,
+            layout_document=layout_doc,
+        )
+        if len(bboxes) == 1:
+            try:
+                return tuple(float(v) for v in bboxes[0][:4])
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
 def _read_segment_layout_bbox(
     segment: Dict[str, Any],
     task_state: Optional[Dict[str, Any]] = None,
     layout_doc: Any = None,
+    *,
+    block_key: Optional[int] = None,
 ) -> Optional[tuple[float, float, float, float]]:
     """Return layout bbox from segment override or computed layout_block_bbox."""
+    if block_key is not None:
+        resolved = _read_segment_layout_bbox_for_block(
+            segment,
+            block_key,
+            task_state,
+            layout_doc,
+        )
+        if resolved is not None:
+            return resolved
+
     override = segment.get("layout_block_bbox_override")
     if isinstance(override, (tuple, list)) and len(override) >= 4:
         try:
@@ -1464,6 +1541,30 @@ def collect_segment_layout_bbox_redaction_rects(
             task_state,
         ),
     )
+
+    def _append_rect(
+        page_idx: int,
+        rect_bbox: tuple[float, float, float, float],
+    ) -> None:
+        x0, y0, x1, y1 = rect_bbox
+        expanded = (
+            max(0.0, x0 - margin_pt),
+            max(0.0, y0 - margin_pt),
+            x1 + margin_pt,
+            y1 + margin_pt,
+        )
+        preserve_on_page = preserve_empty_by_page.get(page_idx, [])
+        if preserve_on_page:
+            from layout.pdf_renderer.typst_overlay.source_cleanup import (
+                _clip_rects_against_protected_rects,
+            )
+
+            clipped = _clip_rects_against_protected_rects([expanded], preserve_on_page)
+            for rect in clipped:
+                by_page.setdefault(page_idx, []).append(rect)
+        else:
+            by_page.setdefault(page_idx, []).append(expanded)
+
     for seg in segments:
         if not isinstance(seg, dict):
             continue
@@ -1476,7 +1577,48 @@ def collect_segment_layout_bbox_redaction_rects(
             continue
         bbox = _read_segment_layout_bbox(seg, task_state, layout_doc)
         indices = resolve_segment_layout_block_indices(seg, task_state)
-        if bbox is None and bbox_override_by_block_index and indices:
+        redaction_targets: List[tuple[int, tuple[float, float, float, float]]] = []
+        if indices:
+            for raw_idx in indices:
+                try:
+                    idx = int(raw_idx)
+                except (TypeError, ValueError):
+                    continue
+                per_block_bbox = _read_segment_layout_bbox_for_block(
+                    seg,
+                    idx,
+                    task_state,
+                    layout_doc,
+                )
+                if per_block_bbox is None:
+                    blk = block_by_index.get(idx)
+                    if blk is not None and getattr(blk, "bbox", None):
+                        try:
+                            per_block_bbox = tuple(float(v) for v in blk.bbox[:4])
+                        except (TypeError, ValueError):
+                            per_block_bbox = None
+                if per_block_bbox is None:
+                    continue
+                page_for_block = block_page.get(idx)
+                if page_for_block is None:
+                    page_for_block = _infer_page_index_for_bbox(per_block_bbox, layout_doc)
+                if page_for_block is None:
+                    continue
+                redaction_targets.append((int(page_for_block), per_block_bbox))
+        if not redaction_targets and bbox is not None:
+            page_idx = None
+            for raw_idx in indices or []:
+                try:
+                    page_idx = block_page.get(int(raw_idx))
+                except (TypeError, ValueError):
+                    continue
+                if page_idx is not None:
+                    break
+            if page_idx is None:
+                page_idx = _infer_page_index_for_bbox(bbox, layout_doc)
+            if page_idx is not None:
+                redaction_targets.append((int(page_idx), bbox))
+        if not redaction_targets and bbox_override_by_block_index and indices:
             for raw_idx in indices:
                 try:
                     idx = int(raw_idx)
@@ -1486,11 +1628,14 @@ def collect_segment_layout_bbox_redaction_rects(
                 if override_bbox is None:
                     continue
                 try:
-                    bbox = tuple(float(v) for v in override_bbox[:4])
+                    override_rect = tuple(float(v) for v in override_bbox[:4])
+                    page_idx = block_page.get(idx)
+                    if page_idx is not None:
+                        redaction_targets.append((int(page_idx), override_rect))
                     break
                 except (TypeError, ValueError):
                     continue
-        if bbox is None:
+        if not redaction_targets:
             continue
         if indices and all(int(i) in skip for i in indices if i is not None):
             continue
@@ -1529,36 +1674,8 @@ def collect_segment_layout_bbox_redaction_rects(
             # Empty OCR blocks without segment overlay text keep PDF background pixels.
             if all_empty_ocr_text and not has_overlay_text:
                 continue
-        page_idx = None
-        for raw_idx in indices:
-            try:
-                page_idx = block_page.get(int(raw_idx))
-            except (TypeError, ValueError):
-                continue
-            if page_idx is not None:
-                break
-        if page_idx is None:
-            page_idx = _infer_page_index_for_bbox(bbox, layout_doc)
-        if page_idx is None:
-            continue
-        x0, y0, x1, y1 = bbox
-        expanded = (
-            max(0.0, x0 - margin_pt),
-            max(0.0, y0 - margin_pt),
-            x1 + margin_pt,
-            y1 + margin_pt,
-        )
-        preserve_on_page = preserve_empty_by_page.get(page_idx, [])
-        if preserve_on_page:
-            from layout.pdf_renderer.typst_overlay.source_cleanup import (
-                _clip_rects_against_protected_rects,
-            )
-
-            clipped = _clip_rects_against_protected_rects([expanded], preserve_on_page)
-            for rect in clipped:
-                by_page.setdefault(page_idx, []).append(rect)
-        else:
-            by_page.setdefault(page_idx, []).append(expanded)
+        for page_idx, target_bbox in redaction_targets:
+            _append_rect(page_idx, target_bbox)
     return by_page
 
 
@@ -1602,7 +1719,7 @@ def collect_empty_text_block_protected_rects(
             ):
                 continue
             raw = getattr(block, "raw", None) or {}
-            if isinstance(raw, dict) and raw.get("_cross_page_pair_of") is not None:
+            if is_layout_companion_block(raw):
                 continue
             x0, y0, x1, y1 = block.bbox
             by_page.setdefault(page.page_index, []).append(
@@ -1716,13 +1833,18 @@ def build_block_bbox_override_map_from_segments(
             equation_format=eq_fmt,
         ):
             continue
-        bbox = _read_segment_layout_bbox(seg, task_state, layout_doc)
-        if bbox is None:
-            continue
         for idx in resolve_segment_layout_block_indices(seg, task_state):
             try:
                 idx_int = int(idx)
             except (TypeError, ValueError):
+                continue
+            per_block_bbox = _read_segment_layout_bbox_for_block(
+                seg,
+                idx_int,
+                task_state,
+                layout_doc,
+            )
+            if per_block_bbox is None:
                 continue
             blk = block_by_index.get(idx_int)
             if blk is not None and block_preserves_source_pdf_visual(
@@ -1732,7 +1854,7 @@ def build_block_bbox_override_map_from_segments(
                 table_body_format=table_fmt,
             ):
                 continue
-            block_map[idx_int] = bbox
+            block_map[idx_int] = per_block_bbox
     return block_map
 
 

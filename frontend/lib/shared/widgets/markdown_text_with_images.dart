@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import '../../shared/utils/app_logger.dart';
 import '../../shared/utils/ebook_image_helper.dart';
+import '../../shared/utils/latex_text_segments.dart';
 
 /// Widget that displays markdown text with image placeholders replaced by actual images
 /// Supports both selectable and non-selectable text
@@ -52,9 +53,8 @@ class MarkdownTextWithImages extends StatelessWidget {
       }
     }
 
-    // Check if text contains LaTeX formulas ($$...$$ format)
-    final latexBlockPattern = RegExp(r'\$\$[\s\S]*?\$\$');
-    final hasLaTeX = latexBlockPattern.hasMatch(text);
+    // Check if text contains LaTeX formulas ($$...$$, $...$, \[...\], \(...\))
+    final bool hasLaTeX = textContainsLatexMath(text);
 
     // Check if text contains image placeholders
     // Support path characters (/, ., -, _) in placeholder IDs for MOBI/EPUB images
@@ -794,85 +794,164 @@ class MarkdownTextWithImages extends StatelessWidget {
     }
   }
 
-  /// Build widget with LaTeX formulas rendered using KaTeX (Web) or plain text (Desktop)
+  /// Build widget with inline and display LaTeX delimiters.
   Widget _buildWithLaTeX(String text) {
-    // Pattern to match LaTeX block formulas: $$...$$
-    final latexBlockPattern = RegExp(r'\$\$([\s\S]*?)\$\$');
+    final List<LatexTextSegment> segments = splitLatexTextSegments(text);
+    final bool hasDisplay = segments.any(
+      (LatexTextSegment segment) => segment.kind == LatexSegmentKind.display,
+    );
 
-    // Split text by LaTeX blocks
-    final parts = <Widget>[];
-    final textParts = text.split(latexBlockPattern);
-    final matches = latexBlockPattern.allMatches(text);
-    int matchIndex = 0;
-
-    for (int i = 0; i < textParts.length; i++) {
-      // Add text part (non-LaTeX content)
-      if (textParts[i].isNotEmpty) {
-        // Check if this text part contains images or placeholders
-        final base64ImagePattern = RegExp(r'data:image/[^;]+;base64,[^\s)]+');
-        final hasPlaceholders = ebookPlaceholderRe.hasMatch(textParts[i]);
-        final hasHtmlExtractorPart =
-            parseHtmlExtractorImageSegment(textParts[i].trim()) != null;
-        final hasBase64Images = base64ImagePattern.hasMatch(textParts[i]);
-
-        if (hasPlaceholders || hasBase64Images || hasHtmlExtractorPart) {
-          // This text part contains images, render it recursively
-          parts.add(
-            MarkdownTextWithImages(
-              text: textParts[i],
-              imageDataMap: imageDataMap,
-              enableSelection: enableSelection,
-              style: style,
-              imageMaxWidth: imageMaxWidth,
-              imageMaxHeight: imageMaxHeight,
-            ),
-          );
-        } else {
-          // Plain text
-          parts.add(
-            enableSelection
-                ? SelectableText.rich(
-                    TextSpan(
-                      text: textParts[i],
-                      style: style,
-                    ),
-                  )
-                : Text.rich(
-                    TextSpan(
-                      text: textParts[i],
-                      style: style,
-                    ),
-                  ),
-          );
-        }
-      }
-
-      // Add LaTeX formula if found
-      if (i < textParts.length - 1 && matchIndex < matches.length) {
-        final match = matches.elementAt(matchIndex);
-        final latexContent = match.group(1)?.trim() ?? '';
-        matchIndex++;
-
-        if (latexContent.isNotEmpty) {
-          parts.add(
-            _buildLaTeXWidget(latexContent, displayMode: true),
-          );
-        }
-      }
+    if (!hasDisplay) {
+      return _buildInlineLaTeXFlow(segments);
     }
 
-    // If only one part, return it directly
+    final List<Widget> parts = <Widget>[];
+    final StringBuffer plainBuffer = StringBuffer();
+
+    void flushPlainBuffer() {
+      if (plainBuffer.isEmpty) {
+        return;
+      }
+      final String plainText = plainBuffer.toString();
+      plainBuffer.clear();
+      parts.add(_buildPlainOrRecursiveTextPart(plainText));
+    }
+
+    for (final LatexTextSegment segment in segments) {
+      switch (segment.kind) {
+        case LatexSegmentKind.plain:
+          plainBuffer.write(segment.text);
+        case LatexSegmentKind.inline:
+          flushPlainBuffer();
+          parts.add(_buildInlineLaTeXFlow(<LatexTextSegment>[segment]));
+        case LatexSegmentKind.display:
+          flushPlainBuffer();
+          parts.add(_buildLaTeXWidget(segment.text, displayMode: true));
+      }
+    }
+    flushPlainBuffer();
+
     if (parts.length == 1) {
-      return parts[0];
+      return parts.first;
     }
 
-    // Multiple parts, wrap in Column
     return RepaintBoundary(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: parts,
       ),
+    );
+  }
+
+  Widget _buildPlainOrRecursiveTextPart(String plainText) {
+    if (plainText.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final RegExp base64ImagePattern =
+        RegExp(r'data:image/[^;]+;base64,[^\s)]+');
+    final bool hasPlaceholders = ebookPlaceholderRe.hasMatch(plainText);
+    final bool hasHtmlExtractorPart =
+        parseHtmlExtractorImageSegment(plainText.trim()) != null;
+    final bool hasBase64Images = base64ImagePattern.hasMatch(plainText);
+
+    if (hasPlaceholders || hasBase64Images || hasHtmlExtractorPart) {
+      return MarkdownTextWithImages(
+        text: plainText,
+        imageDataMap: imageDataMap,
+        enableSelection: enableSelection,
+        style: style,
+        imageMaxWidth: imageMaxWidth,
+        imageMaxHeight: imageMaxHeight,
+      );
+    }
+
+    if (textContainsLatexMath(plainText)) {
+      return _buildWithLaTeX(plainText);
+    }
+
+    return enableSelection
+        ? SelectableText.rich(
+            TextSpan(
+              text: plainText,
+              style: style,
+            ),
+          )
+        : Text.rich(
+            TextSpan(
+              text: plainText,
+              style: style,
+            ),
+          );
+  }
+
+  Widget _buildInlineLaTeXFlow(List<LatexTextSegment> segments) {
+    final List<InlineSpan> spans = <InlineSpan>[];
+    for (final LatexTextSegment segment in segments) {
+      if (segment.kind == LatexSegmentKind.plain) {
+        if (segment.text.isEmpty) {
+          continue;
+        }
+        spans.add(TextSpan(text: segment.text));
+        continue;
+      }
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: _buildInlineLaTeXChip(segment.text),
+        ),
+      );
+    }
+
+    if (spans.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    if (spans.length == 1 && spans.first is TextSpan) {
+      final TextSpan onlySpan = spans.first as TextSpan;
+      return enableSelection
+          ? SelectableText.rich(
+              TextSpan(
+                text: onlySpan.text,
+                style: style,
+              ),
+            )
+          : Text.rich(
+              TextSpan(
+                text: onlySpan.text,
+                style: style,
+              ),
+            );
+    }
+
+    return enableSelection
+        ? SelectableText.rich(
+            TextSpan(style: style, children: spans),
+          )
+        : Text.rich(
+            TextSpan(style: style, children: spans),
+          );
+  }
+
+  Widget _buildInlineLaTeXChip(String latex) {
+    final TextStyle chipStyle = style?.copyWith(
+          fontFamily: 'monospace',
+          fontSize: (style?.fontSize ?? 14) * 0.92,
+          color: Colors.blue.shade800,
+          height: 1.2,
+        ) ??
+        TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 12,
+          color: Colors.blue.shade800,
+          height: 1.2,
+        );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 1),
+      child: Text(latex, style: chipStyle),
     );
   }
 

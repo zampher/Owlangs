@@ -15,6 +15,7 @@ from pathlib import Path
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from layout.renderable_block_indices import expand_renderable_block_indices
+from layout.layout_group_pair_utils import is_layout_companion_block
 
 # Temporary feature flag: high-fidelity layout-based PDF (ReportLab/HTML fallback).
 # When False, this generator will short-circuit and not create additional PDFs,
@@ -562,7 +563,7 @@ class PDFGenerator:
                 # their share of the translation is rendered via the source block's
                 # _split_cross_page_text logic.
                 raw = block_index_to_raw.get(block_index_int, {})
-                if isinstance(raw, dict) and raw.get("_cross_page_pair_of") is not None:
+                if is_layout_companion_block(raw):
                     continue
 
                 if block_type == "image":
@@ -603,6 +604,39 @@ class PDFGenerator:
                 continue
 
             if not text:
+                continue
+
+            from layout.layout_group_pair_utils import (
+                layout_group_text_parts_cover_indices,
+                normalize_layout_group_text_parts,
+            )
+
+            stored_parts = normalize_layout_group_text_parts(
+                seg.get("layout_group_text_parts"),
+            )
+            layout_indices = resolve_segment_layout_block_indices(seg, task_state)
+            if (
+                stored_parts
+                and layout_group_text_parts_cover_indices(stored_parts, layout_indices)
+            ):
+                for raw_idx in layout_indices:
+                    try:
+                        block_index_int = int(raw_idx)
+                    except (TypeError, ValueError):
+                        continue
+                    block_type = block_index_to_type.get(block_index_int)
+                    raw_meta = block_index_to_raw.get(block_index_int, {})
+                    if block_type == "image":
+                        continue
+                    if block_type == "list":
+                        continue
+                    part_text = (stored_parts.get(block_index_int) or "").strip()
+                    if not part_text:
+                        continue
+                    if is_layout_companion_block(raw_meta) or block_index_int in stored_parts:
+                        block_text_map[block_index_int] = part_text
+                        block_has_overlay[block_index_int] = True
+                        block_only_skip[block_index_int] = False
                 continue
 
             try:
@@ -719,7 +753,7 @@ class PDFGenerator:
                 if block_index_to_type.get(block_index_int) == "image":
                     continue
                 raw = block_index_to_raw.get(block_index_int, {})
-                if isinstance(raw, dict) and raw.get("_cross_page_pair_of") is not None:
+                if is_layout_companion_block(raw):
                     continue
                 text_indices.append(block_index_int)
             if len(text_indices) == 1:

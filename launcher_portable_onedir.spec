@@ -147,7 +147,7 @@ hiddenimports = [
     'pptx', 'pptx.util', 'pptx.dml.color', 'pptx.enum.shapes',
     'pptx.enum.text', 'pptx.shapes.base', 'pptx.shapes.group',
     'pptx.shapes.autoshape', 'pptx.table', 'pptx.shapes.freeform', 'pptx.text.text',
-    'layout', 'layout.base', 'layout.block_types', 'layout.mineru_layout_model', 'layout.markdown_builder', 'layout.registry',
+    'layout', 'layout.base', 'layout.block_types', 'layout.layout_group_pair_utils', 'layout.mineru_layout_model', 'layout.markdown_builder', 'layout.registry',
     # layout OCR provider - multi-engine OCR/layout parsing (MinerU + PaddleOCR)
     'layout.ocr_provider', 'layout.ocr_provider.base', 'layout.ocr_provider.types',
     'layout.ocr_provider.mineru', 'layout.ocr_provider.mineru.layout_parser', 'layout.ocr_provider.mineru.provider',
@@ -155,6 +155,7 @@ hiddenimports = [
     'layout.ocr_provider.paddle.block_labels', 'layout.ocr_provider.paddle.converter_adapter',
     'layout.ocr_provider.paddle.capability_probe', 'layout.ocr_provider.paddle.sync_infer_adapter',
     'layout.ocr_provider.paddle.layout_parser', 'layout.ocr_provider.paddle.provider',
+    'layout.ocr_provider.paddle.layout_group_pairs',
     'layout.ocr_provider.paddle.zip_loader',
     'layout.ocr_provider.paddle.paddle_det_supplements',
     # layout PDF renderer - Typst overlay (high-fidelity PDF export)

@@ -52,3 +52,30 @@ Widget layoutBboxHighlightPositioned({
     child: child,
   );
 }
+
+/// Stack multiple bbox highlight overlays (same group / multi-block segment).
+List<Widget> layoutBboxHighlightOverlays(
+  Iterable<Rect> bboxRects, {
+  Color borderColor = const Color(0xD9FF0000),
+}) {
+  final List<Widget> overlays = <Widget>[];
+  for (final Rect bboxRect in bboxRects) {
+    overlays.add(
+      layoutBboxHighlightPositioned(
+        bboxRect: bboxRect,
+        child: IgnorePointer(
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: borderColor,
+                width: kLayoutBboxHighlightBorderWidth,
+              ),
+              color: Colors.transparent,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+  return overlays;
+}

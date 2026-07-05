@@ -26,7 +26,7 @@ class PdfPreview extends StatefulWidget {
     this.scrollController,
     this.showScrollbar = true,
     this.highlightPageNumber,
-    this.highlightBbox,
+    this.highlightBboxes,
     this.bboxEditMode = false,
     this.onEditBboxChanged,
     this.onEditBboxReset,
@@ -48,8 +48,8 @@ class PdfPreview extends StatefulWidget {
   /// 1-based page number to render the highlight rectangle on.
   final int? highlightPageNumber;
 
-  /// Bounding box in PDF points: [x0, y0, x1, y1].
-  final List<double>? highlightBbox;
+  /// Bounding boxes in PDF points: each `[x0, y0, x1, y1]`.
+  final List<List<double>>? highlightBboxes;
 
   /// Whether bbox edit mode is active.
   final bool bboxEditMode;
@@ -174,7 +174,7 @@ class _PdfPreviewIoState extends State<PdfPreview> {
       scrollController: widget.scrollController,
       showScrollbar: widget.showScrollbar,
       highlightPageNumber: widget.highlightPageNumber,
-      highlightBbox: widget.highlightBbox,
+      highlightBboxes: widget.highlightBboxes,
       bboxEditMode: widget.bboxEditMode,
       onEditBboxChanged: widget.onEditBboxChanged,
       onEditBboxReset: widget.onEditBboxReset,

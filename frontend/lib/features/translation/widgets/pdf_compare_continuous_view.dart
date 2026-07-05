@@ -70,8 +70,8 @@ class PdfCompareContinuousView extends StatefulWidget {
     this.onVisiblePageChanged,
     this.navigationController,
     this.highlightPageNumber,
-    this.highlightBbox,
-    this.sourceHighlightBbox,
+    this.highlightBboxes,
+    this.sourceHighlightBboxes,
     this.viewportController,
     this.bboxEditMode = false,
     this.editBboxRect,
@@ -91,12 +91,11 @@ class PdfCompareContinuousView extends StatefulWidget {
   /// When non-null, the page number (1-based) whose bbox should be highlighted.
   final int? highlightPageNumber;
 
-  /// Bbox in PDF points `[x0, y0, x1, y1]` to highlight on the matching page.
-  final List<double>? highlightBbox;
+  /// Bboxes in PDF points to highlight on the matching page.
+  final List<List<double>>? highlightBboxes;
 
-  /// Original (non-overridden) bbox for the source (left) side highlight.
-  /// When editing bbox, the source side should always show the original.
-  final List<double>? sourceHighlightBbox;
+  /// Original (non-overridden) bboxes for the source (left) side highlight.
+  final List<List<double>>? sourceHighlightBboxes;
 
   /// When provided, [InteractiveViewer] zoom is bidirectionally synced with
   /// this controller so toolbar buttons (zoom In/Out/Reset) mirror the child's
@@ -683,10 +682,10 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                               document: source,
                               pageNumber: pageNumber,
                               maxWidth: columnWidth - 16,
-                              highlightBbox: (widget.highlightPageNumber ==
+                              highlightBboxes: (widget.highlightPageNumber ==
                                       pageNumber)
-                                  ? (widget.sourceHighlightBbox ??
-                                      widget.highlightBbox)
+                                  ? (widget.sourceHighlightBboxes ??
+                                      widget.highlightBboxes)
                                   : null,
                               transformController: _sourceZoomController,
                               scaleEnabled: false,
@@ -700,9 +699,9 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                               document: target,
                               pageNumber: pageNumber,
                               maxWidth: columnWidth - 16,
-                              highlightBbox: (widget.highlightPageNumber ==
+                              highlightBboxes: (widget.highlightPageNumber ==
                                       pageNumber)
-                                  ? widget.highlightBbox
+                                  ? widget.highlightBboxes
                                   : null,
                               transformController: _targetZoomController,
                               scaleEnabled: false,
@@ -763,10 +762,10 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                           document: source,
                           pageNumber: pageNumber,
                           maxWidth: constraints.maxWidth - 16,
-                          highlightBbox:
+                          highlightBboxes:
                               (widget.highlightPageNumber == pageNumber)
-                                  ? (widget.sourceHighlightBbox ??
-                                      widget.highlightBbox)
+                                  ? (widget.sourceHighlightBboxes ??
+                                      widget.highlightBboxes)
                                   : null,
                           transformController: _sourceZoomController,
                           scaleEnabled: false,
@@ -807,9 +806,9 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
                           document: target,
                           pageNumber: pageNumber,
                           maxWidth: constraints.maxWidth - 16,
-                          highlightBbox:
+                          highlightBboxes:
                               (widget.highlightPageNumber == pageNumber)
-                                  ? widget.highlightBbox
+                                  ? widget.highlightBboxes
                                   : null,
                           transformController: _targetZoomController,
                           scaleEnabled: false,

@@ -676,6 +676,8 @@ class TranslationService {
     double? tableStrokePt,
     List<double>? layoutBlockBboxOverride,
     bool layoutBlockBboxReset = false,
+    Map<String, String>? layoutGroupTextParts,
+    bool layoutGroupTextPartsReset = false,
   }) async {
     final dio = _buildAuthedDio();
     final body = <String, dynamic>{};
@@ -689,6 +691,11 @@ class TranslationService {
       body['layout_block_bbox_reset'] = true;
     } else if (layoutBlockBboxOverride != null) {
       body['layout_block_bbox_override'] = layoutBlockBboxOverride;
+    }
+    if (layoutGroupTextPartsReset) {
+      body['layout_group_text_parts_reset'] = true;
+    } else if (layoutGroupTextParts != null) {
+      body['layout_group_text_parts'] = layoutGroupTextParts;
     }
     if (pdfFontReset) {
       body['pdf_font_reset'] = true;

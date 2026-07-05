@@ -18,6 +18,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from layout.base import LayoutBlock, LayoutPage, LayoutDocument
 from layout.ocr_provider.paddle.block_labels import map_paddle_label
+from layout.ocr_provider.paddle.layout_group_pairs import (
+    apply_paddle_layout_group_pairs,
+    apply_spatial_layout_group_pairs,
+)
 from logger import unified_logger as logger
 from logger.logger import LogModule
 
@@ -395,6 +399,17 @@ def parse_paddle_layout(
                         1.0,
                     )
                 )
+                apply_paddle_layout_group_pairs(
+                    blocks,
+                    page_height=page_h,
+                    page_width=page_w,
+                )
+                apply_spatial_layout_group_pairs(
+                    blocks,
+                    page_height=page_h,
+                    page_width=page_w,
+                )
+
                 from layout.ocr_provider.paddle.paddle_det_supplements import (
                     append_paddle_det_supplement_blocks,
                     extract_paddle_det_boxes_from_pruned,

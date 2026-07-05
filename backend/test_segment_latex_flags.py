@@ -121,6 +121,25 @@ WRAPPED_MIXED = (
 
 
 @pytest.mark.unit
+def test_author_superscript_line_is_delimited_mixed():
+    text = "李云 $ ^{1} $ | 黄志鸿 $ ^{2} $ | 周建国 $ ^{2} $"
+    flags = classify_latex_flags(text, block_type="text")
+    assert flags["present"] is True
+    assert flags["mixed"] is True
+    assert flags["needs_delimiter_wrap"] is False
+
+
+@pytest.mark.unit
+def test_inline_math_whitespace_trimmed_for_typst():
+    text = "充电（$ (P_{c,t}) $）和放电（$ (P_{d,t}) $）"
+    flags = classify_latex_flags(text, block_type="text")
+    normalized = normalize_text_for_typst_overlay(text, flags)
+    assert "$(P_{c,t})$" in normalized
+    assert "$(P_{d,t})$" in normalized
+    assert "$ (" not in normalized
+
+
+@pytest.mark.unit
 def test_unwrap_spurious_display_math_wrapper_for_mixed_paragraph():
     flags = classify_latex_flags(WRAPPED_MIXED, block_type="text")
     normalized = normalize_text_for_typst_overlay(WRAPPED_MIXED, flags)

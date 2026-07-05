@@ -25,6 +25,8 @@ def test_pyinstaller_hiddenimports_contains_latex_check_modules() -> None:
         "backend.utils.llm_client",
         "backend.utils.segment_latex_flags",
         "backend.utils.mixed_formula_text",
+        "layout.layout_group_pair_utils",
+        "layout.ocr_provider.paddle.layout_group_pairs",
     ]
 
     for spec_path in spec_files:
