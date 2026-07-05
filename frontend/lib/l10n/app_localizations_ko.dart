@@ -2927,6 +2927,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get aiPlatformConnectionTestSucceeded => '연결 테스트 성공';
 
   @override
+  String get paddleOcrTestWarningTextOnly =>
+      '연결되었지만 이 서버는 기본 텍스트 OCR만 반환합니다(rec_texts 행, doc_title/table/formula 없음). Owlangs에는 PaddleOCR-VL-1.6이 필요합니다. 예: 클라우드와 동일 POST /api/v2/ocr/jobs, 모델 PaddleOCR-VL-1.6(infer 전용 POST /ocr 아님).';
+
+  @override
+  String get paddleOcrTestWarningUnverified =>
+      '연결됨(POST /ocr)이지만 PaddleOCR-VL-1.6 레이아웃 파싱을 확인할 수 없습니다. 관리자에게 VL 문서 파싱 배포(예: POST /api/v2/ocr/jobs)를 요청하세요.';
+
+  @override
+  String get paddleOcrTestUnreachable =>
+      'Cannot reach the self-hosted PaddleOCR service. Confirm it is running and the URL/port is correct (template default: http://localhost:8099). After a successful connection, Owlangs checks for PaddleOCR-VL-1.6 document parsing; infer-only text OCR will show a separate orange warning.';
+
+  @override
   String mineruConnectionSuccessWithVersion(String version) {
     return '연결 테스트 성공. MinerU 버전: $version';
   }

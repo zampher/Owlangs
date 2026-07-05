@@ -2,26 +2,39 @@
 # SPDX-License-Identifier: MPL-2.0
 
 """
-PaddleOCR async HTTP API client.
+PaddleOCR HTTP API client.
 
-Implements the three-step PaddleOCR v2 workflow:
+Supports two deployment modes:
 
-1. POST ``/api/v2/ocr/jobs`` — submit PDF, receive job_id
-2. GET  ``/api/v2/ocr/jobs/{job_id}`` — poll until status != "running"
+Cloud async (AI Studio):
+1. POST ``/api/v2/ocr/jobs`` — multipart submit, receive job_id
+2. GET  ``/api/v2/ocr/jobs/{job_id}`` — poll until done
 3. GET  result URL — download JSONL payload
+
+Local sync (official PaddleOCR service):
+1. POST ``/layout-parsing`` (VL layout) or ``/ocr`` (text OCR) — JSON base64 ``file`` + ``fileType``
+2. Response returns ``result.layoutParsingResults`` or ``result.ocrResults`` inline (no polling)
 """
 
 import asyncio
+import base64
 import json
 import threading
 import time
 from email.utils import formatdate
+from pathlib import PurePath
 from typing import Any, Dict, Optional
 
 import httpx
 
+from layout.ocr_provider.paddle.sync_infer_adapter import (
+    is_sync_infer_submit_path,
+    normalize_sync_infer_response,
+)
 from logger import unified_logger as logger
 from logger.logger import LogModule
+
+_INLINE_SYNC_JOB_ID = "__paddle_sync_inline__"
 
 
 class PaddleOCRClient:
@@ -76,6 +89,8 @@ class PaddleOCRClient:
         endpoints = api_endpoints or {}
         self._submit_path = endpoints.get("submit", "/api/v2/ocr/jobs")
         self._result_path = endpoints.get("result", "/api/v2/ocr/jobs/{job_id}")
+        self._sync_infer_mode = is_sync_infer_submit_path(self._submit_path)
+        self._inline_sync_raw: Optional[Dict[str, Any]] = None
 
         self._client: Optional[httpx.AsyncClient] = None
 
@@ -116,23 +131,74 @@ class PaddleOCRClient:
     async def __aexit__(self, *args: Any) -> None:
         await self.close()
 
+    @staticmethod
+    def _sync_file_type(filename: str) -> int:
+        """Local sync API fileType: 0=PDF, 1=image."""
+        suffix = PurePath(filename or "").suffix.lower()
+        if suffix in (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"):
+            return 1
+        return 0
+
+    async def _submit_sync_infer(self, file_bytes: bytes, filename: str) -> str:
+        """POST JSON /layout-parsing or /ocr with base64 file (local PaddleOCR serving)."""
+        payload: Dict[str, Any] = {
+            "file": base64.b64encode(file_bytes).decode("ascii"),
+            "fileType": self._sync_file_type(filename),
+            "useDocOrientationClassify": self.use_doc_orientation_classify,
+        }
+        response = await self.client.post(
+            self._submit_path,
+            json=payload,
+            headers={**self._auth_headers(), "Content-Type": "application/json"},
+        )
+        if response.status_code != 200:
+            logger.error(
+                LogModule.LAYOUT,
+                f"PaddleOCR sync infer failed: HTTP {response.status_code}\n"
+                f"Request URL: {self.base_url}{self._submit_path}\n"
+                f"Response body: {response.text[:2000]}",
+            )
+        response.raise_for_status()
+        resp_json = response.json()
+        if resp_json.get("errorCode") not in (None, 0):
+            raise RuntimeError(
+                f"PaddleOCR sync infer error: {resp_json.get('errorMsg') or resp_json}"
+            )
+        self._inline_sync_raw = resp_json
+        sync_result = resp_json.get("result") or {}
+        page_count = len(
+            sync_result.get("layoutParsingResults")
+            or sync_result.get("ocrResults")
+            or []
+        )
+        logger.info(
+            LogModule.LAYOUT,
+            f"[PADDLEOCR-CONFIG] Sync infer completed inline "
+            f"(endpoint={self._submit_path}, pages={page_count})",
+        )
+        return _INLINE_SYNC_JOB_ID
+
     async def submit_job(self, pdf_bytes: bytes, filename: str = "document.pdf") -> str:
         """
         Submit a PDF document for document parsing (layout analysis + OCR).
 
-        Mirrors the official SDK's ``create_job()``:
-        - ``data``: model + optionalPayload (JSON string)
-        - ``files``: raw file bytes (no filename/content-type tuple)
+        Cloud async: multipart POST with model + optionalPayload + file bytes.
+        Local sync: JSON POST /layout-parsing or /ocr with base64 file (result returned inline).
         """
         logger.info(
             LogModule.LAYOUT,
-            f"[PADDLEOCR-CONFIG] Submitting job (model={self.model}, "
+            f"[PADDLEOCR-CONFIG] Submitting job (mode="
+            f"{'sync_infer' if self._sync_infer_mode else 'cloud_async'}, "
+            f"model={self.model}, "
             f"use_doc_orientation_classify={self.use_doc_orientation_classify}, "
             f"restructure_pages={self.restructure_pages}, "
             f"size={len(pdf_bytes)} bytes)"
         )
 
-        # Match official SDK: data with model + optionalPayload, files as raw bytes
+        if self._sync_infer_mode:
+            return await self._submit_sync_infer(pdf_bytes, filename)
+
+        # Match official cloud SDK: data with model + optionalPayload, files as raw bytes
         optional_payload = {
             "useDocOrientationClassify": self.use_doc_orientation_classify,
             "restructurePages": self.restructure_pages,
@@ -183,6 +249,11 @@ class PaddleOCRClient:
             TimeoutError: If max_wait is exceeded.
             RuntimeError: If the job fails.
         """
+        if job_id == _INLINE_SYNC_JOB_ID:
+            if not self._inline_sync_raw:
+                raise RuntimeError("PaddleOCR sync infer result missing after submit")
+            return {"state": "done", "_sync_infer_raw": self._inline_sync_raw}
+
         started = time.monotonic()
         result_path = self._result_path.format(job_id=job_id)
 
@@ -249,6 +320,10 @@ class PaddleOCRClient:
             Parsed full result dict with ``layoutParsingResults`` list built
             from the JSONL lines.
         """
+        sync_raw = result_data.get("_sync_infer_raw")
+        if sync_raw is not None:
+            return normalize_sync_infer_response(sync_raw)
+
         # Official SDK: resultUrl.jsonUrl
         url = (
             result_data.get("resultUrl", {}).get("jsonUrl")

@@ -19,6 +19,42 @@ def test_sanitize_normalizes_paren_math_delimiters():
     assert "\\(" not in out
 
 
+def test_sanitize_strips_newlines_inside_inline_math():
+    text = "Cell value $R_{m}\nC_{d}$ end"
+    out = sanitize_typst_markdown_for_compile(text)
+    assert "\n" not in out.split("$")[1]
+    assert "R_{m}" in out and "C_{d}" in out
+
+
+def test_sanitize_strips_literal_backslash_n_inside_inline_math():
+    text = r"Cell value $R_{m}\nC_{d}$ end"
+    out = sanitize_typst_markdown_for_compile(text)
+    inner = out.split("$")[1]
+    assert r"\n" not in inner
+    assert "R_{m}" in out and "C_{d}" in out
+
+
+def test_render_table_block_cell_with_literal_backslash_n_not_wrapped_as_math():
+    """Regression: LLM \\n in table cell must not become $...$ math for mitex."""
+    block = RenderBlock(
+        block_id="tbl-literal-n",
+        page_index=0,
+        inner_bbox=(10.0, 20.0, 200.0, 120.0),
+        markdown_text=(
+            "| Reagent | Amount |\n"
+            "| --- | --- |\n"
+            r"| PVA | 2.28 克\n(=1,838 克聚乙烯醇) |"
+        ),
+        font_size_pt=10.0,
+        render_kind="table",
+        opaque_fill=True,
+    )
+    src = _render_table_block("block-tbl-n", block)
+    assert r"$\n$" not in src
+    assert "2.28 克" in src
+    assert "cmarker.render(" in src
+
+
 def test_typst_plain_text_expr_uses_cmarker():
     expr = _typst_plain_text_expr(
         "myvar", 10.0, 1.2, "regular", "normal", "rgb(0, 0, 0)", 0.0, "false",

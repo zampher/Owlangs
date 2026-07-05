@@ -512,7 +512,6 @@ class _BatchQuickSettingsPanelState
                     );
                     await aiNotifier.refreshPlatformStatus();
                     if (!context.mounted) return;
-                    final success = result?['success'] == true;
                     String testLabel;
                     switch (selectedParser) {
                       case 'mineru_local':
@@ -527,10 +526,11 @@ class _BatchQuickSettingsPanelState
                       default:
                         testLabel = l10n.batchUploadMineru;
                     }
-                    final String detailMessage = success
-                        ? buildMinerUTestSuccessMessage(l10n, result)
-                        : (result?['message']?.toString() ??
-                            l10n.quickSettingsMineruConnectionFailed);
+                    final String detailMessage = platformTestDetailMessage(
+                      l10n,
+                      selectedParser,
+                      result,
+                    );
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
@@ -539,8 +539,10 @@ class _BatchQuickSettingsPanelState
                             detailMessage,
                           ),
                         ),
-                        duration: const Duration(seconds: 3),
-                        backgroundColor: success ? Colors.green.shade700 : Colors.red.shade700,
+                        duration: Duration(
+                          seconds: paddleTestHasCapabilityWarning(result) ? 8 : 3,
+                        ),
+                        backgroundColor: platformTestSnackBarColor(result),
                         behavior: SnackBarBehavior.floating,
                       ),
                     );

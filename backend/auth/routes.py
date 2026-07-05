@@ -3350,83 +3350,13 @@ async def batch_update_settings(
                                 logger.warning(LogModule.AUTH, f"Invalid platform config for {p_key}, skipping")
                                 continue
                             from backend.config.platforms_config import (
-                                AIPlatformConfig,
-                                platform_type_uses_llm_chunk_concurrent,
+                                build_platform_config_from_dict,
                             )
                             try:
-                                _pt = p_val.get('platform_type', 'llm')
-                                # Normalize legacy platform_type values (e.g. 'pdf_parser' → 'parser')
-                                if _pt == 'pdf_parser':
-                                    _pt = 'parser'
-                                # Normalize cloud MinerU model: 'vlm' → 'vlm-auto-engine'
-                                _model = p_val.get('model', '')
-                                _subtype = p_val.get('parser_subtype')
-                                if p_key == 'mineru' and _model == 'vlm':
-                                    _model = 'vlm-auto-engine'
-                                    logger.info(LogModule.AUTH, f"[AI_PLATFORMS] Normalized mineru model: 'vlm' → 'vlm-auto-engine'")
-                                if platform_type_uses_llm_chunk_concurrent(_pt):
-                                    _cs = (
-                                        int(p_val['chunk_size'])
-                                        if p_val.get('chunk_size') is not None
-                                        else 3000
-                                    )
-                                    _cc = (
-                                        int(p_val['concurrent'])
-                                        if p_val.get('concurrent') is not None
-                                        else 5
-                                    )
-                                else:
-                                    _cs, _cc = 3000, 5
-                                # Parse segment_limit (max segments per batch, 0 = unlimited)
-                                _sl_raw = p_val.get('segment_limit')
-                                if _sl_raw is None:
-                                    # Migrate from old single_segment_retry_mode if present
-                                    _old_ssr = p_val.get('single_segment_retry_mode')
-                                    if isinstance(_old_ssr, bool):
-                                        _sl = 1 if _old_ssr else 100
-                                    elif _old_ssr == 'single':
-                                        _sl = 1
-                                    elif _old_ssr == 'fixed_5':
-                                        _sl = 5
-                                    elif _old_ssr == 'fixed_10':
-                                        _sl = 10
-                                    else:
-                                        _sl = 100  # default
-                                else:
-                                    _sl = int(_sl_raw)
-                                    # Validate: must be 0 (unlimited) or one of the allowed values
-                                    _valid_limits = {0, 1, 3, 5, 10, 20, 50, 100, 200, 500, 1000}
-                                    if _sl not in _valid_limits:
-                                        _sl = 100  # fallback to default
-                                cfg = AIPlatformConfig(
-                                    name=p_val.get('name', ''),
-                                    url=p_val.get('url', ''),
-                                    model=_model,
-                                    max_tokens=p_val.get('max_tokens', 4096),
-                                    temperature=float(p_val.get('temperature', 0.3)),
-                                    temperature_min=float(p_val.get('temperature_min', 0.0)),
-                                    temperature_max=float(p_val.get('temperature_max', 2.0)),
-                                    thinking_mode_supported=p_val.get('thinking_mode_supported', False),
-                                    thinking_mode=p_val.get('thinking_mode', 'disable'),
-                                    segment_limit=_sl,
-                                    recommended_tokens=p_val.get('recommended_tokens'),
-                                    performance_note=p_val.get('performance_note'),
-                                    platform_type=_pt,
-                                    parser_subtype=p_val.get('parser_subtype'),
-                                    api_protocol=p_val.get('api_protocol', 'openai'),
-                                    requires_api_key=p_val.get('requires_api_key', True),
-                                    description=p_val.get('description'),
-                                    token_link=p_val.get('token_link'),
-                                    api_endpoints=p_val.get('api_endpoints') if p_val.get('api_endpoints') is not None else {},
-                                    chunk_size=_cs,
-                                    concurrent=_cc,
-                                    timeout=int(p_val['timeout']) if p_val.get('timeout') is not None else None,
-                                    write_timeout=int(p_val['write_timeout']) if p_val.get('write_timeout') is not None else None,
-                                    test_connect_timeout=int(p_val['test_connect_timeout']) if p_val.get('test_connect_timeout') is not None else 30,
-                                    test_request_timeout=int(p_val['test_request_timeout']) if p_val.get('test_request_timeout') is not None else 10,
-                                )
+                                existing_cfg = platforms_config.get_platform_config(p_key)
+                                cfg = build_platform_config_from_dict(p_key, p_val, existing_cfg)
                                 platforms_config.update_platform_config(p_key, cfg)
-                                logger.info(LogModule.AUTH, f"[AI_PLATFORMS] Updated platform '{p_key}': url={cfg.url}, model={cfg.model}")
+                                logger.info(LogModule.AUTH, f"[AI_PLATFORMS] Updated platform '{p_key}': url={cfg.url}, model={cfg.model}, parser_engine={cfg.parser_engine}")
                             except Exception as e:
                                 logger.warning(LogModule.AUTH, f"Failed to parse platform {p_key}: {e}")
                         # Determine target path for extra visibility
@@ -4372,11 +4302,15 @@ async def test_ai_platform(
                     logger.error(LogModule.AUTH, f"[TEST_AI_PLATFORM] Failed to update max_tokens for platform '{platform_type}': {e}", exc_info=True)
         
         # Persist test result so frontend and Quick Settings use backend as single source of truth
-        from backend.config.ai_platform_status import update_platform_status
+        from backend.config.ai_platform_status import (
+            platform_test_is_api_available,
+            platform_test_status_error,
+            update_platform_status,
+        )
         update_platform_status(
             platform_type,
-            result.get("success", False),
-            result.get("error") or result.get("message"),
+            platform_test_is_api_available(result),
+            platform_test_status_error(result),
         )
         # Ensure frontend gets a message when test failed (use error if message missing)
         if not result.get("success") and not result.get("message") and result.get("error"):

@@ -735,7 +735,7 @@
     },
     "paddle_local": {
       "name": "PaddleOCR (Local)",
-      "url": "http://localhost:8099",
+      "url": "http://localhost:8080",
       "platform_type": "parser",
       "parser_engine": "paddle",
       "parser_subtype": "local",
@@ -743,8 +743,8 @@
       "description": "Self-hosted PaddleOCR-VL via Docker (edgaras0x4e/paddleocr-pdf-api or official PaddleOCR service). API key is optional for local deployment.",
       "token_link": "https://hub.docker.com/r/edgaras0x4e/paddleocr-pdf-api",
       "api_endpoints": {
-        "submit": "/ocr",
-        "result": "/ocr/{job_id}/result"
+        "submit": "/layout-parsing",
+        "result": "/layout-parsing/{job_id}/result"
       },
       "performance_note": "Self-hosted PaddleOCR; requires NVIDIA GPU (~8.5 GB VRAM).",
       "concurrent": 5,

@@ -153,6 +153,7 @@ hiddenimports = [
     'layout.ocr_provider.mineru', 'layout.ocr_provider.mineru.layout_parser', 'layout.ocr_provider.mineru.provider',
     'layout.ocr_provider.paddle', 'layout.ocr_provider.paddle.api_client',
     'layout.ocr_provider.paddle.block_labels', 'layout.ocr_provider.paddle.converter_adapter',
+    'layout.ocr_provider.paddle.capability_probe', 'layout.ocr_provider.paddle.sync_infer_adapter',
     'layout.ocr_provider.paddle.layout_parser', 'layout.ocr_provider.paddle.provider',
     'layout.ocr_provider.paddle.zip_loader',
     'layout.ocr_provider.paddle.paddle_det_supplements',

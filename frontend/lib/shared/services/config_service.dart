@@ -886,10 +886,28 @@ class AIPlatformInfo {
   final bool useDocOrientationClassify;
   final bool restructurePages;
 
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'name': name,
-        'url': url,
-        'model': model,
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> json = <String, dynamic>{
+      'name': name,
+      'url': url,
+      'model': model,
+      'performance_note': performanceNote,
+      'platform_type': platformType,
+      'requires_api_key': requiresApiKey,
+      'description': description,
+      'token_link': tokenLink,
+      'concurrent': concurrent,
+    };
+    if (platformType == 'parser') {
+      json['parser_engine'] = parserEngine;
+      json['parser_subtype'] = parserSubtype;
+      if (apiEndpoints != null) {
+        json['api_endpoints'] = apiEndpoints;
+      }
+      json['use_doc_orientation_classify'] = useDocOrientationClassify;
+      json['restructure_pages'] = restructurePages;
+    } else {
+      json.addAll(<String, dynamic>{
         'max_tokens': maxTokens,
         'temperature': temperature,
         'temperature_min': temperatureMin,
@@ -898,25 +916,16 @@ class AIPlatformInfo {
         'thinking_mode': thinkingMode,
         'segment_limit': segmentLimit,
         'recommended_tokens': recommendedTokens,
-        'performance_note': performanceNote,
-        'description': description,
-        'token_link': tokenLink,
-        'platform_type': platformType,
-        'parser_engine': parserEngine,
-        'parser_subtype': parserSubtype,
         'api_protocol': apiProtocol,
-        'requires_api_key': requiresApiKey,
-        'api_endpoints': apiEndpoints,
         'chunk_size': chunkSize,
-        'concurrent': concurrent,
         'timeout': timeout,
         'write_timeout': writeTimeout,
         'test_connect_timeout': testConnectTimeout,
         'test_request_timeout': testRequestTimeout,
-        'use_doc_orientation_classify': useDocOrientationClassify,
-        'restructure_pages': restructurePages,
-        // Intentionally exclude lastTestError from persisted JSON
-      };
+      });
+    }
+    return json;
+  }
 
   AIPlatformInfo copyWith({
     String? name,

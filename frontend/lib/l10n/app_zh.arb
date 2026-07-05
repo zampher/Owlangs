@@ -1003,6 +1003,9 @@
   "aiPlatformApiKeyOptionalHint": "如无需验证可留空",
   "optional": "可选",
   "aiPlatformConnectionTestSucceeded": "连接测试成功",
+  "paddleOcrTestWarningTextOnly": "已连通，但当前服务只返回基础文本 OCR（rec_texts 文本行，无 doc_title / table / formula 等版面块）。Owlangs 需要 PaddleOCR-VL-1.6 文档解析。示例：请管理员部署与云端一致的服务 — POST /api/v2/ocr/jobs，模型 PaddleOCR-VL-1.6（而非仅 POST /ocr 的 infer 文本服务）。",
+  "paddleOcrTestWarningUnverified": "已连通（POST /ocr），但无法确认是否具备 PaddleOCR-VL-1.6 版面解析。请向管理员确认已部署 VL 文档解析（标题/表格/公式），例如与云端一致的 POST /api/v2/ocr/jobs。",
+  "paddleOcrTestUnreachable": "无法连接到 PaddleOCR 本地服务。请确认服务已启动且 URL/端口正确（模板默认为 http://localhost:8099）。只有连接成功后，才会进一步检测是否具备 PaddleOCR-VL-1.6 文档解析；若仅为 infer 文本 OCR，将单独显示橙色能力警告。",
   "mineruConnectionSuccessWithVersion": "连接测试成功。MinerU 版本：{version}",
   "@mineruConnectionSuccessWithVersion": {
     "placeholders": {

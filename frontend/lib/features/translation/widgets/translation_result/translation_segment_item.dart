@@ -1470,8 +1470,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                         ),
                       // Mark for retry button (if not already marked for retry and not excluded)
                       // Can be shown even if failed (failed segments can also be marked for retry)
-                      if (!widget.pdfRevisionMode &&
-                          !_localNeedsRetry &&
+                      if (!_localNeedsRetry &&
                           !_localIsExcluded &&
                           widget.onMarkForRetry != null)
                         Padding(
@@ -1525,7 +1524,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                         ),
                       // Unmark retry button (icon + text button to unmark for retry)
                       // Only show if needsRetry is true (not for failed segments)
-                      if (!widget.pdfRevisionMode && _localNeedsRetry)
+                      if (_localNeedsRetry)
                         Padding(
                           padding: const EdgeInsets.only(left: 4),
                           child: Material(
@@ -1572,6 +1571,56 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                                       ),
                                     ),
                                   ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      // Run retry immediately (PDF revision mode only)
+                      if (widget.pdfRevisionMode &&
+                          !widget.isSource &&
+                          (widget.isFailed || _localNeedsRetry) &&
+                          widget.onRetry != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: Tooltip(
+                            message: l10n.translationToolbarRetryTooltip,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => widget.onRetry!(widget.index),
+                                borderRadius: BorderRadius.circular(4),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.shade50,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: Colors.orange.shade400,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: <Widget>[
+                                      Icon(
+                                        Icons.refresh,
+                                        size: 12,
+                                        color: Colors.orange.shade800,
+                                      ),
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        l10n.segmentItemRetry,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.orange.shade800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),

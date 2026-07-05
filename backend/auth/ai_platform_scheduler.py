@@ -24,7 +24,11 @@ async def _test_one_platform(
 ) -> None:
     """Run connectivity test for one platform and persist result."""
     from .ai_platform_service import test_ai_platform_connectivity
-    from backend.config.ai_platform_status import update_platform_status
+    from backend.config.ai_platform_status import (
+        platform_test_is_api_available,
+        platform_test_status_error,
+        update_platform_status,
+    )
 
     result = await test_ai_platform_connectivity(
         platform_type, base_url, model_name or "", api_key, detect_max_tokens=False, requires_api_key=requires_api_key,
@@ -33,8 +37,8 @@ async def _test_one_platform(
     )
     update_platform_status(
         platform_type,
-        result.get("success", False),
-        result.get("error"),
+        platform_test_is_api_available(result),
+        platform_test_status_error(result),
     )
     logger.debug(
         LogModule.AUTH,

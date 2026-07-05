@@ -20,6 +20,149 @@ def platform_type_uses_llm_chunk_concurrent(platform_type: Optional[str]) -> boo
     return (platform_type or "llm") == "llm"
 
 
+# Fields written only for parser platforms (omit from LLM entries in platforms.json).
+_PARSER_ONLY_FIELDS = frozenset({
+    "parser_engine",
+    "parser_subtype",
+    "use_doc_orientation_classify",
+    "restructure_pages",
+    "api_endpoints",
+})
+
+_KNOWN_PARSER_ENGINES = ("mineru", "paddle")
+_VALID_SEGMENT_LIMITS = frozenset({0, 1, 3, 5, 10, 20, 50, 100, 200, 500, 1000})
+
+
+def normalize_platform_type(platform_type: Optional[str]) -> str:
+    """Normalize legacy platform_type values (e.g. pdf_parser → parser)."""
+    ptype = (platform_type or "llm").strip()
+    if ptype == "pdf_parser":
+        return "parser"
+    return ptype
+
+
+def infer_parser_engine(
+    platform_key: str,
+    parser_engine: Optional[str],
+    platform_type: str,
+) -> Optional[str]:
+    """Infer parser_engine for parser platforms when missing from saved JSON."""
+    if normalize_platform_type(platform_type) != "parser":
+        return None
+    if parser_engine:
+        return str(parser_engine)
+    for eng in _KNOWN_PARSER_ENGINES:
+        if platform_key == eng or platform_key.startswith(f"{eng}_"):
+            return eng
+    return None
+
+
+def _parse_segment_limit(p_val: Dict[str, Any]) -> int:
+    sl_raw = p_val.get("segment_limit")
+    if sl_raw is None:
+        old_ssr = p_val.get("single_segment_retry_mode")
+        if isinstance(old_ssr, bool):
+            return 1 if old_ssr else 100
+        if old_ssr == "single":
+            return 1
+        if old_ssr == "fixed_5":
+            return 5
+        if old_ssr == "fixed_10":
+            return 10
+        return 100
+    sl = int(sl_raw)
+    return sl if sl in _VALID_SEGMENT_LIMITS else 100
+
+
+def build_platform_config_from_dict(
+    platform_key: str,
+    p_val: Dict[str, Any],
+    existing: Optional["AIPlatformConfig"] = None,
+) -> "AIPlatformConfig":
+    """Build AIPlatformConfig from API/JSON payload, preserving type-specific fields."""
+    merged: Dict[str, Any] = dict(asdict(existing)) if existing is not None else {}
+    merged.update(p_val)
+
+    ptype = normalize_platform_type(
+        p_val.get("platform_type", merged.get("platform_type", "llm"))
+    )
+    is_llm = platform_type_uses_llm_chunk_concurrent(ptype)
+
+    model = p_val.get("model", merged.get("model", ""))
+    if platform_key == "mineru" and model == "vlm":
+        model = "vlm-auto-engine"
+
+    if is_llm:
+        chunk_size = int(p_val["chunk_size"]) if p_val.get("chunk_size") is not None else int(merged.get("chunk_size", 3000))
+        concurrent = int(p_val["concurrent"]) if p_val.get("concurrent") is not None else int(merged.get("concurrent", 5))
+        segment_limit = _parse_segment_limit(p_val if "segment_limit" in p_val or "single_segment_retry_mode" in p_val else merged)
+        parser_engine = None
+        parser_subtype = None
+        use_doc_orientation_classify = False
+        restructure_pages = False
+        api_endpoints: Dict[str, str] = {}
+    else:
+        chunk_size = int(merged.get("chunk_size", 3000))
+        concurrent = int(p_val["concurrent"]) if p_val.get("concurrent") is not None else int(merged.get("concurrent", 5))
+        segment_limit = int(merged.get("segment_limit", 100))
+        parser_engine = infer_parser_engine(
+            platform_key,
+            p_val.get("parser_engine", merged.get("parser_engine")),
+            ptype,
+        )
+        parser_subtype = p_val.get("parser_subtype", merged.get("parser_subtype"))
+        use_doc_orientation_classify = bool(
+            p_val.get("use_doc_orientation_classify", merged.get("use_doc_orientation_classify", False))
+        )
+        restructure_pages = bool(
+            p_val.get("restructure_pages", merged.get("restructure_pages", False))
+        )
+        raw_endpoints = p_val.get("api_endpoints", merged.get("api_endpoints"))
+        api_endpoints = dict(raw_endpoints) if isinstance(raw_endpoints, dict) else {}
+
+    def _float(key: str, default: float) -> float:
+        val = p_val.get(key, merged.get(key, default))
+        return float(val)
+
+    def _int_or_none(key: str, default: Optional[int]) -> Optional[int]:
+        if key in p_val:
+            val = p_val[key]
+            return int(val) if val is not None else default
+        val = merged.get(key, default)
+        return int(val) if val is not None else default
+
+    return AIPlatformConfig(
+        name=str(p_val.get("name", merged.get("name", ""))),
+        url=str(p_val.get("url", merged.get("url", ""))),
+        model=str(model or ""),
+        max_tokens=int(p_val.get("max_tokens", merged.get("max_tokens", 4096))),
+        temperature=_float("temperature", 0.3),
+        temperature_min=_float("temperature_min", 0.0),
+        temperature_max=_float("temperature_max", 2.0),
+        thinking_mode_supported=bool(p_val.get("thinking_mode_supported", merged.get("thinking_mode_supported", False))),
+        thinking_mode=str(p_val.get("thinking_mode", merged.get("thinking_mode", "disable"))),
+        recommended_tokens=p_val.get("recommended_tokens", merged.get("recommended_tokens")),
+        performance_note=p_val.get("performance_note", merged.get("performance_note")),
+        platform_type=ptype,
+        parser_engine=parser_engine,
+        parser_subtype=parser_subtype,
+        use_doc_orientation_classify=use_doc_orientation_classify,
+        restructure_pages=restructure_pages,
+        api_protocol=str(p_val.get("api_protocol", merged.get("api_protocol", "openai"))),
+        requires_api_key=bool(p_val.get("requires_api_key", merged.get("requires_api_key", True))),
+        description=p_val.get("description", merged.get("description")),
+        token_link=p_val.get("token_link", merged.get("token_link")),
+        api_endpoints=api_endpoints,
+        chunk_size=chunk_size,
+        concurrent=concurrent,
+        timeout=_int_or_none("timeout", merged.get("timeout") if is_llm else None),
+        write_timeout=_int_or_none("write_timeout", merged.get("write_timeout") if is_llm else None),
+        test_connect_timeout=_int_or_none("test_connect_timeout", merged.get("test_connect_timeout", 30) if is_llm else None),
+        test_request_timeout=_int_or_none("test_request_timeout", merged.get("test_request_timeout", 10) if is_llm else None),
+        segment_limit=segment_limit,
+    )
+
+
 @dataclass
 class AIPlatformConfig:
     """AI Platform configuration (API keys stored separately in secrets.json)"""
@@ -183,11 +326,8 @@ class PlatformsConfig:
                     pdata = dict(platform_data)
                     # Preserve original JSON field order for consistent write-back
                     self._platform_field_orders[platform_key] = list(pdata.keys())
-                    ptype = pdata.get("platform_type", "llm")
-                    # Normalize legacy platform_type values (e.g. 'pdf_parser' → 'parser')
-                    if ptype == 'pdf_parser':
-                        ptype = 'parser'
-                        pdata['platform_type'] = 'parser'
+                    ptype = normalize_platform_type(pdata.get("platform_type", "llm"))
+                    pdata['platform_type'] = ptype
                     if not platform_type_uses_llm_chunk_concurrent(ptype):
                         pdata.pop("chunk_size", None)
                         pdata.pop("timeout", None)
@@ -195,6 +335,9 @@ class PlatformsConfig:
                         pdata.pop("test_connect_timeout", None)
                         pdata.pop("test_request_timeout", None)
                         pdata.pop("segment_limit", None)
+                    else:
+                        for parser_field in _PARSER_ONLY_FIELDS:
+                            pdata.pop(parser_field, None)
                     allowed = {f.name for f in fields(AIPlatformConfig)}
                     unknown = sorted(k for k in pdata if k not in allowed)
                     if unknown:
@@ -232,20 +375,18 @@ class PlatformsConfig:
                                 f"Migrated '{platform_key}': single_segment_retry_mode='{old_ssr}' → segment_limit={pdata_filtered.get('segment_limit', 100)}"
                             )
                     # Migrate: populate parser_engine for parser platforms missing it.
-                    # PaddleOCR support was added in a later version; older configs have
-                    # parser_engine=null for all parser platforms.  Infer from the
-                    # platform key so the frontend can show the correct model dropdown.
-                    if ptype == 'parser' and pdata_filtered.get('parser_engine') is None:
-                        _known_engines = ('mineru', 'paddle')
-                        for _eng in _known_engines:
-                            if platform_key == _eng or platform_key.startswith(f'{_eng}_'):
-                                pdata_filtered['parser_engine'] = _eng
-                                needs_migration = True
-                                logger.info(
-                                    LogModule.CONFIG,
-                                    f"Migrated '{platform_key}': parser_engine → '{_eng}'",
-                                )
-                                break
+                    inferred_engine = infer_parser_engine(
+                        platform_key,
+                        pdata_filtered.get('parser_engine'),
+                        ptype,
+                    )
+                    if ptype == 'parser' and inferred_engine and pdata_filtered.get('parser_engine') != inferred_engine:
+                        pdata_filtered['parser_engine'] = inferred_engine
+                        needs_migration = True
+                        logger.info(
+                            LogModule.CONFIG,
+                            f"Migrated '{platform_key}': parser_engine → '{inferred_engine}'",
+                        )
                     self.platforms[platform_key] = AIPlatformConfig(**pdata_filtered)
             if needs_migration:
                 self._needs_migration = True
@@ -336,6 +477,15 @@ class PlatformsConfig:
             # Determine if this is an LLM platform
             is_llm_platform = platform_type_uses_llm_chunk_concurrent(platform_config.platform_type)
 
+            if not is_llm_platform:
+                inferred_engine = infer_parser_engine(
+                    platform_key,
+                    plat_raw.get("parser_engine"),
+                    platform_config.platform_type,
+                )
+                if inferred_engine:
+                    plat_raw["parser_engine"] = inferred_engine
+
             # Use preserved original field order when available;
             # fall back to _PLATFORM_FIELD_ORDER for programmatically-added platforms.
             field_order = self._platform_field_orders.get(platform_key)
@@ -350,6 +500,9 @@ class PlatformsConfig:
                 if not is_llm_platform and field_name in self._LLM_ONLY_FIELDS:
                     seen.add(field_name)
                     continue
+                if is_llm_platform and field_name in _PARSER_ONLY_FIELDS:
+                    seen.add(field_name)
+                    continue
                 plat_dict[field_name] = plat_raw[field_name]
                 seen.add(field_name)
 
@@ -359,6 +512,8 @@ class PlatformsConfig:
             for field_name in plat_raw:
                 if field_name not in seen:
                     if not is_llm_platform and field_name in self._LLM_ONLY_FIELDS:
+                        continue
+                    if is_llm_platform and field_name in _PARSER_ONLY_FIELDS:
                         continue
                     plat_dict[field_name] = plat_raw[field_name]
 

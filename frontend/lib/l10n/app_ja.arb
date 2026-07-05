@@ -954,6 +954,8 @@
   "aiPlatformApiKeyOptionalHint": "不要な場合は空欄可",
   "optional": "任意",
   "aiPlatformConnectionTestSucceeded": "接続テスト成功",
+  "paddleOcrTestWarningTextOnly": "接続できましたが、このサーバーは基本テキスト OCR のみ（rec_texts 行、doc_title/table/formula なし）を返します。Owlangs には PaddleOCR-VL-1.6 が必要です。例：クラウド同様 POST /api/v2/ocr/jobs、モデル PaddleOCR-VL-1.6（infer のみ POST /ocr では不可）。",
+  "paddleOcrTestWarningUnverified": "接続済み（POST /ocr）ですが、PaddleOCR-VL-1.6 のレイアウト解析を確認できません。管理者に VL 文書解析のデプロイ（例：POST /api/v2/ocr/jobs）を依頼してください。",
   "mineruConnectionSuccessWithVersion": "接続テスト成功。MinerU バージョン：{version}",
   "@mineruConnectionSuccessWithVersion": {
     "placeholders": {

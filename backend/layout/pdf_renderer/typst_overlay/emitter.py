@@ -394,12 +394,41 @@ def _typst_plain_text_expr(text_name: str, font_size_pt: float,
     )
 
 
+# LLM/export line-break escapes that are not LaTeX commands (mitex: unknown command \n).
+# Keep \nu, \neq, \newline, etc. (\n followed by lowercase letter).
+_LITERAL_LINEBREAK_ESCAPE_RE = re.compile(r"\\(?:n|r)(?![a-z])")
+
+
+def _neutralize_linebreak_artifacts(text: str) -> str:
+    """Replace literal \\n/\\r artifacts with a space; keep \\nu, \\newline, etc."""
+    return _LITERAL_LINEBREAK_ESCAPE_RE.sub(" ", text)
+
+
+def _strip_newlines_inside_math_delimiters(text: str) -> str:
+    """Replace raw newlines inside $...$ / $$...$$ so mitex does not see unknown \\n."""
+    def _clean_inner(inner: str) -> str:
+        inner = re.sub(r"[\r\n]+", " ", inner)
+        return _LITERAL_LINEBREAK_ESCAPE_RE.sub(" ", inner)
+
+    def _repl_display(match: re.Match[str]) -> str:
+        return f"$${_clean_inner(match.group(1))}$$"
+
+    def _repl_inline(match: re.Match[str]) -> str:
+        return f"${_clean_inner(match.group(1))}$"
+
+    text = re.sub(r"\$\$(.+?)\$\$", _repl_display, text, flags=re.DOTALL)
+    text = re.sub(r"(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)", _repl_inline, text, flags=re.DOTALL)
+    return text
+
+
 def sanitize_typst_markdown_for_compile(markdown: str) -> str:
     """Sanitize markdown to avoid common Typst compilation errors in overlay blocks."""
     text = str(markdown or "")
     # Normalize LaTeX math delimiters to $...$ / $$...$$ for cmarker+mitex.
     text = re.sub(r"\\\[(.+?)\\\]", r"$$\1$$", text, flags=re.DOTALL)
     text = re.sub(r"\\\((.+?)\\\)", r"$\1$", text, flags=re.DOTALL)
+    text = _strip_newlines_inside_math_delimiters(text)
+    text = _neutralize_linebreak_artifacts(text)
     text = re.sub(r"\$\s*\^\s*\{\s*\\(?:circled|textcircled)\s*R\s*\}\s*\$", "®", text)
     text = re.sub(r"\$\s*\^\s*\{\s*\\(?:circled|textcircled)\s*\{\s*R\s*\}\s*\}\s*\$", "®", text)
     text = re.sub(r"\$\s*\^\s*\{\s*\\(?:textregistered|registered)\s*\}\s*\$", "®", text)

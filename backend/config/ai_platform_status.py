@@ -51,6 +51,22 @@ def save_status(data: Dict[str, Any]) -> bool:
         return False
 
 
+def platform_test_is_api_available(result: Dict[str, Any]) -> bool:
+    """True when the platform test passes Owlangs requirements (not just reachable)."""
+    if not result.get("success"):
+        return False
+    if "document_parsing_capable" in result:
+        return bool(result.get("document_parsing_capable"))
+    return True
+
+
+def platform_test_status_error(result: Dict[str, Any]) -> Optional[str]:
+    """Error/warning message to persist when the test does not meet requirements."""
+    if platform_test_is_api_available(result):
+        return None
+    return result.get("error") or result.get("message")
+
+
 def update_platform_status(
     platform_type: str,
     is_api_available: bool,

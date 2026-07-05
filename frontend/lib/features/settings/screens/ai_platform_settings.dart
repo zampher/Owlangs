@@ -820,6 +820,7 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
   String? _testResult;
   bool?
       _lastTestSuccess; // drive success/failure styling from API result, not message text
+  Map<String, dynamic>? _lastTestRawResult;
   bool _isTestingConnection = false;
   bool _isLoadingModels = false;
 
@@ -1072,28 +1073,24 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
                 if (_testResult != null) ...<Widget>[
                   Builder(
                     builder: (BuildContext ctx) {
-                      final bool isSuccess =
-                          _lastTestSuccess ?? _isSuccessMessage(_testResult);
-                      final Color bgColor =
-                          isSuccess ? Colors.green.shade50 : Colors.red.shade50;
-                      final Color borderColor = isSuccess
-                          ? Colors.green.shade300
-                          : Colors.red.shade300;
-                      final Color contentColor = isSuccess
-                          ? Colors.green.shade700
-                          : Colors.red.shade700;
+                      final PlatformTestVisualState visualState =
+                          resolvePlatformTestVisualState(
+                        lastTestSuccess: _lastTestSuccess,
+                        rawResult: _lastTestRawResult,
+                      );
+                      final style = platformTestResultStyle(visualState);
                       return Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: bgColor,
+                          color: style.backgroundColor,
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: borderColor),
+                          border: Border.all(color: style.borderColor),
                         ),
                         child: Row(
                           children: <Widget>[
                             Icon(
-                              isSuccess ? Icons.check_circle : Icons.error,
-                              color: contentColor,
+                              style.icon,
+                              color: style.contentColor,
                               size: 20,
                             ),
                             const SizedBox(width: 8),
@@ -1101,7 +1098,7 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
                               child: SelectableText(
                                 _testResult!,
                                 style: TextStyle(
-                                  color: contentColor,
+                                  color: style.contentColor,
                                   fontSize: 12,
                                 ),
                               ),
@@ -1636,6 +1633,7 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
       _isTestingConnection = true;
       _testResult = null;
       _lastTestSuccess = null;
+      _lastTestRawResult = null;
     });
 
     try {
@@ -1652,13 +1650,18 @@ class _PlatformConfigDialogState extends State<_PlatformConfigDialog> {
       if (!mounted) return;
       setState(() {
         _lastTestSuccess = success;
+        _lastTestRawResult = result;
         _testResult = success
             ? buildPlatformTestSuccessMessage(
                 l10n,
                 widget.platformInfo.key,
                 result,
               )
-            : l10n.aiPlatformConnectionTestFailed(result['message']?.toString() ?? '');
+            : buildPlatformTestFailureMessage(
+                l10n,
+                widget.platformInfo.key,
+                result,
+              );
       });
     } catch (e) {
       if (!mounted) return;
@@ -2273,17 +2276,17 @@ class AIPlatformSettingsNotifier extends StateNotifier<AIPlatformSettings> {
           apiKey: apiKey,
           url: baseUrlOverride?.trim() ?? existing.url,
           isConfigured: isConfigured,
-          isApiAvailable: result?['success'] == true,
-          lastTestError: result?['success'] == true
+          isApiAvailable: platformTestMeetsRequirements(result),
+          lastTestError: platformTestMeetsRequirements(result)
               ? null
-              : (result?['error']?.toString() ??
-                  result?['message']?.toString() ??
+              : (result?['message']?.toString() ??
+                  result?['error']?.toString() ??
                   'Unknown error'),
         );
         state = state.copyWith(platforms: updatedPlatforms);
         if (kDebugMode) {
           print(
-              '[AIPlatformSettings] testConnection updated $platformKey isApiAvailable=${result?['success'] == true}',);
+              '[AIPlatformSettings] testConnection updated $platformKey isApiAvailable=${platformTestMeetsRequirements(result)}',);
         }
         // Save single test result
         await _saveTestResults(state.platforms);
@@ -2292,21 +2295,17 @@ class AIPlatformSettingsNotifier extends StateNotifier<AIPlatformSettings> {
       // Refresh from backend to ensure consistency (backend is single source of truth)
       await refreshPlatformStatus();
 
-      // Uniformly return message, prioritize backend error, then message
-      final success = result?['success'] == true;
-      final message = result?['error']?.toString() ??
-          result?['message']?.toString() ??
-          'Unknown error';
-      return <String, dynamic>{
-        'success': success,
-        'message': message,
-        if (result?['mineru_version'] != null)
-          'mineru_version': result!['mineru_version'],
-        if (result?['api_version'] != null)
-          'api_version': result!['api_version'],
-        if (result?['model_version'] != null)
-          'model_version': result!['model_version'],
-      };
+      // Uniformly return backend payload (includes Paddle capability fields).
+      if (result == null) {
+        return <String, dynamic>{'success': false, 'message': 'Unknown error'};
+      }
+      final Map<String, dynamic> payload = Map<String, dynamic>.from(result);
+      if (payload['message'] == null && payload['error'] != null) {
+        payload['message'] = payload['error'];
+      }
+      payload['success'] = payload['success'] == true;
+      payload['meets_requirements'] = platformTestMeetsRequirements(payload);
+      return payload;
     } catch (e) {
       // Even if test fails, update status to unavailable
       final updatedPlatforms =
@@ -2554,6 +2553,7 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
   bool _obscureText = true;
   String? _testResult;
   bool? _lastTestSuccess; // drive success/failure styling from API result
+  Map<String, dynamic>? _lastTestRawResult;
   bool _isTestingConnection = false;
   bool _formulaOcr = true;
   bool _tableOcr = true;
@@ -2594,6 +2594,7 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
       _isTestingConnection = true;
       _testResult = null;
       _lastTestSuccess = null;
+      _lastTestRawResult = null;
     });
 
     try {
@@ -2609,13 +2610,18 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
       if (!mounted) return;
       setState(() {
         _lastTestSuccess = success;
+        _lastTestRawResult = result;
         _testResult = success
             ? buildPlatformTestSuccessMessage(
                 l10n,
                 widget.platformInfo.key,
                 result,
               )
-            : l10n.aiPlatformConnectionTestFailed(result['message']?.toString() ?? '');
+            : buildPlatformTestFailureMessage(
+                l10n,
+                widget.platformInfo.key,
+                result,
+              );
       });
     } catch (e) {
       if (!mounted) return;
@@ -2941,35 +2947,31 @@ class _MinerUConfigDialogState extends State<_MinerUConfigDialog> {
                 const SizedBox(height: 12),
                 Builder(
                   builder: (BuildContext ctx) {
-                    final cs = Theme.of(ctx).colorScheme;
-                    final bool isSuccess =
-                        _lastTestSuccess ?? _isSuccessMessage(_testResult);
-                    final Color bgColor =
-                        isSuccess ? Colors.green.shade50 : cs.errorContainer;
-                    final Color borderColor =
-                        isSuccess ? Colors.green.shade300 : cs.outlineVariant;
-                    final Color contentColor = isSuccess
-                        ? Colors.green.shade700
-                        : cs.onErrorContainer;
+                    final PlatformTestVisualState visualState =
+                        resolvePlatformTestVisualState(
+                      lastTestSuccess: _lastTestSuccess,
+                      rawResult: _lastTestRawResult,
+                    );
+                    final style = platformTestResultStyle(visualState);
                     return Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: bgColor,
+                        color: style.backgroundColor,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: borderColor),
+                        border: Border.all(color: style.borderColor),
                       ),
                       width: double.infinity,
                       child: Row(
                         children: <Widget>[
                           Icon(
-                            isSuccess ? Icons.check_circle : Icons.error,
-                            color: contentColor,
+                            style.icon,
+                            color: style.contentColor,
                           ),
                           const SizedBox(width: 8),
                           Flexible(
                             child: SelectableText(
                               _testResult!,
-                              style: TextStyle(color: contentColor),
+                              style: TextStyle(color: style.contentColor),
                             ),
                           ),
                         ],
@@ -3035,6 +3037,7 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
   bool _obscureText = true;
   String? _testResult;
   bool? _lastTestSuccess; // drive success/failure styling from API result
+  Map<String, dynamic>? _lastTestRawResult;
   bool _isTestingConnection = false;
   bool _formulaOcr = true;
   bool _tableOcr = true;
@@ -3083,6 +3086,7 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
       _isTestingConnection = true;
       _testResult = null;
       _lastTestSuccess = null;
+      _lastTestRawResult = null;
     });
 
     try {
@@ -3098,13 +3102,18 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
       if (!mounted) return;
       setState(() {
         _lastTestSuccess = success;
+        _lastTestRawResult = result;
         _testResult = success
             ? buildPlatformTestSuccessMessage(
                 l10n,
                 widget.platformInfo.key,
                 result,
               )
-            : l10n.aiPlatformConnectionTestFailed(result['message']?.toString() ?? '');
+            : buildPlatformTestFailureMessage(
+                l10n,
+                widget.platformInfo.key,
+                result,
+              );
       });
     } catch (e) {
       if (!mounted) return;
@@ -3454,35 +3463,31 @@ class _MinerULocalConfigDialogState extends State<_MinerULocalConfigDialog> {
                 const SizedBox(height: 12),
                 Builder(
                   builder: (BuildContext ctx) {
-                    final cs = Theme.of(ctx).colorScheme;
-                    final bool isSuccess =
-                        _lastTestSuccess ?? _isSuccessMessage(_testResult);
-                    final Color bgColor =
-                        isSuccess ? Colors.green.shade50 : cs.errorContainer;
-                    final Color borderColor =
-                        isSuccess ? Colors.green.shade300 : cs.outlineVariant;
-                    final Color contentColor = isSuccess
-                        ? Colors.green.shade700
-                        : cs.onErrorContainer;
+                    final PlatformTestVisualState visualState =
+                        resolvePlatformTestVisualState(
+                      lastTestSuccess: _lastTestSuccess,
+                      rawResult: _lastTestRawResult,
+                    );
+                    final style = platformTestResultStyle(visualState);
                     return Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: bgColor,
+                        color: style.backgroundColor,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: borderColor),
+                        border: Border.all(color: style.borderColor),
                       ),
                       width: double.infinity,
                       child: Row(
                         children: <Widget>[
                           Icon(
-                            isSuccess ? Icons.check_circle : Icons.error,
-                            color: contentColor,
+                            style.icon,
+                            color: style.contentColor,
                           ),
                           const SizedBox(width: 8),
                           Flexible(
                             child: SelectableText(
                               _testResult!,
-                              style: TextStyle(color: contentColor),
+                              style: TextStyle(color: style.contentColor),
                             ),
                           ),
                         ],

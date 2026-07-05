@@ -5354,6 +5354,24 @@ abstract class AppLocalizations {
   /// **'Connection test succeeded'**
   String get aiPlatformConnectionTestSucceeded;
 
+  /// No description provided for @paddleOcrTestWarningTextOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected, but this server only returns basic text OCR (rec_texts lines — no doc_title, table, or formula blocks). Owlangs needs PaddleOCR-VL-1.6 document parsing. Example: deploy the cloud-style API POST /api/v2/ocr/jobs with model PaddleOCR-VL-1.6, not infer-only POST /ocr.'**
+  String get paddleOcrTestWarningTextOnly;
+
+  /// No description provided for @paddleOcrTestWarningUnverified.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected (POST /ocr), but PaddleOCR-VL-1.6 layout parsing could not be verified. Ask your admin to deploy VL document parsing (titles, tables, formulas), e.g. POST /api/v2/ocr/jobs like cloud.'**
+  String get paddleOcrTestWarningUnverified;
+
+  /// No description provided for @paddleOcrTestUnreachable.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot reach the self-hosted PaddleOCR service. Confirm it is running and the URL/port is correct (template default: http://localhost:8099). After a successful connection, Owlangs checks for PaddleOCR-VL-1.6 document parsing; infer-only text OCR will show a separate orange warning.'**
+  String get paddleOcrTestUnreachable;
+
   /// No description provided for @mineruConnectionSuccessWithVersion.
   ///
   /// In en, this message translates to:

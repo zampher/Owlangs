@@ -52,20 +52,27 @@ class AIPlatformTestService {
       final resp =
           await dio.post('/api/v1/auth/test-ai-platform', data: payload);
 
-      final ok = resp.statusCode == 200 && (resp.data?['success'] == true);
-      final error = resp.data?['error']?.toString();
-      final message = resp.data?['message']?.toString() ??
-          (ok ? 'Connection successful' : (error ?? 'Connection failed'));
+      final dynamic body = resp.data;
+      if (body is Map<String, dynamic>) {
+        final Map<String, dynamic> data = Map<String, dynamic>.from(body);
+        final bool ok = resp.statusCode == 200 && data['success'] == true;
+        final String? error = data['error']?.toString();
+        final String message = data['message']?.toString() ??
+            (ok ? 'Connection successful' : (error ?? 'Connection failed'));
+        return <String, dynamic>{
+          ...data,
+          'success': ok,
+          'message': message,
+          if (error != null) 'error': error,
+          'platform': platformType,
+          'response_time': DateTime.now().millisecondsSinceEpoch,
+        };
+      }
+
+      final ok = resp.statusCode == 200;
       return <String, dynamic>{
         'success': ok,
-        'message': message,
-        if (error != null) 'error': error,
-        if (resp.data?['mineru_version'] != null)
-          'mineru_version': resp.data['mineru_version'],
-        if (resp.data?['api_version'] != null)
-          'api_version': resp.data['api_version'],
-        if (resp.data?['model_version'] != null)
-          'model_version': resp.data['model_version'],
+        'message': ok ? 'Connection successful' : 'Connection failed',
         'platform': platformType,
         'response_time': DateTime.now().millisecondsSinceEpoch,
       };

@@ -141,7 +141,14 @@ def test_subscript_after_cjk_comma_does_not_wrap_prose_as_math():
 
 
 @pytest.mark.unit
-def test_layout_block_to_render_block_promotes_mixed_latex_to_markdown():
+def test_mixed_text_to_md_does_not_wrap_literal_backslash_n_as_math():
+    from utils.mixed_formula_text import mixed_text_to_md
+
+    text = r"2.28 克\n(=1,838 克聚乙烯醇)"
+    md = mixed_text_to_md(text)
+    assert r"$\n$" not in md
+    assert "2.28 克" in md
+    assert "(=1,838 克聚乙烯醇)" in md
     from layout.base import LayoutBlock
     from layout.pdf_renderer.typst_overlay.models import layout_block_to_render_block
 

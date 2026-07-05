@@ -80,23 +80,75 @@ def _parse_models_from_openai_list_json(models_data: object) -> list[str]:
     return models
 
 
+async def _fetch_paddle_openapi_info(client: httpx.AsyncClient, base: str) -> Dict[str, Any]:
+    """Best-effort OpenAPI fetch to detect sync /layout-parsing vs cloud async jobs API."""
+    from layout.ocr_provider.paddle.capability_probe import analyze_openapi_paths
+
+    for spec_path in ("/openapi.json", "/docs/openapi.json"):
+        try:
+            resp = await client.get(f"{base}{spec_path}")
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, dict):
+                    return analyze_openapi_paths(data.get("paths"))
+        except Exception:
+            continue
+    return analyze_openapi_paths(None)
+
+
+def _paddle_capability_test_result(
+    *,
+    platform: str,
+    base: str,
+    capability: Dict[str, Any],
+    api_style: str,
+) -> Dict[str, Any]:
+    from layout.ocr_provider.paddle.capability_probe import build_paddle_test_user_message
+
+    message = build_paddle_test_user_message(
+        platform=platform,
+        base=base,
+        capability=capability,
+        api_style=api_style,
+        reachable=True,
+    )
+    return {
+        "success": True,
+        "meets_requirements": bool(capability.get("document_parsing_capable")),
+        "document_parsing_capable": bool(capability.get("document_parsing_capable")),
+        "capability_level": capability.get("capability_level"),
+        "warning_code": capability.get("warning_code"),
+        "api_style": api_style,
+        "layout_block_labels": capability.get("layout_block_labels") or [],
+        "message": message,
+    }
+
+
 async def _test_paddleocr_connectivity(
     base_url: str,
     api_key: str,
     platform: str,
 ) -> Dict[str, Any]:
-    """Test PaddleOCR API connectivity.
+    """Test PaddleOCR API connectivity and document-parsing capability.
 
-    PaddleOCR is a parser platform, not an LLM. It does not expose
-    /models or /chat/completions. We verify reachability by probing
-    the API submit endpoint listed in platforms.json.
+    PaddleOCR is a parser platform, not an LLM. Besides reachability, we probe
+    whether the deployment supports VL layout parsing (titles/tables/formulas),
+    not plain line OCR only.
     """
     try:
+        import base64
+
+        from layout.ocr_provider.paddle.capability_probe import (
+            CAPABILITY_CLOUD_ASYNC,
+            analyze_probe_payload,
+            build_probe_pdf_bytes,
+        )
+        from layout.ocr_provider.paddle.sync_infer_adapter import is_sync_infer_submit_path
+
         base = (base_url or '').strip().rstrip('/')
         if not base:
             return {"success": False, "error": "No base URL configured for PaddleOCR"}
 
-        # Read the submit endpoint path from platforms config
         from backend.config.config_loader import get_unified_config
         config = get_unified_config()
         platform_cfg = config.get_ai_platform_config(platform)
@@ -104,16 +156,65 @@ async def _test_paddleocr_connectivity(
         submit_path = api_endpoints.get('submit', '/api/v2/ocr/jobs')
         probe_url = f"{base}{submit_path}"
 
-        async with httpx.AsyncClient(timeout=15.0, proxy=None, mounts={'http://': None, 'https://': None}) as client:
-            headers = {}
+        async with httpx.AsyncClient(timeout=120.0, proxy=None, mounts={'http://': None, 'https://': None}) as client:
+            headers: Dict[str, str] = {}
             if api_key and api_key.strip():
-                # Official PaddleOCR SDK uses lowercase "bearer"
                 headers["Authorization"] = f"bearer {api_key}"
 
-            # Try reaching the submit endpoint — any non-404 response
-            # (including 401, 405) means the API server is reachable
-            resp = await client.get(probe_url, headers=headers, follow_redirects=True)
+            openapi_info = await _fetch_paddle_openapi_info(client, base)
+            api_style = str(openapi_info.get("api_style") or "unknown")
+            use_sync_probe = is_sync_infer_submit_path(submit_path) or api_style == "sync_infer"
 
+            if use_sync_probe:
+                sync_submit = probe_url
+                health_resp = await client.get(f"{base}/health", headers=headers)
+                if health_resp.status_code not in (200, 404):
+                    return {
+                        "success": False,
+                        "error": (
+                            f"PaddleOCR local health check failed at {base}/health "
+                            f"(HTTP {health_resp.status_code}): {health_resp.text[:300]}"
+                        ),
+                        "message": f"PaddleOCR local health check failed (HTTP {health_resp.status_code})",
+                    }
+
+                file_bytes = build_probe_pdf_bytes()
+                payload = {
+                    "file": base64.b64encode(file_bytes).decode("ascii"),
+                    "fileType": 0,
+                    "useDocOrientationClassify": False,
+                }
+                resp = await client.post(
+                    sync_submit,
+                    json=payload,
+                    headers={**headers, "Content-Type": "application/json"},
+                )
+                if resp.status_code != 200:
+                    return {
+                        "success": False,
+                        "error": (
+                            f"PaddleOCR local sync API rejected request at {sync_submit} "
+                            f"(HTTP {resp.status_code}): {resp.text[:500]}"
+                        ),
+                        "message": f"PaddleOCR local sync test failed (HTTP {resp.status_code})",
+                    }
+
+                body = resp.json()
+                capability = analyze_probe_payload(body)
+                logger.info(
+                    LogModule.AUTH,
+                    f"PaddleOCR capability probe: platform={platform} "
+                    f"level={capability.get('capability_level')} "
+                    f"labels={capability.get('layout_block_labels')}",
+                )
+                return _paddle_capability_test_result(
+                    platform=platform,
+                    base=base,
+                    capability=capability,
+                    api_style=api_style if api_style != "unknown" else "sync_infer",
+                )
+
+            resp = await client.get(probe_url, headers=headers, follow_redirects=True)
             if resp.status_code == 404:
                 return {
                     "success": False,
@@ -121,19 +222,43 @@ async def _test_paddleocr_connectivity(
                     "message": f"PaddleOCR API endpoint not found at {probe_url} (HTTP 404). Check the base URL in Settings.",
                 }
 
-            # Any status other than 404 means the server is alive
-            label = "PaddleOCR Cloud" if platform == "paddle" else "PaddleOCR Local"
-            return {
-                "success": True,
-                "message": f"{label} API is reachable at {base}",
+            if openapi_info.get("has_sync_infer_api") and not openapi_info.get("has_cloud_jobs_api"):
+                capability = analyze_probe_payload({})
+                capability["capability_level"] = CAPABILITY_TEXT_OCR_ONLY
+                capability["document_parsing_capable"] = False
+                capability["warning_code"] = "paddle_text_ocr_only"
+                return _paddle_capability_test_result(
+                    platform=platform,
+                    base=base,
+                    capability=capability,
+                    api_style="sync_infer",
+                )
+
+            capability = {
+                "capability_level": CAPABILITY_CLOUD_ASYNC,
+                "document_parsing_capable": True,
+                "warning_code": None,
+                "layout_block_labels": [],
             }
+            return _paddle_capability_test_result(
+                platform=platform,
+                base=base,
+                capability=capability,
+                api_style=api_style if api_style != "unknown" else "cloud_async",
+            )
 
     except httpx.ConnectError as e:
-        return {
+        message = f"Cannot connect to PaddleOCR at {base_url!r}: {e}."
+        payload: Dict[str, Any] = {
             "success": False,
-            "error": f"Cannot connect to PaddleOCR at {base_url!r}: {e}. Check that the service is running and the URL is correct.",
-            "message": f"Cannot connect to PaddleOCR at {base_url!r}: {e}.",
+            "error": (
+                f"{message} Check that the service is running and the URL is correct."
+            ),
+            "message": message,
         }
+        if platform == "paddle_local":
+            payload["warning_code"] = "paddle_unreachable"
+        return payload
     except httpx.TimeoutException:
         return {
             "success": False,

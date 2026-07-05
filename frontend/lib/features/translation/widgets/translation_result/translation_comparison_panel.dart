@@ -282,8 +282,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
       _FilterChipConfig('pending', l10n.translationStatsPendingLabel, Colors.orange),
       _FilterChipConfig('failed', l10n.translationToolbarFilterFailed, Colors.red),
       _FilterChipConfig('excluded', l10n.translationToolbarFilterExcluded, Colors.grey),
-      if (!pdfRevisionMode)
-        _FilterChipConfig('retry', l10n.translationToolbarRetry, Colors.orange),
+      _FilterChipConfig('retry', l10n.translationToolbarRetry, Colors.orange),
       _FilterChipConfig('cleared', l10n.translationStatsClearedLabel, Colors.purple),
       if (!pdfRevisionMode)
         _FilterChipConfig(
@@ -295,9 +294,13 @@ class TranslationComparisonPanel extends ConsumerWidget {
 
     final chipWidgets = filters.map((cfg) {
         final count = counts[cfg.key] ?? 0;
-        // Hide chips with 0 count (except "All")
+        // Hide chips with 0 count (except "All" and Retry in PDF revision mode)
         if (count == 0 && cfg.key.isNotEmpty) {
-          return const SizedBox.shrink();
+          if (pdfRevisionMode && cfg.key == 'retry') {
+            // Keep Retry visible so users can filter marked segments in revision mode
+          } else {
+            return const SizedBox.shrink();
+          }
         }
         final isSelected = cfg.key.isEmpty
             ? selected.isEmpty

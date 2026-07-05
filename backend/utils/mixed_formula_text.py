@@ -15,9 +15,11 @@ from typing import List, Tuple
 # Inline math spans: LaTeX commands and identifier sub/superscripts (e.g. R_{m}, C_{d}).
 # Scan the full string instead of whitespace tokens so CJK punctuation glued to a
 # subscript (``C_{d}，都是...``) does not swallow the rest of the paragraph as math.
+# Exclude \n, \r, \t artifacts (LLM line breaks) — not valid LaTeX; mitex rejects \n.
+# Keep \nu, \neq, \newline (\n followed by lowercase continues the command name).
 _MATH_SPAN_RE = re.compile(
     r"(?:\\(?:mathrm|mathbf|mathit|operatorname|text)\{[^{}]*\}"
-    r"|\\[a-zA-Z]+(?:\{[^{}]*\})*"
+    r"|\\(?!(?:n|r|t)(?![a-z]))[a-zA-Z]+(?:\{[^{}]*\})*"
     r"|[A-Za-z]+(?:_\{[^{}]*\}|\^\{[^{}]*\})+)"
 )
 

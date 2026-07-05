@@ -80,6 +80,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   bool _paddleHasApiKey = true;
   String? _paddleTestResult;
   bool? _paddleLastTestSuccess;
+  Map<String, dynamic>? _paddleLastTestRawResult;
   bool _paddleIsTestingConnection = false;
   bool _paddleUseDocOrientationClassify = false;
   bool _paddleRestructurePages = false;
@@ -120,7 +121,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   }
 
   /// Platform connection status color and label (same logic as Quick Settings).
-  static Color _platformStatusColor(AIPlatformInfo? p) {
+  Color _platformStatusColor(AIPlatformInfo? p, {Map<String, dynamic>? testRawResult}) {
+    if (testRawResult != null && paddleTestHasCapabilityWarning(testRawResult)) {
+      return Colors.orange;
+    }
     if (p == null) return Colors.grey;
     final bool configured = p.isConfigured;
     final bool? available = p.isApiAvailable;
@@ -369,6 +373,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     // Determine current step's test result
     String? testResult;
     bool? testSuccess;
+    Map<String, dynamic>? testRawResult;
     if (isLLMStep) {
       testResult = _llmTestResult;
       testSuccess = _llmLastTestSuccess;
@@ -376,6 +381,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       if (_isPaddleParsingPlatform(_selectedParsingPlatform)) {
         testResult = _paddleTestResult;
         testSuccess = _paddleLastTestSuccess;
+        testRawResult = _paddleLastTestRawResult;
       } else if (_selectedParsingPlatform == 'mineru') {
         testResult = _mineruTestResult;
         testSuccess = _mineruLastTestSuccess;
@@ -417,30 +423,37 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                   if (hasTest && testResult != null) ...[
                     const SizedBox(width: 10),
                     Flexible(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: (testSuccess ?? false)
-                              ? Colors.green.shade50
-                              : Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: (testSuccess ?? false)
-                                ? Colors.green.shade300
-                                : Colors.red.shade300,
-                          ),
-                        ),
-                        child: Text(
-                          testResult!,
-                          style: TextStyle(
-                            color: (testSuccess ?? false)
-                                ? Colors.green.shade700
-                                : Colors.red.shade700,
-                            fontSize: 11,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      child: Builder(
+                        builder: (BuildContext ctx) {
+                          final PlatformTestVisualState visualState =
+                              resolvePlatformTestVisualState(
+                            lastTestSuccess: testSuccess,
+                            rawResult: testRawResult,
+                          );
+                          final style = platformTestResultStyle(visualState);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: style.backgroundColor,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: style.borderColor),
+                            ),
+                            child: Text(
+                              testResult!,
+                              style: TextStyle(
+                                color: style.contentColor,
+                                fontSize: 11,
+                              ),
+                              maxLines: visualState == PlatformTestVisualState.warning
+                                  ? 3
+                                  : 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ],
@@ -1160,10 +1173,16 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   ) {
     final AppLocalizations l10n = AppLocalizations.of(context)!;
     final AIPlatformInfo? paddle = settings.platforms[platformKey];
-    final Color statusColor = _platformStatusColor(paddle);
-    final String statusText = _platformStatusText(paddle, l10n);
+    final Color statusColor = _platformStatusColor(
+      paddle,
+      testRawResult: _paddleLastTestRawResult,
+    );
+    final String statusText = paddleTestHasCapabilityWarning(_paddleLastTestRawResult)
+        ? (_paddleTestResult ?? _platformStatusText(paddle, l10n))
+        : _platformStatusText(paddle, l10n);
     final bool showUnavailableHint =
         _platformConnectionUnavailable(paddle) &&
+            !platformTestMeetsRequirements(_paddleLastTestRawResult) &&
             (_paddleLastTestSuccess != true);
     final String? tokenLink = paddle?.tokenLink;
     final String defaultName = platformKey == 'paddle'
@@ -1265,6 +1284,14 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         ),
         const SizedBox(height: 6),
         _buildPaddleOptionSwitches(l10n),
+        if (_paddleTestResult != null) ...<Widget>[
+          const SizedBox(height: 8),
+          buildPlatformTestResultBanner(
+            message: _paddleTestResult!,
+            lastTestSuccess: _paddleLastTestSuccess,
+            rawResult: _paddleLastTestRawResult,
+          ),
+        ],
       ],
     );
   }
@@ -1487,6 +1514,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       _paddleIsTestingConnection = true;
       _paddleTestResult = null;
       _paddleLastTestSuccess = null;
+      _paddleLastTestRawResult = null;
     });
 
     try {
@@ -1501,11 +1529,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       if (!mounted) return;
       setState(() {
         _paddleLastTestSuccess = success;
+        _paddleLastTestRawResult = result;
         _paddleTestResult = success
             ? buildPlatformTestSuccessMessage(l10n, platformKey, result)
-            : l10n.aiPlatformConnectionTestFailed(
-                result['message']?.toString() ?? '',
-              );
+            : buildPlatformTestFailureMessage(l10n, platformKey, result);
       });
     } catch (e) {
       if (!mounted) return;

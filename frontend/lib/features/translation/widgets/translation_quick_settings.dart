@@ -1146,12 +1146,12 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                           );
                       await aiPlatformNotifier.refreshPlatformStatus();
                       if (!context.mounted) return;
-                      final success = result?['success'] == true;
                       final l10nSnack = AppLocalizations.of(context)!;
-                      final String message = success
-                          ? buildMinerUTestSuccessMessage(l10nSnack, result)
-                          : (result?['message']?.toString() ??
-                              l10nSnack.quickSettingsMineruConnectionFailed);
+                      final String message = platformTestDetailMessage(
+                        l10nSnack,
+                        selectedParser,
+                        result,
+                      );
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
@@ -1160,10 +1160,10 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                               message,
                             ),
                           ),
-                          duration: const Duration(seconds: 3),
-                          backgroundColor: success
-                              ? Colors.green.shade700
-                              : Colors.red.shade700,
+                          duration: Duration(
+                            seconds: paddleTestHasCapabilityWarning(result) ? 8 : 3,
+                          ),
+                          backgroundColor: platformTestSnackBarColor(result),
                           behavior: SnackBarBehavior.floating,
                         ),
                       );

@@ -1033,6 +1033,8 @@
   "aiPlatformApiKeyOptionalHint": "Dejar vacío si no es requerido",
   "optional": "opcional",
   "aiPlatformConnectionTestSucceeded": "Prueba de conexión exitosa",
+  "paddleOcrTestWarningTextOnly": "Conectado, pero este servidor solo devuelve OCR de texto básico (líneas rec_texts, sin doc_title/table/formula). Owlangs necesita PaddleOCR-VL-1.6. Ejemplo: despliegue POST /api/v2/ocr/jobs con modelo PaddleOCR-VL-1.6, no solo POST /ocr infer.",
+  "paddleOcrTestWarningUnverified": "Conectado (POST /ocr), pero no se pudo verificar PaddleOCR-VL-1.6. Pida al administrador desplegar parsing VL (p. ej. POST /api/v2/ocr/jobs como en la nube).",
   "mineruConnectionSuccessWithVersion": "Prueba de conexión exitosa. Versión de MinerU: {version}",
   "@mineruConnectionSuccessWithVersion": {
     "placeholders": {

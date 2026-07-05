@@ -3069,6 +3069,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get aiPlatformConnectionTestSucceeded => 'Prueba de conexión exitosa';
 
   @override
+  String get paddleOcrTestWarningTextOnly =>
+      'Conectado, pero este servidor solo devuelve OCR de texto básico (líneas rec_texts, sin doc_title/table/formula). Owlangs necesita PaddleOCR-VL-1.6. Ejemplo: despliegue POST /api/v2/ocr/jobs con modelo PaddleOCR-VL-1.6, no solo POST /ocr infer.';
+
+  @override
+  String get paddleOcrTestWarningUnverified =>
+      'Conectado (POST /ocr), pero no se pudo verificar PaddleOCR-VL-1.6. Pida al administrador desplegar parsing VL (p. ej. POST /api/v2/ocr/jobs como en la nube).';
+
+  @override
+  String get paddleOcrTestUnreachable =>
+      'Cannot reach the self-hosted PaddleOCR service. Confirm it is running and the URL/port is correct (template default: http://localhost:8099). After a successful connection, Owlangs checks for PaddleOCR-VL-1.6 document parsing; infer-only text OCR will show a separate orange warning.';
+
+  @override
   String mineruConnectionSuccessWithVersion(String version) {
     return 'Prueba de conexión exitosa. Versión de MinerU: $version';
   }

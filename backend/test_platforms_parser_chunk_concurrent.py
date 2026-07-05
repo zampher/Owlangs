@@ -13,6 +13,8 @@ if str(_OWLANGS) not in sys.path:
 from backend.config.platforms_config import (  # noqa: E402
     AIPlatformConfig,
     PlatformsConfig,
+    build_platform_config_from_dict,
+    infer_parser_engine,
     platform_type_uses_llm_chunk_concurrent,
 )
 
@@ -79,6 +81,65 @@ def test_update_from_dict_strips_chunk_for_parser_json():
     assert cfg.platforms["mineru"].chunk_size == 3000
     # concurrent is now preserved for parser platforms
     assert cfg.platforms["mineru"].concurrent == 9
+    assert cfg.platforms["mineru"].parser_engine == "mineru"
+
+
+def test_get_config_dict_omits_parser_fields_for_llm():
+    cfg = PlatformsConfig()
+    cfg.platforms["deepseek"] = AIPlatformConfig(
+        name="DeepSeek",
+        url="https://api.deepseek.com",
+        model="deepseek-chat",
+        platform_type="llm",
+        parser_engine="mineru",
+        parser_subtype="cloud",
+        use_doc_orientation_classify=True,
+        api_endpoints={"submit": "/ocr"},
+    )
+    inner = cfg.get_config_dict()["platforms"]["deepseek"]
+    assert "parser_engine" not in inner
+    assert "parser_subtype" not in inner
+    assert "use_doc_orientation_classify" not in inner
+    assert "restructure_pages" not in inner
+    assert "api_endpoints" not in inner
+
+
+def test_build_platform_config_preserves_parser_engine():
+    cfg = build_platform_config_from_dict(
+        "paddle_local",
+        {
+            "name": "PaddleOCR (Local)",
+            "url": "http://localhost:8099",
+            "platform_type": "parser",
+            "parser_subtype": "local",
+        },
+    )
+    assert cfg.parser_engine == "paddle"
+    assert cfg.parser_subtype == "local"
+
+
+def test_build_platform_config_strips_parser_fields_for_llm():
+    cfg = build_platform_config_from_dict(
+        "deepseek",
+        {
+            "name": "DeepSeek",
+            "url": "https://api.deepseek.com",
+            "model": "deepseek-chat",
+            "platform_type": "llm",
+            "parser_engine": "mineru",
+            "parser_subtype": "cloud",
+            "api_endpoints": {"x": "y"},
+        },
+    )
+    assert cfg.parser_engine is None
+    assert cfg.parser_subtype is None
+    assert cfg.api_endpoints == {}
+
+
+def test_infer_parser_engine():
+    assert infer_parser_engine("mineru", None, "parser") == "mineru"
+    assert infer_parser_engine("paddle_local", None, "parser") == "paddle"
+    assert infer_parser_engine("deepseek", None, "llm") is None
 
 
 if __name__ == "__main__":
@@ -86,4 +147,8 @@ if __name__ == "__main__":
     test_get_config_dict_omits_chunk_for_parser()
     test_get_config_dict_keeps_chunk_for_llm()
     test_update_from_dict_strips_chunk_for_parser_json()
+    test_get_config_dict_omits_parser_fields_for_llm()
+    test_build_platform_config_preserves_parser_engine()
+    test_build_platform_config_strips_parser_fields_for_llm()
+    test_infer_parser_engine()
     print("platforms parser chunk/concurrent tests passed")

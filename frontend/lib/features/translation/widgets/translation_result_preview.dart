@@ -3534,6 +3534,8 @@ class _TranslationResultPreviewState
       // Only call setState if widget is still mounted and state needs sync
       // (Child widget already updated its local state, so this is just for consistency)
       if (mounted) {
+        _clearFilteredIndicesCache();
+        _segmentUiRevisionNotifier.value++;
         setState(() {
           // State already updated above, this just triggers a rebuild for consistency
           // but child widget's local state will prevent visual changes
@@ -3575,6 +3577,8 @@ class _TranslationResultPreviewState
       // Only call setState if widget is still mounted and state needs sync
       // (Child widget already updated its local state, so this is just for consistency)
       if (mounted) {
+        _clearFilteredIndicesCache();
+        _segmentUiRevisionNotifier.value++;
         setState(() {
           // State already updated above, this just triggers a rebuild for consistency
           // but child widget's local state will prevent visual changes
