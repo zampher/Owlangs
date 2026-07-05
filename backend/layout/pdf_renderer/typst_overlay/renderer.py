@@ -1116,7 +1116,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
             return []
 
         from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
-            _read_segment_layout_bbox,
+            _read_segment_layout_bbox_for_block,
             resolve_segment_layout_block_indices,
             segment_overlay_export_text,
             segment_skips_overlay,
