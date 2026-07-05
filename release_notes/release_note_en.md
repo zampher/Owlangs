@@ -1,5 +1,19 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.5.1.0
+
+### Bug Fixes
+
+1. **Missing overlay for some PDF segments**: Fixed an issue where certain segments that failed translation were not rendered in layout-preserving exported PDFs, leaving blank areas.
+2. **Preview tab switch crash**: Fixed a frontend crash when closing one preview tab and activating another after enabling preview editing in the PDF translation workflow.
+3. **Non-ASCII filename export failure**: Fixed intermittent export failures when PDF filenames contain non-ASCII characters (e.g. Chinese), caused by HTTP `Content-Disposition` header latin-1 encoding limits.
+4. **Missing formula tag numbers**: Fixed an issue where tag/subscript numbers in exported PDF formulas were missing or not displayed correctly.
+5. **Inline LaTeX in body text not rendered**: Fixed incorrect rendering of inline LaTeX formulas mixed within body text after PDF translation (e.g. `$^{1}$`, `$P_{c,t}$` shown as plain text).
+6. **PaddleOCR local deployment business failure**: Fixed an issue where locally deployed PaddleOCR passed connectivity tests but document parsing (layout recognition) failed at runtime; local endpoint switched to `/layout-parsing` with capability probing and user-facing warnings.
+7. **Split cross-column paragraph translation loss**: Fixed an issue where a single logical paragraph split across multiple bboxes on the same page (e.g. two-column layout) only received translation in the first block while the second still showed source text, or caused duplicate rendering/overflow; improved Paddle same-page cross-column pairing and deep-split paragraph-to-block mapping.
+
+---
+
 ## Owlangs 1.5.0.0
 
 ### New Features
