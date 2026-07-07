@@ -4017,6 +4017,27 @@ class AppLocalizationsKo extends AppLocalizations {
       'When enabled, drag handles to adjust bounding box of the selected segment';
 
   @override
+  String get translationPreviewAutoRotateSidewaysText => 'Auto rotate';
+
+  @override
+  String get translationPreviewAutoRotateSidewaysTextDesc =>
+      'When enabled, rotate tall narrow text blocks (height/width above threshold) by 90° for sideways layout';
+
+  @override
+  String get translationPreviewAutoRotateAspectRatio => 'H/W ≥';
+
+  @override
+  String get translationPreviewAutoRotateAspectRatioDesc =>
+      'Minimum bbox height/width ratio to trigger auto rotation (default 20)';
+
+  @override
+  String get translationPreviewAutoRotateDegrees => 'Angle°';
+
+  @override
+  String get translationPreviewAutoRotateControlsDesc =>
+      'Auto rotation threshold (height/width) and angle in degrees (90, 180, or 270; default 270)';
+
+  @override
   String get translationPreviewStaleSession =>
       '미리보기를 사용할 수 없습니다. 번역 패널에서 미리보기 수정을 다시 여세요.';
 

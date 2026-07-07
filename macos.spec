@@ -274,6 +274,7 @@ hiddenimports = [
     'layout.pdf_renderer.typst_overlay.text_metrics',
     'layout.pdf_renderer.typst_overlay.affected_pages',
     'layout.pdf_renderer.typst_overlay.pdf_preview_cache',
+    'layout.pdf_renderer.typst_overlay.segment_rotation_utils',
     'layout.pdf_renderer.typst_overlay.visual_images',
     'layout.pdf_renderer.typst_overlay.typst_packages',
     'layout.image_overlay',

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import '../../providers/format_settings_provider.dart';
+import '../../utils/segment_type_utils.dart';
 
 /// Build export query parameters for preview download URLs.
 Map<String, String> buildPreviewExportQueryParams(
@@ -60,11 +61,15 @@ Map<String, String> buildPreviewExportQueryParams(
 }
 
 /// Append a revision token so PDF preview re-fetches after segment edits.
-Map<String, String> previewCacheBustParams(int revision) {
-  if (revision <= 0) {
-    return const <String, String>{};
+Map<String, String> previewCacheBustParams(int revision, {int manualNonce = 0}) {
+  final Map<String, String> params = <String, String>{};
+  if (revision > 0) {
+    params['_rev'] = revision.toString();
   }
-  return <String, String>{'_rev': revision.toString()};
+  if (manualNonce > 0) {
+    params['_pdf_refresh'] = manualNonce.toString();
+  }
+  return params;
 }
 
 /// Pass dirty segment indices for incremental PDF preview refresh.
@@ -74,6 +79,29 @@ Map<String, String> pdfPreviewDirtySegmentParams(Set<int> segmentIndices) {
   }
   final List<int> sorted = segmentIndices.toList()..sort();
   return <String, String>{'dirty_segments': sorted.join(',')};
+}
+
+/// Optional auto-rotation query params for PDF typst_overlay preview/export.
+Map<String, String> autoRotationPreviewParams({
+  required bool enabled,
+  double aspectRatio = kDefaultAutoRotationAspectRatio,
+  int degrees = kDefaultAutoRotationDegrees,
+}) {
+  if (!enabled) {
+    return const <String, String>{};
+  }
+  final double ratio = aspectRatio > 0
+      ? aspectRatio
+      : kDefaultAutoRotationAspectRatio;
+  final int rotationDegrees = kPdfRotationOptionsDegrees.contains(degrees) &&
+          degrees != 0
+      ? degrees
+      : kDefaultAutoRotationDegrees;
+  return <String, String>{
+    'auto_rotation_enabled': 'true',
+    'auto_rotation_aspect_ratio': ratio.toString(),
+    'auto_rotation_degrees': rotationDegrees.toString(),
+  };
 }
 
 String mergePreviewUrl(String baseUrl, Map<String, String> params) {

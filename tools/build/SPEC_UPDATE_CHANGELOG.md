@@ -1,5 +1,22 @@
 # Spec文件更新日志
 
+## 2026-07-07 — PDF 预览修订：bbox 宽高比自动旋转
+
+未提交改动新增 `backend/layout/pdf_renderer/typst_overlay/segment_rotation_utils.py`，并在 `download_service._typst_overlay_pdf_response` 中 lazy import；`pdf_preview_cache.compute_typst_overlay_content_fingerprint` 增加 `auto_rotation_enabled` / `auto_rotation_aspect_ratio` 字段（已有 `pdf_preview_cache` 条目）。已在 `lite.spec`、`launcher_portable_onedir.spec`、`macos.spec` 补充：
+
+- `layout.pdf_renderer.typst_overlay.segment_rotation_utils` — 根据 bbox 高宽比推断侧向文本 90°/270° 旋转，合并手动 `segment.rotation`
+
+**同批改动无需新增 spec 条目的模块：**
+
+- `backend/layout/pdf_renderer/typst_overlay/pdf_preview_cache.py` — 已有 hiddenimport；仅扩展指纹字段
+- `backend/app/routes/service/app_routes_download.py` — 路由透传 query 参数
+- `backend/app/services/download/download_service.py` — 调用既有 typst_overlay 模块
+- `backend/layout/pdf_renderer/typst_overlay/test_*.py` — 测试，不打包
+- `frontend/**` — Flutter 预览修订工具栏（自动旋转勾选 + 阈值），不进 PyInstaller
+- `configs/platforms.json`、`configs/system.json` — 本地配置，不打包
+
+---
+
 ## 2026-07-05 — PDF 双栏跨段配对与 1.5.1.0 修复批次
 
 未提交改动新增 `backend/layout/layout_group_pair_utils.py`、`backend/layout/ocr_provider/paddle/layout_group_pairs.py`，并在 Paddle zip 加载、markdown 分块、Typst overlay、PDF 生成、片段 API 等路径中 lazy import。已在 `lite.spec`、`launcher_portable_onedir.spec`、`macos.spec` 补充：

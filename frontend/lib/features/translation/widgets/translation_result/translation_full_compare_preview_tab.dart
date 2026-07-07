@@ -12,6 +12,7 @@ import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/services/translation_service.dart';
 import '../../../../shared/utils/app_logger.dart';
 import '../../providers/format_settings_provider.dart';
+import '../../utils/segment_type_utils.dart';
 import '../pdf_continuous_scroll_view.dart';
 import '../pdf_compare_continuous_view.dart';
 import '../pdf_preview.dart';
@@ -141,6 +142,12 @@ class _TranslationFullComparePreviewTabState
   /// Original (non-overridden) bboxes for source-side PDF highlight.
   List<List<double>>? _sourceHighlightBboxes;
   bool _bboxEditMode = true;
+  bool _autoRotationEnabled = true;
+  double _autoRotationAspectRatio = kDefaultAutoRotationAspectRatio;
+  int _autoRotationDegrees = kDefaultAutoRotationDegrees;
+  int _pdfPreviewManualRefreshNonce = 0;
+  late final TextEditingController _autoRotationRatioController;
+  late final TextEditingController _autoRotationDegreesController;
   bool _autoFollowSegmentPdfPage = true;
   bool _showSelectedSegmentMarker = true;
 
@@ -188,6 +195,12 @@ class _TranslationFullComparePreviewTabState
       level: LogLevel.info,
     );
     _viewportController = PreviewViewportController();
+    _autoRotationRatioController = TextEditingController(
+      text: _autoRotationAspectRatio.toStringAsFixed(0),
+    );
+    _autoRotationDegreesController = TextEditingController(
+      text: _autoRotationDegrees.toString(),
+    );
     _fullscreenOverlay = PreviewFullscreenOverlay(
       onExit: () {
         if (mounted) {
@@ -317,6 +330,8 @@ class _TranslationFullComparePreviewTabState
     _pdfNavigationController.dispose();
     _pdfCompareNavigationController.dispose();
     _selectedSegmentIndicesNotifier.dispose();
+    _autoRotationRatioController.dispose();
+    _autoRotationDegreesController.dispose();
     _fullscreenOverlay.dispose();
     _viewportController.dispose();
     super.dispose();
@@ -532,14 +547,58 @@ class _TranslationFullComparePreviewTabState
     }
   }
 
+  bool _commitAutoRotationAspectRatioFromField() {
+    final double? parsed = double.tryParse(
+      _autoRotationRatioController.text.trim(),
+    );
+    if (parsed == null || parsed <= 0) {
+      _autoRotationRatioController.text =
+          _autoRotationAspectRatio.toStringAsFixed(0);
+      return false;
+    }
+    if ((_autoRotationAspectRatio - parsed).abs() < 1e-6) {
+      return false;
+    }
+    _autoRotationAspectRatio = parsed;
+    return true;
+  }
+
+  bool _commitAutoRotationDegreesFromField() {
+    final int? parsed = int.tryParse(
+      _autoRotationDegreesController.text.trim(),
+    );
+    if (parsed == null ||
+        parsed == 0 ||
+        !kPdfRotationOptionsDegrees.contains(parsed)) {
+      _autoRotationDegreesController.text = _autoRotationDegrees.toString();
+      return false;
+    }
+    if (_autoRotationDegrees == parsed) {
+      return false;
+    }
+    _autoRotationDegrees = parsed;
+    return true;
+  }
+
+  void _commitAutoRotationFieldsFromControllers() {
+    _commitAutoRotationAspectRatioFromField();
+    _commitAutoRotationDegreesFromField();
+  }
+
   void _refreshPdfManually() {
+    _commitAutoRotationFieldsFromControllers();
     final int revision =
         widget.pdfRenderRevisionListenable?.value ?? widget.pdfRenderRevision;
     setState(() {
+      _pdfPreviewManualRefreshNonce++;
       _displayPdfRevision = revision;
-      _displayDirtySegmentIndices = Set<int>.from(
-        widget.pdfPreviewDirtySegmentsListenable?.value ?? const <int>{},
-      );
+      // Auto rotation is global; incremental dirty_segments refresh is insufficient.
+      _displayDirtySegmentIndices = _autoRotationEnabled
+          ? <int>{}
+          : Set<int>.from(
+              widget.pdfPreviewDirtySegmentsListenable?.value ??
+                  const <int>{},
+            );
     });
   }
 
@@ -564,6 +623,88 @@ class _TranslationFullComparePreviewTabState
       _layoutMode = mode;
     });
     _onPdfBboxHighlightChanged();
+  }
+
+  void _setAutoRotationEnabled(bool enabled) {
+    if (_autoRotationEnabled == enabled) {
+      return;
+    }
+    setState(() {
+      _autoRotationEnabled = enabled;
+    });
+    _refreshPdfManually();
+  }
+
+  void _applyAutoRotationDegreesFromField() {
+    if (!_commitAutoRotationDegreesFromField()) {
+      return;
+    }
+    setState(() {});
+    if (_autoRotationEnabled) {
+      _refreshPdfManually();
+    }
+  }
+
+  Widget _buildAutoRotationNumberField({
+    required TextEditingController controller,
+    required bool allowDecimal,
+    required VoidCallback onCommit,
+  }) {
+    return SizedBox(
+      width: 52,
+      child: TextField(
+        controller: controller,
+        style: Theme.of(context).textTheme.bodySmall,
+        textAlign: TextAlign.right,
+        textAlignVertical: TextAlignVertical.center,
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 6,
+            vertical: 0,
+          ),
+          constraints: const BoxConstraints(
+            minHeight: 26,
+            maxHeight: 26,
+          ),
+          border: const OutlineInputBorder(),
+        ),
+        keyboardType: TextInputType.numberWithOptions(
+          decimal: allowDecimal,
+        ),
+        onSubmitted: (_) => onCommit(),
+        onEditingComplete: onCommit,
+      ),
+    );
+  }
+
+  Widget _buildAutoRotationFieldRow({
+    required String label,
+    required Widget field,
+  }) {
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: Text(
+            label,
+            textAlign: TextAlign.right,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+        const SizedBox(width: 4),
+        field,
+      ],
+    );
+  }
+
+  void _applyAutoRotationAspectRatioFromField() {
+    if (!_commitAutoRotationAspectRatioFromField()) {
+      return;
+    }
+    setState(() {});
+    if (_autoRotationEnabled) {
+      _refreshPdfManually();
+    }
   }
 
   Future<void> _enterRevisionLayoutMode([
@@ -722,13 +863,20 @@ class _TranslationFullComparePreviewTabState
   Map<String, String> _buildFormatParams() {
     final FormatSettings formatSettings =
         ref.watch(formatSettingsProviderFamily(widget.taskId));
-    return buildPreviewExportQueryParams(
-      formatSettings,
-      isPdfWorkflow: widget.isPdfWorkflow,
-      isImageWorkflow: widget.isImageSource &&
-          widget.baseMode == TranslationPreviewMode.imageOriginalLayout,
-      rendererType: widget.baseMode.rendererType,
-    );
+    return <String, String>{
+      ...buildPreviewExportQueryParams(
+        formatSettings,
+        isPdfWorkflow: widget.isPdfWorkflow,
+        isImageWorkflow: widget.isImageSource &&
+            widget.baseMode == TranslationPreviewMode.imageOriginalLayout,
+        rendererType: widget.baseMode.rendererType,
+      ),
+      ...autoRotationPreviewParams(
+        enabled: _autoRotationEnabled,
+        aspectRatio: _autoRotationAspectRatio,
+        degrees: _autoRotationDegrees,
+      ),
+    };
   }
 
   Widget _buildPdfCompareContinuousView({
@@ -770,7 +918,10 @@ class _TranslationFullComparePreviewTabState
       widget.translatedImageUrl!,
       {
         ...formatParams,
-        ...previewCacheBustParams(_displayPdfRevision),
+        ...previewCacheBustParams(
+          _displayPdfRevision,
+          manualNonce: _pdfPreviewManualRefreshNonce,
+        ),
       },
     );
   }
@@ -780,7 +931,10 @@ class _TranslationFullComparePreviewTabState
       widget.translatedPdfUrl!,
       {
         ...formatParams,
-        ...previewCacheBustParams(_displayPdfRevision),
+        ...previewCacheBustParams(
+          _displayPdfRevision,
+          manualNonce: _pdfPreviewManualRefreshNonce,
+        ),
         ...pdfPreviewDirtySegmentParams(_displayDirtySegmentIndices),
       },
     );
@@ -1267,6 +1421,63 @@ class _TranslationFullComparePreviewTabState
                             ],
                           ),
                         ),
+                      if (_isPdfRevisionSource) ...<Widget>[
+                        Tooltip(
+                          message:
+                              l10n.translationPreviewAutoRotateSidewaysTextDesc,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Checkbox(
+                                value: _autoRotationEnabled,
+                                onChanged: (bool? value) {
+                                  _setAutoRotationEnabled(value ?? false);
+                                },
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              Text(
+                                l10n.translationPreviewAutoRotateSidewaysText,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (_autoRotationEnabled)
+                          Tooltip(
+                            message: l10n
+                                .translationPreviewAutoRotateControlsDesc,
+                            child: IntrinsicWidth(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: <Widget>[
+                                  _buildAutoRotationFieldRow(
+                                    label: l10n
+                                        .translationPreviewAutoRotateAspectRatio,
+                                    field: _buildAutoRotationNumberField(
+                                      controller: _autoRotationRatioController,
+                                      allowDecimal: true,
+                                      onCommit:
+                                          _applyAutoRotationAspectRatioFromField,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  _buildAutoRotationFieldRow(
+                                    label: l10n
+                                        .translationPreviewAutoRotateDegrees,
+                                    field: _buildAutoRotationNumberField(
+                                      controller:
+                                          _autoRotationDegreesController,
+                                      allowDecimal: false,
+                                      onCommit:
+                                          _applyAutoRotationDegreesFromField,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
                       if (kPdfLeadingTypographyUiEnabled &&
                           widget.onBatchLeadingApply != null)
                         ValueListenableBuilder<Set<int>>(

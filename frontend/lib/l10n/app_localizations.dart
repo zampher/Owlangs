@@ -7310,6 +7310,42 @@ abstract class AppLocalizations {
   /// **'When enabled, drag handles to adjust bounding box of the selected segment'**
   String get translationPreviewEditSegmentBboxDesc;
 
+  /// No description provided for @translationPreviewAutoRotateSidewaysText.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto rotate'**
+  String get translationPreviewAutoRotateSidewaysText;
+
+  /// No description provided for @translationPreviewAutoRotateSidewaysTextDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, rotate tall narrow text blocks (height/width above threshold) by 90° for sideways layout'**
+  String get translationPreviewAutoRotateSidewaysTextDesc;
+
+  /// No description provided for @translationPreviewAutoRotateAspectRatio.
+  ///
+  /// In en, this message translates to:
+  /// **'H/W ≥'**
+  String get translationPreviewAutoRotateAspectRatio;
+
+  /// No description provided for @translationPreviewAutoRotateAspectRatioDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum bbox height/width ratio to trigger auto rotation (default 20)'**
+  String get translationPreviewAutoRotateAspectRatioDesc;
+
+  /// No description provided for @translationPreviewAutoRotateDegrees.
+  ///
+  /// In en, this message translates to:
+  /// **'Angle°'**
+  String get translationPreviewAutoRotateDegrees;
+
+  /// No description provided for @translationPreviewAutoRotateControlsDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto rotation threshold (height/width) and angle in degrees (90, 180, or 270; default 270)'**
+  String get translationPreviewAutoRotateControlsDesc;
+
   /// No description provided for @translationPreviewStaleSession.
   ///
   /// In en, this message translates to:

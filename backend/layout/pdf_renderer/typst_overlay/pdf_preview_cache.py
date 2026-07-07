@@ -38,12 +38,26 @@ def compute_typst_overlay_content_fingerprint(
     rotation_by_block_index: Optional[Dict[int, int]] = None,
     table_stroke_pt_by_block_index: Optional[Dict[int, float]] = None,
     bbox_override_by_block_index: Optional[Dict[int, tuple]] = None,
+    auto_rotation_enabled: bool = False,
+    auto_rotation_aspect_ratio: Optional[float] = None,
+    auto_rotation_degrees: Optional[int] = None,
 ) -> str:
     """Stable hash of all inputs that affect Typst overlay PDF output."""
     payload: Dict[str, Any] = {
         "equation_format": equation_format,
         "table_body_format": table_body_format,
         "chart_body_format": chart_body_format,
+        "auto_rotation_enabled": bool(auto_rotation_enabled),
+        "auto_rotation_aspect_ratio": (
+            float(auto_rotation_aspect_ratio)
+            if auto_rotation_enabled and auto_rotation_aspect_ratio is not None
+            else None
+        ),
+        "auto_rotation_degrees": (
+            int(auto_rotation_degrees)
+            if auto_rotation_enabled and auto_rotation_degrees is not None
+            else None
+        ),
         "segments": [
             _segment_fingerprint_fields(seg)
             for seg in sorted(

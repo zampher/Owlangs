@@ -106,6 +106,9 @@ async def service_download_file_route(
         renderer_type: Optional[str] = FastApiQuery(None, description="PDF renderer: 'typst_overlay' = preserve original layout (default when omitted); 'pandoc' = reflow from Markdown via Pandoc+XeLaTeX. PDF downloads only.", examples=["typst_overlay", "pandoc"]),
         preview: Optional[bool] = FastApiQuery(None, description="When true, serve HTML/MD with Content-Disposition inline for iframe preview.", examples=[True]),
         dirty_segments: Optional[str] = FastApiQuery(None, description="Comma-separated segment indices for incremental PDF preview refresh (PDF revision).", examples=["12,13"]),
+        auto_rotation_enabled: Optional[bool] = FastApiQuery(None, description="When true, auto-rotate sideways text blocks whose bbox height/width exceeds the aspect ratio threshold (PDF typst_overlay only).", examples=[True, False]),
+        auto_rotation_aspect_ratio: Optional[float] = FastApiQuery(None, description="Minimum bbox height/width ratio to trigger auto rotation when auto_rotation_enabled is true. Default: 20.", examples=[20.0]),
+        auto_rotation_degrees: Optional[int] = FastApiQuery(None, description="Rotation angle in degrees for auto-rotated blocks when auto_rotation_enabled is true. Allowed: 90, 180, 270. Default: 270.", examples=[270]),
 ):
     """Download translation result files."""
     resp = await download_service.download_file(
@@ -127,6 +130,9 @@ async def service_download_file_route(
         cover_color_mode=cover_color_mode,
         renderer_type=renderer_type,
         dirty_segments=dirty_segments,
+        auto_rotation_enabled=auto_rotation_enabled,
+        auto_rotation_aspect_ratio=auto_rotation_aspect_ratio,
+        auto_rotation_degrees=auto_rotation_degrees,
     )
     try:
         if isinstance(resp, (FileResponse, Response)):

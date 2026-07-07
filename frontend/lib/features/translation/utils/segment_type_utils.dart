@@ -94,6 +94,12 @@ const double kPdfDefaultTableStrokePt = 0.5;
 /// Preset table grid stroke widths (pt) in PDF revision UI.
 const List<double> kPdfTableStrokeOptionsPt = <double>[0, 0.5, 1.0, 1.5];
 
+/// Default minimum bbox height/width ratio for auto sideways text rotation.
+const double kDefaultAutoRotationAspectRatio = 20.0;
+
+/// Default rotation angle (degrees) for auto sideways text rotation.
+const int kDefaultAutoRotationDegrees = 270;
+
 /// Selectable PDF overlay rotation angles (degrees, clockwise).
 const List<int> kPdfRotationOptionsDegrees = <int>[0, 90, 180, 270];
 

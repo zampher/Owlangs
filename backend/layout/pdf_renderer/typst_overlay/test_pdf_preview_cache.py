@@ -47,6 +47,27 @@ def test_fingerprint_stable_for_same_content():
     assert first == second
 
 
+def test_fingerprint_changes_when_auto_rotation_threshold_changes():
+    segments = [{"segment_index": 0, "target_text": "A"}]
+    first = compute_typst_overlay_content_fingerprint(
+        segments,
+        equation_format="text",
+        table_body_format="html",
+        chart_body_format="image",
+        auto_rotation_enabled=True,
+        auto_rotation_aspect_ratio=20.0,
+    )
+    second = compute_typst_overlay_content_fingerprint(
+        segments,
+        equation_format="text",
+        table_body_format="html",
+        chart_body_format="image",
+        auto_rotation_enabled=True,
+        auto_rotation_aspect_ratio=25.0,
+    )
+    assert first != second
+
+
 def test_store_pdf_preview_cache_tracks_full_render(tmp_path):
     task_state: dict = {}
     pdf_path = tmp_path / "preview.pdf"

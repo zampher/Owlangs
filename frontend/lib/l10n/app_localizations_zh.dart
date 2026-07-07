@@ -3972,6 +3972,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationPreviewEditSegmentBboxDesc => '启用后，可通过拖拽手柄调整选中片段的边界框';
 
   @override
+  String get translationPreviewAutoRotateSidewaysText => '自动旋转';
+
+  @override
+  String get translationPreviewAutoRotateSidewaysTextDesc =>
+      '启用后，对高宽比超过阈值的窄长文本块自动旋转 90° 以侧向排版';
+
+  @override
+  String get translationPreviewAutoRotateAspectRatio => '高宽比≥';
+
+  @override
+  String get translationPreviewAutoRotateAspectRatioDesc =>
+      '触发自动旋转的最小 bbox 高宽比（默认 20）';
+
+  @override
+  String get translationPreviewAutoRotateDegrees => '角度°';
+
+  @override
+  String get translationPreviewAutoRotateControlsDesc =>
+      '自动旋转阈值（高宽比）与角度（90、180 或 270，默认 270）';
+
+  @override
   String get translationPreviewStaleSession => '预览已失效，请从翻译面板重新打开预览修订。';
 
   @override

@@ -1561,6 +1561,9 @@ async def _typst_overlay_pdf_response(
     pdf_generator: PDFGenerator,
     chart_body_format: Optional[str] = None,
     dirty_segment_indices: Optional[List[int]] = None,
+    auto_rotation_enabled: bool = False,
+    auto_rotation_aspect_ratio: float = 20.0,
+    auto_rotation_degrees: int = 270,
 ) -> FileResponse:
     """Generate a high-fidelity PDF using Typst overlay rendering.
 
@@ -1683,14 +1686,23 @@ async def _typst_overlay_pdf_response(
                 f"for {len(leading_em_by_block_index)} block(s): "
                 f"{sorted(leading_em_by_block_index.items())[:8]}",
             )
-        rotation_by_block_index = _build_block_rotation_map_from_segments(
-            segments, task_state,
+        from layout.pdf_renderer.typst_overlay.segment_rotation_utils import (
+            build_rotation_by_block_index,
+        )
+
+        rotation_by_block_index = build_rotation_by_block_index(
+            segments,
+            task_state,
+            layout_doc=layout_doc,
+            auto_rotation_enabled=auto_rotation_enabled,
+            auto_rotation_aspect_ratio=auto_rotation_aspect_ratio,
+            auto_rotation_degrees=auto_rotation_degrees,
         )
         if rotation_by_block_index:
             logger.info(
                 LogModule.EXPORT,
-                f"[TYPST_OVERLAY] Task {task_id}: applying user rotation overrides "
-                f"for {len(rotation_by_block_index)} block(s): "
+                f"[TYPST_OVERLAY] Task {task_id}: applying rotation for "
+                f"{len(rotation_by_block_index)} block(s): "
                 f"{sorted(rotation_by_block_index.items())[:8]}",
             )
         table_stroke_pt_by_block_index = _build_block_table_stroke_map_from_segments(
@@ -1748,6 +1760,9 @@ async def _typst_overlay_pdf_response(
         rotation_by_block_index=rotation_by_block_index or None,
         table_stroke_pt_by_block_index=table_stroke_pt_by_block_index or None,
         bbox_override_by_block_index=bbox_override_by_block_index or None,
+        auto_rotation_enabled=auto_rotation_enabled,
+        auto_rotation_aspect_ratio=auto_rotation_aspect_ratio,
+        auto_rotation_degrees=auto_rotation_degrees,
     )
 
     output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
@@ -1796,7 +1811,12 @@ async def _typst_overlay_pdf_response(
     render_page_indices = None
     base_merged_pdf_bytes = None
     expected_page_count = max(1, int(getattr(layout_doc, "page_count", 0) or 0))
-    if dirty_segment_indices and cached_pdf is not None and cache.get("has_full_render"):
+    if (
+        dirty_segment_indices
+        and not auto_rotation_enabled
+        and cached_pdf is not None
+        and cache.get("has_full_render")
+    ):
         cached_page_count = _pdf_page_count(cached_pdf)
         if cached_page_count is not None and cached_page_count != expected_page_count:
             logger.warning(
@@ -2663,6 +2683,9 @@ class DownloadService:
         renderer_type: Optional[str] = None,
         dirty_segments: Optional[str] = None,
         cover_color_mode: Optional[str] = None,
+        auto_rotation_enabled: Optional[bool] = None,
+        auto_rotation_aspect_ratio: Optional[float] = None,
+        auto_rotation_degrees: Optional[int] = None,
     ) -> FileResponse:
         """
         Download translation result file.
@@ -2699,6 +2722,27 @@ class DownloadService:
         sfx = _get_output_suffix(task_state)
 
         dirty_segment_indices = _parse_dirty_segment_indices(dirty_segments)
+        auto_rot_enabled = bool(auto_rotation_enabled)
+        try:
+            auto_rot_ratio = (
+                float(auto_rotation_aspect_ratio)
+                if auto_rotation_aspect_ratio is not None
+                else 20.0
+            )
+        except (TypeError, ValueError):
+            auto_rot_ratio = 20.0
+        if auto_rot_ratio <= 0:
+            auto_rot_ratio = 20.0
+        try:
+            auto_rot_degrees = (
+                int(auto_rotation_degrees)
+                if auto_rotation_degrees is not None
+                else 270
+            )
+        except (TypeError, ValueError):
+            auto_rot_degrees = 270
+        if auto_rot_degrees not in {90, 180, 270}:
+            auto_rot_degrees = 270
 
         # Serve uploaded source PDF for bilingual PDF compare preview (PDF tasks only).
         if file_type == "source-pdf":
@@ -4679,6 +4723,9 @@ class DownloadService:
                                     self.pdf_generator,
                                     chart_body_format=chart_body_format,
                                     dirty_segment_indices=dirty_segment_indices,
+                                    auto_rotation_enabled=auto_rot_enabled,
+                                    auto_rotation_aspect_ratio=auto_rot_ratio,
+                                    auto_rotation_degrees=auto_rot_degrees,
                                 )
 
                             if renderer_type == "pandoc":
@@ -5062,6 +5109,9 @@ class DownloadService:
                                             self.pdf_generator,
                                             chart_body_format=chart_body_format,
                                             dirty_segment_indices=dirty_segment_indices,
+                                            auto_rotation_enabled=auto_rot_enabled,
+                                            auto_rotation_aspect_ratio=auto_rot_ratio,
+                                            auto_rotation_degrees=auto_rot_degrees,
                                         )
 
                                     if renderer_type == "pandoc":
@@ -5409,6 +5459,9 @@ class DownloadService:
                         self.pdf_generator,
                         chart_body_format=chart_body_format,
                         dirty_segment_indices=dirty_segment_indices,
+                        auto_rotation_enabled=auto_rot_enabled,
+                        auto_rotation_aspect_ratio=auto_rot_ratio,
+                        auto_rotation_degrees=auto_rot_degrees,
                     )
 
                 # For PDF files, only use layout-based generation (high-fidelity, no fallback to HTML-to-PDF)
@@ -6363,6 +6416,9 @@ class DownloadService:
                         self.pdf_generator,
                         chart_body_format=chart_body_format,
                         dirty_segment_indices=dirty_segment_indices,
+                        auto_rotation_enabled=auto_rot_enabled,
+                        auto_rotation_aspect_ratio=auto_rot_ratio,
+                        auto_rotation_degrees=auto_rot_degrees,
                     )
                 file_path = file_info["path"]
                 if file_type == "mobi":
