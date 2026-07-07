@@ -396,6 +396,18 @@ def _finalize_mineru_layout_document(
     doc = LayoutDocument(pages=pages, engine=engine, metadata=metadata or {})
     _infer_title_heading_levels(doc)
     _apply_cross_page_block_pairs(doc)
+    from layout.ocr_provider.mineru.layout_group_pairs import (
+        apply_mineru_layout_group_pairs_on_document,
+    )
+    from layout.layout_group_enrichment import enrich_layout_group_pairs_on_document
+
+    apply_mineru_layout_group_pairs_on_document(doc)
+    enrich_layout_group_pairs_on_document(
+        doc,
+        paddle_raw_payload=None,
+        apply_paddle_groups=False,
+        log_prefix="MINERU-GROUP",
+    )
     return doc
 
 
@@ -855,18 +867,17 @@ def parse_mineru_layout_from_zip_bytes(zip_bytes: bytes, engine: str = "mineru")
             pages_dict.setdefault(page_idx, []).append(block)
             global_index += 1
 
-        # Build LayoutDocument
-        pages = []
-        for page_idx in sorted(pages_dict.keys()):
-            pages.append(LayoutPage(
-                page_index=page_idx,
-                blocks=pages_dict[page_idx]
-            ))
-
-        logger.info(LogModule.LAYOUT, f"Parsed MinerU *_content_list.json: {len(pages)} pages, {global_index} blocks")
-        doc = LayoutDocument(pages=pages, engine=engine)
-        _infer_title_heading_levels(doc)
-        return doc
+        logger.info(LogModule.LAYOUT, f"Parsed MinerU *_content_list.json: {len(pages_dict)} pages, {global_index} blocks")
+        pdf_info = [
+            {"page_idx": page_idx, "page_size": []}
+            for page_idx in sorted(pages_dict.keys())
+        ]
+        return _finalize_mineru_layout_document(
+            pages_dict,
+            pdf_info,
+            metadata={},
+            engine=engine,
+        )
 
     except Exception as e:
         logger.warning(LogModule.EXTRACT, f"Failed to parse MinerU layout from ZIP: {e}")

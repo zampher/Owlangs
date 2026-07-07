@@ -967,6 +967,21 @@ async def get_translation_segments_api(
         if isinstance(segments_list, list) and segments_list:
             _enrich_segments_table_fields(task_state, segments_list)
             _enrich_segments_pdf_typography(task_id, task_state, segments_list)
+            # Typography enrich may reset layout_block_indices from segment map;
+            # re-expand layout group companions so indices match multi-bbox preview.
+            layout_doc = _resolve_layout_document(task_id, task_state)
+            if layout_doc is not None:
+                from utils.format_convert_utils import normalize_layout_block_bbox_map
+
+                _expand_segments_layout_group_bboxes(
+                    task_id,
+                    task_state,
+                    segments_list,
+                    layout_doc,
+                    normalize_layout_block_bbox_map(
+                        task_state.get("layout_block_bbox"),
+                    ),
+                )
 
     # Write enriched translation segments to debug file for font/bbox diagnosis
     _write_translation_segments_debug(task_id, task_state, response_data)
@@ -1115,6 +1130,7 @@ async def update_segment_api(
     table_stroke_pt = body.get("table_stroke_pt")
     layout_block_bbox_override = body.get("layout_block_bbox_override")
     layout_block_bbox_reset = bool(body.get("layout_block_bbox_reset", False))
+    layout_block_index = body.get("layout_block_index")
     layout_group_text_parts = body.get("layout_group_text_parts")
     layout_group_text_parts_reset = bool(
         body.get("layout_group_text_parts_reset", False)
@@ -1140,6 +1156,7 @@ async def update_segment_api(
         table_stroke_pt=table_stroke_pt,
         layout_block_bbox_override=layout_block_bbox_override,
         layout_block_bbox_reset=layout_block_bbox_reset,
+        layout_block_index=layout_block_index,
         layout_group_text_parts=layout_group_text_parts,
         layout_group_text_parts_reset=layout_group_text_parts_reset,
     )
@@ -1162,6 +1179,17 @@ async def update_segment_api(
     task_state = task_manager.get_task(task_id) or {}
     if isinstance(segment, dict):
         _enrich_segments_pdf_typography(task_id, task_state, [segment])
+        layout_doc = _resolve_layout_document(task_id, task_state)
+        if layout_doc is not None:
+            from utils.format_convert_utils import normalize_layout_block_bbox_map
+
+            _expand_segments_layout_group_bboxes(
+                task_id,
+                task_state,
+                [segment],
+                layout_doc,
+                normalize_layout_block_bbox_map(task_state.get("layout_block_bbox")),
+            )
 
     return JSONResponse(content={
         "success": True,

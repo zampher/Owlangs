@@ -13,6 +13,7 @@ from layout.layout_group_pair_utils import (
     LAYOUT_GROUP_PAIRS_KEY,
     bbox_overlap_over_min_area,
     bbox_y_overlap_ratio,
+    is_block_claimed_for_layout_group_pairing,
     is_column_continuation_bbox,
     is_column_wrap_continuation_bbox,
     layout_group_ids_compatible,
@@ -198,6 +199,9 @@ def apply_paddle_layout_group_pairs(
 
     paired = 0
     for empty in sorted(empties, key=_block_order):
+        empty_raw = empty.raw if isinstance(empty.raw, dict) else {}
+        if is_block_claimed_for_layout_group_pairing(empty_raw):
+            continue
         gid = _group_id(empty)
         if gid is None:
             continue
@@ -235,6 +239,10 @@ def _attach_layout_group_pair(primary: LayoutBlock, empty: LayoutBlock) -> None:
     if primary.index is None or empty.index is None:
         return
     if empty.bbox is None or len(empty.bbox) != 4:
+        return
+
+    empty_raw = empty.raw if isinstance(empty.raw, dict) else {}
+    if is_block_claimed_for_layout_group_pairing(empty_raw):
         return
 
     empty.raw = dict(empty.raw or {})
@@ -339,6 +347,8 @@ def apply_spatial_layout_group_pairs(
             continue
         empty_raw = empty.raw if isinstance(empty.raw, dict) else {}
         if empty_raw.get(LAYOUT_GROUP_PAIR_OF_KEY) is not None:
+            continue
+        if is_block_claimed_for_layout_group_pairing(empty_raw):
             continue
         if empty.index is None:
             continue

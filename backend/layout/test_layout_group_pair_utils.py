@@ -202,6 +202,47 @@ def test_layout_group_text_parts_merge_and_cover():
     assert merged == "Left Right"
 
 
+def test_layout_block_bbox_overrides_parse_and_read():
+    from layout.layout_group_pair_utils import (
+        parse_layout_block_bbox_overrides,
+        serialize_layout_block_bbox_overrides,
+    )
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        _read_segment_layout_bbox_for_block,
+    )
+
+    overrides = parse_layout_block_bbox_overrides(
+        {"13": [1.0, 2.0, 3.0, 4.0], "14": [10.0, 20.0, 30.0, 40.0]},
+    )
+    assert overrides == {
+        13: (1.0, 2.0, 3.0, 4.0),
+        14: (10.0, 20.0, 30.0, 40.0),
+    }
+    serialized = serialize_layout_block_bbox_overrides(overrides)
+    assert serialized["14"] == [10.0, 20.0, 30.0, 40.0]
+
+    segment = {
+        "layout_block_indices": [13, 14],
+        "layout_block_bbox": [
+            [42.0, 569.4, 291.9, 661.9],
+            [301.4, 522.9, 552.8, 662.4],
+        ],
+        "layout_block_bbox_overrides": serialized,
+    }
+    assert _read_segment_layout_bbox_for_block(segment, 13, None, None) == (
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+    )
+    assert _read_segment_layout_bbox_for_block(segment, 14, None, None) == (
+        10.0,
+        20.0,
+        30.0,
+        40.0,
+    )
+
+
 def test_split_translated_text_for_layout_group_with_parts():
     primary_bbox = (0.0, 0.0, 100.0, 200.0)
     pairs = [
@@ -293,3 +334,139 @@ def test_filter_valid_layout_group_pairs_keeps_same_group_id_companion():
     filtered = filter_valid_layout_group_pairs(primary, pairs, doc)
     assert len(filtered) == 1
     assert filtered[0]["index"] == 14
+
+
+def test_apply_layout_block_indices_preserves_layout_group_companions():
+    from utils.translation_segments import _apply_layout_block_indices_to_segments
+
+    segments = [
+        {
+            "segment_index": 19,
+            "layout_block_indices": [13, 14],
+            "layout_block_bbox": [
+                [42.0, 569.4, 291.9, 661.9],
+                [301.4, 522.9, 552.8, 662.4],
+            ],
+        }
+    ]
+    block_map = [[] for _ in range(20)]
+    block_map[19] = [13]
+    updated = _apply_layout_block_indices_to_segments(segments, block_map)
+    assert updated == 0
+    assert segments[0]["layout_block_indices"] == [13, 14]
+
+
+def test_sort_layout_block_indices_reading_order_same_page_before_cross_page():
+    from types import SimpleNamespace
+
+    from layout.layout_group_pair_utils import sort_layout_block_indices_reading_order
+
+    doc = SimpleNamespace(
+        pages=[
+            SimpleNamespace(
+                page_index=0,
+                blocks=[
+                    SimpleNamespace(
+                        index=13,
+                        page_index=0,
+                        bbox=[40.0, 520.0, 290.0, 660.0],
+                    ),
+                    SimpleNamespace(
+                        index=14,
+                        page_index=0,
+                        bbox=[300.0, 520.0, 550.0, 660.0],
+                    ),
+                ],
+            ),
+            SimpleNamespace(
+                page_index=1,
+                blocks=[
+                    SimpleNamespace(
+                        index=24,
+                        page_index=1,
+                        bbox=[40.0, 30.0, 290.0, 160.0],
+                    ),
+                ],
+            ),
+        ]
+    )
+    doc.iter_blocks = lambda: (
+        block
+        for page in doc.pages
+        for block in page.blocks
+    )
+
+    ordered = sort_layout_block_indices_reading_order(
+        [13, 24, 14],
+        doc,
+        13,
+    )
+    assert ordered == [13, 14, 24]
+
+
+def test_split_translated_text_for_overlay_blocks_three_bboxes():
+    from types import SimpleNamespace
+
+    from layout.layout_group_pair_utils import split_translated_text_for_overlay_blocks
+
+    doc = SimpleNamespace(
+        pages=[
+            SimpleNamespace(
+                page_index=0,
+                blocks=[
+                    SimpleNamespace(
+                        index=13,
+                        page_index=0,
+                        bbox=[0.0, 0.0, 100.0, 200.0],
+                        raw={"_cross_page_pairs": [{"index": 24, "bbox": [0.0, 0.0, 80.0, 50.0], "page_index": 1}]},
+                    ),
+                    SimpleNamespace(
+                        index=14,
+                        page_index=0,
+                        bbox=[120.0, 0.0, 220.0, 200.0],
+                        raw={"_layout_group_pair_of": 13},
+                    ),
+                ],
+            ),
+            SimpleNamespace(
+                page_index=1,
+                blocks=[
+                    SimpleNamespace(
+                        index=24,
+                        page_index=1,
+                        bbox=[0.0, 0.0, 80.0, 50.0],
+                        raw={"_cross_page_pair_of": 13},
+                    ),
+                ],
+            ),
+        ]
+    )
+    doc.iter_blocks = lambda: (
+        block
+        for page in doc.pages
+        for block in page.blocks
+    )
+
+    primary = doc.pages[0].blocks[0]
+    segment = {
+        "layout_block_indices": [13, 24, 14],
+        "layout_group_text_parts": {
+            "13": "Left column",
+            "14": "Right column",
+            "24": "Next page tail",
+        },
+    }
+    result = split_translated_text_for_overlay_blocks(
+        segment,
+        primary,
+        "Left column Right column Next page tail",
+        doc,
+    )
+    assert result["used_segment_order"] is True
+    assert result["main_text"] == "Left column"
+    assert len(result["companion_specs"]) == 2
+    by_index = {spec["index"]: spec for spec in result["companion_specs"]}
+    assert by_index[14]["text"] == "Right column"
+    assert by_index[14]["page_index"] == 0
+    assert by_index[24]["text"] == "Next page tail"
+    assert by_index[24]["page_index"] == 1

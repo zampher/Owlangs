@@ -1727,25 +1727,54 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     block_key,
                     overlay_segments,
                 )
-                group_info = self._split_layout_group_text(
-                    block,
-                    translated,
-                    layout_doc,
-                    segment=segment_for_block,
+                from layout.layout_group_pair_utils import (
+                    split_translated_text_for_overlay_blocks,
                 )
-                translated = group_info["main_text"]
-                group_parts = group_info["group_parts"]
 
-                # Detect and split cross-page lines.
-                # When a text block has lines marked "cross_page": true,
-                # those lines render on the *next* page. We need to:
-                #   1. Split the translated text proportionally
-                #   2. Create a RenderBlock for the cross-page portion
-                #      and place it in render_blocks_by_page[next_page].
-                cross_page_info = self._split_cross_page_text(block, translated)
-                main_text = cross_page_info["main_text"]
-                main_bbox = cross_page_info.get("main_bbox")
-                cross_page_parts = cross_page_info["cross_page_parts"]
+                overlay_split = split_translated_text_for_overlay_blocks(
+                    segment=segment_for_block,
+                    primary_block=block,
+                    translated_text=translated,
+                    layout_doc=layout_doc,
+                )
+                if overlay_split.get("used_segment_order"):
+                    main_text = overlay_split["main_text"]
+                    main_bbox = overlay_split.get("main_bbox")
+                    group_parts = overlay_split["companion_specs"]
+                    cross_page_parts: list = []
+                    for idx, part in enumerate(group_parts):
+                        part["block_id"] = (
+                            f"block-{block_key}-group-{part.get('index', idx)}"
+                        )
+                    if group_parts:
+                        unified_logger.info(
+                            LogModule.RESTOR,
+                            "[TYPST_OVERLAY] Multi-block segment split block "
+                            f"{block_key}: {len(group_parts)} companion part(s), "
+                            f"source=segment_order, main_chars={len(main_text)}, "
+                            f"companion_chars="
+                            f"{sum(len(p.get('text') or '') for p in group_parts)}",
+                        )
+                else:
+                    group_info = self._split_layout_group_text(
+                        block,
+                        translated,
+                        layout_doc,
+                        segment=segment_for_block,
+                    )
+                    main_text = group_info["main_text"]
+                    group_parts = group_info["group_parts"]
+
+                    # Detect and split cross-page lines.
+                    # When a text block has lines marked "cross_page": true,
+                    # those lines render on the *next* page. We need to:
+                    #   1. Split the translated text proportionally
+                    #   2. Create a RenderBlock for the cross-page portion
+                    #      and place it in render_blocks_by_page[next_page].
+                    cross_page_info = self._split_cross_page_text(block, main_text)
+                    main_text = cross_page_info["main_text"]
+                    main_bbox = cross_page_info.get("main_bbox")
+                    cross_page_parts = cross_page_info["cross_page_parts"]
 
                 # Main block: render with the main portion of the translation.
                 # When cross-page lines exist, use main_bbox (only the on-page

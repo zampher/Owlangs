@@ -116,10 +116,10 @@ class TranslationFullComparePreviewTab extends ConsumerStatefulWidget {
   final ValueChanged<bool>? onBboxEditModeChanged;
 
   /// Called when the user finishes dragging, with the new bbox in PDF points.
-  final void Function(List<double> bbox)? onBboxOverrideChanged;
+  final void Function(int bboxIndex, List<double> bbox)? onBboxOverrideChanged;
 
-  /// Called when the user taps the reset button.
-  final VoidCallback? onBboxOverrideReset;
+  /// Called when the user taps reset on a specific bbox overlay.
+  final void Function(int bboxIndex)? onBboxOverrideReset;
 
   @override
   ConsumerState<TranslationFullComparePreviewTab> createState() =>
@@ -140,7 +140,7 @@ class _TranslationFullComparePreviewTabState
   List<List<double>>? _highlightBboxes;
   /// Original (non-overridden) bboxes for source-side PDF highlight.
   List<List<double>>? _sourceHighlightBboxes;
-  bool _bboxEditMode = false;
+  bool _bboxEditMode = true;
   bool _autoFollowSegmentPdfPage = true;
   bool _showSelectedSegmentMarker = true;
 
@@ -200,6 +200,7 @@ class _TranslationFullComparePreviewTabState
     _previewSignalsAlive = _bindPreviewSignalListeners();
     if (_previewSignalsAlive) {
       _onPdfBboxHighlightChanged();
+      _onBboxEditModeChanged();
       _onAutoFollowSegmentPdfPageChanged();
       _onShowSelectedSegmentMarkerChanged();
     }
@@ -504,16 +505,20 @@ class _TranslationFullComparePreviewTabState
 
   /// Called by [PdfContinuousPage] when dragging ends in the edit overlay.
   /// [pdfRect] is already in PDF points (converted by PdfContinuousPage).
-  void _onEditBboxChanged(Rect pdfRect) {
+  void _onEditBboxChanged(int bboxIndex, Rect pdfRect) {
     if (widget.onBboxOverrideChanged == null) {
       return;
     }
-    widget.onBboxOverrideChanged!(<double>[
+    widget.onBboxOverrideChanged!(bboxIndex, <double>[
       pdfRect.left,
       pdfRect.top,
       pdfRect.right,
       pdfRect.bottom,
     ]);
+  }
+
+  void _onEditBboxReset(int bboxIndex) {
+    widget.onBboxOverrideReset?.call(bboxIndex);
   }
 
   void _maybeApplyPdfRevision(int revision) {
@@ -741,11 +746,11 @@ class _TranslationFullComparePreviewTabState
       navigationController: navigationController,
       highlightPageNumber: _highlightBboxPage,
       highlightBboxes: _highlightBboxes,
-      sourceHighlightBboxes: _sourceHighlightBboxes,
+      sourceHighlightBboxes: _bboxEditMode ? null : _sourceHighlightBboxes,
       viewportController: _viewportController,
       bboxEditMode: _bboxEditMode,
       onEditBboxChanged: _onEditBboxChanged,
-      onEditBboxReset: widget.onBboxOverrideReset,
+      onEditBboxReset: _onEditBboxReset,
       onVisiblePageChanged: (int page, int totalPages) {
         if (!mounted ||
             (page == _comparePdfCurrentPage &&
@@ -856,7 +861,7 @@ class _TranslationFullComparePreviewTabState
       highlightBboxes: _highlightBboxes,
       bboxEditMode: _bboxEditMode,
       onEditBboxChanged: _onEditBboxChanged,
-      onEditBboxReset: widget.onBboxOverrideReset,
+      onEditBboxReset: _onEditBboxReset,
       onDownload: widget.onDownload,
       onRequestPreviewSettings: widget.onRequestPreviewSettings,
     );

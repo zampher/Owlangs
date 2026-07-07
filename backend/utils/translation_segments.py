@@ -2605,7 +2605,16 @@ def record_translation_segments(
             from utils.format_convert_utils import (
                 bboxes_for_layout_block_indices,
                 normalize_layout_block_bbox_map,
+                sync_segment_layout_block_page_numbers,
             )
+
+            page_number_map = None
+            if layout_doc is not None:
+                from utils.format_convert_utils import (
+                    build_layout_block_page_number_map,
+                )
+
+                page_number_map = build_layout_block_page_number_map(layout_doc)
 
             for segment_dict in segments:
                 bidxs = segment_dict.get("layout_block_indices", [])
@@ -2628,6 +2637,11 @@ def record_translation_segments(
                         f"(bbox_map blocks="
                         f"{len(normalize_layout_block_bbox_map(bbox_map))})",
                     )
+                sync_segment_layout_block_page_numbers(
+                    segment_dict,
+                    layout_doc,
+                    page_number_map=page_number_map,
+                )
             if isinstance(layout_doc, _LD) and is_image_overlay_task(task_state):
                 try:
                     from layout.image_overlay.block_text_map import (
@@ -2875,6 +2889,20 @@ def _apply_layout_block_indices_to_segments(
             continue
         unique_indices = _dedupe_layout_block_indices(block_map[seg_idx] or [])
         if unique_indices:
+            existing_raw = segment_dict.get("layout_block_indices") or []
+            existing: List[int] = []
+            for raw_idx in existing_raw:
+                try:
+                    existing.append(int(raw_idx))
+                except (TypeError, ValueError):
+                    continue
+            existing = _dedupe_layout_block_indices(existing)
+            if (
+                len(existing) > len(unique_indices)
+                and existing[: len(unique_indices)] == unique_indices
+            ):
+                # Keep layout-group companion indices (e.g. [13, 14] vs map [13]).
+                continue
             segment_dict["layout_block_indices"] = unique_indices
             updated += 1
     return updated
@@ -3349,6 +3377,7 @@ def update_translation_segment(
     table_stroke_pt: Optional[float] = None,
     layout_block_bbox_override: Optional[list] = None,
     layout_block_bbox_reset: bool = False,
+    layout_block_index: Optional[int] = None,
     layout_group_text_parts: Optional[dict] = None,
     layout_group_text_parts_reset: bool = False,
     task_state: Optional[dict] = None,
@@ -3367,6 +3396,7 @@ def update_translation_segment(
         table_stroke_pt: Optional table grid stroke width in pt (0 = hidden).
         layout_block_bbox_override: Optional bbox override [x0, y0, x1, y1].
         layout_block_bbox_reset: If True, clear the bbox override (restore default).
+        layout_block_index: Optional layout block index for per-block bbox override.
         layout_group_text_parts: Optional per-layout-block text map for multi-bbox groups.
         layout_group_text_parts_reset: If True, clear stored per-block text parts.
         task_state: Task state dictionary (if None, will be imported)
@@ -3515,45 +3545,160 @@ def update_translation_segment(
 
     # Apply bbox override change
     if layout_block_bbox_reset:
-        if "layout_block_bbox_override" in segment:
-            del segment["layout_block_bbox_override"]
-            segment["modified"] = True
-            segment["modified_by"] = modified_by or segment.get("modified_by")
-            segment["modified_at"] = time.time()
-            logger.info(
-                LogModule.TRANS,
-                f"Reset bbox override for segment {segment_index} on task {task_id}",
-            )
-            typography_changed = True
-    elif layout_block_bbox_override is not None:
-        if not isinstance(layout_block_bbox_override, (tuple, list)) or len(layout_block_bbox_override) != 4:
-            logger.warning(
-                LogModule.TRANS,
-                f"Ignoring invalid layout_block_bbox_override={layout_block_bbox_override!r} "
-                f"for segment {segment_index} on task {task_id}. Expected [x0, y0, x1, y1].",
-            )
-        else:
+        from layout.layout_group_pair_utils import (
+            LAYOUT_BLOCK_BBOX_OVERRIDES_KEY,
+            parse_layout_block_bbox_overrides,
+            serialize_layout_block_bbox_overrides,
+        )
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            resolve_segment_layout_block_indices,
+        )
+
+        if layout_block_index is not None:
             try:
-                normalized = [float(v) for v in layout_block_bbox_override]
+                reset_block_key = int(layout_block_index)
             except (TypeError, ValueError):
-                logger.warning(
-                    LogModule.TRANS,
-                    f"Ignoring non-numeric layout_block_bbox_override for segment "
-                    f"{segment_index} on task {task_id}",
-                )
-            else:
-                old_override = segment.get("layout_block_bbox_override")
-                if old_override != normalized:
-                    segment["layout_block_bbox_override"] = normalized
+                reset_block_key = None
+            if reset_block_key is not None:
+                existing = parse_layout_block_bbox_overrides(
+                    segment.get(LAYOUT_BLOCK_BBOX_OVERRIDES_KEY),
+                ) or {}
+                if reset_block_key in existing:
+                    del existing[reset_block_key]
+                    if existing:
+                        segment[LAYOUT_BLOCK_BBOX_OVERRIDES_KEY] = (
+                            serialize_layout_block_bbox_overrides(existing)
+                        )
+                    elif LAYOUT_BLOCK_BBOX_OVERRIDES_KEY in segment:
+                        del segment[LAYOUT_BLOCK_BBOX_OVERRIDES_KEY]
                     segment["modified"] = True
                     segment["modified_by"] = modified_by or segment.get("modified_by")
                     segment["modified_at"] = time.time()
                     logger.info(
                         LogModule.TRANS,
-                        f"Updated bbox override for segment {segment_index} on task {task_id}: "
-                        f"{old_override} -> {normalized}",
+                        f"Reset bbox override for block {reset_block_key} on segment "
+                        f"{segment_index} task {task_id}",
                     )
                     typography_changed = True
+                indices = resolve_segment_layout_block_indices(segment, task_state)
+                is_primary = indices and int(indices[0]) == reset_block_key
+                if is_primary and "layout_block_bbox_override" in segment:
+                    del segment["layout_block_bbox_override"]
+                    segment["modified"] = True
+                    segment["modified_by"] = modified_by or segment.get("modified_by")
+                    segment["modified_at"] = time.time()
+                    logger.info(
+                        LogModule.TRANS,
+                        f"Reset primary bbox override for segment {segment_index} "
+                        f"on task {task_id}",
+                    )
+                    typography_changed = True
+        else:
+            cleared = False
+            if "layout_block_bbox_override" in segment:
+                del segment["layout_block_bbox_override"]
+                cleared = True
+            if LAYOUT_BLOCK_BBOX_OVERRIDES_KEY in segment:
+                del segment[LAYOUT_BLOCK_BBOX_OVERRIDES_KEY]
+                cleared = True
+            if cleared:
+                segment["modified"] = True
+                segment["modified_by"] = modified_by or segment.get("modified_by")
+                segment["modified_at"] = time.time()
+                logger.info(
+                    LogModule.TRANS,
+                    f"Reset bbox override for segment {segment_index} on task {task_id}",
+                )
+                typography_changed = True
+    elif layout_block_bbox_override is not None:
+        from layout.layout_group_pair_utils import (
+            LAYOUT_BLOCK_BBOX_OVERRIDES_KEY,
+            normalize_layout_block_bbox_override_entry,
+            parse_layout_block_bbox_overrides,
+            serialize_layout_block_bbox_overrides,
+        )
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            resolve_segment_layout_block_indices,
+        )
+
+        normalized_entry = normalize_layout_block_bbox_override_entry(
+            layout_block_bbox_override,
+        )
+        if normalized_entry is None:
+            logger.warning(
+                LogModule.TRANS,
+                f"Ignoring invalid layout_block_bbox_override="
+                f"{layout_block_bbox_override!r} for segment {segment_index} on task {task_id}. "
+                "Expected [x0, y0, x1, y1].",
+            )
+        else:
+            normalized = [float(v) for v in normalized_entry]
+            indices = resolve_segment_layout_block_indices(segment, task_state)
+            target_block_key: Optional[int] = None
+            apply_override = True
+            if layout_block_index is not None:
+                try:
+                    target_block_key = int(layout_block_index)
+                except (TypeError, ValueError):
+                    target_block_key = None
+                    apply_override = False
+            elif indices and len(indices) == 1:
+                try:
+                    target_block_key = int(indices[0])
+                except (TypeError, ValueError):
+                    target_block_key = None
+                    apply_override = False
+            elif indices and len(indices) > 1:
+                logger.warning(
+                    LogModule.TRANS,
+                    f"Ignoring layout_block_bbox_override without layout_block_index "
+                    f"for multi-block segment {segment_index} on task {task_id} "
+                    f"(indices={indices})",
+                )
+                apply_override = False
+
+            is_primary = False
+            if apply_override and target_block_key is not None and indices:
+                try:
+                    is_primary = int(indices[0]) == int(target_block_key)
+                except (TypeError, ValueError):
+                    is_primary = False
+
+            changed = False
+            if apply_override and target_block_key is not None:
+                existing = parse_layout_block_bbox_overrides(
+                    segment.get(LAYOUT_BLOCK_BBOX_OVERRIDES_KEY),
+                ) or {}
+                old_block_override = existing.get(target_block_key)
+                if old_block_override != normalized_entry:
+                    existing[target_block_key] = normalized_entry
+                    segment[LAYOUT_BLOCK_BBOX_OVERRIDES_KEY] = (
+                        serialize_layout_block_bbox_overrides(existing)
+                    )
+                    changed = True
+                    logger.info(
+                        LogModule.TRANS,
+                        f"Updated bbox override for block {target_block_key} on segment "
+                        f"{segment_index} task {task_id}: "
+                        f"{old_block_override} -> {normalized}",
+                    )
+
+            if apply_override and is_primary:
+                old_override = segment.get("layout_block_bbox_override")
+                if old_override != normalized:
+                    segment["layout_block_bbox_override"] = normalized
+                    changed = True
+                    logger.info(
+                        LogModule.TRANS,
+                        f"Updated primary bbox override for segment {segment_index} "
+                        f"on task {task_id}: {old_override} -> {normalized}",
+                    )
+
+            if changed:
+                segment["modified"] = True
+                segment["modified_by"] = modified_by or segment.get("modified_by")
+                segment["modified_at"] = time.time()
+                typography_changed = True
 
     if layout_group_text_parts_reset:
         if "layout_group_text_parts" in segment:

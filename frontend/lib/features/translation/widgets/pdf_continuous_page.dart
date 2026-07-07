@@ -10,6 +10,13 @@ import 'translation_result/layout_bbox_highlight.dart';
 import 'translation_result/layout_bbox_edit_overlay.dart';
 import 'pdf_page_utils.dart';
 
+/// Called when the user finishes dragging a bbox overlay.
+/// [bboxIndex] is the index within the segment's layout bbox list.
+typedef BboxEditChangedCallback = void Function(int bboxIndex, Rect rect);
+
+/// Called when the user taps reset on a specific bbox overlay.
+typedef BboxEditResetCallback = void Function(int bboxIndex);
+
 /// Renders one PDF page at [maxWidth] using pdfium/pdf.js for pixel-accurate output.
 ///
 /// When [highlightBboxes] is provided (each entry is PDF points:
@@ -46,12 +53,12 @@ class PdfContinuousPage extends StatefulWidget {
   /// Whether bbox edit mode is active for this page.
   final bool bboxEditMode;
 
-  /// Called when the user finishes dragging the bbox overlay, with the
+  /// Called when the user finishes dragging a bbox overlay, with the
   /// new bbox in display-pixel coordinates (relative to the page image).
-  final ValueChanged<Rect>? onEditBboxChanged;
+  final BboxEditChangedCallback? onEditBboxChanged;
 
-  /// Called when the user taps the reset button on the bbox overlay.
-  final VoidCallback? onEditBboxReset;
+  /// Called when the user taps the reset button on a specific bbox overlay.
+  final BboxEditResetCallback? onEditBboxReset;
 
   @override
   State<PdfContinuousPage> createState() => _PdfContinuousPageState();
@@ -151,18 +158,20 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
     }
   }
 
-  /// Wraps [callback] (which expects display-pixel rect) with a converter
-  /// that transforms the rect to PDF points before calling the outer callback.
-  ValueChanged<Rect>? _toPdfCallback(ValueChanged<Rect>? callback) {
+  /// Wraps [callback] (display-pixel rect + index) with PDF-point conversion.
+  BboxEditChangedCallback? _toPdfCallback(BboxEditChangedCallback? callback) {
     if (callback == null || _pdfPageWidth <= 0) return null;
     final double scale = widget.maxWidth / _pdfPageWidth;
-    return (Rect displayRect) {
-      callback(Rect.fromLTWH(
-        displayRect.left / scale,
-        displayRect.top / scale,
-        displayRect.width / scale,
-        displayRect.height / scale,
-      ));
+    return (int bboxIndex, Rect displayRect) {
+      callback(
+        bboxIndex,
+        Rect.fromLTWH(
+          displayRect.left / scale,
+          displayRect.top / scale,
+          displayRect.width / scale,
+          displayRect.height / scale,
+        ),
+      );
     };
   }
 
@@ -193,7 +202,7 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
     }
 
     List<Rect> highlightRects = const <Rect>[];
-    Rect? editBboxRect;
+    List<Rect> editBboxRects = const <Rect>[];
     if (widget.highlightBboxes != null &&
         _pdfPageWidth > 0 &&
         _pdfPageHeight > 0) {
@@ -213,9 +222,7 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
         );
       }
       highlightRects = rects;
-      if (rects.isNotEmpty) {
-        editBboxRect = rects.first;
-      }
+      editBboxRects = rects;
     }
 
     return PdfContinuousPageFrame(
@@ -226,7 +233,7 @@ class _PdfContinuousPageState extends State<PdfContinuousPage> {
       transformController: widget.transformController,
       scaleEnabled: widget.scaleEnabled,
       bboxEditMode: widget.bboxEditMode,
-      editBboxRect: editBboxRect,
+      editBboxRects: editBboxRects,
       onEditBboxChanged: _toPdfCallback(widget.onEditBboxChanged),
       onEditBboxReset: widget.onEditBboxReset,
     );
@@ -246,7 +253,7 @@ class PdfContinuousPageFrame extends StatelessWidget {
     this.transformController,
     this.scaleEnabled = true,
     this.bboxEditMode = false,
-    this.editBboxRect,
+    this.editBboxRects = const <Rect>[],
     this.onEditBboxChanged,
     this.onEditBboxReset,
     super.key,
@@ -266,14 +273,14 @@ class PdfContinuousPageFrame extends StatelessWidget {
   /// Whether bbox edit mode is active.
   final bool bboxEditMode;
 
-  /// Bbox for the edit overlay in display-pixel coordinates.
-  final Rect? editBboxRect;
+  /// Bboxes for edit overlays in display-pixel coordinates.
+  final List<Rect> editBboxRects;
 
-  /// Called when the user finishes dragging the bbox overlay.
-  final ValueChanged<Rect>? onEditBboxChanged;
+  /// Called when the user finishes dragging a bbox overlay.
+  final BboxEditChangedCallback? onEditBboxChanged;
 
-  /// Called when the user taps the reset button.
-  final VoidCallback? onEditBboxReset;
+  /// Called when the user taps reset on a specific bbox overlay.
+  final BboxEditResetCallback? onEditBboxReset;
 
   @override
   Widget build(BuildContext context) {
@@ -317,18 +324,28 @@ class PdfContinuousPageFrame extends StatelessWidget {
   }
 
   Widget _buildTile(Widget pageContent) {
-    // Edit mode: show interactive edit overlay
-    if (bboxEditMode && editBboxRect != null) {
+    // Edit mode: show interactive edit overlays for every layout bbox.
+    if (bboxEditMode && editBboxRects.isNotEmpty) {
       return Stack(
         clipBehavior: Clip.none,
         children: <Widget>[
           pageContent,
           Positioned.fill(
-            child: LayoutBboxEditOverlay(
-              bboxRect: editBboxRect!,
-              imageSize: Size(width, height),
-              onChanged: onEditBboxChanged ?? (_) {},
-              onReset: onEditBboxReset,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: <Widget>[
+                for (int i = 0; i < editBboxRects.length; i++)
+                  LayoutBboxEditOverlay(
+                    key: ValueKey<int>(i),
+                    bboxRect: editBboxRects[i],
+                    imageSize: Size(width, height),
+                    onChanged: (Rect rect) =>
+                        onEditBboxChanged?.call(i, rect),
+                    onReset: onEditBboxReset != null
+                        ? () => onEditBboxReset!(i)
+                        : null,
+                  ),
+              ],
             ),
           ),
         ],

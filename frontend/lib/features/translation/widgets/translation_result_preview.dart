@@ -673,7 +673,7 @@ class _TranslationResultPreviewState
   late final ValueNotifier<bool> _showSelectedSegmentMarkerNotifier =
       ValueNotifier<bool>(true);
   late final ValueNotifier<bool> _bboxEditModeNotifier =
-      ValueNotifier<bool>(false);
+      ValueNotifier<bool>(true);
   bool _isRefreshingForFilter = false;
 
   // PERFORMANCE: Cache exclusion counts to avoid expensive recalculation on every rebuild
@@ -1369,7 +1369,8 @@ class _TranslationResultPreviewState
   }
 
   /// Read all layout block bboxes for a segment, in image pixel coords.
-  /// Prefers [layout_block_bbox_override] for the first bbox when present.
+  /// Applies per-block overrides from [layout_block_bbox_overrides] and
+  /// legacy [layout_block_bbox_override] for the primary bbox.
   List<List<double>>? _readSegmentBboxes(int index) {
     final Map<String, dynamic>? metadata = _allSegmentsMetadata[index];
     final List<List<double>>? parsed =
@@ -1377,23 +1378,43 @@ class _TranslationResultPreviewState
     if (parsed == null || parsed.isEmpty) {
       return null;
     }
-    final List<double>? override =
+    final List<int>? blockIndices =
+        parseLayoutBlockIndices(metadata?['layout_block_indices']);
+    final Map<String, dynamic>? overridesRaw =
+        metadata?['layout_block_bbox_overrides'] is Map
+            ? Map<String, dynamic>.from(
+                metadata!['layout_block_bbox_overrides'] as Map,
+              )
+            : null;
+    final List<double>? primaryOverride =
         _parseBboxList(metadata?['layout_block_bbox_override']);
-    if (override == null) {
-      return parsed
-          .map(
-            (List<double> bbox) => <double>[
-              bbox[0],
-              bbox[1],
-              bbox[2],
-              bbox[3],
-            ],
-          )
-          .toList(growable: false);
+    if (blockIndices != null && blockIndices.length != parsed.length) {
+      _translationResultLog(
+        '[BBOX-HIGHLIGHT] segment metadata indices/bbox length mismatch: '
+        'indices=${blockIndices.length} bboxes=${parsed.length}',
+        level: LogLevel.warn,
+      );
     }
     final List<List<double>> result = <List<double>>[];
     for (int i = 0; i < parsed.length; i++) {
-      if (i == 0) {
+      List<double>? override;
+      if (blockIndices != null && i < blockIndices.length) {
+        if (overridesRaw != null) {
+          final int blockKey = blockIndices[i];
+          override = _parseBboxList(
+            overridesRaw['$blockKey'] ?? overridesRaw[blockKey.toString()],
+          );
+        }
+        if (override == null &&
+            i == 0 &&
+            primaryOverride != null &&
+            blockIndices.isNotEmpty) {
+          override = primaryOverride;
+        }
+      } else if (i == 0 && primaryOverride != null) {
+        override = primaryOverride;
+      }
+      if (override != null) {
         result.add(override);
       } else {
         final List<double> bbox = parsed[i];
@@ -1554,9 +1575,33 @@ class _TranslationResultPreviewState
     if (bboxes != null && bboxes.isNotEmpty) {
       final int? resolvedPage =
           page ?? (_isImageSourceFile() ? 1 : null);
+      final List<int>? blockPageNumbers =
+          parseLayoutBlockPageNumbers(meta?['layout_block_page_numbers']);
+      List<List<double>>? highlightBboxes = bboxes;
+      List<List<double>>? highlightOriginalBboxes = originalBboxes;
+      if (resolvedPage != null &&
+          blockPageNumbers != null &&
+          blockPageNumbers.isNotEmpty) {
+        highlightBboxes = filterLayoutBlockBboxesForPdfPage(
+          bboxes: bboxes,
+          pageNumbers: blockPageNumbers,
+          pdfPageNumber: resolvedPage,
+        );
+        if (originalBboxes != null) {
+          highlightOriginalBboxes = filterLayoutBlockBboxesForPdfPage(
+            bboxes: originalBboxes,
+            pageNumbers: blockPageNumbers,
+            pdfPageNumber: resolvedPage,
+          );
+        }
+      }
+      if (highlightBboxes == null || highlightBboxes.isEmpty) {
+        _clearPdfBboxHighlight();
+        return;
+      }
       _pdfHighlightBboxPageNotifier.value = resolvedPage;
-      _pdfHighlightBboxNotifier.value = bboxes;
-      _pdfSourceHighlightBboxNotifier.value = originalBboxes;
+      _pdfHighlightBboxNotifier.value = highlightBboxes;
+      _pdfSourceHighlightBboxNotifier.value = highlightOriginalBboxes;
     } else {
       _clearPdfBboxHighlight();
     }
@@ -3125,8 +3170,14 @@ class _TranslationResultPreviewState
       if (layoutBlockIndices != null)
         'layout_block_indices': layoutBlockIndices,
       if (layoutBlockBbox != null) 'layout_block_bbox': layoutBlockBbox,
+      if (segment.containsKey('layout_block_page_numbers'))
+        'layout_block_page_numbers': parseLayoutBlockPageNumbers(
+          segment['layout_block_page_numbers'],
+        ),
       if (segment.containsKey('layout_block_bbox_override'))
         'layout_block_bbox_override': segment['layout_block_bbox_override'],
+      if (segment.containsKey('layout_block_bbox_overrides'))
+        'layout_block_bbox_overrides': segment['layout_block_bbox_overrides'],
       if (segment.containsKey('layout_block_indices_resolution'))
         'layout_block_indices_resolution':
             segment['layout_block_indices_resolution'],
@@ -5953,29 +6004,90 @@ class _TranslationResultPreviewState
   }
 
   /// Handle bbox override change from drag editing.
+  int? _resolveLayoutBlockIndexForBboxEdit(
+    Map<String, dynamic>? metadata,
+    int bboxIndex,
+  ) {
+    final List<int>? blockIndices =
+        parseLayoutBlockIndices(metadata?['layout_block_indices']);
+    final List<List<double>>? bboxes =
+        _parseLayoutBlockBbox(metadata?['layout_block_bbox']);
+    if (blockIndices != null &&
+        bboxIndex >= 0 &&
+        bboxIndex < blockIndices.length) {
+      return blockIndices[bboxIndex];
+    }
+    if (bboxIndex > 0) {
+      _translationResultLog(
+        '[BBOX-EDIT] Cannot map bboxIndex=$bboxIndex to layout block: '
+        'indices=${blockIndices?.length ?? 0} bboxes=${bboxes?.length ?? 0}',
+        level: LogLevel.warn,
+      );
+      return null;
+    }
+    return blockIndices?.isNotEmpty == true ? blockIndices!.first : null;
+  }
+
   Future<void> _handleBboxOverrideChanged(
     int index,
+    int bboxIndex,
     List<double> bbox,
   ) async {
     try {
+      final Map<String, dynamic>? metadata = _allSegmentsMetadata[index];
+      final int? layoutBlockIndex =
+          _resolveLayoutBlockIndexForBboxEdit(metadata, bboxIndex);
+      if (bboxIndex > 0 && layoutBlockIndex == null) {
+        if (mounted) {
+          MessageService.showError(
+            context,
+            'Cannot save bbox edit: layout block index missing for this region',
+          );
+        }
+        return;
+      }
+
       final TranslationService svc = TranslationService();
-      await svc.updateTranslationSegment(
+      final Map<String, dynamic> response = await svc.updateTranslationSegment(
         _apiTaskId(),
         index,
         layoutBlockBboxOverride: bbox,
+        layoutBlockIndex: layoutBlockIndex,
       );
 
       // Update local metadata so the UI reflects the change immediately.
-      if (_allSegmentsMetadata.containsKey(index)) {
-        _allSegmentsMetadata[index] = <String, dynamic>{
-          ..._allSegmentsMetadata[index]!,
-          'layout_block_bbox_override': bbox,
-        };
-      } else {
-        _allSegmentsMetadata[index] = <String, dynamic>{
-          'layout_block_bbox_override': bbox,
-        };
+      final Map<String, dynamic> updated = <String, dynamic>{
+        ...?metadata,
+      };
+      final dynamic segmentPayload = response['segment'];
+      if (segmentPayload is Map) {
+        updated.addAll(
+          _layoutBlockMetadataFieldsFromApi(
+            Map<dynamic, dynamic>.from(segmentPayload),
+          ),
+        );
       }
+      if (layoutBlockIndex != null) {
+        final Map<String, dynamic> overrides =
+            updated['layout_block_bbox_overrides'] is Map
+                ? Map<String, dynamic>.from(
+                    updated['layout_block_bbox_overrides'] as Map,
+                  )
+                : <String, dynamic>{};
+        overrides['$layoutBlockIndex'] = bbox;
+        updated['layout_block_bbox_overrides'] = overrides;
+        final List<int>? blockIndices =
+            parseLayoutBlockIndices(updated['layout_block_indices']);
+        final bool isPrimaryBlock = blockIndices == null ||
+            blockIndices.isEmpty ||
+            blockIndices.first == layoutBlockIndex;
+        if (isPrimaryBlock) {
+          updated['layout_block_bbox_override'] = bbox;
+        }
+      } else {
+        updated['layout_block_bbox_override'] = bbox;
+      }
+      _allSegmentsMetadata[index] = updated;
 
       if (mounted && _shouldRefreshOverlayPreviewRevision) {
         // Refresh the PDF bbox highlight so the target preview shows the
@@ -5992,25 +6104,63 @@ class _TranslationResultPreviewState
     }
   }
 
-  /// Handle bbox override reset.
-  Future<void> _handleBboxOverrideReset(int index) async {
+  /// Handle bbox override reset for one layout block (or all when [bboxIndex] is invalid).
+  Future<void> _handleBboxOverrideReset(int index, int bboxIndex) async {
     try {
+      final Map<String, dynamic>? metadata = _allSegmentsMetadata[index];
+      final int? layoutBlockIndex =
+          _resolveLayoutBlockIndexForBboxEdit(metadata, bboxIndex);
+      if (bboxIndex > 0 && layoutBlockIndex == null) {
+        if (mounted) {
+          MessageService.showError(
+            context,
+            'Cannot reset bbox: layout block index missing for this region',
+          );
+        }
+        return;
+      }
+
       final TranslationService svc = TranslationService();
       await svc.updateTranslationSegment(
         _apiTaskId(),
         index,
         layoutBlockBboxReset: true,
+        layoutBlockIndex: layoutBlockIndex,
       );
 
-      // Remove the override from local metadata.
       if (_allSegmentsMetadata.containsKey(index)) {
         final Map<String, dynamic> updated =
             Map<String, dynamic>.from(_allSegmentsMetadata[index]!);
-        updated.remove('layout_block_bbox_override');
+        if (layoutBlockIndex != null) {
+          if (updated['layout_block_bbox_overrides'] is Map) {
+            final Map<String, dynamic> overrides =
+                Map<String, dynamic>.from(
+                  updated['layout_block_bbox_overrides'] as Map,
+                );
+            overrides.remove('$layoutBlockIndex');
+            if (overrides.isEmpty) {
+              updated.remove('layout_block_bbox_overrides');
+            } else {
+              updated['layout_block_bbox_overrides'] = overrides;
+            }
+          }
+          final List<int>? blockIndices =
+              parseLayoutBlockIndices(updated['layout_block_indices']);
+          final bool isPrimaryBlock = blockIndices == null ||
+              blockIndices.isEmpty ||
+              blockIndices.first == layoutBlockIndex;
+          if (isPrimaryBlock) {
+            updated.remove('layout_block_bbox_override');
+          }
+        } else {
+          updated.remove('layout_block_bbox_override');
+          updated.remove('layout_block_bbox_overrides');
+        }
         _allSegmentsMetadata[index] = updated;
       }
 
       if (mounted && _shouldRefreshOverlayPreviewRevision) {
+        _requestPdfBboxHighlight(index);
         _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
         setState(() {});
         await _segmentsPaginationController?.refresh();
@@ -6798,19 +6948,21 @@ class _TranslationResultPreviewState
                   : null,
           onBboxOverrideChanged:
               _supportsRevisionForMode(baseMode)
-                  ? (List<double> bbox) {
+                  ? (int bboxIndex, List<double> bbox) {
                       final int? idx = highlightedIndex;
                       if (idx != null) {
-                        unawaited(_handleBboxOverrideChanged(idx, bbox));
+                        unawaited(
+                          _handleBboxOverrideChanged(idx, bboxIndex, bbox),
+                        );
                       }
                     }
                   : null,
           onBboxOverrideReset:
               _supportsRevisionForMode(baseMode)
-                  ? () {
+                  ? (int bboxIndex) {
                       final int? idx = highlightedIndex;
                       if (idx != null) {
-                        unawaited(_handleBboxOverrideReset(idx));
+                        unawaited(_handleBboxOverrideReset(idx, bboxIndex));
                       }
                     }
                   : null,

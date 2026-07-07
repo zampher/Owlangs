@@ -642,10 +642,8 @@
         "api_version": "cloud-v4"
       },
       "performance_note": "Advanced document parsing and conversion service with OCR capabilities",
-      "concurrent": 5,
-      "model": "",
-      "use_doc_orientation_classify": false,
-      "restructure_pages": false
+      "concurrent": 3,
+      "model": "vlm-auto-engine"
     },
     "mineru_local": {
       "name": "MinerU (Local)",
@@ -664,10 +662,8 @@
         "api_version": "local-v3.1"
       },
       "performance_note": "Self-hosted MinerU; API key optional.",
-      "concurrent": 5,
-      "model": "vlm-auto-engine",
-      "use_doc_orientation_classify": false,
-      "restructure_pages": false
+      "concurrent": 3,
+      "model": "vlm-auto-engine"
     },
     "paddle": {
       "name": "PaddleOCR (Cloud)",

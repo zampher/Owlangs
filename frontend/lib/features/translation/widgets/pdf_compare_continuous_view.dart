@@ -108,11 +108,11 @@ class PdfCompareContinuousView extends StatefulWidget {
   /// Bbox for the edit overlay in display-pixel coordinates.
   final Rect? editBboxRect;
 
-  /// Called when the user finishes dragging the bbox overlay.
-  final ValueChanged<Rect>? onEditBboxChanged;
+  /// Called when the user finishes dragging a bbox overlay.
+  final BboxEditChangedCallback? onEditBboxChanged;
 
-  /// Called when the user taps the reset button.
-  final VoidCallback? onEditBboxReset;
+  /// Called when the user taps reset on a specific bbox overlay.
+  final BboxEditResetCallback? onEditBboxReset;
 
   @override
   State<PdfCompareContinuousView> createState() =>

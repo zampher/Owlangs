@@ -142,6 +142,60 @@ def test_infer_parser_engine():
     assert infer_parser_engine("deepseek", None, "llm") is None
 
 
+def test_sanitize_platforms_json_root_strips_parser_fields_for_llm():
+    from backend.config.platforms_config import sanitize_platforms_json_root
+
+    data = {
+        "_schema_version": 1,
+        "default_platform": "deepseek",
+        "platforms": {
+            "deepseek": {
+                "name": "DeepSeek",
+                "url": "https://api.deepseek.com",
+                "model": "deepseek-chat",
+                "platform_type": "llm",
+                "parser_subtype": None,
+                "api_endpoints": {},
+            },
+            "mineru": {
+                "name": "MinerU",
+                "url": "https://mineru.net",
+                "platform_type": "parser",
+                "parser_subtype": "cloud",
+                "api_endpoints": {"submit": "/ocr"},
+            },
+        },
+    }
+    sanitized = sanitize_platforms_json_root(data)
+    llm = sanitized["platforms"]["deepseek"]
+    parser = sanitized["platforms"]["mineru"]
+    assert "parser_subtype" not in llm
+    assert "api_endpoints" not in llm
+    assert parser["parser_subtype"] == "cloud"
+    assert parser["api_endpoints"] == {"submit": "/ocr"}
+
+
+def test_ai_platforms_api_omits_parser_fields_for_llm():
+    from backend.config.config_loader import UnifiedConfig
+    from backend.config.platforms_config import AIPlatformConfig, PlatformsConfig
+
+    platforms = PlatformsConfig()
+    platforms.platforms["deepseek"] = AIPlatformConfig(
+        name="DeepSeek",
+        url="https://api.deepseek.com",
+        model="deepseek-chat",
+        platform_type="llm",
+        parser_subtype="cloud",
+        api_endpoints={"submit": "/ocr"},
+    )
+    cfg = UnifiedConfig.__new__(UnifiedConfig)
+    cfg.platforms = platforms
+    cfg.secrets = None
+    payload = cfg.ai_platforms["deepseek"]
+    assert "parser_subtype" not in payload
+    assert "api_endpoints" not in payload
+
+
 if __name__ == "__main__":
     test_platform_type_uses_llm_chunk_concurrent()
     test_get_config_dict_omits_chunk_for_parser()

@@ -9,7 +9,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 LAYOUT_GROUP_PAIRS_KEY = "_layout_group_pairs"
 LAYOUT_GROUP_PAIR_OF_KEY = "_layout_group_pair_of"
+CROSS_PAGE_PAIR_OF_KEY = "_cross_page_pair_of"
 LAYOUT_GROUP_TEXT_PARTS_KEY = "layout_group_text_parts"
+LAYOUT_BLOCK_BBOX_OVERRIDES_KEY = "layout_block_bbox_overrides"
 
 
 def parse_layout_group_text_parts(raw: Any) -> Optional[Dict[int, str]]:
@@ -91,6 +93,61 @@ def serialize_layout_group_text_parts(parts: Dict[int, str]) -> Dict[str, str]:
     return {str(idx): text for idx, text in sorted(parts.items(), key=lambda item: item[0])}
 
 
+def normalize_layout_block_bbox_override_entry(
+    raw: Any,
+) -> Optional[Tuple[float, float, float, float]]:
+    """Parse a single [x0, y0, x1, y1] bbox override list."""
+    if not isinstance(raw, (list, tuple)) or len(raw) < 4:
+        return None
+    try:
+        return tuple(float(v) for v in raw[:4])
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_layout_block_bbox_overrides(
+    raw: Any,
+) -> Optional[Dict[int, Tuple[float, float, float, float]]]:
+    """Parse per-layout-block bbox overrides from segment metadata."""
+    if raw is None:
+        return None
+    result: Dict[int, Tuple[float, float, float, float]] = {}
+    if isinstance(raw, dict):
+        for key, value in raw.items():
+            bbox = normalize_layout_block_bbox_override_entry(value)
+            if bbox is None:
+                continue
+            try:
+                result[int(key)] = bbox
+            except (TypeError, ValueError):
+                continue
+    elif isinstance(raw, list):
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue
+            idx_raw = entry.get("layout_block_index", entry.get("index"))
+            bbox = normalize_layout_block_bbox_override_entry(
+                entry.get("bbox") or entry.get("layout_block_bbox_override"),
+            )
+            if bbox is None:
+                continue
+            try:
+                result[int(idx_raw)] = bbox
+            except (TypeError, ValueError):
+                continue
+    return result or None
+
+
+def serialize_layout_block_bbox_overrides(
+    overrides: Dict[int, Tuple[float, float, float, float]],
+) -> Dict[str, list]:
+    """Persist bbox overrides with string keys for JSON segment storage."""
+    return {
+        str(idx): [float(v) for v in bbox]
+        for idx, bbox in sorted(overrides.items(), key=lambda item: item[0])
+    }
+
+
 def split_translated_text_for_layout_group_with_parts(
     segment: Optional[Dict[str, Any]],
     primary_index: int,
@@ -144,11 +201,21 @@ def is_layout_group_companion(raw: Any) -> bool:
     return isinstance(raw, dict) and raw.get(LAYOUT_GROUP_PAIR_OF_KEY) is not None
 
 
+def is_cross_page_companion_block(raw: Any) -> bool:
+    """True when block continues a paragraph from the previous page."""
+    return isinstance(raw, dict) and raw.get(CROSS_PAGE_PAIR_OF_KEY) is not None
+
+
 def is_layout_companion_block(raw: Any) -> bool:
     """True for cross-page or same-page group companion blocks."""
     if not isinstance(raw, dict):
         return False
-    return raw.get("_cross_page_pair_of") is not None or is_layout_group_companion(raw)
+    return is_cross_page_companion_block(raw) or is_layout_group_companion(raw)
+
+
+def is_block_claimed_for_layout_group_pairing(raw: Any) -> bool:
+    """True when block must not participate in same-page layout group pairing."""
+    return is_layout_companion_block(raw)
 
 
 def bbox_area(bbox: Sequence[float]) -> float:
@@ -257,13 +324,28 @@ def filter_valid_layout_group_pairs(
             continue
 
         companion_gid = None
+        companion_block = None
         if layout_doc is not None:
             companion_block = lookup_layout_block(layout_doc, entry.get("index"))
             if companion_block is not None:
                 companion_raw = getattr(companion_block, "raw", None) or {}
                 if isinstance(companion_raw, dict):
+                    if is_cross_page_companion_block(companion_raw):
+                        continue
                     companion_gid = companion_raw.get("group_id")
         if not layout_group_ids_compatible(primary_gid, companion_gid):
+            continue
+        if (
+            companion_block is not None
+            and isinstance(primary_bbox, (list, tuple))
+            and len(primary_bbox) == 4
+            and companion_block.bbox is not None
+            and len(companion_block.bbox) == 4
+            and is_same_row_parallel_column_pair(
+                primary_bbox,
+                companion_block.bbox,
+            )
+        ):
             continue
 
         kept.append(entry)
@@ -283,6 +365,11 @@ def sanitize_layout_group_pairs_on_document(layout_doc: Any) -> None:
             continue
         pair_of = raw.get(LAYOUT_GROUP_PAIR_OF_KEY)
         if pair_of is None:
+            continue
+        if is_cross_page_companion_block(raw):
+            cleaned = dict(raw)
+            cleaned.pop(LAYOUT_GROUP_PAIR_OF_KEY, None)
+            block.raw = cleaned
             continue
         primary = lookup_layout_block(layout_doc, pair_of)
         if primary is None:
@@ -473,6 +560,70 @@ def paddle_group_cross_column_pair(
     except (TypeError, ValueError):
         return False
     return ex0 >= px1 - 35.0
+
+
+def is_same_row_parallel_column_pair(
+    primary_bbox: Sequence[float],
+    companion_bbox: Sequence[float],
+    *,
+    page_width: float = 595.0,
+    min_y_overlap: float = 0.40,
+    top_align_tol_ratio: float = 0.30,
+) -> bool:
+    """True when left/right blocks are independent paragraphs on the same row."""
+    if len(primary_bbox) != 4 or len(companion_bbox) != 4:
+        return False
+    if not is_left_column_bbox(primary_bbox, page_width=page_width):
+        return False
+    if not is_right_column_bbox(companion_bbox, page_width=page_width):
+        return False
+    if bbox_y_overlap_ratio(primary_bbox, companion_bbox) < min_y_overlap:
+        return False
+    try:
+        py0 = float(primary_bbox[1])
+        ey0 = float(companion_bbox[1])
+        ph = max(float(primary_bbox[3]) - py0, 1.0)
+    except (TypeError, ValueError):
+        return False
+    return abs(py0 - ey0) <= ph * top_align_tol_ratio
+
+
+def is_flow_column_continuation_bbox(
+    primary_bbox: Sequence[float],
+    companion_bbox: Sequence[float],
+    *,
+    page_height: float = 842.0,
+    page_width: float = 595.0,
+    min_y_overlap: float = 0.08,
+) -> bool:
+    """True for column-flow continuation (wrap/fill), not same-row parallel columns."""
+    if is_same_row_parallel_column_pair(
+        primary_bbox,
+        companion_bbox,
+        page_width=page_width,
+    ):
+        return False
+    if is_column_wrap_continuation_bbox(
+        primary_bbox,
+        companion_bbox,
+        page_height=page_height,
+    ):
+        return True
+    if len(primary_bbox) != 4 or len(companion_bbox) != 4:
+        return False
+    if not is_left_column_bbox(primary_bbox, page_width=page_width):
+        return False
+    if not is_right_column_bbox(companion_bbox, page_width=page_width):
+        return False
+    try:
+        py0 = float(primary_bbox[1])
+        ey0 = float(companion_bbox[1])
+    except (TypeError, ValueError):
+        return False
+    # Wrapped paragraph: right column block starts above the left block top.
+    if ey0 + 8.0 < py0 and bbox_y_overlap_ratio(primary_bbox, companion_bbox) >= min_y_overlap:
+        return True
+    return False
 
 
 def _nearest_whitespace_boundary(text: str, target: int) -> int:
@@ -691,6 +842,8 @@ def resolve_layout_group_pairs_for_block(
                 continue
             if other_raw.get(LAYOUT_GROUP_PAIR_OF_KEY) != primary_index:
                 continue
+            if is_cross_page_companion_block(other_raw):
+                continue
             if other.index is None or other.bbox is None or len(other.bbox) != 4:
                 continue
             entry = _normalize_group_pair_entry(
@@ -762,3 +915,243 @@ def split_translated_text_for_layout_group(
             }
         )
     return primary_text, companion_specs
+
+
+CROSS_PAGE_PAIRS_KEY = "_cross_page_pairs"
+
+
+def cross_page_pairs_from_raw(raw: Any) -> List[Dict[str, Any]]:
+    """Return MinerU cross-page companion pair entries from a primary block raw dict."""
+    if not isinstance(raw, dict):
+        return []
+    pairs = raw.get(CROSS_PAGE_PAIRS_KEY) or []
+    if not isinstance(pairs, list):
+        return []
+    return [p for p in pairs if isinstance(p, dict)]
+
+
+def _reading_order_key_for_block_index(
+    layout_doc: Any,
+    block_index: int,
+) -> Tuple[int, float, float, int]:
+    block = lookup_layout_block(layout_doc, block_index)
+    if block is None:
+        return (9999, 9999.0, 9999.0, block_index)
+    page = getattr(block, "page_index", 0) or 0
+    bbox = getattr(block, "bbox", None) or [0.0, 0.0, 0.0, 0.0]
+    try:
+        y0 = float(bbox[1])
+        x0 = float(bbox[0])
+    except (TypeError, ValueError):
+        y0, x0 = 9999.0, 9999.0
+    return (int(page), y0, x0, block_index)
+
+
+def sort_layout_block_indices_reading_order(
+    indices: Sequence[Any],
+    layout_doc: Any,
+    primary_index: Optional[Any] = None,
+) -> List[int]:
+    """Order layout block indices: primary first, companions by (page, y, x)."""
+    ordered: List[int] = []
+    seen: set[int] = set()
+    for raw_idx in indices:
+        try:
+            idx = int(raw_idx)
+        except (TypeError, ValueError):
+            continue
+        if idx in seen:
+            continue
+        ordered.append(idx)
+        seen.add(idx)
+
+    if not ordered:
+        return []
+
+    primary: Optional[int] = None
+    if primary_index is not None:
+        try:
+            primary = int(primary_index)
+        except (TypeError, ValueError):
+            primary = None
+    if primary is None:
+        primary = ordered[0]
+
+    companions = [idx for idx in ordered if idx != primary]
+    companions.sort(
+        key=lambda idx: _reading_order_key_for_block_index(layout_doc, idx),
+    )
+    if primary in seen:
+        return [primary] + companions
+    return companions
+
+
+def resolve_overlay_layout_block_indices(
+    segment: Optional[Dict[str, Any]],
+    primary_block: Any,
+    layout_doc: Any,
+) -> List[int]:
+    """Resolve ordered layout block indices for overlay text split (primary + companions)."""
+    primary_index = getattr(primary_block, "index", None)
+    try:
+        primary_int = int(primary_index) if primary_index is not None else None
+    except (TypeError, ValueError):
+        primary_int = None
+
+    indices: List[int] = []
+    if isinstance(segment, dict):
+        for raw_idx in segment.get("layout_block_indices") or []:
+            try:
+                indices.append(int(raw_idx))
+            except (TypeError, ValueError):
+                continue
+
+    if primary_int is not None and primary_int in indices and len(indices) > 1:
+        return sort_layout_block_indices_reading_order(
+            indices,
+            layout_doc,
+            primary_int,
+        )
+
+    raw = getattr(primary_block, "raw", None) or {}
+    pair_entries: List[Dict[str, Any]] = []
+    for pair in cross_page_pairs_from_raw(raw):
+        entry = _normalize_group_pair_entry(
+            index=pair.get("index"),
+            bbox=pair.get("bbox"),
+            page_index=pair.get("page_index"),
+        )
+        if entry is not None:
+            pair_entries.append(entry)
+    for pair in resolve_layout_group_pairs_for_block(primary_block, layout_doc):
+        entry = _normalize_group_pair_entry(
+            index=pair.get("index"),
+            bbox=pair.get("bbox"),
+            page_index=pair.get("page_index"),
+        )
+        if entry is not None:
+            pair_entries.append(entry)
+
+    if not pair_entries and not indices:
+        return [primary_int] if primary_int is not None else []
+
+    merged: List[int] = []
+    if primary_int is not None:
+        merged.append(primary_int)
+    for entry in pair_entries:
+        try:
+            companion = int(entry["index"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        if companion not in merged:
+            merged.append(companion)
+    for idx in indices:
+        if idx not in merged:
+            merged.append(idx)
+
+    if len(merged) <= 1:
+        return merged
+    return sort_layout_block_indices_reading_order(
+        merged,
+        layout_doc,
+        primary_int,
+    )
+
+
+def _block_spec_for_overlay_index(
+    block_index: int,
+    layout_doc: Any,
+) -> Optional[Dict[str, Any]]:
+    block = lookup_layout_block(layout_doc, block_index)
+    if block is None:
+        return None
+    bbox = lookup_layout_block_bbox(layout_doc, block_index)
+    if bbox is None:
+        bbox_tuple = getattr(block, "bbox", None)
+        if not isinstance(bbox_tuple, (list, tuple)) or len(bbox_tuple) != 4:
+            return None
+        try:
+            bbox = tuple(float(v) for v in bbox_tuple[:4])
+        except (TypeError, ValueError):
+            return None
+    page_index = getattr(block, "page_index", None)
+    try:
+        page_int = int(page_index) if page_index is not None else 0
+    except (TypeError, ValueError):
+        page_int = 0
+    return {
+        "index": block_index,
+        "page_index": page_int,
+        "bbox": bbox,
+    }
+
+
+def split_translated_text_for_overlay_blocks(
+    segment: Optional[Dict[str, Any]],
+    primary_block: Any,
+    translated_text: str,
+    layout_doc: Any,
+) -> Dict[str, Any]:
+    """Split translated text across all segment layout blocks (same-page + cross-page).
+
+    Mirrors frontend ``resolveLayoutGroupDisplayTexts``: stored parts when complete,
+    else area-proportional split in reading order (primary, then companions by page/y/x).
+    """
+    empty: Dict[str, Any] = {
+        "main_text": translated_text,
+        "main_bbox": None,
+        "companion_specs": [],
+        "used_segment_order": False,
+    }
+    if layout_doc is None or primary_block is None:
+        return empty
+
+    try:
+        primary_index = int(getattr(primary_block, "index", 0))
+    except (TypeError, ValueError):
+        return empty
+
+    indices = resolve_overlay_layout_block_indices(segment, primary_block, layout_doc)
+    if len(indices) <= 1:
+        return empty
+
+    specs: List[Dict[str, Any]] = []
+    for idx in indices:
+        spec = _block_spec_for_overlay_index(idx, layout_doc)
+        if spec is None:
+            return empty
+        specs.append(spec)
+
+    parts = None
+    if isinstance(segment, dict):
+        parts = normalize_layout_group_text_parts(
+            segment.get(LAYOUT_GROUP_TEXT_PARTS_KEY),
+        )
+
+    if parts and layout_group_text_parts_cover_indices(parts, indices):
+        texts = [(parts.get(idx) or "").strip() for idx in indices]
+    else:
+        bboxes = [spec["bbox"] for spec in specs]
+        texts = split_text_by_bbox_areas(translated_text, bboxes)
+        texts = [(t or "").strip() for t in texts]
+
+    primary_text = texts[0] if texts else translated_text
+    companion_specs: List[Dict[str, Any]] = []
+    for spec, text in zip(specs[1:], texts[1:]):
+        if not text.strip():
+            continue
+        companion_specs.append(
+            {
+                "index": spec["index"],
+                "page_index": spec["page_index"],
+                "bbox": spec["bbox"],
+                "text": text,
+            }
+        )
+
+    return {
+        "main_text": primary_text,
+        "main_bbox": None,
+        "companion_specs": companion_specs,
+        "used_segment_order": True,
+    }

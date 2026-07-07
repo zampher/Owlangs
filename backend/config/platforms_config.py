@@ -29,6 +29,40 @@ _PARSER_ONLY_FIELDS = frozenset({
     "api_endpoints",
 })
 
+
+def strip_parser_only_fields_from_platform_dict(
+    platform_data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Remove parser-only keys from an LLM platform dict (API responses / disk JSON)."""
+    if not isinstance(platform_data, dict):
+        return platform_data
+    ptype = normalize_platform_type(platform_data.get("platform_type"))
+    if not platform_type_uses_llm_chunk_concurrent(ptype):
+        return platform_data
+    cleaned = dict(platform_data)
+    for field_name in _PARSER_ONLY_FIELDS:
+        cleaned.pop(field_name, None)
+    return cleaned
+
+
+def sanitize_platforms_json_root(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Strip parser-only fields from LLM platforms in a platforms.json root object."""
+    if not isinstance(data, dict):
+        return data
+    platforms = data.get("platforms")
+    if not isinstance(platforms, dict):
+        return data
+    sanitized = dict(data)
+    sanitized["platforms"] = {
+        key: (
+            strip_parser_only_fields_from_platform_dict(pval)
+            if isinstance(pval, dict)
+            else pval
+        )
+        for key, pval in platforms.items()
+    }
+    return sanitized
+
 _KNOWN_PARSER_ENGINES = ("mineru", "paddle")
 _VALID_SEGMENT_LIMITS = frozenset({0, 1, 3, 5, 10, 20, 50, 100, 200, 500, 1000})
 
@@ -236,9 +270,14 @@ class PlatformsConfig:
                         merged = maybe_merge_json_file_with_template(
                             current_path=config_path,
                             template_path=template_path,
-                            write_back=True,
+                            write_back=False,
                         )
                         if isinstance(merged, dict) and merged != data:
+                            merged = sanitize_platforms_json_root(merged)
+                            config_path.write_text(
+                                json.dumps(merged, ensure_ascii=False, indent=2),
+                                encoding="utf-8",
+                            )
                             logger.info(
                                 LogModule.CONFIG,
                                 f"Merged existing platforms.json with template structure: {config_path}",

@@ -14,7 +14,12 @@ from backend.logger.logger import LogModule
 
 # Import all config modules
 from .system_config import get_system_config, SystemConfig, ExclusionDefaultsConfig
-from .platforms_config import get_platforms_config, PlatformsConfig, platform_type_uses_llm_chunk_concurrent
+from .platforms_config import (
+    get_platforms_config,
+    PlatformsConfig,
+    platform_type_uses_llm_chunk_concurrent,
+    build_platform_config_from_dict,
+)
 from .secrets_manager import get_secrets_manager
 from .local_config import LocalConfig
 def load_all_configs() -> dict:
@@ -109,12 +114,20 @@ class UnifiedConfig:
                 'model': platform.model,
                 'performance_note': platform.performance_note,
                 'platform_type': platform.platform_type,
-                'parser_subtype': platform.parser_subtype,
                 'description': platform.description,
                 'token_link': platform.token_link,
                 'requires_api_key': bool(platform.requires_api_key),
-                'api_endpoints': dict(platform.api_endpoints) if platform.api_endpoints else {},
             }
+            if not is_llm:
+                platforms_dict[key]['parser_engine'] = platform.parser_engine
+                platforms_dict[key]['parser_subtype'] = platform.parser_subtype
+                endpoints = dict(platform.api_endpoints) if platform.api_endpoints else {}
+                if endpoints:
+                    platforms_dict[key]['api_endpoints'] = endpoints
+                platforms_dict[key]['use_doc_orientation_classify'] = bool(
+                    platform.use_doc_orientation_classify
+                )
+                platforms_dict[key]['restructure_pages'] = bool(platform.restructure_pages)
             platforms_dict[key]['concurrent'] = (
                 int(platform.concurrent) if platform.concurrent is not None else 5
             )
@@ -176,15 +189,22 @@ class UnifiedConfig:
                 'model': platform_obj.model,
                 'performance_note': platform_obj.performance_note,
                 'platform_type': platform_obj.platform_type,
-                'parser_engine': platform_obj.parser_engine,
-                'parser_subtype': platform_obj.parser_subtype,
                 'description': platform_obj.description,
                 'token_link': platform_obj.token_link,
                 'requires_api_key': bool(platform_obj.requires_api_key),
-                'api_endpoints': dict(platform_obj.api_endpoints) if platform_obj.api_endpoints else {},
-                'use_doc_orientation_classify': bool(platform_obj.use_doc_orientation_classify),
-                'restructure_pages': bool(platform_obj.restructure_pages),
             }
+            if not is_llm:
+                base['parser_engine'] = platform_obj.parser_engine
+                base['parser_subtype'] = platform_obj.parser_subtype
+                endpoints = (
+                    dict(platform_obj.api_endpoints) if platform_obj.api_endpoints else {}
+                )
+                if endpoints:
+                    base['api_endpoints'] = endpoints
+                base['use_doc_orientation_classify'] = bool(
+                    platform_obj.use_doc_orientation_classify
+                )
+                base['restructure_pages'] = bool(platform_obj.restructure_pages)
             base['concurrent'] = (
                 int(platform_obj.concurrent) if platform_obj.concurrent is not None else 5
             )
@@ -301,16 +321,13 @@ class UnifiedConfig:
                         self.platforms.default_platform = platform_data
                     continue
                 if isinstance(platform_data, dict):
-                    # Update or add platform
-                    platform_obj = self.platforms.get_platform_config(platform_key)
-                    if platform_obj:
-                        # Update existing platform
-                        for key, value in platform_data.items():
-                            if hasattr(platform_obj, key):
-                                setattr(platform_obj, key, value)
-                    else:
-                        # Add new platform (would need to use platforms config's add method if available)
-                        logger.warning(LogModule.CONFIG, f"Cannot add new platform {platform_key} via update_from_dict, use platforms config directly")
+                    existing_cfg = self.platforms.get_platform_config(platform_key)
+                    cfg = build_platform_config_from_dict(
+                        platform_key,
+                        platform_data,
+                        existing_cfg,
+                    )
+                    self.platforms.update_platform_config(platform_key, cfg)
         
         # Handle default_language
         if 'default_language' in data:

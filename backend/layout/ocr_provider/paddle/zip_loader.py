@@ -132,58 +132,17 @@ def _enrich_layout_group_pairs_on_document(
     doc: LayoutDocument,
     paddle_raw_payload: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """Ensure group pair metadata exists after loading layout.json from ZIP."""
-    from layout.layout_group_pair_utils import (
-        LAYOUT_GROUP_PAIR_OF_KEY,
-        LAYOUT_GROUP_PAIRS_KEY,
-        layout_group_pairs_from_raw,
-        resolve_layout_group_pairs_for_block,
-        sanitize_layout_group_pairs_on_document,
+    """Backward-compatible wrapper; see layout.layout_group_enrichment."""
+    from layout.layout_group_enrichment import enrich_layout_group_pairs_on_document
+
+    engine = (getattr(doc, "engine", None) or "").strip().lower()
+    use_paddle_groups = paddle_raw_payload is not None or engine == "paddle"
+    enrich_layout_group_pairs_on_document(
+        doc,
+        paddle_raw_payload,
+        apply_paddle_groups=use_paddle_groups,
+        log_prefix="PADDLE-ZIP" if use_paddle_groups else "MINERU-GROUP",
     )
-    from layout.ocr_provider.paddle.layout_group_pairs import (
-        apply_paddle_layout_group_pairs,
-        apply_spatial_layout_group_pairs,
-    )
-
-    if paddle_raw_payload:
-        _merge_group_pair_meta_from_paddle_raw(doc, paddle_raw_payload)
-
-    for page in doc.pages:
-        page_height = float(page.height) if page.height else None
-        page_width = float(page.width) if page.width else None
-        apply_paddle_layout_group_pairs(
-            page.blocks,
-            page_height=page_height,
-            page_width=page_width,
-        )
-        apply_spatial_layout_group_pairs(
-            page.blocks,
-            page_height=page_height,
-            page_width=page_width,
-        )
-
-    sanitize_layout_group_pairs_on_document(doc)
-
-    enriched_primaries = 0
-    for page in doc.pages:
-        for block in page.blocks:
-            raw = block.raw if isinstance(block.raw, dict) else {}
-            if layout_group_pairs_from_raw(raw):
-                continue
-            pairs = resolve_layout_group_pairs_for_block(block, doc)
-            if not pairs:
-                continue
-            enriched = dict(raw)
-            enriched[LAYOUT_GROUP_PAIRS_KEY] = pairs
-            block.raw = enriched
-            enriched_primaries += 1
-
-    if enriched_primaries:
-        logger.info(
-            LogModule.LAYOUT,
-            "[PADDLE-ZIP] Enriched "
-            f"{enriched_primaries} primary block(s) with layout group pair metadata",
-        )
 
 
 def _merge_group_pair_meta_from_paddle_raw(

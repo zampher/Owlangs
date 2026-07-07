@@ -137,11 +137,11 @@ class PdfContinuousScrollView extends StatefulWidget {
   /// Whether bbox edit mode is active.
   final bool bboxEditMode;
 
-  /// Called when the user finishes dragging the bbox overlay.
-  final ValueChanged<Rect>? onEditBboxChanged;
+  /// Called when the user finishes dragging a bbox overlay.
+  final BboxEditChangedCallback? onEditBboxChanged;
 
-  /// Called when the user taps the reset button.
-  final VoidCallback? onEditBboxReset;
+  /// Called when the user taps the reset button on a specific bbox overlay.
+  final BboxEditResetCallback? onEditBboxReset;
 
   @override
   State<PdfContinuousScrollView> createState() =>
@@ -408,11 +408,11 @@ class PdfContinuousPreviewLoader extends StatefulWidget {
   /// Whether bbox edit mode is active.
   final bool bboxEditMode;
 
-  /// Called when the user finishes dragging the bbox overlay.
-  final ValueChanged<Rect>? onEditBboxChanged;
+  /// Called when the user finishes dragging a bbox overlay.
+  final BboxEditChangedCallback? onEditBboxChanged;
 
-  /// Called when the user taps the reset button.
-  final VoidCallback? onEditBboxReset;
+  /// Called when the user taps the reset button on a specific bbox overlay.
+  final BboxEditResetCallback? onEditBboxReset;
 
   @override
   State<PdfContinuousPreviewLoader> createState() =>

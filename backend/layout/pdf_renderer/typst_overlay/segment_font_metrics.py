@@ -1314,6 +1314,22 @@ def _read_segment_layout_bbox_for_block(
         except (TypeError, ValueError):
             is_primary_block = True
 
+    from layout.layout_group_pair_utils import (
+        LAYOUT_BLOCK_BBOX_OVERRIDES_KEY,
+        parse_layout_block_bbox_overrides,
+    )
+
+    per_block_overrides = parse_layout_block_bbox_overrides(
+        segment.get(LAYOUT_BLOCK_BBOX_OVERRIDES_KEY),
+    )
+    if per_block_overrides:
+        try:
+            block_override = per_block_overrides.get(int(block_key))
+        except (TypeError, ValueError):
+            block_override = None
+        if block_override is not None:
+            return block_override
+
     override = segment.get("layout_block_bbox_override")
     if is_primary_block and isinstance(override, (tuple, list)) and len(override) >= 4:
         try:

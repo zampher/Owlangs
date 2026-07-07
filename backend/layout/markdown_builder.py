@@ -1176,13 +1176,17 @@ def _build_layout_markdown(
         # deep_split only controls whether to split a single block's text by paragraphs
 
         # Collect cross-page and layout-group companion indices for multi-bbox segments.
+        from layout.layout_group_pair_utils import (
+            cross_page_pairs_from_raw,
+            sort_layout_block_indices_reading_order,
+        )
+
         pair_indices: List[int] = []
         if isinstance(raw, dict):
-            for pair in raw.get("_cross_page_pairs", []):
-                if isinstance(pair, dict):
-                    pidx = pair.get("index")
-                    if pidx is not None:
-                        pair_indices.append(int(pidx))
+            for pair in cross_page_pairs_from_raw(raw):
+                pidx = pair.get("index")
+                if pidx is not None:
+                    pair_indices.append(int(pidx))
         for pair in resolve_layout_group_pairs_for_block(block, layout_doc):
             pidx = pair.get("index")
             if pidx is not None:
@@ -1190,8 +1194,16 @@ def _build_layout_markdown(
 
         def _make_block_indices(base_idx: int) -> List[int]:
             if base_idx < 0:
-                return list(pair_indices)
-            return [base_idx] + pair_indices
+                return sort_layout_block_indices_reading_order(
+                    pair_indices,
+                    layout_doc,
+                    None,
+                )
+            return sort_layout_block_indices_reading_order(
+                [base_idx] + pair_indices,
+                layout_doc,
+                base_idx,
+            )
 
         def _make_block_texts(base_text: str) -> List[str]:
             texts = [base_text] if block_index >= 0 else []

@@ -676,6 +676,7 @@ class TranslationService {
     double? tableStrokePt,
     List<double>? layoutBlockBboxOverride,
     bool layoutBlockBboxReset = false,
+    int? layoutBlockIndex,
     Map<String, String>? layoutGroupTextParts,
     bool layoutGroupTextPartsReset = false,
   }) async {
@@ -689,8 +690,14 @@ class TranslationService {
     if (tableStrokePt != null) body['table_stroke_pt'] = tableStrokePt;
     if (layoutBlockBboxReset) {
       body['layout_block_bbox_reset'] = true;
+      if (layoutBlockIndex != null) {
+        body['layout_block_index'] = layoutBlockIndex;
+      }
     } else if (layoutBlockBboxOverride != null) {
       body['layout_block_bbox_override'] = layoutBlockBboxOverride;
+      if (layoutBlockIndex != null) {
+        body['layout_block_index'] = layoutBlockIndex;
+      }
     }
     if (layoutGroupTextPartsReset) {
       body['layout_group_text_parts_reset'] = true;

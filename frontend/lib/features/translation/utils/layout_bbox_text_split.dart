@@ -45,9 +45,56 @@ List<int>? parseLayoutBlockIndices(dynamic raw) {
       result.add(entry);
     } else if (entry is num) {
       result.add(entry.toInt());
+    } else if (entry is String) {
+      final int? value = int.tryParse(entry);
+      if (value != null) {
+        result.add(value);
+      }
     }
   }
   return result.isNotEmpty ? result : null;
+}
+
+/// Parse 1-based PDF page numbers aligned with [layout_block_indices].
+List<int>? parseLayoutBlockPageNumbers(dynamic raw) {
+  if (raw is! List || raw.isEmpty) {
+    return null;
+  }
+  final List<int> result = <int>[];
+  for (final dynamic entry in raw) {
+    if (entry is int) {
+      result.add(entry);
+    } else if (entry is num) {
+      result.add(entry.toInt());
+    } else if (entry is String) {
+      final int? value = int.tryParse(entry);
+      if (value != null) {
+        result.add(value);
+      }
+    }
+  }
+  return result.isNotEmpty ? result : null;
+}
+
+/// Keep only bboxes whose layout block lies on [pdfPageNumber] (1-based).
+List<List<double>>? filterLayoutBlockBboxesForPdfPage({
+  required List<List<double>> bboxes,
+  required List<int> pageNumbers,
+  required int pdfPageNumber,
+}) {
+  if (bboxes.isEmpty || pageNumbers.isEmpty || pdfPageNumber < 1) {
+    return bboxes;
+  }
+  if (bboxes.length != pageNumbers.length) {
+    return bboxes;
+  }
+  final List<List<double>> filtered = <List<double>>[];
+  for (int i = 0; i < bboxes.length; i++) {
+    if (pageNumbers[i] == pdfPageNumber) {
+      filtered.add(bboxes[i]);
+    }
+  }
+  return filtered.isEmpty ? null : filtered;
 }
 
 List<double>? _parseSingleBboxList(dynamic raw) {
@@ -67,7 +114,7 @@ List<double>? _parseSingleBboxList(dynamic raw) {
 }
 
 /// Read all layout block bboxes for a segment metadata dict.
-/// Prefers [layout_block_bbox_override] for the first bbox when present.
+/// Applies per-block overrides and legacy primary [layout_block_bbox_override].
 List<List<double>>? readSegmentLayoutBlockBboxes(Map<String, dynamic>? metadata) {
   if (metadata == null) {
     return null;
@@ -77,23 +124,36 @@ List<List<double>>? readSegmentLayoutBlockBboxes(Map<String, dynamic>? metadata)
   if (parsed == null || parsed.isEmpty) {
     return null;
   }
-  final List<double>? override =
+  final List<int>? blockIndices =
+      parseLayoutBlockIndices(metadata['layout_block_indices']);
+  final Map<String, dynamic>? overridesRaw =
+      metadata['layout_block_bbox_overrides'] is Map
+          ? Map<String, dynamic>.from(
+              metadata['layout_block_bbox_overrides'] as Map,
+            )
+          : null;
+  final List<double>? primaryOverride =
       _parseSingleBboxList(metadata['layout_block_bbox_override']);
-  if (override == null) {
-    return parsed
-        .map(
-          (List<double> bbox) => <double>[
-            bbox[0],
-            bbox[1],
-            bbox[2],
-            bbox[3],
-          ],
-        )
-        .toList(growable: false);
-  }
   final List<List<double>> result = <List<double>>[];
   for (int i = 0; i < parsed.length; i++) {
-    if (i == 0) {
+    List<double>? override;
+    if (blockIndices != null && i < blockIndices.length) {
+      if (overridesRaw != null) {
+        final int blockKey = blockIndices[i];
+        override = _parseSingleBboxList(
+          overridesRaw['$blockKey'] ?? overridesRaw[blockKey.toString()],
+        );
+      }
+      if (override == null &&
+          i == 0 &&
+          primaryOverride != null &&
+          blockIndices.isNotEmpty) {
+        override = primaryOverride;
+      }
+    } else if (i == 0 && primaryOverride != null) {
+      override = primaryOverride;
+    }
+    if (override != null) {
       result.add(override);
     } else {
       final List<double> bbox = parsed[i];

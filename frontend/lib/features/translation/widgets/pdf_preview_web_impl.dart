@@ -6,6 +6,7 @@ import 'package:pdfx/pdfx.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/utils/compare_scroll_sync/compare_scroll_sync.dart';
+import 'pdf_continuous_page.dart';
 import 'pdf_continuous_scroll_view.dart';
 import 'translation_result/preview_selection.dart';
 import 'translation_result/preview_viewport.dart';
@@ -54,11 +55,11 @@ class PdfPreview extends StatefulWidget {
   /// Whether bbox edit mode is active.
   final bool bboxEditMode;
 
-  /// Called when the user finishes dragging the bbox overlay.
-  final ValueChanged<Rect>? onEditBboxChanged;
+  /// Called when the user finishes dragging a bbox overlay.
+  final BboxEditChangedCallback? onEditBboxChanged;
 
-  /// Called when the user taps the reset button.
-  final VoidCallback? onEditBboxReset;
+  /// Called when the user taps reset on a specific bbox overlay.
+  final BboxEditResetCallback? onEditBboxReset;
 
   @override
   State<PdfPreview> createState() => _PdfPreviewWebState();

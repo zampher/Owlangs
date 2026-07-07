@@ -1984,6 +1984,70 @@ def normalize_layout_block_bbox_map(
     return out
 
 
+def build_layout_block_page_number_map(layout_document: Any) -> Dict[int, int]:
+    """Map layout block index to 1-based PDF page number."""
+    result: Dict[int, int] = {}
+    if layout_document is None:
+        return result
+    try:
+        for page in layout_document.pages:
+            page_num = int(page.page_index) + 1
+            for block in page.blocks:
+                if block.index is not None:
+                    result[int(block.index)] = page_num
+    except Exception:
+        pass
+    return result
+
+
+def page_numbers_for_layout_block_indices(
+    block_indices: Any,
+    *,
+    layout_document: Any = None,
+    page_number_map: Optional[Dict[int, int]] = None,
+) -> List[int]:
+    """Return 1-based PDF page numbers aligned with layout_block_indices."""
+    if not block_indices:
+        return []
+    lookup = page_number_map or build_layout_block_page_number_map(layout_document)
+    pages: List[int] = []
+    for raw_idx in block_indices:
+        try:
+            bidx = int(raw_idx)
+        except (TypeError, ValueError):
+            pages.append(0)
+            continue
+        pages.append(int(lookup.get(bidx, 0)))
+    return pages
+
+
+def sync_segment_layout_block_page_numbers(
+    segment: Dict[str, Any],
+    layout_document: Any,
+    *,
+    page_number_map: Optional[Dict[int, int]] = None,
+) -> bool:
+    """Attach layout_block_page_numbers aligned with layout_block_indices."""
+    if not isinstance(segment, dict):
+        return False
+    indices_raw = segment.get("layout_block_indices") or []
+    if not indices_raw:
+        segment.pop("layout_block_page_numbers", None)
+        return False
+    pages = page_numbers_for_layout_block_indices(
+        indices_raw,
+        layout_document=layout_document,
+        page_number_map=page_number_map,
+    )
+    if not pages:
+        segment.pop("layout_block_page_numbers", None)
+        return False
+    if segment.get("layout_block_page_numbers") != pages:
+        segment["layout_block_page_numbers"] = pages
+        return True
+    return False
+
+
 def bboxes_for_layout_block_indices(
     block_indices: Any,
     bbox_map: Optional[Dict[Any, Any]] = None,
@@ -2049,7 +2113,11 @@ def expand_segment_layout_group_bboxes(
     if layout_doc is None or not isinstance(segment, dict):
         return False
 
-    from layout.layout_group_pair_utils import resolve_layout_group_pairs_for_block
+    from layout.layout_group_pair_utils import (
+        cross_page_pairs_from_raw,
+        resolve_layout_group_pairs_for_block,
+        sort_layout_block_indices_reading_order,
+    )
 
     indices_raw = segment.get("layout_block_indices") or []
     indices: List[int] = []
@@ -2072,6 +2140,18 @@ def expand_segment_layout_group_bboxes(
         block = block_by_index.get(idx)
         if block is None:
             continue
+        block_raw = getattr(block, "raw", None) or {}
+        for pair in cross_page_pairs_from_raw(block_raw):
+            companion_index = pair.get("index")
+            if companion_index is None:
+                continue
+            try:
+                companion_int = int(companion_index)
+            except (TypeError, ValueError):
+                continue
+            if companion_int not in expanded_indices:
+                expanded_indices.append(companion_int)
+                changed = True
         for pair in resolve_layout_group_pairs_for_block(block, layout_doc):
             companion_index = pair.get("index")
             if companion_index is None:
@@ -2084,6 +2164,17 @@ def expand_segment_layout_group_bboxes(
                 expanded_indices.append(companion_int)
                 changed = True
 
+    if len(expanded_indices) > 1:
+        primary_hint = expanded_indices[0]
+        sorted_indices = sort_layout_block_indices_reading_order(
+            expanded_indices,
+            layout_doc,
+            primary_hint,
+        )
+        if sorted_indices != expanded_indices:
+            expanded_indices = sorted_indices
+            changed = True
+
     existing_bboxes = segment.get("layout_block_bbox")
     needs_bbox_refresh = (
         changed
@@ -2091,10 +2182,16 @@ def expand_segment_layout_group_bboxes(
         or len(existing_bboxes) < len(expanded_indices)
     )
     if not needs_bbox_refresh:
-        return False
+        page_changed = sync_segment_layout_block_page_numbers(segment, layout_doc)
+        if (
+            expanded_indices != list(segment.get("layout_block_indices") or [])
+            and len(expanded_indices) > len(indices)
+        ):
+            segment["layout_block_indices"] = expanded_indices
+            return True
+        return page_changed
 
-    if changed:
-        segment["layout_block_indices"] = expanded_indices
+    segment["layout_block_indices"] = expanded_indices
 
     seg_bboxes = bboxes_for_layout_block_indices(
         expanded_indices,
@@ -2102,12 +2199,20 @@ def expand_segment_layout_group_bboxes(
         layout_document=layout_doc,
     )
     if not seg_bboxes:
-        return changed
+        sync_segment_layout_block_page_numbers(segment, layout_doc)
+        return True
 
     if seg_bboxes != existing_bboxes:
         segment["layout_block_bbox"] = seg_bboxes
-        return True
-    return changed
+        changed = True
+    else:
+        changed = bool(changed)
+
+    page_changed = sync_segment_layout_block_page_numbers(
+        segment,
+        layout_doc,
+    )
+    return changed or page_changed or needs_bbox_refresh
 
 
 def segment_needs_layout_block_bbox(segment: Dict[str, Any]) -> bool:
