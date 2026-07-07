@@ -10,7 +10,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>OwlangsLauncher</AssemblyName>
     <RootNamespace>OwlangsLauncher</RootNamespace>
-    <Version>1.5.1.0</Version>
+    <Version>1.5.2.0</Version>
     <Authors>Owlangs Team</Authors>
     <Company>Owlangs</Company>
     <Product>Owlangs Launcher</Product>

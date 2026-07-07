@@ -281,14 +281,15 @@ class Agent:
         self.baseurl = config.base_url.strip()
         if self.baseurl.endswith("/"):
             self.baseurl = self.baseurl[:-1]
-        # Use Tencent Hunyuan OpenAI-compatible endpoint when old TC API host is configured
-        # (hunyuan.tencentcloudapi.com requires X-TC-Version and other TC3 headers;
-        # api.hunyuan.cloud.tencent.com/v1 only needs Bearer + Content-Type)
-        if "hunyuan.tencentcloudapi.com" in self.baseurl:
-            self.baseurl = "https://api.hunyuan.cloud.tencent.com/v1"
+        # Use TokenHub OpenAI-compatible endpoint when legacy Hunyuan hosts are configured
+        # (hunyuan.tencentcloudapi.com requires TC3 headers; TokenHub uses Bearer + sk- keys)
+        _tokenhub_openai_base = "https://tokenhub.tencentmaas.com/v1"
+        if "hunyuan.tencentcloudapi.com" in self.baseurl or "api.hunyuan.cloud.tencent.com" in self.baseurl:
+            self.baseurl = _tokenhub_openai_base
             unified_logger.debug(
                 LogModule.TRANS,
-                "[HUNYUAN] Using OpenAI-compatible endpoint (api.hunyuan.cloud.tencent.com/v1) instead of Tencent Cloud API host"
+                "[HUNYUAN] Using TokenHub OpenAI-compatible endpoint (tokenhub.tencentmaas.com/v1) "
+                "instead of legacy Hunyuan host",
             )
         self.domain = urlparse(self.baseurl).netloc
         

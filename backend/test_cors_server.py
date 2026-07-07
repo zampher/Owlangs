@@ -171,14 +171,14 @@ async def get_app_config():
             },
             "hunyuan": {
                 "name": "Hunyuan",
-                "url": "https://api.hunyuan.cloud.tencent.com/v1",
-                "model": "hunyuan-lite",
+                "url": "https://tokenhub.tencentmaas.com/v1",
+                "model": "hy3-preview",
                 "max_tokens": 32000,
                 "temperature": 0.3,
                 "recommended_tokens": None,
-                "performance_note": "腾讯混元，企业级模型，稳定可靠",
-                "description": "腾讯开发的混元系列模型，企业级AI服务，在稳定性和可靠性方面表现优秀，适合大规模翻译任务。",
-                "token_link": "https://cloud.tencent.com/product/hunyuan"
+                "performance_note": "腾讯 TokenHub 混元网关（Hy3 系列）",
+                "description": "通过 TokenHub OpenAI 兼容接口调用腾讯混元；请在 TokenHub 控制台创建 sk- API Key。",
+                "token_link": "https://console.cloud.tencent.com/tokenhub/apikey"
             },
             "volcengine_ark": {
                 "name": "VolcEngine ARK (豆包)",
