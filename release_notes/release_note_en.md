@@ -1,5 +1,19 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.5.2.0
+
+### New Features
+
+1. **Editable bbox and text for multi-block paragraphs**: In layout-preserving PDF translation, when a single logical paragraph spans multiple layout text blocks (e.g. two columns or cross-page), you can edit bbox and translated text per block; changes apply to preview and export.
+2. **Segment rotation and auto-rotation**: In PDF preview editing, manually set rotation for text segments; optionally auto-detect and rotate tall narrow sideways text blocks by bbox aspect ratio (threshold and angle configurable in the toolbar; enabled by default).
+
+### Bug Fixes
+
+1. **Hunyuan model API URL**: Updated the Hunyuan (TokenHub) model API endpoint to fix 401 failures on list-models and related calls.
+2. **Intermittent PDF download failure**: Fixed occasional failures when exporting or downloading PDFs.
+
+---
+
 ## Owlangs 1.5.1.0
 
 ### Bug Fixes
