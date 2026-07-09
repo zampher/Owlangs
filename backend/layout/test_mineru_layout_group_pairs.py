@@ -69,7 +69,7 @@ def test_spatial_pairs_empty_flow_companion_not_same_row_parallel():
     assert companion.raw.get(LAYOUT_GROUP_PAIR_OF_KEY) == 13
 
 
-def test_spatial_rejects_same_row_parallel_empty_companion():
+def test_spatial_pairs_same_row_empty_companion():
     left = LayoutBlock(
         page_index=0,
         bbox=(40.0, 100.0, 260.0, 140.0),
@@ -92,7 +92,8 @@ def test_spatial_rejects_same_row_parallel_empty_companion():
         page_height=842.0,
         page_width=595.0,
     )
-    assert paired == 0
+    assert paired == 1
+    assert right.raw.get(LAYOUT_GROUP_PAIR_OF_KEY) == 0
 
 
 def test_spatial_rejects_same_row_parallel_text_blocks():
@@ -119,6 +120,39 @@ def test_spatial_rejects_same_row_parallel_text_blocks():
         page_width=595.0,
     )
     assert paired == 0
+
+
+def test_merge_prev_pairs_same_row_empty_lines_deleted_companion():
+    """MinerU lines_deleted right bbox pairs with left text for overlay split."""
+    primary = LayoutBlock(
+        page_index=0,
+        bbox=(47.0, 663.0, 293.0, 755.0),
+        type="text",
+        index=11,
+        text=(
+            "tions, we first tested their responsive performance under LIFU. "
+            "electrical output was observed in the absence of nanoparticles."
+        ),
+        raw={"type": "text", "index": 23},
+    )
+    companion = LayoutBlock(
+        page_index=0,
+        bbox=(310.0, 662.0, 557.0, 755.0),
+        type="text",
+        index=12,
+        text="",
+        raw={"type": "text", "index": 24, "lines_deleted": True},
+    )
+    blocks = [primary, companion]
+    paired = apply_mineru_merge_prev_layout_group_pairs(
+        blocks,
+        page_height=800.0,
+        page_width=607.0,
+    )
+    assert paired == 1
+    assert companion.raw.get(LAYOUT_GROUP_PAIR_OF_KEY) == 11
+    pairs = primary.raw.get(LAYOUT_GROUP_PAIRS_KEY) or []
+    assert any(p.get("index") == 12 for p in pairs)
 
 
 def test_merge_prev_rejects_same_row_parallel_heading_and_body():
@@ -173,6 +207,39 @@ def test_finalize_keeps_same_row_multi_column_as_separate_segments():
     ]
     assert multi_block_chunks == []
     assert len(result.chunks) == 2
+
+
+def test_finalize_pairs_same_row_empty_lines_deleted_companion():
+    """MinerU task aee3dd0c: left text + empty lines_deleted right bbox -> one segment."""
+    primary = LayoutBlock(
+        page_index=0,
+        bbox=(47.0, 663.0, 293.0, 755.0),
+        type="text",
+        index=11,
+        text=(
+            "tions, we first tested their responsive performance under LIFU. "
+            "electrical output was observed in the absence of nanoparticles."
+        ),
+        raw={"type": "text", "index": 23},
+    )
+    companion = LayoutBlock(
+        page_index=0,
+        bbox=(310.0, 662.0, 557.0, 755.0),
+        type="text",
+        index=12,
+        text="",
+        raw={"type": "text", "index": 24, "lines_deleted": True},
+    )
+    pages_dict = {0: [primary, companion]}
+    pdf_info = [{"page_idx": 0, "page_size": [607.0, 800.0]}]
+    doc = _finalize_mineru_layout_document(pages_dict, pdf_info)
+    result = _build_layout_markdown(LayoutMarkdownBuilder(deep_split=False), doc)
+    multi_block_chunks = [
+        chunk for chunk in result.chunks if len(chunk.block_indices) >= 2
+    ]
+    assert len(multi_block_chunks) == 1
+    assert multi_block_chunks[0].block_indices == [11, 12]
+    assert companion.raw.get(LAYOUT_GROUP_PAIR_OF_KEY) == 11
 
 
 def test_finalize_pairs_empty_flow_companion_into_single_segment():

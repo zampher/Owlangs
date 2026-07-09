@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Zampher
 # SPDX-License-Identifier: MPL-2.0
 
-"""Pair MinerU column-flow blocks using Paddle-safe rules (no same-row proximity)."""
+"""Pair MinerU column-flow blocks; allow same-row pairing only for empty companions."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from layout.layout_group_pair_utils import (
     is_flow_column_continuation_bbox,
     is_same_row_parallel_column_pair,
     layout_group_ids_compatible,
+    paddle_group_cross_column_pair,
 )
 from layout.ocr_provider.paddle.layout_group_pairs import (
     _attach_layout_group_pair,
@@ -55,6 +56,14 @@ def _mineru_column_flow_accepts(
         companion.bbox,
         page_width=page_width,
     ):
+        # MinerU often keeps right-column OCR in the left block but leaves an empty
+        # lines_deleted bbox for the right column — pair for multi-bbox overlay split.
+        if not _has_recognized_text(companion):
+            return paddle_group_cross_column_pair(
+                primary.bbox,
+                companion.bbox,
+                page_width=page_width,
+            )
         return False
     return is_flow_column_continuation_bbox(
         primary.bbox,

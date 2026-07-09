@@ -5,7 +5,7 @@
     "session_timeout": 3600
   },
   "parsing_engine": {
-    "default_engine": "paddle",
+    "default_engine": "mineru",
     "default_engine_settings": {
       "formula_ocr": true,
       "skip_translate": false,
