@@ -201,6 +201,28 @@ def is_layout_group_companion(raw: Any) -> bool:
     return isinstance(raw, dict) and raw.get(LAYOUT_GROUP_PAIR_OF_KEY) is not None
 
 
+def is_empty_layout_group_companion_of(
+    companion_block: Any,
+    primary_block: Any,
+) -> bool:
+    """True when companion is a text-empty block explicitly paired to primary."""
+    if companion_block is None or primary_block is None:
+        return False
+    companion_raw = getattr(companion_block, "raw", None) or {}
+    if not is_layout_group_companion(companion_raw):
+        return False
+    pair_of = companion_raw.get(LAYOUT_GROUP_PAIR_OF_KEY)
+    primary_index = getattr(primary_block, "index", None)
+    if primary_index is None or pair_of is None:
+        return False
+    try:
+        if int(pair_of) != int(primary_index):
+            return False
+    except (TypeError, ValueError):
+        return False
+    return not (getattr(companion_block, "text", None) or "").strip()
+
+
 def is_cross_page_companion_block(raw: Any) -> bool:
     """True when block continues a paragraph from the previous page."""
     return isinstance(raw, dict) and raw.get(CROSS_PAGE_PAIR_OF_KEY) is not None
@@ -344,6 +366,10 @@ def filter_valid_layout_group_pairs(
             and is_same_row_parallel_column_pair(
                 primary_bbox,
                 companion_block.bbox,
+            )
+            and not is_empty_layout_group_companion_of(
+                companion_block,
+                primary_block,
             )
         ):
             continue

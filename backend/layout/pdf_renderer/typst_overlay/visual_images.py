@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import AbstractSet, Dict, List, Optional, Tuple
 
 from layout.base import LayoutDocument
 from logger.logger import LogModule, unified_logger
@@ -284,11 +284,13 @@ def collect_visual_image_placements(
     table_body_format: str,
     equation_format: str = "text",
     image_data_map: Dict[str, bytes],
+    equation_image_fallback_block_indices: Optional[AbstractSet[int]] = None,
 ) -> List[VisualImagePlacement]:
     """Collect chart/table/equation regions that should be embedded as images."""
     chart_fmt = (chart_body_format or "image").strip().lower()
     table_fmt = (table_body_format or "html").strip().lower()
     eq_fmt = (equation_format or "text").strip().lower()
+    fallback_eq_blocks = equation_image_fallback_block_indices or set()
     placements: List[VisualImagePlacement] = []
 
     for page in layout_doc.pages:
@@ -329,7 +331,10 @@ def collect_visual_image_placements(
                         block_type="table",
                     ))
 
-            elif block.is_equation() and eq_fmt == "image":
+            elif block.is_equation() and (
+                eq_fmt == "image"
+                or block_index in fallback_eq_blocks
+            ):
                 image_path = extract_equation_image_path(block)
                 body_bbox = _parse_bbox(getattr(block, "bbox", None))
                 if body_bbox and image_path and lookup_image_bytes(image_data_map, image_path):

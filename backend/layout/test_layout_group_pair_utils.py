@@ -336,6 +336,49 @@ def test_filter_valid_layout_group_pairs_keeps_same_group_id_companion():
     assert filtered[0]["index"] == 14
 
 
+def test_filter_keeps_same_row_empty_paddle_companion_task_958f08a7():
+    """Paddle-paired empty right column must survive same-row parallel filter."""
+    from layout.base import LayoutBlock, LayoutDocument, LayoutPage
+    from layout.layout_group_pair_utils import (
+        filter_valid_layout_group_pairs,
+        resolve_layout_group_pairs_for_block,
+    )
+
+    primary = LayoutBlock(
+        page_index=0,
+        bbox=(48.493, 663.918, 293.456, 755.407),
+        type="text",
+        index=0,
+        text="tions, we first tested their responsive performance under LIFU.",
+        raw={"group_id": 19},
+    )
+    companion = LayoutBlock(
+        page_index=0,
+        bbox=(311.453, 663.918, 557.416, 755.907),
+        type="text",
+        index=1,
+        text="",
+        raw={"group_id": 19, "_layout_group_pair_of": 0},
+    )
+    doc = LayoutDocument(
+        pages=[LayoutPage(page_index=0, blocks=[primary, companion], width=607.4, height=800.9)],
+        engine="paddle",
+    )
+    pairs = [
+        {
+            "index": 1,
+            "bbox": [311.453, 663.918, 557.416, 755.907],
+            "page_index": 0,
+        }
+    ]
+    filtered = filter_valid_layout_group_pairs(primary, pairs, doc)
+    assert len(filtered) == 1
+    assert filtered[0]["index"] == 1
+    resolved = resolve_layout_group_pairs_for_block(primary, doc)
+    assert len(resolved) == 1
+    assert resolved[0]["index"] == 1
+
+
 def test_apply_layout_block_indices_preserves_layout_group_companions():
     from utils.translation_segments import _apply_layout_block_indices_to_segments
 

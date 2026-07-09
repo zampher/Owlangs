@@ -1,5 +1,20 @@
 # Spec文件更新日志
 
+## 2026-07-09 — mitex 公式安全检测与 Paddle 同排空栏 companion 保留
+
+未提交改动新增 `backend/layout/pdf_renderer/typst_overlay/mitex_math_safety.py`，由 `emitter.py`、`renderer.py` lazy import；`visual_images.py` 增加 `equation_image_fallback_block_indices` 参数（已有 `visual_images` 条目）。已在 `lite.spec`、`launcher_portable_onedir.spec`、`macos.spec` 补充：
+
+- `layout.pdf_renderer.typst_overlay.mitex_math_safety` — mitex 0.2.6 保守安全检测（`\begin{}`、括号不平衡等），驱动 Typst overlay 公式图降级
+
+**同批改动无需新增 spec 条目的模块：**
+
+- `backend/layout/layout_group_pair_utils.py` — 已有 `layout.layout_group_pair_utils`；同排空栏 Paddle companion 过滤修复
+- `backend/utils/mixed_formula_text.py` — 已有 `backend.utils.mixed_formula_text`；brace-aware 混排公式包裹
+- `backend/layout/pdf_renderer/typst_overlay/emitter.py`、`renderer.py`、`visual_images.py` — 已有 typst_overlay 子模块列表
+- `backend/layout/test_*.py`、`backend/test_mixed_formula_text.py`、`backend/test_segment_latex_flags.py` — 测试，不打包
+
+---
+
 ## 2026-07-07 — PDF 预览修订：bbox 宽高比自动旋转
 
 未提交改动新增 `backend/layout/pdf_renderer/typst_overlay/segment_rotation_utils.py`，并在 `download_service._typst_overlay_pdf_response` 中 lazy import；`pdf_preview_cache.compute_typst_overlay_content_fingerprint` 增加 `auto_rotation_enabled` / `auto_rotation_aspect_ratio` 字段（已有 `pdf_preview_cache` 条目）。已在 `lite.spec`、`launcher_portable_onedir.spec`、`macos.spec` 补充：

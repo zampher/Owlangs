@@ -79,6 +79,7 @@ from layout.pdf_renderer.typst_overlay.visual_images import (
     lookup_image_bytes,
     normalize_equation_content_for_typst,
 )
+from layout.pdf_renderer.typst_overlay.mitex_math_safety import mitex_unsafe_reason
 from layout.block_types import (
     EQUATION_BLOCK_TYPES,
     TABLE_CAPTION, IMAGE_CAPTION, CHART_CAPTION, CAPTION,
@@ -930,12 +931,16 @@ class TypstOverlayRenderer(BasePDFRenderer):
         chart_fmt = getattr(self.config, "chart_body_format", "image") or "image"
         table_fmt = getattr(self.config, "table_body_format", "html") or "html"
         eq_fmt = getattr(self.config, "equation_format", "text") or "text"
+        fallback_eq_blocks = getattr(
+            self, "_mitex_equation_image_fallback_indices", None,
+        ) or set()
         placements = collect_visual_image_placements(
             layout_doc,
             chart_body_format=chart_fmt,
             table_body_format=table_fmt,
             equation_format=eq_fmt,
             image_data_map=image_data_map,
+            equation_image_fallback_block_indices=fallback_eq_blocks,
         )
         chart_fmt_norm = chart_fmt.strip().lower()
         table_fmt_norm = table_fmt.strip().lower()
@@ -1351,6 +1356,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
         build_started = time.perf_counter()
         render_blocks_by_page: Dict[int, List[RenderBlock]] = {}
         total_blocks = 0
+        mitex_equation_image_fallback_indices: set[int] = set()
         skipped_blocks = []  # [(block_index, block_type, image_path or "no-image")]
         eq_fmt = (getattr(self.config, "equation_format", "text") or "text").strip().lower()
         chart_fmt = (getattr(self.config, "chart_body_format", "image") or "image").strip().lower()
@@ -1436,6 +1442,37 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     if translated and translated.strip():
                         eq_text = translated.strip()
                         raw_eq_text = eq_text
+                        unsafe_reason = mitex_unsafe_reason(raw_eq_text)
+                        if unsafe_reason and eq_fmt == "text":
+                            eq_img = extract_equation_image_path(block) or ""
+                            if eq_img:
+                                mitex_equation_image_fallback_indices.add(block_key)
+                                unified_logger.info(
+                                    LogModule.RESTOR,
+                                    f"[TYPST_OVERLAY] Equation block {block_key}: "
+                                    f"mitex-unsafe ({unsafe_reason}), "
+                                    f"using equation image fallback",
+                                )
+                                skipped_blocks.append((
+                                    getattr(block, 'index', '?'),
+                                    getattr(block, 'type', '?'),
+                                    eq_img,
+                                    block.bbox,
+                                ))
+                                continue
+                            unified_logger.warning(
+                                LogModule.RESTOR,
+                                f"[TYPST_OVERLAY] Equation block {block_key}: "
+                                f"mitex-unsafe ({unsafe_reason}), "
+                                f"preserving source equation (no image)",
+                            )
+                            skipped_blocks.append((
+                                getattr(block, 'index', '?'),
+                                getattr(block, 'type', '?'),
+                                "equation_overlay",
+                                block.bbox,
+                            ))
+                            continue
                         # Make sure the equation has math delimiters so cmarker + mitex
                         # render it as a formula instead of plain LaTeX text.
                         normalized = normalize_equation_content_for_typst(eq_text)
@@ -1954,6 +1991,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
         # ---- Step 1b: Embed chart/table/equation images when format=image ----
         temp_dir = Path(mkdtemp(prefix="owlangs_typst_"))
         image_data_map = self._load_image_data_map(layout_doc)
+        self._mitex_equation_image_fallback_indices = mitex_equation_image_fallback_indices
         extra_redaction_rects, embedded_image_block_indices = (
             self._append_visual_image_render_blocks(
                 layout_doc,

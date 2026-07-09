@@ -19,6 +19,7 @@ import re
 from pathlib import Path
 from typing import List
 
+from layout.pdf_renderer.typst_overlay.mitex_math_safety import mitex_unsafe_reason
 from layout.pdf_renderer.typst_overlay.typst_packages import typst_preview_import_lines
 
 from layout.pdf_renderer.shared.table_utils import TableUtils
@@ -469,6 +470,37 @@ def _strip_newlines_inside_math_delimiters(text: str) -> str:
     return text
 
 
+def _log_unsafe_mitex_math_delimiters(text: str) -> str:
+    """Log mitex-unsafe math spans; do not mutate content (block-level fallback handles envs)."""
+
+    def _check_inner(inner: str, delimiter: str) -> None:
+        reason = mitex_unsafe_reason(inner)
+        if reason:
+            preview = inner.replace("\n", " ")[:120]
+            unified_logger.debug(
+                LogModule.RESTOR,
+                "[TYPST_OVERLAY] mitex-unsafe math in sanitize "
+                f"({reason}, delimiter={delimiter}, preview={preview!r})",
+            )
+
+    def _repl_display(match: re.Match[str]) -> str:
+        _check_inner(match.group(1), "$$")
+        return match.group(0)
+
+    def _repl_inline(match: re.Match[str]) -> str:
+        _check_inner(match.group(1), "$")
+        return match.group(0)
+
+    text = re.sub(r"\$\$(.+?)\$\$", _repl_display, text, flags=re.DOTALL)
+    text = re.sub(
+        r"(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)",
+        _repl_inline,
+        text,
+        flags=re.DOTALL,
+    )
+    return text
+
+
 def sanitize_typst_markdown_for_compile(markdown: str) -> str:
     """Sanitize markdown to avoid common Typst compilation errors in overlay blocks."""
     text = str(markdown or "")
@@ -494,7 +526,7 @@ def sanitize_typst_markdown_for_compile(markdown: str) -> str:
     # when image files are not available. For overlay rendering, image/table/chart visuals
     # should remain on the original PDF, not re-rendered through Typst.
     text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", "", text)
-    return text
+    return _log_unsafe_mitex_math_delimiters(text)
 
 
 # ---- TOC entry rendering helpers ----

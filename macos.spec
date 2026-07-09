@@ -268,6 +268,7 @@ hiddenimports = [
     'layout.pdf_renderer.typst_overlay.models',
     'layout.pdf_renderer.typst_overlay.font_fit',
     'layout.pdf_renderer.typst_overlay.formula_safety',
+    'layout.pdf_renderer.typst_overlay.mitex_math_safety',
     'layout.pdf_renderer.typst_overlay.source_cleanup',
     'layout.pdf_renderer.typst_overlay.overlay_merge',
     'layout.pdf_renderer.typst_overlay.segment_font_metrics',
