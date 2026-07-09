@@ -34,6 +34,37 @@ def test_sanitize_strips_literal_backslash_n_inside_inline_math():
     assert "R_{m}" in out and "C_{d}" in out
 
 
+def test_sanitize_glued_ndiff_inside_math_becomes_text_not_variable():
+    """Regression: LLM \\ndiff in math must not become mitex unknown variable: diff."""
+    text = r"Profit $P_{t}\ndiff$ here"
+    out = sanitize_typst_markdown_for_compile(text)
+    inner = out.split("$")[1]
+    assert r"\ndiff" not in inner
+    assert r"\text{diff}" in inner
+    assert "P_{t}" in inner
+
+
+def test_sanitize_glued_ndiff_outside_math_becomes_plain_word():
+    text = r"Compare results\ndiff across cases"
+    out = sanitize_typst_markdown_for_compile(text)
+    assert r"\ndiff" not in out
+    assert " diff " in out or out.endswith(" diff across cases")
+
+
+def test_sanitize_preserves_nu_and_nabla_after_backslash_n():
+    text = r"$a=\nu+\nabla f$"
+    out = sanitize_typst_markdown_for_compile(text)
+    assert r"\nu" in out
+    assert r"\nabla" in out
+
+
+def test_sanitize_diff_command_maps_to_mathrm_d():
+    text = r"$\diff x$"
+    out = sanitize_typst_markdown_for_compile(text)
+    assert r"\mathrm{d}" in out
+    assert r"\diff" not in out
+
+
 def test_render_table_block_cell_with_literal_backslash_n_not_wrapped_as_math():
     """Regression: LLM \\n in table cell must not become $...$ math for mitex."""
     block = RenderBlock(

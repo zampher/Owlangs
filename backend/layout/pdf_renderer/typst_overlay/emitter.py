@@ -398,17 +398,65 @@ def _typst_plain_text_expr(text_name: str, font_size_pt: float,
 # Keep \nu, \neq, \newline, etc. (\n followed by lowercase letter).
 _LITERAL_LINEBREAK_ESCAPE_RE = re.compile(r"\\(?:n|r)(?![a-z])")
 
+# Valid LaTeX command bodies after a literal "\n" (not a newline). Longest first.
+_N_PREFIX_LATEX_COMMANDS: tuple[str, ...] = (
+    "subseteqq",
+    "supseteqq",
+    "subseteq",
+    "supseteq",
+    "shortparallel",
+    "shortmid",
+    "Leftarrow",
+    "Rightarrow",
+    "leftarrow",
+    "rightarrow",
+    "atural",
+    "parallel",
+    "olimits",
+    "ewline",
+    "abla",
+    "cong",
+    "simeq",
+    "sim",
+    "mid",
+    "eq",
+    "eg",
+    "ot",
+    "i",
+    "u",
+    "e",
+)
+_N_PREFIX_LATEX_ALTS = "|".join(
+    re.escape(prefix)
+    for prefix in sorted(_N_PREFIX_LATEX_COMMANDS, key=len, reverse=True)
+)
+# LLM "\\n" glued to a word inside math (e.g. "\\ndiff") becomes mitex "unknown variable: diff".
+_LLM_N_GLUE_WORD_RE = re.compile(
+    rf"\\(?:n|r)(?!{_N_PREFIX_LATEX_ALTS})([a-z]{{2,}})"
+)
+
 
 def _neutralize_linebreak_artifacts(text: str) -> str:
     """Replace literal \\n/\\r artifacts with a space; keep \\nu, \\newline, etc."""
-    return _LITERAL_LINEBREAK_ESCAPE_RE.sub(" ", text)
+    text = _LITERAL_LINEBREAK_ESCAPE_RE.sub(" ", text)
+    text = _LLM_N_GLUE_WORD_RE.sub(lambda match: f" {match.group(1)}", text)
+    return text
+
+
+def _clean_math_inner(inner: str) -> str:
+    """Sanitize inline/display math before mitex (line breaks + glued LLM tokens)."""
+    inner = re.sub(r"[\r\n]+", " ", inner)
+    inner = _LITERAL_LINEBREAK_ESCAPE_RE.sub(" ", inner)
+    inner = _LLM_N_GLUE_WORD_RE.sub(
+        lambda match: f"\\text{{{match.group(1)}}}", inner
+    )
+    return inner
 
 
 def _strip_newlines_inside_math_delimiters(text: str) -> str:
     """Replace raw newlines inside $...$ / $$...$$ so mitex does not see unknown \\n."""
     def _clean_inner(inner: str) -> str:
-        inner = re.sub(r"[\r\n]+", " ", inner)
-        return _LITERAL_LINEBREAK_ESCAPE_RE.sub(" ", inner)
+        return _clean_math_inner(inner)
 
     def _repl_display(match: re.Match[str]) -> str:
         return f"$${_clean_inner(match.group(1))}$$"
@@ -436,6 +484,8 @@ def sanitize_typst_markdown_for_compile(markdown: str) -> str:
     text = text.replace("$^®$", "®").replace("$^{®}$", "®")
     text = text.replace(r"$^\circled{R}$", "®").replace(r"$^\textcircled{R}$", "®")
     text = re.sub(r"\\langlen\b", r"\\langle n", text)
+    # mitex 0.2.6 does not define \\diff (physics package); map to upright d.
+    text = re.sub(r"\\diff\b", r"\\mathrm{d}", text)
     text = text.replace(r"\circled{\times}", r"\otimes")
     text = text.replace(r"\circled{\parallel}", r"\circ")
     text = text.replace(r"\textcircled{\times}", r"\otimes")
