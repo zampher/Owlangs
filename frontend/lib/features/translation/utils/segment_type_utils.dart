@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2025 QinHan
 // SPDX-License-Identifier: MPL-2.0
 
+import '../../../l10n/app_localizations.dart';
 import '../models/exclusion_reason.dart';
 
 /// Utilities for classifying segments into exclusion/filter categories.
@@ -94,6 +95,19 @@ const double kPdfDefaultTableStrokePt = 0.5;
 /// Preset table grid stroke widths (pt) in PDF revision UI.
 const List<double> kPdfTableStrokeOptionsPt = <double>[0, 0.5, 1.0, 1.5];
 
+/// Table border style presets for in-place PDF overlay tables.
+const String kPdfDefaultTableBorderStyle = 'booktabs';
+
+const List<String> kPdfTableBorderStyleOptions = <String>[
+  'booktabs',
+  'booktabs_2',
+  'booktabs_3',
+  'grid',
+  'horizontal',
+  'outer',
+  'none',
+];
+
 /// Default minimum bbox height/width ratio for auto sideways text rotation.
 const double kDefaultAutoRotationAspectRatio = 20.0;
 
@@ -165,6 +179,41 @@ double readPdfTableStrokePt(Map<String, dynamic> metadata) {
     return double.tryParse(raw) ?? kPdfDefaultTableStrokePt;
   }
   return kPdfDefaultTableStrokePt;
+}
+
+String readPdfTableBorderStyle(Map<String, dynamic> metadata) {
+  final dynamic raw = metadata['table_border_style'];
+  if (raw is String && raw.trim().isNotEmpty) {
+    final String style = raw.trim().toLowerCase();
+    if (kPdfTableBorderStyleOptions.contains(style)) {
+      return style;
+    }
+  }
+  return kPdfDefaultTableBorderStyle;
+}
+
+bool isPdfTableBorderStyleSelected(String current, String option) {
+  return current == option;
+}
+
+String pdfTableBorderStyleLabel(AppLocalizations l10n, String style) {
+  switch (style) {
+    case 'booktabs':
+      return l10n.segmentTableBorderBooktabs;
+    case 'booktabs_2':
+      return l10n.segmentTableBorderBooktabs2;
+    case 'booktabs_3':
+      return l10n.segmentTableBorderBooktabs3;
+    case 'horizontal':
+      return l10n.segmentTableBorderHorizontal;
+    case 'outer':
+      return l10n.segmentTableBorderOuter;
+    case 'none':
+      return l10n.segmentTableBorderNone;
+    case 'grid':
+    default:
+      return l10n.segmentTableBorderGrid;
+  }
 }
 
 /// Normalize stroke width to one decimal place for option matching.

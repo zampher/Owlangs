@@ -477,6 +477,18 @@ def _build_block_table_stroke_map_from_segments(
     return build_block_table_stroke_map_from_segments(segments, task_state)
 
 
+def _build_block_table_border_style_map_from_segments(
+    segments: list,
+    task_state: Dict[str, Any],
+) -> Dict[int, str]:
+    """Build block_index -> table_border_style from segment overrides."""
+    from layout.pdf_renderer.typst_overlay.table_border_style import (
+        build_block_table_border_style_map_from_segments,
+    )
+
+    return build_block_table_border_style_map_from_segments(segments, task_state)
+
+
 def _resolve_layout_zip_bytes(task_state: Dict[str, Any]) -> Optional[bytes]:
     """Resolve MinerU layout ZIP bytes for chart/table/image export (matches DOCX path)."""
     zip_bytes = task_state.get("layout_source_zip")
@@ -1638,6 +1650,7 @@ async def _typst_overlay_pdf_response(
     leading_em_by_block_index: Dict[int, float] = {}
     rotation_by_block_index: Dict[int, int] = {}
     table_stroke_pt_by_block_index: Dict[int, float] = {}
+    table_border_style_by_block_index: Dict[int, str] = {}
     bbox_override_by_block_index: Dict[int, tuple] = {}
     if segments:
         is_deep_split_enabled = bool(task_state.get("deep_split"))
@@ -1715,6 +1728,16 @@ async def _typst_overlay_pdf_response(
                 f"for {len(table_stroke_pt_by_block_index)} block(s): "
                 f"{sorted(table_stroke_pt_by_block_index.items())[:8]}",
             )
+        table_border_style_by_block_index = (
+            _build_block_table_border_style_map_from_segments(segments, task_state)
+        )
+        if table_border_style_by_block_index:
+            logger.info(
+                LogModule.EXPORT,
+                f"[TYPST_OVERLAY] Task {task_id}: applying table border style overrides "
+                f"for {len(table_border_style_by_block_index)} block(s): "
+                f"{sorted(table_border_style_by_block_index.items())[:8]}",
+            )
         bbox_override_by_block_index = build_block_bbox_override_map_from_segments(
             segments,
             task_state,
@@ -1759,6 +1782,7 @@ async def _typst_overlay_pdf_response(
         leading_em_by_block_index=leading_em_by_block_index or None,
         rotation_by_block_index=rotation_by_block_index or None,
         table_stroke_pt_by_block_index=table_stroke_pt_by_block_index or None,
+        table_border_style_by_block_index=table_border_style_by_block_index or None,
         bbox_override_by_block_index=bbox_override_by_block_index or None,
         auto_rotation_enabled=auto_rotation_enabled,
         auto_rotation_aspect_ratio=auto_rotation_aspect_ratio,
@@ -1883,6 +1907,11 @@ async def _typst_overlay_pdf_response(
                         if table_stroke_pt_by_block_index
                         else None
                     ),
+                    table_border_style_by_block_index=(
+                        table_border_style_by_block_index
+                        if table_border_style_by_block_index
+                        else None
+                    ),
                     bbox_override_by_block_index=(
                         bbox_override_by_block_index
                         if bbox_override_by_block_index
@@ -1939,6 +1968,11 @@ async def _typst_overlay_pdf_response(
                             table_stroke_pt_by_block_index=(
                                 table_stroke_pt_by_block_index
                                 if table_stroke_pt_by_block_index
+                                else None
+                            ),
+                            table_border_style_by_block_index=(
+                                table_border_style_by_block_index
+                                if table_border_style_by_block_index
                                 else None
                             ),
                             bbox_override_by_block_index=(
@@ -2021,6 +2055,11 @@ async def _typst_overlay_pdf_response(
                         table_stroke_pt_by_block_index=(
                             table_stroke_pt_by_block_index
                             if table_stroke_pt_by_block_index
+                            else None
+                        ),
+                        table_border_style_by_block_index=(
+                            table_border_style_by_block_index
+                            if table_border_style_by_block_index
                             else None
                         ),
                         bbox_override_by_block_index=(

@@ -15,11 +15,15 @@ Design principles:
   - Formulas in $...$ (and normalized \\(...\\)) are rendered via cmarker + mitex
 """
 
+import math
 import re
 from pathlib import Path
 from typing import List
 
-from layout.pdf_renderer.typst_overlay.mitex_math_safety import mitex_unsafe_reason
+from layout.pdf_renderer.typst_overlay.mitex_math_safety import (
+    markdown_line_safe_for_mitex,
+    mitex_unsafe_reason,
+)
 from layout.pdf_renderer.typst_overlay.typst_packages import typst_preview_import_lines
 
 from layout.pdf_renderer.shared.table_utils import TableUtils
@@ -28,6 +32,17 @@ from layout.pdf_renderer.typst_overlay.layer_order import background_embed_force
 from logger.logger import LogModule, unified_logger
 from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
     DEFAULT_TABLE_STROKE_PT,
+)
+from layout.pdf_renderer.typst_overlay.table_border_style import (
+    TABLE_BORDER_STYLE_BOOKTABS,
+    TABLE_BORDER_STYLE_GRID,
+    TABLE_BORDER_STYLE_HORIZONTAL,
+    TABLE_BORDER_STYLE_NONE,
+    TABLE_BORDER_STYLE_OUTER,
+    booktabs_header_row_count,
+    group_adjacent_equal_row_cells,
+    is_booktabs_border_style,
+    resolve_table_border_style,
 )
 from layout.pdf_renderer.typst_overlay.models import RenderBlock, RenderPageSpec
 
@@ -53,6 +68,11 @@ def _escape_typst_string(text: str) -> str:
 def _typst_cmarker_render_expr(var_name: str) -> str:
     """Render user text through cmarker+mitex so LaTeX $...$ math compiles."""
     return f"cmarker.render({var_name}, math: mitex)"
+
+
+def _typst_cmarker_plain_render_expr(var_name: str) -> str:
+    """Render markdown without mitex (fallback for unsafe inline math)."""
+    return f"cmarker.render({var_name})"
 
 
 def _prepare_user_text_for_typst(text: str) -> str:
@@ -554,6 +574,9 @@ def sanitize_typst_markdown_for_compile(markdown: str) -> str:
     text = re.sub(r"\\langlen\b", r"\\langle n", text)
     # mitex 0.2.6 does not define \\diff (physics package); map to upright d.
     text = re.sub(r"\\diff\b", r"\\mathrm{d}", text)
+    # OCR/translation corruption: \right\text{ceil} is not a valid delimiter.
+    text = re.sub(r"\\right\\text\{ceil\}", r"\\right\\rfloor", text)
+    text = re.sub(r"\\right\\text\{floor\}", r"\\right\\rfloor", text)
     text = text.replace(r"\circled{\times}", r"\otimes")
     text = text.replace(r"\circled{\parallel}", r"\circ")
     text = text.replace(r"\textcircled{\times}", r"\otimes")
@@ -664,6 +687,88 @@ def _typst_preserved_lines_expr(lines_name: str, font_size_pt: float,
         f"block(width: {width_pt}pt)[#{{ "
         f"set par(leading: {leading_em}em, justify: {justify_text}); cmarker.render(line, math: mitex) }}]))"
     )
+
+
+def _render_preserved_line_breaks_block(
+    block_id: str,
+    block: RenderBlock,
+    *,
+    line_values: list[str],
+    text_fill: str,
+    block_fill: str,
+    font_style: str,
+    justify: str,
+    layout_width: float,
+    layout_height: float,
+    content_top: float,
+    content_bottom: float,
+    x0: float,
+    y0: float,
+    width: float,
+    height: float,
+    rotation: int,
+    rotate_fill: str,
+) -> str:
+    """Emit preserved lines with per-line mitex safety fallback."""
+    var_prefix = block_id.replace("-", "_")
+    body_var = f"{var_prefix}_body"
+    width_pt = round(layout_width, 2)
+    leading_em = block.leading_em
+    stack_items: list[str] = []
+    let_lines: list[str] = []
+    fallback_count = 0
+
+    for index, line in enumerate(line_values):
+        line_var = f"{var_prefix}_line_{index}"
+        let_lines.append(
+            f'#let {line_var} = "{_prepare_user_text_for_typst(line)}"',
+        )
+        if markdown_line_safe_for_mitex(line):
+            render_expr = _typst_cmarker_render_expr(line_var)
+        else:
+            fallback_count += 1
+            preview = line.replace("\n", " ")[:120]
+            unified_logger.warning(
+                LogModule.RESTOR,
+                "[TYPST_OVERLAY] Preserved line mitex fallback "
+                f"(block={block_id}, line={index}, preview={preview!r})",
+            )
+            render_expr = _typst_cmarker_plain_render_expr(line_var)
+        stack_items.append(
+            "block(width: "
+            f"{width_pt}pt)[#{{ set par(leading: {leading_em}em, justify: {justify}); "
+            f"{render_expr} }}]",
+        )
+
+    if fallback_count:
+        unified_logger.info(
+            LogModule.RESTOR,
+            "[TYPST_OVERLAY] Preserved line block "
+            f"{block_id}: {fallback_count}/{len(line_values)} line(s) "
+            "use plain cmarker (mitex skipped)",
+        )
+
+    body_expr = (
+        f"{_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; "
+        f"stack(dir: ttb, spacing: {leading_em}em, {', '.join(stack_items)})"
+    )
+    parts = [
+        *let_lines,
+        _typst_markdown_block(
+            body_var,
+            layout_width,
+            layout_height,
+            block_fill,
+            body_expr,
+            content_top_inset_pt=content_top,
+            content_bottom_inset_pt=content_bottom,
+        ),
+        _typst_place_flow_block(
+            x0, y0, width, height, body_var, var_prefix, rotation,
+            fill_arg=rotate_fill,
+        ).rstrip(),
+    ]
+    return "\n".join(parts) + "\n"
 
 
 def _render_plain_block(block_id: str, block: RenderBlock,
@@ -915,24 +1020,26 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
 
     # Preserved line breaks with newlines
     if block.preserve_line_breaks and "\n" in text:
-        lines_name = f"{var_prefix}_lines"
         line_values = [line.strip() for line in text.splitlines() if line.strip()]
-        body_expr = _typst_preserved_lines_expr(
-            lines_name, block.font_size_pt, block.leading_em,
-            block.font_weight, font_style, text_fill, justify, layout_width)
-        parts = [
-            f"#let {lines_name} = (" + ", ".join(
-                f"\"{_prepare_user_text_for_typst(v)}\"" for v in line_values) + ("," if len(line_values) == 1 else "") + ")",
-            _typst_markdown_block(
-                body_var, layout_width, layout_height, block_fill, body_expr,
-                content_top_inset_pt=content_top,
-                content_bottom_inset_pt=content_bottom),
-            _typst_place_flow_block(
-                x0, y0, width, height, body_var, var_prefix, rotation,
-                fill_arg=rotate_fill,
-            ).rstrip(),
-        ]
-        return "\n".join(parts) + "\n"
+        return _render_preserved_line_breaks_block(
+            block_id,
+            block,
+            line_values=line_values,
+            text_fill=text_fill,
+            block_fill=block_fill,
+            font_style=font_style,
+            justify=justify,
+            layout_width=layout_width,
+            layout_height=layout_height,
+            content_top=content_top,
+            content_bottom=content_bottom,
+            x0=x0,
+            y0=y0,
+            width=width,
+            height=height,
+            rotation=rotation,
+            rotate_fill=rotate_fill,
+        )
 
     if block.fit_to_box and not block.font_size_locked:
         if block.fit_single_line:
@@ -1074,8 +1181,10 @@ def _parse_markdown_table(table_text: str) -> list:
         line = line[:-1] if line.endswith("|") else line
         # Split cells, respecting escaped pipes
         cells = _split_table_cells(line)
-        # Skip separator rows (e.g. ---, :---, ---:)
-        if i == 1 and all(re.match(r"^:?-{2,}:?$", c.strip()) for c in cells if c.strip()):
+        # Skip separator rows (e.g. ---, :---, ---:) at any position.
+        if cells and all(
+            re.match(r"^:?-{2,}:?$", c.strip()) for c in cells if c.strip()
+        ):
             continue
         rows.append([c.strip() for c in cells])
     return rows
@@ -1108,15 +1217,421 @@ TABLE_MAX_FONT_PT = 12.0
 TABLE_ROW_HEIGHT_FACTOR = 1.55
 TABLE_HEADER_COLOR = (0.95, 0.95, 0.98)
 TABLE_STROKE_COLOR = (0.45, 0.45, 0.45)
+TABLE_LATIN_CHAR_WIDTH_RATIO = 0.55
+TABLE_CJK_CHAR_WIDTH_RATIO = 1.0
+TABLE_COLUMN_MIN_WIDTH_PT = 8.0
+TABLE_COLUMN_FILL_THRESHOLD = 0.92
+TABLE_ROW_MIN_HEIGHT_PT = 6.0
+TABLE_ROW_LINE_HEIGHT_FACTOR = 1.35
 
 
 def _typst_table_stroke_arg(stroke_pt: float) -> str:
-    """Return Typst table stroke argument for grid lines."""
+    """Return Typst table stroke argument for full grid lines."""
     if stroke_pt <= 0:
         return "stroke: none,"
     return (
         f"stroke: {round(stroke_pt, 2)}pt + {_typst_rgb(TABLE_STROKE_COLOR)},"
     )
+
+
+def _typst_table_stroke_color_expr(stroke_pt: float) -> str:
+    """Return a Typst stroke expression for partial table borders."""
+    return f"{round(stroke_pt, 2)}pt + {_typst_rgb(TABLE_STROKE_COLOR)}"
+
+
+def _typst_table_stroke_callback(
+    style: str,
+    *,
+    stroke_pt: float,
+    row_count: int,
+    col_count: int,
+) -> str:
+    """Return Typst stroke rule for horizontal-only or outer border styles."""
+    stroke = _typst_table_stroke_color_expr(stroke_pt)
+    last_row = max(0, row_count - 1)
+    last_col = max(0, col_count - 1)
+    if style == TABLE_BORDER_STYLE_HORIZONTAL:
+        return (
+            f"stroke: (x, y) => ("
+            f"top: {stroke}, bottom: {stroke}, left: none, right: none),"
+        )
+    if style == TABLE_BORDER_STYLE_OUTER:
+        return (
+            f"stroke: (x, y) => ("
+            f"top: if y == 0 {{ {stroke} }} else {{ none }}, "
+            f"bottom: if y == {last_row} {{ {stroke} }} else {{ none }}, "
+            f"left: if x == 0 {{ {stroke} }} else {{ none }}, "
+            f"right: if x == {last_col} {{ {stroke} }} else {{ none }}),"
+        )
+    return "stroke: none,"
+
+
+def _is_cjk_char(ch: str) -> bool:
+    """True for common CJK unified ideographs used in table width estimates."""
+    if not ch:
+        return False
+    code = ord(ch)
+    return (
+        0x2E80 <= code <= 0x9FFF
+        or 0xF900 <= code <= 0xFAFF
+        or 0x3400 <= code <= 0x4DBF
+    )
+
+
+def _strip_math_delimiters_for_width_estimate(text: str) -> str:
+    """Remove $...$ wrappers so width heuristics use visible characters only."""
+    body = str(text or "")
+    body = re.sub(r"\$\$([^$]+)\$\$", r"\1", body)
+    body = re.sub(r"\$([^$]+)\$", r"\1", body)
+    return body.strip()
+
+
+def _estimate_table_cell_width_pt(text: str, font_pt: float) -> float:
+    """Heuristic cell content width (pt) for column sizing."""
+    if font_pt <= 0:
+        font_pt = TABLE_MIN_FONT_PT
+    visible = _strip_math_delimiters_for_width_estimate(text)
+    if not visible:
+        return TABLE_COLUMN_MIN_WIDTH_PT
+
+    cjk_count = sum(1 for ch in visible if _is_cjk_char(ch))
+    latin_count = max(0, len(visible) - cjk_count)
+    text_width = (
+        latin_count * font_pt * TABLE_LATIN_CHAR_WIDTH_RATIO
+        + cjk_count * font_pt * TABLE_CJK_CHAR_WIDTH_RATIO
+    )
+    return max(TABLE_COLUMN_MIN_WIDTH_PT, text_width + TABLE_CELL_PAD_PT * 2)
+
+
+def _estimate_table_column_widths_pt(
+    rows: list,
+    col_count: int,
+    font_pt: float,
+) -> list[float]:
+    """Return per-column natural width (pt) from the widest cell in each column."""
+    widths = [TABLE_COLUMN_MIN_WIDTH_PT] * col_count
+    for row in rows:
+        for col_idx in range(min(col_count, len(row))):
+            cell_w = _estimate_table_cell_width_pt(row[col_idx], font_pt)
+            widths[col_idx] = max(widths[col_idx], cell_w)
+    return widths
+
+
+def _column_fr_weights(widths: list[float]) -> list[int]:
+    """Convert column natural widths to integer Typst fr weights."""
+    total = sum(widths)
+    if total <= 0:
+        return [1] * len(widths)
+    scale = 100.0 / total
+    return [max(1, int(round(width * scale))) for width in widths]
+
+
+def _resolve_table_column_widths_pt(
+    rows: list,
+    col_count: int,
+    layout_width: float,
+    font_pt: float,
+    *,
+    inset_pt: float = TABLE_CELL_PAD_PT,
+) -> list[float]:
+    """Resolve per-column widths (pt) so the table spans the layout bbox width."""
+    avail_width = max(MIN_BLOCK_SIZE_PT, layout_width - inset_pt * 2)
+    natural = _estimate_table_column_widths_pt(rows, col_count, font_pt)
+    total = sum(natural)
+    if total <= 0:
+        even = avail_width / max(1, col_count)
+        return [even] * col_count
+
+    if total < avail_width * TABLE_COLUMN_FILL_THRESHOLD:
+        scale = avail_width / total
+        scaled = [
+            max(TABLE_COLUMN_MIN_WIDTH_PT, width * scale)
+            for width in natural
+        ]
+        drift = avail_width - sum(scaled)
+        if abs(drift) > 0.05:
+            scaled[-1] = max(TABLE_COLUMN_MIN_WIDTH_PT, scaled[-1] + drift)
+        return scaled
+
+    fr_weights = _column_fr_weights(natural)
+    fr_total = sum(fr_weights)
+    return [avail_width * weight / fr_total for weight in fr_weights]
+
+
+def _table_extra_vertical_stroke_budget_pt(
+    border_style: str,
+    row_count: int,
+    stroke_pt: float,
+) -> float:
+    """Reserve vertical space consumed by table.hline / outer rules outside row tracks."""
+    if stroke_pt <= 0:
+        return 0.0
+    if is_booktabs_border_style(border_style):
+        return 3.0 * stroke_pt
+    if border_style == TABLE_BORDER_STYLE_HORIZONTAL:
+        return max(0, row_count + 1) * stroke_pt
+    if border_style == TABLE_BORDER_STYLE_OUTER:
+        return 2.0 * stroke_pt
+    return 0.0
+
+
+def _estimate_table_row_natural_heights_pt(
+    rows: list,
+    col_count: int,
+    column_widths_pt: list[float],
+    font_pt: float,
+    header_font_pt: float,
+    *,
+    inset_pt: float = TABLE_CELL_PAD_PT,
+    header_row_count: int = 1,
+) -> list[float]:
+    """Estimate per-row natural height (pt) from wrapped cell content."""
+    heights: list[float] = []
+    for row_idx, row in enumerate(rows):
+        row_font = header_font_pt if row_idx < header_row_count else font_pt
+        line_h = row_font * TABLE_ROW_LINE_HEIGHT_FACTOR
+        row_h = TABLE_ROW_MIN_HEIGHT_PT
+        for col_idx in range(min(col_count, len(row))):
+            col_w = column_widths_pt[min(col_idx, len(column_widths_pt) - 1)]
+            inner_w = max(1.0, col_w - inset_pt * 2)
+            cell_w = _estimate_table_cell_width_pt(row[col_idx], row_font)
+            wrap_lines = max(1, int(math.ceil(cell_w / inner_w)))
+            cell_h = wrap_lines * line_h + inset_pt * 2
+            row_h = max(row_h, cell_h)
+        heights.append(row_h)
+    return heights
+
+
+def _resolve_table_row_heights_pt(
+    rows: list,
+    col_count: int,
+    layout_height: float,
+    column_widths_pt: list[float],
+    font_pt: float,
+    header_font_pt: float,
+    *,
+    inset_pt: float = TABLE_CELL_PAD_PT,
+    border_style: str = TABLE_BORDER_STYLE_GRID,
+    stroke_pt: float = 0.0,
+) -> list[float]:
+    """Resolve per-row heights (pt) so the table spans the layout bbox height."""
+    row_count = len(rows)
+    stroke_budget = _table_extra_vertical_stroke_budget_pt(
+        border_style, row_count, stroke_pt,
+    )
+    avail_height = max(
+        MIN_BLOCK_SIZE_PT,
+        layout_height - inset_pt * 2 - stroke_budget,
+    )
+    header_row_count = (
+        min(booktabs_header_row_count(border_style), row_count)
+        if is_booktabs_border_style(border_style)
+        else 1
+    )
+    natural = _estimate_table_row_natural_heights_pt(
+        rows,
+        col_count,
+        column_widths_pt,
+        font_pt,
+        header_font_pt,
+        inset_pt=inset_pt,
+        header_row_count=header_row_count,
+    )
+    total = sum(natural)
+    if total <= 0:
+        even = avail_height / max(1, row_count)
+        return [even] * row_count
+
+    scale = avail_height / total
+    scaled = [
+        max(TABLE_ROW_MIN_HEIGHT_PT, height * scale)
+        for height in natural
+    ]
+    drift = avail_height - sum(scaled)
+    if abs(drift) > 0.05:
+        scaled[-1] = max(TABLE_ROW_MIN_HEIGHT_PT, scaled[-1] + drift)
+    return scaled
+
+
+def _typst_table_columns_spec(
+    rows: list,
+    col_count: int,
+    layout_width: float,
+    font_pt: float,
+    *,
+    inset_pt: float = TABLE_CELL_PAD_PT,
+) -> str:
+    """Build Typst table column sizing that fills the layout bbox width."""
+    widths = _resolve_table_column_widths_pt(
+        rows, col_count, layout_width, font_pt, inset_pt=inset_pt,
+    )
+    return "(" + ", ".join(f"{round(width, 1)}pt" for width in widths) + ")"
+
+
+def _typst_table_rows_spec(
+    rows: list,
+    col_count: int,
+    layout_height: float,
+    column_widths_pt: list[float],
+    font_pt: float,
+    header_font_pt: float,
+    *,
+    inset_pt: float = TABLE_CELL_PAD_PT,
+    border_style: str = TABLE_BORDER_STYLE_GRID,
+    stroke_pt: float = 0.0,
+) -> str:
+    """Build Typst table row sizing that fills the layout bbox height."""
+    heights = _resolve_table_row_heights_pt(
+        rows,
+        col_count,
+        layout_height,
+        column_widths_pt,
+        font_pt,
+        header_font_pt,
+        inset_pt=inset_pt,
+        border_style=border_style,
+        stroke_pt=stroke_pt,
+    )
+    return "(" + ", ".join(f"{round(height, 1)}pt" for height in heights) + ")"
+
+
+def _typst_table_cell_content(
+    cell_var: str,
+    *,
+    row_idx: int,
+    font_pt: float,
+    header_font_pt: float,
+    text_fill: str,
+    border_style: str,
+    is_header_row: bool,
+) -> str:
+    """Build one Typst table cell body expression."""
+    body_expr = _typst_cmarker_render_expr(cell_var)
+    use_header_fill = (
+        is_header_row and border_style == TABLE_BORDER_STYLE_GRID
+    )
+    weight = "bold" if is_header_row else "regular"
+    size_pt = header_font_pt if is_header_row else font_pt
+    inner = (
+        f"set text(size: {size_pt}pt, weight: \"{weight}\""
+        f", fill: {text_fill}); {body_expr}"
+    )
+    if use_header_fill:
+        return (
+            f"table.cell(fill: {_typst_rgb(TABLE_HEADER_COLOR)})"
+            f"[#{{ {inner} }}]"
+        )
+    return f"[#{{ {inner} }}]"
+
+
+def _typst_booktabs_title_cell_expr(
+    cell_var: str,
+    *,
+    row_idx: int,
+    colspan: int,
+    header_font_pt: float,
+    data_font_pt: float,
+    text_fill: str,
+    stroke_pt: float,
+    draw_bottom_rule: bool,
+) -> str:
+    """Build one booktabs title cell, merging colspan and optional bottom rule."""
+    inner_content = _typst_table_cell_content(
+        cell_var,
+        row_idx=row_idx,
+        font_pt=data_font_pt,
+        header_font_pt=header_font_pt,
+        text_fill=text_fill,
+        border_style=TABLE_BORDER_STYLE_BOOKTABS,
+        is_header_row=True,
+    )
+    if colspan <= 1 and not draw_bottom_rule:
+        return inner_content
+
+    cell_args: list[str] = []
+    if colspan > 1:
+        cell_args.append(f"colspan: {colspan}")
+    if draw_bottom_rule and stroke_pt > 0:
+        stroke = _typst_table_stroke_color_expr(stroke_pt)
+        cell_args.append(f"stroke: (bottom: {stroke})")
+    if not cell_args:
+        return inner_content
+    return f"table.cell({', '.join(cell_args)}){inner_content}"
+
+
+def _typst_table_booktabs_items(
+    rows: list,
+    *,
+    var_prefix: str,
+    stroke_pt: float,
+    header_font_pt: float,
+    data_font_pt: float,
+    text_fill: str,
+    cell_let_lines: list,
+    header_row_count: int = 1,
+) -> list:
+    """Emit booktabs-style table items: toprule, header, midrule, body, bottomrule."""
+    stroke = _typst_table_stroke_color_expr(stroke_pt)
+    items: list = []
+    if stroke_pt > 0:
+        items.append(f"  table.hline(stroke: {stroke}),")
+
+    effective_header_rows = max(1, min(header_row_count, len(rows)))
+    header_parts: list = []
+    cell_index = 0
+    for row_idx in range(effective_header_rows):
+        title_groups = group_adjacent_equal_row_cells(rows[row_idx])
+        draw_bottom_rule = row_idx < effective_header_rows - 1
+        for text, colspan in title_groups:
+            cell_var = f"{var_prefix}_cell_{cell_index}"
+            cell_let_lines.append(
+                f"#let {cell_var} = \"{_prepare_user_text_for_typst(text)}\""
+            )
+            header_parts.append(
+                _typst_booktabs_title_cell_expr(
+                    cell_var,
+                    row_idx=row_idx,
+                    colspan=colspan,
+                    header_font_pt=header_font_pt,
+                    data_font_pt=data_font_pt,
+                    text_fill=text_fill,
+                    stroke_pt=stroke_pt,
+                    draw_bottom_rule=draw_bottom_rule and colspan > 1,
+                )
+            )
+            cell_index += 1
+    items.append("  table.header(")
+    items.append("    " + ", ".join(header_parts) + ",")
+    items.append("  ),")
+
+    if stroke_pt > 0:
+        items.append(f"  table.hline(stroke: {stroke}),")
+
+    body_cells: list = []
+    for row_idx, row in enumerate(rows[effective_header_rows:], start=effective_header_rows):
+        for cell in row:
+            cell_var = f"{var_prefix}_cell_{cell_index}"
+            cell_let_lines.append(
+                f"#let {cell_var} = \"{_prepare_user_text_for_typst(cell)}\""
+            )
+            body_cells.append(
+                _typst_table_cell_content(
+                    cell_var,
+                    row_idx=row_idx,
+                    font_pt=data_font_pt,
+                    header_font_pt=header_font_pt,
+                    text_fill=text_fill,
+                    border_style=TABLE_BORDER_STYLE_BOOKTABS,
+                    is_header_row=False,
+                )
+            )
+            cell_index += 1
+    if body_cells:
+        items.append("  " + ", ".join(body_cells) + ",")
+
+    if stroke_pt > 0:
+        items.append(f"  table.hline(stroke: {stroke}),")
+    return items
 
 
 def _estimate_table_font_pt(
@@ -1127,6 +1642,7 @@ def _estimate_table_font_pt(
     col_count: int,
     rows: list,
     block_font_pt: float,
+    border_style: str,
 ) -> float:
     """Estimate a table font size that uses the reading-oriented bbox."""
     total_chars = sum(len(c) for r in rows for c in r)
@@ -1135,7 +1651,18 @@ def _estimate_table_font_pt(
     avail_width = max(MIN_BLOCK_SIZE_PT, layout_width - pad * col_count)
     avail_height = max(MIN_BLOCK_SIZE_PT, layout_height - pad * row_count)
     font_from_width = avail_width / max(1, avg_chars_per_cell * 0.55)
-    font_from_height = avail_height / max(1, row_count * TABLE_ROW_HEIGHT_FACTOR)
+    row_factor = (
+        1.35
+        if is_booktabs_border_style(border_style)
+        or border_style
+        in {
+            TABLE_BORDER_STYLE_HORIZONTAL,
+            TABLE_BORDER_STYLE_OUTER,
+            TABLE_BORDER_STYLE_NONE,
+        }
+        else TABLE_ROW_HEIGHT_FACTOR
+    )
+    font_from_height = avail_height / max(1, row_count * row_factor)
     return max(
         TABLE_MIN_FONT_PT,
         min(
@@ -1175,12 +1702,20 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
     if col_count == 0:
         return ""
 
-    # Pad shorter rows to match column count
     for r in rows:
         while len(r) < col_count:
             r.append("")
 
     row_count = len(rows)
+    table_stroke_pt = max(
+        0.0,
+        float(getattr(block, "table_stroke_pt", DEFAULT_TABLE_STROKE_PT)),
+    )
+    border_style = resolve_table_border_style(
+        getattr(block, "table_border_style", TABLE_BORDER_STYLE_GRID),
+        stroke_pt=table_stroke_pt,
+    )
+
     target_font_pt = _estimate_table_font_pt(
         layout_width=layout_width,
         layout_height=layout_height,
@@ -1188,55 +1723,125 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
         col_count=col_count,
         rows=rows,
         block_font_pt=block.font_size_pt,
+        border_style=border_style,
     )
 
     header_font_pt = round(target_font_pt * TABLE_HEADER_FONT_SCALE, 1)
     data_font_pt = round(target_font_pt, 1)
 
-    # Generate table cells for Typst (cmarker+mitex so $...$ formulas compile)
     cell_let_lines: list = []
     cell_lines: list = []
-    total_cells = sum(len(r) for r in rows)
-    cell_index = 0
-    for row_idx, row in enumerate(rows):
-        for cell in row:
-            cell_var = f"{var_prefix}_cell_{cell_index}"
-            cell_let_lines.append(
-                f"#let {cell_var} = \"{_prepare_user_text_for_typst(cell)}\""
-            )
-            body_expr = _typst_cmarker_render_expr(cell_var)
-            comma = "," if cell_index < total_cells - 1 else ""
-            cell_index += 1
-            if row_idx == 0:
-                cell_lines.append(
-                    f"  table.cell(fill: {_typst_rgb(TABLE_HEADER_COLOR)})"
-                    f"[#{{ set text(size: {header_font_pt}pt, weight: \"bold\""
-                    f", fill: {text_fill}); {body_expr} }}]{comma}"
+    if is_booktabs_border_style(border_style):
+        cell_lines = _typst_table_booktabs_items(
+            rows,
+            var_prefix=var_prefix,
+            stroke_pt=table_stroke_pt,
+            header_font_pt=header_font_pt,
+            data_font_pt=data_font_pt,
+            text_fill=text_fill,
+            cell_let_lines=cell_let_lines,
+            header_row_count=booktabs_header_row_count(border_style),
+        )
+    else:
+        total_cells = sum(len(r) for r in rows)
+        cell_index = 0
+        for row_idx, row in enumerate(rows):
+            for cell in row:
+                cell_var = f"{var_prefix}_cell_{cell_index}"
+                cell_let_lines.append(
+                    f"#let {cell_var} = \"{_prepare_user_text_for_typst(cell)}\""
                 )
-            else:
+                comma = "," if cell_index < total_cells - 1 else ""
+                cell_index += 1
                 cell_lines.append(
-                    f"  [ #{{ set text(size: {data_font_pt}pt, weight: \"regular\""
-                    f", fill: {text_fill}); {body_expr} }} ]{comma}"
+                    "  "
+                    + _typst_table_cell_content(
+                        cell_var,
+                        row_idx=row_idx,
+                        font_pt=data_font_pt,
+                        header_font_pt=header_font_pt,
+                        text_fill=text_fill,
+                        border_style=border_style,
+                        is_header_row=row_idx == 0,
+                    )
+                    + comma
                 )
 
-    columns_str = "(" + ", ".join(["auto"] * col_count) + ")"
-    row_h = round(
-        max(1.0, (layout_height - TABLE_CELL_PAD_PT * 2) / max(1, row_count)),
-        1,
+    provisional_inset = TABLE_CELL_PAD_PT
+    column_widths_pt = _resolve_table_column_widths_pt(
+        rows,
+        col_count,
+        layout_width,
+        data_font_pt,
+        inset_pt=provisional_inset,
     )
+    row_heights_pt = _resolve_table_row_heights_pt(
+        rows,
+        col_count,
+        layout_height,
+        column_widths_pt,
+        data_font_pt,
+        header_font_pt,
+        inset_pt=provisional_inset,
+        border_style=border_style,
+        stroke_pt=table_stroke_pt,
+    )
+    avg_row_h = sum(row_heights_pt) / max(1, len(row_heights_pt))
     inset_pt = round(
         min(
             TABLE_CELL_PAD_PT,
-            max(0.25, (row_h - data_font_pt) / 2 - 0.25),
+            max(0.25, (avg_row_h - data_font_pt) / 2 - 0.25),
         ),
         2,
     )
-    rows_spec = "(" + ", ".join([f"{row_h}pt"] * row_count) + ")"
-    table_stroke_pt = max(
-        0.0,
-        float(getattr(block, "table_stroke_pt", DEFAULT_TABLE_STROKE_PT)),
+    column_widths_pt = _resolve_table_column_widths_pt(
+        rows,
+        col_count,
+        layout_width,
+        data_font_pt,
+        inset_pt=inset_pt,
     )
-    stroke_arg = _typst_table_stroke_arg(table_stroke_pt)
+    row_heights_pt = _resolve_table_row_heights_pt(
+        rows,
+        col_count,
+        layout_height,
+        column_widths_pt,
+        data_font_pt,
+        header_font_pt,
+        inset_pt=inset_pt,
+        border_style=border_style,
+        stroke_pt=table_stroke_pt,
+    )
+    columns_str = _typst_table_columns_spec(
+        rows,
+        col_count,
+        layout_width,
+        data_font_pt,
+        inset_pt=inset_pt,
+    )
+    rows_spec = _typst_table_rows_spec(
+        rows,
+        col_count,
+        layout_height,
+        column_widths_pt,
+        data_font_pt,
+        header_font_pt,
+        inset_pt=inset_pt,
+        border_style=border_style,
+        stroke_pt=table_stroke_pt,
+    )
+
+    if border_style == TABLE_BORDER_STYLE_GRID:
+        stroke_arg = _typst_table_stroke_arg(table_stroke_pt)
+    elif border_style == TABLE_BORDER_STYLE_NONE:
+        stroke_arg = "stroke: none,"
+    else:
+        stroke_arg = _typst_table_stroke_callback(
+            border_style,
+            stroke_pt=table_stroke_pt,
+            row_count=row_count,
+            col_count=col_count,
+        )
 
     table_var = f"{var_prefix}_table"
     inner_var = f"{var_prefix}_inner"
@@ -1246,10 +1851,12 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
         f"#let {table_var} = table(",
         f"  columns: {columns_str},",
         f"  rows: {rows_spec},",
+    ]
+    parts.extend([
         f"  {stroke_arg}",
         f"  inset: {inset_pt}pt,",
         f"  align: (left + horizon,) * {col_count},",
-    ]
+    ])
     parts.extend(cell_lines)
     parts.append(")")
 

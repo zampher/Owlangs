@@ -37,6 +37,7 @@ class PDFRendererConfig:
         leading_em_by_block_index: Optional[Dict[int, float]] = None,
         rotation_by_block_index: Optional[Dict[int, int]] = None,
         table_stroke_pt_by_block_index: Optional[Dict[int, float]] = None,
+        table_border_style_by_block_index: Optional[Dict[int, str]] = None,
         bbox_override_by_block_index: Optional[Dict[int, tuple]] = None,
         render_page_indices: Optional[Set[int]] = None,
         base_merged_pdf_bytes: Optional[bytes] = None,
@@ -76,6 +77,7 @@ class PDFRendererConfig:
         self.leading_em_by_block_index = leading_em_by_block_index or {}
         self.rotation_by_block_index = rotation_by_block_index or {}
         self.table_stroke_pt_by_block_index = table_stroke_pt_by_block_index or {}
+        self.table_border_style_by_block_index = table_border_style_by_block_index or {}
         self.bbox_override_by_block_index = bbox_override_by_block_index or {}
         self.render_page_indices = render_page_indices
         self.base_merged_pdf_bytes = base_merged_pdf_bytes

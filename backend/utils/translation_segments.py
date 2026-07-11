@@ -3375,6 +3375,7 @@ def update_translation_segment(
     pdf_font_reset: bool = False,
     rotation: Optional[int] = None,
     table_stroke_pt: Optional[float] = None,
+    table_border_style: Optional[str] = None,
     layout_block_bbox_override: Optional[list] = None,
     layout_block_bbox_reset: bool = False,
     layout_block_index: Optional[int] = None,
@@ -3540,6 +3541,39 @@ def update_translation_segment(
                     LogModule.TRANS,
                     f"Updated table_stroke_pt for segment {segment_index} on task {task_id}: "
                     f"{old_stroke_value} -> {normalized_stroke}",
+                )
+                typography_changed = True
+
+    if table_border_style is not None:
+        from layout.pdf_renderer.typst_overlay.table_border_style import (
+            DEFAULT_TABLE_BORDER_STYLE,
+            normalize_table_border_style,
+        )
+        normalized_style = normalize_table_border_style(table_border_style)
+        if normalized_style is None:
+            logger.warning(
+                LogModule.TRANS,
+                f"Ignoring invalid table_border_style={table_border_style!r} for segment "
+                f"{segment_index} on task {task_id}",
+            )
+        else:
+            old_style = segment.get("table_border_style")
+            if old_style is None:
+                old_style_value = DEFAULT_TABLE_BORDER_STYLE
+            else:
+                old_style_value = str(old_style)
+            if (
+                normalized_style != old_style_value
+                or "table_border_style" not in segment
+            ):
+                segment["table_border_style"] = normalized_style
+                segment["modified"] = True
+                segment["modified_by"] = modified_by or segment.get("modified_by")
+                segment["modified_at"] = time.time()
+                logger.info(
+                    LogModule.TRANS,
+                    f"Updated table_border_style for segment {segment_index} on task {task_id}: "
+                    f"{old_style_value} -> {normalized_style}",
                 )
                 typography_changed = True
 

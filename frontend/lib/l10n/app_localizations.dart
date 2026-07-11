@@ -7022,6 +7022,54 @@ abstract class AppLocalizations {
   /// **'Border weight'**
   String get segmentTableStrokeMenuTitle;
 
+  /// No description provided for @segmentTableBorderMenuTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Border style'**
+  String get segmentTableBorderMenuTitle;
+
+  /// No description provided for @segmentTableBorderGrid.
+  ///
+  /// In en, this message translates to:
+  /// **'Full grid'**
+  String get segmentTableBorderGrid;
+
+  /// No description provided for @segmentTableBorderBooktabs.
+  ///
+  /// In en, this message translates to:
+  /// **'Three lines (1 title row)'**
+  String get segmentTableBorderBooktabs;
+
+  /// No description provided for @segmentTableBorderBooktabs2.
+  ///
+  /// In en, this message translates to:
+  /// **'Three lines (2 title rows)'**
+  String get segmentTableBorderBooktabs2;
+
+  /// No description provided for @segmentTableBorderBooktabs3.
+  ///
+  /// In en, this message translates to:
+  /// **'Three lines (3 title rows)'**
+  String get segmentTableBorderBooktabs3;
+
+  /// No description provided for @segmentTableBorderHorizontal.
+  ///
+  /// In en, this message translates to:
+  /// **'Horizontal lines'**
+  String get segmentTableBorderHorizontal;
+
+  /// No description provided for @segmentTableBorderOuter.
+  ///
+  /// In en, this message translates to:
+  /// **'Outer box'**
+  String get segmentTableBorderOuter;
+
+  /// No description provided for @segmentTableBorderNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No lines'**
+  String get segmentTableBorderNone;
+
   /// No description provided for @segmentItemExclude.
   ///
   /// In en, this message translates to:
@@ -7363,6 +7411,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Refresh PDF'**
   String get translationPreviewRefreshPdf;
+
+  /// No description provided for @translationPreviewPdfUpdating.
+  ///
+  /// In en, this message translates to:
+  /// **'Updating PDF…'**
+  String get translationPreviewPdfUpdating;
 
   /// No description provided for @translationPreviewBatchFont.
   ///

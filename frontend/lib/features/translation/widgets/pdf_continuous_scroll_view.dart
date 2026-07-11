@@ -463,6 +463,7 @@ class PdfContinuousPreviewLoader extends StatefulWidget {
     this.onEditBboxChanged,
     this.onEditBboxReset,
     this.viewportController,
+    this.onLoadSettled,
   });
 
   final String downloadUrl;
@@ -490,6 +491,9 @@ class PdfContinuousPreviewLoader extends StatefulWidget {
 
   /// Called when the user taps the reset button on a specific bbox overlay.
   final BboxEditResetCallback? onEditBboxReset;
+
+  /// Called after a PDF load attempt finishes (success or failure).
+  final VoidCallback? onLoadSettled;
 
   @override
   State<PdfContinuousPreviewLoader> createState() =>
@@ -565,6 +569,7 @@ class _PdfContinuousPreviewLoaderState extends State<PdfContinuousPreviewLoader>
       });
       widget.onDocumentLoaded?.call(document);
       widget.navigationController?.restoreScrollPosition();
+      widget.onLoadSettled?.call();
     } catch (error) {
       if (!mounted) {
         return;
@@ -573,6 +578,7 @@ class _PdfContinuousPreviewLoaderState extends State<PdfContinuousPreviewLoader>
         _error = error;
         _loading = false;
       });
+      widget.onLoadSettled?.call();
     }
   }
 

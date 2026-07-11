@@ -22,6 +22,7 @@ def _segment_fingerprint_fields(segment: Dict[str, Any]) -> Dict[str, Any]:
         "leading_em": segment.get("leading_em"),
         "rotation": segment.get("rotation", 0),
         "table_stroke_pt": segment.get("table_stroke_pt", 0.5),
+        "table_border_style": segment.get("table_border_style", "booktabs"),
     }
 
 
@@ -37,6 +38,7 @@ def compute_typst_overlay_content_fingerprint(
     leading_em_by_block_index: Optional[Dict[int, float]] = None,
     rotation_by_block_index: Optional[Dict[int, int]] = None,
     table_stroke_pt_by_block_index: Optional[Dict[int, float]] = None,
+    table_border_style_by_block_index: Optional[Dict[int, str]] = None,
     bbox_override_by_block_index: Optional[Dict[int, tuple]] = None,
     auto_rotation_enabled: bool = False,
     auto_rotation_aspect_ratio: Optional[float] = None,
@@ -72,6 +74,9 @@ def compute_typst_overlay_content_fingerprint(
         "rotation_by_block_index": _sorted_int_key_map(rotation_by_block_index),
         "table_stroke_pt_by_block_index": _sorted_int_key_map(
             table_stroke_pt_by_block_index,
+        ),
+        "table_border_style_by_block_index": _sorted_int_key_map(
+            table_border_style_by_block_index,
         ),
         "bbox_override_by_block_index": _sorted_int_key_map(
             bbox_override_by_block_index,

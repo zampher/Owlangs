@@ -13,6 +13,7 @@ _END_ENV_RE = re.compile(r"\\end\{")
 _TAG_RE = re.compile(r"\\tag\{")
 _LEFT_RE = re.compile(r"\\left\b")
 _RIGHT_RE = re.compile(r"\\right\b")
+_RIGHT_TEXT_RE = re.compile(r"\\right\\text\{")
 
 
 def strip_math_delimiters(text: str) -> str:
@@ -66,7 +67,37 @@ def mitex_unsafe_reason(math_body: str) -> Optional[str]:
         return "unbalanced_left_right"
     if _TAG_RE.search(body):
         return "latex_tag"
+    if _RIGHT_TEXT_RE.search(body):
+        return "invalid_right_delimiter"
     return None
+
+
+def iter_math_spans_in_markdown(text: str) -> list[str]:
+    """Extract inline/display math bodies from markdown text."""
+    spans: list[str] = []
+    for match in re.finditer(r"\$\$(.+?)\$\$", text, flags=re.DOTALL):
+        spans.append(match.group(1))
+    for match in re.finditer(
+        r"(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)",
+        text,
+        flags=re.DOTALL,
+    ):
+        spans.append(match.group(1))
+    return spans
+
+
+def markdown_line_safe_for_mitex(line: str) -> bool:
+    """Return False when a preserved line should not use cmarker+mitex."""
+    body = str(line or "")
+    if not body.strip():
+        return True
+    spans = iter_math_spans_in_markdown(body)
+    if not spans:
+        return True
+    for span in spans:
+        if mitex_unsafe_reason(span):
+            return False
+    return True
 
 
 def is_mitex_safe_latex(math_body: str) -> bool:

@@ -3224,6 +3224,9 @@ class _TranslationResultPreviewState
         'rotation': _parseOptionalInt(segment['rotation']) ?? 0,
       if (segment.containsKey('table_stroke_pt'))
         'table_stroke_pt': _parseOptionalDouble(segment['table_stroke_pt']) ?? 0,
+      if (segment.containsKey('table_border_style'))
+        'table_border_style': segment['table_border_style'] as String? ??
+            kPdfDefaultTableBorderStyle,
     };
   }
 
@@ -5459,6 +5462,7 @@ class _TranslationResultPreviewState
       onFontSizeChanged: null,
       onRotationChanged: null,
       onTableStrokeChanged: null,
+      onTableBorderStyleChanged: null,
       onLayoutGroupPartsEdit: _handleLayoutGroupPartsEdit,
     );
   }
@@ -5567,6 +5571,7 @@ class _TranslationResultPreviewState
       onFontSizeChanged: _handleFontSizeChanged,
       onRotationChanged: _handleRotationChanged,
       onTableStrokeChanged: _handleTableStrokeChanged,
+      onTableBorderStyleChanged: _handleTableBorderStyleChanged,
       showSegmentScrollbar: showSegmentScrollbar,
       onLayoutGroupPartsEdit: _handleLayoutGroupPartsEdit,
     );
@@ -6201,6 +6206,42 @@ class _TranslationResultPreviewState
     } catch (e) {
       if (mounted) {
         MessageService.showError(context, 'Failed to update table grid: $e');
+      }
+    }
+  }
+
+  /// Handle table border style for a PDF table segment.
+  Future<void> _handleTableBorderStyleChanged(
+    int index,
+    String tableBorderStyle,
+  ) async {
+    try {
+      final TranslationService svc = TranslationService();
+      await svc.updateTranslationSegment(
+        _apiTaskId(),
+        index,
+        tableBorderStyle: tableBorderStyle,
+      );
+
+      if (_allSegmentsMetadata.containsKey(index)) {
+        _allSegmentsMetadata[index] = <String, dynamic>{
+          ..._allSegmentsMetadata[index]!,
+          'table_border_style': tableBorderStyle,
+        };
+      } else {
+        _allSegmentsMetadata[index] = <String, dynamic>{
+          'table_border_style': tableBorderStyle,
+        };
+      }
+
+      if (mounted && _shouldRefreshOverlayPreviewRevision) {
+        _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
+        setState(() {});
+        await _segmentsPaginationController?.refresh();
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showError(context, 'Failed to update table border style: $e');
       }
     }
   }

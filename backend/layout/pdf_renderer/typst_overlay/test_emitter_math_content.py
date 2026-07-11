@@ -128,3 +128,31 @@ def test_render_table_block_inline_math_uses_cmarker_not_raw_content():
     # Raw Typst content injection (no cmarker) caused unknown variable: cdot
     assert "[EDC $" not in src
     assert "#let block_tbl_cell_" in src
+
+
+def test_render_preserved_lines_fallback_for_invalid_right_text():
+    block = RenderBlock(
+        block_id="algo-49",
+        page_index=0,
+        inner_bbox=(305.4, 54.1, 557.8, 417.8),
+        markdown_text=(
+            "算法 1: FedCode。\n"
+            r"4 | $\left\lfloor c_{n}^{t+1} \right\text{bad} \leftarrow a;$"
+        ),
+        font_size_pt=6.0,
+        render_kind="markdown",
+        preserve_line_breaks=True,
+        leading_em=0.35,
+        opaque_fill=True,
+    )
+    src = _render_markdown_block("block-algo", block)
+    assert "cmarker.render(block_algo_line_0, math: mitex)" in src
+    assert "cmarker.render(block_algo_line_1)" in src
+    assert "cmarker.render(block_algo_line_1, math: mitex)" not in src
+
+
+def test_sanitize_fixes_right_text_ceil_corruption():
+    text = r"$\left\lfloor a \right\text{ceil}$"
+    out = sanitize_typst_markdown_for_compile(text)
+    assert r"\right\rfloor" in out
+    assert r"\right\text{ceil}" not in out

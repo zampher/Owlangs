@@ -87,6 +87,8 @@ class RenderBlock:
 
     # -- table grid lines (pt); 0 = hidden, default 0.5pt --
     table_stroke_pt: float = 0.5
+    # -- table border style: grid | booktabs | booktabs_2 | booktabs_3 | horizontal | outer | none --
+    table_border_style: str = "booktabs"
 
     # -- advanced --
     math_map: Optional[List[dict]] = None    # formula identifier -> latex map

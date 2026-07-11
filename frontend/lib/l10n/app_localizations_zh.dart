@@ -3816,6 +3816,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get segmentTableStrokeMenuTitle => '线宽';
 
   @override
+  String get segmentTableBorderMenuTitle => '线条样式';
+
+  @override
+  String get segmentTableBorderGrid => '全网格';
+
+  @override
+  String get segmentTableBorderBooktabs => '三线表（1行标题）';
+
+  @override
+  String get segmentTableBorderBooktabs2 => '三线表（2行标题）';
+
+  @override
+  String get segmentTableBorderBooktabs3 => '三线表（3行标题）';
+
+  @override
+  String get segmentTableBorderHorizontal => '横线';
+
+  @override
+  String get segmentTableBorderOuter => '外框';
+
+  @override
+  String get segmentTableBorderNone => '无线';
+
+  @override
   String get segmentItemExclude => '排除';
 
   @override
@@ -4002,6 +4026,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get translationPreviewRefreshPdf => '刷新 PDF';
+
+  @override
+  String get translationPreviewPdfUpdating => 'PDF 更新中…';
 
   @override
   String get translationPreviewBatchFont => '字体';

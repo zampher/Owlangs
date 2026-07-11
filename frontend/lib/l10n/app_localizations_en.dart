@@ -3994,6 +3994,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get segmentTableStrokeMenuTitle => 'Border weight';
 
   @override
+  String get segmentTableBorderMenuTitle => 'Border style';
+
+  @override
+  String get segmentTableBorderGrid => 'Full grid';
+
+  @override
+  String get segmentTableBorderBooktabs => 'Three lines (1 title row)';
+
+  @override
+  String get segmentTableBorderBooktabs2 => 'Three lines (2 title rows)';
+
+  @override
+  String get segmentTableBorderBooktabs3 => 'Three lines (3 title rows)';
+
+  @override
+  String get segmentTableBorderHorizontal => 'Horizontal lines';
+
+  @override
+  String get segmentTableBorderOuter => 'Outer box';
+
+  @override
+  String get segmentTableBorderNone => 'No lines';
+
+  @override
   String get segmentItemExclude => 'Exclude';
 
   @override
@@ -4186,6 +4210,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get translationPreviewRefreshPdf => 'Refresh PDF';
+
+  @override
+  String get translationPreviewPdfUpdating => 'Updating PDF…';
 
   @override
   String get translationPreviewBatchFont => 'Font';

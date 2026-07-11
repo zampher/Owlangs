@@ -100,6 +100,8 @@ class TranslationSegmentItem extends StatefulWidget {
     this.onRotationChanged,
     this.tableStrokePt = 0,
     this.onTableStrokeChanged,
+    this.tableBorderStyle = kPdfDefaultTableBorderStyle,
+    this.onTableBorderStyleChanged,
     this.showTableStroke = false,
     this.layoutBlockBboxes,
     this.layoutBlockIndices,
@@ -175,6 +177,8 @@ class TranslationSegmentItem extends StatefulWidget {
   final void Function(int index, int rotation)? onRotationChanged;
   final double tableStrokePt; // Table grid stroke width in pt (0 = hidden)
   final void Function(int index, double tableStrokePt)? onTableStrokeChanged;
+  final String tableBorderStyle;
+  final void Function(int index, String tableBorderStyle)? onTableBorderStyleChanged;
   final bool showTableStroke;
   /// Layout group bboxes (image pixel coords) for area-proportional text split.
   final List<List<double>>? layoutBlockBboxes;
@@ -1421,58 +1425,101 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
   Widget _buildTableStrokeChip(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final bool hasStroke = widget.tableStrokePt > 0;
+    final bool isNoneStyle = widget.tableBorderStyle == 'none';
     final ColorScheme colors = Theme.of(context).colorScheme;
-    final String label = hasStroke
-        ? l10n.segmentTableStrokeLabel(
-            formatPdfTableStrokePtLabel(widget.tableStrokePt),
-          )
-        : l10n.segmentTableStrokeOff;
-    final bool canEdit = widget.onTableStrokeChanged != null;
+    final String styleLabel = pdfTableBorderStyleLabel(
+      l10n,
+      widget.tableBorderStyle,
+    );
+    final String label = isNoneStyle
+        ? styleLabel
+        : hasStroke
+            ? '$styleLabel · ${formatPdfTableStrokePtLabel(widget.tableStrokePt)}pt'
+            : styleLabel;
+    final bool canEdit = widget.onTableStrokeChanged != null ||
+        widget.onTableBorderStyleChanged != null;
+    final bool showWeightMenu =
+        widget.tableBorderStyle != 'none' && widget.onTableStrokeChanged != null;
 
     return Padding(
       padding: const EdgeInsets.only(left: 4),
       child: MenuAnchor(
         style: MenuStyle(
           visualDensity: VisualDensity.compact,
-          minimumSize: const WidgetStatePropertyAll<Size>(Size(148, 0)),
+          minimumSize: const WidgetStatePropertyAll<Size>(Size(168, 0)),
         ),
         menuChildren: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: Text(
-              l10n.segmentTableStrokeMenuTitle,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: colors.onSurfaceVariant,
+          if (widget.onTableBorderStyleChanged != null) ...<Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: Text(
+                l10n.segmentTableBorderMenuTitle,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: colors.onSurfaceVariant,
+                ),
               ),
             ),
-          ),
-          ...kPdfTableStrokeOptionsPt.map((double optionPt) {
-            final bool selected = isPdfTableStrokeOptionSelected(
-              widget.tableStrokePt,
-              optionPt,
-            );
-            final String optionLabel = optionPt <= 0
-                ? l10n.segmentTableStrokeNone
-                : l10n.segmentTableStrokeLabel(
-                    formatPdfTableStrokePtLabel(optionPt),
-                  );
-            return MenuItemButton(
-              onPressed: canEdit
-                  ? () => widget.onTableStrokeChanged!(
-                        widget.index,
-                        optionPt,
-                      )
-                  : null,
-              child: _buildTableStrokeMenuRow(
-                context,
-                strokePt: optionPt,
-                label: optionLabel,
-                checked: selected,
+            ...kPdfTableBorderStyleOptions.map((String optionStyle) {
+              final bool selected = isPdfTableBorderStyleSelected(
+                widget.tableBorderStyle,
+                optionStyle,
+              );
+              return MenuItemButton(
+                onPressed: canEdit
+                    ? () => widget.onTableBorderStyleChanged!(
+                          widget.index,
+                          optionStyle,
+                        )
+                    : null,
+                child: _buildTableBorderStyleMenuRow(
+                  context,
+                  style: optionStyle,
+                  label: pdfTableBorderStyleLabel(l10n, optionStyle),
+                  checked: selected,
+                ),
+              );
+            }),
+          ],
+          if (showWeightMenu) ...<Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+              child: Text(
+                l10n.segmentTableStrokeMenuTitle,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: colors.onSurfaceVariant,
+                ),
               ),
-            );
-          }),
+            ),
+            ...kPdfTableStrokeOptionsPt.map((double optionPt) {
+              final bool selected = isPdfTableStrokeOptionSelected(
+                widget.tableStrokePt,
+                optionPt,
+              );
+              final String optionLabel = optionPt <= 0
+                  ? l10n.segmentTableStrokeNone
+                  : l10n.segmentTableStrokeLabel(
+                      formatPdfTableStrokePtLabel(optionPt),
+                    );
+              return MenuItemButton(
+                onPressed: canEdit
+                    ? () => widget.onTableStrokeChanged!(
+                          widget.index,
+                          optionPt,
+                        )
+                    : null,
+                child: _buildTableStrokeMenuRow(
+                  context,
+                  strokePt: optionPt,
+                  label: optionLabel,
+                  checked: selected,
+                ),
+              );
+            }),
+          ],
         ],
         builder: (
           BuildContext context,
@@ -1495,12 +1542,12 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: hasStroke
+                  color: (!isNoneStyle && hasStroke)
                       ? colors.secondaryContainer
                       : colors.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(
-                    color: hasStroke
+                    color: (!isNoneStyle && hasStroke)
                         ? colors.secondary
                         : colors.outlineVariant,
                   ),
@@ -1509,9 +1556,9 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     Icon(
-                      Icons.grid_on_outlined,
+                      _tableBorderStyleIcon(widget.tableBorderStyle),
                       size: 12,
-                      color: hasStroke
+                      color: (!isNoneStyle && hasStroke)
                           ? colors.onSecondaryContainer
                           : colors.onSurfaceVariant,
                     ),
@@ -1521,7 +1568,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w500,
-                        color: hasStroke
+                        color: (!isNoneStyle && hasStroke)
                             ? colors.onSecondaryContainer
                             : colors.onSurfaceVariant,
                       ),
@@ -1530,7 +1577,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                       Icon(
                         Icons.arrow_drop_down,
                         size: 14,
-                        color: hasStroke
+                        color: (!isNoneStyle && hasStroke)
                             ? colors.onSecondaryContainer
                             : colors.onSurfaceVariant,
                       ),
@@ -1542,6 +1589,36 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildTableBorderStyleMenuRow(
+    BuildContext context, {
+    required String style,
+    required String label,
+    required bool checked,
+  }) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return Row(
+      children: <Widget>[
+        SizedBox(
+          width: 18,
+          child: checked
+              ? Icon(Icons.check, size: 14, color: colors.primary)
+              : const SizedBox.shrink(),
+        ),
+        _TableBorderStylePreviewIcon(
+          style: style,
+          color: colors.onSurface,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 12),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1765,6 +1842,8 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                       (widget.onRotationChanged != null) ||
                       (widget.onTableStrokeChanged != null &&
                           widget.showTableStroke) ||
+                      (widget.onTableBorderStyleChanged != null &&
+                          widget.showTableStroke) ||
                       (widget.onExclude != null && !_localIsExcluded) ||
                       (widget.onClear != null &&
                           widget.text.isNotEmpty &&
@@ -1780,7 +1859,8 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                         _buildPdfFontSizeChip(),
                       if (widget.onRotationChanged != null && !widget.isSource)
                         _buildRotationChip(context),
-                      if (widget.onTableStrokeChanged != null &&
+                      if ((widget.onTableStrokeChanged != null ||
+                              widget.onTableBorderStyleChanged != null) &&
                           !widget.isSource &&
                           widget.showTableStroke)
                         _buildTableStrokeChip(context),
@@ -2774,6 +2854,137 @@ class _RotationPreviewIcon extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Mini table border style preview icon for PDF revision menu.
+class _TableBorderStylePreviewIcon extends StatelessWidget {
+  const _TableBorderStylePreviewIcon({
+    required this.style,
+    required this.color,
+  });
+
+  final String style;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 22,
+      height: 16,
+      child: CustomPaint(
+        painter: _TableBorderStylePreviewPainter(
+          style: style,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+class _TableBorderStylePreviewPainter extends CustomPainter {
+  _TableBorderStylePreviewPainter({
+    required this.style,
+    required this.color,
+  });
+
+  final String style;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Rect bounds = Rect.fromLTWH(1, 1, size.width - 2, size.height - 2);
+    final Paint linePaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    switch (style) {
+      case 'booktabs':
+      case 'booktabs_2':
+      case 'booktabs_3':
+        canvas.drawLine(
+          Offset(bounds.left, bounds.top),
+          Offset(bounds.right, bounds.top),
+          linePaint,
+        );
+        final int headerRows = style == 'booktabs_3'
+            ? 3
+            : style == 'booktabs_2'
+                ? 2
+                : 1;
+        final double headerBand = bounds.height * 0.28 / headerRows;
+        for (int row = 1; row <= headerRows; row++) {
+          final double y = bounds.top + headerBand * row;
+          canvas.drawLine(
+            Offset(bounds.left, y),
+            Offset(bounds.right, y),
+            linePaint,
+          );
+        }
+        canvas.drawLine(
+          Offset(bounds.left, bounds.bottom),
+          Offset(bounds.right, bounds.bottom),
+          linePaint,
+        );
+        break;
+      case 'horizontal':
+        for (final double y in <double>[0.0, 0.28, 0.56, 0.84, 1.0]) {
+          final double py = bounds.top + bounds.height * y;
+          canvas.drawLine(
+            Offset(bounds.left, py),
+            Offset(bounds.right, py),
+            linePaint,
+          );
+        }
+        break;
+      case 'outer':
+        canvas.drawRect(bounds, linePaint);
+        break;
+      case 'none':
+        final Paint dashed = Paint()
+          ..color = color.withValues(alpha: 0.35)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1;
+        canvas.drawRect(bounds, dashed);
+        break;
+      case 'grid':
+      default:
+        canvas.drawRect(bounds, linePaint);
+        canvas.drawLine(
+          Offset(bounds.left, bounds.center.dy),
+          Offset(bounds.right, bounds.center.dy),
+          linePaint,
+        );
+        canvas.drawLine(
+          Offset(bounds.center.dx, bounds.top),
+          Offset(bounds.center.dx, bounds.bottom),
+          linePaint,
+        );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TableBorderStylePreviewPainter oldDelegate) {
+    return oldDelegate.style != style || oldDelegate.color != color;
+  }
+}
+
+IconData _tableBorderStyleIcon(String style) {
+  switch (style) {
+    case 'booktabs':
+    case 'booktabs_2':
+    case 'booktabs_3':
+      return Icons.table_rows_outlined;
+    case 'horizontal':
+      return Icons.horizontal_rule;
+    case 'outer':
+      return Icons.crop_square_outlined;
+    case 'none':
+      return Icons.border_clear_outlined;
+    case 'grid':
+    default:
+      return Icons.grid_on_outlined;
   }
 }
 

@@ -31,6 +31,7 @@ class PdfPreview extends StatefulWidget {
     this.bboxEditMode = false,
     this.onEditBboxChanged,
     this.onEditBboxReset,
+    this.onLoadSettled,
   });
 
   final String downloadUrl;
@@ -60,6 +61,9 @@ class PdfPreview extends StatefulWidget {
 
   /// Called when the user taps reset on a specific bbox overlay.
   final BboxEditResetCallback? onEditBboxReset;
+
+  /// Called after a PDF load attempt finishes (success or failure).
+  final VoidCallback? onLoadSettled;
 
   @override
   State<PdfPreview> createState() => _PdfPreviewWebState();
@@ -135,6 +139,7 @@ class _PdfPreviewWebState extends State<PdfPreview> {
             bboxEditMode: widget.bboxEditMode,
             onEditBboxChanged: widget.onEditBboxChanged,
             onEditBboxReset: widget.onEditBboxReset,
+            onLoadSettled: widget.onLoadSettled,
             onDocumentLoaded: (PdfDocument document) {
               if (!mounted) {
                 return;

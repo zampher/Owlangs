@@ -146,6 +146,8 @@ class _TranslationFullComparePreviewTabState
   double _autoRotationAspectRatio = kDefaultAutoRotationAspectRatio;
   int _autoRotationDegrees = kDefaultAutoRotationDegrees;
   int _pdfPreviewManualRefreshNonce = 0;
+  bool _pdfPreviewRefreshing = false;
+  int _pdfPreviewLoadGeneration = 0;
   late final TextEditingController _autoRotationRatioController;
   late final TextEditingController _autoRotationDegreesController;
   bool _autoFollowSegmentPdfPage = true;
@@ -536,8 +538,78 @@ class _TranslationFullComparePreviewTabState
     widget.onBboxOverrideReset?.call(bboxIndex);
   }
 
+  void _markPdfPreviewRefreshing() {
+    _pdfPreviewLoadGeneration++;
+    if (!_pdfPreviewRefreshing && mounted) {
+      setState(() {
+        _pdfPreviewRefreshing = true;
+      });
+    }
+  }
+
+  VoidCallback _pdfPreviewLoadSettledHandler() {
+    final int expectedGeneration = _pdfPreviewLoadGeneration;
+    return () {
+      if (!mounted || expectedGeneration != _pdfPreviewLoadGeneration) {
+        return;
+      }
+      if (_pdfPreviewRefreshing) {
+        setState(() {
+          _pdfPreviewRefreshing = false;
+        });
+      }
+    };
+  }
+
+  Widget _wrapPdfPreviewRefreshingOverlay(
+    AppLocalizations l10n,
+    Widget child,
+  ) {
+    if (!_pdfPreviewRefreshing) {
+      return child;
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        child,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: ColoredBox(
+              color: Colors.black.withValues(alpha: 0.12),
+              child: Center(
+                child: Material(
+                  elevation: 2,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(l10n.translationPreviewPdfUpdating),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   void _maybeApplyPdfRevision(int revision) {
     if (_autoRefreshPdf && revision != _displayPdfRevision) {
+      _markPdfPreviewRefreshing();
       setState(() {
         _displayPdfRevision = revision;
         _displayDirtySegmentIndices = Set<int>.from(
@@ -589,6 +661,7 @@ class _TranslationFullComparePreviewTabState
     _commitAutoRotationFieldsFromControllers();
     final int revision =
         widget.pdfRenderRevisionListenable?.value ?? widget.pdfRenderRevision;
+    _markPdfPreviewRefreshing();
     setState(() {
       _pdfPreviewManualRefreshNonce++;
       _displayPdfRevision = revision;
@@ -899,6 +972,7 @@ class _TranslationFullComparePreviewTabState
       bboxEditMode: _bboxEditMode,
       onEditBboxChanged: _onEditBboxChanged,
       onEditBboxReset: _onEditBboxReset,
+      onLoadSettled: _pdfPreviewLoadSettledHandler(),
       onVisiblePageChanged: (int page, int totalPages) {
         if (!mounted ||
             (page == _comparePdfCurrentPage &&
@@ -1016,6 +1090,7 @@ class _TranslationFullComparePreviewTabState
       bboxEditMode: _bboxEditMode,
       onEditBboxChanged: _onEditBboxChanged,
       onEditBboxReset: _onEditBboxReset,
+      onLoadSettled: _pdfPreviewLoadSettledHandler(),
       onDownload: widget.onDownload,
       onRequestPreviewSettings: widget.onRequestPreviewSettings,
     );
@@ -1064,7 +1139,10 @@ class _TranslationFullComparePreviewTabState
           child: PreviewZoomableViewport(
             controller: _viewportController,
             childHandlesVerticalScroll: true,
-            child: _buildTargetPdfPreview(l10n, targetPdfUrl: targetPdfUrl),
+            child: _wrapPdfPreviewRefreshingOverlay(
+              l10n,
+              _buildTargetPdfPreview(l10n, targetPdfUrl: targetPdfUrl),
+            ),
           ),
         ),
         const VerticalDivider(width: 1),
@@ -1130,11 +1208,14 @@ class _TranslationFullComparePreviewTabState
           child: PreviewZoomableViewport(
             controller: _viewportController,
             childHandlesVerticalScroll: true,
-            child: _buildPdfCompareContinuousView(
-              sourcePdfUrl: sourcePdfUrl,
-              targetPdfUrl: targetPdfUrl,
-              linkedScroll: _revisionLinkedScrollEnabled,
-              navigationController: _pdfCompareNavigationController,
+            child: _wrapPdfPreviewRefreshingOverlay(
+              l10n,
+              _buildPdfCompareContinuousView(
+                sourcePdfUrl: sourcePdfUrl,
+                targetPdfUrl: targetPdfUrl,
+                linkedScroll: _revisionLinkedScrollEnabled,
+                navigationController: _pdfCompareNavigationController,
+              ),
             ),
           ),
         ),
@@ -1220,10 +1301,13 @@ class _TranslationFullComparePreviewTabState
     return PreviewZoomableViewport(
       controller: _viewportController,
       childHandlesVerticalScroll: true,
-      child: _buildPdfCompareContinuousView(
-        sourcePdfUrl: sourcePdfUrl,
-        targetPdfUrl: targetPdfUrl,
-        linkedScroll: _syncScrollEnabled,
+      child: _wrapPdfPreviewRefreshingOverlay(
+        l10n,
+        _buildPdfCompareContinuousView(
+          sourcePdfUrl: sourcePdfUrl,
+          targetPdfUrl: targetPdfUrl,
+          linkedScroll: _syncScrollEnabled,
+        ),
       ),
     );
   }

@@ -40,3 +40,26 @@ def test_unbalanced_left_right_is_unsafe():
 def test_tag_is_unsafe():
     body = r"x = 1\tag{10}"
     assert mitex_unsafe_reason(body) == "latex_tag"
+
+
+def test_right_text_is_unsafe():
+    body = r"\left\lfloor a \right\text{ceil}"
+    assert mitex_unsafe_reason(body) == "invalid_right_delimiter"
+
+
+def test_markdown_line_with_right_text_is_unsafe():
+    from layout.pdf_renderer.typst_overlay.mitex_math_safety import (
+        markdown_line_safe_for_mitex,
+    )
+
+    line = r"4 | $\left\lfloor c_{n}^{t+1} \right\text{ceil} \leftarrow a;$"
+    assert not markdown_line_safe_for_mitex(line)
+
+
+def test_markdown_line_with_simple_math_is_safe():
+    from layout.pdf_renderer.typst_overlay.mitex_math_safety import (
+        markdown_line_safe_for_mitex,
+    )
+
+    line = "输入：全局轮次 $T$，本地轮次 $R$。"
+    assert markdown_line_safe_for_mitex(line)

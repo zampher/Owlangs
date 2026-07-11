@@ -3850,6 +3850,30 @@ class AppLocalizationsJa extends AppLocalizations {
   String get segmentTableStrokeMenuTitle => '線幅';
 
   @override
+  String get segmentTableBorderMenuTitle => '線のスタイル';
+
+  @override
+  String get segmentTableBorderGrid => '全罫線';
+
+  @override
+  String get segmentTableBorderBooktabs => '3本線（見出し1行）';
+
+  @override
+  String get segmentTableBorderBooktabs2 => '3本線（見出し2行）';
+
+  @override
+  String get segmentTableBorderBooktabs3 => '3本線（見出し3行）';
+
+  @override
+  String get segmentTableBorderHorizontal => '横線のみ';
+
+  @override
+  String get segmentTableBorderOuter => '外枠';
+
+  @override
+  String get segmentTableBorderNone => '線なし';
+
+  @override
   String get segmentItemExclude => '除外';
 
   @override
@@ -4038,6 +4062,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get translationPreviewRefreshPdf => 'PDF を更新';
+
+  @override
+  String get translationPreviewPdfUpdating => 'PDF を更新中…';
 
   @override
   String get translationPreviewBatchFont => 'フォント';

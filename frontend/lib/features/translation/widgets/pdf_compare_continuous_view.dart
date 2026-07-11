@@ -77,6 +77,7 @@ class PdfCompareContinuousView extends StatefulWidget {
     this.editBboxRect,
     this.onEditBboxChanged,
     this.onEditBboxReset,
+    this.onLoadSettled,
   });
 
   final String sourceDownloadUrl;
@@ -113,6 +114,9 @@ class PdfCompareContinuousView extends StatefulWidget {
 
   /// Called when the user taps reset on a specific bbox overlay.
   final BboxEditResetCallback? onEditBboxReset;
+
+  /// Called after PDF compare load attempt finishes (success or failure).
+  final VoidCallback? onLoadSettled;
 
   @override
   State<PdfCompareContinuousView> createState() =>
@@ -612,7 +616,9 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     if (_loadPending && mounted) {
       _loadPending = false;
       unawaited(_loadDocuments(reason: 'queued'));
+      return;
     }
+    widget.onLoadSettled?.call();
   }
 
   Widget _buildErrorState() {

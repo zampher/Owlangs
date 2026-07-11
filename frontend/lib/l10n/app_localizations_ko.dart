@@ -3859,6 +3859,30 @@ class AppLocalizationsKo extends AppLocalizations {
   String get segmentTableStrokeMenuTitle => '선 두께';
 
   @override
+  String get segmentTableBorderMenuTitle => '선 스타일';
+
+  @override
+  String get segmentTableBorderGrid => '전체 격자';
+
+  @override
+  String get segmentTableBorderBooktabs => '3선（제목 1행）';
+
+  @override
+  String get segmentTableBorderBooktabs2 => '3선（제목 2행）';
+
+  @override
+  String get segmentTableBorderBooktabs3 => '3선（제목 3행）';
+
+  @override
+  String get segmentTableBorderHorizontal => '가로선';
+
+  @override
+  String get segmentTableBorderOuter => '외곽선';
+
+  @override
+  String get segmentTableBorderNone => '선 없음';
+
+  @override
   String get segmentItemExclude => '제외';
 
   @override
@@ -4048,6 +4072,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get translationPreviewRefreshPdf => 'PDF 새로고침';
+
+  @override
+  String get translationPreviewPdfUpdating => 'PDF 업데이트 중…';
 
   @override
   String get translationPreviewBatchFont => '글꼴';

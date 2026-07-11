@@ -1128,6 +1128,7 @@ async def update_segment_api(
     pdf_font_reset = bool(body.get("pdf_font_reset", False))
     rotation = body.get("rotation")
     table_stroke_pt = body.get("table_stroke_pt")
+    table_border_style = body.get("table_border_style")
     layout_block_bbox_override = body.get("layout_block_bbox_override")
     layout_block_bbox_reset = bool(body.get("layout_block_bbox_reset", False))
     layout_block_index = body.get("layout_block_index")
@@ -1154,6 +1155,7 @@ async def update_segment_api(
         pdf_font_reset=pdf_font_reset,
         rotation=rotation,
         table_stroke_pt=table_stroke_pt,
+        table_border_style=table_border_style,
         layout_block_bbox_override=layout_block_bbox_override,
         layout_block_bbox_reset=layout_block_bbox_reset,
         layout_block_index=layout_block_index,

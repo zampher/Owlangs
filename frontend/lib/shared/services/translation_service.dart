@@ -674,6 +674,7 @@ class TranslationService {
     bool pdfFontReset = false,
     int? rotation,
     double? tableStrokePt,
+    String? tableBorderStyle,
     List<double>? layoutBlockBboxOverride,
     bool layoutBlockBboxReset = false,
     int? layoutBlockIndex,
@@ -688,6 +689,7 @@ class TranslationService {
     if (modifiedBy != null) body['modified_by'] = modifiedBy;
     if (rotation != null) body['rotation'] = rotation;
     if (tableStrokePt != null) body['table_stroke_pt'] = tableStrokePt;
+    if (tableBorderStyle != null) body['table_border_style'] = tableBorderStyle;
     if (layoutBlockBboxReset) {
       body['layout_block_bbox_reset'] = true;
       if (layoutBlockIndex != null) {

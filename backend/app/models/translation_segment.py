@@ -65,6 +65,8 @@ class TranslationSegment:
 
     # Optional table grid stroke width for PDF overlay tables (pt). 0 = hidden.
     table_stroke_pt: Optional[float] = None
+    # Optional table border style: grid | booktabs | booktabs_2 | booktabs_3 | horizontal | outer | none
+    table_border_style: Optional[str] = None
     
     @classmethod
     def create(
@@ -127,6 +129,7 @@ class TranslationSegment:
             "leading_em": self.leading_em,
             "rotation": self.rotation,
             "table_stroke_pt": self.table_stroke_pt,
+            "table_border_style": self.table_border_style,
         }
     
     @classmethod
@@ -167,6 +170,7 @@ class TranslationSegment:
             leading_em=data.get("leading_em"),
             rotation=data.get("rotation", 0),
             table_stroke_pt=data.get("table_stroke_pt"),
+            table_border_style=data.get("table_border_style"),
         )
     
     def update_target_text(self, new_text: str, modified_by: Optional[str] = None) -> None:

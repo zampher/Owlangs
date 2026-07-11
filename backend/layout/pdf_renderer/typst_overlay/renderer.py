@@ -1247,6 +1247,21 @@ class TypstOverlayRenderer(BasePDFRenderer):
             return DEFAULT_TABLE_STROKE_PT
         return max(0.0, stroke_pt)
 
+    def _block_table_border_style(self, block_key: int) -> str:
+        """Return table border style for a layout block (default grid)."""
+        from layout.pdf_renderer.typst_overlay.table_border_style import (
+            DEFAULT_TABLE_BORDER_STYLE,
+            normalize_table_border_style,
+        )
+
+        overrides = getattr(
+            self.config, "table_border_style_by_block_index", None,
+        ) or {}
+        if block_key not in overrides:
+            return DEFAULT_TABLE_BORDER_STYLE
+        style = normalize_table_border_style(overrides.get(block_key))
+        return style or DEFAULT_TABLE_BORDER_STYLE
+
     def _apply_block_typography_overrides(
         self,
         rb: RenderBlock,
@@ -1617,28 +1632,12 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     if self.config.translated_text_by_block_index:
                         translated = self.config.translated_text_by_block_index.get(block_key, "")
                     if translated:
-                        per_segment_blocks = self._build_per_segment_table_overlay_blocks(
-                            block,
-                            block_key,
-                            page.page_index,
-                            page_width_pt,
-                            skip_overlay,
-                            segment_bbox_overlay_blocks=segment_bbox_overlay_block_indices,
-                        )
-                        if per_segment_blocks:
-                            blocks.extend(per_segment_blocks)
-                            total_blocks += len(per_segment_blocks)
-                            skipped_blocks.append((
-                                getattr(block, 'index', '?'),
-                                getattr(block, 'type', '?'),
-                                "table_per_segment_overlay",
-                                block.bbox,
-                            ))
-                            continue
-
                         _cap, table_body, _fn = self._extract_caption_footnote_from_translated(
                             translated,
                         )
+                        # Prefer dedicated table overlay when markdown table body exists.
+                        # Bbox override and border styles are applied on this path; per-segment
+                        # text overlay would drop table render_kind and table_border_style.
                         if table_body and table_body.strip():
                             tb_rb = layout_block_to_render_block(
                                 block,
@@ -1659,35 +1658,56 @@ class TypstOverlayRenderer(BasePDFRenderer):
                             tb_rb = self._apply_block_typography_overrides(tb_rb, block_key)
                             tb_rb.rotation = self._block_rotation(block_key)
                             tb_rb.table_stroke_pt = self._block_table_stroke_pt(block_key)
+                            tb_rb.table_border_style = self._block_table_border_style(
+                                block_key,
+                            )
                             blocks.append(tb_rb)
                             total_blocks += 1
-                        elif translated.strip():
-                            # Table-classified region with free-form translated text
-                            # (not a markdown table body) — render as text overlay.
-                            free_rb = layout_block_to_render_block(
+                        else:
+                            per_segment_blocks = self._build_per_segment_table_overlay_blocks(
                                 block,
-                                page_index=page.page_index,
-                                translated_text=translated.strip(),
-                                block_id=f"block-{block_key}",
+                                block_key,
+                                page.page_index,
+                                page_width_pt,
+                                skip_overlay,
+                                segment_bbox_overlay_blocks=segment_bbox_overlay_block_indices,
                             )
-                            bbox_override = self._block_bbox_override(block_key)
-                            if bbox_override is not None:
-                                free_rb.inner_bbox = bbox_override
-                            free_rb = self._font_fit.calculate_fit_params(
-                                free_rb, page_width_pt=page_width_pt,
-                            )
-                            free_rb = self._apply_block_typography_overrides(
-                                free_rb, block_key,
-                            )
-                            free_rb.rotation = self._block_rotation(block_key)
-                            free_rb.opaque_fill = True
-                            blocks.append(free_rb)
-                            total_blocks += 1
-                            unified_logger.info(
-                                LogModule.RESTOR,
-                                f"[TYPST_OVERLAY] Table block {block_key}: "
-                                "free-form text overlay (no markdown table body)",
-                            )
+                            if per_segment_blocks:
+                                blocks.extend(per_segment_blocks)
+                                total_blocks += len(per_segment_blocks)
+                                skipped_blocks.append((
+                                    getattr(block, 'index', '?'),
+                                    getattr(block, 'type', '?'),
+                                    "table_per_segment_overlay",
+                                    block.bbox,
+                                ))
+                            elif translated.strip():
+                                # Table-classified region with free-form translated text
+                                # (not a markdown table body) — render as text overlay.
+                                free_rb = layout_block_to_render_block(
+                                    block,
+                                    page_index=page.page_index,
+                                    translated_text=translated.strip(),
+                                    block_id=f"block-{block_key}",
+                                )
+                                bbox_override = self._block_bbox_override(block_key)
+                                if bbox_override is not None:
+                                    free_rb.inner_bbox = bbox_override
+                                free_rb = self._font_fit.calculate_fit_params(
+                                    free_rb, page_width_pt=page_width_pt,
+                                )
+                                free_rb = self._apply_block_typography_overrides(
+                                    free_rb, block_key,
+                                )
+                                free_rb.rotation = self._block_rotation(block_key)
+                                free_rb.opaque_fill = True
+                                blocks.append(free_rb)
+                                total_blocks += 1
+                                unified_logger.info(
+                                    LogModule.RESTOR,
+                                    f"[TYPST_OVERLAY] Table block {block_key}: "
+                                    "free-form text overlay (no markdown table body)",
+                                )
 
                     # Still skip (don't fall through to text handling) — the
                     # caption/footnote blocks above and the table body block here
