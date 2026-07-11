@@ -440,8 +440,15 @@ def compute_image_overlay_effective_font_size_pt(
     line_count = _overlay_line_count(text)
     _, y0, _, y1 = block.bbox
     bbox_h = max(0.1, float(y1) - float(y0))
-    bbox_cap_pt = (bbox_h / line_count) * 0.90
-    layout_line_pt = (bbox_h / line_count) * 0.88
+    from layout.pdf_renderer.typst_overlay.text_metrics import outer_bbox_content_height_pt
+
+    if line_count <= 1:
+        bbox_cap_pt = bbox_h
+        layout_line_pt = bbox_h * 0.88
+    else:
+        content_h = outer_bbox_content_height_pt(bbox_h, float(line_count))
+        bbox_cap_pt = content_h
+        layout_line_pt = (content_h / line_count) * 0.88
 
     candidates: List[float] = [bbox_cap_pt, layout_line_pt]
     layout_pt = _mineru_layout_font_size_pt(block)

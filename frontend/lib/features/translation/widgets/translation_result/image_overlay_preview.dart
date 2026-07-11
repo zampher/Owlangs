@@ -409,12 +409,7 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
     _load();
   }
 
-  bool _isCtrlPressed() {
-    return HardwareKeyboard.instance.logicalKeysPressed
-            .contains(LogicalKeyboardKey.controlLeft) ||
-        HardwareKeyboard.instance.logicalKeysPressed
-            .contains(LogicalKeyboardKey.controlRight);
-  }
+  bool _isCtrlPressed() => previewCtrlKeyPressed();
 
   void _onPointerSignal(PointerSignalEvent event) {
     if (!_isCtrlPressed() || event is! PointerScrollEvent || !mounted) return;
@@ -423,8 +418,12 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
     if (dy == 0) return;
     final double currentScale =
         _sourceTransformController.value.getMaxScaleOnAxis();
-    final double factor = 1.0 - dy * 0.002;
-    final double nextScale = (currentScale * factor).clamp(0.5, 5.0);
+    final double nextScale = previewApplyCtrlWheelZoom(
+      currentScale,
+      dy,
+      minScale: 0.5,
+      maxScale: 5.0,
+    );
     final Matrix4 matrix = Matrix4.diagonal3Values(nextScale, nextScale, 1.0);
     _sourceTransformController.value = matrix;
     // _onSourceTransformChanged syncs target and viewport automatically.
@@ -673,6 +672,7 @@ class _ImageOverlayCompareViewState extends State<ImageOverlayCompareView> {
         ? widget.sourceHighlightRects
         : widget.highlightRects;
     return Listener(
+      behavior: HitTestBehavior.translucent,
       onPointerSignal: _onPointerSignal,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,

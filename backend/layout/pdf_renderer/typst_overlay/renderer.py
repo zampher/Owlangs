@@ -658,7 +658,10 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     **{
                         **gp_block.__dict__,
                         "fit_to_box": True,
-                        "fit_max_height_pt": gp_height * 0.9,
+                        "fit_max_height_pt": max(
+                            1.0,
+                            gp_block.inner_bbox[3] - gp_block.inner_bbox[1],
+                        ),
                         "fit_min_font_size_pt": max(
                             self._font_fit.min_size_pt,
                             gp_block.font_size_pt * 0.5,
@@ -1926,7 +1929,10 @@ class TypstOverlayRenderer(BasePDFRenderer):
                             **{
                                 **cp_block.__dict__,
                                 "fit_to_box": True,
-                                "fit_max_height_pt": cp_height * 0.9,
+                                "fit_max_height_pt": max(
+                                    1.0,
+                                    cp_block.inner_bbox[3] - cp_block.inner_bbox[1],
+                                ),
                                 "fit_min_font_size_pt": max(
                                     self._font_fit.min_size_pt,
                                     cp_block.font_size_pt * 0.5,

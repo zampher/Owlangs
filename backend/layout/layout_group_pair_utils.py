@@ -614,6 +614,39 @@ def is_same_row_parallel_column_pair(
     return abs(py0 - ey0) <= ph * top_align_tol_ratio
 
 
+def is_bottom_left_to_right_top_wrap_pair(
+    primary_bbox: Sequence[float],
+    companion_bbox: Sequence[float],
+    *,
+    page_height: float = 842.0,
+    page_width: float = 595.0,
+    vertical_gap_tol: float = 8.0,
+) -> bool:
+    """True when empty right-column top continues bottom-left primary (vertical reading order)."""
+    del page_height  # reserved for future page-relative thresholds
+    if len(primary_bbox) != 4 or len(companion_bbox) != 4:
+        return False
+    if is_same_row_parallel_column_pair(
+        primary_bbox,
+        companion_bbox,
+        page_width=page_width,
+    ):
+        return False
+    if not paddle_group_cross_column_pair(
+        primary_bbox,
+        companion_bbox,
+        page_width=page_width,
+    ):
+        return False
+    try:
+        py0 = float(primary_bbox[1])
+        ey0 = float(companion_bbox[1])
+    except (TypeError, ValueError):
+        return False
+    # After reading the left column top-to-bottom, the right column resumes at the top.
+    return ey0 + vertical_gap_tol < py0
+
+
 def is_flow_column_continuation_bbox(
     primary_bbox: Sequence[float],
     companion_bbox: Sequence[float],

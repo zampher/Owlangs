@@ -7,6 +7,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 _OWLANGS = Path(__file__).resolve().parent.parent.parent.parent
 if str(_OWLANGS) not in sys.path:
     sys.path.insert(0, str(_OWLANGS))
@@ -104,7 +106,9 @@ def test_build_layout_group_companion_render_blocks_emits_typst():
     assert typst_src.strip(), "companion typst source must not be empty"
     assert companion_rb.plain_text, "companion must retain text"
     assert companion_rb.inner_bbox != ref_rb.inner_bbox
-    assert companion_rb.inner_bbox == (301.387, 522.908, 552.792, 662.383)
+    assert companion_rb.inner_bbox == pytest.approx(
+        (301.387, 523.698, 552.792, 661.593), abs=0.02,
+    )
 
 
 def test_build_layout_group_companion_render_blocks_corrects_stale_pair_bbox():
@@ -173,7 +177,9 @@ def test_build_layout_group_companion_render_blocks_corrects_stale_pair_bbox():
         unified_ref_leading_em=None,
     )
     _, companion_rb = companions[0]
-    assert companion_rb.inner_bbox == (301.387, 522.908, 552.792, 662.383)
+    assert companion_rb.inner_bbox == pytest.approx(
+        (301.387, 523.698, 552.792, 661.593), abs=0.02,
+    )
     assert companion_rb.inner_bbox != ref_rb.inner_bbox
 
 
@@ -299,5 +305,7 @@ def test_companion_render_ignores_duplicate_primary_bbox_override():
         unified_ref_leading_em=None,
     )
     _, companion_rb = companions[0]
-    assert companion_rb.inner_bbox == (301.387, 522.908, 552.792, 662.383)
+    assert companion_rb.inner_bbox == pytest.approx(
+        (301.387, 523.698, 552.792, 661.593), abs=0.02,
+    )
     assert companion_rb.inner_bbox != primary_bbox

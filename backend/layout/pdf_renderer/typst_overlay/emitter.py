@@ -102,6 +102,29 @@ def _typst_set_text_attrs(
 
 PLAIN_LINE_FIT_MAX_CHARS = 40
 MIN_BLOCK_SIZE_PT = 8.0
+
+
+def _block_formula_layout_insets_pt(
+    block: RenderBlock,
+    layout_height_pt: float,
+    text: str,
+) -> tuple[float, float, float]:
+    """Return (top_inset, bottom_inset, content_fit_height) for formula safety padding."""
+    formula_insets = formula_safety_insets_pt(
+        text,
+        block.math_map,
+        font_size_pt=block.font_size_pt,
+        box_height_pt=layout_height_pt,
+    )
+    top = formula_insets.top_pt
+    bottom = formula_insets.bottom_pt
+    content_h = max(
+        MIN_BLOCK_SIZE_PT,
+        layout_height_pt - top - bottom,
+    )
+    return top, bottom, content_h
+
+
 TOC_ENTRY_FONT_PT = 9.6
 TOC_ENTRY_MIN_FONT_PT = 6.8
 TOC_TITLE_PAGE_GAP_PT = 4.0
@@ -256,16 +279,29 @@ def _typst_place_context(x_pt: float, y_pt: float, body_name: str,
             f"}}\n")
 
 
+def _typst_pad_vertical_expr(
+    body_expr: str,
+    content_top_inset_pt: float,
+    content_bottom_inset_pt: float,
+) -> str:
+    """Wrap *body_expr* with Typst vertical pad for formula safety insets."""
+    if content_top_inset_pt <= 0 and content_bottom_inset_pt <= 0:
+        return body_expr
+    return (
+        f"pad(top: {max(0.0, content_top_inset_pt)}pt, "
+        f"bottom: {max(0.0, content_bottom_inset_pt)}pt)"
+        f"[#{{ {body_expr} }}]"
+    )
+
+
 def _typst_markdown_block(body_name: str, width: float, height: float,
                           block_fill: str, body_expr: str,
                           content_top_inset_pt: float = 0.0,
                           content_bottom_inset_pt: float = 0.0) -> str:
     """Generate a Typst #let body = block(...) expression with optional pad insets."""
     if content_top_inset_pt > 0 or content_bottom_inset_pt > 0:
-        body_expr = (
-            f"pad(top: {max(0.0, content_top_inset_pt)}pt, "
-            f"bottom: {max(0.0, content_bottom_inset_pt)}pt)"
-            f"[#{{ {body_expr} }}]"
+        body_expr = _typst_pad_vertical_expr(
+            body_expr, content_top_inset_pt, content_bottom_inset_pt,
         )
     return (f"#let {body_name} = block(width: {width}pt, height: {height}pt"
             f"{block_fill})[#{{ {body_expr} }}]\n")
@@ -647,6 +683,9 @@ def _render_plain_block(block_id: str, block: RenderBlock,
         return ""
 
     font_style = getattr(block, "font_style", None) or "normal"
+    content_top, content_bottom, content_fit_height = _block_formula_layout_insets_pt(
+        block, layout_height, text,
+    )
 
     # Long plain text: use markdown fit rendering (> 40 chars)
     if len(text) > PLAIN_LINE_FIT_MAX_CHARS:
@@ -661,7 +700,7 @@ def _render_plain_block(block_id: str, block: RenderBlock,
             fit_call = _block_markdown_fit_call(
                 block,
                 text_var,
-                min(layout_height * 0.9, block.fit_max_height_pt or layout_height),
+                min(content_fit_height, block.fit_max_height_pt or content_fit_height),
                 font_style,
                 first_indent,
                 justify,
@@ -675,7 +714,9 @@ def _render_plain_block(block_id: str, block: RenderBlock,
         parts = [
             f"#let {text_var} = \"{_prepare_user_text_for_typst(sanitized)}\"",
             _typst_markdown_block(
-                body_var, layout_width, layout_height, block_fill, body_expr),
+                body_var, layout_width, layout_height, block_fill, body_expr,
+                content_top_inset_pt=content_top,
+                content_bottom_inset_pt=content_bottom),
             _typst_place_flow_block(
                 x0, y0, width, height, body_var, var_prefix, rotation,
                 fill_arg=block_fill if rotation in {90, 180, 270} else "",
@@ -687,11 +728,15 @@ def _render_plain_block(block_id: str, block: RenderBlock,
     if block.font_size_locked:
         text_var = f"{var_prefix}_txt"
         box_var = f"{var_prefix}_box"
+        body_inner = (
+            f"{{ {_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; "
+            f"{_typst_cmarker_render_expr(text_var)} }}"
+        )
+        body_expr = _typst_pad_vertical_expr(body_inner, content_top, content_bottom)
         lines = [
             f"#let {text_var} = \"{_prepare_user_text_for_typst(text)}\"",
             f"#let {box_var} = block(width: {layout_width}pt, height: {layout_height}pt{block_fill})"
-            f"[#{{ {_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; "
-            f"{_typst_cmarker_render_expr(text_var)} }}]",
+            f"[#{{ {body_expr} }}]",
             _typst_place_flow_block(
                 x0, y0, width, height, box_var, var_prefix, rotation,
                 fill_arg=block_fill if rotation in {90, 180, 270} else "",
@@ -705,6 +750,14 @@ def _render_plain_block(block_id: str, block: RenderBlock,
     inner_var = f"{var_prefix}_inner"
     outer_var = f"{var_prefix}_bbox"
     rotate_fill = block_fill if rotation in {90, 180, 270} else ""
+    short_body_inner = (
+        "set text(size: scaled-font, weight: "
+        f"\"{block.font_weight}\"{_typst_font_style_clause(font_style)}, fill: {text_fill}); "
+        f"{_typst_cmarker_render_expr(text_var)}"
+    )
+    short_body_expr = _typst_pad_vertical_expr(
+        short_body_inner, content_top, content_bottom,
+    )
 
     lines = [
         f"#let {text_var} = \"{_prepare_user_text_for_typst(text)}\"",
@@ -716,9 +769,7 @@ def _render_plain_block(block_id: str, block: RenderBlock,
         f"{{ {block.font_size_pt}pt * ({layout_width}pt / base-size.width) }} "
         f"else {{ {block.font_size_pt}pt }}",
         f"  let {inner_var} = block(width: {layout_width}pt, height: {layout_height}pt{block_fill})"
-        f"[#{{ set text(size: scaled-font, weight: "
-        f"\"{block.font_weight}\"{_typst_font_style_clause(font_style)}, fill: {text_fill}); "
-        f"{_typst_cmarker_render_expr(text_var)} }}]",
+        f"[#{{ {short_body_expr} }}]",
         *_typst_emit_flow_placement_in_context(
             x0=x0,
             y0=y0,
@@ -849,14 +900,10 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
     first_indent = max(0.0, block.first_line_indent_pt)
     font_style = getattr(block, "font_style", None) or "normal"
 
-    # Calculate formula safety insets (block renderer path)
-    formula_insets = formula_safety_insets_pt(
-        text,
-        block.math_map,
-        font_size_pt=block.font_size_pt,
-        box_height_pt=layout_height,
+    # Formula safety vertical insets (multi-line edge margin lives in shrunk inner_bbox)
+    content_top, content_bottom, content_fit_height = _block_formula_layout_insets_pt(
+        block, layout_height, text,
     )
-    content_fit_height = max(MIN_BLOCK_SIZE_PT, layout_height - formula_insets.total_pt)
 
     # TOC entries (dedicated TOC entry dispatch)
     if block.toc_entries:
@@ -878,8 +925,8 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
                 f"\"{_prepare_user_text_for_typst(v)}\"" for v in line_values) + ("," if len(line_values) == 1 else "") + ")",
             _typst_markdown_block(
                 body_var, layout_width, layout_height, block_fill, body_expr,
-                content_top_inset_pt=formula_insets.top_pt,
-                content_bottom_inset_pt=formula_insets.bottom_pt),
+                content_top_inset_pt=content_top,
+                content_bottom_inset_pt=content_bottom),
             _typst_place_flow_block(
                 x0, y0, width, height, body_var, var_prefix, rotation,
                 fill_arg=rotate_fill,
@@ -903,8 +950,8 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
                 _typst_markdown_block(
                     body_var, fit_w, layout_height, block_fill,
                     f"set text(fill: {text_fill}); {fit_call}",
-                    content_top_inset_pt=formula_insets.top_pt,
-                    content_bottom_inset_pt=formula_insets.bottom_pt),
+                    content_top_inset_pt=content_top,
+                    content_bottom_inset_pt=content_bottom),
                 _typst_place_flow_block(
                     x0, y0, width, height, body_var, var_prefix, rotation,
                     fill_arg=rotate_fill, dy_offset=-shift_up,
@@ -926,8 +973,8 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
             _typst_markdown_block(
                 body_var, layout_width, layout_height, block_fill,
                 f"set text(fill: {text_fill}); {fit_call}",
-                content_top_inset_pt=formula_insets.top_pt,
-                content_bottom_inset_pt=formula_insets.bottom_pt),
+                content_top_inset_pt=content_top,
+                content_bottom_inset_pt=content_bottom),
             _typst_place_flow_block(
                 x0, y0, width, height, body_var, var_prefix, rotation,
                 fill_arg=rotate_fill,
@@ -943,8 +990,8 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
             f"#let {md_var} = \"{_prepare_user_text_for_typst(text)}\"",
             _typst_markdown_block(
                 body_var, layout_width, layout_height, block_fill, body_expr,
-                content_top_inset_pt=formula_insets.top_pt,
-                content_bottom_inset_pt=formula_insets.bottom_pt),
+                content_top_inset_pt=content_top,
+                content_bottom_inset_pt=content_bottom),
             _typst_place_flow_block(
                 x0, y0, width, height, body_var, var_prefix, rotation,
                 fill_arg=rotate_fill,

@@ -28,6 +28,184 @@ SINGLE_LINE_BBOX_HEIGHT_PT = 32.0
 # Typical body-text line height used to infer visual line count from bbox height.
 TYPICAL_BODY_LINE_HEIGHT_PT = 14.0
 
+# One visual line body height as em of font size (matches preserved-stack body em).
+PREDICTED_LINE_BODY_EM = 1.0
+
+# Multi-line bbox: top/bottom margin as this fraction of predicted single-line height.
+BBOX_PER_LINE_EDGE_MARGIN_RATIO = 0.10
+
+# Cap per-edge vertical inset (pt) so large fonts do not reserve excessive margin.
+BBOX_VERTICAL_EDGE_INSET_MAX_PT = 1.5
+
+# Minimum inner height (pt) after shrinking; skip shrink when bbox would collapse.
+BBOX_MIN_INNER_HEIGHT_AFTER_SHRINK_PT = 4.0
+
+
+def predicted_line_height_pt(
+    font_size_pt: Optional[float] = None,
+    *,
+    line_height_pt: Optional[float] = None,
+    body_em: float = PREDICTED_LINE_BODY_EM,
+) -> float:
+    """Predicted single-line vertical extent (pt) for multi-line edge margins."""
+    if line_height_pt is not None and line_height_pt > 0:
+        return float(line_height_pt)
+    if font_size_pt is not None and font_size_pt > 0:
+        return float(font_size_pt) * body_em
+    return TYPICAL_BODY_LINE_HEIGHT_PT
+
+
+def bbox_vertical_edge_inset_pt(
+    line_count: float,
+    *,
+    font_size_pt: Optional[float] = None,
+    line_height_pt: Optional[float] = None,
+) -> float:
+    """
+    Top/bottom inset (pt) before the first and after the last visual line.
+
+    Single-line bboxes use the full height (no edge inset). Multi-line bboxes
+    reserve 10% of the predicted line height at the top and bottom, capped at
+    [BBOX_VERTICAL_EDGE_INSET_MAX_PT] per edge.
+    """
+    if line_count < 2.0:
+        return 0.0
+    line_h = predicted_line_height_pt(
+        font_size_pt,
+        line_height_pt=line_height_pt,
+    )
+    raw = line_h * BBOX_PER_LINE_EDGE_MARGIN_RATIO
+    return min(raw, BBOX_VERTICAL_EDGE_INSET_MAX_PT)
+
+
+def shrink_inner_bbox_vertical(
+    bbox: Tuple[float, float, float, float],
+    line_count: float,
+    *,
+    font_size_pt: Optional[float] = None,
+    line_height_pt: Optional[float] = None,
+) -> Tuple[float, float, float, float]:
+    """Shrink bbox top/bottom by multi-line edge insets (method-1 layout margin)."""
+    inset = bbox_vertical_edge_inset_pt(
+        line_count,
+        font_size_pt=font_size_pt,
+        line_height_pt=line_height_pt,
+    )
+    if inset <= 0:
+        return bbox
+    x0, y0, x1, y1 = bbox
+    new_y0 = y0 + inset
+    new_y1 = y1 - inset
+    if new_y1 - new_y0 < BBOX_MIN_INNER_HEIGHT_AFTER_SHRINK_PT:
+        return bbox
+    return (x0, new_y0, x1, new_y1)
+
+
+def bbox_content_height_pt(
+    bbox_height_pt: float,
+    line_count: float = 1.0,
+    *,
+    font_size_pt: Optional[float] = None,
+    line_height_pt: Optional[float] = None,
+) -> float:
+    """
+    Usable vertical extent (pt) inside an outer OCR bbox before inner_bbox shrink.
+
+    After shrink_render_block_inner_bbox_for_edge_margin, use the inner height
+    directly (max(1.0, y1 - y0)) instead of calling this helper.
+    """
+    return outer_bbox_content_height_pt(
+        bbox_height_pt,
+        line_count,
+        font_size_pt=font_size_pt,
+        line_height_pt=line_height_pt,
+    )
+
+
+def outer_bbox_content_height_pt(
+    bbox_height_pt: float,
+    line_count: float,
+    *,
+    font_size_pt: Optional[float] = None,
+    line_height_pt: Optional[float] = None,
+) -> float:
+    """Content height inside an outer OCR bbox before inner_bbox shrink (previews)."""
+    if bbox_height_pt <= 0:
+        return 1.0
+    inset = bbox_vertical_edge_inset_pt(
+        line_count,
+        font_size_pt=font_size_pt,
+        line_height_pt=line_height_pt,
+    )
+    if inset <= 0:
+        return bbox_height_pt
+    return max(1.0, bbox_height_pt - 2.0 * inset)
+
+
+def line_count_for_vertical_edge_margin(
+    bbox_height_pt: float,
+    layout_raw: Any = None,
+    text: str = "",
+    *,
+    font_size_pt: Optional[float] = None,
+    bbox_width_pt: Optional[float] = None,
+) -> float:
+    """
+    Conservative visual line count for shrinking inner_bbox.
+
+    Avoids treating short single-line text as multi-line when only the default
+    font size makes a tight bbox look tall; still honors OCR tall boxes (patent
+    headers) and real width-wrap / embedded newlines.
+    """
+    if bbox_height_pt <= 0:
+        return 1.0
+
+    embedded_lines = float(count_visual_lines_from_content(text, layout_raw))
+    if embedded_lines > 1.0:
+        return max(
+            embedded_lines,
+            estimate_visual_line_count(
+                bbox_height_pt, layout_raw, text=text, font_size_pt=font_size_pt,
+            ),
+        )
+
+    wrap_lines = 1.0
+    if bbox_width_pt and bbox_width_pt > 0 and font_size_pt and font_size_pt > 0:
+        typo_units = estimate_typographic_units(text, layout_raw)
+        chars_per_line = max(
+            1.0,
+            bbox_width_pt / (font_size_pt * LATIN_CHAR_WIDTH_RATIO),
+        )
+        wrap_lines = typo_units / chars_per_line
+
+    if wrap_lines >= 1.05:
+        return max(
+            2.0,
+            wrap_lines,
+            estimate_visual_line_count(
+                bbox_height_pt, layout_raw, text=text, font_size_pt=font_size_pt,
+            ),
+        )
+
+    height_lines_ref = estimate_visual_line_count(
+        bbox_height_pt, layout_raw, text=text, font_size_pt=None,
+    )
+    if height_lines_ref >= 1.85:
+        return max(2.0, height_lines_ref)
+
+    if font_size_pt and font_size_pt > 0:
+        height_lines_font = estimate_visual_line_count(
+            bbox_height_pt, layout_raw, text=text, font_size_pt=font_size_pt,
+        )
+        if height_lines_font >= 2.0 and wrap_lines >= 0.35:
+            return max(2.0, height_lines_font)
+
+    return 1.0
+
+
+# Typical Latin character width-to-font-size ratio (font_fit parity).
+LATIN_CHAR_WIDTH_RATIO = 0.52
+
 
 def text_contains_math(text: str) -> bool:
     """Return True when text includes inline or display math delimiters."""
@@ -109,6 +287,8 @@ def estimate_visual_line_count(
     bbox_height_pt: float,
     layout_raw: Any = None,
     text: str = "",
+    *,
+    font_size_pt: Optional[float] = None,
 ) -> float:
     """
     Estimate how many visual lines fit in the block bbox.
@@ -121,14 +301,15 @@ def estimate_visual_line_count(
     if bbox_height_pt <= 0:
         return 1.0
 
-    from_height = max(1.0, bbox_height_pt / TYPICAL_BODY_LINE_HEIGHT_PT)
+    line_h = predicted_line_height_pt(font_size_pt)
+    from_height = max(1.0, bbox_height_pt / line_h)
     from_raw = float(count_non_cross_page_lines(layout_raw)) if layout_raw else 1.0
     embedded_lines = float(count_visual_lines_from_content(text, layout_raw))
 
     if bbox_height_pt <= SINGLE_LINE_BBOX_HEIGHT_PT:
         if embedded_lines > 1.0:
             return max(embedded_lines, from_height)
-        # ~26pt+ bbox fits two ~9–10pt lines (27/14 ≈ 1.93 was misclassified as one line).
+        # Compact two-line fields: use font-aware line height (not fixed 14pt).
         if from_height >= 1.85:
             return max(2.0, from_height, from_raw if from_raw > 1.0 else from_height)
         return 1.0

@@ -250,7 +250,7 @@ def test_enrich_segment_image_block_with_overlay_text():
     assert computed >= FONT_SIZE_PT_MIN
     # Effective overlay size is bbox-capped, not raw Typst estimate alone.
     _, y0, _, y1 = layout_doc.pages[0].blocks[0].bbox
-    bbox_cap = ((float(y1) - float(y0)) * 0.90)
+    bbox_cap = (float(y1) - float(y0))
     assert computed <= bbox_cap + 0.05
 
 

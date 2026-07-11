@@ -286,22 +286,20 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     }
   }
 
-  bool _isCtrlPressed() {
-    return HardwareKeyboard.instance.logicalKeysPressed
-            .contains(LogicalKeyboardKey.controlLeft) ||
-        HardwareKeyboard.instance.logicalKeysPressed
-            .contains(LogicalKeyboardKey.controlRight);
-  }
+  bool _isCtrlPressed() => previewCtrlKeyPressed();
 
   void _onPointerSignal(PointerSignalEvent event) {
     if (!_isCtrlPressed() || event is! PointerScrollEvent || !mounted) return;
     final PointerScrollEvent scroll = event;
     final double dy = scroll.scrollDelta.dy;
     if (dy == 0) return;
-    // Positive dy = scroll down → zoom out; negative dy → zoom in.
     final double currentScale = _sourceZoomController.value.getMaxScaleOnAxis();
-    final double factor = 1.0 - dy * 0.002;
-    final double nextScale = (currentScale * factor).clamp(0.5, 5.0);
+    final double nextScale = previewApplyCtrlWheelZoom(
+      currentScale,
+      dy,
+      minScale: 0.5,
+      maxScale: 5.0,
+    );
     final Matrix4 matrix = Matrix4.diagonal3Values(nextScale, nextScale, 1.0);
     // _onSourceZoomChanged syncs target and viewport automatically.
     _sourceZoomController.value = matrix;
@@ -650,6 +648,7 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
         : target.pagesCount;
 
     return Listener(
+      behavior: HitTestBehavior.translucent,
       onPointerSignal: _onPointerSignal,
       child: Scrollbar(
         controller: _scrollController,
@@ -737,6 +736,7 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
       children: <Widget>[
         Expanded(
           child: Listener(
+            behavior: HitTestBehavior.translucent,
             onPointerSignal: _onPointerSignal,
             child: Scrollbar(
               controller: _sourceScrollController,
@@ -781,6 +781,7 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
         SizedBox(width: widget.columnGap),
         Expanded(
           child: Listener(
+            behavior: HitTestBehavior.translucent,
             onPointerSignal: _onPointerSignal,
             child: Scrollbar(
               controller: _targetScrollController,

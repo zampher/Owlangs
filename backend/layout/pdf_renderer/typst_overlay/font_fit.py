@@ -11,17 +11,21 @@ based on the bounding box dimensions of each layout block.
 import math
 import re
 import statistics
-from typing import Any, List, Optional, Tuple
+from dataclasses import replace
+from typing import Any, Callable, List, Optional, Tuple
 
 from layout.pdf_renderer.typst_overlay.models import RenderBlock
 from layout.pdf_renderer.typst_overlay.text_metrics import (
     block_needs_math_fit,
+    bbox_content_height_pt,
     count_embedded_newlines,
     count_non_cross_page_lines,
     count_visual_lines_from_content,
     estimate_typographic_units,
     estimate_visual_line_count,
     is_single_line_bbox,
+    line_count_for_vertical_edge_margin,
+    shrink_inner_bbox_vertical,
     SINGLE_LINE_BBOX_HEIGHT_PT,
 )
 
@@ -33,8 +37,6 @@ CJK_CHAR_WIDTH_RATIO = 1.0
 # Typical Latin character width-to-font-size ratio (approximately 0.5 for mixed text)
 LATIN_CHAR_WIDTH_RATIO = 0.52
 
-# Margin inside the bbox to leave around text (as fraction of bbox height)
-BBOX_VERTICAL_MARGIN_RATIO = 0.15
 BBOX_HORIZONTAL_MARGIN_PT = 4.0
 
 # Font size ranges
@@ -55,8 +57,6 @@ REF_TEXT_FONT_QUANTIZE_STEP_PT = 0.5
 REF_TEXT_UNIFIED_FONT_OFFSET_PT = -0.5
 # Per-line glyph box height as em of font size (Typst par leading is extra gap).
 REF_TEXT_LINE_METRICS_EM = 0.88
-# Target render height as a fraction of ref_text bbox height.
-REF_TEXT_FIT_HEIGHT_RATIO = 0.90
 REF_TEXT_MIN_LEADING_EM = 0.48
 REF_TEXT_MAX_LEADING_EM = 0.72
 REF_TEXT_LEADING_QUANTIZE_STEP_EM = 0.05
@@ -160,7 +160,9 @@ def title_wrap_would_exceed_bbox_height(
     wrap_lines = max(1, int(math.ceil(text_width / max(bbox_width, 1.0))))
     if wrap_lines <= 1:
         return False
-    available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
+    available_h = bbox_content_height_pt(
+        bbox_height, float(wrap_lines), font_size_pt=font_size_pt,
+    )
     needed_h = preserved_stack_render_height_pt(
         float(wrap_lines), font_size_pt, leading_em,
     )
@@ -319,7 +321,7 @@ def estimate_short_header_font_size_pt(
         return DEFAULT_FONT_SIZE_PT
 
     raw_line_count = max(1, count_non_cross_page_lines(layout_raw))
-    available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
+    available_h = bbox_content_height_pt(bbox_height, float(raw_line_count))
     if raw_line_count <= 1:
         estimated = min(
             bbox_height * SHORT_HEADER_FONT_HEIGHT_RATIO,
@@ -350,12 +352,12 @@ def estimate_title_font_size_pt(
         return DEFAULT_FONT_SIZE_PT
 
     raw_line_count = max(1, count_non_cross_page_lines(layout_raw))
-    available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
 
     if (
         bbox_height <= TIGHT_TITLE_BBOX_HEIGHT_PT
         and raw_line_count == 1
     ):
+        visual_lines = 1.0
         estimated = bbox_height * TITLE_SINGLE_LINE_FONT_HEIGHT_RATIO
     elif (
         bbox_height <= SINGLE_LINE_BBOX_HEIGHT_PT
@@ -365,12 +367,14 @@ def estimate_title_font_size_pt(
             2.0,
             bbox_height / TITLE_TYPICAL_LINE_HEIGHT_PT,
         )
+        available_h = bbox_content_height_pt(bbox_height, visual_lines)
         estimated = available_h / (visual_lines * TITLE_LEADING_EM)
     else:
         visual_lines = max(
             float(raw_line_count),
             bbox_height / TITLE_TYPICAL_LINE_HEIGHT_PT,
         )
+        available_h = bbox_content_height_pt(bbox_height, visual_lines)
         estimated = available_h / (visual_lines * TITLE_LEADING_EM)
 
     clamped = max(min_size_pt, min(max_size_pt, estimated))
@@ -486,10 +490,14 @@ def _estimate_line_count(
     chars_per_line: float,
     layout_raw: Any,
     text: str = "",
+    *,
+    font_size_pt: Optional[float] = None,
 ) -> float:
     """Combine visual, width-wrap, and block-type signals for line count."""
     wrap_lines = typo_units / max(chars_per_line, 1.0)
-    visual_lines = estimate_visual_line_count(bbox_height, layout_raw, text=text)
+    visual_lines = estimate_visual_line_count(
+        bbox_height, layout_raw, text=text, font_size_pt=font_size_pt,
+    )
     embedded_lines = float(count_visual_lines_from_content(text, layout_raw))
     if embedded_lines > 1.0:
         visual_lines = max(visual_lines, embedded_lines)
@@ -507,9 +515,86 @@ def _is_true_single_visual_line(
     bbox_height: float,
     layout_raw: Any,
     text: str = "",
+    *,
+    font_size_pt: Optional[float] = None,
 ) -> bool:
     """True when the block bbox fits exactly one visual text line."""
-    return estimate_visual_line_count(bbox_height, layout_raw, text=text) <= 1.05
+    return estimate_visual_line_count(
+        bbox_height, layout_raw, text=text, font_size_pt=font_size_pt,
+    ) <= 1.05
+
+
+def _visual_line_count_for_edge_margin(
+    block: RenderBlock,
+    layout_raw: Any,
+    *,
+    font_size_pt: float,
+) -> float:
+    """Line count used to decide multi-line inner_bbox vertical shrink."""
+    text = block.plain_text or block.markdown_text or ""
+    _, y0, _, y1 = block.inner_bbox
+    bbox_height = max(1.0, y1 - y0)
+    x0, _, x1, _ = block.inner_bbox
+    bbox_width = max(1.0, x1 - x0)
+    if block.preserve_line_breaks and count_embedded_newlines(text, layout_raw) > 0:
+        return estimate_preserved_stack_visual_lines(
+            text, bbox_width, font_size_pt,
+        )
+    return line_count_for_vertical_edge_margin(
+        bbox_height,
+        layout_raw,
+        text=text,
+        font_size_pt=font_size_pt,
+        bbox_width_pt=bbox_width,
+    )
+
+
+def shrink_render_block_inner_bbox_for_edge_margin(
+    block: RenderBlock,
+    layout_raw: Any = None,
+    *,
+    estimate_font_size: Optional[
+        Callable[[RenderBlock, Any], float]
+    ] = None,
+) -> RenderBlock:
+    """Apply method-1 margin by shrinking inner_bbox (10% line height, max 1.5pt/edge)."""
+    if block.skip_reason or block.render_kind in ("image", "table"):
+        return block
+    block_type = _layout_block_type(layout_raw)
+    text = block.plain_text or block.markdown_text or ""
+    if is_page_header_layout(layout_raw, block_type=block_type):
+        return block
+    if (
+        is_title_layout(layout_raw, block_type=block_type)
+        and should_use_title_font_sizing(
+            text,
+            layout_raw,
+            max(1.0, block.inner_bbox[3] - block.inner_bbox[1]),
+            block_type=block_type,
+        )
+    ):
+        return block
+    if not text.strip():
+        return block
+
+    font_size_pt = block.font_size_pt
+    if (
+        estimate_font_size is not None
+        and (font_size_pt <= 0 or font_size_pt == DEFAULT_FONT_SIZE_PT)
+    ):
+        font_size_pt = estimate_font_size(block, layout_raw)
+
+    line_count = _visual_line_count_for_edge_margin(
+        block, layout_raw, font_size_pt=font_size_pt,
+    )
+    shrunk = shrink_inner_bbox_vertical(
+        block.inner_bbox,
+        line_count,
+        font_size_pt=font_size_pt,
+    )
+    if shrunk == block.inner_bbox:
+        return block
+    return replace(block, inner_bbox=shrunk)
 
 
 class FontFitCalculator:
@@ -529,6 +614,8 @@ class FontFitCalculator:
         self,
         block: RenderBlock,
         layout_raw: Any = None,
+        *,
+        inner_bbox_shrunk: bool = False,
     ) -> float:
         """
         Estimate an appropriate font size for a render block.
@@ -559,8 +646,6 @@ class FontFitCalculator:
                 max_size_pt=self.max_size_pt,
             )
 
-        available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
-
         typo_units = estimate_typographic_units(text, layout_raw)
         if typo_units <= 0:
             return self.default_size_pt
@@ -579,7 +664,21 @@ class FontFitCalculator:
             bbox_width / (self.default_size_pt * LATIN_CHAR_WIDTH_RATIO),
         )
         line_count = _estimate_line_count(
-            bbox_height, typo_units, chars_per_line, layout_raw, text=text,
+            bbox_height,
+            typo_units,
+            chars_per_line,
+            layout_raw,
+            text=text,
+            font_size_pt=block.font_size_pt if block.font_size_pt > 0 else None,
+        )
+        available_h = (
+            max(1.0, bbox_height)
+            if inner_bbox_shrunk
+            else bbox_content_height_pt(
+                bbox_height,
+                line_count,
+                font_size_pt=block.font_size_pt if block.font_size_pt > 0 else None,
+            )
         )
 
         estimated = available_h / (line_count * self.default_leading_em)
@@ -588,7 +687,10 @@ class FontFitCalculator:
         if block_type == "ref_text":
             estimated = min(estimated, bbox_height * REF_TEXT_FONT_HEIGHT_RATIO)
         elif (
-            _is_true_single_visual_line(bbox_height, layout_raw, text=text)
+            _is_true_single_visual_line(
+                bbox_height, layout_raw, text=text,
+                font_size_pt=block.font_size_pt if block.font_size_pt > 0 else None,
+            )
             and count_embedded_newlines(text, layout_raw) == 0
         ):
             # Generic short single-line boxes: never exceed what fits one em line.
@@ -641,7 +743,6 @@ class FontFitCalculator:
 
         _, y0, _, y1 = block.inner_bbox
         bbox_height = max(1.0, y1 - y0)
-        fit_height = bbox_height * REF_TEXT_FIT_HEIGHT_RATIO
         body_per_line = font_size_pt * REF_TEXT_LINE_METRICS_EM
 
         text = block.plain_text or block.markdown_text or ""
@@ -653,10 +754,16 @@ class FontFitCalculator:
             bbox_width / max(font_size_pt * LATIN_CHAR_WIDTH_RATIO, 0.1),
         )
         line_count = _estimate_line_count(
-            bbox_height, typo_units, chars_per_line, layout_raw, text=text,
+            bbox_height,
+            typo_units,
+            chars_per_line,
+            layout_raw,
+            text=text,
+            font_size_pt=font_size_pt,
         )
         line_count = max(1.0, line_count)
         visual_lines = max(1, int(math.ceil(line_count - 1e-6)))
+        fit_height = max(1.0, bbox_height)
 
         if visual_lines <= 1:
             remaining = fit_height - body_per_line
@@ -743,7 +850,7 @@ class FontFitCalculator:
                     "fit_min_font_size_pt": font_size,
                     "fit_max_font_size_pt": font_size,
                     "fit_min_leading_em": max(0.9, leading_em * 0.9),
-                    "fit_max_height_pt": bbox_height * 0.9,
+                    "fit_max_height_pt": max(1.0, bbox_height),
                 }
             )
         if _block_width_overflows(block_text, bbox_width, font_size):
@@ -757,7 +864,7 @@ class FontFitCalculator:
                     "fit_min_font_size_pt": self.min_size_pt,
                     "fit_max_font_size_pt": font_size,
                     "fit_min_leading_em": max(0.8, leading_em * 0.7),
-                    "fit_max_height_pt": bbox_height * 0.9,
+                    "fit_max_height_pt": max(1.0, bbox_height),
                 }
             )
         if always_single_line_measure:
@@ -771,7 +878,7 @@ class FontFitCalculator:
                     "fit_min_font_size_pt": self.min_size_pt,
                     "fit_max_font_size_pt": font_size,
                     "fit_min_leading_em": max(0.8, leading_em * 0.7),
-                    "fit_max_height_pt": bbox_height * 0.9,
+                    "fit_max_height_pt": max(1.0, bbox_height),
                 }
             )
         return RenderBlock(
@@ -784,7 +891,7 @@ class FontFitCalculator:
                 "fit_min_font_size_pt": max(self.min_size_pt, font_size * 0.85),
                 "fit_max_font_size_pt": min(self.max_size_pt, font_size * 1.05),
                 "fit_min_leading_em": max(0.9, leading_em * 0.9),
-                "fit_max_height_pt": bbox_height * 0.9,
+                "fit_max_height_pt": max(1.0, bbox_height),
             }
         )
 
@@ -792,6 +899,8 @@ class FontFitCalculator:
         self,
         block: RenderBlock,
         layout_raw: Any = None,
+        *,
+        inner_bbox_shrunk: bool = False,
     ) -> Tuple[float, float]:
         """
         Estimate font size and leading for embedded-newline preserved-stack blocks.
@@ -800,13 +909,26 @@ class FontFitCalculator:
         """
         _, y0, _, y1 = block.inner_bbox
         bbox_height = max(1.0, y1 - y0)
-        available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
         x0, _, x1, _ = block.inner_bbox
         bbox_width = max(1.0, x1 - x0)
         text = block.plain_text or block.markdown_text or ""
 
         leading_em = self.default_leading_em
         visual_lines = float(count_visual_lines_from_content(text, layout_raw))
+
+        def _content_height(
+            height_pt: float,
+            lines: float,
+            *,
+            font_size_pt: Optional[float] = None,
+        ) -> float:
+            if inner_bbox_shrunk:
+                return max(1.0, height_pt)
+            return bbox_content_height_pt(
+                height_pt, lines, font_size_pt=font_size_pt,
+            )
+
+        available_h = _content_height(bbox_height, visual_lines)
         for _ in range(6):
             estimated = available_h / preserved_stack_height_em(
                 visual_lines, leading_em,
@@ -816,6 +938,9 @@ class FontFitCalculator:
             visual_lines = estimate_preserved_stack_visual_lines(
                 text, bbox_width, estimated,
             )
+            available_h = _content_height(
+                bbox_height, visual_lines, font_size_pt=estimated,
+            )
 
         estimated = available_h / preserved_stack_height_em(
             visual_lines, leading_em,
@@ -824,11 +949,14 @@ class FontFitCalculator:
         leading_em = fit_preserved_stack_leading_em(
             estimated,
             visual_lines,
-            available_h,
+            _content_height(bbox_height, visual_lines, font_size_pt=estimated),
             self.estimate_leading(estimated),
         )
         visual_lines = estimate_preserved_stack_visual_lines(
             text, bbox_width, estimated,
+        )
+        available_h = _content_height(
+            bbox_height, visual_lines, font_size_pt=estimated,
         )
         if estimated * preserved_stack_height_em(visual_lines, leading_em) > available_h:
             estimated = available_h / preserved_stack_height_em(
@@ -865,6 +993,11 @@ class FontFitCalculator:
         Returns:
             A new RenderBlock with complete font/fit parameters.
         """
+        block = shrink_render_block_inner_bbox_for_edge_margin(
+            block,
+            layout_raw=layout_raw,
+            estimate_font_size=self.estimate_font_size,
+        )
         block_type = _layout_block_type(layout_raw)
         is_ref_text = is_ref_text_layout(layout_raw, block_type=block_type)
         block_text = block.plain_text or block.markdown_text or ""
@@ -889,7 +1022,9 @@ class FontFitCalculator:
         elif not preserve_font_size and (
             font_size <= 0 or font_size == DEFAULT_FONT_SIZE_PT
         ):
-            font_size = self.estimate_font_size(block, layout_raw=layout_raw)
+            font_size = self.estimate_font_size(
+                block, layout_raw=layout_raw, inner_bbox_shrunk=True,
+            )
 
         leading = block.leading_em
         if use_unified_ref:
@@ -904,7 +1039,7 @@ class FontFitCalculator:
         ):
             if count_embedded_newlines(block_text, layout_raw) > 0:
                 _, leading = self.estimate_preserved_stack_metrics(
-                    block, layout_raw=layout_raw,
+                    block, layout_raw=layout_raw, inner_bbox_shrunk=True,
                 )
             else:
                 leading = self.estimate_leading(font_size)
@@ -924,7 +1059,7 @@ class FontFitCalculator:
                     "fit_min_font_size_pt": font_size,
                     "fit_max_font_size_pt": font_size,
                     "fit_min_leading_em": leading,
-                    "fit_max_height_pt": bbox_height * 0.9,
+                    "fit_max_height_pt": max(1.0, bbox_height),
                 }
             )
 
@@ -959,7 +1094,13 @@ class FontFitCalculator:
         typo_units = estimate_typographic_units(text, layout_raw)
         has_math = block_needs_math_fit(text, layout_raw)
         short_single_line = is_single_line_bbox(bbox_height, layout_raw)
-        visual_lines = estimate_visual_line_count(bbox_height, layout_raw, text=text)
+        visual_lines = line_count_for_vertical_edge_margin(
+            bbox_height,
+            layout_raw,
+            block_text,
+            font_size_pt=font_size,
+            bbox_width_pt=bbox_width,
+        )
         wrap_ratio = typo_units / max(
             1.0, bbox_width / max(font_size * LATIN_CHAR_WIDTH_RATIO, 0.1),
         )
@@ -1007,7 +1148,7 @@ class FontFitCalculator:
                 "fit_min_font_size_pt": max(self.min_size_pt, font_size * 0.5),
                 "fit_max_font_size_pt": min(self.max_size_pt, font_size * 1.2),
                 "fit_min_leading_em": max(0.8, leading * 0.7),
-                "fit_max_height_pt": bbox_height * 0.9,
+                "fit_max_height_pt": max(1.0, bbox_height),
             }
         )
 

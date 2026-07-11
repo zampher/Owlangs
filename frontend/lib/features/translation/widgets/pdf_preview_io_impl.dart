@@ -173,6 +173,7 @@ class _PdfPreviewIoState extends State<PdfPreview> {
       rendererType: _rendererType,
       navigationController: widget.navigationController,
       scrollController: widget.scrollController,
+      viewportController: _viewportController,
       showScrollbar: widget.showScrollbar,
       highlightPageNumber: widget.highlightPageNumber,
       highlightBboxes: widget.highlightBboxes,

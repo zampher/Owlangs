@@ -13,8 +13,11 @@ from layout.layout_group_pair_utils import (
     LAYOUT_GROUP_PAIR_OF_KEY,
     bbox_overlap_over_min_area,
     is_block_claimed_for_layout_group_pairing,
+    is_bottom_left_to_right_top_wrap_pair,
     is_cross_page_companion_block,
     is_flow_column_continuation_bbox,
+    is_left_column_bbox,
+    is_right_column_bbox,
     is_same_row_parallel_column_pair,
     layout_group_ids_compatible,
     paddle_group_cross_column_pair,
@@ -51,6 +54,14 @@ def _mineru_column_flow_accepts(
         return False
     if len(primary.bbox) != 4 or len(companion.bbox) != 4:
         return False
+    if not _has_recognized_text(companion):
+        if is_bottom_left_to_right_top_wrap_pair(
+            primary.bbox,
+            companion.bbox,
+            page_height=page_height,
+            page_width=page_width,
+        ):
+            return True
     if is_same_row_parallel_column_pair(
         primary.bbox,
         companion.bbox,
@@ -71,6 +82,67 @@ def _mineru_column_flow_accepts(
         page_height=page_height,
         page_width=page_width,
     )
+
+
+def _is_right_column_topmost_empty(
+    empty: LayoutBlock,
+    text_blocks: List[LayoutBlock],
+    *,
+    page_width: float,
+    y_tol: float = 20.0,
+) -> bool:
+    """True when empty sits at the top of the right column on its page."""
+    if empty.bbox is None or len(empty.bbox) != 4:
+        return False
+    if not is_right_column_bbox(empty.bbox, page_width=page_width):
+        return False
+    try:
+        ey0 = float(empty.bbox[1])
+    except (TypeError, ValueError):
+        return False
+    right_y0_values: List[float] = []
+    for block in text_blocks:
+        if block.page_index != empty.page_index:
+            continue
+        if block.bbox is None or len(block.bbox) != 4:
+            continue
+        if not is_right_column_bbox(block.bbox, page_width=page_width):
+            continue
+        try:
+            right_y0_values.append(float(block.bbox[1]))
+        except (TypeError, ValueError):
+            continue
+    if not right_y0_values:
+        return False
+    return ey0 <= min(right_y0_values) + y_tol
+
+
+def _bottommost_left_column_text_block(
+    text_blocks: List[LayoutBlock],
+    *,
+    page_index: int,
+    page_width: float,
+) -> Optional[LayoutBlock]:
+    """Return the left-column text block with the lowest bottom edge on the page."""
+    best: Optional[LayoutBlock] = None
+    best_y1 = -1.0
+    for block in text_blocks:
+        if not _has_recognized_text(block):
+            continue
+        if block.page_index != page_index:
+            continue
+        if block.bbox is None or len(block.bbox) != 4:
+            continue
+        if not is_left_column_bbox(block.bbox, page_width=page_width):
+            continue
+        try:
+            y1 = float(block.bbox[3])
+        except (TypeError, ValueError):
+            continue
+        if y1 > best_y1:
+            best_y1 = y1
+            best = block
+    return best
 
 
 def apply_mineru_merge_prev_layout_group_pairs(
@@ -181,6 +253,32 @@ def apply_mineru_spatial_layout_group_pairs(
                 break
         if overlaps_existing_block:
             continue
+
+        if _is_right_column_topmost_empty(empty, text_blocks, page_width=page_w):
+            bottom_primary = _bottommost_left_column_text_block(
+                text_blocks,
+                page_index=empty.page_index,
+                page_width=page_w,
+            )
+            if (
+                bottom_primary is not None
+                and bottom_primary.index is not None
+                and bottom_primary.index != empty.index
+                and bottom_primary.bbox is not None
+                and is_bottom_left_to_right_top_wrap_pair(
+                    bottom_primary.bbox,
+                    empty.bbox,
+                    page_height=page_h,
+                    page_width=page_w,
+                )
+            ):
+                bottom_raw = (
+                    bottom_primary.raw if isinstance(bottom_primary.raw, dict) else {}
+                )
+                if not is_cross_page_companion_block(bottom_raw):
+                    _attach_layout_group_pair(bottom_primary, empty)
+                    paired += 1
+                    continue
 
         empty_gid = empty_raw.get("group_id")
         best_primary: Optional[LayoutBlock] = None

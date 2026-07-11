@@ -6,7 +6,6 @@
 import unittest
 
 from layout.pdf_renderer.typst_overlay.font_fit import (
-    BBOX_VERTICAL_MARGIN_RATIO,
     FontFitCalculator,
     REF_TEXT_MAX_LEADING_EM,
     estimate_preserved_stack_visual_lines,
@@ -664,12 +663,12 @@ class TestFontFitCalculator(unittest.TestCase):
         fitted = calc.calculate_fit_params(block, layout_raw=raw)
         self.assertTrue(fitted.preserve_line_breaks)
 
-        bbox_height = bbox[3] - bbox[1]
-        bbox_width = bbox[2] - bbox[0]
-        available_h = bbox_height * (1.0 - BBOX_VERTICAL_MARGIN_RATIO)
+        bbox_height = fitted.inner_bbox[3] - fitted.inner_bbox[1]
+        bbox_width = fitted.inner_bbox[2] - fitted.inner_bbox[0]
         visual_lines = estimate_preserved_stack_visual_lines(
             text, bbox_width, fitted.font_size_pt,
         )
+        available_h = bbox_height
         render_h = preserved_stack_render_height_pt(
             fitted.font_size_pt, visual_lines, fitted.leading_em,
         )
@@ -712,6 +711,33 @@ class TestFontFitCalculator(unittest.TestCase):
         self.assertLessEqual(fitted.font_size_pt, 11.0)
         self.assertGreaterEqual(fitted.font_size_pt, 7.5)
         self.assertTrue(fitted.fit_to_box)
+
+    def test_fit_max_height_single_line_uses_full_bbox(self):
+        calc = FontFitCalculator()
+        bbox = (104.0, 700.0, 504.0, 723.0)
+        block = RenderBlock(
+            block_id="single",
+            page_index=0,
+            inner_bbox=bbox,
+            plain_text="Hello",
+            markdown_text="Hello",
+        )
+        fitted = calc.calculate_fit_params(block, layout_raw={})
+        self.assertAlmostEqual(fitted.fit_max_height_pt, 23.0)
+
+    def test_fit_max_height_two_line_bbox_matches_shrunk_inner_height(self):
+        calc = FontFitCalculator()
+        bbox = (104.0, 511.0, 506.0, 599.0)
+        block = RenderBlock(
+            block_id="multi",
+            page_index=0,
+            inner_bbox=bbox,
+            plain_text="Line one\nLine two",
+            markdown_text="Line one\nLine two",
+        )
+        fitted = calc.calculate_fit_params(block, layout_raw={})
+        inner_h = fitted.inner_bbox[3] - fitted.inner_bbox[1]
+        self.assertAlmostEqual(fitted.fit_max_height_pt, inner_h)
 
 
 if __name__ == "__main__":

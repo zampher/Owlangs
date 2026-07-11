@@ -7,6 +7,26 @@ import 'package:flutter/services.dart';
 
 import '../../../../l10n/app_localizations.dart';
 
+/// Whether the Ctrl key is held (reliable during pointer-scroll on Windows).
+bool previewCtrlKeyPressed() {
+  return HardwareKeyboard.instance.isControlPressed;
+}
+
+/// Applies one Ctrl+wheel step to [currentScale] using [scrollDeltaDy].
+double previewApplyCtrlWheelZoom(
+  double currentScale,
+  double scrollDeltaDy, {
+  required double minScale,
+  required double maxScale,
+}) {
+  if (scrollDeltaDy == 0) {
+    return currentScale;
+  }
+  // Positive dy = scroll down → zoom out; negative dy → zoom in.
+  final double factor = 1.0 - scrollDeltaDy * 0.002;
+  return (currentScale * factor).clamp(minScale, maxScale);
+}
+
 /// Scope for nested preview children (e.g. [PdfView]) to cooperate with
 /// [PreviewZoomableViewport] wheel routing when zoomed.
 class PreviewViewportScope extends InheritedNotifier<PreviewViewportController> {
@@ -32,7 +52,7 @@ class PreviewViewportScope extends InheritedNotifier<PreviewViewportController> 
 }
 
 /// Controls zoom level for preview viewports (PDF/HTML compare, single preview).
-/// Zoom is toolbar-only so mouse wheel stays with child scroll / PDF paging.
+/// Toolbar buttons and Ctrl+mouse wheel update scale; plain wheel stays on scroll.
 class PreviewViewportController extends ChangeNotifier {
   PreviewViewportController({
     this.minScale = 0.5,

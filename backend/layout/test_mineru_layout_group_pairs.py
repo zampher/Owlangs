@@ -96,6 +96,52 @@ def test_spatial_pairs_same_row_empty_companion():
     assert right.raw.get(LAYOUT_GROUP_PAIR_OF_KEY) == 0
 
 
+def test_spatial_pairs_right_top_empty_prefers_bottom_left_primary():
+    """PDFsam-style two-column page: empty right-column top pairs with bottom-left segment."""
+    blocks = [
+        LayoutBlock(
+            page_index=0,
+            bbox=(33.0, 222.0, 290.0, 286.0),
+            type="text",
+            index=1,
+            text="Top-left segment body.",
+            raw={"type": "text"},
+        ),
+        LayoutBlock(
+            page_index=0,
+            bbox=(47.0, 296.0, 290.0, 390.0),
+            type="text",
+            index=2,
+            text="Middle-left segment.",
+            raw={"type": "text"},
+        ),
+        LayoutBlock(
+            page_index=0,
+            bbox=(31.0, 607.0, 293.0, 748.0),
+            type="text",
+            index=9,
+            text="Bottom-left segment before right column continues.",
+            raw={"type": "text"},
+        ),
+        LayoutBlock(
+            page_index=0,
+            bbox=(303.0, 222.0, 560.0, 254.0),
+            type="text",
+            index=10,
+            text="",
+            raw={"type": "text"},
+        ),
+    ]
+    paired = apply_mineru_spatial_layout_group_pairs(
+        blocks,
+        page_height=842.0,
+        page_width=595.0,
+    )
+    assert paired == 1
+    assert blocks[3].raw.get(LAYOUT_GROUP_PAIR_OF_KEY) == 9
+    assert blocks[3].raw.get(LAYOUT_GROUP_PAIR_OF_KEY) != 1
+
+
 def test_spatial_rejects_same_row_parallel_text_blocks():
     left = LayoutBlock(
         page_index=0,

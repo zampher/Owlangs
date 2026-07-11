@@ -4,12 +4,15 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pdfx/pdfx.dart';
 
 import '../../../shared/services/translation_service.dart';
 import 'pdf_continuous_page.dart';
 import 'pdf_page_utils.dart';
+import 'translation_result/preview_viewport.dart';
 
 /// Returns the 1-based page number whose body contains [anchorOffset].
 int visiblePdfPageAtScrollOffset({
@@ -117,6 +120,7 @@ class PdfContinuousScrollView extends StatefulWidget {
     this.bboxEditMode = false,
     this.onEditBboxChanged,
     this.onEditBboxReset,
+    this.viewportController,
   });
 
   final PdfDocument document;
@@ -127,6 +131,9 @@ class PdfContinuousScrollView extends StatefulWidget {
   final Color backgroundColor;
   final void Function(int pageNumber)? onPageVisible;
   final bool showScrollbar;
+
+  /// Optional zoom controller; falls back to [PreviewViewportScope] when omitted.
+  final PreviewViewportController? viewportController;
 
   /// 1-based page number to render the highlight rectangle on.
   final int? highlightPageNumber;
@@ -154,6 +161,7 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
   double _pageWidth = 0;
   List<double>? _pageDisplayHeights;
   int _lastReportedPage = 0;
+  bool _ctrlHeld = false;
 
   @override
   void initState() {
@@ -166,7 +174,64 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
     }
     _scrollController.addListener(_handleScroll);
     widget.navigationController?._attach(this);
+    HardwareKeyboard.instance.addHandler(_onKeyEvent);
     _preloadPageHeights();
+  }
+
+  bool _onKeyEvent(KeyEvent event) {
+    if (!mounted) {
+      return false;
+    }
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.controlLeft ||
+          event.logicalKey == LogicalKeyboardKey.controlRight) {
+        if (!_ctrlHeld) {
+          setState(() {
+            _ctrlHeld = true;
+          });
+        }
+        return false;
+      }
+    }
+    if (event is KeyUpEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.controlLeft ||
+          event.logicalKey == LogicalKeyboardKey.controlRight) {
+        if (_ctrlHeld) {
+          setState(() {
+            _ctrlHeld = false;
+          });
+        }
+        return false;
+      }
+    }
+    return false;
+  }
+
+  PreviewViewportController? _effectiveViewportController() {
+    return widget.viewportController ??
+        PreviewViewportScope.maybeOf(context)?.controller;
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (!previewCtrlKeyPressed() || event is! PointerScrollEvent || !mounted) {
+      return;
+    }
+    final PreviewViewportController? controller = _effectiveViewportController();
+    if (controller == null || controller.childManagesZoom) {
+      return;
+    }
+    final double dy = event.scrollDelta.dy;
+    if (dy == 0) {
+      return;
+    }
+    controller.setScale(
+      previewApplyCtrlWheelZoom(
+        controller.scale,
+        dy,
+        minScale: controller.minScale,
+        maxScale: controller.maxScale,
+      ),
+    );
   }
 
   @override
@@ -296,6 +361,7 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKeyEvent);
     _scrollController.removeListener(_handleScroll);
     widget.navigationController?._detach(this);
     if (_ownsScrollController) {
@@ -307,67 +373,74 @@ class _PdfContinuousScrollViewState extends State<PdfContinuousScrollView> {
   @override
   Widget build(BuildContext context) {
     final int pageCount = widget.document.pagesCount;
-    return ColoredBox(
-      color: widget.backgroundColor,
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          final double pageWidth =
-              (constraints.maxWidth - widget.horizontalPadding * 2)
-                  .clamp(120.0, constraints.maxWidth);
-          if (_pageWidth != pageWidth) {
-            _pageWidth = pageWidth;
-            _pageDisplayHeights = null;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                unawaited(_preloadPageHeights().then((_) {
-                  _maybeApplyPendingJump();
-                }));
-              }
-            });
-          }
-          final Widget listView = ListView.builder(
-            controller: _scrollController,
-            physics: const ClampingScrollPhysics(
-              parent: AlwaysScrollableScrollPhysics(),
-            ),
-            padding: EdgeInsets.symmetric(
-              vertical: widget.pageGap,
-              horizontal: widget.horizontalPadding,
-            ),
-            itemCount: pageCount,
-            itemBuilder: (BuildContext context, int index) {
-              final int pageNumber = index + 1;
-              final List<List<double>>? pageHighlightBboxes =
-                  (widget.highlightPageNumber == pageNumber)
-                      ? widget.highlightBboxes
-                      : null;
-              final bool pageEditMode =
-                  widget.bboxEditMode && widget.highlightPageNumber == pageNumber;
-              return Padding(
-                padding: EdgeInsets.only(
-                  bottom: index == pageCount - 1 ? 0 : widget.pageGap,
-                ),
-                child: PdfContinuousPage(
-                  document: widget.document,
-                  pageNumber: pageNumber,
-                  maxWidth: pageWidth,
-                  highlightBboxes: pageHighlightBboxes,
-                  bboxEditMode: pageEditMode,
-                  onEditBboxChanged: pageEditMode ? widget.onEditBboxChanged : null,
-                  onEditBboxReset: pageEditMode ? widget.onEditBboxReset : null,
-                ),
-              );
-            },
-          );
-          if (!widget.showScrollbar) {
-            return listView;
-          }
-          return Scrollbar(
-            controller: _scrollController,
-            thumbVisibility: true,
-            child: listView,
-          );
-        },
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerSignal: _onPointerSignal,
+      child: ColoredBox(
+        color: widget.backgroundColor,
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final double pageWidth =
+                (constraints.maxWidth - widget.horizontalPadding * 2)
+                    .clamp(120.0, constraints.maxWidth);
+            if (_pageWidth != pageWidth) {
+              _pageWidth = pageWidth;
+              _pageDisplayHeights = null;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  unawaited(_preloadPageHeights().then((_) {
+                    _maybeApplyPendingJump();
+                  }));
+                }
+              });
+            }
+            final ScrollPhysics listPhysics = _ctrlHeld
+                ? const NeverScrollableScrollPhysics()
+                : const ClampingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  );
+            final Widget listView = ListView.builder(
+              controller: _scrollController,
+              physics: listPhysics,
+              padding: EdgeInsets.symmetric(
+                vertical: widget.pageGap,
+                horizontal: widget.horizontalPadding,
+              ),
+              itemCount: pageCount,
+              itemBuilder: (BuildContext context, int index) {
+                final int pageNumber = index + 1;
+                final List<List<double>>? pageHighlightBboxes =
+                    (widget.highlightPageNumber == pageNumber)
+                        ? widget.highlightBboxes
+                        : null;
+                final bool pageEditMode =
+                    widget.bboxEditMode && widget.highlightPageNumber == pageNumber;
+                return Padding(
+                  padding: EdgeInsets.only(
+                    bottom: index == pageCount - 1 ? 0 : widget.pageGap,
+                  ),
+                  child: PdfContinuousPage(
+                    document: widget.document,
+                    pageNumber: pageNumber,
+                    maxWidth: pageWidth,
+                    highlightBboxes: pageHighlightBboxes,
+                    bboxEditMode: pageEditMode,
+                    onEditBboxChanged: pageEditMode ? widget.onEditBboxChanged : null,
+                    onEditBboxReset: pageEditMode ? widget.onEditBboxReset : null,
+                  ),
+                );
+              },
+            );
+            if (!widget.showScrollbar) {
+              return listView;
+            }
+            return Scrollbar(
+              controller: _scrollController,
+              thumbVisibility: true,
+              child: listView,
+            );
+          },
+        ),
       ),
     );
   }
@@ -389,6 +462,7 @@ class PdfContinuousPreviewLoader extends StatefulWidget {
     this.bboxEditMode = false,
     this.onEditBboxChanged,
     this.onEditBboxReset,
+    this.viewportController,
   });
 
   final String downloadUrl;
@@ -398,6 +472,9 @@ class PdfContinuousPreviewLoader extends StatefulWidget {
   final void Function(PdfDocument document)? onDocumentLoaded;
   final void Function(int pageNumber)? onPageVisible;
   final bool showScrollbar;
+
+  /// Optional zoom controller; falls back to [PreviewViewportScope] when omitted.
+  final PreviewViewportController? viewportController;
 
   /// 1-based page number to render the highlight rectangle on.
   final int? highlightPageNumber;
@@ -559,6 +636,7 @@ class _PdfContinuousPreviewLoaderState extends State<PdfContinuousPreviewLoader>
       document: document,
       scrollController: widget.scrollController,
       navigationController: widget.navigationController,
+      viewportController: widget.viewportController,
       onPageVisible: widget.onPageVisible,
       showScrollbar: widget.showScrollbar,
       highlightPageNumber: widget.highlightPageNumber,

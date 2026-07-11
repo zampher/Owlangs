@@ -187,6 +187,28 @@ def test_is_column_wrap_continuation_bbox_detects_bottom_left_to_top_right():
     assert is_column_continuation_bbox(primary, companion, page_height=842.0) is True
 
 
+def test_is_bottom_left_to_right_top_wrap_pair_rejects_same_row():
+    from layout.layout_group_pair_utils import is_bottom_left_to_right_top_wrap_pair
+
+    same_row_left = (33.0, 222.0, 290.0, 286.0)
+    same_row_right = (303.0, 222.0, 560.0, 254.0)
+    assert is_bottom_left_to_right_top_wrap_pair(
+        same_row_left,
+        same_row_right,
+        page_height=842.0,
+        page_width=595.0,
+    ) is False
+
+    bottom_left = (31.0, 607.0, 293.0, 748.0)
+    right_top = (303.0, 222.0, 560.0, 254.0)
+    assert is_bottom_left_to_right_top_wrap_pair(
+        bottom_left,
+        right_top,
+        page_height=842.0,
+        page_width=595.0,
+    ) is True
+
+
 def test_distribute_text_by_weights_preserves_all_words():
     text = "one two three four five six"
     parts = distribute_text_by_weights(text, [1.0, 1.0, 1.0])

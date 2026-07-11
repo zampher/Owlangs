@@ -7,6 +7,8 @@ import unittest
 
 from layout.pdf_renderer.typst_overlay.text_metrics import (
     block_needs_math_fit,
+    bbox_content_height_pt,
+    bbox_vertical_edge_inset_pt,
     count_embedded_newlines,
     count_visual_lines_from_content,
     estimate_typographic_units,
@@ -14,6 +16,7 @@ from layout.pdf_renderer.typst_overlay.text_metrics import (
     is_single_line_bbox,
     is_suspiciously_short_mapped_text,
     layout_raw_has_inline_equation,
+    outer_bbox_content_height_pt,
 )
 
 # layout.json Introduction paragraph: 1 MinerU line, bbox height 101pt, 3 citations
@@ -125,7 +128,6 @@ class TestTextMetrics(unittest.TestCase):
         }
         self.assertEqual(count_embedded_newlines("", raw), 1)
         self.assertEqual(count_visual_lines_from_content("", raw), 2)
-        # bbox height 31pt: was treated as 1 line; should infer ~2 lines
         self.assertGreaterEqual(estimate_visual_line_count(31.0, raw), 2.0)
 
     def test_tight_bbox_single_line_stays_one_line(self):
@@ -133,11 +135,45 @@ class TestTextMetrics(unittest.TestCase):
         self.assertEqual(estimate_visual_line_count(23.0, None), 1.0)
 
     def test_short_two_line_bbox_from_height_rounding(self):
-        """27pt patent field: two lines even without embedded \\n in translated text."""
         self.assertGreaterEqual(
             estimate_visual_line_count(27.0, None, text="(56) References Cited U.S. PATENT DOCUMENTS"),
             2.0,
         )
+
+    def test_compact_two_line_bbox_uses_font_size_for_line_count(self):
+        self.assertGreaterEqual(
+            estimate_visual_line_count(
+                22.0, None, text="Wrapped translation line one and two",
+                font_size_pt=10.0,
+            ),
+            2.0,
+        )
+        self.assertGreater(
+            bbox_vertical_edge_inset_pt(
+                estimate_visual_line_count(22.0, None, font_size_pt=10.0),
+                font_size_pt=10.0,
+            ),
+            0.0,
+        )
+
+
+class TestBboxContentHeight(unittest.TestCase):
+    def test_single_line_uses_full_bbox_height(self):
+        self.assertEqual(bbox_content_height_pt(23.0, 1.0), 23.0)
+        self.assertEqual(bbox_vertical_edge_inset_pt(1.0), 0.0)
+        self.assertEqual(bbox_content_height_pt(14.0, 1.167), 14.0)
+
+    def test_two_line_outer_bbox_content_height(self):
+        self.assertAlmostEqual(bbox_vertical_edge_inset_pt(2.0), 1.4)
+        self.assertAlmostEqual(outer_bbox_content_height_pt(100.0, 2.0), 97.2)
+        self.assertAlmostEqual(bbox_vertical_edge_inset_pt(2.0, font_size_pt=10.0), 1.0)
+        self.assertAlmostEqual(
+            outer_bbox_content_height_pt(100.0, 2.0, font_size_pt=10.0),
+            98.0,
+        )
+
+    def test_four_line_outer_content_uses_capped_inset(self):
+        self.assertAlmostEqual(outer_bbox_content_height_pt(88.0, 4.0), 85.2)
 
 
 if __name__ == "__main__":
