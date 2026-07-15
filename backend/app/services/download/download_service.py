@@ -1592,6 +1592,7 @@ async def _typst_overlay_pdf_response(
         compute_affected_page_indices_0based,
     )
     from layout.pdf_renderer.typst_overlay.pdf_preview_cache import (
+        compute_typst_cleanup_fingerprint,
         compute_typst_overlay_content_fingerprint,
         get_pdf_preview_cache,
         read_cached_cleaned_source_path,
@@ -1789,6 +1790,34 @@ async def _typst_overlay_pdf_response(
         auto_rotation_degrees=auto_rotation_degrees,
     )
 
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        collect_image_exclusion_layout_block_indices,
+        collect_segment_bbox_overlay_block_indices,
+    )
+
+    segment_bbox_overlay_blocks: set[int] = set()
+    image_exclusion_blocks: set[int] = set()
+    if segments:
+        segment_bbox_overlay_blocks = collect_segment_bbox_overlay_block_indices(
+            segments,
+            layout_doc,
+            task_state,
+        )
+        image_exclusion_blocks = collect_image_exclusion_layout_block_indices(
+            segments,
+            task_state,
+        )
+    cleanup_hash = compute_typst_cleanup_fingerprint(
+        skip_overlay_block_indices=skip_overlay_block_indices or None,
+        bbox_override_by_block_index=bbox_override_by_block_index or None,
+        segment_bbox_overlay_block_indices=segment_bbox_overlay_blocks,
+        image_exclusion_block_indices=image_exclusion_blocks,
+        equation_format=eq_fmt,
+        table_body_format=tbl_fmt,
+        chart_body_format=chart_fmt,
+        layout_page_count=max(1, int(getattr(layout_doc, "page_count", 0) or 0)),
+    )
+
     output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
     output_dir.mkdir(exist_ok=True)
     sfx = _get_output_suffix(task_state)
@@ -1799,6 +1828,15 @@ async def _typst_overlay_pdf_response(
     cached_hash = cache.get("content_hash")
     cached_pdf = read_cached_pdf_path(task_state)
     cached_cleaned = read_cached_cleaned_source_path(task_state)
+
+    cached_cleaned_source_bytes: Optional[bytes] = None
+    if cache.get("cleanup_hash") == cleanup_hash and cached_cleaned is not None:
+        cached_cleaned_source_bytes = cached_cleaned.read_bytes()
+        logger.info(
+            LogModule.EXPORT,
+            f"[TYPST_OVERLAY] Task {task_id}: reusing cached cleaned source PDF "
+            f"({len(cached_cleaned_source_bytes)} bytes, cleanup_hash={cleanup_hash[:12]})",
+        )
 
     if cached_hash == content_hash and cached_pdf is not None:
         logger.info(
@@ -1835,14 +1873,16 @@ async def _typst_overlay_pdf_response(
     render_page_indices = None
     base_merged_pdf_bytes = None
     expected_page_count = max(1, int(getattr(layout_doc, "page_count", 0) or 0))
+    cached_page_count = _pdf_page_count(cached_pdf) if cached_pdf is not None else None
+    cached_pdf_is_complete = (
+        cached_page_count is not None and cached_page_count == expected_page_count
+    )
     if (
         dirty_segment_indices
-        and not auto_rotation_enabled
         and cached_pdf is not None
-        and cache.get("has_full_render")
+        and (cache.get("has_full_render") or cached_pdf_is_complete)
     ):
-        cached_page_count = _pdf_page_count(cached_pdf)
-        if cached_page_count is not None and cached_page_count != expected_page_count:
+        if not cached_pdf_is_complete:
             logger.warning(
                 LogModule.EXPORT,
                 f"[TYPST_OVERLAY] Task {task_id}: cached PDF page count "
@@ -1865,11 +1905,15 @@ async def _typst_overlay_pdf_response(
                     f"for pages {[p + 1 for p in affected]} "
                     f"(0-based {affected}, segments={dirty_segment_indices})",
                 )
-    elif dirty_segment_indices and cached_pdf is not None and not cache.get("has_full_render"):
+    elif (
+        dirty_segment_indices
+        and cached_pdf is not None
+        and not cached_pdf_is_complete
+    ):
         logger.info(
             LogModule.EXPORT,
             f"[TYPST_OVERLAY] Task {task_id}: skipping partial preview until a "
-            "full PDF preview has been cached",
+            "complete PDF preview has been cached",
         )
 
     async with _typst_overlay_preview_lock(task_id):
@@ -1920,6 +1964,7 @@ async def _typst_overlay_pdf_response(
                     render_page_indices=render_page_indices,
                     base_merged_pdf_bytes=base_merged_pdf_bytes,
                     cleaned_source_output_path=cleaned_source_file,
+                    cached_cleaned_source_bytes=cached_cleaned_source_bytes,
                     skip_overlay_block_indices=(
                         skip_overlay_block_indices if skip_overlay_block_indices else None
                     ),
@@ -1981,6 +2026,7 @@ async def _typst_overlay_pdf_response(
                                 else None
                             ),
                             cleaned_source_output_path=cleaned_source_file,
+                            cached_cleaned_source_bytes=cached_cleaned_source_bytes,
                             skip_overlay_block_indices=(
                                 skip_overlay_block_indices if skip_overlay_block_indices else None
                             ),
@@ -2068,6 +2114,7 @@ async def _typst_overlay_pdf_response(
                             else None
                         ),
                         cleaned_source_output_path=cleaned_source_file,
+                    cached_cleaned_source_bytes=cached_cleaned_source_bytes,
                         skip_overlay_block_indices=(
                             skip_overlay_block_indices if skip_overlay_block_indices else None
                         ),
@@ -2092,6 +2139,14 @@ async def _typst_overlay_pdf_response(
             pdf_path=pdf_file,
             cleaned_source_path=cleaned_source_file if cleaned_source_file.is_file() else None,
             partial_render=render_page_indices is not None,
+            cleanup_hash=cleanup_hash,
+            has_full_render=(
+                render_page_indices is None
+                or (
+                    output_page_count is not None
+                    and output_page_count == expected_page_count
+                )
+            ),
         )
         task_state.setdefault("downloadable_files", {})["pdf"] = {"path": str(pdf_file)}
 
@@ -2759,6 +2814,10 @@ class DownloadService:
             raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
 
         sfx = _get_output_suffix(task_state)
+        original_filename = task_state.get("original_filename") or ""
+        file_stem = task_state.get("original_filename_stem") or (
+            Path(original_filename).stem if original_filename else "translated"
+        )
 
         dirty_segment_indices = _parse_dirty_segment_indices(dirty_segments)
         auto_rot_enabled = bool(auto_rotation_enabled)
@@ -3220,14 +3279,22 @@ class DownloadService:
                 task_state["source_input_type"] = "layout"
         
         if is_pdf_file and layout_doc and source_input_type == "layout":
-            should_regenerate_from_layout = True
-            # Concise high-level log; detailed image handling logs are emitted later.
-            logger.info(
-                LogModule.EXPORT,
-                f"[DOWNLOAD] Regenerating {file_type} from layout_document "
-                f"(equation_format={equation_format}, table_body_format={table_body_format}, "
-                f"is_format_conversion={is_format_conversion}, source_input_type=layout)"
-            )
+            if file_type == "pdf" and renderer_type == "typst_overlay":
+                should_regenerate_from_layout = False
+                logger.info(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] Task {task_id}: typst_overlay PDF preview skips "
+                    "layout markdown regeneration",
+                )
+            else:
+                should_regenerate_from_layout = True
+                # Concise high-level log; detailed image handling logs are emitted later.
+                logger.info(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] Regenerating {file_type} from layout_document "
+                    f"(equation_format={equation_format}, table_body_format={table_body_format}, "
+                    f"is_format_conversion={is_format_conversion}, source_input_type=layout)"
+                )
         elif (equation_format or table_body_format) and is_pdf_file and layout_doc and source_input_type != "layout":
             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Skipping layout regeneration: source_input_type={source_input_type} (not layout)")
         
@@ -4332,6 +4399,23 @@ class DownloadService:
             has_revisions = False
 
         if has_revisions and workflow_type:
+            if file_type == "pdf" and renderer_type == "typst_overlay":
+                logger.info(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] Task {task_id}: typst_overlay PDF preview skips "
+                    "markdown rebuild on revised segments",
+                )
+                return await _typst_overlay_pdf_response(
+                    task_state, task_id, file_stem,
+                    table_body_format, equation_format,
+                    self.pdf_generator,
+                    chart_body_format=chart_body_format,
+                    dirty_segment_indices=dirty_segment_indices,
+                    auto_rotation_enabled=auto_rot_enabled,
+                    auto_rotation_aspect_ratio=auto_rot_ratio,
+                    auto_rotation_degrees=auto_rot_degrees,
+                )
+
             logger.info(LogModule.EXPORT, f"[DOWNLOAD] Found revised segments for task {task_id}, rebuilding {file_type} file with revisions")
         
             try:

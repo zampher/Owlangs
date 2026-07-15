@@ -62,6 +62,9 @@ class TranslationSegmentItem extends StatefulWidget {
     this.onUnmarkForRetry,
     this.isExcluded = false,
     this.exclusionReason,
+    this.detectedExclusionReason,
+    this.suggestedExclusionReason,
+    this.showExclusionTypeSwitcher = false,
     this.onExclude,
     this.onUnexclude,
     this.isCleared = false,
@@ -127,6 +130,12 @@ class TranslationSegmentItem extends StatefulWidget {
   final bool isExcluded; // Whether this segment is excluded from translation
   final String?
       exclusionReason; // Exclusion reason (e.g., 'image', 'formula', 'reference')
+  /// Detected type even when the segment is not currently excluded.
+  final String? detectedExclusionReason;
+  /// Preferred reason for the type switcher (formula/table/chart/image).
+  final String? suggestedExclusionReason;
+  /// Show exclusion-type picker before the segment is excluded (image-switchable).
+  final bool showExclusionTypeSwitcher;
   final Function(int index)? onExclude; // Callback to exclude segment
   final Function(int index)? onUnexclude; // Callback to unexclude segment
   final bool isCleared; // Whether this segment translation is cleared
@@ -146,8 +155,11 @@ class TranslationSegmentItem extends StatefulWidget {
   final double? editFontSize; // Font size for editing
   final Map<String, Map<String, String>> imageDataMap;
   final String? taskId; // Task ID for API calls
-  final Function(int index)?
-      onExclusionUpdated; // Callback when exclusion reason is updated
+  final FutureOr<void> Function(
+    int index, {
+    String? exclusionReason,
+    bool? isExcluded,
+  })? onExclusionUpdated; // Callback when exclusion reason is updated
   final Function(int index)? onFormulaFix; // Callback to trigger LLM formula repair
   final bool showPdfFontSize;
   final double? fontSizePt;
@@ -216,6 +228,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
   // Local state for immediate UI updates without triggering parent rebuild
   bool _localNeedsRetry = false;
   bool _localIsExcluded = false;
+  String? _localExclusionReason;
   bool _localIsCleared = false;
 
   final Map<int, TextEditingController> _layoutPartControllers =
@@ -237,6 +250,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     _localNeedsRetry = widget.needsRetry;
     _localIsExcluded = widget.isExcluded;
     _localIsCleared = widget.isCleared;
+    _localExclusionReason = widget.exclusionReason;
 
     // Listen to text changes to build edit history
     _textController.addListener(_onTextChanged);
@@ -305,6 +319,9 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     }
     if (oldWidget.isExcluded != widget.isExcluded) {
       _localIsExcluded = widget.isExcluded;
+    }
+    if (oldWidget.exclusionReason != widget.exclusionReason) {
+      _localExclusionReason = widget.exclusionReason;
     }
     if (oldWidget.isCleared != widget.isCleared) {
       _localIsCleared = widget.isCleared;
@@ -1838,6 +1855,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                       widget.isExcluded ||
                       _localIsExcluded ||
                       _localIsCleared ||
+                      _shouldShowExclusionTypeSwitcher ||
                       (widget.showPdfFontSize && widget.onFontSizeChanged != null) ||
                       (widget.onRotationChanged != null) ||
                       (widget.onTableStrokeChanged != null &&
@@ -1973,11 +1991,17 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                             ),
                           ),
                         ),
-                      // Mark for retry button (if not already marked for retry and not excluded)
-                      // Can be shown even if failed (failed segments can also be marked for retry)
+                      // Retry chips are mutually exclusive to avoid duplicate
+                      // "重试" / "已标记重试" labels (esp. in PDF revision mode).
+                      // - Run-retry (revision): failed or marked → single "重试"
+                      // - Mark-retry: only when run-retry chip is not shown
+                      // - Marked badge: only when run-retry chip is not shown
                       if (!_localNeedsRetry &&
                           !_localIsExcluded &&
-                          widget.onMarkForRetry != null)
+                          widget.onMarkForRetry != null &&
+                          !(widget.pdfRevisionMode &&
+                              widget.onRetry != null &&
+                              widget.isFailed))
                         Padding(
                           padding: const EdgeInsets.only(left: 4),
                           child: Material(
@@ -2027,9 +2051,10 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                             ),
                           ),
                         ),
-                      // Unmark retry button (icon + text button to unmark for retry)
-                      // Only show if needsRetry is true (not for failed segments)
-                      if (_localNeedsRetry)
+                      // Unmark retry badge — hidden when PDF revision run-retry chip
+                      // already covers the same status.
+                      if (_localNeedsRetry &&
+                          !(widget.pdfRevisionMode && widget.onRetry != null))
                         Padding(
                           padding: const EdgeInsets.only(left: 4),
                           child: Material(
@@ -2081,7 +2106,9 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                             ),
                           ),
                         ),
-                      // Run retry immediately (PDF revision mode only)
+                      // Run retry immediately (PDF revision mode only).
+                      // For manually marked segments, include a close control to unmark
+                      // without a second "已标记重试" chip.
                       if (widget.pdfRevisionMode &&
                           !widget.isSource &&
                           (widget.isFailed || _localNeedsRetry) &&
@@ -2092,40 +2119,67 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                             message: l10n.translationToolbarRetryTooltip,
                             child: Material(
                               color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () => widget.onRetry!(widget.index),
-                                borderRadius: BorderRadius.circular(4),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: Colors.orange.shade400,
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.shade50,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                      color: Colors.orange.shade400,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: <Widget>[
-                                      Icon(
-                                        Icons.refresh,
-                                        size: 12,
-                                        color: Colors.orange.shade800,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[
+                                    InkWell(
+                                      onTap: () =>
+                                          widget.onRetry!(widget.index),
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: <Widget>[
+                                          Icon(
+                                            Icons.refresh,
+                                            size: 12,
+                                            color: Colors.orange.shade800,
+                                          ),
+                                          const SizedBox(width: 2),
+                                          Text(
+                                            l10n.segmentItemRetry,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.orange.shade800,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      const SizedBox(width: 2),
-                                      Text(
-                                        l10n.segmentItemRetry,
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w500,
+                                    ),
+                                    if (_localNeedsRetry &&
+                                        widget.onUnmarkForRetry != null) ...<
+                                        Widget>[
+                                      const SizedBox(width: 4),
+                                      InkWell(
+                                        onTap: () {
+                                          setState(() {
+                                            _localNeedsRetry = false;
+                                          });
+                                          widget.onUnmarkForRetry!(
+                                            widget.index,
+                                          );
+                                        },
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: Icon(
+                                          Icons.close,
+                                          size: 12,
                                           color: Colors.orange.shade800,
                                         ),
                                       ),
                                     ],
-                                  ),
+                                  ],
                                 ),
                               ),
                             ),
@@ -2136,6 +2190,13 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                         Padding(
                           padding: const EdgeInsets.only(left: 4),
                           child: _buildExclusionBadge(context),
+                        ),
+                      // Type switcher for formula/table/chart/image — shown even
+                      // before the segment is excluded so users can pick Image directly.
+                      if (!_localIsExcluded && _shouldShowExclusionTypeSwitcher)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: _buildExclusionTypeSwitcher(context),
                         ),
                       // Exclude button (if not excluded and not source)
                       if (!_localIsExcluded &&
@@ -2388,11 +2449,78 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     );
   }
 
+  bool get _shouldShowExclusionTypeSwitcher =>
+      !widget.isSource &&
+      widget.taskId != null &&
+      widget.showExclusionTypeSwitcher;
+
+  String? get _effectiveExclusionTypeHint =>
+      _localExclusionReason ??
+      widget.exclusionReason ??
+      widget.suggestedExclusionReason ??
+      widget.detectedExclusionReason;
+
+  /// Type picker shown for formula/table/chart/image before exclusion.
+  Widget _buildExclusionTypeSwitcher(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final ExclusionReason reason =
+        ExclusionReason.fromString(_effectiveExclusionTypeHint);
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Tooltip(
+      message: l10n.segmentItemExclusionEditTooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showEditExclusionDialog(context),
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? reason.color.withOpacity(0.18)
+                  : reason.color.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: isDark
+                    ? reason.color.withOpacity(0.55)
+                    : reason.color.withOpacity(0.40),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(reason.icon, size: 12, color: reason.color),
+                const SizedBox(width: 2),
+                Text(
+                  reason.displayNameLocalized(l10n),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: isDark
+                        ? reason.color.withOpacity(0.95)
+                        : reason.color.withOpacity(0.90),
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Icon(
+                  Icons.edit,
+                  size: 10,
+                  color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Build exclusion badge with reason-specific styling
   /// New design: Badge body for quick unexclude, edit button for editing, x button for quick unexclude
   Widget _buildExclusionBadge(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final reason = ExclusionReason.fromString(widget.exclusionReason);
+    final reason = ExclusionReason.fromString(_effectiveExclusionTypeHint);
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final bool canUnexclude = reason.canUnexclude && widget.onUnexclude != null;
     final bool canEdit = widget.taskId != null;
@@ -2414,6 +2542,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                     // Update local state immediately for instant UI feedback
                     setState(() {
                       _localIsExcluded = false;
+                      _localExclusionReason = null;
                     });
                     // Then call the callback (which will update backend)
                     widget.onUnexclude!(widget.index);
@@ -2517,6 +2646,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                 // Update local state immediately for instant UI feedback
                 setState(() {
                   _localIsExcluded = false;
+                  _localExclusionReason = null;
                 });
                 // Then call the callback (which will update backend)
                 widget.onUnexclude!(widget.index);
@@ -2554,14 +2684,20 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
 
   /// Show dialog to edit exclusion reason
   Future<void> _showEditExclusionDialog(BuildContext context) async {
+    final String? priorReason = _localIsExcluded
+        ? (_localExclusionReason ?? widget.exclusionReason)
+        : _effectiveExclusionTypeHint;
     final String? newReason = await showDialog<String?>(
       context: context,
       builder: (context) => ExclusionReasonEditor(
-        currentReason: widget.exclusionReason,
+        currentReason: priorReason,
       ),
     );
 
-    if (newReason != widget.exclusionReason && widget.taskId != null) {
+    // Applying a type while not excluded (null -> formula/image) must call API.
+    final bool reasonChanged = newReason != widget.exclusionReason ||
+        (!_localIsExcluded && newReason != null);
+    if (reasonChanged && widget.taskId != null) {
       // Call API to update exclusion reason
       try {
         final TranslationService svc = TranslationService();
@@ -2580,12 +2716,17 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
         // Update local state
         setState(() {
           _localIsExcluded = updatedIsExcluded;
+          _localExclusionReason = newReason;
         });
 
         // Refresh parent widget to get updated data
         // Pass updated exclusion info so parent can update metadata immediately
         if (widget.onExclusionUpdated != null) {
-          widget.onExclusionUpdated!(widget.index);
+          await widget.onExclusionUpdated!(
+            widget.index,
+            exclusionReason: newReason,
+            isExcluded: updatedIsExcluded,
+          );
         }
 
         if (mounted) {

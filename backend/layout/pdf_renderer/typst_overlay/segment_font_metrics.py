@@ -512,6 +512,20 @@ def _overlay_dry_run_render_pt(
     )
 
 
+def build_layout_block_maps(
+    layout_doc: LayoutDocument,
+) -> tuple[Dict[int, LayoutBlock], Dict[int, str]]:
+    """Build block index maps once for batch segment typography enrichment."""
+    block_map: Dict[int, LayoutBlock] = {}
+    type_map: Dict[int, str] = {}
+    for block in layout_doc.iter_blocks():
+        if block.index is None:
+            continue
+        block_map[int(block.index)] = block
+        type_map[int(block.index)] = getattr(block, "type", "") or "text"
+    return block_map, type_map
+
+
 def enrich_segment_font_fields(
     segment: Dict[str, Any],
     layout_doc: Optional[LayoutDocument],
@@ -519,6 +533,8 @@ def enrich_segment_font_fields(
     text: Optional[str] = None,
     calculator: Optional[FontFitCalculator] = None,
     task_state: Optional[Dict[str, Any]] = None,
+    block_map: Optional[Dict[int, LayoutBlock]] = None,
+    type_map: Optional[Dict[int, str]] = None,
 ) -> None:
     """Add computed font fields to a segment dict (mutates in place)."""
     segment["font_size_source"] = segment_font_size_source(segment)
@@ -534,13 +550,8 @@ def enrich_segment_font_fields(
         segment.pop("pdf_page_number", None)
         return
 
-    block_map: Dict[int, LayoutBlock] = {}
-    type_map: Dict[int, str] = {}
-    for block in layout_doc.iter_blocks():
-        if block.index is None:
-            continue
-        block_map[int(block.index)] = block
-        type_map[int(block.index)] = getattr(block, "type", "") or "text"
+    if block_map is None or type_map is None:
+        block_map, type_map = build_layout_block_maps(layout_doc)
 
     block_idx: Optional[int] = None
     if task_state is not None and is_layout_image_typography_task(
@@ -788,6 +799,10 @@ def enrich_segments_font_fields(
     if not segments:
         return
     calc = FontFitCalculator(min_size_pt=FONT_SIZE_PT_MIN)
+    block_map: Optional[Dict[int, LayoutBlock]] = None
+    type_map: Optional[Dict[int, str]] = None
+    if layout_doc is not None:
+        block_map, type_map = build_layout_block_maps(layout_doc)
     for seg in segments:
         if not isinstance(seg, dict):
             continue
@@ -800,6 +815,8 @@ def enrich_segments_font_fields(
             text=str(text or ""),
             calculator=calc,
             task_state=task_state,
+            block_map=block_map,
+            type_map=type_map,
         )
 
 
@@ -922,6 +939,91 @@ def segment_overlay_export_text(
     return prepare_segment_export_text(segment, text_field=text_field, for_typst=True)
 
 
+_IDENTIFIER_OVERLAY_EXCLUSION_REASONS = frozenset({
+    "identifier",
+    "numeric",
+    "number",
+})
+
+_NON_TEXT_OVERLAY_EXCLUSION_REASONS = frozenset({
+    "formula",
+    "image",
+    "table",
+    "reference",
+    "user_selected",
+})
+
+
+def segment_exclusion_reason_tokens(segment: Dict[str, Any]) -> set[str]:
+    """Normalized exclusion reason tokens from segment metadata."""
+    tokens: set[str] = set()
+    for key in ("exclusion_reason", "detected_exclusion_reason"):
+        raw = (segment.get(key) or "").strip().lower()
+        if raw:
+            tokens.add(raw)
+    return tokens
+
+
+def segment_exclusion_prefers_source_image(segment: Dict[str, Any]) -> bool:
+    """True when the user marked this segment as image exclusion.
+
+    Image exclusion means: keep source-PDF pixels and do not Typst-overlay text/LaTeX,
+    even for mixed prose+$math$ that would otherwise force latex overlay when excluded
+    as ``formula``.
+    """
+    reason = (segment.get("exclusion_reason") or "").strip().lower()
+    return reason == "image"
+
+
+def collect_image_exclusion_layout_block_indices(
+    segments: Optional[List[Dict[str, Any]]],
+    task_state: Optional[Dict[str, Any]] = None,
+) -> set[int]:
+    """Layout block indices mapped from segments with exclusion_reason=image."""
+    indices: set[int] = set()
+    for seg in segments or []:
+        if not isinstance(seg, dict):
+            continue
+        if not segment_exclusion_prefers_source_image(seg):
+            continue
+        for raw_idx in resolve_segment_layout_block_indices(seg, task_state):
+            try:
+                indices.add(int(raw_idx))
+            except (TypeError, ValueError):
+                continue
+    return indices
+
+
+def segment_is_excluded_identifier_overlay(segment: Dict[str, Any]) -> bool:
+    """True when an excluded identifier-like segment must render via Typst overlay."""
+    if not bool(segment.get("is_excluded")):
+        return False
+
+    reason_tokens = segment_exclusion_reason_tokens(segment)
+    if reason_tokens & _NON_TEXT_OVERLAY_EXCLUSION_REASONS:
+        return False
+    if not (reason_tokens & _IDENTIFIER_OVERLAY_EXCLUSION_REASONS):
+        return False
+
+    chunk = (segment.get("chunk_type") or "").strip().lower()
+    if chunk in (
+        "interline_equation",
+        "inline_equation",
+        "formula",
+        "equation",
+        "image",
+        "chart_body",
+        "table_body",
+    ):
+        return False
+    if bool(segment.get("is_image")):
+        return False
+
+    source_text = (segment.get("source_text") or "").strip()
+    target_text = (segment.get("target_text") or "").strip()
+    return bool(source_text or target_text)
+
+
 def collect_layout_block_indices_with_overlay_text(
     segments: Optional[List[Dict[str, Any]]],
     task_state: Optional[Dict[str, Any]] = None,
@@ -1011,7 +1113,27 @@ def segment_skips_overlay(
     segment: Dict[str, Any],
     text_field: str = "target_text",
 ) -> bool:
-    """True when overlay/redaction should preserve original PDF content for this segment."""
+    """True when overlay/redaction should preserve original PDF content for this segment.
+
+    Mixed prose+LaTeX (latex_flags.present) must overlay even when excluded as
+    ``formula``: otherwise preserve is False (needs Typst math) while skip is True
+    and the redacted region becomes a blank hole.
+
+    Exception: ``exclusion_reason=image`` always preserves source PDF (user chose
+    per-segment image rendering for that formula/mixed region).
+    """
+    if segment_exclusion_prefers_source_image(segment):
+        return True
+
+    if segment_is_excluded_identifier_overlay(segment):
+        return False
+
+    from utils.segment_latex_flags import segment_requires_typst_latex_overlay
+
+    # Must run before is_excluded: formula-excluded mixed text still needs Typst.
+    if segment_requires_typst_latex_overlay(segment, text_field):
+        return False
+
     if bool(segment.get("is_excluded")):
         return True
 
@@ -1056,12 +1178,20 @@ def segment_preserves_source_pdf_pixels(
     text_field: str = "target_text",
 ) -> bool:
     """True when segment region must keep original PDF pixels (failed/excluded/image-format)."""
-    if segment_skips_overlay(segment, text_field):
+    if segment_exclusion_prefers_source_image(segment):
         return True
     chart_fmt = (chart_body_format or "image").strip().lower()
     table_fmt = (table_body_format or "html").strip().lower()
     eq_fmt = (equation_format or "text").strip().lower()
     chunk = (segment.get("chunk_type") or "").strip().lower()
+    if chunk in ("interline_equation", "formula", "equation") and eq_fmt == "text":
+        return False
+    from utils.segment_latex_flags import segment_requires_typst_latex_overlay
+
+    if segment_requires_typst_latex_overlay(segment, text_field):
+        return False
+    if segment_skips_overlay(segment, text_field):
+        return True
     if chunk == "chart_body" and chart_fmt == "image":
         return True
     if chunk == "table_body" and table_fmt == "image":

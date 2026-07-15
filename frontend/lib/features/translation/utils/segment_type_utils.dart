@@ -139,6 +139,70 @@ bool isMarkdownTableText(String? text) {
   return tableLineCount >= 2;
 }
 
+/// Exclusion reasons that users commonly switch to/from image rendering.
+const Set<String> kImageSwitchableExclusionReasons = <String>{
+  'image',
+  'formula',
+  'table',
+  'chart',
+};
+
+/// Infer a switchable exclusion type (formula/table/chart/image) from metadata.
+///
+/// Used to show the exclusion-type editor before the segment is excluded.
+String? inferImageSwitchableExclusionReason(Map<String, dynamic> metadata) {
+  for (final String key in <String>[
+    'exclusion_reason',
+    'detected_exclusion_reason',
+  ]) {
+    final String? reason = (metadata[key] as String?)?.trim().toLowerCase();
+    if (reason != null && kImageSwitchableExclusionReasons.contains(reason)) {
+      return reason;
+    }
+  }
+
+  final String blockType =
+      (metadata['block_type'] as String? ?? '').trim().toLowerCase();
+  final String chunkType =
+      (metadata['chunk_type'] as String? ?? '').trim().toLowerCase();
+  final bool isTableBody = metadata['is_table_body'] as bool? ?? false;
+
+  if (isTableBody ||
+      blockType == 'table' ||
+      blockType == 'table_body' ||
+      chunkType == 'table_body') {
+    return ExclusionReason.table.value;
+  }
+  if (blockType == 'chart' ||
+      blockType == 'chart_body' ||
+      chunkType == 'chart_body') {
+    return ExclusionReason.chart.value;
+  }
+  if (blockType == 'interline_equation' ||
+      blockType == 'equation' ||
+      blockType == 'formula' ||
+      chunkType == 'interline_equation' ||
+      chunkType == 'equation' ||
+      chunkType == 'formula') {
+    return ExclusionReason.formula.value;
+  }
+  if (blockType == 'image' || chunkType == 'image') {
+    return ExclusionReason.image.value;
+  }
+
+  final dynamic latexFlags = metadata['latex_flags'];
+  if (latexFlags is Map && latexFlags['present'] == true) {
+    return ExclusionReason.formula.value;
+  }
+  return null;
+}
+
+/// True when the segment can switch exclusion type to image (show type picker
+/// even if not yet excluded).
+bool segmentOffersImageExclusionTypeSwitch(Map<String, dynamic> metadata) {
+  return inferImageSwitchableExclusionReason(metadata) != null;
+}
+
 /// Whether [metadata] describes a PDF table segment (table body overlay).
 bool isPdfTableSegment(Map<String, dynamic> metadata) {
   final String? blockType = metadata['block_type'] as String?;

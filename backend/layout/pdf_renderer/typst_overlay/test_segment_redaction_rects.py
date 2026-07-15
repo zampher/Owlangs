@@ -9,6 +9,8 @@ from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
     collect_excluded_segment_protected_rects,
     collect_partial_overlay_block_indices,
     collect_segment_layout_bbox_redaction_rects,
+    segment_is_excluded_identifier_overlay,
+    segment_preserves_source_pdf_pixels,
     segment_skips_overlay,
 )
 from layout.pdf_renderer.typst_overlay.source_cleanup import _collect_redaction_rects
@@ -72,6 +74,181 @@ class TestSegmentRedactionRects(unittest.TestCase):
         self.assertEqual(len(protected.get(0, [])), 1)
         self.assertTrue(segment_skips_overlay(segments[0]))
 
+    def test_excluded_identifier_renders_via_typst_overlay(self):
+        seg = {
+            "segment_index": 39,
+            "is_excluded": True,
+            "exclusion_reason": "identifier",
+            "chunk_type": "text",
+            "layout_block_indices": [12],
+            "layout_block_bbox": [[420.0, 180.0, 440.0, 195.0]],
+            "source_text": "(1)",
+            "target_text": "(1)",
+        }
+        self.assertTrue(segment_is_excluded_identifier_overlay(seg))
+        self.assertFalse(segment_skips_overlay(seg))
+        self.assertFalse(
+            segment_preserves_source_pdf_pixels(seg, equation_format="text")
+        )
+
+    def test_excluded_identifier_mixed_block_gets_redaction_not_protection(self):
+        layout_doc = self._layout_doc()
+        segments = [
+            {
+                "segment_index": 0,
+                "is_excluded": True,
+                "exclusion_reason": "identifier",
+                "layout_block_indices": [0],
+                "layout_block_bbox": [[10.0, 20.0, 30.0, 40.0]],
+                "source_text": "(2)",
+                "target_text": "(2)",
+            },
+            {
+                "segment_index": 1,
+                "layout_block_indices": [0],
+                "layout_block_bbox": [[10.0, 50.0, 90.0, 70.0]],
+                "target_text": "Translated",
+            },
+        ]
+        redact = collect_segment_layout_bbox_redaction_rects(segments, layout_doc)
+        protected = collect_excluded_segment_protected_rects(segments, layout_doc)
+        self.assertEqual(len(redact.get(0, [])), 2)
+        self.assertEqual(len(protected.get(0, [])), 0)
+
+    def test_excluded_formula_still_preserves_pdf_pixels(self):
+        seg = {
+            "segment_index": 0,
+            "is_excluded": True,
+            "exclusion_reason": "formula",
+            "chunk_type": "interline_equation",
+            "layout_block_indices": [0],
+            "source_text": "E=mc^2",
+            "target_text": "E=mc^2",
+        }
+        self.assertFalse(segment_is_excluded_identifier_overlay(seg))
+        self.assertTrue(segment_skips_overlay(seg))
+
+    def test_excluded_mixed_formula_text_still_overlays(self):
+        """Formula-excluded prose+$math$ must Typst-overlay (seg 73 blank-hole case)."""
+        mixed_text = (
+            "where  $ \\tilde{r}_i^o $ and  $ \\tilde{r}_i^a $ denote the "
+            "Z-score normalized i-th column of representations."
+        )
+        # Use block 0 + bbox inside _layout_doc fixture so redaction page can be resolved.
+        seg = {
+            "segment_index": 73,
+            "is_excluded": True,
+            "exclusion_reason": "formula",
+            "chunk_type": "text",
+            "layout_block_indices": [0],
+            "layout_block_bbox": [[10.0, 20.0, 90.0, 40.0]],
+            "source_text": mixed_text,
+            "target_text": mixed_text,
+            "latex_flags": {
+                "present": True,
+                "mixed": True,
+                "needs_delimiter_wrap": False,
+            },
+        }
+        self.assertFalse(segment_is_excluded_identifier_overlay(seg))
+        self.assertFalse(segment_skips_overlay(seg))
+        self.assertFalse(
+            segment_preserves_source_pdf_pixels(seg, equation_format="text")
+        )
+
+        layout_doc = self._layout_doc()
+        redact = collect_segment_layout_bbox_redaction_rects([seg], layout_doc)
+        protected = collect_excluded_segment_protected_rects([seg], layout_doc)
+        self.assertEqual(len(redact.get(0, [])), 1)
+        self.assertEqual(protected, {})
+
+    def test_image_excluded_mixed_formula_preserves_source_pdf(self):
+        """exclusion_reason=image keeps source pixels even for mixed prose+$math$."""
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            collect_image_exclusion_layout_block_indices,
+            segment_exclusion_prefers_source_image,
+        )
+
+        mixed_text = (
+            "Algorithm 1 FedCode: for each client $T$ compute "
+            "$\\theta$ with $\\left\\lfloor x \\right\\rfloor$."
+        )
+        seg = {
+            "segment_index": 78,
+            "is_excluded": True,
+            "exclusion_reason": "image",
+            "chunk_type": "text",
+            "layout_block_indices": [147],
+            "layout_block_bbox": [[10.0, 20.0, 90.0, 40.0]],
+            "source_text": mixed_text,
+            "target_text": mixed_text,
+            "latex_flags": {
+                "present": True,
+                "mixed": True,
+                "needs_delimiter_wrap": False,
+            },
+        }
+        self.assertTrue(segment_exclusion_prefers_source_image(seg))
+        self.assertTrue(segment_skips_overlay(seg))
+        self.assertTrue(
+            segment_preserves_source_pdf_pixels(seg, equation_format="text")
+        )
+        self.assertEqual(
+            collect_image_exclusion_layout_block_indices([seg]),
+            {147},
+        )
+
+        # Remap to fixture block 0 so page/bbox helpers resolve.
+        seg["layout_block_indices"] = [0]
+        layout_doc = self._layout_doc()
+        redact = collect_segment_layout_bbox_redaction_rects(
+            [seg], layout_doc, equation_format="text"
+        )
+        protected = collect_excluded_segment_protected_rects(
+            [seg], layout_doc, equation_format="text"
+        )
+        self.assertEqual(redact, {})
+        self.assertEqual(len(protected.get(0, [])), 1)
+
+    def test_unchanged_equation_latex_mode_not_protected(self):
+        seg = {
+            "segment_index": 0,
+            "chunk_type": "interline_equation",
+            "layout_block_indices": [0],
+            "layout_block_bbox": [[10.0, 20.0, 90.0, 40.0]],
+            "source_text": "E=mc^2",
+            "target_text": "E=mc^2",
+        }
+        self.assertTrue(segment_skips_overlay(seg))
+        self.assertFalse(
+            segment_preserves_source_pdf_pixels(seg, equation_format="text")
+        )
+        self.assertTrue(
+            segment_preserves_source_pdf_pixels(seg, equation_format="image")
+        )
+
+    def test_unchanged_mixed_latex_segment_still_overlays(self):
+        mixed_text = (
+            "Overall parameters are \\mathrm{FFR} and more text "
+            "with plain prose."
+        )
+        seg = {
+            "segment_index": 0,
+            "chunk_type": "text",
+            "layout_block_indices": [0],
+            "layout_block_bbox": [[10.0, 20.0, 90.0, 40.0]],
+            "source_text": mixed_text,
+            "target_text": mixed_text,
+            "latex_flags": {
+                "present": True,
+                "mixed": True,
+                "needs_delimiter_wrap": True,
+            },
+        }
+        self.assertFalse(segment_skips_overlay(seg))
+        self.assertFalse(
+            segment_preserves_source_pdf_pixels(seg, equation_format="text")
+        )
 
     def test_translation_failed_segment_not_redacted_but_protected(self):
         layout_doc = self._layout_doc()

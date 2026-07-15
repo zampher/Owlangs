@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from layout.base import LayoutBlock, LayoutPage, LayoutDocument
 from layout.ocr_provider.paddle.block_labels import map_paddle_label
 from layout.ocr_provider.paddle.layout_group_pairs import (
+    apply_figure_wrap_layout_group_pairs,
     apply_paddle_layout_group_pairs,
     apply_spatial_layout_group_pairs,
 )
@@ -405,6 +406,11 @@ def parse_paddle_layout(
                     page_width=page_w,
                 )
                 apply_spatial_layout_group_pairs(
+                    blocks,
+                    page_height=page_h,
+                    page_width=page_w,
+                )
+                apply_figure_wrap_layout_group_pairs(
                     blocks,
                     page_height=page_h,
                     page_width=page_w,

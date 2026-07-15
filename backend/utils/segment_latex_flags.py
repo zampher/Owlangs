@@ -200,6 +200,32 @@ def normalize_text_for_typst_overlay(
     return _unwrap_spurious_display_math_wrapper(prepared, flags)
 
 
+def segment_requires_typst_latex_overlay(
+    segment: Dict[str, Any],
+    text_field: str = "target_text",
+) -> bool:
+    """True when segment body must be re-rendered via Typst math (not left on source PDF)."""
+    chunk = (segment.get("chunk_type") or "").strip().lower()
+    if chunk in ("interline_equation", "formula", "equation"):
+        return False
+    if text_field == "source_text":
+        body = segment.get("source_text") or ""
+    else:
+        body = (
+            segment.get("modified_text")
+            or segment.get("target_text")
+            or segment.get("text")
+            or ""
+        )
+    return bool(
+        resolve_segment_latex_flags(
+            segment,
+            text=body or None,
+            block_type=segment.get("block_type") or segment.get("chunk_type"),
+        ).get("present")
+    )
+
+
 def prepare_segment_export_text(
     segment: Dict[str, Any],
     *,

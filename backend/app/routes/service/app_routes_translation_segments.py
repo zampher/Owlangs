@@ -8,7 +8,9 @@ API routes for translation segments management.
 from fastapi import APIRouter, HTTPException, Body, Query
 from fastapi.responses import JSONResponse
 from typing import Optional, List, Dict, Any
+import asyncio
 import copy
+import hashlib
 import time
 
 from backend.app.services.task import task_manager
@@ -716,6 +718,121 @@ def _enrich_segments_table_fields(
             seg["chunk_type"] = chunk_type
 
 
+def _compute_segments_typography_fingerprint(
+    segments_list: List[Dict[str, Any]],
+    *,
+    text_field: str,
+) -> str:
+    """Fingerprint segment texts and typography overrides for cache lookup."""
+    parts: List[str] = []
+    for seg in segments_list:
+        if not isinstance(seg, dict):
+            continue
+        idx = seg.get("segment_index")
+        text = (
+            seg.get("modified_text")
+            or seg.get(text_field)
+            or seg.get("target_text")
+            or seg.get("text")
+            or ""
+        )
+        parts.append(
+            f"{idx}|{text}|{seg.get('font_size_pt')}|{seg.get('font_weight')}|"
+            f"{seg.get('font_style')}|{seg.get('leading_em')}|"
+            f"{seg.get('table_stroke_pt')}|{seg.get('table_border_style')}"
+        )
+    payload = "\n".join(parts)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
+
+
+_TYPOGRAPHY_CACHE_FIELDS = (
+    "computed_font_size_pt",
+    "computed_font_weight",
+    "computed_font_style",
+    "computed_leading_em",
+    "overlay_render_font_size_pt",
+    "overlay_estimated_font_size_pt",
+    "pdf_page_number",
+    "font_size_source",
+    "font_weight_source",
+    "font_style_source",
+    "leading_em_source",
+)
+
+
+def _apply_cached_segment_typography(
+    segments_list: List[Dict[str, Any]],
+    cached_by_index: Dict[str, Dict[str, Any]],
+) -> None:
+    for seg in segments_list:
+        if not isinstance(seg, dict):
+            continue
+        idx = seg.get("segment_index")
+        if idx is None:
+            continue
+        cached = cached_by_index.get(str(idx))
+        if not isinstance(cached, dict):
+            continue
+        for key in _TYPOGRAPHY_CACHE_FIELDS:
+            if key in cached:
+                seg[key] = cached[key]
+            else:
+                seg.pop(key, None)
+
+
+def _snapshot_segment_typography_cache(
+    segments_list: List[Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    snapshot: Dict[str, Dict[str, Any]] = {}
+    for seg in segments_list:
+        if not isinstance(seg, dict):
+            continue
+        idx = seg.get("segment_index")
+        if idx is None:
+            continue
+        snapshot[str(idx)] = {
+            key: seg[key]
+            for key in _TYPOGRAPHY_CACHE_FIELDS
+            if key in seg
+        }
+    return snapshot
+
+
+def _run_segments_pdf_typography_enrichment(
+    layout_doc: Any,
+    segments_list: List[Dict[str, Any]],
+    *,
+    text_field: str,
+    task_state: Dict[str, Any],
+) -> Dict[str, Dict[str, Any]]:
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        enrich_segments_font_fields,
+    )
+
+    working = [copy.deepcopy(seg) for seg in segments_list if isinstance(seg, dict)]
+    enrich_segments_font_fields(
+        layout_doc,
+        working,
+        text_field=text_field,
+        task_state=task_state,
+    )
+    return _snapshot_segment_typography_cache(working)
+
+
+def _translation_segment_total_count(task_state: Dict[str, Any]) -> int:
+    segs = (task_state.get("translation_segments") or {}).get("segments") or []
+    return len(segs) if isinstance(segs, list) else 0
+
+
+def _typography_cache_eligible(
+    task_state: Dict[str, Any],
+    segments_list: List[Dict[str, Any]],
+) -> bool:
+    """Only cache typography when enriching the full segment list."""
+    total = _translation_segment_total_count(task_state)
+    return total > 0 and len(segments_list) >= total
+
+
 def _enrich_segments_pdf_typography(
     task_id: str,
     task_state: Dict[str, Any],
@@ -748,10 +865,6 @@ def _enrich_segments_pdf_typography(
 
     _ensure_segment_layout_block_indices(segments_list, task_state)
 
-    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
-        enrich_segments_font_fields,
-    )
-
     text_field = "modified_text"
     if not any(
         isinstance(s, dict) and s.get("modified_text")
@@ -759,12 +872,46 @@ def _enrich_segments_pdf_typography(
     ):
         text_field = "target_text"
 
-    enrich_segments_font_fields(
+    fingerprint = _compute_segments_typography_fingerprint(
+        segments_list,
+        text_field=text_field,
+    )
+    cache_eligible = _typography_cache_eligible(task_state, segments_list)
+    cache = task_state.get("pdf_typography_cache") if cache_eligible else None
+    if (
+        cache_eligible
+        and isinstance(cache, dict)
+        and cache.get("fingerprint") == fingerprint
+        and isinstance(cache.get("by_index"), dict)
+    ):
+        _apply_cached_segment_typography(segments_list, cache["by_index"])
+        logger.debug(
+            LogModule.ROUTE,
+            f"[TRANSLATION-SEGMENTS-API] Task {task_id}: reused pdf typography cache "
+            f"for {len(segments_list)} segment(s)",
+        )
+        return
+
+    started = time.perf_counter()
+    cached_by_index = _run_segments_pdf_typography_enrichment(
         layout_doc,
         segments_list,
         text_field=text_field,
         task_state=task_state,
     )
+    _apply_cached_segment_typography(segments_list, cached_by_index)
+    if cache_eligible:
+        task_state["pdf_typography_cache"] = {
+            "fingerprint": fingerprint,
+            "by_index": cached_by_index,
+        }
+    elapsed = time.perf_counter() - started
+    if elapsed >= 1.0:
+        logger.info(
+            LogModule.ROUTE,
+            f"[TRANSLATION-SEGMENTS-API] Task {task_id}: computed pdf typography for "
+            f"{len(segments_list)} segment(s) in {elapsed:.2f}s",
+        )
 
 
 def _write_translation_segments_debug(
@@ -797,6 +944,53 @@ def _write_translation_segments_debug(
             f"[TRANSLATION-SEGMENTS-API] Task {task_id}: "
             f"Failed to write translation_segments.json: {_e}"
         )
+
+
+def _run_heavy_segment_enrichment_for_api(
+    task_id: str,
+    task_state: Dict[str, Any],
+    response_data: Dict[str, Any],
+) -> None:
+    """Run layout/typography enrichment off the asyncio event loop."""
+    segments_list = response_data.get("segments", [])
+    if not isinstance(segments_list, list) or not segments_list:
+        return
+
+    _enrich_segments_layout_block_bbox(task_id, task_state, segments_list)
+    _transform_image_overlay_bboxes_to_pixels(
+        task_id,
+        task_state,
+        segments_list,
+    )
+    _enrich_image_overlay_preview_metadata(task_id, task_state, response_data)
+    _enrich_segments_table_fields(task_state, segments_list)
+    _enrich_segments_pdf_typography(task_id, task_state, segments_list)
+
+    layout_doc = _resolve_layout_document(task_id, task_state)
+    if layout_doc is not None:
+        from utils.format_convert_utils import normalize_layout_block_bbox_map
+
+        _expand_segments_layout_group_bboxes(
+            task_id,
+            task_state,
+            segments_list,
+            layout_doc,
+            normalize_layout_block_bbox_map(
+                task_state.get("layout_block_bbox"),
+            ),
+        )
+
+    _write_translation_segments_debug(task_id, task_state, response_data)
+
+
+def _should_offload_segment_enrichment(
+    task_state: Dict[str, Any],
+    segments_list: List[Dict[str, Any]],
+) -> bool:
+    """Offload PDF layout enrichment when it would block the event loop."""
+    if len(segments_list) >= 20:
+        return True
+    return _translation_segment_total_count(task_state) >= 20
 
 
 @router.get(
@@ -953,38 +1147,43 @@ async def get_translation_segments_api(
     if isinstance(response_data, dict):
         segments_list = response_data.get("segments", [])
         if isinstance(segments_list, list) and segments_list:
-            _enrich_segments_layout_block_bbox(task_id, task_state, segments_list)
-            _transform_image_overlay_bboxes_to_pixels(
-                task_id,
-                task_state,
-                segments_list,
-            )
-            _enrich_image_overlay_preview_metadata(task_id, task_state, response_data)
-
-    # Enrich PDF layout segments with computed/user font size metadata.
-    if isinstance(response_data, dict):
-        segments_list = response_data.get("segments", [])
-        if isinstance(segments_list, list) and segments_list:
-            _enrich_segments_table_fields(task_state, segments_list)
-            _enrich_segments_pdf_typography(task_id, task_state, segments_list)
-            # Typography enrich may reset layout_block_indices from segment map;
-            # re-expand layout group companions so indices match multi-bbox preview.
-            layout_doc = _resolve_layout_document(task_id, task_state)
-            if layout_doc is not None:
-                from utils.format_convert_utils import normalize_layout_block_bbox_map
-
-                _expand_segments_layout_group_bboxes(
+            if _should_offload_segment_enrichment(task_state, segments_list):
+                await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: _run_heavy_segment_enrichment_for_api(
+                        task_id, task_state, response_data,
+                    ),
+                )
+            else:
+                _enrich_segments_layout_block_bbox(task_id, task_state, segments_list)
+                _transform_image_overlay_bboxes_to_pixels(
                     task_id,
                     task_state,
                     segments_list,
-                    layout_doc,
-                    normalize_layout_block_bbox_map(
-                        task_state.get("layout_block_bbox"),
-                    ),
                 )
+                _enrich_image_overlay_preview_metadata(
+                    task_id, task_state, response_data,
+                )
+                _enrich_segments_table_fields(task_state, segments_list)
+                _enrich_segments_pdf_typography(
+                    task_id, task_state, segments_list,
+                )
+                layout_doc = _resolve_layout_document(task_id, task_state)
+                if layout_doc is not None:
+                    from utils.format_convert_utils import normalize_layout_block_bbox_map
 
-    # Write enriched translation segments to debug file for font/bbox diagnosis
-    _write_translation_segments_debug(task_id, task_state, response_data)
+                    _expand_segments_layout_group_bboxes(
+                        task_id,
+                        task_state,
+                        segments_list,
+                        layout_doc,
+                        normalize_layout_block_bbox_map(
+                            task_state.get("layout_block_bbox"),
+                        ),
+                    )
+                _write_translation_segments_debug(
+                    task_id, task_state, response_data,
+                )
 
     # Include image data map if available so frontend can render placeholders as images
     # Prefer translation-specific image map (placeholder IDs generated during translation)
@@ -1179,6 +1378,7 @@ async def update_segment_api(
     )
 
     task_state = task_manager.get_task(task_id) or {}
+    task_state.pop("pdf_typography_cache", None)
     if isinstance(segment, dict):
         _enrich_segments_pdf_typography(task_id, task_state, [segment])
         layout_doc = _resolve_layout_document(task_id, task_state)

@@ -187,6 +187,45 @@ def test_is_column_wrap_continuation_bbox_detects_bottom_left_to_top_right():
     assert is_column_continuation_bbox(primary, companion, page_height=842.0) is True
 
 
+def test_is_figure_wrap_text_continuation_bbox_and_inset_image():
+    from layout.layout_group_pair_utils import (
+        has_inset_image_for_figure_wrap,
+        is_figure_wrap_inset_left_strip_bbox,
+        is_figure_wrap_text_continuation_bbox,
+    )
+
+    primary = (48.493, 316.461, 310.453, 448.445)
+    companion = (48.993, 448.445, 557.416, 537.434)
+    image = (316.452, 318.461, 553.416, 437.946)
+    assert is_figure_wrap_text_continuation_bbox(primary, companion, page_width=595.0)
+    assert has_inset_image_for_figure_wrap(primary, companion, [image])
+    assert not has_inset_image_for_figure_wrap(primary, companion, [])
+    # Classic and inset-left strip geometries are mutually exclusive.
+    assert not is_figure_wrap_inset_left_strip_bbox(primary, companion, page_width=595.0)
+
+
+def test_is_figure_wrap_inset_left_strip_bbox_and_image():
+    """Real page-0 geometry: wide text above + empty left strip + inset figure."""
+    from layout.layout_group_pair_utils import (
+        has_inset_image_for_figure_left_strip,
+        is_figure_wrap_geometry_pair,
+        is_figure_wrap_inset_left_strip_bbox,
+        is_figure_wrap_text_continuation_bbox,
+    )
+
+    # Blocks 9 / 10 / 12 from Causality-inspired representation learning PDF (US Letter).
+    primary = (305.0, 350.5, 548.5, 579.0)
+    companion = (305.5, 583.0, 412.5, 715.0)
+    image = (430.0, 590.0, 544.5, 657.0)
+    page_w = 612.0
+
+    assert is_figure_wrap_inset_left_strip_bbox(primary, companion, page_width=page_w)
+    assert has_inset_image_for_figure_left_strip(primary, companion, [image])
+    assert not has_inset_image_for_figure_left_strip(primary, companion, [])
+    assert not is_figure_wrap_text_continuation_bbox(primary, companion, page_width=page_w)
+    assert is_figure_wrap_geometry_pair(primary, companion, page_width=page_w)
+
+
 def test_is_bottom_left_to_right_top_wrap_pair_rejects_same_row():
     from layout.layout_group_pair_utils import is_bottom_left_to_right_top_wrap_pair
 

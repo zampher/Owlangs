@@ -56,6 +56,30 @@ TABLE_WITH_RAW_LATEX = (
 )
 
 
+VPP_PAREN_DELIMITED_MIXED = (
+    "4. 内部资源调度：在此层级中，VPP运营商主要关注如何调度其内部资源以满足需求。"
+    "通过这种分层方法，确定了可再生能源证书（REC）的购买和再调度数量，"
+    r"分别记为 \( R_{m} \) 和 \( R_{d} \)，以及各年度、各月和各日的碳排放配额。"
+)
+
+
+@pytest.mark.unit
+def test_paren_delimited_mixed_text_does_not_need_wrap():
+    flags = classify_latex_flags(VPP_PAREN_DELIMITED_MIXED, block_type="text")
+    assert flags["present"] is True
+    assert flags["mixed"] is True
+    assert flags["needs_delimiter_wrap"] is False
+
+
+@pytest.mark.unit
+def test_paren_delimited_mixed_text_not_corrupted_by_prepare():
+    flags = classify_latex_flags(VPP_PAREN_DELIMITED_MIXED, block_type="text")
+    prepared = prepare_text_for_latex_render(VPP_PAREN_DELIMITED_MIXED, flags)
+    assert r"\( R_{m} \)" in prepared
+    assert r"\( R_{d} \)" in prepared
+    assert prepared.count("$") % 2 == 0 or prepared.count("$") == 0
+
+
 @pytest.mark.unit
 def test_pure_text_has_no_latex_flags():
     flags = classify_latex_flags(PURE_TEXT, block_type="text")
@@ -183,6 +207,24 @@ def test_log_repro_mathcal_mixed_text_wraps_nested_commands():
     for chunk in outside:
         assert r"\mathcal" not in chunk
     assert r"\mathcal{P}(\boldsymbol{x}^{o})" in prepared
+
+
+@pytest.mark.unit
+def test_segment_requires_typst_latex_overlay_mixed_unchanged():
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        segment_preserves_source_pdf_pixels,
+        segment_skips_overlay,
+    )
+
+    seg = {
+        "chunk_type": "text",
+        "source_text": MIXED_FFR_PARAGRAPH,
+        "target_text": MIXED_FFR_PARAGRAPH,
+    }
+    attach_latex_flags_to_segment(seg, text=MIXED_FFR_PARAGRAPH)
+    assert seg["latex_flags"]["present"] is True
+    assert segment_skips_overlay(seg) is False
+    assert segment_preserves_source_pdf_pixels(seg, equation_format="text") is False
 
 
 @pytest.mark.unit

@@ -4643,8 +4643,10 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                                                               },
                                                               onExclusionUpdated:
                                                                   (
-                                                                int index,
-                                                              ) async {
+                                                                int index, {
+                                                                String? exclusionReason,
+                                                                bool? isExcluded,
+                                                              }) async {
                                                                 // CRITICAL: Reload data from backend to ensure consistency
                                                                 // This ensures chunks are updated correctly when exclusion changes
                                                                 // Use addPostFrameCallback to avoid setState during layout

@@ -665,13 +665,9 @@ class _TranslationFullComparePreviewTabState
     setState(() {
       _pdfPreviewManualRefreshNonce++;
       _displayPdfRevision = revision;
-      // Auto rotation is global; incremental dirty_segments refresh is insufficient.
-      _displayDirtySegmentIndices = _autoRotationEnabled
-          ? <int>{}
-          : Set<int>.from(
-              widget.pdfPreviewDirtySegmentsListenable?.value ??
-                  const <int>{},
-            );
+      _displayDirtySegmentIndices = Set<int>.from(
+        widget.pdfPreviewDirtySegmentsListenable?.value ?? const <int>{},
+      );
     });
   }
 

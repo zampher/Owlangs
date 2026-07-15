@@ -2246,6 +2246,26 @@ class _TranslationResultPreviewState
       // so Segment Type Filters stay in sync with latest backend metadata.
       _readGlobalDetectedReasonCounts(segmentsData);
 
+      // After retry/retranslate success, mark affected pages dirty so PDF
+      // preview auto-refresh re-renders only those pages.
+      if (mounted && _shouldRefreshOverlayPreviewRevision) {
+        final List<int> dirty = <int>[];
+        for (final int index in segmentIndices) {
+          final Map<String, dynamic>? segment = segmentMap[index];
+          if (segment == null) {
+            continue;
+          }
+          final bool isFailed = segment['is_failed'] as bool? ?? false;
+          final bool isImage = segment['is_image'] as bool? ?? false;
+          if (!isFailed && !isImage) {
+            dirty.add(index);
+          }
+        }
+        if (dirty.isNotEmpty) {
+          _schedulePdfPreviewRevisionChanged(dirtySegmentIndices: dirty);
+        }
+      }
+
       _translationResultLog(
         '[UPDATE_SEGMENTS] Updated ${segmentIndices.length} segments: $segmentIndices',
       );
@@ -4264,15 +4284,42 @@ class _TranslationResultPreviewState
     }
   }
 
-  /// Handle exclusion reason update from Change Exclusion Reason dialog
-  /// This is called when user changes exclusion reason via the dialog
-  /// Note: The actual segment data is already updated in translation_segment_item.dart
-  /// from the updateExclusionReason API response. This method just refreshes the UI.
-  Future<void> _handleExclusionUpdated(int index) async {
-    // Refresh pagination to reflect changes
-    // The metadata will be updated from the API response in translation_segment_item.dart
+  /// Handle exclusion reason update from Change Exclusion Reason dialog.
+  /// Updates local metadata, refreshes segment UI, and marks the segment dirty
+  /// so auto PDF preview refresh re-renders the affected page(s).
+  Future<void> _handleExclusionUpdated(
+    int index, {
+    String? exclusionReason,
+    bool? isExcluded,
+  }) async {
+    final bool excluded = isExcluded ?? (exclusionReason != null);
+    if (_allSegmentsMetadata.containsKey(index)) {
+      _allSegmentsMetadata[index] = <String, dynamic>{
+        ..._allSegmentsMetadata[index]!,
+        'is_excluded': excluded,
+        'exclusion_reason': exclusionReason,
+      };
+    } else {
+      _allSegmentsMetadata[index] = <String, dynamic>{
+        'is_excluded': excluded,
+        'exclusion_reason': exclusionReason,
+      };
+    }
+    if (excluded) {
+      _excludedSegments[index] = true;
+    } else {
+      _excludedSegments.remove(index);
+    }
+    _clearFilteredIndicesCache();
+
     if (_segmentsPaginationController != null) {
       await _segmentsPaginationController!.refresh();
+    }
+
+    if (mounted) {
+      setState(() {});
+      // Auto PDF preview refresh: dirty page for this segment.
+      _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
     }
   }
 
@@ -4451,6 +4498,10 @@ class _TranslationResultPreviewState
 
       if (mounted) {
         if (success && !isFailed) {
+          // Preview revision page: mark dirty page and auto-refresh PDF.
+          if (_shouldRefreshOverlayPreviewRevision) {
+            _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
+          }
           MessageService.showSuccess(
             context,
             'Segment retranslated using $selectedPlatform',
@@ -5236,6 +5287,16 @@ class _TranslationResultPreviewState
     }
     if (dirtySegmentIndices != null) {
       _pendingDirtySegmentIndices.addAll(dirtySegmentIndices);
+    }
+    // Expose dirty segments immediately so partial PDF URLs are correct
+    // before the debounced revision flush (e.g. manual refresh within 500ms).
+    if (_pendingDirtySegmentIndices.isNotEmpty) {
+      _pdfPreviewDirtySegmentsNotifier.value = Set<int>.from(
+        <int>{
+          ..._pdfPreviewDirtySegmentsNotifier.value,
+          ..._pendingDirtySegmentIndices,
+        },
+      );
     }
     _pdfPreviewRevisionDebounceTimer?.cancel();
     _pdfPreviewRevisionDebounceTimer = Timer(_pdfPreviewRevisionDebounce, () {
@@ -6199,7 +6260,7 @@ class _TranslationResultPreviewState
       }
 
       if (mounted && _shouldRefreshOverlayPreviewRevision) {
-        _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
+        _notifyPdfPreviewRevisionChanged(dirtySegmentIndex: index);
         setState(() {});
         await _segmentsPaginationController?.refresh();
       }
@@ -6235,7 +6296,7 @@ class _TranslationResultPreviewState
       }
 
       if (mounted && _shouldRefreshOverlayPreviewRevision) {
-        _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
+        _notifyPdfPreviewRevisionChanged(dirtySegmentIndex: index);
         setState(() {});
         await _segmentsPaginationController?.refresh();
       }
@@ -6493,7 +6554,9 @@ class _TranslationResultPreviewState
     if (baseMode == TranslationPreviewMode.imageOriginalLayout) {
       await _warmImageOverlayTypographyCache();
     }
-    await _refreshPdfTypographyMetadata(forceRefresh: true);
+    // Do not block revision preview on a full typography refetch; segments
+    // loaded after translation already carry computed fields when available.
+    unawaited(_refreshPdfTypographyMetadata(forceRefresh: false));
   }
 
   Future<void> _warmImageOverlayTypographyCache() async {

@@ -414,11 +414,15 @@ def segment_mixed_text_into_md_segments(text: str) -> List[Tuple[bool, str]]:
 
 
 
+_PAREN_INLINE_MATH_RE = re.compile(r"\\\(.+?\\\)", re.DOTALL)
+_BRACKET_DISPLAY_MATH_RE = re.compile(r"\\\[.+?\\\]", re.DOTALL)
+
+
 def _has_existing_math_delimiters(text: str) -> bool:
 
     """
 
-    True if text already contains LaTeX math delimiters ($$ or $).
+    True if text already contains LaTeX math delimiters ($, $$, \\(...\\), or \\[...\\]).
 
     Do NOT run mixed_text_to_md on such content - it would corrupt the structure.
 
@@ -428,7 +432,19 @@ def _has_existing_math_delimiters(text: str) -> bool:
 
         return False
 
-    return "$$" in text or ("$" in text and text.count("$") >= 2)
+    if "$$" in text or ("$" in text and text.count("$") >= 2):
+
+        return True
+
+    if _PAREN_INLINE_MATH_RE.search(text):
+
+        return True
+
+    if _BRACKET_DISPLAY_MATH_RE.search(text):
+
+        return True
+
+    return False
 
 
 

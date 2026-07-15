@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2025 QinHan
 // SPDX-License-Identifier: MPL-2.0
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
@@ -53,8 +55,11 @@ class SegmentNumberedItem extends StatefulWidget {
   final Function(int index)? onExclude; // Callback to exclude segment
   final Function(int index)? onUnexclude; // Callback to unexclude segment
   final String? taskId; // Task ID for API calls
-  final Function(int index)?
-      onExclusionUpdated; // Callback when exclusion reason is updated
+  final FutureOr<void> Function(
+    int index, {
+    String? exclusionReason,
+    bool? isExcluded,
+  })? onExclusionUpdated; // Callback when exclusion reason is updated
 
   @override
   State<SegmentNumberedItem> createState() => _SegmentNumberedItemState();
@@ -483,7 +488,11 @@ class _SegmentNumberedItemState extends State<SegmentNumberedItem> {
         if (widget.onExclusionUpdated != null) {
           WidgetsBinding.instance.addPostFrameCallback((_) async {
             if (mounted && widget.onExclusionUpdated != null) {
-              await widget.onExclusionUpdated!(widget.index);
+              await widget.onExclusionUpdated!(
+                widget.index,
+                exclusionReason: newReason,
+                isExcluded: newReason != null,
+              );
             }
           });
         }

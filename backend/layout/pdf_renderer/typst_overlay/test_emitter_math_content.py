@@ -19,6 +19,25 @@ def test_sanitize_normalizes_paren_math_delimiters():
     assert "\\(" not in out
 
 
+def test_sanitize_strips_stray_paren_delimiters_inside_dollar_math():
+    """Regression: corrupted $...\\)...$ must not reach mitex."""
+    text = r"load ($ E_{t} \) $ and more"
+    out = sanitize_typst_markdown_for_compile(text)
+    assert r"\)" not in out
+    assert "$E_{t}$" in out
+
+
+def test_sanitize_mixed_vpp_paren_math_segment():
+    """Regression: well-formed \\( ... \\) inline math normalizes cleanly."""
+    text = (
+        "分别记为 \\( R_{m} \\) 和 \\( R_{d} \\)，以及每年 CER 的购买量"
+    )
+    out = sanitize_typst_markdown_for_compile(text)
+    assert "$R_{m}$" in out
+    assert "$R_{d}$" in out
+    assert r"\)" not in out
+
+
 def test_sanitize_strips_newlines_inside_inline_math():
     text = "Cell value $R_{m}\nC_{d}$ end"
     out = sanitize_typst_markdown_for_compile(text)

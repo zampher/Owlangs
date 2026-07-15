@@ -5037,6 +5037,14 @@ def update_exclusion_reason(
             except ValueError:
                 logger.error(LogModule.TRANS, f"Invalid exclusion reason: {new_reason}")
                 return None
+
+        # Exclusion reason changes overlay vs source-PDF preserve; bust PDF caches.
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            invalidate_pdf_export_cache,
+            invalidate_pdf_preview_cache,
+        )
+        invalidate_pdf_export_cache(task_state)
+        invalidate_pdf_preview_cache(task_state)
         
         return segment
     
@@ -5151,6 +5159,13 @@ def update_exclusion_reason(
             except ValueError:
                 logger.error(LogModule.TRANS,f"Invalid exclusion reason: {new_reason}")
                 return None
+
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            invalidate_pdf_export_cache,
+            invalidate_pdf_preview_cache,
+        )
+        invalidate_pdf_export_cache(task_state)
+        invalidate_pdf_preview_cache(task_state)
         
         # Return a mock segment dict for consistency with API response
         return {

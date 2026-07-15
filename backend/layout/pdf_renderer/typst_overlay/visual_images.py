@@ -14,10 +14,15 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import AbstractSet, Dict, List, Optional, Tuple
 
 from layout.base import LayoutDocument
+from layout.ocr_provider.paddle.layout_parser import _PADDLE_IMAGE_PATH_SENTINEL
 from logger.logger import LogModule, unified_logger
+
+PADDLE_SOURCE_PDF_IMAGE_SENTINEL = _PADDLE_IMAGE_PATH_SENTINEL
+EQUATION_SOURCE_PDF_FALLBACK_SENTINEL = "__equation_source_pdf__"
 
 
 @dataclass(frozen=True)
@@ -28,7 +33,7 @@ class VisualImagePlacement:
     block_index: int
     inner_bbox: Tuple[float, float, float, float]
     image_path: str
-    block_type: str  # "chart" | "table" | "equation"
+    block_type: str  # "chart" | "table" | "equation" | "image"
 
 
 from layout.block_types import (
@@ -39,6 +44,47 @@ from layout.block_types import (
     TABLE_BODY,
     VISUAL_BLOCK_TYPES,
 )
+
+
+def chart_block_has_replaceable_html_body(block) -> bool:
+    """True when the chart exposes markdown-table/HTML content for overlay re-render."""
+    raw = getattr(block, "raw", None) or {}
+    if not isinstance(raw, dict):
+        return False
+    for sub in raw.get("blocks") or []:
+        if not isinstance(sub, dict):
+            continue
+        if str(sub.get("type", "")) != CHART_BODY:
+            continue
+        for line in sub.get("lines") or []:
+            if not isinstance(line, dict):
+                continue
+            for span in line.get("spans") or []:
+                if not isinstance(span, dict):
+                    continue
+                if span.get("type") != "chart":
+                    continue
+                content = span.get("content")
+                if not isinstance(content, str) or not content.strip():
+                    continue
+                text = content.strip()
+                lowered = text.lower()
+                if (
+                    text.startswith("|")
+                    or "<table" in lowered
+                    or text.startswith("<div")
+                    or text.startswith("<svg")
+                    or text.startswith("<img")
+                ):
+                    return True
+                # Markdown table separator heuristic
+                lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+                if "|" in text and any(
+                    "|" in ln and all(c in " -:|" for c in ln.replace("|", "").strip())
+                    for ln in lines
+                ):
+                    return True
+    return False
 
 
 def block_preserves_source_pdf_visual(
@@ -53,7 +99,11 @@ def block_preserves_source_pdf_visual(
     table_fmt = (table_body_format or "html").strip().lower()
     eq_fmt = (equation_format or "text").strip().lower()
     if block.type == "chart":
-        return chart_fmt == "image"
+        # Image mode always keeps source pixels. HTML mode only erases when a
+        # replaceable HTML/markdown body exists; otherwise keep the chart.
+        if chart_fmt == "image":
+            return True
+        return not chart_block_has_replaceable_html_body(block)
     if block.type == "table":
         return table_fmt == "image"
     is_equation = getattr(block, "is_equation", None)
@@ -84,6 +134,10 @@ def protected_bbox_for_layout_block(
 def extract_equation_content(block) -> Optional[str]:
     """Return LaTeX/text content from an interline_equation block."""
     raw = getattr(block, "raw", None) or {}
+    if isinstance(raw, dict):
+        paddle_content = raw.get("block_content")
+        if isinstance(paddle_content, str) and paddle_content.strip():
+            return paddle_content.strip()
     if not isinstance(raw, dict):
         return None
     for line in raw.get("lines") or []:
@@ -256,6 +310,122 @@ def _extract_body_image_from_nested(
     return None, None
 
 
+def is_paddle_source_pdf_image_path(image_path: Optional[str]) -> bool:
+    """Return True when layout image pixels exist only on the source PDF."""
+    return isinstance(image_path, str) and image_path.strip() == PADDLE_SOURCE_PDF_IMAGE_SENTINEL
+
+
+def is_equation_source_pdf_fallback_path(image_path: Optional[str]) -> bool:
+    """Return True when equation pixels must be cropped from the source PDF."""
+    return (
+        isinstance(image_path, str)
+        and image_path.strip() == EQUATION_SOURCE_PDF_FALLBACK_SENTINEL
+    )
+
+
+def is_source_pdf_crop_image_path(image_path: Optional[str]) -> bool:
+    """Return True when image bytes should be extracted from the source PDF region."""
+    return is_paddle_source_pdf_image_path(image_path) or is_equation_source_pdf_fallback_path(
+        image_path
+    )
+
+
+def extract_image_bytes_from_pdf_region(
+    source_pdf_path: Path,
+    page_index: int,
+    bbox: Tuple[float, float, float, float],
+    *,
+    dpi: int = 150,
+) -> Optional[bytes]:
+    """Crop a PDF page region to PNG bytes (Paddle OCR image blocks)."""
+    try:
+        import fitz
+    except ImportError:
+        unified_logger.warning(
+            LogModule.RESTOR,
+            "[TYPST_OVERLAY] PyMuPDF unavailable; cannot extract paddle PDF images",
+        )
+        return None
+
+    try:
+        doc = fitz.open(source_pdf_path)
+    except Exception as exc:
+        unified_logger.warning(
+            LogModule.RESTOR,
+            f"[TYPST_OVERLAY] Failed to open source PDF for image extract: {exc}",
+        )
+        return None
+
+    try:
+        if page_index < 0 or page_index >= len(doc):
+            return None
+        page = doc[page_index]
+        rect = fitz.Rect(*bbox) & page.rect
+        if rect.is_empty:
+            return None
+        pix = page.get_pixmap(clip=rect, dpi=dpi)
+        return pix.tobytes("png")
+    except Exception as exc:
+        unified_logger.warning(
+            LogModule.RESTOR,
+            f"[TYPST_OVERLAY] Failed to extract PDF image on page {page_index + 1}: {exc}",
+        )
+        return None
+    finally:
+        doc.close()
+
+
+def collect_paddle_source_pdf_image_placements(
+    layout_doc: LayoutDocument,
+) -> List[VisualImagePlacement]:
+    """Collect image blocks whose raster lives only on the source PDF layer."""
+    placements: List[VisualImagePlacement] = []
+    for page in layout_doc.pages:
+        for block in page.blocks:
+            if block.type not in (IMAGE, LEGACY_FIGURE):
+                continue
+            image_path = getattr(block, "image_path", None)
+            if not is_paddle_source_pdf_image_path(image_path):
+                continue
+            block_index = getattr(block, "index", None)
+            if block_index is None:
+                continue
+            body_bbox = _parse_bbox(getattr(block, "bbox", None))
+            if body_bbox is None:
+                continue
+            placements.append(VisualImagePlacement(
+                page_index=page.page_index,
+                block_index=block_index,
+                inner_bbox=body_bbox,
+                image_path=PADDLE_SOURCE_PDF_IMAGE_SENTINEL,
+                block_type="image",
+            ))
+    if placements:
+        unified_logger.info(
+            LogModule.RESTOR,
+            f"[TYPST_OVERLAY] Collected {len(placements)} paddle source-PDF "
+            "image placement(s)",
+        )
+    return placements
+
+
+def collect_latex_overlay_equation_block_indices(layout_doc: LayoutDocument) -> set[int]:
+    """Return layout block indices for equation blocks (LaTeX overlay targets)."""
+    indices: set[int] = set()
+    for page in layout_doc.pages:
+        for block in page.blocks:
+            if not block.is_equation():
+                continue
+            block_index = getattr(block, "index", None)
+            if block_index is None:
+                continue
+            try:
+                indices.add(int(block_index))
+            except (TypeError, ValueError):
+                continue
+    return indices
+
+
 def lookup_image_bytes(image_data_map: Dict[str, bytes], image_path: str) -> Optional[bytes]:
     """Resolve image bytes by full path or basename."""
     if not image_path or not image_data_map:
@@ -337,12 +507,22 @@ def collect_visual_image_placements(
             ):
                 image_path = extract_equation_image_path(block)
                 body_bbox = _parse_bbox(getattr(block, "bbox", None))
-                if body_bbox and image_path and lookup_image_bytes(image_data_map, image_path):
+                if not body_bbox:
+                    continue
+                if image_path and lookup_image_bytes(image_data_map, image_path):
                     placements.append(VisualImagePlacement(
                         page_index=page.page_index,
                         block_index=block_index,
                         inner_bbox=body_bbox,
                         image_path=image_path,
+                        block_type="equation",
+                    ))
+                elif block_index in fallback_eq_blocks:
+                    placements.append(VisualImagePlacement(
+                        page_index=page.page_index,
+                        block_index=block_index,
+                        inner_bbox=body_bbox,
+                        image_path=EQUATION_SOURCE_PDF_FALLBACK_SENTINEL,
                         block_type="equation",
                     ))
 

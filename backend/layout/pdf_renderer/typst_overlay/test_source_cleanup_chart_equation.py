@@ -74,6 +74,24 @@ class TestSourceCleanupChartEquation(unittest.TestCase):
 
     def test_chart_html_format_redacts_body_bbox(self):
         chart_block = self._chart_block()
+        chart_block.raw = {
+            "blocks": [
+                {
+                    "type": "chart_body",
+                    "bbox": [110.0, 441.0, 302.0, 610.0],
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "type": "chart",
+                                    "content": "| A | B |\n| --- | --- |\n| 1 | 2 |",
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ]
+        }
         page = SimpleNamespace(page_index=0, blocks=[chart_block], iter_image_blocks=lambda: [])
         layout_doc = SimpleNamespace(pages=[page])
         redaction_map, _ = _collect_redaction_rects(
@@ -85,6 +103,24 @@ class TestSourceCleanupChartEquation(unittest.TestCase):
         rect = redaction_map[0][0]
         self.assertAlmostEqual(rect[0], 108.0)
         self.assertAlmostEqual(rect[1], 439.0)
+
+    def test_chart_html_format_keeps_source_when_no_replaceable_body(self):
+        chart_block = self._chart_block()
+        page = SimpleNamespace(page_index=0, blocks=[chart_block], iter_image_blocks=lambda: [])
+        layout_doc = SimpleNamespace(pages=[page])
+        redaction_map, _ = _collect_redaction_rects(
+            layout_doc,
+            chart_body_format="html",
+            equation_format="text",
+        )
+        self.assertEqual(redaction_map, {})
+        self.assertTrue(
+            block_preserves_source_pdf_visual(
+                chart_block,
+                chart_body_format="html",
+                equation_format="text",
+            )
+        )
 
     def test_equation_image_format_skips_redaction(self):
         eq_block = self._equation_block()
@@ -138,6 +174,18 @@ class TestSourceCleanupChartEquation(unittest.TestCase):
         rect = redaction_map[0][0]
         self.assertAlmostEqual(rect[0], 98.0)
         self.assertAlmostEqual(rect[1], 198.0)
+
+    def test_equation_text_format_redacts_even_when_in_skip_set(self):
+        eq_block = self._equation_block()
+        page = SimpleNamespace(page_index=0, blocks=[eq_block], iter_image_blocks=lambda: [])
+        layout_doc = SimpleNamespace(pages=[page])
+        redaction_map, _ = _collect_redaction_rects(
+            layout_doc,
+            skip_block_indices={35},
+            chart_body_format="image",
+            equation_format="text",
+        )
+        self.assertEqual(len(redaction_map.get(0, [])), 1)
 
 
 if __name__ == "__main__":

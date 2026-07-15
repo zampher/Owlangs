@@ -8,6 +8,7 @@ import unittest
 from layout.pdf_renderer.typst_overlay.font_fit import (
     FontFitCalculator,
     REF_TEXT_MAX_LEADING_EM,
+    _blend_height_and_wrap_line_count,
     estimate_preserved_stack_visual_lines,
     estimate_title_font_size_pt,
     is_bbox_at_page_right_edge,
@@ -61,6 +62,49 @@ class TestFontFitCalculator(unittest.TestCase):
         )
         fitted = calc.calculate_fit_params(block, layout_raw={})
         self.assertFalse(fitted.fit_to_box)
+
+    def test_default_font_hint_does_not_inflate_visual_line_count(self):
+        """Unset font_size_pt=10 must not be treated as a real 10pt line height."""
+        calc = FontFitCalculator()
+        # Tall body bbox (~6 lines at 14pt typical line height).
+        bbox = (72.0, 100.0, 540.0, 184.0)
+        text = (
+            "Natural language inference remains a challenging task in computational "
+            "linguistics. Researchers have proposed many models."
+        )
+        block = RenderBlock(
+            block_id="body",
+            page_index=0,
+            inner_bbox=bbox,
+            plain_text=text,
+            markdown_text=text,
+            font_size_pt=10.0,  # default / unset
+        )
+        estimated = calc.estimate_font_size(block, layout_raw={})
+        # With 14pt typical line height: ~10.8pt. The old bug used 10pt line
+        # height → ~7.8pt and chronically under-filled EN→ZH overlays.
+        self.assertGreaterEqual(estimated, 10.0)
+
+    def test_cjk_body_enables_fit_to_box_for_width_wrap(self):
+        """EN→ZH: CJK width (~1em) must not be measured with Latin 0.52em ratio."""
+        calc = FontFitCalculator()
+        bbox = (72.0, 100.0, 540.0, 184.0)
+        # Dense Chinese that wraps at body size; Latin-only ratio understated width.
+        text = (
+            "自然语言推理在计算语言学中仍然是一项极具挑战性的任务。"
+            "研究人员已经提出了许多模型，但这些模型在组合性与语义推理方面仍然存在明显困难，"
+            "亟需更强的可解释性与泛化能力。针对上述问题我们进一步探索了多语言对齐与知识增强方法。"
+        )
+        block = RenderBlock(
+            block_id="zh",
+            page_index=0,
+            inner_bbox=bbox,
+            plain_text=text,
+            markdown_text=text,
+        )
+        fitted = calc.calculate_fit_params(block, layout_raw={})
+        self.assertTrue(fitted.fit_to_box)
+        self.assertGreaterEqual(fitted.font_size_pt, 10.0)
 
 
     def test_tall_paragraph_with_citations_uses_multiline_fit(self):
@@ -738,6 +782,89 @@ class TestFontFitCalculator(unittest.TestCase):
         fitted = calc.calculate_fit_params(block, layout_raw={})
         inner_h = fitted.inner_bbox[3] - fitted.inner_bbox[1]
         self.assertAlmostEqual(fitted.fit_max_height_pt, inner_h)
+
+    def test_soft_newline_tall_cjk_body_does_not_crush_font(self):
+        """Seg 8 regression: soft OCR newline must not force preserved-stack ~5pt font."""
+        calc = FontFitCalculator()
+        p1 = (
+            "为使理论构想付诸实践，我们基于研究强调，因果因素S应满足三个属性：与非因果因素U分离；"
+            "S的分解应联合独立；对分类任务因果充分，即包含所有因果信息。如图2所示，与U混合导致S包含"
+            "潜在的非因果信息，从而影响模型的泛化能力。"
+        )
+        p2 = (
+            "因此我们提出一种因果启发的表征学习方法，通过干预非因果因素并强制表征维度对干预保持不变，"
+            "从而实现因果因素的有效提取与解耦，为领域泛化任务提供更具可解释性的解决方案。"
+        )
+        text = p1 + "\n" + p2
+        raw = {
+            "type": "text",
+            "lines": [{"spans": [{"type": "text", "content": text}]}],
+        }
+        block = RenderBlock(
+            block_id="seg8",
+            page_index=0,
+            inner_bbox=(305.0, 350.5, 548.5, 579.0),
+            plain_text=text,
+            markdown_text=text,
+        )
+        fitted = calc.calculate_fit_params(block, layout_raw=raw)
+        self.assertFalse(fitted.preserve_line_breaks)
+        self.assertGreaterEqual(fitted.font_size_pt, 9.0)
+        self.assertTrue(fitted.fit_to_box)
+
+    def test_command_heavy_inline_math_keeps_readable_font(self):
+        """Seg 73 regression: long \\mathbf/\\left LaTeX must not crush fit font."""
+        calc = FontFitCalculator()
+        text = (
+            "where  $ \\tilde{r}_i^o $ and  $ \\tilde{r}_i^a $ denote the Z-score "
+            "normalized  $ i $-th column of  $ \\mathbf{R}^o = \\left[ "
+            "(\\mathbf{r}_1^o)^T, \\ldots, (\\mathbf{r}_N^o)^T \\right]^T "
+            "\\in \\mathbb{R}^{B \\times N} $ and  $ \\mathbf{R}^a $, respectively."
+        )
+        block = RenderBlock(
+            block_id="seg73",
+            page_index=0,
+            inner_bbox=(46.5, 267.5, 288.5, 366.5),
+            plain_text=text,
+            markdown_text=text,
+        )
+        fitted = calc.calculate_fit_params(block, layout_raw={})
+        self.assertGreaterEqual(fitted.font_size_pt, 9.0)
+        self.assertTrue(fitted.fit_to_box)
+
+    def test_blend_height_wrap_caps_near_single_line_at_two(self):
+        """Short wrap vs tall visual → single↔double tradeoff (not 3+ lines)."""
+        self.assertAlmostEqual(_blend_height_and_wrap_line_count(3.5, 1.2), 2.0)
+        self.assertAlmostEqual(_blend_height_and_wrap_line_count(2.6, 1.7), 2.0)
+        # Boundary near 2 wrap lines still uses the 2-line height budget
+        self.assertAlmostEqual(_blend_height_and_wrap_line_count(3.3, 2.1), 2.1)
+        # Dense text: wrap ≈ visual → keep max
+        self.assertAlmostEqual(_blend_height_and_wrap_line_count(3.1, 3.0), 3.1)
+        # Longer wrap still may use wrap+1 when under-filled
+        self.assertAlmostEqual(_blend_height_and_wrap_line_count(4.5, 2.5), 3.5)
+
+    def test_short_zh_in_tall_source_bbox_uses_two_line_budget(self):
+        """Seg 20: EN source ~3 lines, ZH wrap ~1–2 → avoid height-implied under-size."""
+        calc = FontFitCalculator()
+        # Bbox from task 8f43c211 segment 20 (~36.5pt tall, ~229pt wide).
+        bbox = (318.0, 277.0, 547.0, 313.5)
+        text = (
+            "- 在多个广泛使用的数据集上的大量实验和分析结果证明了我们方法的有效性和优越性。"
+        )
+        block = RenderBlock(
+            block_id="seg20",
+            page_index=0,
+            inner_bbox=bbox,
+            plain_text=text,
+            markdown_text=text,
+            font_size_pt=10.3,
+        )
+        estimated = calc.estimate_font_size(block, layout_raw={})
+        # Layout seed 10.3 must not short-circuit when tall bbox is under-filled.
+        # Old max(visual≈2.6, wrap≈1.7) → ~10pt; with 2-line blend → ~13pt+.
+        self.assertGreaterEqual(estimated, 12.5)
+        fitted = calc.calculate_fit_params(block, layout_raw={})
+        self.assertGreaterEqual(fitted.font_size_pt, 12.5)
 
 
 if __name__ == "__main__":

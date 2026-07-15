@@ -27,6 +27,7 @@ def enrich_layout_group_pairs_on_document(
         sanitize_layout_group_pairs_on_document,
     )
     from layout.ocr_provider.paddle.layout_group_pairs import (
+        apply_figure_wrap_layout_group_pairs,
         apply_paddle_layout_group_pairs,
         apply_spatial_layout_group_pairs,
     )
@@ -55,8 +56,18 @@ def enrich_layout_group_pairs_on_document(
                 page_height=page_height,
                 page_width=page_width,
             )
+            apply_figure_wrap_layout_group_pairs(
+                page.blocks,
+                page_height=page_height,
+                page_width=page_width,
+            )
         else:
             apply_mineru_spatial_layout_group_pairs(
+                page.blocks,
+                page_height=page_height,
+                page_width=page_width,
+            )
+            apply_figure_wrap_layout_group_pairs(
                 page.blocks,
                 page_height=page_height,
                 page_width=page_width,

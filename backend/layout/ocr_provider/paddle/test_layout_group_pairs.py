@@ -25,6 +25,168 @@ def _block_by_index(blocks, index: int) -> LayoutBlock:
     raise KeyError(index)
 
 
+def test_apply_figure_wrap_pairs_abstract_continuation_with_inset_image():
+    from layout.ocr_provider.paddle.layout_group_pairs import (
+        apply_figure_wrap_layout_group_pairs,
+    )
+    from layout.layout_group_pair_utils import LAYOUT_GROUP_PAIR_KIND_FIGURE_WRAP
+
+    blocks = [
+        LayoutBlock(
+            page_index=0,
+            bbox=(48.493, 316.461, 310.453, 448.445),
+            type="text",
+            index=9,
+            text="ABSTRACT: Left column wraps beside the TOC graphic and continues",
+            raw={"group_id": 14, "block_order": 9},
+        ),
+        LayoutBlock(
+            page_index=0,
+            bbox=(48.993, 448.445, 557.416, 537.434),
+            type="text",
+            index=10,
+            text="below the figure as a full-width continuation sentence.",
+            raw={"group_id": 16, "block_order": 10},
+        ),
+        LayoutBlock(
+            page_index=0,
+            bbox=(316.452, 318.461, 553.416, 437.946),
+            type="image",
+            index=22,
+            text="",
+            raw={"group_id": 15, "block_order": 22},
+        ),
+        LayoutBlock(
+            page_index=0,
+            bbox=(48.993, 539.433, 522.421, 562.43),
+            type="text",
+            index=11,
+            text="KEYWORDS: piezoelectric nanotransducer",
+            raw={"group_id": 17, "block_order": 11},
+        ),
+    ]
+
+    paired = apply_figure_wrap_layout_group_pairs(blocks, page_width=595.0)
+    assert paired == 1
+    primary = _block_by_index(blocks, 9)
+    companion = _block_by_index(blocks, 10)
+    keywords = _block_by_index(blocks, 11)
+
+    assert companion.raw.get("_layout_group_pair_of") == 9
+    assert companion.raw.get("_layout_group_pair_kind") == LAYOUT_GROUP_PAIR_KIND_FIGURE_WRAP
+    assert not (companion.text or "").strip()
+    assert "continues" in (primary.text or "")
+    assert "full-width continuation" in (primary.text or "")
+    assert any(p.get("index") == 10 for p in (primary.raw.get("_layout_group_pairs") or []))
+    assert keywords.raw.get("_layout_group_pair_of") is None
+    assert (keywords.text or "").startswith("KEYWORDS")
+
+
+def test_apply_figure_wrap_pairs_requires_inset_image():
+    from layout.ocr_provider.paddle.layout_group_pairs import (
+        apply_figure_wrap_layout_group_pairs,
+    )
+
+    blocks = [
+        LayoutBlock(
+            page_index=0,
+            bbox=(48.0, 300.0, 300.0, 420.0),
+            type="text",
+            index=1,
+            text="Narrow paragraph without an inset image.",
+            raw={"group_id": 1, "block_order": 1},
+        ),
+        LayoutBlock(
+            page_index=0,
+            bbox=(48.0, 420.0, 540.0, 500.0),
+            type="text",
+            index=2,
+            text="Wider continuation that must not pair without a figure notch.",
+            raw={"group_id": 2, "block_order": 2},
+        ),
+    ]
+    assert apply_figure_wrap_layout_group_pairs(blocks, page_width=595.0) == 0
+    assert _block_by_index(blocks, 2).raw.get("_layout_group_pair_of") is None
+
+
+def test_apply_figure_wrap_pairs_inset_left_strip_empty_companion():
+    """Wide text above + empty left strip beside inset figure (Causality PDF page 0)."""
+    from layout.ocr_provider.paddle.layout_group_pairs import (
+        apply_figure_wrap_layout_group_pairs,
+    )
+    from layout.layout_group_pair_utils import LAYOUT_GROUP_PAIR_KIND_FIGURE_WRAP
+
+    primary_text = (
+        "This paragraph runs full column width above the figure and should "
+        "continue in the narrow strip to the left of Figure 1."
+    )
+    blocks = [
+        LayoutBlock(
+            page_index=0,
+            bbox=(305.0, 350.5, 548.5, 579.0),
+            type="text",
+            index=9,
+            text=primary_text,
+            raw={"group_id": 10, "block_order": 9},
+        ),
+        LayoutBlock(
+            page_index=0,
+            bbox=(305.5, 583.0, 412.5, 715.0),
+            type="text",
+            index=10,
+            text="",
+            raw={"group_id": 10, "block_order": 10},
+        ),
+        LayoutBlock(
+            page_index=0,
+            bbox=(430.0, 590.0, 544.5, 657.0),
+            type="image",
+            index=12,
+            text="",
+            raw={"group_id": 12, "block_order": 12},
+        ),
+    ]
+
+    paired = apply_figure_wrap_layout_group_pairs(blocks, page_width=612.0)
+    assert paired == 1
+    primary = _block_by_index(blocks, 9)
+    companion = _block_by_index(blocks, 10)
+
+    assert companion.raw.get("_layout_group_pair_of") == 9
+    assert companion.raw.get("_layout_group_pair_kind") == LAYOUT_GROUP_PAIR_KIND_FIGURE_WRAP
+    # Empty companion: do not merge OCR; keep text on primary for area-based split later.
+    assert (primary.text or "") == primary_text
+    assert not (companion.text or "").strip()
+    assert any(p.get("index") == 10 for p in (primary.raw.get("_layout_group_pairs") or []))
+
+
+def test_apply_figure_wrap_pairs_inset_left_strip_requires_image():
+    from layout.ocr_provider.paddle.layout_group_pairs import (
+        apply_figure_wrap_layout_group_pairs,
+    )
+
+    blocks = [
+        LayoutBlock(
+            page_index=0,
+            bbox=(305.0, 350.5, 548.5, 579.0),
+            type="text",
+            index=9,
+            text="Wide primary above an empty left strip without a figure.",
+            raw={"group_id": 10, "block_order": 9},
+        ),
+        LayoutBlock(
+            page_index=0,
+            bbox=(305.5, 583.0, 412.5, 715.0),
+            type="text",
+            index=10,
+            text="",
+            raw={"group_id": 10, "block_order": 10},
+        ),
+    ]
+    assert apply_figure_wrap_layout_group_pairs(blocks, page_width=612.0) == 0
+    assert _block_by_index(blocks, 10).raw.get("_layout_group_pair_of") is None
+
+
 def test_apply_group_pairs_one_primary_two_empty_companions():
     blocks = [
         LayoutBlock(

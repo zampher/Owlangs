@@ -169,19 +169,17 @@ def line_count_for_vertical_edge_margin(
             ),
         )
 
-    wrap_lines = 1.0
+    # Width helpers are defined below; resolve at call time.
+    wrap_ratio = 0.0
     if bbox_width_pt and bbox_width_pt > 0 and font_size_pt and font_size_pt > 0:
-        typo_units = estimate_typographic_units(text, layout_raw)
-        chars_per_line = max(
-            1.0,
-            bbox_width_pt / (font_size_pt * LATIN_CHAR_WIDTH_RATIO),
+        wrap_ratio = estimate_wrap_ratio(
+            text, bbox_width_pt, font_size_pt, layout_raw,
         )
-        wrap_lines = typo_units / chars_per_line
 
-    if wrap_lines >= 1.05:
+    if wrap_ratio >= 1.05:
         return max(
             2.0,
-            wrap_lines,
+            wrap_ratio,
             estimate_visual_line_count(
                 bbox_height_pt, layout_raw, text=text, font_size_pt=font_size_pt,
             ),
@@ -197,14 +195,76 @@ def line_count_for_vertical_edge_margin(
         height_lines_font = estimate_visual_line_count(
             bbox_height_pt, layout_raw, text=text, font_size_pt=font_size_pt,
         )
-        if height_lines_font >= 2.0 and wrap_lines >= 0.35:
+        if height_lines_font >= 2.0 and wrap_ratio >= 0.35:
             return max(2.0, height_lines_font)
 
     return 1.0
 
 
-# Typical Latin character width-to-font-size ratio (font_fit parity).
+# Typical Latin / CJK character width-to-font-size ratios (font_fit parity).
 LATIN_CHAR_WIDTH_RATIO = 0.52
+CJK_CHAR_WIDTH_RATIO = 1.0
+
+
+def _is_cjk_char(ch: str) -> bool:
+    """True for CJK unified / extension / compatibility ideographs."""
+    if not ch:
+        return False
+    o = ord(ch)
+    return (
+        0x4E00 <= o <= 0x9FFF
+        or 0x3400 <= o <= 0x4DBF
+        or 0xF900 <= o <= 0xFAFF
+    )
+
+
+def _char_width_pt(ch: str, font_size_pt: float) -> float:
+    if ch.isspace():
+        return font_size_pt * 0.28
+    if _is_cjk_char(ch):
+        return font_size_pt * CJK_CHAR_WIDTH_RATIO
+    return font_size_pt * LATIN_CHAR_WIDTH_RATIO
+
+
+def estimate_text_width_pt(text: str, font_size_pt: float) -> float:
+    """Estimate single-line text width in pt (CJK ≈ 1em, Latin ≈ 0.52em)."""
+    if not text or font_size_pt <= 0:
+        return 0.0
+    return sum(_char_width_pt(ch, font_size_pt) for ch in text)
+
+
+def estimate_wrap_ratio(
+    text: str,
+    bbox_width_pt: float,
+    font_size_pt: float,
+    layout_raw: Any = None,
+) -> float:
+    """
+    Fractional width-wrap ratio at *font_size_pt* (may be < 1.0).
+
+    Uses mixed CJK/Latin glyph widths (not Latin-only 0.52em). Math-heavy
+    spans inflate width via typographic units when they exceed raw length.
+    """
+    if not text or bbox_width_pt <= 0 or font_size_pt <= 0:
+        return 0.0
+    width_pt = estimate_text_width_pt(text, font_size_pt)
+    typo_units = estimate_typographic_units(text, layout_raw)
+    raw_len = float(len(text))
+    if raw_len > 0.0 and typo_units > raw_len:
+        width_pt *= typo_units / raw_len
+    return width_pt / bbox_width_pt
+
+
+def estimate_wrap_line_count(
+    text: str,
+    bbox_width_pt: float,
+    font_size_pt: float,
+    layout_raw: Any = None,
+) -> float:
+    """Estimate layout line count from width wrap (at least 1.0)."""
+    return max(1.0, estimate_wrap_ratio(
+        text, bbox_width_pt, font_size_pt, layout_raw,
+    ))
 
 
 def text_contains_math(text: str) -> bool:
@@ -275,6 +335,135 @@ def count_embedded_newlines(text: str = "", layout_raw: Any = None) -> int:
     return max_newlines
 
 
+# Patent / structured field markers that should keep soft newlines as stack lines.
+_STRUCTURED_FIELD_LINE_RE = re.compile(
+    r"^\(\d{1,2}\)\s|"
+    r"\bU\.?\s*S\.?\s*Cl\b|"
+    r"\bUSPC\b|"
+    r"References Cited|"
+    r"Field of Classification|"
+    r"United States Patent|"
+    r"Patent Documents|"
+    r"See application file",
+    re.IGNORECASE,
+)
+
+
+def newline_bearing_text(text: str = "", layout_raw: Any = None) -> str:
+    """
+    Text that carries embedded newlines for preserve/soft heuristics.
+
+    Prefer the translated/plain text when it contains ``\\n``; otherwise use the
+    first MinerU span content that still embeds newlines (OCR soft breaks).
+    """
+    if text and "\n" in text:
+        return text
+    if isinstance(layout_raw, dict):
+        for line in layout_raw.get("lines") or []:
+            if not isinstance(line, dict):
+                continue
+            for span in line.get("spans") or []:
+                if not isinstance(span, dict):
+                    continue
+                content = span.get("content")
+                if isinstance(content, str) and "\n" in content:
+                    return content
+    return text or ""
+
+
+def collapse_soft_embedded_newlines(text: str) -> str:
+    """Turn soft body ``\\n`` into spaces so Typst can reflow as one paragraph."""
+    if not text or "\n" not in text:
+        return text
+    collapsed = re.sub(r"[ \t]*\n[ \t]*", " ", text)
+    return re.sub(r" {2,}", " ", collapsed).strip()
+
+
+def _looks_like_structured_field_line(line: str) -> bool:
+    t = (line or "").strip()
+    if not t:
+        return False
+    if _STRUCTURED_FIELD_LINE_RE.search(t):
+        return True
+    # Very short caption/label line (e.g. inventor surname under patent header).
+    return len(t) <= 32
+
+
+def should_preserve_embedded_newlines(
+    text: str = "",
+    layout_raw: Any = None,
+    *,
+    bbox_width_pt: float,
+    font_size_pt: float,
+) -> bool:
+    """
+    Whether embedded ``\\n`` should force preserved-stack layout.
+
+    Patent field labels / short header stacks keep newlines. Soft OCR/body
+    breaks inside wrapping paragraphs are collapsed so reflow + fit can fill
+    tall boxes (otherwise fit_max is capped near the tiny stack font).
+    """
+    if count_embedded_newlines(text, layout_raw) <= 0:
+        return False
+
+    bearing = newline_bearing_text(text, layout_raw)
+    parts = [p.strip() for p in bearing.split("\n") if p.strip()]
+    if len(parts) <= 1:
+        return False
+
+    probe = max(6.0, float(font_size_pt) if font_size_pt > 0 else 10.0)
+    width = max(1.0, float(bbox_width_pt))
+    short_count = 0
+    wrapping_units = 0.0
+    total_units = 0.0
+    label_like = 0
+    for part in parts:
+        if _looks_like_structured_field_line(part):
+            label_like += 1
+        units = estimate_typographic_units(part, None)
+        total_units += units
+        if estimate_wrap_ratio(part, width, probe, None) <= 1.05:
+            short_count += 1
+        else:
+            wrapping_units += units
+
+    # Keep patent / form-style stacks.
+    if label_like >= 1:
+        return True
+    # Soft body paragraphs: every logical line already wraps as running text.
+    if short_count == 0:
+        return False
+    # Soft break before a short trailer ("See also.") after a wrapping body.
+    if total_units > 0 and wrapping_units / total_units >= 0.55:
+        return False
+    return short_count >= 1
+
+
+def resolve_embedded_newline_policy(
+    text: str = "",
+    layout_raw: Any = None,
+    *,
+    bbox_width_pt: float,
+    font_size_pt: float,
+) -> Tuple[str, bool]:
+    """
+    Resolve soft vs preserved newlines for font fit.
+
+    Returns ``(text_for_fit, preserve_line_breaks)``. Soft body newlines are
+    collapsed in the returned text; layout_raw may still contain OCR ``\\n``.
+    """
+    if count_embedded_newlines(text, layout_raw) <= 0:
+        return text, False
+    if should_preserve_embedded_newlines(
+        text,
+        layout_raw,
+        bbox_width_pt=bbox_width_pt,
+        font_size_pt=font_size_pt,
+    ):
+        return text, True
+    return collapse_soft_embedded_newlines(text), False
+
+
 def count_visual_lines_from_content(text: str = "", layout_raw: Any = None) -> int:
     """Visual line count implied by embedded newlines (0 newlines → 1 line)."""
     newline_count = count_embedded_newlines(text, layout_raw)
@@ -337,6 +526,36 @@ def is_single_line_bbox(bbox_height_pt: float, layout_raw: Any = None) -> bool:
     return bbox_height_pt <= SINGLE_LINE_BBOX_HEIGHT_PT
 
 
+_LATEX_CMD_RE = re.compile(r"\\[a-zA-Z]+\*?")
+
+
+def latex_math_visible_length(body: str) -> float:
+    """
+    Approximate visible glyph count from LaTeX math source.
+
+    Command names (``\\mathbf``, ``\\left``, …) and structural braces inflate
+    raw length without matching painted width; strip them before width fit.
+    """
+    s = body or ""
+    s = _LATEX_CMD_RE.sub("", s)
+    # Escaped single chars: \{ \} \, \; etc.
+    s = re.sub(r"\\.", "", s)
+    s = s.replace("{", "").replace("}", "")
+    s = s.replace("^", "").replace("_", "")
+    s = re.sub(r"\s+", "", s)
+    return float(len(s))
+
+
+def _math_body_typographic_units(body: str, *, display: bool) -> float:
+    """Width units for a delimited math body (LaTeX-aware)."""
+    raw = float(len(body or ""))
+    visible = latex_math_visible_length(body)
+    # Keep short tokens (W_{y}) heavier than plain letters; cap command bloat.
+    effective = max(visible, min(raw, visible * 1.5 + 2.0))
+    floor = DISPLAY_MATH_LINE_UNITS if display else INLINE_MATH_MIN_UNITS
+    return max(effective * INLINE_MATH_WIDTH_FACTOR, floor)
+
+
 def _units_from_delimited_math(text: str) -> Tuple[float, int]:
     """Return (typographic units, end cursor) from delimited math patterns in text."""
     units = 0.0
@@ -346,10 +565,9 @@ def _units_from_delimited_math(text: str) -> Tuple[float, int]:
             if match.start() >= cursor:
                 units += float(len(text[cursor:match.start()]))
             body = match.group(1) if match.lastindex else match.group(0)
-            if pattern is _DISPLAY_MATH_RE:
-                units += max(len(body) * INLINE_MATH_WIDTH_FACTOR, DISPLAY_MATH_LINE_UNITS)
-            else:
-                units += max(len(body) * INLINE_MATH_WIDTH_FACTOR, INLINE_MATH_MIN_UNITS)
+            units += _math_body_typographic_units(
+                body, display=pattern is _DISPLAY_MATH_RE,
+            )
             cursor = max(cursor, match.end())
     units += float(len(text[cursor:]))
     return units, cursor

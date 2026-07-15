@@ -42,6 +42,7 @@ class PDFRendererConfig:
         render_page_indices: Optional[Set[int]] = None,
         base_merged_pdf_bytes: Optional[bytes] = None,
         cleaned_source_output_path: Optional[Path] = None,
+        cached_cleaned_source_bytes: Optional[bytes] = None,
         skip_overlay_block_indices: Optional[Set[int]] = None,
         overlay_segments: Optional[list] = None,
         overlay_task_state: Optional[dict] = None,
@@ -82,6 +83,7 @@ class PDFRendererConfig:
         self.render_page_indices = render_page_indices
         self.base_merged_pdf_bytes = base_merged_pdf_bytes
         self.cleaned_source_output_path = cleaned_source_output_path
+        self.cached_cleaned_source_bytes = cached_cleaned_source_bytes
         self.skip_overlay_block_indices: Optional[Set[int]] = skip_overlay_block_indices
         self.overlay_segments = overlay_segments or []
         self.overlay_task_state = overlay_task_state or {}

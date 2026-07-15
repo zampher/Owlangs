@@ -119,7 +119,11 @@ class TranslationComparisonPanel extends ConsumerWidget {
   final void Function(int)? onUnclearSegment;
   final void Function(int) onUndo;
   final void Function(int) onRedo;
-  final void Function(int)? onExclusionUpdated;
+  final Future<void> Function(
+    int index, {
+    String? exclusionReason,
+    bool? isExcluded,
+  })? onExclusionUpdated;
   final dynamic translationState;
   final Map<String, int>? tokenUsage;
   final Set<String>? selectedExclusionFilters;
@@ -1259,6 +1263,12 @@ class TranslationComparisonPanel extends ConsumerWidget {
                   : (metadata['needs_retry'] as bool? ?? false),
               isExcluded: pair.isExcluded,
               exclusionReason: pair.exclusionReason,
+              detectedExclusionReason:
+                  metadata['detected_exclusion_reason'] as String?,
+              suggestedExclusionReason:
+                  inferImageSwitchableExclusionReason(metadata),
+              showExclusionTypeSwitcher:
+                  segmentOffersImageExclusionTypeSwitch(metadata),
               isCleared:
                   pair.isImage ? false : _isSegmentCleared(metadata),
               onRetry: retranslatingSegments.contains(pair.index)
@@ -1282,9 +1292,9 @@ class TranslationComparisonPanel extends ConsumerWidget {
               imageDataMap: imageDataMap,
               taskId: taskId,
               onExclusionUpdated: onExclusionUpdated ??
-                  (int index) {
+                  (int index, {String? exclusionReason, bool? isExcluded}) async {
                     // Fallback: Refresh segments to get updated exclusion reason
-                    segmentsPaginationController?.refresh();
+                    await segmentsPaginationController?.refresh();
                   },
               onFormulaFix: onFormulaFix,
               showPdfFontSize: showPdfFontSize && !pair.isImage,
@@ -1503,6 +1513,12 @@ class TranslationComparisonPanel extends ConsumerWidget {
                   needsRetry: isImage ? false : needsRetry,
                   isExcluded: isExcluded,
                   exclusionReason: exclusionReason,
+                  detectedExclusionReason:
+                      metadata['detected_exclusion_reason'] as String?,
+                  suggestedExclusionReason:
+                      inferImageSwitchableExclusionReason(metadata),
+                  showExclusionTypeSwitcher:
+                      segmentOffersImageExclusionTypeSwitch(metadata),
                   isCleared: isCleared,
                   onRetry: isRetranslating ? null : onRetrySegment,
                   onMarkForRetry: onMarkForRetry,
@@ -1522,9 +1538,9 @@ class TranslationComparisonPanel extends ConsumerWidget {
                   imageDataMap: imageDataMap,
                   taskId: taskId,
                   onExclusionUpdated: onExclusionUpdated ??
-                      (int index) {
+                      (int index, {String? exclusionReason, bool? isExcluded}) async {
                         // Fallback: Refresh segments to get updated exclusion reason
-                        segmentsPaginationController?.refresh();
+                        await segmentsPaginationController?.refresh();
                       },
                   showPdfFontSize: showPdfFontSize && !isImage,
                   fontSizePt: _readFontSizePt(metadata),

@@ -1,5 +1,21 @@
 # Spec文件更新日志
 
+## 2026-07-16 — Typst overlay math span 扫描（math_span_utils）
+
+未提交改动新增 `backend/layout/pdf_renderer/typst_overlay/math_span_utils.py`，由 `emitter.py` 顶层导入、`mitex_math_safety.py` lazy import（扫描 markdown 中 `$...$` / `$$...$$` 公式体）。已在 `lite.spec`、`launcher_portable_onedir.spec`、`macos.spec` 补充：
+
+- `layout.pdf_renderer.typst_overlay.math_span_utils` — 公式 span 体抽取（供 mitex 安全检测与 emitter sanitize）
+
+**同批改动无需新增 spec 条目的模块：**
+
+- `backend/layout/pdf_renderer/typst_overlay/mitex_math_safety.py` — 已有 hiddenimport；mismatched floor/ceil 等规则
+- `backend/layout/pdf_renderer/typst_overlay/emitter.py`、`renderer.py`、`source_cleanup.py`、`segment_font_metrics.py`、`pdf_preview_cache.py`、`visual_images.py`、`font_fit.py` — 已有 typst_overlay 子模块列表
+- `backend/utils/translation_segments.py`、`download_service.py` — 调用既有模块（image 排除 bust cache 等）
+- `backend/layout/pdf_renderer/typst_overlay/test_*.py`、`tools/_tmp_*` — 测试/临时文件，不打包
+- `frontend/**` — Flutter（排除类型切换、重试 dirty 刷新、重试标签去重），不进 PyInstaller
+
+---
+
 ## 2026-07-09 — mitex 公式安全检测与 Paddle 同排空栏 companion 保留
 
 未提交改动新增 `backend/layout/pdf_renderer/typst_overlay/mitex_math_safety.py`，由 `emitter.py`、`renderer.py` lazy import；`visual_images.py` 增加 `equation_image_fallback_block_indices` 参数（已有 `visual_images` 条目）。已在 `lite.spec`、`launcher_portable_onedir.spec`、`macos.spec` 补充：

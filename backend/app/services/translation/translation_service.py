@@ -1488,85 +1488,6 @@ class TranslationService:
                     logger.error(LogModule.TRANS, f"[TRANSLATION-SERVICE] Task {task_id}: ensure_translation_segments failed: {seg_error}", exc_info=True)
                     # Don't raise - segment recording failure shouldn't block task completion
 
-                # PDF workflow: auto normalize formula segments after translation using LLM (batched).
-                # This is intentionally separate from segment-level manual repair endpoint.
-                try:
-                    is_pdf_file = original_filename.lower().endswith(".pdf")
-                    if is_pdf_file and workflow_type == "markdown_based":
-                        from utils.latex_formula_batch_repair import (
-                            apply_formula_repairs_to_task_state,
-                            batch_repair_formulas_with_llm,
-                            collect_formula_items,
-                        )
-
-                        items = collect_formula_items(task_state)
-                        # Keep progress < 100 during post-processing so frontend
-                        # does not stop polling before formula repair completes.
-                        try:
-                            if int(task_state.get("progress", 0) or 0) >= 100:
-                                task_state["progress"] = 95
-                                task_state["message"] = "Post-processing: preparing formula repair..."
-                                self.task_manager.update_task(
-                                    task_id,
-                                    {"status": "processing", "progress": task_state["progress"], "message": task_state["message"]},
-                                )
-                        except Exception:
-                            pass
-
-                        def _on_formula_progress(evt: dict) -> None:
-                            try:
-                                if not isinstance(evt, dict):
-                                    return
-                                if evt.get("event") == "batch_start":
-                                    bi = int(evt.get("batch_index") or 0)
-                                    bn = int(evt.get("batch_total") or 0) or 1
-                                    # Map formula repair to 95%..99% range
-                                    p = 95 + int((max(0, min(bi - 1, bn)) / max(1, bn)) * 4)
-                                    task_state["status"] = "processing"
-                                    task_state["progress"] = min(99, max(95, p))
-                                    task_state["message"] = f"Auto repairing formulas... batch {bi}/{bn}"
-                                    self.task_manager.update_task(
-                                        task_id,
-                                        {"status": task_state["status"], "progress": task_state["progress"], "message": task_state["message"]},
-                                    )
-                                elif evt.get("event") == "batch_done":
-                                    bi = int(evt.get("batch_index") or 0)
-                                    bn = int(evt.get("batch_total") or 0) or 1
-                                    p = 95 + int((max(0, min(bi, bn)) / max(1, bn)) * 4)
-                                    task_state["status"] = "processing"
-                                    task_state["progress"] = min(99, max(95, p))
-                                    task_state["message"] = f"Auto repairing formulas... batch {bi}/{bn}"
-                                    self.task_manager.update_task(
-                                        task_id,
-                                        {"status": task_state["status"], "progress": task_state["progress"], "message": task_state["message"]},
-                                    )
-                            except Exception:
-                                return
-
-                        fixes, notes = await asyncio.to_thread(
-                            batch_repair_formulas_with_llm,
-                            task_id=task_id,
-                            items=items,
-                            llm_config_dict=task_state.get("llm_config_for_repair"),
-                            on_progress=_on_formula_progress,
-                        )
-                        summary = apply_formula_repairs_to_task_state(task_state, fixes)
-                        logger.info(
-                            LogModule.RESTOR,
-                            "[FORMULA-REPAIR] Auto repair finished (task_id={tid}, notes={notes}, items={n}, updated={u}, skipped={s})",
-                            tid=task_id,
-                            notes=notes,
-                            n=len(items),
-                            u=summary.get("updated", 0),
-                            s=summary.get("skipped", 0),
-                        )
-                except Exception as fr_err:  # noqa: BLE001
-                    logger.warning(
-                        LogModule.RESTOR,
-                        f"[FORMULA-REPAIR] Auto repair failed (task {task_id}): {fr_err}",
-                        exc_info=False,
-                    )
-
                 # Markdown-based: optional auto LLM repair for Pandoc DOCX / texmath fragment failures
                 try:
                     from backend.config.system_config import get_system_config
@@ -1672,6 +1593,85 @@ class TranslationService:
                         LogModule.TRANS,
                         f"[AUTO-RETRY] task={task_id} fatal: {auto_retry_err}",
                         exc_info=True,
+                    )
+
+                # PDF workflow: auto normalize formula segments after retranslate using LLM (batched).
+                # Runs after auto batch-retry so repairs target final segment text.
+                try:
+                    is_pdf_file = original_filename.lower().endswith(".pdf")
+                    if is_pdf_file and workflow_type == "markdown_based":
+                        from utils.latex_formula_batch_repair import (
+                            apply_formula_repairs_to_task_state,
+                            batch_repair_formulas_with_llm,
+                            collect_formula_items,
+                        )
+
+                        items = collect_formula_items(task_state)
+                        # Keep progress < 100 during post-processing so frontend
+                        # does not stop polling before formula repair completes.
+                        try:
+                            if int(task_state.get("progress", 0) or 0) >= 100:
+                                task_state["progress"] = 95
+                                task_state["message"] = "Post-processing: preparing formula repair..."
+                                self.task_manager.update_task(
+                                    task_id,
+                                    {"status": "processing", "progress": task_state["progress"], "message": task_state["message"]},
+                                )
+                        except Exception:
+                            pass
+
+                        def _on_formula_progress(evt: dict) -> None:
+                            try:
+                                if not isinstance(evt, dict):
+                                    return
+                                if evt.get("event") == "batch_start":
+                                    bi = int(evt.get("batch_index") or 0)
+                                    bn = int(evt.get("batch_total") or 0) or 1
+                                    # Map formula repair to 95%..99% range
+                                    p = 95 + int((max(0, min(bi - 1, bn)) / max(1, bn)) * 4)
+                                    task_state["status"] = "processing"
+                                    task_state["progress"] = min(99, max(95, p))
+                                    task_state["message"] = f"Auto repairing formulas... batch {bi}/{bn}"
+                                    self.task_manager.update_task(
+                                        task_id,
+                                        {"status": task_state["status"], "progress": task_state["progress"], "message": task_state["message"]},
+                                    )
+                                elif evt.get("event") == "batch_done":
+                                    bi = int(evt.get("batch_index") or 0)
+                                    bn = int(evt.get("batch_total") or 0) or 1
+                                    p = 95 + int((max(0, min(bi, bn)) / max(1, bn)) * 4)
+                                    task_state["status"] = "processing"
+                                    task_state["progress"] = min(99, max(95, p))
+                                    task_state["message"] = f"Auto repairing formulas... batch {bi}/{bn}"
+                                    self.task_manager.update_task(
+                                        task_id,
+                                        {"status": task_state["status"], "progress": task_state["progress"], "message": task_state["message"]},
+                                    )
+                            except Exception:
+                                return
+
+                        fixes, notes = await asyncio.to_thread(
+                            batch_repair_formulas_with_llm,
+                            task_id=task_id,
+                            items=items,
+                            llm_config_dict=task_state.get("llm_config_for_repair"),
+                            on_progress=_on_formula_progress,
+                        )
+                        summary = apply_formula_repairs_to_task_state(task_state, fixes)
+                        logger.info(
+                            LogModule.RESTOR,
+                            "[FORMULA-REPAIR] Auto repair finished (task_id={tid}, notes={notes}, items={n}, updated={u}, skipped={s})",
+                            tid=task_id,
+                            notes=notes,
+                            n=len(items),
+                            u=summary.get("updated", 0),
+                            s=summary.get("skipped", 0),
+                        )
+                except Exception as fr_err:  # noqa: BLE001
+                    logger.warning(
+                        LogModule.RESTOR,
+                        f"[FORMULA-REPAIR] Auto repair failed (task {task_id}): {fr_err}",
+                        exc_info=False,
                     )
 
                 # Mark translation phase done; queued tasks defer "completed" until exports finish.

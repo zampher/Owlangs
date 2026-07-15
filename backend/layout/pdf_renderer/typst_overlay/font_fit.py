@@ -16,15 +16,20 @@ from typing import Any, Callable, List, Optional, Tuple
 
 from layout.pdf_renderer.typst_overlay.models import RenderBlock
 from layout.pdf_renderer.typst_overlay.text_metrics import (
+    BBOX_VERTICAL_EDGE_INSET_MAX_PT,
     block_needs_math_fit,
     bbox_content_height_pt,
     count_embedded_newlines,
     count_non_cross_page_lines,
     count_visual_lines_from_content,
+    estimate_text_width_pt,
     estimate_typographic_units,
     estimate_visual_line_count,
+    estimate_wrap_line_count,
+    estimate_wrap_ratio,
     is_single_line_bbox,
     line_count_for_vertical_edge_margin,
+    resolve_embedded_newline_policy,
     shrink_inner_bbox_vertical,
     SINGLE_LINE_BBOX_HEIGHT_PT,
 )
@@ -90,6 +95,20 @@ def _char_width_pt(ch: str, font_size_pt: float) -> float:
     return font_size_pt * LATIN_CHAR_WIDTH_RATIO
 
 
+def _effective_font_size_hint(font_size_pt: float) -> Optional[float]:
+    """
+    Return a real font-size hint, or None when the value is unset.
+
+    ``RenderBlock.font_size_pt`` defaults to ``DEFAULT_FONT_SIZE_PT`` (10pt).
+    Passing that default into font-aware line-height heuristics treats every
+    unset block as 10pt body text and over-counts visual lines → undersized
+    fonts and chronically under-filled bboxes (especially EN→ZH).
+    """
+    if font_size_pt <= 0 or font_size_pt == DEFAULT_FONT_SIZE_PT:
+        return None
+    return font_size_pt
+
+
 def overflow_tail_text(
     text: str,
     bbox_width: float,
@@ -130,9 +149,7 @@ def _is_cjk_char(ch: str) -> bool:
 
 def estimate_horizontal_text_width_pt(text: str, font_size_pt: float) -> float:
     """Estimate rendered single-line text width in pt (CJK ≈ 1em, Latin ≈ 0.52em)."""
-    if not text or font_size_pt <= 0:
-        return 0.0
-    return sum(_char_width_pt(ch, font_size_pt) for ch in text)
+    return estimate_text_width_pt(text, font_size_pt)
 
 
 def is_bbox_at_page_right_edge(
@@ -484,6 +501,61 @@ def fit_preserved_stack_leading_em(
     return max(min_leading_em, needed_leading)
 
 
+def _blend_height_and_wrap_line_count(visual_lines: float, wrap_lines: float) -> float:
+    """
+    Tall bbox font sizing: balance height-implied lines vs width-wrap lines.
+
+    When EN→ZH (or similar) shortens text, width-wrap can be ~1–2 lines while the
+    source bbox height still implies ~3 visual lines. Using ``max(visual, wrap)``
+    alone then under-sizes the font. For near-single-line wrap, trade off toward
+    a 2-line height budget; for longer wrap, allow at most ``wrap + 1``.
+
+    Use ``wrap < 2.5`` (not ``<= 2.0``) so probe fonts near the 2-line boundary
+    still get the single↔double tradeoff instead of oscillating to wrap+1.
+    """
+    visual = max(1.0, float(visual_lines))
+    wrap = max(1.0, float(wrap_lines))
+    if wrap + 0.15 >= visual:
+        return max(visual, wrap)
+    # Under-filled width relative to bbox height.
+    # ~1–2 wrap lines → never size as if ≥3 visual lines.
+    if wrap < 2.5:
+        height_cap = 2.0
+    else:
+        height_cap = wrap + 1.0
+    return max(wrap, min(visual, height_cap))
+
+
+def _is_underfilled_tall_bbox(
+    block: RenderBlock,
+    layout_raw: Any,
+    font_size_pt: float,
+) -> bool:
+    """
+    True when width-wrap is clearly shorter than height-implied lines.
+
+    Detects EN→ZH (etc.) cases where a source multi-line bbox holds much shorter
+    translated text; layout-seeded fonts must be allowed to grow.
+    """
+    text = (block.plain_text or block.markdown_text or "").strip()
+    if not text:
+        return False
+    x0, y0, x1, y1 = block.inner_bbox
+    bbox_height = max(1.0, y1 - y0)
+    if is_single_line_bbox(bbox_height, layout_raw):
+        return False
+    # Explicit multi-line structure: keep layout seed / full visual weight.
+    if count_visual_lines_from_content(text, layout_raw) > 1:
+        return False
+    bbox_width = max(1.0, x1 - x0)
+    probe = font_size_pt if font_size_pt > 0 else DEFAULT_FONT_SIZE_PT
+    visual = estimate_visual_line_count(
+        bbox_height, layout_raw, text=text, font_size_pt=probe,
+    )
+    wrap = estimate_wrap_line_count(text, bbox_width, probe, layout_raw)
+    return wrap + 0.15 < visual
+
+
 def _estimate_line_count(
     bbox_height: float,
     typo_units: float,
@@ -508,7 +580,11 @@ def _estimate_line_count(
         # two visual lines even when translated text is shorter than the source.
         return max(1.0, visual_lines, wrap_lines)
 
-    return max(1.0, visual_lines, wrap_lines)
+    # Explicit structure (\\n / multi-line OCR content): keep full visual weight.
+    if embedded_lines > 1.0:
+        return max(1.0, visual_lines, wrap_lines)
+
+    return _blend_height_and_wrap_line_count(visual_lines, wrap_lines)
 
 
 def _is_true_single_visual_line(
@@ -622,9 +698,22 @@ class FontFitCalculator:
 
         Uses typographic units and visual line count from bbox height so MinerU
         single-line entries that wrap across many visual lines are handled.
+
+        Layout-/MinerU-seeded sizes are kept unless the tall bbox is under-filled
+        by short translated text (single↔double tradeoff should grow the font).
         """
-        if block.font_size_pt > 0.0 and block.font_size_pt != DEFAULT_FONT_SIZE_PT:
-            return block.font_size_pt
+        layout_seed = (
+            block.font_size_pt
+            if (
+                block.font_size_pt > 0.0
+                and block.font_size_pt != DEFAULT_FONT_SIZE_PT
+            )
+            else None
+        )
+        if layout_seed is not None and not _is_underfilled_tall_bbox(
+            block, layout_raw, layout_seed,
+        ):
+            return layout_seed
 
         _, y0, _, y1 = block.inner_bbox
         bbox_height = max(1.0, y1 - y0)
@@ -646,30 +735,46 @@ class FontFitCalculator:
                 max_size_pt=self.max_size_pt,
             )
 
+        x0, _, x1, _ = block.inner_bbox
+        bbox_width = max(1.0, x1 - x0)
+        font_hint = _effective_font_size_hint(block.font_size_pt)
+        probe_font = font_hint if font_hint is not None else self.default_size_pt
+        text, preserve_breaks = resolve_embedded_newline_policy(
+            text,
+            layout_raw,
+            bbox_width_pt=bbox_width,
+            font_size_pt=probe_font,
+        )
+        # Soft body newlines: ignore OCR span ``\\n`` so reflow fit can fill.
+        newline_raw = layout_raw if preserve_breaks else None
+
         typo_units = estimate_typographic_units(text, layout_raw)
         if typo_units <= 0:
             return self.default_size_pt
 
-        embedded_newlines = count_embedded_newlines(text, layout_raw)
-        if embedded_newlines > 0:
+        if preserve_breaks and count_embedded_newlines(text, newline_raw) > 0:
             font_pt, _leading = self.estimate_preserved_stack_metrics(
                 block, layout_raw=layout_raw,
             )
             return font_pt
 
-        x0, _, x1, _ = block.inner_bbox
-        bbox_width = max(1.0, x1 - x0)
-        chars_per_line = max(
-            1.0,
-            bbox_width / (self.default_size_pt * LATIN_CHAR_WIDTH_RATIO),
+        wrap_lines = estimate_wrap_line_count(
+            text, bbox_width, probe_font, layout_raw,
         )
+        chars_per_line = max(1.0, typo_units / max(wrap_lines, 1e-6))
+        # After method-1 edge-margin shrink, compact two-line OCR boxes
+        # (e.g. 27pt patent headers) can fall below the 1.85 visual-line
+        # threshold and be misread as single-line → oversized fonts.
+        line_count_height = bbox_height
+        if inner_bbox_shrunk:
+            line_count_height = bbox_height + 2.0 * BBOX_VERTICAL_EDGE_INSET_MAX_PT
         line_count = _estimate_line_count(
-            bbox_height,
+            line_count_height,
             typo_units,
             chars_per_line,
             layout_raw,
             text=text,
-            font_size_pt=block.font_size_pt if block.font_size_pt > 0 else None,
+            font_size_pt=font_hint,
         )
         available_h = (
             max(1.0, bbox_height)
@@ -677,7 +782,7 @@ class FontFitCalculator:
             else bbox_content_height_pt(
                 bbox_height,
                 line_count,
-                font_size_pt=block.font_size_pt if block.font_size_pt > 0 else None,
+                font_size_pt=font_hint,
             )
         )
 
@@ -689,9 +794,9 @@ class FontFitCalculator:
         elif (
             _is_true_single_visual_line(
                 bbox_height, layout_raw, text=text,
-                font_size_pt=block.font_size_pt if block.font_size_pt > 0 else None,
+                font_size_pt=font_hint,
             )
-            and count_embedded_newlines(text, layout_raw) == 0
+            and count_embedded_newlines(text, newline_raw) == 0
         ):
             # Generic short single-line boxes: never exceed what fits one em line.
             estimated = min(estimated, available_h / 1.05)
@@ -749,10 +854,10 @@ class FontFitCalculator:
         typo_units = estimate_typographic_units(text, layout_raw)
         x0, _, x1, _ = block.inner_bbox
         bbox_width = max(1.0, x1 - x0)
-        chars_per_line = max(
-            1.0,
-            bbox_width / max(font_size_pt * LATIN_CHAR_WIDTH_RATIO, 0.1),
+        wrap_lines = estimate_wrap_line_count(
+            text, bbox_width, font_size_pt, layout_raw,
         )
+        chars_per_line = max(1.0, typo_units / max(wrap_lines, 1e-6))
         line_count = _estimate_line_count(
             bbox_height,
             typo_units,
@@ -1001,6 +1106,29 @@ class FontFitCalculator:
         block_type = _layout_block_type(layout_raw)
         is_ref_text = is_ref_text_layout(layout_raw, block_type=block_type)
         block_text = block.plain_text or block.markdown_text or ""
+        x0_pre, y0_pre, x1_pre, y1_pre = block.inner_bbox
+        bbox_width_pre = max(1.0, x1_pre - x0_pre)
+        font_hint_pre = _effective_font_size_hint(block.font_size_pt)
+        probe_pre = (
+            font_hint_pre if font_hint_pre is not None else self.default_size_pt
+        )
+        fit_text, preserve_breaks = resolve_embedded_newline_policy(
+            block_text,
+            layout_raw,
+            bbox_width_pt=bbox_width_pre,
+            font_size_pt=probe_pre,
+        )
+        if fit_text != block_text:
+            # Soft-collapse so emitter does not stack body paragraphs by OCR ``\\n``.
+            updates: dict = {}
+            if block.plain_text:
+                updates["plain_text"] = fit_text
+            if block.markdown_text:
+                updates["markdown_text"] = fit_text
+            if updates:
+                block = replace(block, **updates)
+            block_text = fit_text
+        newline_raw = layout_raw if preserve_breaks else None
         _, y0, _, y1 = block.inner_bbox
         bbox_height = max(1.0, y1 - y0)
         is_title = (
@@ -1020,7 +1148,9 @@ class FontFitCalculator:
         if use_unified_ref:
             font_size = ref_unified_font_pt
         elif not preserve_font_size and (
-            font_size <= 0 or font_size == DEFAULT_FONT_SIZE_PT
+            font_size <= 0
+            or font_size == DEFAULT_FONT_SIZE_PT
+            or _is_underfilled_tall_bbox(block, layout_raw, max(font_size, 0.0))
         ):
             font_size = self.estimate_font_size(
                 block, layout_raw=layout_raw, inner_bbox_shrunk=True,
@@ -1037,7 +1167,9 @@ class FontFitCalculator:
         elif not preserve_font_size and (
             leading <= 0 or leading == DEFAULT_LEADING_EM
         ):
-            if count_embedded_newlines(block_text, layout_raw) > 0:
+            if preserve_breaks and count_embedded_newlines(
+                block_text, newline_raw,
+            ) > 0:
                 _, leading = self.estimate_preserved_stack_metrics(
                     block, layout_raw=layout_raw, inner_bbox_shrunk=True,
                 )
@@ -1101,29 +1233,46 @@ class FontFitCalculator:
             font_size_pt=font_size,
             bbox_width_pt=bbox_width,
         )
-        wrap_ratio = typo_units / max(
-            1.0, bbox_width / max(font_size * LATIN_CHAR_WIDTH_RATIO, 0.1),
+        wrap_ratio = estimate_wrap_ratio(
+            text, bbox_width, font_size, layout_raw,
         )
-        text_width_at_font = typo_units * font_size * LATIN_CHAR_WIDTH_RATIO
+        text_width_at_font = wrap_ratio * bbox_width
         width_overflow = text_width_at_font > bbox_width * 0.95
         will_wrap = (
             wrap_ratio > 1.05
             or width_overflow
             or (short_single_line and visual_lines >= 2.0)
         )
-        has_embedded_breaks = count_embedded_newlines(text, layout_raw) > 0
+        # Soft body OCR ``\\n`` must not force preserve_line_breaks (layout_raw
+        # may still carry newlines after plain_text was collapsed).
+        has_embedded_breaks = (
+            preserve_breaks
+            and count_embedded_newlines(text, newline_raw) > 0
+        )
         height_overflow = (
             short_single_line
             and font_size * leading > bbox_height * SHORT_BBOX_HEIGHT_OVERFLOW_RATIO
             and (is_ref_text or wrap_ratio >= 0.35)
         )
+        # Multi-line body: enable Typst fit when CJK/Latin wrap needs it.
+        # Latin-only 0.52em used to miss dense CJK and leave fit_to_box=False.
+        content_height_est = max(1.0, wrap_ratio) * font_size * max(leading, 0.8)
+        multi_line_needs_fit = (
+            not short_single_line
+            and typo_units > 0
+            and (
+                content_height_est > bbox_height * 0.92
+                or wrap_ratio > 1.05
+            )
+        )
 
         needs_fit = typo_units > 0 and (
-            typo_units * font_size * LATIN_CHAR_WIDTH_RATIO > bbox_width * 1.2
+            text_width_at_font > bbox_width * 1.2
             or has_math
             or height_overflow
             or (is_ref_text and short_single_line)
             or (short_single_line and will_wrap)
+            or multi_line_needs_fit
         )
         fit_single_line = (
             needs_fit
@@ -1132,7 +1281,7 @@ class FontFitCalculator:
         )
 
         render_kind = block.render_kind
-        preserve_line_breaks = block.preserve_line_breaks or has_embedded_breaks
+        preserve_line_breaks = bool(block.preserve_line_breaks) or has_embedded_breaks
         if preserve_line_breaks and render_kind in ("plain", "plain_line"):
             render_kind = "markdown"
 

@@ -419,3 +419,38 @@ def test_primary_layout_block_index_from_task_state_map():
     task_state = {"layout_chunk_block_map": [[], [5], [10, 11]]}
     type_map = {10: "text", 11: "image"}
     assert primary_layout_block_index(segment, type_map, task_state) == 10
+
+
+def test_build_layout_block_maps_and_batch_enrichment_share_maps():
+    from layout.base import LayoutBlock, LayoutDocument, LayoutPage
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        build_layout_block_maps,
+        enrich_segments_font_fields,
+    )
+
+    layout_doc = LayoutDocument(
+        pages=[
+            LayoutPage(
+                page_index=0,
+                blocks=[
+                    LayoutBlock(
+                        page_index=0,
+                        bbox=(0.0, 0.0, 100.0, 20.0),
+                        type="text",
+                        index=0,
+                        text="Hello",
+                    ),
+                ],
+            ),
+        ],
+    )
+    block_map, type_map = build_layout_block_maps(layout_doc)
+    assert block_map[0].text == "Hello"
+    assert type_map[0] == "text"
+
+    segments = [
+        {"segment_index": 0, "target_text": "Hello", "layout_block_indices": [0]},
+    ]
+    enrich_segments_font_fields(layout_doc, segments, text_field="target_text")
+    assert segments[0].get("computed_font_size_pt") is not None
+    assert segments[0].get("pdf_page_number") == 1

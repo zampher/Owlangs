@@ -15,11 +15,18 @@ Design principles:
   - Formulas in $...$ (and normalized \\(...\\)) are rendered via cmarker + mitex
 """
 
+import logging
 import math
 import re
+import time
+from functools import lru_cache
 from pathlib import Path
 from typing import List
 
+from layout.pdf_renderer.typst_overlay.math_span_utils import (
+    transform_dollar_math_spans,
+    transform_latex_bracket_delimiters,
+)
 from layout.pdf_renderer.typst_overlay.mitex_math_safety import (
     markdown_line_safe_for_mitex,
     mitex_unsafe_reason,
@@ -75,9 +82,16 @@ def _typst_cmarker_plain_render_expr(var_name: str) -> str:
     return f"cmarker.render({var_name})"
 
 
+@lru_cache(maxsize=8192)
 def _prepare_user_text_for_typst(text: str) -> str:
     """Sanitize and escape user-authored text for Typst string bindings."""
     return _escape_typst_string(sanitize_typst_markdown_for_compile(text))
+
+
+@lru_cache(maxsize=8192)
+def _escape_sanitized_text_for_typst(text: str) -> str:
+    """Escape already-sanitized markdown for Typst string bindings."""
+    return _escape_typst_string(text)
 
 
 def _typst_rgb(color) -> str:
@@ -512,24 +526,17 @@ def _clean_math_inner(inner: str) -> str:
 
 def _strip_newlines_inside_math_delimiters(text: str) -> str:
     """Replace raw newlines inside $...$ / $$...$$ so mitex does not see unknown \\n."""
-    def _clean_inner(inner: str) -> str:
-        return _clean_math_inner(inner)
-
-    def _repl_display(match: re.Match[str]) -> str:
-        return f"$${_clean_inner(match.group(1))}$$"
-
-    def _repl_inline(match: re.Match[str]) -> str:
-        return f"${_clean_inner(match.group(1))}$"
-
-    text = re.sub(r"\$\$(.+?)\$\$", _repl_display, text, flags=re.DOTALL)
-    text = re.sub(r"(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)", _repl_inline, text, flags=re.DOTALL)
-    return text
+    return transform_dollar_math_spans(
+        text,
+        on_display=lambda inner: f"$${_clean_math_inner(inner)}$$",
+        on_inline=lambda inner: f"${_clean_math_inner(inner)}$",
+    )
 
 
 def _log_unsafe_mitex_math_delimiters(text: str) -> str:
     """Log mitex-unsafe math spans; do not mutate content (block-level fallback handles envs)."""
 
-    def _check_inner(inner: str, delimiter: str) -> None:
+    def _check_inner(inner: str, delimiter: str) -> str:
         reason = mitex_unsafe_reason(inner)
         if reason:
             preview = inner.replace("\n", " ")[:120]
@@ -538,31 +545,95 @@ def _log_unsafe_mitex_math_delimiters(text: str) -> str:
                 "[TYPST_OVERLAY] mitex-unsafe math in sanitize "
                 f"({reason}, delimiter={delimiter}, preview={preview!r})",
             )
+        return inner
 
-    def _repl_display(match: re.Match[str]) -> str:
-        _check_inner(match.group(1), "$$")
-        return match.group(0)
-
-    def _repl_inline(match: re.Match[str]) -> str:
-        _check_inner(match.group(1), "$")
-        return match.group(0)
-
-    text = re.sub(r"\$\$(.+?)\$\$", _repl_display, text, flags=re.DOTALL)
-    text = re.sub(
-        r"(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)",
-        _repl_inline,
+    return transform_dollar_math_spans(
         text,
-        flags=re.DOTALL,
+        on_display=lambda inner: f"$${_check_inner(inner, '$$')}$$",
+        on_inline=lambda inner: f"${_check_inner(inner, '$')}$",
     )
-    return text
 
 
-def sanitize_typst_markdown_for_compile(markdown: str) -> str:
-    """Sanitize markdown to avoid common Typst compilation errors in overlay blocks."""
+def _strip_paren_delimiter_artifacts_inside_math(text: str) -> str:
+    """Remove stray \\( / \\) tokens inside $...$ / $$...$$ spans."""
+
+    def _clean_inner(inner: str) -> str:
+        return inner.replace(r"\(", "").replace(r"\)", "").strip()
+
+    return transform_dollar_math_spans(
+        text,
+        on_display=lambda inner: f"$${_clean_inner(inner)}$$",
+        on_inline=lambda inner: f"${_clean_inner(inner)}$",
+    )
+
+
+EMIT_SLOW_BLOCK_THRESHOLD_S = 0.5
+
+_HEAVY_SANITIZE_MARKERS = (
+    "$",
+    r"\(",
+    r"\[",
+    r"\circled",
+    r"\diff",
+    "![",
+    r"\langlen",
+    r"\right\text",
+    r"\textcircled",
+)
+
+
+def _needs_heavy_markdown_sanitize(text: str) -> bool:
+    """True when text needs the full mitex/math sanitize pipeline."""
+    if not text:
+        return False
+    return any(marker in text for marker in _HEAVY_SANITIZE_MARKERS)
+
+
+@lru_cache(maxsize=16384)
+def _prepare_table_cell_for_typst(text: str) -> str:
+    """Fast-path Typst binding for table cells (mostly plain text)."""
+    body = str(text or "")
+    if not _needs_heavy_markdown_sanitize(body):
+        return _escape_typst_string(body)
+    return _escape_typst_string(_sanitize_typst_markdown_core(body))
+
+
+class _TableCellVarCache:
+    """Deduplicate identical table cell strings into shared #let bindings."""
+
+    def __init__(self, var_prefix: str) -> None:
+        self._var_prefix = var_prefix
+        self._text_to_var: dict[str, str] = {}
+        self._let_lines: list[str] = []
+        self._counter = 0
+
+    def bind(self, cell_text: str) -> str:
+        key = str(cell_text or "")
+        cached = self._text_to_var.get(key)
+        if cached is not None:
+            return cached
+        var = f"{self._var_prefix}_cell_{self._counter}"
+        self._counter += 1
+        self._text_to_var[key] = var
+        self._let_lines.append(
+            f'#let {var} = "{_prepare_table_cell_for_typst(key)}"'
+        )
+        return var
+
+    @property
+    def let_lines(self) -> list[str]:
+        return self._let_lines
+
+
+@lru_cache(maxsize=8192)
+def _sanitize_typst_markdown_core(markdown: str) -> str:
+    """Cached markdown sanitization for Typst overlay emit (hot path)."""
     text = str(markdown or "")
+    if not _needs_heavy_markdown_sanitize(text):
+        return text
     # Normalize LaTeX math delimiters to $...$ / $$...$$ for cmarker+mitex.
-    text = re.sub(r"\\\[(.+?)\\\]", r"$$\1$$", text, flags=re.DOTALL)
-    text = re.sub(r"\\\((.+?)\\\)", r"$\1$", text, flags=re.DOTALL)
+    text = transform_latex_bracket_delimiters(text)
+    text = _strip_paren_delimiter_artifacts_inside_math(text)
     text = _strip_newlines_inside_math_delimiters(text)
     text = _neutralize_linebreak_artifacts(text)
     text = re.sub(r"\$\s*\^\s*\{\s*\\(?:circled|textcircled)\s*R\s*\}\s*\$", "®", text)
@@ -585,7 +656,15 @@ def sanitize_typst_markdown_for_compile(markdown: str) -> str:
     # when image files are not available. For overlay rendering, image/table/chart visuals
     # should remain on the original PDF, not re-rendered through Typst.
     text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", "", text)
-    return _log_unsafe_mitex_math_delimiters(text)
+    return text
+
+
+def sanitize_typst_markdown_for_compile(markdown: str) -> str:
+    """Sanitize markdown to avoid common Typst compilation errors in overlay blocks."""
+    text = _sanitize_typst_markdown_core(markdown)
+    if unified_logger.isEnabledFor(logging.DEBUG):
+        return _log_unsafe_mitex_math_delimiters(text)
+    return text
 
 
 # ---- TOC entry rendering helpers ----
@@ -1053,7 +1132,7 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
                 md_var, max_font_pt, min_font_pt, fit_w, fit_h,
                 block.font_weight, font_style, justify)
             parts = [
-                f"#let {md_var} = \"{_prepare_user_text_for_typst(text)}\"",
+                f"#let {md_var} = \"{_escape_sanitized_text_for_typst(text)}\"",
                 _typst_markdown_block(
                     body_var, fit_w, layout_height, block_fill,
                     f"set text(fill: {text_fill}); {fit_call}",
@@ -1076,7 +1155,7 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
             justify,
         )
         parts = [
-            f"#let {md_var} = \"{_prepare_user_text_for_typst(text)}\"",
+            f"#let {md_var} = \"{_escape_sanitized_text_for_typst(text)}\"",
             _typst_markdown_block(
                 body_var, layout_width, layout_height, block_fill,
                 f"set text(fill: {text_fill}); {fit_call}",
@@ -1094,7 +1173,7 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
             md_var, block.font_size_pt, block.leading_em,
             block.font_weight, font_style, text_fill, first_indent, justify)
         parts = [
-            f"#let {md_var} = \"{_prepare_user_text_for_typst(text)}\"",
+            f"#let {md_var} = \"{_escape_sanitized_text_for_typst(text)}\"",
             _typst_markdown_block(
                 body_var, layout_width, layout_height, block_fill, body_expr,
                 content_top_inset_pt=content_top,
@@ -1149,7 +1228,7 @@ def _render_image_block(block_id: str, block: RenderBlock) -> str:
     return "\n".join(parts) + "\n"
 
 
-def _parse_table_rows(table_text: str) -> list:
+def parse_table_rows_for_render(table_text: str) -> list:
     """Parse markdown, HTML, or TSV table text into a 2D cell grid."""
     rows = _parse_markdown_table(table_text)
     if rows:
@@ -1159,6 +1238,11 @@ def _parse_table_rows(table_text: str) -> list:
         if html_rows:
             return html_rows
     return TableUtils.parse_markdown_table(table_text)
+
+
+def _parse_table_rows(table_text: str) -> list:
+    """Backward-compatible alias for table row parsing."""
+    return parse_table_rows_for_render(table_text)
 
 
 def _parse_markdown_table(table_text: str) -> list:
@@ -1567,7 +1651,7 @@ def _typst_table_booktabs_items(
     header_font_pt: float,
     data_font_pt: float,
     text_fill: str,
-    cell_let_lines: list,
+    cell_cache: _TableCellVarCache,
     header_row_count: int = 1,
 ) -> list:
     """Emit booktabs-style table items: toprule, header, midrule, body, bottomrule."""
@@ -1578,15 +1662,11 @@ def _typst_table_booktabs_items(
 
     effective_header_rows = max(1, min(header_row_count, len(rows)))
     header_parts: list = []
-    cell_index = 0
     for row_idx in range(effective_header_rows):
         title_groups = group_adjacent_equal_row_cells(rows[row_idx])
         draw_bottom_rule = row_idx < effective_header_rows - 1
         for text, colspan in title_groups:
-            cell_var = f"{var_prefix}_cell_{cell_index}"
-            cell_let_lines.append(
-                f"#let {cell_var} = \"{_prepare_user_text_for_typst(text)}\""
-            )
+            cell_var = cell_cache.bind(text)
             header_parts.append(
                 _typst_booktabs_title_cell_expr(
                     cell_var,
@@ -1599,7 +1679,6 @@ def _typst_table_booktabs_items(
                     draw_bottom_rule=draw_bottom_rule and colspan > 1,
                 )
             )
-            cell_index += 1
     items.append("  table.header(")
     items.append("    " + ", ".join(header_parts) + ",")
     items.append("  ),")
@@ -1610,10 +1689,7 @@ def _typst_table_booktabs_items(
     body_cells: list = []
     for row_idx, row in enumerate(rows[effective_header_rows:], start=effective_header_rows):
         for cell in row:
-            cell_var = f"{var_prefix}_cell_{cell_index}"
-            cell_let_lines.append(
-                f"#let {cell_var} = \"{_prepare_user_text_for_typst(cell)}\""
-            )
+            cell_var = cell_cache.bind(cell)
             body_cells.append(
                 _typst_table_cell_content(
                     cell_var,
@@ -1625,7 +1701,6 @@ def _typst_table_booktabs_items(
                     is_header_row=False,
                 )
             )
-            cell_index += 1
     if body_cells:
         items.append("  " + ", ".join(body_cells) + ",")
 
@@ -1688,7 +1763,7 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
     if not table_text.strip():
         return ""
 
-    rows = _parse_table_rows(table_text)
+    rows = block.table_rows if block.table_rows else _parse_table_rows(table_text)
     if not rows or not rows[0]:
         snippet = table_text.strip().replace("\n", " ")[:120]
         unified_logger.warning(
@@ -1729,7 +1804,7 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
     header_font_pt = round(target_font_pt * TABLE_HEADER_FONT_SCALE, 1)
     data_font_pt = round(target_font_pt, 1)
 
-    cell_let_lines: list = []
+    cell_cache = _TableCellVarCache(var_prefix)
     cell_lines: list = []
     if is_booktabs_border_style(border_style):
         cell_lines = _typst_table_booktabs_items(
@@ -1739,7 +1814,7 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
             header_font_pt=header_font_pt,
             data_font_pt=data_font_pt,
             text_fill=text_fill,
-            cell_let_lines=cell_let_lines,
+            cell_cache=cell_cache,
             header_row_count=booktabs_header_row_count(border_style),
         )
     else:
@@ -1747,10 +1822,7 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
         cell_index = 0
         for row_idx, row in enumerate(rows):
             for cell in row:
-                cell_var = f"{var_prefix}_cell_{cell_index}"
-                cell_let_lines.append(
-                    f"#let {cell_var} = \"{_prepare_user_text_for_typst(cell)}\""
-                )
+                cell_var = cell_cache.bind(cell)
                 comma = "," if cell_index < total_cells - 1 else ""
                 cell_index += 1
                 cell_lines.append(
@@ -1766,6 +1838,7 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
                     )
                     + comma
                 )
+    cell_let_lines = cell_cache.let_lines
 
     provisional_inset = TABLE_CELL_PAD_PT
     column_widths_pt = _resolve_table_column_widths_pt(
@@ -1812,24 +1885,12 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
         border_style=border_style,
         stroke_pt=table_stroke_pt,
     )
-    columns_str = _typst_table_columns_spec(
-        rows,
-        col_count,
-        layout_width,
-        data_font_pt,
-        inset_pt=inset_pt,
-    )
-    rows_spec = _typst_table_rows_spec(
-        rows,
-        col_count,
-        layout_height,
-        column_widths_pt,
-        data_font_pt,
-        header_font_pt,
-        inset_pt=inset_pt,
-        border_style=border_style,
-        stroke_pt=table_stroke_pt,
-    )
+    columns_str = "(" + ", ".join(
+        f"{round(width, 1)}pt" for width in column_widths_pt
+    ) + ")"
+    rows_spec = "(" + ", ".join(
+        f"{round(height, 1)}pt" for height in row_heights_pt
+    ) + ")"
 
     if border_style == TABLE_BORDER_STYLE_GRID:
         stroke_arg = _typst_table_stroke_arg(table_stroke_pt)
@@ -2087,7 +2148,15 @@ def build_typst_overlay_source(
     lines.append("")
 
     total_pages = len(page_specs)
+    total_blocks = sum(len(spec.blocks) for spec in page_specs)
+    unified_logger.info(
+        LogModule.RESTOR,
+        f"[TYPST_OVERLAY] Emitting Typst source for {total_blocks} block(s) "
+        f"across {total_pages} page(s)",
+    )
+    page_emit_started = time.perf_counter()
     for page_idx, spec in enumerate(page_specs):
+        page_block_count = 0
         lines.append(
             f"#set page(width: {spec.page_width_pt}pt, "
             f"height: {spec.page_height_pt}pt, "
@@ -2096,9 +2165,36 @@ def build_typst_overlay_source(
 
         for block_idx, block in enumerate(spec.blocks):
             block_id = f"p{page_idx}_{block.block_id}_{block_idx}"
+            block_started = time.perf_counter()
             block_source = render_block_to_typst(block_id, block)
+            block_elapsed = time.perf_counter() - block_started
+            if block_elapsed >= EMIT_SLOW_BLOCK_THRESHOLD_S:
+                cell_count = 0
+                if block.table_rows:
+                    cell_count = sum(len(row) for row in block.table_rows)
+                raw_text = block.markdown_text or block.plain_text or ""
+                text_len = len(raw_text)
+                preview = raw_text.replace("\n", " ")[:80]
+                unified_logger.info(
+                    LogModule.RESTOR,
+                    f"[TYPST_OVERLAY] Slow emit block {block.block_id} "
+                    f"(kind={block.render_kind}, chars={text_len}, "
+                    f"cells={cell_count}, fit_to_box={block.fit_to_box}, "
+                    f"preserve_line_breaks={block.preserve_line_breaks}, "
+                    f"preview={preview!r}) took {block_elapsed:.2f}s "
+                    f"on page {page_idx + 1}",
+                )
             if block_source.strip():
                 lines.append(block_source)
+                page_block_count += 1
+
+        unified_logger.info(
+            LogModule.RESTOR,
+            f"[TYPST_OVERLAY] Emitted page {page_idx + 1}/{total_pages} "
+            f"({page_block_count} block(s)) in "
+            f"{time.perf_counter() - page_emit_started:.2f}s",
+        )
+        page_emit_started = time.perf_counter()
 
         # Page break between pages
         if page_idx + 1 < total_pages:

@@ -10,8 +10,18 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 LAYOUT_GROUP_PAIRS_KEY = "_layout_group_pairs"
 LAYOUT_GROUP_PAIR_OF_KEY = "_layout_group_pair_of"
 CROSS_PAGE_PAIR_OF_KEY = "_cross_page_pair_of"
+LAYOUT_GROUP_PAIR_KIND_KEY = "_layout_group_pair_kind"
+LAYOUT_GROUP_PAIR_KIND_FIGURE_WRAP = "figure_wrap"
 LAYOUT_GROUP_TEXT_PARTS_KEY = "layout_group_text_parts"
 LAYOUT_BLOCK_BBOX_OVERRIDES_KEY = "layout_block_bbox_overrides"
+
+
+def is_figure_wrap_layout_group_pair(raw: Any) -> bool:
+    """True when companion was paired as figure-wrap full-width continuation."""
+    return (
+        isinstance(raw, dict)
+        and raw.get(LAYOUT_GROUP_PAIR_KIND_KEY) == LAYOUT_GROUP_PAIR_KIND_FIGURE_WRAP
+    )
 
 
 def parse_layout_group_text_parts(raw: Any) -> Optional[Dict[int, str]]:
@@ -347,6 +357,7 @@ def filter_valid_layout_group_pairs(
 
         companion_gid = None
         companion_block = None
+        companion_raw: Dict[str, Any] = {}
         if layout_doc is not None:
             companion_block = lookup_layout_block(layout_doc, entry.get("index"))
             if companion_block is not None:
@@ -355,8 +366,25 @@ def filter_valid_layout_group_pairs(
                     if is_cross_page_companion_block(companion_raw):
                         continue
                     companion_gid = companion_raw.get("group_id")
+                else:
+                    companion_raw = {}
         if not layout_group_ids_compatible(primary_gid, companion_gid):
-            continue
+            if not (
+                is_figure_wrap_layout_group_pair(companion_raw)
+                or is_figure_wrap_layout_group_pair(pair)
+                or (
+                    companion_block is not None
+                    and isinstance(primary_bbox, (list, tuple))
+                    and len(primary_bbox) == 4
+                    and companion_block.bbox is not None
+                    and len(companion_block.bbox) == 4
+                    and is_figure_wrap_geometry_pair(
+                        primary_bbox,
+                        companion_block.bbox,
+                    )
+                )
+            ):
+                continue
         if (
             companion_block is not None
             and isinstance(primary_bbox, (list, tuple))
@@ -371,6 +399,7 @@ def filter_valid_layout_group_pairs(
                 companion_block,
                 primary_block,
             )
+            and not is_figure_wrap_layout_group_pair(companion_raw)
         ):
             continue
 
@@ -408,10 +437,17 @@ def sanitize_layout_group_pairs_on_document(layout_doc: Any) -> None:
             primary_raw.get("group_id"),
             raw.get("group_id"),
         ):
-            cleaned = dict(raw)
-            cleaned.pop(LAYOUT_GROUP_PAIR_OF_KEY, None)
-            block.raw = cleaned
-            continue
+            allow_figure_wrap = is_figure_wrap_layout_group_pair(raw) or (
+                primary.bbox is not None
+                and block.bbox is not None
+                and is_figure_wrap_geometry_pair(primary.bbox, block.bbox)
+            )
+            if not allow_figure_wrap:
+                cleaned = dict(raw)
+                cleaned.pop(LAYOUT_GROUP_PAIR_OF_KEY, None)
+                cleaned.pop(LAYOUT_GROUP_PAIR_KIND_KEY, None)
+                block.raw = cleaned
+                continue
         if (
             primary.bbox is not None
             and block.bbox is not None
@@ -419,6 +455,7 @@ def sanitize_layout_group_pairs_on_document(layout_doc: Any) -> None:
         ):
             cleaned = dict(raw)
             cleaned.pop(LAYOUT_GROUP_PAIR_OF_KEY, None)
+            cleaned.pop(LAYOUT_GROUP_PAIR_KIND_KEY, None)
             block.raw = cleaned
 
     for block in layout_doc.iter_blocks():
@@ -645,6 +682,219 @@ def is_bottom_left_to_right_top_wrap_pair(
         return False
     # After reading the left column top-to-bottom, the right column resumes at the top.
     return ey0 + vertical_gap_tol < py0
+
+
+def is_figure_wrap_text_continuation_bbox(
+    primary_bbox: Sequence[float],
+    companion_bbox: Sequence[float],
+    *,
+    page_width: float = 595.0,
+    vertical_gap_tol: float = 8.0,
+    left_align_tol: float = 24.0,
+    min_width_ratio: float = 1.15,
+    max_primary_width_ratio: float = 0.65,
+) -> bool:
+    """True when companion is a full-width continuation under a left-column primary.
+
+    Typical ACS/graphical-abstract layout: left text wraps beside an inset image,
+    then continues in a wider block immediately below (primary.y1 ≈ companion.y0).
+    """
+    if len(primary_bbox) != 4 or len(companion_bbox) != 4:
+        return False
+    try:
+        px0, py0, px1, py1 = (
+            float(primary_bbox[0]),
+            float(primary_bbox[1]),
+            float(primary_bbox[2]),
+            float(primary_bbox[3]),
+        )
+        cx0, cy0, cx1, cy1 = (
+            float(companion_bbox[0]),
+            float(companion_bbox[1]),
+            float(companion_bbox[2]),
+            float(companion_bbox[3]),
+        )
+    except (TypeError, ValueError):
+        return False
+
+    page_w = max(float(page_width), 1.0)
+    primary_w = max(px1 - px0, 1.0)
+    companion_w = max(cx1 - cx0, 1.0)
+    if primary_w > page_w * max_primary_width_ratio:
+        return False
+    if companion_w < primary_w * min_width_ratio:
+        return False
+    if abs(cx0 - px0) > left_align_tol:
+        return False
+    if cx1 < px1 + primary_w * 0.15:
+        return False
+    # Companion starts immediately below the primary (figure notch).
+    if cy0 + vertical_gap_tol < py1:
+        return False
+    if cy0 > py1 + vertical_gap_tol:
+        return False
+    # Avoid pairing two stacked full-column rows with negligible height change.
+    if cy1 <= py1:
+        return False
+    return True
+
+
+def has_inset_image_for_figure_wrap(
+    primary_bbox: Sequence[float],
+    companion_bbox: Sequence[float],
+    image_bboxes: Sequence[Sequence[float]],
+    *,
+    x_gap_tol: float = 35.0,
+    vertical_gap_tol: float = 24.0,
+    min_y_overlap: float = 0.35,
+) -> bool:
+    """True when an image sits in the notch between left primary and full-width continue."""
+    if len(primary_bbox) != 4 or len(companion_bbox) != 4:
+        return False
+    try:
+        px1 = float(primary_bbox[2])
+        cy0 = float(companion_bbox[1])
+    except (TypeError, ValueError):
+        return False
+
+    for image_bbox in image_bboxes:
+        if not isinstance(image_bbox, (list, tuple)) or len(image_bbox) != 4:
+            continue
+        try:
+            ix0 = float(image_bbox[0])
+            iy0 = float(image_bbox[1])
+            iy1 = float(image_bbox[3])
+        except (TypeError, ValueError):
+            continue
+        if ix0 + x_gap_tol < px1:
+            continue
+        if bbox_y_overlap_ratio(primary_bbox, image_bbox) < min_y_overlap:
+            continue
+        # Image must occupy the notch above the continuation band.
+        if iy0 > cy0 + vertical_gap_tol:
+            continue
+        if iy1 > cy0 + vertical_gap_tol:
+            continue
+        return True
+    return False
+
+
+def is_figure_wrap_inset_left_strip_bbox(
+    primary_bbox: Sequence[float],
+    companion_bbox: Sequence[float],
+    *,
+    page_width: float = 595.0,
+    vertical_gap_tol: float = 8.0,
+    max_vertical_gap: float = 40.0,
+    left_align_tol: float = 24.0,
+    max_companion_width_ratio: float = 0.72,
+    min_primary_inset_ratio: float = 0.22,
+) -> bool:
+    """True when companion is a narrow left strip under a wide primary (figure on the right).
+
+    Typical Paddle split: full-width text above an inset figure, then an empty/narrow
+    OCR band beside the figure. Companion is left-aligned with primary and much
+    narrower so the image can sit in the right notch under the primary.
+    Mutually exclusive with :func:`is_figure_wrap_text_continuation_bbox`.
+    """
+    if len(primary_bbox) != 4 or len(companion_bbox) != 4:
+        return False
+    try:
+        px0, py0, px1, py1 = (
+            float(primary_bbox[0]),
+            float(primary_bbox[1]),
+            float(primary_bbox[2]),
+            float(primary_bbox[3]),
+        )
+        cx0, cy0, cx1, cy1 = (
+            float(companion_bbox[0]),
+            float(companion_bbox[1]),
+            float(companion_bbox[2]),
+            float(companion_bbox[3]),
+        )
+    except (TypeError, ValueError):
+        return False
+
+    del page_width, py0  # reserved for future page-relative thresholds
+    primary_w = max(px1 - px0, 1.0)
+    companion_w = max(cx1 - cx0, 1.0)
+    if companion_w > primary_w * max_companion_width_ratio:
+        return False
+    if abs(cx0 - px0) > left_align_tol:
+        return False
+    # Companion must leave a clear right notch for the inset figure.
+    if cx1 > px1 - primary_w * min_primary_inset_ratio:
+        return False
+    if cy0 + vertical_gap_tol < py1:
+        return False
+    if cy0 > py1 + max_vertical_gap:
+        return False
+    if cy1 <= py1:
+        return False
+    return True
+
+
+def has_inset_image_for_figure_left_strip(
+    primary_bbox: Sequence[float],
+    companion_bbox: Sequence[float],
+    image_bboxes: Sequence[Sequence[float]],
+    *,
+    x_gap_tol: float = 35.0,
+    right_align_tol: float = 40.0,
+    vertical_gap_tol: float = 24.0,
+    min_y_overlap: float = 0.35,
+) -> bool:
+    """True when an image fills the right notch beside a left strip under the primary."""
+    if len(primary_bbox) != 4 or len(companion_bbox) != 4:
+        return False
+    try:
+        px1 = float(primary_bbox[2])
+        py1 = float(primary_bbox[3])
+        cx1 = float(companion_bbox[2])
+    except (TypeError, ValueError):
+        return False
+
+    for image_bbox in image_bboxes:
+        if not isinstance(image_bbox, (list, tuple)) or len(image_bbox) != 4:
+            continue
+        try:
+            ix0 = float(image_bbox[0])
+            ix1 = float(image_bbox[2])
+            iy0 = float(image_bbox[1])
+        except (TypeError, ValueError):
+            continue
+        # Image sits to the right of the left strip (small gap or slight overlap OK).
+        if ix0 + x_gap_tol < cx1:
+            continue
+        if ix0 > cx1 + x_gap_tol:
+            continue
+        if abs(ix1 - px1) > right_align_tol:
+            continue
+        if bbox_y_overlap_ratio(companion_bbox, image_bbox) < min_y_overlap:
+            continue
+        # Image belongs under the primary band (not far below the companion start).
+        if iy0 > py1 + vertical_gap_tol * 2:
+            continue
+        return True
+    return False
+
+
+def is_figure_wrap_geometry_pair(
+    primary_bbox: Sequence[float],
+    companion_bbox: Sequence[float],
+    *,
+    page_width: float = 595.0,
+) -> bool:
+    """True for either classic wrap (narrow+wide) or inset-left strip (wide+narrow)."""
+    return is_figure_wrap_text_continuation_bbox(
+        primary_bbox,
+        companion_bbox,
+        page_width=page_width,
+    ) or is_figure_wrap_inset_left_strip_bbox(
+        primary_bbox,
+        companion_bbox,
+        page_width=page_width,
+    )
 
 
 def is_flow_column_continuation_bbox(

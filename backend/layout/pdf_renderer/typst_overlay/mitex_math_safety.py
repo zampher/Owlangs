@@ -14,6 +14,13 @@ _TAG_RE = re.compile(r"\\tag\{")
 _LEFT_RE = re.compile(r"\\left\b")
 _RIGHT_RE = re.compile(r"\\right\b")
 _RIGHT_TEXT_RE = re.compile(r"\\right\\text\{")
+_PAREN_DELIM_RE = re.compile(r"\\\(|\\\)")
+# mitex 0.2.6 fails with "unclosed delimiter" when \left\lfloor/\lceil is
+# closed with \right. instead of the matching floor/ceil token.
+_LEFT_FLOOR_RE = re.compile(r"\\left\\lfloor\b")
+_RIGHT_FLOOR_RE = re.compile(r"\\right\\rfloor\b")
+_LEFT_CEIL_RE = re.compile(r"\\left\\lceil\b")
+_RIGHT_CEIL_RE = re.compile(r"\\right\\rceil\b")
 
 
 def strip_math_delimiters(text: str) -> str:
@@ -54,6 +61,14 @@ def _left_right_balanced(body: str) -> bool:
     return len(_LEFT_RE.findall(body)) == len(_RIGHT_RE.findall(body))
 
 
+def _floor_ceil_paired(body: str) -> bool:
+    """True when \\left\\lfloor/\\lceil counts match matching \\right tokens."""
+    return (
+        len(_LEFT_FLOOR_RE.findall(body)) == len(_RIGHT_FLOOR_RE.findall(body))
+        and len(_LEFT_CEIL_RE.findall(body)) == len(_RIGHT_CEIL_RE.findall(body))
+    )
+
+
 def mitex_unsafe_reason(math_body: str) -> Optional[str]:
     """Return a short reason when LaTeX is likely to break mitex; else None."""
     body = strip_math_delimiters(math_body)
@@ -65,25 +80,22 @@ def mitex_unsafe_reason(math_body: str) -> Optional[str]:
         return "unbalanced_braces"
     if not _left_right_balanced(body):
         return "unbalanced_left_right"
+    if not _floor_ceil_paired(body):
+        return "mismatched_floor_ceil"
     if _TAG_RE.search(body):
         return "latex_tag"
     if _RIGHT_TEXT_RE.search(body):
         return "invalid_right_delimiter"
+    if _PAREN_DELIM_RE.search(body):
+        return "paren_delimiter_artifact"
     return None
 
 
 def iter_math_spans_in_markdown(text: str) -> list[str]:
     """Extract inline/display math bodies from markdown text."""
-    spans: list[str] = []
-    for match in re.finditer(r"\$\$(.+?)\$\$", text, flags=re.DOTALL):
-        spans.append(match.group(1))
-    for match in re.finditer(
-        r"(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)",
-        text,
-        flags=re.DOTALL,
-    ):
-        spans.append(match.group(1))
-    return spans
+    from layout.pdf_renderer.typst_overlay.math_span_utils import iter_math_span_bodies
+
+    return iter_math_span_bodies(text)
 
 
 def markdown_line_safe_for_mitex(line: str) -> bool:
@@ -103,3 +115,19 @@ def markdown_line_safe_for_mitex(line: str) -> bool:
 def is_mitex_safe_latex(math_body: str) -> bool:
     """True when math_body is safe to pass through cmarker+mitex."""
     return mitex_unsafe_reason(math_body) is None
+
+
+def should_fallback_mitex_equation_to_image(
+    math_body: str,
+    *,
+    equation_format: str = "text",
+) -> Optional[str]:
+    """Return unsafe reason when overlay must use equation-image / source-PDF fallback.
+
+    Applies for ``text`` and ``latex`` equation formats. ``image`` format already
+    preserves equation visuals and never routes through mitex.
+    """
+    eq_fmt = (equation_format or "text").strip().lower()
+    if eq_fmt == "image":
+        return None
+    return mitex_unsafe_reason(math_body)

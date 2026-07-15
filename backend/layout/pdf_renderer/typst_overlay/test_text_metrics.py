@@ -6,17 +6,24 @@
 import unittest
 
 from layout.pdf_renderer.typst_overlay.text_metrics import (
+    INLINE_MATH_WIDTH_FACTOR,
+    LATIN_CHAR_WIDTH_RATIO,
+    _math_body_typographic_units,
     block_needs_math_fit,
     bbox_content_height_pt,
     bbox_vertical_edge_inset_pt,
     count_embedded_newlines,
     count_visual_lines_from_content,
+    estimate_text_width_pt,
     estimate_typographic_units,
     estimate_visual_line_count,
+    estimate_wrap_ratio,
     is_single_line_bbox,
     is_suspiciously_short_mapped_text,
+    latex_math_visible_length,
     layout_raw_has_inline_equation,
     outer_bbox_content_height_pt,
+    resolve_embedded_newline_policy,
 )
 
 # layout.json Introduction paragraph: 1 MinerU line, bbox height 101pt, 3 citations
@@ -51,6 +58,19 @@ NLI_CITATION_RAW = {
 
 
 class TestTextMetrics(unittest.TestCase):
+    def test_cjk_wrap_ratio_wider_than_latin_only_estimate(self):
+        text = "自然语言推理仍然具有挑战性"
+        font = 10.0
+        width = 200.0
+        cjk_ratio = estimate_wrap_ratio(text, width, font)
+        latin_only = (len(text) * font * LATIN_CHAR_WIDTH_RATIO) / width
+        self.assertGreater(cjk_ratio, latin_only * 1.4)
+        self.assertAlmostEqual(
+            estimate_text_width_pt(text, font),
+            len(text) * font,
+            places=5,
+        )
+
     def test_typographic_units_math_wider_than_plain_chars(self):
         plain = "Overall, the only extra parameters we require"
         with_math = (
@@ -64,6 +84,59 @@ class TestTextMetrics(unittest.TestCase):
             estimate_typographic_units(with_math),
             estimate_typographic_units(plain),
         )
+
+    def test_long_latex_math_body_not_inflated_by_raw_length(self):
+        """Seg 73: command-heavy LaTeX must not use raw len * INLINE_MATH_WIDTH_FACTOR."""
+        body = (
+            r"\mathbf{R}^o = \left[ (\mathbf{r}_1^o)^T, \ldots, "
+            r"(\mathbf{r}_N^o)^T \right]^T \in \mathbb{R}^{B \times N}"
+        )
+        visible = latex_math_visible_length(body)
+        units = _math_body_typographic_units(body, display=False)
+        naive = float(len(body)) * INLINE_MATH_WIDTH_FACTOR
+        self.assertLess(visible, float(len(body)) * 0.5)
+        self.assertLess(units, naive * 0.55)
+        # Short subscript tokens stay heavier than a single plain letter.
+        self.assertGreater(
+            _math_body_typographic_units(r"W_{y}", display=False),
+            1.0 * INLINE_MATH_WIDTH_FACTOR,
+        )
+
+    def test_soft_embedded_newline_between_wrapping_cjk_paragraphs(self):
+        """Seg 8: OCR soft \\n between long wrapping paragraphs → collapse for font fit."""
+        p1 = (
+            "为使理论构想付诸实践，我们基于研究强调，因果因素S应满足三个属性：与非因果因素U分离；"
+            "S的分解应联合独立；对分类任务因果充分，即包含所有因果信息。如图2所示，与U混合导致S包含"
+            "潜在的非因果信息，从而影响模型的泛化能力。"
+        )
+        p2 = (
+            "因此我们提出一种因果启发的表征学习方法，通过干预非因果因素并强制表征维度对干预保持不变，"
+            "从而实现因果因素的有效提取与解耦，为领域泛化任务提供更具可解释性的解决方案。"
+        )
+        text = p1 + "\n" + p2
+        raw = {
+            "type": "text",
+            "lines": [{"spans": [{"type": "text", "content": text}]}],
+        }
+        fitted_text, preserve = resolve_embedded_newline_policy(
+            text, raw, bbox_width_pt=243.0, font_size_pt=10.0,
+        )
+        self.assertFalse(preserve)
+        self.assertNotIn("\n", fitted_text)
+        self.assertIn(p1[:8], fitted_text)
+        self.assertIn(p2[:8], fitted_text)
+
+    def test_patent_embedded_newline_still_preserved(self):
+        text = "(12) United States Patent\nEisen"
+        raw = {
+            "type": "text",
+            "lines": [{"spans": [{"type": "text", "content": text}]}],
+        }
+        fitted_text, preserve = resolve_embedded_newline_policy(
+            text, raw, bbox_width_pt=180.0, font_size_pt=10.0,
+        )
+        self.assertTrue(preserve)
+        self.assertEqual(fitted_text, text)
 
     def test_layout_raw_inline_equation_detection(self):
         raw = {

@@ -9,13 +9,19 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from layout.base import LayoutBlock
 from layout.layout_group_pair_utils import (
+    LAYOUT_GROUP_PAIR_KIND_FIGURE_WRAP,
+    LAYOUT_GROUP_PAIR_KIND_KEY,
     LAYOUT_GROUP_PAIR_OF_KEY,
     LAYOUT_GROUP_PAIRS_KEY,
     bbox_overlap_over_min_area,
     bbox_y_overlap_ratio,
+    has_inset_image_for_figure_left_strip,
+    has_inset_image_for_figure_wrap,
     is_block_claimed_for_layout_group_pairing,
     is_column_continuation_bbox,
     is_column_wrap_continuation_bbox,
+    is_figure_wrap_inset_left_strip_bbox,
+    is_figure_wrap_text_continuation_bbox,
     layout_group_ids_compatible,
     paddle_group_cross_column_pair,
 )
@@ -234,7 +240,12 @@ def apply_paddle_layout_group_pairs(
         )
 
 
-def _attach_layout_group_pair(primary: LayoutBlock, empty: LayoutBlock) -> None:
+def _attach_layout_group_pair(
+    primary: LayoutBlock,
+    empty: LayoutBlock,
+    *,
+    pair_kind: Optional[str] = None,
+) -> None:
     """Link empty companion block to primary and append pair metadata."""
     if primary.index is None or empty.index is None:
         return
@@ -249,14 +260,18 @@ def _attach_layout_group_pair(primary: LayoutBlock, empty: LayoutBlock) -> None:
     if empty.raw.get(LAYOUT_GROUP_PAIR_OF_KEY) is not None:
         return
     empty.raw[LAYOUT_GROUP_PAIR_OF_KEY] = primary.index
+    if pair_kind:
+        empty.raw[LAYOUT_GROUP_PAIR_KIND_KEY] = pair_kind
 
     primary.raw = dict(primary.raw or {})
     pairs: List[Dict[str, Any]] = list(primary.raw.get(LAYOUT_GROUP_PAIRS_KEY) or [])
-    pair_entry = {
+    pair_entry: Dict[str, Any] = {
         "index": empty.index,
         "bbox": [float(v) for v in empty.bbox[:4]],
         "page_index": empty.page_index,
     }
+    if pair_kind:
+        pair_entry[LAYOUT_GROUP_PAIR_KIND_KEY] = pair_kind
     if any(p.get("index") == empty.index for p in pairs):
         return
     pairs.append(pair_entry)
@@ -268,6 +283,165 @@ def _attach_layout_group_pair(primary: LayoutBlock, empty: LayoutBlock) -> None:
         )
     )
     primary.raw[LAYOUT_GROUP_PAIRS_KEY] = pairs
+
+
+def _merge_companion_text_into_primary(
+    primary: LayoutBlock,
+    companion: LayoutBlock,
+) -> None:
+    """Move companion OCR into primary so markdown keeps a single segment body."""
+    primary_text = (primary.text or "").strip()
+    companion_text = (companion.text or "").strip()
+    if primary_text and companion_text:
+        primary.text = f"{primary_text} {companion_text}"
+    elif companion_text:
+        primary.text = companion_text
+    companion.text = ""
+
+
+def _figure_wrap_match_kind(
+    primary: LayoutBlock,
+    companion: LayoutBlock,
+    *,
+    page_w: float,
+    image_bboxes: Sequence[Sequence[float]],
+) -> Optional[str]:
+    """Return 'classic' or 'inset_left' when primary/companion form a figure-wrap pair."""
+    if primary.bbox is None or companion.bbox is None:
+        return None
+    if len(primary.bbox) != 4 or len(companion.bbox) != 4:
+        return None
+    if is_figure_wrap_text_continuation_bbox(
+        primary.bbox,
+        companion.bbox,
+        page_width=page_w,
+    ) and has_inset_image_for_figure_wrap(
+        primary.bbox,
+        companion.bbox,
+        image_bboxes,
+    ):
+        return "classic"
+    if is_figure_wrap_inset_left_strip_bbox(
+        primary.bbox,
+        companion.bbox,
+        page_width=page_w,
+    ) and has_inset_image_for_figure_left_strip(
+        primary.bbox,
+        companion.bbox,
+        image_bboxes,
+    ):
+        return "inset_left"
+    return None
+
+
+def apply_figure_wrap_layout_group_pairs(
+    blocks: List[LayoutBlock],
+    *,
+    page_height: Optional[float] = None,
+    page_width: Optional[float] = None,
+) -> int:
+    """Pair figure-wrapped text blocks when an inset image fills the notch.
+
+    Two geometries (mutually exclusive):
+
+    - classic: narrow left primary + full-width continuation below (companion has OCR)
+    - inset_left: wide primary above + narrow left strip beside the figure (companion
+      may be empty; translation is later split into the strip bbox by area)
+
+    Without pairing, the strip/continuation becomes its own segment or is orphaned,
+    so text beside the figure never gets a dedicated overlay bbox.
+    """
+    del page_height  # geometry is driven by bbox abutment / effective width
+    text_blocks = [b for b in blocks if _is_parsing_res_text_block(b)]
+    if len(text_blocks) < 2:
+        return 0
+
+    _, page_w = _effective_page_dims(
+        blocks,
+        page_height=None,
+        page_width=page_width,
+    )
+    image_bboxes = [
+        list(b.bbox)
+        for b in blocks
+        if b.type in ("image", "figure", "chart")
+        and b.bbox is not None
+        and len(b.bbox) == 4
+    ]
+    if not image_bboxes:
+        return 0
+
+    paired = 0
+    claimed_primary = {
+        int(p.get("index"))
+        for b in text_blocks
+        for p in ((b.raw or {}).get(LAYOUT_GROUP_PAIRS_KEY) or [])
+        if isinstance(p, dict) and p.get("index") is not None
+    }
+
+    for companion in sorted(text_blocks, key=_block_order):
+        companion_raw = companion.raw if isinstance(companion.raw, dict) else {}
+        if is_block_claimed_for_layout_group_pairing(companion_raw):
+            continue
+        if companion.index is None or companion.bbox is None or len(companion.bbox) != 4:
+            continue
+        if int(companion.index) in claimed_primary:
+            continue
+        companion_has_text = _has_recognized_text(companion)
+
+        best_primary: Optional[LayoutBlock] = None
+        best_order = -1
+        best_kind: Optional[str] = None
+        for primary in text_blocks:
+            if primary.index is None or primary.index == companion.index:
+                continue
+            if primary.page_index != companion.page_index:
+                continue
+            if not _has_recognized_text(primary):
+                continue
+            primary_raw = primary.raw if isinstance(primary.raw, dict) else {}
+            if is_block_claimed_for_layout_group_pairing(primary_raw):
+                continue
+            if primary.bbox is None or len(primary.bbox) != 4:
+                continue
+            if _block_order(primary) >= _block_order(companion):
+                continue
+            match_kind = _figure_wrap_match_kind(
+                primary,
+                companion,
+                page_w=page_w,
+                image_bboxes=image_bboxes,
+            )
+            if match_kind is None:
+                continue
+            # Classic wrap merges companion OCR into primary; requires companion text.
+            if match_kind == "classic" and not companion_has_text:
+                continue
+            order = _block_order(primary)
+            if order > best_order:
+                best_order = order
+                best_primary = primary
+                best_kind = match_kind
+
+        if best_primary is None or best_kind is None:
+            continue
+
+        if companion_has_text:
+            _merge_companion_text_into_primary(best_primary, companion)
+        _attach_layout_group_pair(
+            best_primary,
+            companion,
+            pair_kind=LAYOUT_GROUP_PAIR_KIND_FIGURE_WRAP,
+        )
+        claimed_primary.add(int(companion.index))
+        paired += 1
+
+    if paired:
+        logger.info(
+            LogModule.LAYOUT,
+            f"[PADDLE_GROUP] Paired {paired} figure-wrap continuation block(s) on page",
+        )
+    return paired
 
 
 def _spatial_pair_score(
