@@ -30,7 +30,7 @@ def test_block_markdown_fit_call_uses_fixed_leading_when_locked():
         "md_var",
         fit_height_pt=72.0,
         font_style="normal",
-        first_line_indent_pt=0.0,
+        first_line_indent="",
         justify_text="false",
     )
     assert "pdftr_fit_markdown_fixed_leading" in call
@@ -55,7 +55,7 @@ def test_block_markdown_fit_call_uses_auto_leading_when_unlocked():
         "md_var",
         fit_height_pt=72.0,
         font_style="normal",
-        first_line_indent_pt=0.0,
+        first_line_indent="",
         justify_text="false",
     )
     assert "pdftr_fit_markdown(" in call

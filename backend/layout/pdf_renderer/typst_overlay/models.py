@@ -48,6 +48,8 @@ class RenderBlock:
     font_weight: str = "regular"           # "regular" | "bold"
     font_style: str = "normal"             # "normal" | "italic"
     first_line_indent_pt: float = 0.0
+    # Prefer em when > 0 so indent tracks fitted/scaled text size (≈ N CJK chars).
+    first_line_indent_em: float = 0.0
     justify_text: bool = False
 
     # -- colors --

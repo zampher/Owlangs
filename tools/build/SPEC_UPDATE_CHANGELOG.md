@@ -1,5 +1,20 @@
 # Spec文件更新日志
 
+## 2026-07-17 — 中文原位 PDF 正文首行缩进（cjk_paragraph_indent）
+
+未提交改动新增 `backend/layout/pdf_renderer/typst_overlay/cjk_paragraph_indent.py`，由 `renderer.py` 顶层导入（目标语为中文时为正文设置 `first_line_indent_em=2`；caption/标题等不缩进）。已在 `lite.spec`、`launcher_portable_onedir.spec`、`macos.spec` 补充：
+
+- `layout.pdf_renderer.typst_overlay.cjk_paragraph_indent` — CJK 正文首行缩进（语言判断、2em、block 类型过滤）
+
+**同批改动无需新增 spec 条目的模块：**
+
+- `backend/layout/pdf_renderer/typst_overlay/emitter.py` — 已有 hiddenimport；消费 `first_line_indent_em` / `h(2em)`
+- `backend/layout/pdf_renderer/typst_overlay/models.py` — 已有 hiddenimport；新增 `first_line_indent_em` 字段
+- `backend/layout/pdf_renderer/typst_overlay/renderer.py` — 已有 hiddenimport；调用 apply 辅助函数
+- `backend/layout/pdf_renderer/typst_overlay/test_*.py` — 测试，不打包
+
+---
+
 ## 2026-07-16 — Typst overlay math span 扫描（math_span_utils）
 
 未提交改动新增 `backend/layout/pdf_renderer/typst_overlay/math_span_utils.py`，由 `emitter.py` 顶层导入、`mitex_math_safety.py` lazy import（扫描 markdown 中 `$...$` / `$$...$$` 公式体）。已在 `lite.spec`、`launcher_portable_onedir.spec`、`macos.spec` 补充：

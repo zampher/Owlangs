@@ -65,6 +65,11 @@ from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
     apply_user_typography_override,
     collect_image_exclusion_layout_block_indices,
 )
+from layout.pdf_renderer.typst_overlay.cjk_paragraph_indent import (
+    apply_cjk_body_indent_to_block,
+    infer_layout_block_type,
+    resolve_target_language,
+)
 from layout.pdf_renderer.typst_overlay.source_cleanup import (
     clean_source_pdf, PYMUPDF_AVAILABLE as _pymupdf_ok,
 )
@@ -851,6 +856,8 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 font_size_pt=9.0,
                 leading_em=1.3,
                 font_weight="regular",
+                first_line_indent_pt=0.0,
+                first_line_indent_em=0.0,
                 text_color=(0.0, 0.0, 0.0),
                 cover_fill=(1.0, 1.0, 1.0),
                 use_cover_fill=False,
@@ -874,6 +881,8 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 font_size_pt=9.0,
                 leading_em=1.3,
                 font_weight="regular",
+                first_line_indent_pt=0.0,
+                first_line_indent_em=0.0,
                 text_color=(0.0, 0.0, 0.0),
                 cover_fill=(1.0, 1.0, 1.0),
                 use_cover_fill=False,
@@ -893,6 +902,8 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     font_size_pt=8.0,
                     leading_em=1.2,
                     font_weight="regular",
+                    first_line_indent_pt=0.0,
+                    first_line_indent_em=0.0,
                     text_color=(0.0, 0.0, 0.0),
                     cover_fill=(1.0, 1.0, 1.0),
                     use_cover_fill=False,
@@ -909,6 +920,45 @@ class TypstOverlayRenderer(BasePDFRenderer):
             )
 
         return result
+
+    def _apply_cjk_body_first_line_indents(
+        self,
+        layout_doc: LayoutDocument,
+        render_blocks_by_page: Dict[int, List[RenderBlock]],
+    ) -> None:
+        """Assign Chinese body first-line indent on RenderBlocks (≈ two CJK chars)."""
+        target_lang = resolve_target_language(
+            getattr(self.config, "target_language", None),
+            getattr(self.config, "overlay_task_state", None) or {},
+        )
+        type_by_index: Dict[int, str] = {}
+        for page in layout_doc.pages:
+            for block in page.blocks:
+                idx = getattr(block, "index", None)
+                if idx is None:
+                    continue
+                try:
+                    type_by_index[int(idx)] = str(getattr(block, "type", "") or "")
+                except (TypeError, ValueError):
+                    continue
+
+        indented = 0
+        for page_blocks in render_blocks_by_page.values():
+            for rb in page_blocks:
+                layout_type = infer_layout_block_type(rb.block_id, type_by_index)
+                if apply_cjk_body_indent_to_block(
+                    rb,
+                    target_language=target_lang,
+                    layout_block_type=layout_type,
+                ) > 0:
+                    indented += 1
+
+        if indented:
+            unified_logger.info(
+                LogModule.RESTOR,
+                f"[TYPST_OVERLAY] Applied CJK body first-line indent to "
+                f"{indented} block(s) (lang={target_lang!r})",
+            )
 
     def _load_image_data_map(self, layout_doc: LayoutDocument) -> Dict[str, bytes]:
         """Load MinerU layout images from ZIP bytes attached to config."""
@@ -2420,6 +2470,8 @@ class TypstOverlayRenderer(BasePDFRenderer):
             cleaned_output = Path(cleaned_output)
             cleaned_output.parent.mkdir(parents=True, exist_ok=True)
             cleaned_output.write_bytes(cleaned_pdf_bytes)
+
+        self._apply_cjk_body_first_line_indents(layout_doc, render_blocks_by_page)
 
         # ---- Step 3: Build PageSpecs ----
         specs_started = time.perf_counter()

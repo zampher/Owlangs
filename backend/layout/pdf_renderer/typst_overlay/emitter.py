@@ -341,6 +341,31 @@ def _typst_pad_vertical_expr(
     )
 
 
+def _typst_first_line_indent_length(block: RenderBlock) -> str:
+    """Typst length for first-line indent; prefer em so it tracks text size."""
+    em = float(getattr(block, "first_line_indent_em", 0.0) or 0.0)
+    if em > 0:
+        return f"{em}em"
+    pt = float(getattr(block, "first_line_indent_pt", 0.0) or 0.0)
+    if pt > 0:
+        return f"{pt}pt"
+    return ""
+
+
+def _typst_first_line_indent_h_stmt(indent_length: str) -> str:
+    """Emit ``h(indent)`` when *indent_length* is non-empty."""
+    if not indent_length:
+        return ""
+    return f"if {indent_length} > 0pt {{ h({indent_length}) }}; "
+
+
+def _typst_first_line_indent_arg(indent_length: str) -> str:
+    """Emit ``, first_line_indent: <length>`` for fit helpers."""
+    if not indent_length:
+        return ""
+    return f", first_line_indent: {indent_length}"
+
+
 def _typst_markdown_block(body_name: str, width: float, height: float,
                           block_fill: str, body_expr: str,
                           content_top_inset_pt: float = 0.0,
@@ -358,12 +383,12 @@ def _typst_markdown_fit_call(md_name: str, max_font_size_pt: float,
                              min_font_size_pt: float, max_leading_em: float,
                              min_leading_em: float, fit_height_pt: float,
                              font_weight: str, font_style: str,
-                             first_line_indent_pt: float,
+                             first_line_indent: str,
                              justify_text: str,
                              *,
                              use_mitex: bool = True) -> str:
     """Generate a pdftr_fit_markdown(...) call expression."""
-    indent = f", first_line_indent: {first_line_indent_pt}pt" if first_line_indent_pt > 0 else ""
+    indent = _typst_first_line_indent_arg(first_line_indent)
     style_clause = _typst_font_style_clause(font_style)
     style_arg = f', style: "{font_style or "normal"}"' if style_clause else ""
     mitex_arg = ", use_mitex: true" if use_mitex else ", use_mitex: false"
@@ -384,13 +409,13 @@ def _typst_markdown_fit_fixed_leading_call(
     fit_height_pt: float,
     font_weight: str,
     font_style: str,
-    first_line_indent_pt: float,
+    first_line_indent: str,
     justify_text: str,
     *,
     use_mitex: bool = True,
 ) -> str:
     """Generate pdftr_fit_markdown_fixed_leading(...) — font-only fit, locked leading."""
-    indent = f", first_line_indent: {first_line_indent_pt}pt" if first_line_indent_pt > 0 else ""
+    indent = _typst_first_line_indent_arg(first_line_indent)
     style_clause = _typst_font_style_clause(font_style)
     style_arg = f', style: "{font_style or "normal"}"' if style_clause else ""
     mitex_arg = ", use_mitex: true" if use_mitex else ", use_mitex: false"
@@ -407,7 +432,7 @@ def _block_markdown_fit_call(
     md_name: str,
     fit_height_pt: float,
     font_style: str,
-    first_line_indent_pt: float,
+    first_line_indent: str,
     justify_text: str,
     *,
     markdown: str = "",
@@ -436,7 +461,7 @@ def _block_markdown_fit_call(
             fit_height_pt,
             block.font_weight,
             font_style,
-            first_line_indent_pt,
+            first_line_indent,
             justify_text,
             use_mitex=use_mitex,
         )
@@ -449,7 +474,7 @@ def _block_markdown_fit_call(
         fit_height_pt,
         block.font_weight,
         font_style,
-        first_line_indent_pt,
+        first_line_indent,
         justify_text,
         use_mitex=use_mitex,
     )
@@ -475,7 +500,7 @@ def _typst_single_line_fit_call(md_name: str, max_font_pt: float,
 def _typst_plain_markdown_expr(md_name: str, font_size_pt: float,
                                 leading_em: float, font_weight: str,
                                 font_style: str, text_fill: str,
-                                first_line_indent_pt: float,
+                                first_line_indent: str,
                                 justify_text: str,
                                 *,
                                 markdown: str = "") -> str:
@@ -485,18 +510,18 @@ def _typst_plain_markdown_expr(md_name: str, font_size_pt: float,
         if markdown
         else _typst_cmarker_render_expr(md_name)
     )
+    indent_stmt = _typst_first_line_indent_h_stmt(first_line_indent)
     return (
         f"{_typst_set_text_attrs(font_size_pt, font_weight, font_style, text_fill)}; "
         f"set par(leading: {leading_em}em, justify: {justify_text}); "
-        f"if {first_line_indent_pt}pt > 0pt {{ h({first_line_indent_pt}pt) }}; "
-        f"{render_expr}"
+        f"{indent_stmt}{render_expr}"
     )
 
 
 def _typst_plain_text_expr(text_name: str, font_size_pt: float,
                            leading_em: float, font_weight: str,
                            font_style: str, text_fill: str,
-                           first_line_indent_pt: float,
+                           first_line_indent: str,
                            justify_text: str,
                            *,
                            markdown: str = "") -> str:
@@ -506,11 +531,11 @@ def _typst_plain_text_expr(text_name: str, font_size_pt: float,
         if markdown
         else _typst_cmarker_render_expr(text_name)
     )
+    indent_stmt = _typst_first_line_indent_h_stmt(first_line_indent)
     return (
         f"{_typst_set_text_attrs(font_size_pt, font_weight, font_style, text_fill)}; "
         f"set par(leading: {leading_em}em, justify: {justify_text}); "
-        f"if {first_line_indent_pt}pt > 0pt {{ h({first_line_indent_pt}pt) }}; "
-        f"{render_expr}"
+        f"{indent_stmt}{render_expr}"
     )
 
 
@@ -933,8 +958,7 @@ def _render_plain_block(block_id: str, block: RenderBlock,
         body_var = f"{var_prefix}_body"
         sanitized = sanitize_typst_markdown_for_compile(text)
         justify = _typst_bool(block.justify_text)
-        first_indent = max(0.0, block.first_line_indent_pt)
-        indent_arg = f", first_line_indent: {first_indent}pt" if first_indent > 0 else ""
+        first_indent = _typst_first_line_indent_length(block)
 
         if block.fit_to_box and not block.font_size_locked:
             fit_call = _block_markdown_fit_call(
@@ -973,9 +997,12 @@ def _render_plain_block(block_id: str, block: RenderBlock,
         box_var = f"{var_prefix}_box"
         sanitized_locked = sanitize_typst_markdown_for_compile(text)
         render_expr = _typst_cmarker_render_expr_for_markdown(text_var, sanitized_locked)
+        indent_prefix = _typst_first_line_indent_h_stmt(
+            _typst_first_line_indent_length(block),
+        )
         body_inner = (
             f"{{ {_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; "
-            f"{render_expr} }}"
+            f"{indent_prefix}{render_expr} }}"
         )
         body_expr = _typst_pad_vertical_expr(body_inner, content_top, content_bottom)
         lines = [
@@ -997,10 +1024,13 @@ def _render_plain_block(block_id: str, block: RenderBlock,
     rotate_fill = block_fill if rotation in {90, 180, 270} else ""
     sanitized_short = sanitize_typst_markdown_for_compile(text)
     render_expr = _typst_cmarker_render_expr_for_markdown(text_var, sanitized_short)
+    indent_prefix = _typst_first_line_indent_h_stmt(
+        _typst_first_line_indent_length(block),
+    )
     short_body_inner = (
         "set text(size: scaled-font, weight: "
         f"\"{block.font_weight}\"{_typst_font_style_clause(font_style)}, fill: {text_fill}); "
-        f"{render_expr}"
+        f"{indent_prefix}{render_expr}"
     )
     short_body_expr = _typst_pad_vertical_expr(
         short_body_inner, content_top, content_bottom,
@@ -1009,7 +1039,7 @@ def _render_plain_block(block_id: str, block: RenderBlock,
     lines = [
         f"#let {text_var} = \"{_escape_sanitized_text_for_typst(sanitized_short)}\"",
         f"#let {base_var} = box[#{{ {_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; "
-        f"{render_expr} }}]",
+        f"{indent_prefix}{render_expr} }}]",
         "#context {",
         f"  let base-size = measure({base_var})",
         f"  let scaled-font = if base-size.width > {layout_width}pt "
@@ -1147,7 +1177,7 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
     md_var = f"{var_prefix}_md"
     body_var = f"{var_prefix}_body"
     justify = _typst_bool(block.justify_text)
-    first_indent = max(0.0, block.first_line_indent_pt)
+    first_indent = _typst_first_line_indent_length(block)
     font_style = getattr(block, "font_style", None) or "normal"
 
     # Formula safety vertical insets (multi-line edge margin lives in shrunk inner_bbox)

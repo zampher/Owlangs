@@ -270,6 +270,7 @@ hiddenimports = [
     'layout.pdf_renderer.typst_overlay.formula_safety',
     'layout.pdf_renderer.typst_overlay.mitex_math_safety',
     'layout.pdf_renderer.typst_overlay.math_span_utils',
+    'layout.pdf_renderer.typst_overlay.cjk_paragraph_indent',
     'layout.pdf_renderer.typst_overlay.table_border_style',
     'layout.pdf_renderer.typst_overlay.layer_order',
     'layout.pdf_renderer.typst_overlay.pdf_font_dry_run',
