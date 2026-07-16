@@ -64,10 +64,11 @@ def test_sanitize_glued_ndiff_inside_math_becomes_text_not_variable():
 
 
 def test_sanitize_glued_ndiff_outside_math_becomes_plain_word():
-    text = r"Compare results\ndiff across cases"
+    # Heavy sanitize (triggered by $) also neutralizes glued \\ndiff outside math.
+    text = r"Compare $a$ results\ndiff across cases"
     out = sanitize_typst_markdown_for_compile(text)
     assert r"\ndiff" not in out
-    assert " diff " in out or out.endswith(" diff across cases")
+    assert " diff " in out or "diff across" in out
 
 
 def test_sanitize_preserves_nu_and_nabla_after_backslash_n():
@@ -82,6 +83,40 @@ def test_sanitize_diff_command_maps_to_mathrm_d():
     out = sanitize_typst_markdown_for_compile(text)
     assert r"\mathrm{d}" in out
     assert r"\diff" not in out
+
+
+def test_sanitize_merges_split_not_perp_math():
+    """Regression: $\\not$$\\perp$ must become $\\not\\perp$ for mitex."""
+    from layout.pdf_renderer.typst_overlay.emitter import _sanitize_typst_markdown_core
+    from layout.pdf_renderer.typst_overlay.mitex_math_safety import (
+        markdown_line_safe_for_mitex,
+    )
+
+    _sanitize_typst_markdown_core.cache_clear()
+    text = "对于碰撞结构，我们有X $\\not$$\\perp$ Z | Y。"
+    out = sanitize_typst_markdown_for_compile(text)
+    assert "$\\not$$\\perp$" not in out
+    assert "$\\not\\perp$" in out
+    assert markdown_line_safe_for_mitex(out)
+
+
+def test_render_markdown_fit_sanitizes_split_not_and_keeps_mitex():
+    """Split $\\not$$\\perp$ is merged so fit can keep mitex safely."""
+    block = RenderBlock(
+        block_id="not-bare",
+        page_index=0,
+        inner_bbox=(10.0, 20.0, 300.0, 100.0),
+        markdown_text="条件独立性：X $\\not$$\\perp$ Z | Y。",
+        font_size_pt=10.0,
+        fit_to_box=True,
+        fit_min_font_size_pt=7.0,
+        leading_em=1.2,
+        fit_min_leading_em=0.9,
+    )
+    src = _render_markdown_block("block-not", block)
+    assert "\\\\not\\\\perp" in src
+    assert "\\\\not$$\\\\perp" not in src
+    assert "use_mitex: true" in src
 
 
 def test_render_table_block_cell_with_literal_backslash_n_not_wrapped_as_math():

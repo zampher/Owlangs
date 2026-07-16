@@ -21,6 +21,8 @@ _LEFT_FLOOR_RE = re.compile(r"\\left\\lfloor\b")
 _RIGHT_FLOOR_RE = re.compile(r"\\right\\rfloor\b")
 _LEFT_CEIL_RE = re.compile(r"\\left\\lceil\b")
 _RIGHT_CEIL_RE = re.compile(r"\\right\\rceil\b")
+# Bare \not (no operand) → Typst "missing argument: it" via mitex.
+_BARE_NOT_RE = re.compile(r"^\\not\s*$")
 
 
 def strip_math_delimiters(text: str) -> str:
@@ -88,6 +90,12 @@ def mitex_unsafe_reason(math_body: str) -> Optional[str]:
         return "invalid_right_delimiter"
     if _PAREN_DELIM_RE.search(body):
         return "paren_delimiter_artifact"
+    if _BARE_NOT_RE.match(body.strip()):
+        return "bare_not"
+    # Adjacent $...$$...$ can be scanned as one body containing $$; cmarker
+    # still splits them and may emit bare \not.
+    if "$$" in body:
+        return "embedded_dollar_delimiter"
     return None
 
 

@@ -82,6 +82,19 @@ def _typst_cmarker_plain_render_expr(var_name: str) -> str:
     return f"cmarker.render({var_name})"
 
 
+def _typst_cmarker_render_expr_for_markdown(var_name: str, markdown: str) -> str:
+    """Pick cmarker+mitex or plain cmarker based on mitex safety heuristics."""
+    if markdown_line_safe_for_mitex(markdown):
+        return _typst_cmarker_render_expr(var_name)
+    preview = str(markdown or "").replace("\n", " ")[:120]
+    unified_logger.warning(
+        LogModule.RESTOR,
+        "[TYPST_OVERLAY] mitex skipped for block markdown "
+        f"(var={var_name}, preview={preview!r})",
+    )
+    return _typst_cmarker_plain_render_expr(var_name)
+
+
 @lru_cache(maxsize=8192)
 def _prepare_user_text_for_typst(text: str) -> str:
     """Sanitize and escape user-authored text for Typst string bindings."""
@@ -346,16 +359,20 @@ def _typst_markdown_fit_call(md_name: str, max_font_size_pt: float,
                              min_leading_em: float, fit_height_pt: float,
                              font_weight: str, font_style: str,
                              first_line_indent_pt: float,
-                             justify_text: str) -> str:
+                             justify_text: str,
+                             *,
+                             use_mitex: bool = True) -> str:
     """Generate a pdftr_fit_markdown(...) call expression."""
     indent = f", first_line_indent: {first_line_indent_pt}pt" if first_line_indent_pt > 0 else ""
     style_clause = _typst_font_style_clause(font_style)
     style_arg = f', style: "{font_style or "normal"}"' if style_clause else ""
+    mitex_arg = ", use_mitex: true" if use_mitex else ", use_mitex: false"
     return (
         f"pdftr_fit_markdown({md_name}, max_size: {max_font_size_pt}pt, "
         f"min_size: {min_font_size_pt}pt, max_leading: {max_leading_em}em, "
         f"min_leading: {min_leading_em}em, fit_height: {fit_height_pt}pt, "
-        f"weight: \"{font_weight}\"{style_arg}{indent}, justify: {justify_text})"
+        f"weight: \"{font_weight}\"{style_arg}{indent}, justify: {justify_text}"
+        f"{mitex_arg})"
     )
 
 
@@ -369,16 +386,19 @@ def _typst_markdown_fit_fixed_leading_call(
     font_style: str,
     first_line_indent_pt: float,
     justify_text: str,
+    *,
+    use_mitex: bool = True,
 ) -> str:
     """Generate pdftr_fit_markdown_fixed_leading(...) — font-only fit, locked leading."""
     indent = f", first_line_indent: {first_line_indent_pt}pt" if first_line_indent_pt > 0 else ""
     style_clause = _typst_font_style_clause(font_style)
     style_arg = f', style: "{font_style or "normal"}"' if style_clause else ""
+    mitex_arg = ", use_mitex: true" if use_mitex else ", use_mitex: false"
     return (
         f"pdftr_fit_markdown_fixed_leading({md_name}, max_size: {max_font_size_pt}pt, "
         f"min_size: {min_font_size_pt}pt, leading: {leading_em}em, "
         f"fit_height: {fit_height_pt}pt, weight: \"{font_weight}\"{style_arg}{indent}, "
-        f"justify: {justify_text})"
+        f"justify: {justify_text}{mitex_arg})"
     )
 
 
@@ -389,8 +409,18 @@ def _block_markdown_fit_call(
     font_style: str,
     first_line_indent_pt: float,
     justify_text: str,
+    *,
+    markdown: str = "",
 ) -> str:
     """Pick fit call: user-locked leading keeps line spacing, auto leading may shrink both."""
+    use_mitex = markdown_line_safe_for_mitex(markdown) if markdown else True
+    if markdown and not use_mitex:
+        preview = str(markdown).replace("\n", " ")[:120]
+        unified_logger.warning(
+            LogModule.RESTOR,
+            "[TYPST_OVERLAY] markdown fit uses plain cmarker "
+            f"(block={getattr(block, 'block_id', '?')}, preview={preview!r})",
+        )
     if getattr(block, "leading_em_locked", False):
         max_font_pt = block.font_size_pt
         if block.fit_max_font_size_pt and block.fit_max_font_size_pt > 0:
@@ -408,6 +438,7 @@ def _block_markdown_fit_call(
             font_style,
             first_line_indent_pt,
             justify_text,
+            use_mitex=use_mitex,
         )
     return _typst_markdown_fit_call(
         md_name,
@@ -420,20 +451,24 @@ def _block_markdown_fit_call(
         font_style,
         first_line_indent_pt,
         justify_text,
+        use_mitex=use_mitex,
     )
 
 
 def _typst_single_line_fit_call(md_name: str, max_font_pt: float,
                                 min_font_pt: float, width_pt: float,
                                 height_pt: float, font_weight: str,
-                                font_style: str, justify_text: str) -> str:
+                                font_style: str, justify_text: str,
+                                *,
+                                use_mitex: bool = True) -> str:
     """Generate a pdftr_fit_single_line_markdown(...) call expression."""
     style_arg = f', style: "{font_style or "normal"}"'
+    mitex_arg = ", use_mitex: true" if use_mitex else ", use_mitex: false"
     return (
         f"pdftr_fit_single_line_markdown({md_name}, max_size: {max_font_pt}pt, "
         f"min_size: {min_font_pt}pt, fit_width: {width_pt}pt, "
         f"fit_height: {height_pt}pt, weight: \"{font_weight}\"{style_arg}, "
-        f"justify: {justify_text})"
+        f"justify: {justify_text}{mitex_arg})"
     )
 
 
@@ -441,13 +476,20 @@ def _typst_plain_markdown_expr(md_name: str, font_size_pt: float,
                                 leading_em: float, font_weight: str,
                                 font_style: str, text_fill: str,
                                 first_line_indent_pt: float,
-                                justify_text: str) -> str:
+                                justify_text: str,
+                                *,
+                                markdown: str = "") -> str:
     """Generate static markdown rendering expression with line leading."""
+    render_expr = (
+        _typst_cmarker_render_expr_for_markdown(md_name, markdown)
+        if markdown
+        else _typst_cmarker_render_expr(md_name)
+    )
     return (
         f"{_typst_set_text_attrs(font_size_pt, font_weight, font_style, text_fill)}; "
         f"set par(leading: {leading_em}em, justify: {justify_text}); "
         f"if {first_line_indent_pt}pt > 0pt {{ h({first_line_indent_pt}pt) }}; "
-        f"cmarker.render({md_name}, math: mitex)"
+        f"{render_expr}"
     )
 
 
@@ -455,13 +497,20 @@ def _typst_plain_text_expr(text_name: str, font_size_pt: float,
                            leading_em: float, font_weight: str,
                            font_style: str, text_fill: str,
                            first_line_indent_pt: float,
-                           justify_text: str) -> str:
+                           justify_text: str,
+                           *,
+                           markdown: str = "") -> str:
     """Generate static plain text rendering expression with leading."""
+    render_expr = (
+        _typst_cmarker_render_expr_for_markdown(text_name, markdown)
+        if markdown
+        else _typst_cmarker_render_expr(text_name)
+    )
     return (
         f"{_typst_set_text_attrs(font_size_pt, font_weight, font_style, text_fill)}; "
         f"set par(leading: {leading_em}em, justify: {justify_text}); "
         f"if {first_line_indent_pt}pt > 0pt {{ h({first_line_indent_pt}pt) }}; "
-        f"{_typst_cmarker_render_expr(text_name)}"
+        f"{render_expr}"
     )
 
 
@@ -575,11 +624,16 @@ _HEAVY_SANITIZE_MARKERS = (
     r"\[",
     r"\circled",
     r"\diff",
+    r"\not",
     "![",
     r"\langlen",
     r"\right\text",
     r"\textcircled",
 )
+
+# Translation artifact: $\not$$\perp$ (or $X \not$$\perp$) is split by cmarker
+# into bare $\not$ which breaks mitex 0.2.6 with "missing argument: it".
+_SPLIT_NOT_MATH_RE = re.compile(r"\$([^$]*\\not)\$\s*\$([^$]+)\$")
 
 
 def _needs_heavy_markdown_sanitize(text: str) -> bool:
@@ -636,6 +690,8 @@ def _sanitize_typst_markdown_core(markdown: str) -> str:
     text = _strip_paren_delimiter_artifacts_inside_math(text)
     text = _strip_newlines_inside_math_delimiters(text)
     text = _neutralize_linebreak_artifacts(text)
+    # Merge split negation: $\not$$\perp$ -> $\not\perp$
+    text = _SPLIT_NOT_MATH_RE.sub(r"$\1\2$", text)
     text = re.sub(r"\$\s*\^\s*\{\s*\\(?:circled|textcircled)\s*R\s*\}\s*\$", "®", text)
     text = re.sub(r"\$\s*\^\s*\{\s*\\(?:circled|textcircled)\s*\{\s*R\s*\}\s*\}\s*\$", "®", text)
     text = re.sub(r"\$\s*\^\s*\{\s*\\(?:textregistered|registered)\s*\}\s*\$", "®", text)
@@ -888,15 +944,18 @@ def _render_plain_block(block_id: str, block: RenderBlock,
                 font_style,
                 first_indent,
                 justify,
+                markdown=sanitized,
             )
             body_expr = f"set text(fill: {text_fill}); {fit_call}"
         else:
             body_expr = _typst_plain_text_expr(
                 text_var, block.font_size_pt, block.leading_em,
-                block.font_weight, font_style, text_fill, first_indent, justify)
+                block.font_weight, font_style, text_fill, first_indent, justify,
+                markdown=sanitized,
+            )
 
         parts = [
-            f"#let {text_var} = \"{_prepare_user_text_for_typst(sanitized)}\"",
+            f"#let {text_var} = \"{_escape_sanitized_text_for_typst(sanitized)}\"",
             _typst_markdown_block(
                 body_var, layout_width, layout_height, block_fill, body_expr,
                 content_top_inset_pt=content_top,
@@ -912,13 +971,15 @@ def _render_plain_block(block_id: str, block: RenderBlock,
     if block.font_size_locked:
         text_var = f"{var_prefix}_txt"
         box_var = f"{var_prefix}_box"
+        sanitized_locked = sanitize_typst_markdown_for_compile(text)
+        render_expr = _typst_cmarker_render_expr_for_markdown(text_var, sanitized_locked)
         body_inner = (
             f"{{ {_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; "
-            f"{_typst_cmarker_render_expr(text_var)} }}"
+            f"{render_expr} }}"
         )
         body_expr = _typst_pad_vertical_expr(body_inner, content_top, content_bottom)
         lines = [
-            f"#let {text_var} = \"{_prepare_user_text_for_typst(text)}\"",
+            f"#let {text_var} = \"{_escape_sanitized_text_for_typst(sanitized_locked)}\"",
             f"#let {box_var} = block(width: {layout_width}pt, height: {layout_height}pt{block_fill})"
             f"[#{{ {body_expr} }}]",
             _typst_place_flow_block(
@@ -934,19 +995,21 @@ def _render_plain_block(block_id: str, block: RenderBlock,
     inner_var = f"{var_prefix}_inner"
     outer_var = f"{var_prefix}_bbox"
     rotate_fill = block_fill if rotation in {90, 180, 270} else ""
+    sanitized_short = sanitize_typst_markdown_for_compile(text)
+    render_expr = _typst_cmarker_render_expr_for_markdown(text_var, sanitized_short)
     short_body_inner = (
         "set text(size: scaled-font, weight: "
         f"\"{block.font_weight}\"{_typst_font_style_clause(font_style)}, fill: {text_fill}); "
-        f"{_typst_cmarker_render_expr(text_var)}"
+        f"{render_expr}"
     )
     short_body_expr = _typst_pad_vertical_expr(
         short_body_inner, content_top, content_bottom,
     )
 
     lines = [
-        f"#let {text_var} = \"{_prepare_user_text_for_typst(text)}\"",
+        f"#let {text_var} = \"{_escape_sanitized_text_for_typst(sanitized_short)}\"",
         f"#let {base_var} = box[#{{ {_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; "
-        f"{_typst_cmarker_render_expr(text_var)} }}]",
+        f"{render_expr} }}]",
         "#context {",
         f"  let base-size = measure({base_var})",
         f"  let scaled-font = if base-size.width > {layout_width}pt "
@@ -1002,6 +1065,7 @@ def _render_preserved_line_boxes(block_id: str, block: RenderBlock,
         line_name = f"{var_prefix}_line_{index}_md"
         body_name = f"{var_prefix}_line_{index}_body"
         if block.font_size_locked or getattr(block, "leading_em_locked", False):
+            line_md = sanitize_typst_markdown_for_compile(str(line.text or ""))
             body_expr = _typst_plain_markdown_expr(
                 line_name,
                 block.font_size_pt,
@@ -1011,8 +1075,9 @@ def _render_preserved_line_boxes(block_id: str, block: RenderBlock,
                 text_fill,
                 0.0,
                 "false",
+                markdown=line_md,
             )
-            parts.append(f"#let {line_name} = \"{_prepare_user_text_for_typst(line.text)}\"")
+            parts.append(f"#let {line_name} = \"{_escape_sanitized_text_for_typst(line_md)}\"")
             parts.append(
                 _typst_markdown_block(body_name, lw, lh, block_fill, body_expr).rstrip())
             if rotation in {90, 180, 270}:
@@ -1026,12 +1091,13 @@ def _render_preserved_line_boxes(block_id: str, block: RenderBlock,
             continue
         max_font_pt = round(max(1.0, min(block.font_size_pt, lh * 0.86)), 2)
         min_font_pt = round(max(1.0, min(max_font_pt, lh * 0.58)), 2)
+        line_md = sanitize_typst_markdown_for_compile(str(line.text or ""))
         parts.extend([
-            f"#let {line_name} = \"{_prepare_user_text_for_typst(line.text)}\"",
+            f"#let {line_name} = \"{_escape_sanitized_text_for_typst(line_md)}\"",
             _typst_markdown_block(
                 body_name, lw, lh, block_fill,
                 f"set text(fill: {text_fill}); "
-                f"{_typst_single_line_fit_call(line_name, max_font_pt, min_font_pt, lw, lh, font_weight, font_style, 'false')}").rstrip(),
+                f"{_typst_single_line_fit_call(line_name, max_font_pt, min_font_pt, lw, lh, font_weight, font_style, 'false', use_mitex=markdown_line_safe_for_mitex(line_md))}").rstrip(),
         ])
         if rotation in {90, 180, 270}:
             line_placements.append(
@@ -1130,7 +1196,9 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
             shift_up = max(0.0, block.fit_shift_up_pt)
             fit_call = _typst_single_line_fit_call(
                 md_var, max_font_pt, min_font_pt, fit_w, fit_h,
-                block.font_weight, font_style, justify)
+                block.font_weight, font_style, justify,
+                use_mitex=markdown_line_safe_for_mitex(text),
+            )
             parts = [
                 f"#let {md_var} = \"{_escape_sanitized_text_for_typst(text)}\"",
                 _typst_markdown_block(
@@ -1153,6 +1221,7 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
             font_style,
             first_indent,
             justify,
+            markdown=text,
         )
         parts = [
             f"#let {md_var} = \"{_escape_sanitized_text_for_typst(text)}\"",
@@ -1171,7 +1240,9 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
         # Static rendering with leading (_typst_plain_markdown_expr)
         body_expr = _typst_plain_markdown_expr(
             md_var, block.font_size_pt, block.leading_em,
-            block.font_weight, font_style, text_fill, first_indent, justify)
+            block.font_weight, font_style, text_fill, first_indent, justify,
+            markdown=text,
+        )
         parts = [
             f"#let {md_var} = \"{_escape_sanitized_text_for_typst(text)}\"",
             _typst_markdown_block(
@@ -2017,14 +2088,15 @@ FIT_FLOOR_LEADING_FN = '''
 '''
 
 FIT_SINGLE_LINE_FN = '''
-#let pdftr_fit_single_line_markdown(markdown, max_size: 10pt, min_size: 9pt, fit_width: none, fit_height: none, weight: "regular", style: "normal", justify: false, eps: 0.08pt) = {
+#let pdftr_fit_single_line_markdown(markdown, max_size: 10pt, min_size: 9pt, fit_width: none, fit_height: none, weight: "regular", style: "normal", justify: false, eps: 0.08pt, use_mitex: true) = {
   layout(size => {
+    let render-md() = if use_mitex { cmarker.render(markdown, math: mitex) } else { cmarker.render(markdown) }
     let allowed-width = if fit_width == none { size.width } else { calc.min(size.width, fit_width) }
     let allowed-height = if fit_height == none { size.height } else { calc.min(size.height, fit_height) }
     let render(text_size) = box(inset: 0pt, clip: false)[#{
       set text(size: text_size, weight: weight, style: style)
       set par(leading: 1em, justify: justify)
-      cmarker.render(markdown, math: mitex)
+      render-md()
     }]
     let fits(text_size) = {
       let measured = measure(render(text_size))
@@ -2038,21 +2110,22 @@ FIT_SINGLE_LINE_FN = '''
     box(width: allowed-width, height: allowed-height, inset: 0pt, clip: false)[#{
       set text(size: chosen-size, weight: weight, style: style)
       set par(leading: 1em, justify: justify)
-      cmarker.render(markdown, math: mitex)
+      render-md()
     }]
   })
 }
 '''
 
 FIT_MARKDOWN_FN = '''
-#let pdftr_fit_markdown(markdown, max_size: 10pt, min_size: 9pt, max_leading: 0.66em, min_leading: 0.54em, fit_height: none, weight: "regular", style: "normal", first_line_indent: 0pt, justify: false, eps: 0.08pt) = {
+#let pdftr_fit_markdown(markdown, max_size: 10pt, min_size: 9pt, max_leading: 0.66em, min_leading: 0.54em, fit_height: none, weight: "regular", style: "normal", first_line_indent: 0pt, justify: false, eps: 0.08pt, use_mitex: true) = {
   layout(size => {
+    let render-md() = if use_mitex { cmarker.render(markdown, math: mitex) } else { cmarker.render(markdown) }
     let allowed-height = if fit_height == none { size.height } else { calc.min(size.height, fit_height) }
     let render(text_size, leading) = block(width: size.width)[#{
       set text(size: text_size, weight: weight, style: style)
       set par(leading: leading, justify: justify)
       if first_line_indent > 0pt { h(first_line_indent) }
-      cmarker.render(markdown, math: mitex)
+      render-md()
     }]
     let fits(text_size, leading) = measure(width: size.width, render(text_size, leading)).height <= allowed-height
     if fits(max_size, max_leading) {
@@ -2088,14 +2161,15 @@ FIT_MARKDOWN_FN = '''
 '''
 
 FIT_MARKDOWN_FIXED_LEADING_FN = '''
-#let pdftr_fit_markdown_fixed_leading(markdown, max_size: 10pt, min_size: 9pt, leading: 1.25em, fit_height: none, weight: "regular", style: "normal", first_line_indent: 0pt, justify: false, eps: 0.08pt) = {
+#let pdftr_fit_markdown_fixed_leading(markdown, max_size: 10pt, min_size: 9pt, leading: 1.25em, fit_height: none, weight: "regular", style: "normal", first_line_indent: 0pt, justify: false, eps: 0.08pt, use_mitex: true) = {
   layout(size => {
+    let render-md() = if use_mitex { cmarker.render(markdown, math: mitex) } else { cmarker.render(markdown) }
     let allowed-height = if fit_height == none { size.height } else { calc.min(size.height, fit_height) }
     let render(text_size) = block(width: size.width)[#{
       set text(size: text_size, weight: weight, style: style)
       set par(leading: leading, justify: justify)
       if first_line_indent > 0pt { h(first_line_indent) }
-      cmarker.render(markdown, math: mitex)
+      render-md()
     }]
     let fits(text_size) = measure(width: size.width, render(text_size)).height <= allowed-height
     let chosen_size = if fits(max_size) {

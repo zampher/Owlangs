@@ -133,3 +133,25 @@ def test_markdown_line_with_simple_math_is_safe():
 
     line = "输入：全局轮次 $T$，本地轮次 $R$。"
     assert markdown_line_safe_for_mitex(line)
+
+
+def test_bare_not_is_unsafe():
+    """Bare \\not breaks mitex 0.2.6 with missing argument: it."""
+    assert mitex_unsafe_reason(r"\not") == "bare_not"
+    assert not is_mitex_safe_latex(r"\not")
+
+
+def test_not_perp_is_safe():
+    assert mitex_unsafe_reason(r"\not\perp") is None
+    assert is_mitex_safe_latex(r"\not\perp")
+
+
+def test_markdown_split_not_perp_is_unsafe_before_sanitize():
+    from layout.pdf_renderer.typst_overlay.mitex_math_safety import (
+        markdown_line_safe_for_mitex,
+    )
+
+    # Scanner may glue $\not$$\perp$ into one body containing $$; still unsafe.
+    line = "对于碰撞结构，我们有X $\\not$$\\perp$ Z | Y。"
+    assert not markdown_line_safe_for_mitex(line)
+    assert mitex_unsafe_reason(r"\not$$\perp") == "embedded_dollar_delimiter"
