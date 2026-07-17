@@ -1,5 +1,22 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.5.3.0
+
+### Optimizations
+
+1. **Multi-block segment recognition**: Improved recognition of logical paragraphs/segments that span multiple layout text blocks in layout-preserving PDF translation (e.g. two-column and cross-page cases), for more consistent pairing and editing.
+2. **Per-segment image/text switch**: In layout-preserving PDF translation, certain segments (e.g. code, formulas, charts, tables) can switch between image and text rendering. To keep original content as an image, add the segment to the exclusion list first; plain text segments cannot use this action.
+3. **Table border styles**: Configure table line/border styles for layout-preserving PDF translation.
+4. **Re-translate segments in preview editing**: Re-translate individual segments from the layout-preserving PDF preview editor.
+5. **Chinese first-line indent**: For Chinese layout-preserving PDF export, body paragraphs use a first-line indent of about two characters; titles, figure/table captions, and other non-body blocks are not indented.
+
+### Bug Fixes
+
+1. **Missed segment translation**: Fixed cases where some segments were skipped or left untranslated in layout-preserving PDF translation.
+2. **Export failure on some documents**: Fixed export failures for certain documents in layout-preserving PDF translation.
+
+---
+
 ## Owlangs 1.5.2.0
 
 ### New Features
