@@ -536,20 +536,20 @@ namespace OwlangsLauncher.Views
 
         private void UpdateControlButtons()
         {
-            var backendRunning = _backendService.IsRunning;
+            var backendProcessRunning = _backendService.IsRunning;
+            var backendReady = _backendService.Status == BackendStatus.Running;
             var frontendRunning = _frontendService?.IsRunning ?? false;
             
-            // Backend controls
-            BackendStartButton.IsEnabled = !backendRunning;
-            BackendStopButton.IsEnabled = backendRunning;
-            BackendRestartButton.IsEnabled = backendRunning;
+            // Backend controls (process alive — stop/restart while starting or unhealthy)
+            BackendStartButton.IsEnabled = !backendProcessRunning;
+            BackendStopButton.IsEnabled = backendProcessRunning;
+            BackendRestartButton.IsEnabled = backendProcessRunning;
             
-            // Frontend controls
-            FrontendStartButton.IsEnabled = !frontendRunning;
+            // Frontend Start only after backend health reports Running
+            FrontendStartButton.IsEnabled = !frontendRunning && backendReady;
             FrontendStopButton.IsEnabled = frontendRunning;
             
-            // Update main status
-            UpdateMainStatus(backendRunning, frontendRunning);
+            UpdateMainStatus(backendReady, frontendRunning, _backendService.Status);
         }
         
         private void InitializeStatusColors()
@@ -581,7 +581,7 @@ namespace OwlangsLauncher.Views
             }
         }
 
-        private void UpdateMainStatus(bool backendRunning, bool frontendRunning)
+        private void UpdateMainStatus(bool backendReady, bool frontendRunning, BackendStatus backendStatus)
         {
             if (MainStatusText == null || MainStatusBrush == null)
                 return;
@@ -592,9 +592,15 @@ namespace OwlangsLauncher.Views
                 var runningColor = (SolidColorBrush)Application.Current.TryFindResource("StatusIndicatorRunningBrush");
                 MainStatusBrush.Color = runningColor?.Color ?? Colors.Green;
             }
-            else if (backendRunning)
+            else if (backendReady)
             {
                 MainStatusText.Text = "Ready to start app";
+                var warningColor = (SolidColorBrush)Application.Current.TryFindResource("StatusIndicatorWarningBrush");
+                MainStatusBrush.Color = warningColor?.Color ?? Colors.Orange;
+            }
+            else if (backendStatus == BackendStatus.Starting)
+            {
+                MainStatusText.Text = "Waiting for server...";
                 var warningColor = (SolidColorBrush)Application.Current.TryFindResource("StatusIndicatorWarningBrush");
                 MainStatusBrush.Color = warningColor?.Color ?? Colors.Orange;
             }
@@ -691,6 +697,16 @@ namespace OwlangsLauncher.Views
             {
                 MessageBox.Show("Frontend service is not available.", "Error", 
                     MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (_backendService.Status != BackendStatus.Running)
+            {
+                MessageBox.Show(
+                    "Please wait until the server has finished starting before starting the app.",
+                    "Server Not Ready",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
                 return;
             }
             

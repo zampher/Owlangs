@@ -13,6 +13,7 @@ namespace OwlangsLauncher.Services
         private readonly BackendService _backendService;
         private readonly FrontendService? _frontendService;
         private readonly IpcService _ipcService;
+        private MenuItem? _startAppMenuItem;
 
         public event Action? OnShowLogs;
         public event Action? OnExit;
@@ -136,13 +137,23 @@ namespace OwlangsLauncher.Services
             // Frontend menu items
             if (_frontendService != null)
             {
-                var startFrontendItem = new MenuItem
+                _startAppMenuItem = new MenuItem
                 {
                     Header = "Start App",
                     Command = new RelayCommand(() =>
                     {
                         try
                         {
+                            if (_backendService.Status != BackendStatus.Running)
+                            {
+                                System.Windows.MessageBox.Show(
+                                    "Please wait until the server has finished starting before starting the app.",
+                                    "Server Not Ready",
+                                    System.Windows.MessageBoxButton.OK,
+                                    System.Windows.MessageBoxImage.Information);
+                                return;
+                            }
+
                             _frontendService.StartFrontend();
                         }
                         catch (Exception ex)
@@ -152,7 +163,7 @@ namespace OwlangsLauncher.Services
                         }
                     })
                 };
-                contextMenu.Items.Add(startFrontendItem);
+                contextMenu.Items.Add(_startAppMenuItem);
 
                 var stopFrontendItem = new MenuItem
                 {
@@ -197,7 +208,8 @@ namespace OwlangsLauncher.Services
             
             _taskbarIcon.ContextMenu = contextMenu;
             
-            // Update status menu item when status changes
+            // Sync tray Start App enabled state with current backend/frontend status
+            UpdateStartAppMenuEnabled();
             UpdateStatusMenuItem(statusItem);
         }
 
@@ -232,6 +244,20 @@ namespace OwlangsLauncher.Services
             {
                 _taskbarIcon.ToolTipText = $"Owlangs Launcher - {statusText}";
             }
+
+            UpdateStartAppMenuEnabled();
+        }
+
+        private void UpdateStartAppMenuEnabled()
+        {
+            if (_startAppMenuItem == null)
+            {
+                return;
+            }
+
+            var backendReady = _backendService.Status == BackendStatus.Running;
+            var frontendRunning = _frontendService?.IsRunning ?? false;
+            _startAppMenuItem.IsEnabled = !frontendRunning && backendReady;
         }
 
         private string GetStatusText(BackendStatus status)

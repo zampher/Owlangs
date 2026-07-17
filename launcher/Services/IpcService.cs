@@ -218,6 +218,11 @@ namespace OwlangsLauncher.Services
                 {
                     return CreateErrorResponse("Frontend is already running");
                 }
+
+                if (_backendService.Status != BackendStatus.Running)
+                {
+                    return CreateErrorResponse("Backend is not ready yet");
+                }
                 
                 _frontendService.StartFrontend();
                 return CreateSuccessResponse("Frontend start initiated");
