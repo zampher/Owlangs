@@ -85,6 +85,22 @@ def test_sanitize_diff_command_maps_to_mathrm_d():
     assert r"\diff" not in out
 
 
+def test_sanitize_partial_maps_to_unicode_for_mitex():
+    """Regression: mitex 0.2.6 fails \\partial with unknown variable: diff."""
+    text = r"边际成本，即 ($\partial$ $F_{d}$/$\partial$ $C_{d}$) ，VPP"
+    out = sanitize_typst_markdown_for_compile(text)
+    assert r"\partial" not in out
+    assert "∂" in out
+    assert "$F_{d}$" in out or "F_{d}" in out
+
+
+def test_sanitize_inline_partial_in_single_math_span():
+    text = r"$\partial F_{d}/\partial C_{d}$"
+    out = sanitize_typst_markdown_for_compile(text)
+    assert r"\partial" not in out
+    assert "∂ F_{d}/∂ C_{d}" in out
+
+
 def test_sanitize_merges_split_not_perp_math():
     """Regression: $\\not$$\\perp$ must become $\\not\\perp$ for mitex."""
     from layout.pdf_renderer.typst_overlay.emitter import _sanitize_typst_markdown_core

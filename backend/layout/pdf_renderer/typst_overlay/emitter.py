@@ -649,6 +649,7 @@ _HEAVY_SANITIZE_MARKERS = (
     r"\[",
     r"\circled",
     r"\diff",
+    r"\partial",
     r"\not",
     "![",
     r"\langlen",
@@ -726,6 +727,8 @@ def _sanitize_typst_markdown_core(markdown: str) -> str:
     text = re.sub(r"\\langlen\b", r"\\langle n", text)
     # mitex 0.2.6 does not define \\diff (physics package); map to upright d.
     text = re.sub(r"\\diff\b", r"\\mathrm{d}", text)
+    # mitex 0.2.6 mis-parses \\partial as unknown variable "diff"; use Unicode ∂.
+    text = text.replace(r"\partial", "∂")
     # OCR/translation corruption: \right\text{ceil} is not a valid delimiter.
     text = re.sub(r"\\right\\text\{ceil\}", r"\\right\\rfloor", text)
     text = re.sub(r"\\right\\text\{floor\}", r"\\right\\rfloor", text)
