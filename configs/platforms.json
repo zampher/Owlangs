@@ -677,7 +677,7 @@
       "parser_subtype": "cloud",
       "requires_api_key": true,
       "description": "PaddleOCR Cloud API for document OCR and layout parsing. High-accuracy OCR with rich layout parsing (titles, tables, formulas).",
-      "token_link": "https://aistudio.baidu.com/",
+      "token_link": "https://aistudio.baidu.com/paddleocr",
       "api_endpoints": {
         "submit": "/api/v2/ocr/jobs",
         "result": "/api/v2/ocr/jobs/{job_id}"
