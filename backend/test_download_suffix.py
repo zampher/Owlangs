@@ -200,3 +200,52 @@ def test_add_md_zip_download_accepts_plain_markdown_bytes():
 
     with zipfile.ZipFile(io.BytesIO(outer_buf.getvalue()), "r") as outer_zf:
         assert outer_zf.read("folder/doc/doc.md") == b"# Hello\n\nParagraph"
+
+
+def test_add_md_zip_download_skips_nested_zip_payload():
+    import io
+    import zipfile
+
+    from utils.batch_download_zip import add_md_zip_download_to_batch_archive
+
+    inner_buf = io.BytesIO()
+    with zipfile.ZipFile(inner_buf, "w") as inner_zf:
+        inner_zf.writestr("doc.md", b"# Title")
+        inner_zf.writestr("images/a.png", b"PNG")
+        inner_zf.writestr("extra.zip", b"PK\x03\x04nested")
+
+    outer_buf = io.BytesIO()
+    with zipfile.ZipFile(outer_buf, "w") as outer_zf:
+        add_md_zip_download_to_batch_archive(
+            outer_zf,
+            inner_buf.getvalue(),
+            "MyDoc",
+            "MyDoc",
+            "",
+            lambda name: name,
+        )
+
+    with zipfile.ZipFile(io.BytesIO(outer_buf.getvalue()), "r") as outer_zf:
+        names = [n.replace("\\", "/") for n in outer_zf.namelist()]
+    assert "MyDoc/MyDoc.md" in names
+    assert "MyDoc/images/a.png" in names
+    assert not any(n.lower().endswith(".zip") and not n.endswith("/") for n in names)
+
+
+def test_write_zip_entry_truncates_instead_of_raising():
+    import io
+    import zipfile
+
+    from utils.batch_download_zip import write_zip_entry
+
+    outer_buf = io.BytesIO()
+    long_leaf = ("中文" * 80) + ".png"
+    with zipfile.ZipFile(outer_buf, "w") as outer_zf:
+        written = write_zip_entry(
+            outer_zf,
+            f"folder/images/{long_leaf}",
+            b"PNG",
+            set(),
+        )
+    assert len(written.encode("utf-8")) <= 220
+    assert written.startswith("folder/images/")

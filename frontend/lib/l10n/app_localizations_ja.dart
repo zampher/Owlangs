@@ -1383,7 +1383,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationQueueDownloadMdEmbedded => 'MD（埋め込み）';
 
   @override
-  String get translationQueueDownloadMdZip => 'MD（ZIP）';
+  String get translationQueueDownloadMdZip => 'MD（画像）';
 
   @override
   String get translationQueueExecutionModeQueued => 'キュー';

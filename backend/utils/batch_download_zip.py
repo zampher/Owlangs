@@ -108,10 +108,31 @@ def write_zip_entry(
     data: bytes,
     written_dirs: Set[str],
 ) -> str:
-    """Write one file entry with parent directory stubs and path-length guard."""
+    """Write one file entry with parent directory stubs; truncate overlong paths."""
     norm = _normalize_zip_arcname(arcname)
     if len(norm.encode("utf-8")) > _MAX_ZIP_ENTRY_BYTES:
-        raise ValueError(f"ZIP entry path too long ({len(norm.encode('utf-8'))} bytes): {norm[:80]}...")
+        # Keep parent dirs; truncate only the final path component.
+        if "/" in norm:
+            parent, _, leaf = norm.rpartition("/")
+            ext = ""
+            stem = leaf
+            if "." in leaf and not leaf.startswith("."):
+                stem, ext = leaf.rsplit(".", 1)
+                ext = f".{ext}"
+            prefix_len = len(f"{parent}/".encode("utf-8"))
+            budget = _MAX_ZIP_ENTRY_BYTES - prefix_len - len(ext.encode("utf-8"))
+            if budget < 8:
+                budget = 8
+            leaf = _truncate_utf8(stem or "file", budget) + ext
+            norm = f"{parent}/{leaf}"
+        else:
+            ext = ""
+            stem = norm
+            if "." in norm and not norm.startswith("."):
+                stem, ext = norm.rsplit(".", 1)
+                ext = f".{ext}"
+            budget = _MAX_ZIP_ENTRY_BYTES - len(ext.encode("utf-8"))
+            norm = _truncate_utf8(stem or "file", max(8, budget)) + ext
     _ensure_zip_parent_dirs(zf, norm, written_dirs)
     zf.writestr(norm, data)
     return norm
@@ -134,7 +155,12 @@ def add_md_zip_download_to_batch_archive(
     *,
     written_dirs: Set[str] | None = None,
 ) -> str:
-    """Flatten an md_zip download into *zf*, or place a single .md when bytes are not a ZIP."""
+    """
+    Flatten an md_zip download into *zf* as ``{folder}/md + images/``.
+
+    Never nests an inner ``.zip`` file. Plain markdown bytes become a single
+    ``.md`` under the folder.
+    """
     dirs = written_dirs if written_dirs is not None else set()
     folder_prefix = _normalize_zip_arcname(folder_prefix).rstrip("/")
     md_filename = _fit_md_filename_for_folder(
@@ -143,16 +169,32 @@ def add_md_zip_download_to_batch_archive(
     )
     try:
         with zipfile.ZipFile(io.BytesIO(file_bytes), "r") as inner_zf:
+            wrote_any = False
             for inner_name in inner_zf.namelist():
                 if inner_name.endswith("/"):
                     continue
                 inner_bytes = inner_zf.read(inner_name)
                 remapped = _remap_inner_md_entry(inner_name, md_filename)
-                inner_entry = resolve_conflict(f"{folder_prefix}/{remapped}")
+                remapped_norm = _normalize_zip_arcname(remapped)
+                # Skip nested zip payloads; keep md + image assets only.
+                if remapped_norm.lower().endswith(".zip"):
+                    continue
+                lower = remapped_norm.lower()
+                if "/images/" in f"/{lower}":
+                    idx = lower.find("images/")
+                    if idx >= 0:
+                        remapped_norm = remapped_norm[idx:]
+                elif not lower.endswith(".md") and "/" not in remapped_norm:
+                    remapped_norm = f"images/{remapped_norm}"
+                inner_entry = resolve_conflict(f"{folder_prefix}/{remapped_norm}")
                 write_zip_entry(zf, inner_entry, inner_bytes, dirs)
-        entry_name = resolve_conflict(f"{folder_prefix}/")
-        _ensure_zip_parent_dirs(zf, entry_name, dirs)
-        return entry_name
+                wrote_any = True
+            if not wrote_any:
+                md_entry = resolve_conflict(f"{folder_prefix}/{md_filename}")
+                write_zip_entry(zf, md_entry, b"", dirs)
+            # Ensure directory record exists for Windows explorers.
+            _ensure_zip_parent_dirs(zf, f"{folder_prefix}/{md_filename}", dirs)
+            return f"{folder_prefix}/"
     except zipfile.BadZipFile:
         md_entry = resolve_conflict(f"{folder_prefix}/{md_filename}")
         write_zip_entry(zf, md_entry, file_bytes, dirs)

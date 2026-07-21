@@ -1470,7 +1470,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationQueueDownloadMdEmbedded => 'MD (incrustado)';
 
   @override
-  String get translationQueueDownloadMdZip => 'MD (ZIP)';
+  String get translationQueueDownloadMdZip => 'MD (imágenes)';
 
   @override
   String get translationQueueExecutionModeQueued => 'En cola';

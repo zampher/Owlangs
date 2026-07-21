@@ -451,7 +451,7 @@
   "translationQueueRelease": "一覧から削除",
   "translationQueueDownloads": "ダウンロード",
   "translationQueueDownloadMdEmbedded": "MD（埋め込み）",
-  "translationQueueDownloadMdZip": "MD（ZIP）",
+  "translationQueueDownloadMdZip": "MD（画像）",
   "translationQueueExecutionModeQueued": "キュー",
   "translationQueueExecutionModeImmediate": "即時",
   "translationQueueTaskTypeTranslation": "翻訳",

@@ -451,7 +451,7 @@
   "translationQueueRelease": "목록에서 제거",
   "translationQueueDownloads": "다운로드",
   "translationQueueDownloadMdEmbedded": "MD(임베드)",
-  "translationQueueDownloadMdZip": "MD(ZIP)",
+  "translationQueueDownloadMdZip": "MD(이미지)",
   "translationQueueExecutionModeQueued": "대기열",
   "translationQueueExecutionModeImmediate": "즉시",
   "translationQueueTaskTypeTranslation": "번역",

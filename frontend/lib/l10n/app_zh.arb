@@ -500,7 +500,7 @@
   "translationQueueRelease": "从列表移除",
   "translationQueueDownloads": "下载",
   "translationQueueDownloadMdEmbedded": "MD（内嵌图片）",
-  "translationQueueDownloadMdZip": "MD（ZIP 图片包）",
+  "translationQueueDownloadMdZip": "MD（图片包）",
   "translationQueueExecutionModeQueued": "队列",
   "translationQueueExecutionModeImmediate": "即时",
   "translationQueueTaskTypeTranslation": "翻译",

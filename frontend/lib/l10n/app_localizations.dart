@@ -2600,7 +2600,7 @@ abstract class AppLocalizations {
   /// No description provided for @translationQueueDownloadMdZip.
   ///
   /// In en, this message translates to:
-  /// **'MD (ZIP)'**
+  /// **'MD (images)'**
   String get translationQueueDownloadMdZip;
 
   /// No description provided for @translationQueueExecutionModeQueued.

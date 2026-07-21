@@ -1370,7 +1370,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationQueueDownloadMdEmbedded => 'MD（内嵌图片）';
 
   @override
-  String get translationQueueDownloadMdZip => 'MD（ZIP 图片包）';
+  String get translationQueueDownloadMdZip => 'MD（图片包）';
 
   @override
   String get translationQueueExecutionModeQueued => '队列';

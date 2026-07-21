@@ -1385,7 +1385,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationQueueDownloadMdEmbedded => 'MD(임베드)';
 
   @override
-  String get translationQueueDownloadMdZip => 'MD(ZIP)';
+  String get translationQueueDownloadMdZip => 'MD(이미지)';
 
   @override
   String get translationQueueExecutionModeQueued => '대기열';

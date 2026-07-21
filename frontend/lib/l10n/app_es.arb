@@ -462,7 +462,7 @@
   "translationQueueRelease": "Quitar de la lista",
   "translationQueueDownloads": "Descargas",
   "translationQueueDownloadMdEmbedded": "MD (incrustado)",
-  "translationQueueDownloadMdZip": "MD (ZIP)",
+  "translationQueueDownloadMdZip": "MD (imágenes)",
   "translationQueueExecutionModeQueued": "En cola",
   "translationQueueExecutionModeImmediate": "Inmediato",
   "translationQueueTaskTypeTranslation": "Traducción",

@@ -287,6 +287,7 @@ async def service_batch_download_route(body: BatchDownloadRequest):
                 path_prefix = f"{relative_path}/" if relative_path else ""
 
                 if body.file_type == "md_zip":
+                    # Prefer original document stem as folder name (with output suffix).
                     folder_name = make_batch_folder_name(base_name, task_id, suffix)
                     folder_prefix = f"{path_prefix}{folder_name}"
                     try:
@@ -300,13 +301,22 @@ async def service_batch_download_route(body: BatchDownloadRequest):
                             written_dirs=zip_dir_records,
                         )
                     except Exception as flatten_err:
+                        # Never nest an inner .zip — retry with a short task-id folder.
                         logger.warning(
                             LogModule.ROUTE,
-                            f"[BATCH-DOWNLOAD] task_id={task_id}: md_zip flatten failed: {flatten_err}",
+                            f"[BATCH-DOWNLOAD] task_id={task_id}: md_zip flatten "
+                            f"failed ({flatten_err}); retrying with short folder",
                         )
-                        entry_name = f"{path_prefix}{folder_name}.zip"
-                        entry_name = _resolve_conflict(entry_name)
-                        zf.writestr(entry_name, file_bytes)
+                        short_prefix = f"{path_prefix}{task_id[:8] or 'doc'}"
+                        entry_name = add_md_zip_download_to_batch_archive(
+                            zf,
+                            file_bytes,
+                            short_prefix,
+                            base_name,
+                            suffix,
+                            _resolve_conflict,
+                            written_dirs=zip_dir_records,
+                        )
                 else:
                     entry_name = f"{path_prefix}{base_name}{suffix}.{ext}"
                     entry_name = _resolve_conflict(entry_name)

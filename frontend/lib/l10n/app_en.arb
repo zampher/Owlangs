@@ -516,7 +516,7 @@
   "translationQueueRelease": "Remove from list",
   "translationQueueDownloads": "Downloads",
   "translationQueueDownloadMdEmbedded": "MD (embedded)",
-  "translationQueueDownloadMdZip": "MD (ZIP)",
+  "translationQueueDownloadMdZip": "MD (images)",
   "translationQueueExecutionModeQueued": "Queued",
   "translationQueueExecutionModeImmediate": "Immediate",
   "translationQueueTaskTypeTranslation": "Translation",

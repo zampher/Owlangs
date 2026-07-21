@@ -834,10 +834,18 @@ async def download_batch_results(
                     except Exception as flatten_err:
                         logger.warning(
                             LogModule.ROUTE,
-                            f"[MCP-BATCH-DOWNLOAD] task_id={task_id}: md_zip flatten failed, nesting zip: {flatten_err}",
+                            f"[MCP-BATCH-DOWNLOAD] task_id={task_id}: md_zip flatten "
+                            f"failed ({flatten_err}); retrying with short folder",
                         )
-                        safe_name = f"{base_name}{suffix}.zip"
-                        zf.writestr(safe_name, raw_bytes)
+                        safe_name = add_md_zip_download_to_batch_archive(
+                            zf,
+                            raw_bytes,
+                            task_id[:8] or "doc",
+                            base_name,
+                            suffix,
+                            lambda name: name,
+                            written_dirs=zip_dir_records,
+                        )
                 else:
                     safe_name = f"{base_name}{suffix}.{ext}" if ext else f"{base_name}{suffix}"
                     zf.writestr(safe_name, raw_bytes)
