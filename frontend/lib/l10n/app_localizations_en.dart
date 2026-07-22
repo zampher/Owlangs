@@ -1170,6 +1170,63 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeNavTranslationQueue => 'Tasks';
 
   @override
+  String get homeNavCompareReading => 'Compare';
+
+  @override
+  String get homeNavTooltipCompareReading =>
+      'Open two files side by side for compare reading (source left, translation right)';
+
+  @override
+  String get compareReadingTitle => 'Compare reading';
+
+  @override
+  String get compareReadingIntro =>
+      'Import a source document and its translation to read them side by side. No translation or revision workflow — pure compare reading with zoom and linked scroll.';
+
+  @override
+  String compareReadingSupportedFormats(String formats) {
+    return 'Supported formats: $formats';
+  }
+
+  @override
+  String get compareReadingPickSource => 'Select source document';
+
+  @override
+  String get compareReadingPickTarget => 'Select translation document';
+
+  @override
+  String get compareReadingImport => 'Import';
+
+  @override
+  String get compareReadingReplaceFile => 'Replace';
+
+  @override
+  String get compareReadingChangeFiles => 'Change files';
+
+  @override
+  String get compareReadingClearSession => 'Clear both';
+
+  @override
+  String get compareReadingModeCompare => 'Compare reading';
+
+  @override
+  String get compareReadingModeSourceOnly =>
+      'Source only (double-click source pane to toggle)';
+
+  @override
+  String get compareReadingModeTargetOnly =>
+      'Translation only (double-click translation pane to toggle)';
+
+  @override
+  String get compareReadingKindMismatch =>
+      'Source and translation must use the same preview type (PDF, image, or text).';
+
+  @override
+  String compareReadingReadBytesFailed(String fileName) {
+    return 'Could not read file bytes: $fileName';
+  }
+
+  @override
   String get homeNavAnonymize => 'Anonymize';
 
   @override

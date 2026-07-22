@@ -17,6 +17,9 @@ mixin SynchronizedScrollMixin<T extends StatefulWidget> on State<T> {
   ScrollController? scrollController1;
   ScrollController? scrollController2;
 
+  /// When false, scroll events are ignored (bind/unbind without disposing).
+  bool synchronizedScrollEnabled = true;
+
   // Track which controller is currently being synced (prevents recursive calls from same controller)
   ScrollController? _syncingController;
 
@@ -147,6 +150,9 @@ mixin SynchronizedScrollMixin<T extends StatefulWidget> on State<T> {
   }
 
   void _onScroll1() {
+    if (!synchronizedScrollEnabled) {
+      return;
+    }
     final offset = scrollController1?.offset ?? 0;
 
     // Update scroll history for speed calculation
@@ -219,6 +225,9 @@ mixin SynchronizedScrollMixin<T extends StatefulWidget> on State<T> {
   }
 
   void _onScroll2() {
+    if (!synchronizedScrollEnabled) {
+      return;
+    }
     final offset = scrollController2?.offset ?? 0;
 
     // Update scroll history for speed calculation

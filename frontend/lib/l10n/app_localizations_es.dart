@@ -1197,6 +1197,63 @@ class AppLocalizationsEs extends AppLocalizations {
   String get homeNavTranslationQueue => 'Tareas';
 
   @override
+  String get homeNavCompareReading => 'Comparar';
+
+  @override
+  String get homeNavTooltipCompareReading =>
+      'Abrir dos archivos lado a lado para lectura comparada (origen a la izquierda, traducción a la derecha)';
+
+  @override
+  String get compareReadingTitle => 'Lectura comparada';
+
+  @override
+  String get compareReadingIntro =>
+      'Importe el documento original y su traducción para leerlos lado a lado. Sin flujo de traducción ni revisión: solo lectura comparada con zoom y desplazamiento vinculado.';
+
+  @override
+  String compareReadingSupportedFormats(String formats) {
+    return 'Formatos admitidos: $formats';
+  }
+
+  @override
+  String get compareReadingPickSource => 'Seleccionar documento original';
+
+  @override
+  String get compareReadingPickTarget => 'Seleccionar documento traducido';
+
+  @override
+  String get compareReadingImport => 'Importar';
+
+  @override
+  String get compareReadingReplaceFile => 'Reemplazar';
+
+  @override
+  String get compareReadingChangeFiles => 'Cambiar archivos';
+
+  @override
+  String get compareReadingClearSession => 'Borrar ambos';
+
+  @override
+  String get compareReadingModeCompare => 'Lectura comparada';
+
+  @override
+  String get compareReadingModeSourceOnly =>
+      'Solo original (doble clic en el panel original para alternar)';
+
+  @override
+  String get compareReadingModeTargetOnly =>
+      'Solo traducción (doble clic en el panel de traducción para alternar)';
+
+  @override
+  String get compareReadingKindMismatch =>
+      'El original y la traducción deben usar el mismo tipo de vista previa (PDF, imagen o texto).';
+
+  @override
+  String compareReadingReadBytesFailed(String fileName) {
+    return 'No se pudieron leer los bytes del archivo: $fileName';
+  }
+
+  @override
   String get homeNavAnonymize => 'Anonimizar';
 
   @override

@@ -2141,6 +2141,102 @@ abstract class AppLocalizations {
   /// **'Tasks'**
   String get homeNavTranslationQueue;
 
+  /// No description provided for @homeNavCompareReading.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare'**
+  String get homeNavCompareReading;
+
+  /// No description provided for @homeNavTooltipCompareReading.
+  ///
+  /// In en, this message translates to:
+  /// **'Open two files side by side for compare reading (source left, translation right)'**
+  String get homeNavTooltipCompareReading;
+
+  /// No description provided for @compareReadingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare reading'**
+  String get compareReadingTitle;
+
+  /// No description provided for @compareReadingIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Import a source document and its translation to read them side by side. No translation or revision workflow — pure compare reading with zoom and linked scroll.'**
+  String get compareReadingIntro;
+
+  /// No description provided for @compareReadingSupportedFormats.
+  ///
+  /// In en, this message translates to:
+  /// **'Supported formats: {formats}'**
+  String compareReadingSupportedFormats(String formats);
+
+  /// No description provided for @compareReadingPickSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Select source document'**
+  String get compareReadingPickSource;
+
+  /// No description provided for @compareReadingPickTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'Select translation document'**
+  String get compareReadingPickTarget;
+
+  /// No description provided for @compareReadingImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get compareReadingImport;
+
+  /// No description provided for @compareReadingReplaceFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace'**
+  String get compareReadingReplaceFile;
+
+  /// No description provided for @compareReadingChangeFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Change files'**
+  String get compareReadingChangeFiles;
+
+  /// No description provided for @compareReadingClearSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear both'**
+  String get compareReadingClearSession;
+
+  /// No description provided for @compareReadingModeCompare.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare reading'**
+  String get compareReadingModeCompare;
+
+  /// No description provided for @compareReadingModeSourceOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Source only (double-click source pane to toggle)'**
+  String get compareReadingModeSourceOnly;
+
+  /// No description provided for @compareReadingModeTargetOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation only (double-click translation pane to toggle)'**
+  String get compareReadingModeTargetOnly;
+
+  /// No description provided for @compareReadingKindMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Source and translation must use the same preview type (PDF, image, or text).'**
+  String get compareReadingKindMismatch;
+
+  /// No description provided for @compareReadingReadBytesFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read file bytes: {fileName}'**
+  String compareReadingReadBytesFailed(String fileName);
+
   /// No description provided for @homeNavAnonymize.
   ///
   /// In en, this message translates to:

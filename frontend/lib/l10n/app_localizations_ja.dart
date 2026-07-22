@@ -1126,6 +1126,60 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeNavTranslationQueue => 'タスク';
 
   @override
+  String get homeNavCompareReading => '対照読';
+
+  @override
+  String get homeNavTooltipCompareReading => '原文と訳文を並べて対照読み（左原文・右訳文）';
+
+  @override
+  String get compareReadingTitle => '対照読';
+
+  @override
+  String get compareReadingIntro =>
+      '原文と訳文を読み込んで左右対照。翻訳や校正フローはなく、ズームとスクロール連動だけの対照読です。';
+
+  @override
+  String compareReadingSupportedFormats(String formats) {
+    return '対応形式: $formats';
+  }
+
+  @override
+  String get compareReadingPickSource => '原文ファイルを選択';
+
+  @override
+  String get compareReadingPickTarget => '訳文ファイルを選択';
+
+  @override
+  String get compareReadingImport => '読み込み';
+
+  @override
+  String get compareReadingReplaceFile => '差し替え';
+
+  @override
+  String get compareReadingChangeFiles => 'ファイルを変更';
+
+  @override
+  String get compareReadingClearSession => '両方をクリア';
+
+  @override
+  String get compareReadingModeCompare => '対照読';
+
+  @override
+  String get compareReadingModeSourceOnly => '原文のみ（原文をダブルクリックで切替）';
+
+  @override
+  String get compareReadingModeTargetOnly => '訳文のみ（訳文をダブルクリックで切替）';
+
+  @override
+  String get compareReadingKindMismatch =>
+      '原文と訳文は同じプレビュー種別（PDF・画像・テキスト）である必要があります。';
+
+  @override
+  String compareReadingReadBytesFailed(String fileName) {
+    return 'ファイルを読み取れませんでした: $fileName';
+  }
+
+  @override
   String get homeNavAnonymize => '匿名化';
 
   @override

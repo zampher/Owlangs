@@ -368,7 +368,37 @@
   "homeNewTaskQueuedTooltip": "Batch import files and run the full pipeline in order",
   "homeNavTranslate": "Immersive task",
   "homeNavTranslationQueue": "Tasks",
-  "homeNavAnonymize": "Anonymize",
+  "homeNavCompareReading": "Compare",
+  "homeNavTooltipCompareReading": "Open two files side by side for compare reading (source left, translation right)",
+  "compareReadingTitle": "Compare reading",
+  "compareReadingIntro": "Import a source document and its translation to read them side by side. No translation or revision workflow — pure compare reading with zoom and linked scroll.",
+  "compareReadingSupportedFormats": "Supported formats: {formats}",
+  "@compareReadingSupportedFormats": {
+    "placeholders": {
+      "formats": {
+        "type": "String"
+      }
+    }
+  },
+  "compareReadingPickSource": "Select source document",
+  "compareReadingPickTarget": "Select translation document",
+  "compareReadingImport": "Import",
+  "compareReadingReplaceFile": "Replace",
+  "compareReadingChangeFiles": "Change files",
+  "compareReadingClearSession": "Clear both",
+  "compareReadingModeCompare": "Compare reading",
+  "compareReadingModeSourceOnly": "Source only (double-click source pane to toggle)",
+  "compareReadingModeTargetOnly": "Translation only (double-click translation pane to toggle)",
+    "compareReadingKindMismatch": "Source and translation must use the same preview type (PDF, image, or text).",
+  "compareReadingReadBytesFailed": "Could not read file bytes: {fileName}",
+  "@compareReadingReadBytesFailed": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+    "homeNavAnonymize": "Anonymize",
   "homeNavSettings": "Settings",
   "homeNavDonateHelp": "Help",
   "homeNavDonate": "Donate",

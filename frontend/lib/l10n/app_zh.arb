@@ -352,7 +352,37 @@
   "homeNewTaskQueuedTooltip": "批量导入文件，加入队列按序自动翻译",
   "homeNavTranslate": "沉浸式任务",
   "homeNavTranslationQueue": "任务",
-  "homeNavAnonymize": "匿名化",
+  "homeNavCompareReading": "对比阅读",
+  "homeNavTooltipCompareReading": "导入原文与译文并排对照阅读（左原文、右译文）",
+  "compareReadingTitle": "对比阅读",
+  "compareReadingIntro": "导入原文与译文，左右对照阅读。无需翻译或修订流程——纯对照阅读，支持缩放与滚动绑定。",
+  "compareReadingSupportedFormats": "支持格式：{formats}",
+  "@compareReadingSupportedFormats": {
+    "placeholders": {
+      "formats": {
+        "type": "String"
+      }
+    }
+  },
+  "compareReadingPickSource": "选择原文文件",
+  "compareReadingPickTarget": "选择译文文件",
+  "compareReadingImport": "导入",
+  "compareReadingReplaceFile": "更换",
+  "compareReadingChangeFiles": "更换文件",
+  "compareReadingClearSession": "清空对照",
+  "compareReadingModeCompare": "对比阅读",
+  "compareReadingModeSourceOnly": "只看原文（双击原文区域可切换）",
+  "compareReadingModeTargetOnly": "只看译文（双击译文区域可切换）",
+    "compareReadingKindMismatch": "原文与译文需为同一预览类型（PDF、图片或文本）。",
+  "compareReadingReadBytesFailed": "无法读取文件内容：{fileName}",
+  "@compareReadingReadBytesFailed": {
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      }
+    }
+  },
+    "homeNavAnonymize": "匿名化",
   "homeNavSettings": "设置",
   "homeNavDonateHelp": "帮助",
   "homeNavDonate": "捐赠",

@@ -1128,6 +1128,61 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homeNavTranslationQueue => '작업';
 
   @override
+  String get homeNavCompareReading => '대조 읽기';
+
+  @override
+  String get homeNavTooltipCompareReading =>
+      '원문과 번역문을 나란히 대조 읽기(왼쪽 원문, 오른쪽 번역)';
+
+  @override
+  String get compareReadingTitle => '대조 읽기';
+
+  @override
+  String get compareReadingIntro =>
+      '원문과 번역문을 가져와 좌우로 대조합니다. 번역·교정 워크플로 없이 확대/축소와 스크롤 연동만 지원합니다.';
+
+  @override
+  String compareReadingSupportedFormats(String formats) {
+    return '지원 형식: $formats';
+  }
+
+  @override
+  String get compareReadingPickSource => '원문 파일 선택';
+
+  @override
+  String get compareReadingPickTarget => '번역 파일 선택';
+
+  @override
+  String get compareReadingImport => '가져오기';
+
+  @override
+  String get compareReadingReplaceFile => '교체';
+
+  @override
+  String get compareReadingChangeFiles => '파일 변경';
+
+  @override
+  String get compareReadingClearSession => '모두 지우기';
+
+  @override
+  String get compareReadingModeCompare => '대조 읽기';
+
+  @override
+  String get compareReadingModeSourceOnly => '원문만 (원문 영역 더블클릭으로 전환)';
+
+  @override
+  String get compareReadingModeTargetOnly => '번역만 (번역 영역 더블클릭으로 전환)';
+
+  @override
+  String get compareReadingKindMismatch =>
+      '원문과 번역은 같은 미리보기 유형(PDF, 이미지 또는 텍스트)이어야 합니다.';
+
+  @override
+  String compareReadingReadBytesFailed(String fileName) {
+    return '파일 바이트를 읽을 수 없습니다: $fileName';
+  }
+
+  @override
   String get homeNavAnonymize => '익명화';
 
   @override

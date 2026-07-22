@@ -1114,6 +1114,59 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeNavTranslationQueue => '任务';
 
   @override
+  String get homeNavCompareReading => '对比阅读';
+
+  @override
+  String get homeNavTooltipCompareReading => '导入原文与译文并排对照阅读（左原文、右译文）';
+
+  @override
+  String get compareReadingTitle => '对比阅读';
+
+  @override
+  String get compareReadingIntro =>
+      '导入原文与译文，左右对照阅读。无需翻译或修订流程——纯对照阅读，支持缩放与滚动绑定。';
+
+  @override
+  String compareReadingSupportedFormats(String formats) {
+    return '支持格式：$formats';
+  }
+
+  @override
+  String get compareReadingPickSource => '选择原文文件';
+
+  @override
+  String get compareReadingPickTarget => '选择译文文件';
+
+  @override
+  String get compareReadingImport => '导入';
+
+  @override
+  String get compareReadingReplaceFile => '更换';
+
+  @override
+  String get compareReadingChangeFiles => '更换文件';
+
+  @override
+  String get compareReadingClearSession => '清空对照';
+
+  @override
+  String get compareReadingModeCompare => '对比阅读';
+
+  @override
+  String get compareReadingModeSourceOnly => '只看原文（双击原文区域可切换）';
+
+  @override
+  String get compareReadingModeTargetOnly => '只看译文（双击译文区域可切换）';
+
+  @override
+  String get compareReadingKindMismatch => '原文与译文需为同一预览类型（PDF、图片或文本）。';
+
+  @override
+  String compareReadingReadBytesFailed(String fileName) {
+    return '无法读取文件内容：$fileName';
+  }
+
+  @override
   String get homeNavAnonymize => '匿名化';
 
   @override

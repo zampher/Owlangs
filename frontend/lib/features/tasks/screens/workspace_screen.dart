@@ -984,6 +984,15 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
                 onQueuedTap: () => _showSourceTypeDialog(context),
               ),
               const SizedBox(width: 4),
+              _buildActionButton(
+                icon: Icons.compare,
+                label: l10n.homeNavCompareReading,
+                tooltip: l10n.homeNavTooltipCompareReading,
+                width: 84,
+                maxLabelLines: 2,
+                onPressed: () => context.push(AppRouter.compareReadingRoute),
+              ),
+              const SizedBox(width: 4),
               // Translation queue (list + poll + download)
               _buildActionButton(
                 icon: Icons.list_alt,

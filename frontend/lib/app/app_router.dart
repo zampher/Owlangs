@@ -18,6 +18,7 @@ import '../features/settings/screens/settings_screen.dart';
 import '../features/settings/screens/setup_wizard_screen.dart';
 import '../features/profile/screens/profile_screen.dart';
 import '../features/donate_help/screens/donate_help_contact_screen.dart';
+import '../features/compare_reading/screens/compare_reading_screen.dart';
 import '../shared/providers/auth_provider.dart';
 
 class GoRouterRefreshStream extends ChangeNotifier {
@@ -46,6 +47,7 @@ class AppRouter {
   static const String profileRoute = '/profile';
   static const String setupWizardRoute = '/setup-wizard';
   static const String batchUploadRoute = '/batch-upload';
+  static const String compareReadingRoute = '/compare-reading';
 
   // Lazy initialization to avoid blocking startup
   static GoRouter? _routerInstance;
@@ -165,6 +167,13 @@ class AppRouter {
             name: 'translation_queue',
             builder: (BuildContext context, GoRouterState state) =>
                 const TranslationQueueScreen(),
+          ),
+
+          GoRoute(
+            path: compareReadingRoute,
+            name: 'compare_reading',
+            builder: (BuildContext context, GoRouterState state) =>
+                const CompareReadingScreen(),
           ),
 
           // Batch Upload Route

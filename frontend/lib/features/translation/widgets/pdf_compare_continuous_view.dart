@@ -60,9 +60,11 @@ class PdfCompareContinuousScrollController {
 /// Side-by-side PDF compare with linked (single) or independent scrollbars.
 class PdfCompareContinuousView extends StatefulWidget {
   const PdfCompareContinuousView({
-    required this.sourceDownloadUrl,
-    required this.targetDownloadUrl,
     super.key,
+    this.sourceDownloadUrl,
+    this.targetDownloadUrl,
+    this.sourcePdfBytes,
+    this.targetPdfBytes,
     this.targetRendererType,
     this.linkedScroll = true,
     this.pageGap = 16,
@@ -78,10 +80,23 @@ class PdfCompareContinuousView extends StatefulWidget {
     this.onEditBboxChanged,
     this.onEditBboxReset,
     this.onLoadSettled,
-  });
+  }) : assert(
+          (sourcePdfBytes != null && targetPdfBytes != null) ||
+              (sourceDownloadUrl != null && targetDownloadUrl != null),
+          'Provide either PDF bytes or download URLs for both panes',
+        );
 
-  final String sourceDownloadUrl;
-  final String targetDownloadUrl;
+  /// Remote/source PDF URL (used when [sourcePdfBytes] is null).
+  final String? sourceDownloadUrl;
+
+  /// Remote/target PDF URL (used when [targetPdfBytes] is null).
+  final String? targetDownloadUrl;
+
+  /// Local source PDF bytes (skips network download when set with [targetPdfBytes]).
+  final Uint8List? sourcePdfBytes;
+
+  /// Local target PDF bytes (skips network download when set with [sourcePdfBytes]).
+  final Uint8List? targetPdfBytes;
   final String? targetRendererType;
   final bool linkedScroll;
   final double pageGap;
@@ -150,7 +165,10 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     super.initState();
     AppLogger.log(
       'PdfCompareContinuousView',
-      'initState source=${widget.sourceDownloadUrl}',
+      'initState source=${widget.sourceDownloadUrl ?? 'bytes'} '
+      'target=${widget.targetDownloadUrl ?? 'bytes'} '
+      'hasSourceBytes=${widget.sourcePdfBytes != null} '
+      'hasTargetBytes=${widget.targetPdfBytes != null}',
       level: LogLevel.info,
     );
     _scrollController.addListener(_handleLinkedScroll);
@@ -246,38 +264,50 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
       oldWidget.navigationController?._detach(this);
       widget.navigationController?._attach(this);
     }
-    if (oldWidget.sourceDownloadUrl != widget.sourceDownloadUrl ||
+    final bool bytesChanged =
+        !identical(oldWidget.sourcePdfBytes, widget.sourcePdfBytes) ||
+            !identical(oldWidget.targetPdfBytes, widget.targetPdfBytes);
+    if (bytesChanged ||
+        oldWidget.sourceDownloadUrl != widget.sourceDownloadUrl ||
         oldWidget.targetDownloadUrl != widget.targetDownloadUrl ||
         oldWidget.targetRendererType != widget.targetRendererType) {
-      final bool sourceUnchanged = previewUrlsEquivalent(
-        oldWidget.sourceDownloadUrl,
-        widget.sourceDownloadUrl,
-      );
-      final bool targetUnchanged = previewUrlsEquivalent(
-        oldWidget.targetDownloadUrl,
-        widget.targetDownloadUrl,
-      );
-      if (sourceUnchanged &&
-          targetUnchanged &&
+      final bool usingBytes =
+          widget.sourcePdfBytes != null && widget.targetPdfBytes != null;
+      if (!usingBytes) {
+        final String oldSourceUrl = oldWidget.sourceDownloadUrl ?? '';
+        final String newSourceUrl = widget.sourceDownloadUrl ?? '';
+        final String oldTargetUrl = oldWidget.targetDownloadUrl ?? '';
+        final String newTargetUrl = widget.targetDownloadUrl ?? '';
+        final bool sourceUnchanged =
+            previewUrlsEquivalent(oldSourceUrl, newSourceUrl);
+        final bool targetUnchanged =
+            previewUrlsEquivalent(oldTargetUrl, newTargetUrl);
+        if (!bytesChanged &&
+            sourceUnchanged &&
+            targetUnchanged &&
+            oldWidget.targetRendererType == widget.targetRendererType) {
+          AppLogger.log(
+            'PdfCompareContinuousView',
+            'Skipping redundant PDF reload (equivalent URLs)',
+            level: LogLevel.debug,
+          );
+          return;
+        }
+      } else if (!bytesChanged &&
           oldWidget.targetRendererType == widget.targetRendererType) {
-        AppLogger.log(
-          'PdfCompareContinuousView',
-          'Skipping redundant PDF reload (equivalent URLs)',
-          level: LogLevel.debug,
-        );
         return;
       }
       AppLogger.log(
         'PdfCompareContinuousView',
-        'Reloading compare PDFs: sourceChanged=${!sourceUnchanged} '
-        'targetChanged=${!targetUnchanged} '
+        'Reloading compare PDFs: bytesChanged=$bytesChanged '
+        'usingBytes=$usingBytes '
         'rendererChanged=${oldWidget.targetRendererType != widget.targetRendererType}',
         level: LogLevel.info,
       );
       _linkedRowHeights = null;
       _targetRowHeights = null;
       _lastReportedPage = 0;
-      _loadDocuments(reason: 'url-change');
+      _loadDocuments(reason: bytesChanged ? 'bytes-change' : 'url-change');
       return;
     }
     if (oldWidget.linkedScroll != widget.linkedScroll) {
@@ -556,14 +586,36 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
     }
 
     try {
-      // Download new documents while old content stays visible.
-      final TranslationService svc = TranslationService();
-      final String targetUrl =
-          _withRenderer(widget.targetDownloadUrl, widget.targetRendererType);
-      final List<List<int>> results = await Future.wait(<Future<List<int>>>[
-        svc.downloadFile(widget.sourceDownloadUrl),
-        svc.downloadFile(targetUrl),
-      ]);
+      // Resolve PDF bytes: prefer local bytes, otherwise download URLs.
+      late final Uint8List sourceBytes;
+      late final Uint8List targetBytes;
+      if (widget.sourcePdfBytes != null && widget.targetPdfBytes != null) {
+        sourceBytes = widget.sourcePdfBytes!;
+        targetBytes = widget.targetPdfBytes!;
+        AppLogger.log(
+          'PdfCompareContinuousView',
+          'Using local PDF bytes '
+          '(source=${sourceBytes.length}B target=${targetBytes.length}B)',
+          level: LogLevel.info,
+        );
+      } else {
+        final String? sourceUrl = widget.sourceDownloadUrl;
+        final String? targetUrlRaw = widget.targetDownloadUrl;
+        if (sourceUrl == null || targetUrlRaw == null) {
+          throw StateError(
+            'PdfCompareContinuousView requires PDF bytes or download URLs',
+          );
+        }
+        final TranslationService svc = TranslationService();
+        final String targetUrl =
+            _withRenderer(targetUrlRaw, widget.targetRendererType);
+        final List<List<int>> results = await Future.wait(<Future<List<int>>>[
+          svc.downloadFile(sourceUrl),
+          svc.downloadFile(targetUrl),
+        ]);
+        sourceBytes = Uint8List.fromList(results[0]);
+        targetBytes = Uint8List.fromList(results[1]);
+      }
       if (!mounted) {
         return;
       }
@@ -571,10 +623,8 @@ class _PdfCompareContinuousViewState extends State<PdfCompareContinuousView> {
       // Open new documents BEFORE closing old ones, so there is no
       // window where _sourceDocument / _targetDocument are null while
       // the build method may still access them (when hasContent is true).
-      final PdfDocument newSource =
-          await PdfDocument.openData(Uint8List.fromList(results[0]));
-      final PdfDocument newTarget =
-          await PdfDocument.openData(Uint8List.fromList(results[1]));
+      final PdfDocument newSource = await PdfDocument.openData(sourceBytes);
+      final PdfDocument newTarget = await PdfDocument.openData(targetBytes);
       if (!mounted) {
         await newSource.close();
         await newTarget.close();
