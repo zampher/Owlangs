@@ -365,10 +365,14 @@ class _CompareReadingScreenState extends ConsumerState<CompareReadingScreen> {
     CompareDocumentModel doc, {
     required String paneKey,
   }) {
+    final bool isHtml = doc.contentType == 'html';
+    // Scrollable panes (esp. HTML WebView) must own vertical scroll in a
+    // bounded viewport — nesting platform views in outer scroll crashes Windows.
+    _viewportController.childManagesZoom = isHtml && !kIsWeb;
     return PreviewZoomableViewport(
       key: ValueKey<String>('solo-$paneKey-${doc.fileName}-${doc.kind}'),
       controller: _viewportController,
-      childHandlesVerticalScroll: doc.kind != ComparePaneKind.scrollable,
+      childHandlesVerticalScroll: true,
       child: CompareSoloDocumentView(
         document: doc,
         paneKey: paneKey,
@@ -386,9 +390,12 @@ class _CompareReadingScreenState extends ConsumerState<CompareReadingScreen> {
     final bool linked = session.linkedScroll && session.kindsMatch;
     final String pairKey =
         '${source.fileName}:${source.kind}|${target.fileName}:${target.kind}';
+    final bool isHtmlPair =
+        source.contentType == 'html' && target.contentType == 'html';
 
     if (source.kind == ComparePaneKind.pdf &&
         target.kind == ComparePaneKind.pdf) {
+      _viewportController.childManagesZoom = true;
       return PreviewZoomableViewport(
         key: ValueKey<String>('pdf-$pairKey'),
         controller: _viewportController,
@@ -404,6 +411,7 @@ class _CompareReadingScreenState extends ConsumerState<CompareReadingScreen> {
 
     if (source.kind == ComparePaneKind.image &&
         target.kind == ComparePaneKind.image) {
+      _viewportController.childManagesZoom = true;
       return PreviewZoomableViewport(
         key: ValueKey<String>('image-$pairKey'),
         controller: _viewportController,
@@ -419,9 +427,12 @@ class _CompareReadingScreenState extends ConsumerState<CompareReadingScreen> {
 
     if (source.kind == ComparePaneKind.scrollable &&
         target.kind == ComparePaneKind.scrollable) {
+      // Desktop HTML uses WebView2; avoid Transform.scale on platform views.
+      _viewportController.childManagesZoom = isHtmlPair && !kIsWeb;
       return PreviewZoomableViewport(
         key: ValueKey<String>('text-$pairKey'),
         controller: _viewportController,
+        childHandlesVerticalScroll: true,
         child: CompareScrollablePanes(
           source: source,
           target: target,

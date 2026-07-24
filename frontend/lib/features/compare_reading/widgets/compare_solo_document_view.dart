@@ -3,6 +3,7 @@
 
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:pdfx/pdfx.dart';
@@ -220,6 +221,34 @@ class _CompareSoloDocumentViewState extends State<CompareSoloDocumentView> {
         );
       case ComparePaneKind.scrollable:
         final String content = doc.textContent ?? '';
+        if (doc.contentType == 'html') {
+          // Desktop WebView must fill a bounded box; nesting it in
+          // SingleChildScrollView triggers semantics.parentDataDirty on Windows.
+          if (kIsWeb) {
+            return Scrollbar(
+              controller: _textScrollController,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _textScrollController,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                child: UnifiedPreview(
+                  content: content,
+                  contentType: 'html',
+                  taskId: 'compare-solo-${widget.paneKey}',
+                  comparePaneKey: 'solo-${widget.paneKey}',
+                  embedInCompareScroll: true,
+                ),
+              ),
+            );
+          }
+          return UnifiedPreview(
+            content: content,
+            contentType: 'html',
+            taskId: 'compare-solo-${widget.paneKey}',
+            comparePaneKey: 'solo-${widget.paneKey}',
+            embedInCompareScroll: false,
+          );
+        }
         final Widget body;
         if (doc.contentType == 'plain') {
           body = SelectableText(
@@ -233,10 +262,10 @@ class _CompareSoloDocumentViewState extends State<CompareSoloDocumentView> {
         } else {
           body = UnifiedPreview(
             content: content,
-            contentType: doc.contentType == 'html' ? 'html' : 'md',
+            contentType: 'md',
             taskId: 'compare-solo-${widget.paneKey}',
             comparePaneKey: 'solo-${widget.paneKey}',
-            embedInCompareScroll: true,
+            embedInCompareScroll: false,
           );
         }
         return Scrollbar(

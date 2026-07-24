@@ -14,7 +14,8 @@ import '../models/compare_document_model.dart';
 /// Resolves local file bytes into a [CompareDocumentModel] for compare reading.
 ///
 /// Does not start translation or format-conversion tasks. Uses local decode for
-/// text/PDF/images and lightweight `/preview/docx` + `/preview/xlsx` for Office.
+/// text/PDF/images and lightweight `/preview/docx|xlsx|pptx|epub|mobi` for
+/// Office / ebook formats.
 class CompareDocumentLoader {
   CompareDocumentLoader({Dio? dio}) : _dio = dio;
 
@@ -34,6 +35,9 @@ class CompareDocumentLoader {
   };
   static const Set<String> _docxExt = <String>{'docx'};
   static const Set<String> _xlsxExt = <String>{'xlsx'};
+  static const Set<String> _pptxExt = <String>{'pptx'};
+  static const Set<String> _epubExt = <String>{'epub'};
+  static const Set<String> _mobiExt = <String>{'mobi', 'azw', 'azw3'};
 
   /// Extensions that compare reading can load without a convert/translate task.
   static List<String> get supportedExtensions => <String>[
@@ -44,6 +48,9 @@ class CompareDocumentLoader {
         ..._plainExt,
         ..._docxExt,
         ..._xlsxExt,
+        ..._pptxExt,
+        ..._epubExt,
+        ..._mobiExt,
       ]..sort();
 
   /// Classify extension into a pane kind (null = unsupported).
@@ -59,7 +66,10 @@ class CompareDocumentLoader {
         _mdExt.contains(ext) ||
         _plainExt.contains(ext) ||
         _docxExt.contains(ext) ||
-        _xlsxExt.contains(ext)) {
+        _xlsxExt.contains(ext) ||
+        _pptxExt.contains(ext) ||
+        _epubExt.contains(ext) ||
+        _mobiExt.contains(ext)) {
       return ComparePaneKind.scrollable;
     }
     return null;
@@ -130,6 +140,45 @@ class CompareDocumentLoader {
     if (_xlsxExt.contains(ext)) {
       final String html = await _previewOfficeHtml(
         path: '/preview/xlsx',
+        fileName: fileName,
+        bytes: bytes,
+      );
+      return CompareDocumentModel(
+        fileName: fileName,
+        kind: ComparePaneKind.scrollable,
+        contentType: 'html',
+        textContent: html,
+      );
+    }
+    if (_pptxExt.contains(ext)) {
+      final String html = await _previewOfficeHtml(
+        path: '/preview/pptx',
+        fileName: fileName,
+        bytes: bytes,
+      );
+      return CompareDocumentModel(
+        fileName: fileName,
+        kind: ComparePaneKind.scrollable,
+        contentType: 'html',
+        textContent: html,
+      );
+    }
+    if (_epubExt.contains(ext)) {
+      final String html = await _previewOfficeHtml(
+        path: '/preview/epub',
+        fileName: fileName,
+        bytes: bytes,
+      );
+      return CompareDocumentModel(
+        fileName: fileName,
+        kind: ComparePaneKind.scrollable,
+        contentType: 'html',
+        textContent: html,
+      );
+    }
+    if (_mobiExt.contains(ext)) {
+      final String html = await _previewOfficeHtml(
+        path: '/preview/mobi',
         fileName: fileName,
         bytes: bytes,
       );
@@ -217,14 +266,47 @@ class CompareDocumentLoader {
       }
       return data;
     } on DioException catch (e) {
+      final int? status = e.response?.statusCode;
+      final String detail = previewErrorDetail(e.response?.data, fallback: e.message);
       AppLogger.log(
         'CompareDocumentLoader',
         'Preview failed path=$path fileName=$fileName '
-        'status=${e.response?.statusCode} error=$e',
+        'status=$status detail=$detail error=$e',
         level: LogLevel.error,
       );
+      if (status == 404) {
+        throw StateError(
+          'Preview API missing ($path). Restart the Owlangs backend '
+          'so /preview routes are loaded, then import again.',
+        );
+      }
+      if (detail.isNotEmpty) {
+        throw StateError('Preview failed for $fileName: $detail');
+      }
       rethrow;
     }
+  }
+
+  /// Extract a human-readable detail from a preview API error body.
+  static String previewErrorDetail(Object? data, {String? fallback}) {
+    if (data is Map && data['detail'] != null) {
+      return data['detail'].toString();
+    }
+    if (data is String && data.trim().isNotEmpty) {
+      final String trimmed = data.trim();
+      // FastAPI JSON body often arrives as plain text with ResponseType.plain.
+      final RegExpMatch? match = RegExp(
+        r'"detail"\s*:\s*"((?:\\.|[^"\\])*)"',
+      ).firstMatch(trimmed);
+      if (match != null) {
+        return match
+            .group(1)!
+            .replaceAll(r'\"', '"')
+            .replaceAll(r'\\', r'\');
+      }
+      return trimmed.length > 400 ? '${trimmed.substring(0, 400)}…' : trimmed;
+    }
+    return fallback ?? '';
   }
 
   Dio _buildDio() {

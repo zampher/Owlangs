@@ -174,71 +174,82 @@ async def export_pdf_from_html(req: PdfExportHtmlRequest):
 async def preview_docx(file: UploadFile = File(...)):
     """Convert a DOCX file to HTML for preview using mammoth."""
     try:
-        import mammoth  # type: ignore
-    except Exception:
-        raise HTTPException(
-            status_code=503, 
-            detail="DOCX preview requires 'mammoth' package. Please install it."
-        )
-
-    try:
-        from io import BytesIO
         content = await file.read()
-        # mammoth expects a file-like object with .seek
-        result = mammoth.convert_to_html(BytesIO(content))
-        html = result.value or ""
-        wrapped = (
-            "<html><head><meta charset='utf-8'>"
-            "<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial;padding:12px}</style>"
-            "</head><body>" + html + "</body></html>"
-        )
-        return HTMLResponse(content=wrapped)
+        from utils.office_preview_utils import docx_bytes_to_html
+
+        return HTMLResponse(content=docx_bytes_to_html(content))
+    except RuntimeError as e:
+        detail = str(e)
+        status = 503 if "mammoth" in detail.lower() else 500
+        raise HTTPException(status_code=status, detail=detail)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"DOCX preview failed: {e}")
 
 
 @router.post("/preview/xlsx", response_class=HTMLResponse)
 async def preview_xlsx(file: UploadFile = File(...), max_rows: int = 200):
-    """Convert an XLSX file to HTML for preview. Prefer pandas+openpyxl; fallback to openpyxl only."""
-    use_pandas = False
+    """Convert an XLSX file to HTML for preview (all sheets, capped rows)."""
     try:
-        import pandas as pd  # type: ignore
-        use_pandas = True
-    except Exception:
-        pass
-
-    try:
-        from io import BytesIO
         content = await file.read()
-        
-        if use_pandas:
-            # Use pandas for better handling
-            df = pd.read_excel(BytesIO(content), nrows=max_rows)
-            html = df.to_html(classes="table table-striped", table_id="xlsx-preview")
-        else:
-            # Fallback to openpyxl
-            import openpyxl  # type: ignore
-            workbook = openpyxl.load_workbook(BytesIO(content))
-            worksheet = workbook.active
-            
-            html = "<table class='table table-striped' id='xlsx-preview'>"
-            for row_idx, row in enumerate(worksheet.iter_rows(max_row=max_rows)):
-                html += "<tr>"
-                for cell in row:
-                    html += f"<td>{cell.value or ''}</td>"
-                html += "</tr>"
-            html += "</table>"
-        
-        wrapped = (
-            "<html><head><meta charset='utf-8'>"
-            "<style>"
-            "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial;padding:12px}"
-            ".table{border-collapse:collapse;width:100%}"
-            ".table td,.table th{border:1px solid #ddd;padding:8px;text-align:left}"
-            ".table-striped tr:nth-child(even){background-color:#f2f2f2}"
-            "</style>"
-            "</head><body>" + html + "</body></html>"
-        )
-        return HTMLResponse(content=wrapped)
+        from utils.office_preview_utils import xlsx_bytes_to_html
+
+        return HTMLResponse(content=xlsx_bytes_to_html(content, max_rows=max_rows))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"XLSX preview failed: {e}")
+
+
+@router.post("/preview/pptx", response_class=HTMLResponse)
+async def preview_pptx(file: UploadFile = File(...)):
+    """Convert a PPTX file to HTML slides for preview using python-pptx."""
+    try:
+        content = await file.read()
+        from utils.office_preview_utils import pptx_bytes_to_html
+
+        return HTMLResponse(content=pptx_bytes_to_html(content))
+    except RuntimeError as e:
+        detail = str(e)
+        status = 503 if "python-pptx" in detail.lower() else 500
+        raise HTTPException(status_code=status, detail=detail)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PPTX preview failed: {e}")
+
+
+@router.post("/preview/epub", response_class=HTMLResponse)
+async def preview_epub(file: UploadFile = File(...)):
+    """Convert an EPUB file to HTML for compare-reading preview."""
+    try:
+        content = await file.read()
+        from utils.ebook_preview_utils import epub_bytes_to_html
+
+        return HTMLResponse(content=epub_bytes_to_html(content))
+    except RuntimeError as e:
+        detail = str(e)
+        status = 503 if "ebooklib" in detail.lower() else 500
+        raise HTTPException(status_code=status, detail=detail)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"EPUB preview failed: {e}")
+
+
+@router.post("/preview/mobi", response_class=HTMLResponse)
+async def preview_mobi(file: UploadFile = File(...)):
+    """Convert a MOBI/AZW file to HTML for compare-reading preview."""
+    try:
+        content = await file.read()
+        from utils.ebook_preview_utils import mobi_bytes_to_html
+
+        return HTMLResponse(content=mobi_bytes_to_html(content))
+    except RuntimeError as e:
+        detail = str(e)
+        lower = detail.lower()
+        # 503 only when required packages are missing; bad/corrupt files are 400.
+        if "requires" in lower and ("package" in lower or "install" in lower):
+            status = 503
+        elif "failed" in lower or "invalid" in lower or "corrupt" in lower:
+            status = 400
+        else:
+            status = 500
+        raise HTTPException(status_code=status, detail=detail)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"MOBI/AZW preview failed: {e}")
