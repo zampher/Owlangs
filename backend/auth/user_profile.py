@@ -94,11 +94,10 @@ class UserProfile:
             paths = get_owlangs_paths()
             profile_dir = paths["user_profiles"]
         """Load user configuration from file"""
+        profile_file = os.path.join(profile_dir, f"{username}_profile.json")
         try:
             # Ensure directory exists
             os.makedirs(profile_dir, exist_ok=True)
-            
-            profile_file = os.path.join(profile_dir, f"{username}_profile.json")
             
             if os.path.exists(profile_file):
                 logger.debug(LogModule.AUTH, f"Loading user configuration from file: {profile_file}")
@@ -114,7 +113,11 @@ class UserProfile:
                 return cls()
         except Exception as e:
             logger.error(LogModule.AUTH, f"Failed to load user configuration: {e}")
-            return cls()
+            # Mark load failure so callers can avoid overwriting a corrupt/unread file
+            profile = cls()
+            profile._load_failed = True  # type: ignore[attr-defined]
+            profile._load_failed_path = profile_file  # type: ignore[attr-defined]
+            return profile
     
     def save_to_file(self, username: str, profile_dir: str = None) -> bool:
         if profile_dir is None:
@@ -127,13 +130,37 @@ class UserProfile:
             os.makedirs(profile_dir, exist_ok=True)
             
             profile_file = os.path.join(profile_dir, f"{username}_profile.json")
+
+            # Refuse overwrite when previous load failed and a file still exists on disk
+            if getattr(self, "_load_failed", False) and os.path.exists(profile_file):
+                logger.error(
+                    LogModule.AUTH,
+                    f"Refusing to save user profile for {username}: previous load "
+                    f"failed and file exists at {profile_file}",
+                )
+                return False
             
             # Update modification time
             self.updated_at = datetime.now().isoformat()
             
-            # Save to file
-            with open(profile_file, 'w', encoding='utf-8') as f:
-                json.dump(asdict(self), f, ensure_ascii=False, indent=2)
+            # Atomic write: temp file then replace
+            import tempfile
+            fd, tmp_path = tempfile.mkstemp(
+                prefix=f".{username}_profile_",
+                suffix=".tmp",
+                dir=profile_dir,
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(asdict(self), f, ensure_ascii=False, indent=2)
+                os.replace(tmp_path, profile_file)
+            except Exception:
+                try:
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
             
             logger.info(LogModule.AUTH, f"User {username} configuration saved to: {profile_file}")
             return True
@@ -260,8 +287,19 @@ class UserProfileManager:
         return profile.save_to_file(username, self.profile_dir)
     
     def create_default_profile(self, username: str) -> UserProfile:
-        """Create default profile for user using unified template"""
-        # Use unified default template
+        """Create default profile for user using unified template.
+
+        Never overwrites an existing profile file (config-loss guard).
+        """
+        profile_file = os.path.join(self.profile_dir, f"{username}_profile.json")
+        if os.path.exists(profile_file):
+            logger.info(
+                LogModule.AUTH,
+                f"Profile already exists for {username} at {profile_file}; "
+                f"skipping create_default_profile",
+            )
+            return self.get_user_profile(username)
+
         # Locate template: project root -> backend/config/templates/default_profile.json
         from backend.utils.path_utils import get_project_root
         template_file = str(get_project_root() / "backend" / "config" / "templates" / "default_profile.json")

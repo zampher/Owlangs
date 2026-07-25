@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../shared/services/config_service.dart';
 import '../../../shared/services/settings_service.dart';
+import '../../../shared/utils/app_logger.dart';
 import '../../../shared/utils/mineru_test_result_utils.dart';
 import '../../../l10n/app_localizations.dart';
 
@@ -1961,6 +1962,9 @@ class AIPlatformSettingsNotifier extends StateNotifier<AIPlatformSettings> {
   bool _loadPlatformsInProgress = false;
   DateTime? _lastLoadTime;
   static const Duration _minReloadInterval = Duration(minutes: 1);
+  /// True after a successful load from backend (blocks empty/unhydrated writes).
+  bool _hydratedFromServer = false;
+  int _hydratedPlatformCount = 0;
 
   /// Load platform config (with cache - won't reload if loaded recently)
   Future<void> loadPlatforms({bool force = false}) async {
@@ -2008,6 +2012,7 @@ class AIPlatformSettingsNotifier extends StateNotifier<AIPlatformSettings> {
           error: 'Failed to load app config',
           isLoading: false,
         );
+        _hydratedFromServer = false;
         return;
       }
       if (kDebugMode) {
@@ -2141,12 +2146,15 @@ class AIPlatformSettingsNotifier extends StateNotifier<AIPlatformSettings> {
           defaultPlatform: defaultPlatform,
           platformOrder: platformOrder,
         );
+        _hydratedFromServer = platforms.isNotEmpty;
+        _hydratedPlatformCount = platforms.length;
       }
     } catch (e) {
       if (kDebugMode) {
         print('[AIPlatformSettings] Error loading platforms: $e');
       }
       state = state.copyWith(error: e.toString());
+      _hydratedFromServer = false;
     } finally {
       _loadPlatformsInProgress = false;
       _lastLoadTime = DateTime.now();
@@ -2169,69 +2177,93 @@ class AIPlatformSettingsNotifier extends StateNotifier<AIPlatformSettings> {
     // 1. Immediately update local state (for fast UI response)
     final updatedPlatforms = Map<String, AIPlatformInfo>.from(state.platforms);
 
-    // Ensure isConfigured reflects current API key validity immediately,
-    // so Platform Overview and Test API Status button see the latest state
+    // isConfigured: optional-key platforms need URL; required-key need non-empty key
     var updatedInfo = platformInfo;
-    if (platformInfo.apiKey != null) {
-      final hasValidApiKey = platformInfo.apiKey!.isNotEmpty;
-      updatedInfo = platformInfo.copyWith(isConfigured: hasValidApiKey);
+    if (!platformInfo.requiresApiKey) {
+      updatedInfo = platformInfo.copyWith(
+        isConfigured: platformInfo.url.trim().isNotEmpty,
+      );
+    } else if (platformInfo.apiKey != null) {
+      updatedInfo = platformInfo.copyWith(
+        isConfigured: platformInfo.apiKey!.trim().isNotEmpty,
+      );
     }
 
     updatedPlatforms[platformKey] = updatedInfo;
     state = state.copyWith(platforms: updatedPlatforms);
 
-    // 2. Persist non-sensitive platform configuration (merge full ai_platforms)
-    try {
-      // Build merged ai_platforms payload from current state to avoid overwriting others
-      final mergedPlatformsJson = <String, dynamic>{};
-      for (final entry in state.platforms.entries) {
-        mergedPlatformsJson[entry.key] = entry.value.toJson();
-      }
-      await _configService.updateAppConfig(
-        <String, dynamic>{'ai_platforms': mergedPlatformsJson},
+    // 2. Persist non-sensitive platform configuration (single-platform delta)
+    if (!_hydratedFromServer || state.platforms.isEmpty) {
+      AppLogger.log(
+        'AIPlatformSettings',
+        'Skip ai_platforms save: not hydrated or empty '
+        '(hydrated=$_hydratedFromServer count=${state.platforms.length})',
+        level: LogLevel.warn,
       );
-    } catch (e) {
-      if (kDebugMode) {
-        print('Failed to update platform config: $e');
+    } else if (state.platforms.length < (_hydratedPlatformCount / 2).ceil() &&
+        _hydratedPlatformCount >= 4) {
+      AppLogger.log(
+        'AIPlatformSettings',
+        'Skip ai_platforms save: local count ${state.platforms.length} '
+        'far below hydrated $_hydratedPlatformCount (config-loss guard)',
+        level: LogLevel.error,
+      );
+    } else {
+      try {
+        // Only send the changed platform to avoid full-table overwrite races
+        await _configService.updateAppConfig(
+          <String, dynamic>{
+            'ai_platforms': <String, dynamic>{
+              platformKey: updatedInfo.toJson(),
+            },
+          },
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          print('Failed to update platform config: $e');
+        }
       }
     }
 
-    // 3. Update API key if provided (sensitive, use SettingsService)
-    // For mineru_local, API key is optional - save even if empty to allow clearing
+    // 3. Persist API key when provided.
+    // - Required-key platforms: never write empty (avoids wiping secrets).
+    // - Optional-key platforms (requiresApiKey=false) and mineru_local: empty OK.
+    final bool keyOptional =
+        !platformInfo.requiresApiKey || platformKey == 'mineru_local';
     final shouldSaveApiKey = platformInfo.apiKey != null &&
-        (platformInfo.apiKey!.isNotEmpty || platformKey == 'mineru_local');
-    
-    if (shouldSaveApiKey) {
-      // Check if API key is valid (not empty)
-      final hasValidApiKey = platformInfo.apiKey!.isNotEmpty;
+        (platformInfo.apiKey!.trim().isNotEmpty || keyOptional);
 
-      // MinerU (cloud and local) uses special config fields
+    if (shouldSaveApiKey) {
+      final hasValidApiKey = platformInfo.apiKey!.trim().isNotEmpty;
+
       if (platformKey == 'mineru') {
-        // Cloud MinerU uses translator_mineru_token field
-        await _settingsService.saveSetting(
-          '',
-          'translator_mineru_token',
-          platformInfo.apiKey,
-        );
+        if (!hasValidApiKey) {
+          AppLogger.log(
+            'AIPlatformSettings',
+            'Skip empty translator_mineru_token save (config-loss guard)',
+            level: LogLevel.warn,
+          );
+        } else {
+          await _settingsService.saveSetting(
+            '',
+            'translator_mineru_token',
+            platformInfo.apiKey,
+          );
+        }
       } else if (platformKey == 'mineru_local') {
-        // Local MinerU uses separate mineru_local_token field
-        // API key is optional for local deployment
         await _settingsService.saveSetting(
           '',
           'mineru_local_token',
           platformInfo.apiKey,
         );
-      } else {
-        // Other platforms use api_keys dictionary format
-        // Backend expects: api_keys: {platform: {key: "...", configured: true}}
-        // We need to construct the nested structure correctly
+      } else if (hasValidApiKey || keyOptional) {
         final apiKeyData = <String, Map<String, Object?>>{
           platformKey: <String, Object?>{
-            'key': platformInfo.apiKey,
-            'configured': hasValidApiKey,
+            'key': platformInfo.apiKey ?? '',
+            // Optional-key local platforms are "configured" even with empty key
+            'configured': keyOptional ? true : hasValidApiKey,
           },
         };
-        // Save as api_keys key (backend will extract and update each platform)
         await _settingsService.saveSetting('', 'api_keys', apiKeyData);
       }
     }

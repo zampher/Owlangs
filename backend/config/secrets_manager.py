@@ -67,6 +67,8 @@ class SecretsManager:
         
         logger.debug(LogModule.CONFIG, f"Using secrets config: {self.secrets_file}")
         self._secrets_cache: Optional[Dict[str, Any]] = None
+        self._load_failed: bool = False
+        self._load_failed_reason: Optional[str] = None
         
     def load_secrets(self) -> Dict[str, Any]:
         """
@@ -95,6 +97,7 @@ class SecretsManager:
         if not self.secrets_file.exists():
             logger.warning(LogModule.CONFIG, f"Secrets file {self.secrets_file} not found, using empty configuration")
             self._secrets_cache = {}
+            self._load_failed = False
             return self._secrets_cache
             
         try:
@@ -250,11 +253,15 @@ class SecretsManager:
             
             logger.debug(LogModule.CONFIG, f"Successfully loaded sensitive configuration file: {self.secrets_file}")
             self._secrets_cache = secrets
+            self._load_failed = False
+            self._load_failed_reason = None
             return secrets
             
         except Exception as e:
             logger.error(LogModule.CONFIG, f"Failed to load sensitive configuration file: {e}")
             self._secrets_cache = {}
+            self._load_failed = True
+            self._load_failed_reason = str(e)
             return self._secrets_cache
 
     def _encode_trial_date_obfuscated(self, plain_date: str) -> str:
@@ -541,6 +548,33 @@ class SecretsManager:
     # Redis password is now managed by local.json
     # This method is deprecated
     
+    @staticmethod
+    def _count_configured_api_keys(secrets: Dict[str, Any]) -> int:
+        """Count non-empty API keys / tokens in a secrets dict."""
+        count = 0
+        for key_name in ("api_keys", "platform_api_keys"):
+            raw = secrets.get(key_name)
+            if not isinstance(raw, dict):
+                continue
+            for _platform, val in raw.items():
+                if isinstance(val, dict):
+                    if str(val.get("key") or "").strip():
+                        count += 1
+                elif isinstance(val, str) and val.strip():
+                    count += 1
+        for token_key in ("mineru_token", "translator_mineru_token", "mineru_local_token"):
+            val = secrets.get(token_key)
+            if isinstance(val, dict) and str(val.get("key") or "").strip():
+                count += 1
+            elif isinstance(val, str) and val.strip():
+                count += 1
+        return count
+
+    @staticmethod
+    def _api_keys_map(secrets: Dict[str, Any]) -> Dict[str, Any]:
+        raw = secrets.get("api_keys", secrets.get("platform_api_keys", {}))
+        return raw if isinstance(raw, dict) else {}
+
     def save_secrets(self, secrets: Dict[str, Any]) -> bool:
         """
         Save sensitive configuration to file
@@ -552,34 +586,167 @@ class SecretsManager:
             Whether save was successful
         """
         try:
+            # Refuse write after a failed load when the on-disk file still exists.
+            # Empty in-memory state would otherwise wipe all API keys.
+            if self._load_failed and self.secrets_file.exists():
+                logger.error(
+                    LogModule.CONFIG,
+                    f"Refusing to save secrets.json: previous load failed "
+                    f"({self._load_failed_reason!r}) and file exists at "
+                    f"{self.secrets_file}",
+                )
+                return False
+
+            incoming_keys = self._count_configured_api_keys(secrets or {})
+            incoming_map = self._api_keys_map(secrets or {})
+            if self.secrets_file.exists():
+                try:
+                    with open(self.secrets_file, "r", encoding="utf-8-sig") as fh:
+                        on_disk = json.load(fh)
+                    disk_dict = on_disk if isinstance(on_disk, dict) else {}
+                    disk_keys = self._count_configured_api_keys(disk_dict)
+                    disk_map = self._api_keys_map(disk_dict)
+                except Exception as read_err:
+                    logger.error(
+                        LogModule.CONFIG,
+                        f"Refusing to save secrets.json: cannot read existing "
+                        f"file for wipe-guard ({read_err})",
+                    )
+                    return False
+                # Only refuse wholesale wipe of the api_keys map itself.
+                # Clearing individual keys (including optional-key local platforms)
+                # is allowed when the map still has entries.
+                if disk_keys > 0 and len(disk_map) > 0 and len(incoming_map) == 0:
+                    logger.error(
+                        LogModule.CONFIG,
+                        f"Refusing to save secrets.json: would wipe "
+                        f"{disk_keys} configured key(s) with empty api_keys map "
+                        f"(path={self.secrets_file})",
+                    )
+                    return False
+                if disk_keys > 0 and incoming_keys < disk_keys:
+                    logger.warning(
+                        LogModule.CONFIG,
+                        f"Saving secrets.json with fewer configured keys: "
+                        f"disk={disk_keys} incoming={incoming_keys} "
+                        f"path={self.secrets_file}",
+                    )
+
             # Ensure directory exists
             self.secrets_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            with open(self.secrets_file, 'w', encoding='utf-8') as f:
-                json.dump(secrets, f, indent=2, ensure_ascii=False)
+
+            # Backup existing file before overwrite
+            if self.secrets_file.exists():
+                try:
+                    backup_path = self.secrets_file.with_suffix(".json.bak")
+                    import shutil
+                    shutil.copy2(self.secrets_file, backup_path)
+                except Exception as bak_err:
+                    logger.warning(
+                        LogModule.CONFIG,
+                        f"Failed to write secrets.json.bak: {bak_err}",
+                    )
+
+            # Atomic write
+            import tempfile
+            fd, tmp_path = tempfile.mkstemp(
+                prefix=".secrets_",
+                suffix=".tmp",
+                dir=str(self.secrets_file.parent),
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(secrets, f, indent=2, ensure_ascii=False)
+                os.replace(tmp_path, self.secrets_file)
+            except Exception:
+                try:
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
             
             # Update cache
             self._secrets_cache = secrets
+            self._load_failed = False
+            self._load_failed_reason = None
             
-            logger.debug(LogModule.CONFIG, f"Sensitive configuration saved to: {self.secrets_file}")
+            logger.info(
+                LogModule.CONFIG,
+                f"Sensitive configuration saved to: {self.secrets_file} "
+                f"(configured_keys={incoming_keys})",
+            )
             return True
             
         except Exception as e:
             logger.error(LogModule.CONFIG, f"Failed to save sensitive configuration file: {e}")
             return False
     
-    def update_platform_api_key(self, platform: str, api_key: str, configured: Optional[bool] = None) -> bool:
+    def _platform_allows_empty_api_key(self, platform: str) -> bool:
+        """Return True when platform config says API key is optional (local deploys)."""
+        try:
+            from backend.config.platforms_config import get_platforms_config
+
+            cfg = get_platforms_config().get_platform_config(platform)
+            if cfg is None:
+                return False
+            return not bool(getattr(cfg, "requires_api_key", True))
+        except Exception as exc:
+            logger.debug(
+                LogModule.CONFIG,
+                f"Could not resolve requires_api_key for '{platform}': {exc}",
+            )
+            return False
+
+    def update_platform_api_key(
+        self,
+        platform: str,
+        api_key: str,
+        configured: Optional[bool] = None,
+        *,
+        allow_clear: Optional[bool] = None,
+    ) -> bool:
         """
         Update API key for specified platform
         
         Args:
             platform: Platform name
             api_key: API key
+            configured: Whether the key is configured (auto-detect if None)
+            allow_clear: If True, allow empty key to clear/store empty.
+                If None, auto-allow when platform.requires_api_key is False
+                (local deployments that do not need a key).
             
         Returns:
             Whether update was successful
         """
+        api_key_str = "" if api_key is None else str(api_key)
+        if allow_clear is None:
+            allow_clear = self._platform_allows_empty_api_key(platform)
+        if not api_key_str.strip() and not allow_clear:
+            # Match single-setting API: only persist non-empty keys by default
+            existing = self.get_api_key(platform)
+            if existing:
+                logger.warning(
+                    LogModule.CONFIG,
+                    f"Skipping empty API key update for platform '{platform}' "
+                    f"(existing key present; platform requires_api_key)",
+                )
+                return True
+            logger.info(
+                LogModule.CONFIG,
+                f"Skipping empty API key update for platform '{platform}' "
+                f"(nothing to write)",
+            )
+            return True
+
         secrets = self.load_secrets()
+        if self._load_failed:
+            logger.error(
+                LogModule.CONFIG,
+                f"Cannot update API key for '{platform}': secrets load failed",
+            )
+            return False
         # Use new key "api_keys" if available, otherwise fall back to "platform_api_keys"
         api_keys_key = "api_keys" if "api_keys" in secrets else "platform_api_keys"
         if api_keys_key not in secrets:
@@ -587,15 +754,24 @@ class SecretsManager:
         key_meta = secrets[api_keys_key].get(platform)
         if not isinstance(key_meta, dict):
             key_meta = {"key": "", "configured": False}
-        key_meta["key"] = api_key
+        key_meta["key"] = api_key_str
         if configured is None:
-            key_meta["configured"] = bool(api_key)
+            # Optional-key platforms: empty key still counts as configured for local use
+            if allow_clear and not api_key_str.strip():
+                key_meta["configured"] = True
+            else:
+                key_meta["configured"] = bool(api_key_str)
         else:
             key_meta["configured"] = bool(configured)
         secrets[api_keys_key][platform] = key_meta
         # Also update old key for backward compatibility if it exists
         if "platform_api_keys" in secrets and api_keys_key != "platform_api_keys":
             secrets["platform_api_keys"][platform] = key_meta
+        logger.info(
+            LogModule.CONFIG,
+            f"Updating API key for '{platform}' "
+            f"(empty={not bool(api_key_str.strip())}, allow_clear={allow_clear})",
+        )
         return self.save_secrets(secrets)
     
     def update_api_key(self, platform: str, api_key: str, configured: Optional[bool] = None) -> bool:

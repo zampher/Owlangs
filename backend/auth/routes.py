@@ -394,16 +394,25 @@ async def login(
             "is_active": True
         }
         
-        # Ensure user has a personal profile
+        # Ensure user has a personal profile (use absolute profile_dir, not CWD-relative path)
         from .user_profile import get_user_profile_manager
         profile_manager = get_user_profile_manager()
-        
-        # Create default profile if not exists
-        if not os.path.exists(f"user_profiles/{username}_profile.json"):
-            logger.info(LogModule.AUTH, f"Creating default profile for user {_mask_username(username)}")
+        profile_path = os.path.join(
+            profile_manager.profile_dir, f"{username}_profile.json"
+        )
+        if not os.path.exists(profile_path):
+            logger.info(
+                LogModule.AUTH,
+                f"Creating default profile for user {_mask_username(username)} "
+                f"at {profile_path}",
+            )
             profile_manager.create_default_profile(username)
         else:
-            logger.info(LogModule.AUTH, f"User {_mask_username(username)} already has a profile, skipping creation")
+            logger.info(
+                LogModule.AUTH,
+                f"User {_mask_username(username)} already has a profile at "
+                f"{profile_path}, skipping creation",
+            )
         
         # Reset attempts for this IP
         session_manager.reset_login_attempts(client_ip)
@@ -3341,9 +3350,25 @@ async def batch_update_settings(
                     try:
                         if not isinstance(value, dict):
                             raise ValueError("ai_platforms must be a dictionary")
+                        if len(value) == 0:
+                            logger.error(
+                                LogModule.AUTH,
+                                "[AI_PLATFORMS] Refusing empty ai_platforms payload "
+                                "(config-loss guard)",
+                            )
+                            raise HTTPException(
+                                status_code=400,
+                                detail="Refusing to apply empty ai_platforms payload",
+                            )
                         platforms_config = get_platforms_config()
+                        existing_count = len(getattr(platforms_config, "platforms", {}) or {})
                         logger.info(LogModule.AUTH, f"[AI_PLATFORMS] Incoming platforms count: {len(value.keys())}")
                         logger.debug(LogModule.AUTH, f"[AI_PLATFORMS] Incoming platforms keys: {list(value.keys())}")
+                        if existing_count > 0 and len(value) == 0:
+                            raise HTTPException(
+                                status_code=400,
+                                detail="Refusing to wipe existing platforms with empty payload",
+                            )
                         # Merge incoming platforms into existing platforms_config
                         for p_key, p_val in value.items():
                             if not isinstance(p_val, dict):
@@ -3517,16 +3542,27 @@ async def batch_update_settings(
                     if not isinstance(value, dict):
                         raise HTTPException(status_code=400, detail="platform_api_keys must be a dictionary")
                     
-                    # Update each platform key
+                    # Update each platform key.
+                    # Empty keys are allowed only when platform.requires_api_key is False
+                    # (local deployments) or caller sets configured explicitly for clear.
                     for platform, key_data in value.items():
                         if isinstance(key_data, dict):
                             # New format: {key: "...", configured: true}
                             api_key = key_data.get('key', '')
                             configured = key_data.get('configured')
-                            if not secrets_manager.update_platform_api_key(platform, api_key, configured):
+                            allow_clear = None
+                            if not str(api_key or "").strip():
+                                # Explicit clear request, or optional-key platform
+                                allow_clear = True if configured is False else None
+                            if not secrets_manager.update_platform_api_key(
+                                platform,
+                                api_key,
+                                configured,
+                                allow_clear=allow_clear,
+                            ):
                                 raise HTTPException(status_code=500, detail=f"Failed to save API key for platform {platform}")
                         elif isinstance(key_data, str):
-                            # Old format: direct string
+                            # Old format: direct string - empty uses platform requires_api_key
                             if not secrets_manager.update_platform_api_key(platform, key_data):
                                 raise HTTPException(status_code=500, detail=f"Failed to save API key for platform {platform}")
                         else:
@@ -3538,21 +3574,38 @@ async def batch_update_settings(
                         # New format: {key: "...", configured: true}
                         token = value.get('key', '')
                         configured = value.get('configured')
+                        if not str(token or "").strip():
+                            logger.warning(
+                                LogModule.AUTH,
+                                "Skipping empty translator_mineru_token in batch (config-loss guard)",
+                            )
+                            continue
                         if not secrets_manager.update_mineru_token(token, configured):
                             raise HTTPException(status_code=500, detail="Failed to save MinerU token")
                     elif isinstance(value, str):
                         # Old format: direct string
+                        if not value.strip():
+                            logger.warning(
+                                LogModule.AUTH,
+                                "Skipping empty translator_mineru_token string in batch",
+                            )
+                            continue
                         if not secrets_manager.update_mineru_token(value):
                             raise HTTPException(status_code=500, detail="Failed to save MinerU token")
                     else:
                         raise HTTPException(status_code=400, detail="mineru_token must be a string or dict with 'key' field")
                 
                 elif key == 'mineru_local_token':
-                    # Handle MinerU Local token
+                    # Handle MinerU Local token (empty allowed for clear via configured flag)
                     if isinstance(value, dict):
                         # New format: {key: "...", configured: true}
                         token = value.get('key', '')
                         configured = value.get('configured')
+                        if not str(token or "").strip():
+                            # Explicit clear for local optional token
+                            if not secrets_manager.update_mineru_local_token(token, configured):
+                                raise HTTPException(status_code=500, detail="Failed to save MinerU Local token")
+                            continue
                         if not secrets_manager.update_mineru_local_token(token, configured):
                             raise HTTPException(status_code=500, detail="Failed to save MinerU Local token")
                     elif isinstance(value, str):

@@ -328,18 +328,75 @@ class PlatformsConfig:
             
             config_dict = self.get_config_dict()
             target_path = get_config_file_path(config_file)
+            memory_count = len(self.platforms or {})
+
+            # Refuse wiping a non-empty on-disk platforms.json with empty memory
+            if memory_count == 0 and target_path.exists():
+                try:
+                    with open(target_path, "r", encoding="utf-8-sig") as fh:
+                        on_disk = json.load(fh)
+                    disk_platforms = (
+                        on_disk.get("platforms") if isinstance(on_disk, dict) else None
+                    )
+                    disk_count = len(disk_platforms) if isinstance(disk_platforms, dict) else 0
+                except Exception as read_err:
+                    logger.error(
+                        LogModule.CONFIG,
+                        f"Refusing to save empty platforms.json: cannot read "
+                        f"existing file for wipe-guard ({read_err})",
+                    )
+                    return False
+                if disk_count > 0:
+                    logger.error(
+                        LogModule.CONFIG,
+                        f"Refusing to save platforms.json: memory has 0 platforms "
+                        f"but disk has {disk_count} (path={target_path})",
+                    )
+                    return False
             
             # Ensure configs directory exists
             target_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(target_path, 'w', encoding='utf-8') as f:
-                json.dump(config_dict, f, ensure_ascii=False, indent=2)
+
+            # Backup before overwrite
+            if target_path.exists():
+                try:
+                    import shutil
+                    shutil.copy2(target_path, target_path.with_suffix(".json.bak"))
+                except Exception as bak_err:
+                    logger.warning(
+                        LogModule.CONFIG,
+                        f"Failed to write platforms.json.bak: {bak_err}",
+                    )
+
+            import tempfile
+            fd, tmp_path = tempfile.mkstemp(
+                prefix=".platforms_",
+                suffix=".tmp",
+                dir=str(target_path.parent),
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(config_dict, f, ensure_ascii=False, indent=2)
+                os.replace(tmp_path, target_path)
+            except Exception:
+                try:
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+
             # Set appropriate permissions for system directories
             try:
                 if str(target_path).startswith("/etc/"):
                     os.chmod(target_path, 0o640)
             except Exception:
                 pass
-            logger.info(LogModule.CONFIG, f"Platforms configuration saved to: {target_path}")
+            logger.info(
+                LogModule.CONFIG,
+                f"Platforms configuration saved to: {target_path} "
+                f"(platforms={memory_count})",
+            )
             return True
         except Exception as e:
             logger.error(LogModule.CONFIG, f"Failed to save platforms configuration to {target_path}: {e}")
