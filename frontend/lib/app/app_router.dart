@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/app_localizations.dart';
@@ -84,6 +84,13 @@ class AppRouter {
             final isAuth = authState.maybeWhen(
                 authenticated: (_) => true, orElse: () => false,);
             if (isAuth && state.uri.path == loginRoute) return homeRoute;
+            // Web open-source: passwordless for app use, but settings still need login
+            if (kIsWeb &&
+                !isAuth &&
+                (state.uri.path == settingsRoute ||
+                    state.uri.path == setupWizardRoute)) {
+              return loginRoute;
+            }
             return null;
           }
 

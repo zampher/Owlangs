@@ -154,13 +154,31 @@ async def get_current_user(request: Request) -> Optional[User]:
             if session_user is not None:
                 logger.info(LogModule.AUTH, f"[AUTH] Auth disabled but returning session user: {session_user.username}")
                 return session_user
-            logger.info(LogModule.AUTH, "[AUTH] Auth disabled, no session, returning default local user")
+            # Desktop localhost still gets local admin without login.
+            if _is_desktop_localhost(request):
+                logger.info(
+                    LogModule.AUTH,
+                    "[AUTH] Auth disabled, desktop localhost, returning local admin",
+                )
+                return User(
+                    username="local",
+                    display_name="Local User",
+                    email=None,
+                    is_authenticated=True,
+                    role=UserRole.ADMIN,
+                )
+            # Web passwordless: app is usable, but configuration still requires
+            # a real admin login (non-admin local user).
+            logger.info(
+                LogModule.AUTH,
+                "[AUTH] Auth disabled, no session, returning passwordless local user (non-admin)",
+            )
             return User(
                 username="local",
                 display_name="Local User",
                 email=None,
                 is_authenticated=True,
-                role=UserRole.ADMIN
+                role=UserRole.LDAP_USER,
             )
     except Exception as e:
         logger.warning(LogModule.AUTH, f"[AUTH] Failed to check auth_required: {e}")

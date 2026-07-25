@@ -10,20 +10,27 @@ import '../services/config_service.dart';
 import 'auth_provider.dart';
 
 /// Whether the current user can access admin-only UI (Settings, Setup Wizard, etc.).
-/// Desktop: always true (no user management). Web: from backend can_access_admin_settings.
+/// Desktop: always true (no user management).
+/// Web: requires a real login token and backend can_access_admin_settings.
+/// (Passwordless mode still needs admin login for configuration.)
 final FutureProvider<bool> canAccessAdminSettingsProvider =
     FutureProvider<bool>((FutureProviderRef<bool> ref) async {
   ref.watch(authProvider);
   if (!kIsWeb) return true;
   final config = ConfigService();
+  final String? authHeader = config.authorizationHeader;
+  // Without a session token, treat as non-admin even when auth_required=false
+  // (backend may return a passwordless "local" user that is not admin).
+  if (authHeader == null || authHeader.isEmpty) {
+    return false;
+  }
   final baseUrl = AppConfig.baseUrl;
   final dio = Dio(BaseOptions(
     baseUrl: baseUrl,
     connectTimeout: const Duration(seconds: 10),
     headers: <String, dynamic>{
       'Content-Type': 'application/json',
-      if (config.authorizationHeader != null)
-        'Authorization': config.authorizationHeader,
+      'Authorization': authHeader,
     },
   ),);
   try {

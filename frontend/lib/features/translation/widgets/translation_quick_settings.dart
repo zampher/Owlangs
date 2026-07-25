@@ -1202,12 +1202,11 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                   tooltip: l10n.quickSettingsOpenMineruSettings,
                   onPressed: () {
                     if (kIsWeb &&
-                        (ConfigService().authRequired ?? false) &&
                         ref.read(authProvider).maybeWhen(
                           unauthenticated: () => true,
                           orElse: () => false,
                         )) {
-                      context.go(AppRouter.loginRoute);
+                      showAdminRequiredDialog(context);
                       return;
                     }
                     context.push('${AppRouter.settingsRoute}?tab=1');

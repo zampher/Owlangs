@@ -14,7 +14,8 @@ from logger.logger import LogModule
 @dataclass
 class AuthConfig:
     """Authentication configuration"""
-    required: bool = True
+    # Open-source / passwordless default: web works without login; config still needs admin session
+    required: bool = False
     session_timeout: int = 3600
 
 

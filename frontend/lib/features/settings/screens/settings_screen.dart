@@ -12,8 +12,8 @@ import 'ai_platform_settings.dart';
 import 'parsing_engine_settings.dart';
 import 'glossary_settings.dart';
 import 'anonymization_settings.dart';
-import 'user_management_settings.dart';
 // prompts_settings removed: prompt is now controlled per task in Quick Settings
+// user_management_settings removed: open-source edition has no user management UI
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key, this.initialTabIndex});
@@ -37,9 +37,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   late TabController _tabController;
 
   int get _tabCount =>
-      5 +
-      (AppConfig.kEnableFeaturesInDevelopment ? 1 : 0) +
-      (kIsWeb ? 1 : 0);
+      5 + (AppConfig.kEnableFeaturesInDevelopment ? 1 : 0);
 
   @override
   void initState() {
@@ -104,10 +102,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                     text:
                         AppLocalizations.of(context)!.settingsTabsAnonymization,
                   ),
-                if (kIsWeb)
-                  Tab(
-                    text: AppLocalizations.of(context)!.settingsTabsUserManagement,
-                  ),
               ],
             ),
           ),
@@ -123,7 +117,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                 _buildTranslationSettings(),
                 if (AppConfig.kEnableFeaturesInDevelopment)
                   const AnonymizationSettingsScreen(),
-                if (kIsWeb) const UserManagementSettingsScreen(),
               ],
             ),
           ),

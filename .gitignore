@@ -20,6 +20,7 @@ cookies*.txt
 
 # 敏感配置文件 - 包含API密钥等敏感信息
 secrets.json
+secrets.json.bak
 .env
 .env.local
 # Donor registration code generator private key (never commit)
