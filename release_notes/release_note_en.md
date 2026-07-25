@@ -1,5 +1,18 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.5.4.0
+
+### Optimizations
+
+1. **Batch MD export**: When batch-exporting Markdown from task management, nested zip archives are flattened so only the outer zip remains.
+2. **Compare reading**: Import two documents for side-by-side compare reading.
+
+### Bug Fixes
+
+1. **Intermittent config / API key loss**: Fixed occasional loss of configuration and API keys.
+
+---
+
 ## Owlangs 1.5.3.0
 
 ### Optimizations
