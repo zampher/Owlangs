@@ -6,6 +6,7 @@
 
 1. **Batch MD export**: When batch-exporting Markdown from task management, nested zip archives are flattened so only the outer zip remains.
 2. **Compare reading**: Import two documents for side-by-side compare reading.
+3. **Open-source user management**: User management is removed from the open-source edition (kept for Enterprise). The open-source edition still supports Web and can be used without login; Web configuration still requires an administrator login.
 
 ### Bug Fixes
 
