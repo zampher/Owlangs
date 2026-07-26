@@ -1,4 +1,5 @@
 from typing import Dict, Any, Optional
+import json
 
 import httpx
 from logger import unified_logger as logger
@@ -214,12 +215,17 @@ async def _test_paddleocr_connectivity(
                     api_style=api_style if api_style != "unknown" else "sync_infer",
                 )
 
-            resp = await client.get(probe_url, headers=headers, follow_redirects=True)
-            if resp.status_code == 404:
+            # Cloud async: GET /api/v2/ocr/jobs often returns 405 (method not
+            # allowed) even with a bad token, so a GET probe falsely reports
+            # success. Real conversion uses multipart POST — probe the same way.
+            if platform == "paddle" and not (api_key or "").strip():
                 return {
                     "success": False,
-                    "error": f"PaddleOCR API endpoint not found at {probe_url} (HTTP 404). Check the base URL in Settings.",
-                    "message": f"PaddleOCR API endpoint not found at {probe_url} (HTTP 404). Check the base URL in Settings.",
+                    "error": (
+                        "PaddleOCR cloud API key is empty. Configure a valid "
+                        "AI Studio access token before testing."
+                    ),
+                    "message": "PaddleOCR cloud API key is empty",
                 }
 
             if openapi_info.get("has_sync_infer_api") and not openapi_info.get("has_cloud_jobs_api"):
@@ -234,12 +240,75 @@ async def _test_paddleocr_connectivity(
                     api_style="sync_infer",
                 )
 
+            paddle_model = (platform_cfg or {}).get("model") or "PaddleOCR-VL-1.6"
+            if not paddle_model or paddle_model == "default":
+                paddle_model = "PaddleOCR-VL-1.6"
+            file_bytes = build_probe_pdf_bytes()
+            optional_payload = {
+                "useDocOrientationClassify": False,
+                "restructurePages": False,
+            }
+            post_resp = await client.post(
+                probe_url,
+                data={
+                    "model": paddle_model,
+                    "optionalPayload": json.dumps(optional_payload),
+                },
+                files={"file": ("probe.pdf", file_bytes, "application/pdf")},
+                headers=headers,
+            )
+            if post_resp.status_code in (401, 403):
+                return {
+                    "success": False,
+                    "error": (
+                        f"PaddleOCR cloud auth failed at {probe_url} "
+                        f"(HTTP {post_resp.status_code}). The AI Studio access "
+                        f"token is missing, expired, or invalid. "
+                        f"Response: {post_resp.text[:300]}"
+                    ),
+                    "message": (
+                        f"PaddleOCR cloud auth failed "
+                        f"(HTTP {post_resp.status_code})"
+                    ),
+                }
+            if post_resp.status_code == 404:
+                return {
+                    "success": False,
+                    "error": (
+                        f"PaddleOCR API endpoint not found at {probe_url} "
+                        f"(HTTP 404). Check the base URL in Settings."
+                    ),
+                    "message": (
+                        f"PaddleOCR API endpoint not found at {probe_url} "
+                        f"(HTTP 404)."
+                    ),
+                }
+            if post_resp.status_code not in (200, 201, 202):
+                return {
+                    "success": False,
+                    "error": (
+                        f"PaddleOCR cloud job submit failed at {probe_url} "
+                        f"(HTTP {post_resp.status_code}): "
+                        f"{post_resp.text[:500]}"
+                    ),
+                    "message": (
+                        f"PaddleOCR cloud submit failed "
+                        f"(HTTP {post_resp.status_code})"
+                    ),
+                }
+
+            # Auth + endpoint OK; do not wait for the probe job to finish.
             capability = {
                 "capability_level": CAPABILITY_CLOUD_ASYNC,
                 "document_parsing_capable": True,
                 "warning_code": None,
                 "layout_block_labels": [],
             }
+            logger.info(
+                LogModule.AUTH,
+                f"PaddleOCR cloud auth probe OK: platform={platform} "
+                f"model={paddle_model} status={post_resp.status_code}",
+            )
             return _paddle_capability_test_result(
                 platform=platform,
                 base=base,
