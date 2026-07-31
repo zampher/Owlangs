@@ -47,7 +47,7 @@ class AppConfig {
   static Future<bool> resetToDefaultServerUrl() async => setCustomServerUrl(null);
   // App Information
   static const String appName = 'Owlangs';
-  static const String appVersion = '1.5.4.0';
+  static const String appVersion = '1.5.5.0';
   static const String appDescription =
       'Cross-platform document translation application';
 
