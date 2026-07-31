@@ -7,7 +7,7 @@ import base64
 import hashlib
 from datetime import date
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from logger import unified_logger as logger
 from logger.logger import LogModule
@@ -575,6 +575,102 @@ class SecretsManager:
         raw = secrets.get("api_keys", secrets.get("platform_api_keys", {}))
         return raw if isinstance(raw, dict) else {}
 
+    @staticmethod
+    def _entry_api_key(val: Any) -> str:
+        """Normalize api_keys / token entry to a stripped key string."""
+        if isinstance(val, dict):
+            return str(val.get("key") or "").strip()
+        if isinstance(val, str):
+            return val.strip()
+        return ""
+
+    def _build_api_key_save_summary(
+        self,
+        disk_secrets: Optional[Dict[str, Any]],
+        incoming_secrets: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Compare on-disk vs incoming keys for one save.
+
+        Platforms with requires_api_key=False are optional: clearing them is not loss.
+        Returns a dict used for a single summary log line.
+        """
+        disk_map = self._api_keys_map(disk_secrets or {})
+        incoming_map = self._api_keys_map(incoming_secrets or {})
+        platforms = set(disk_map.keys()) | set(incoming_map.keys())
+
+        required_kept: List[str] = []
+        required_lost: List[str] = []
+        optional_cleared: List[str] = []
+        newly_set: List[str] = []
+
+        for platform in sorted(platforms):
+            disk_key = self._entry_api_key(disk_map.get(platform))
+            incoming_key = self._entry_api_key(incoming_map.get(platform))
+            optional = self._platform_allows_empty_api_key(platform)
+
+            if disk_key and incoming_key:
+                required_kept.append(platform)
+            elif disk_key and not incoming_key:
+                if optional:
+                    optional_cleared.append(platform)
+                else:
+                    required_lost.append(platform)
+            elif (not disk_key) and incoming_key:
+                newly_set.append(platform)
+
+        def _token_state(token_keys: Tuple[str, ...]) -> str:
+            disk_tok = ""
+            inc_tok = ""
+            for name in token_keys:
+                if disk_secrets:
+                    disk_tok = disk_tok or self._entry_api_key(disk_secrets.get(name))
+                inc_tok = inc_tok or self._entry_api_key(incoming_secrets.get(name))
+            if disk_tok and inc_tok:
+                return "kept"
+            if disk_tok and not inc_tok:
+                return "lost"
+            if (not disk_tok) and inc_tok:
+                return "set"
+            return "empty"
+
+        mineru = _token_state(("mineru_token", "translator_mineru_token"))
+        mineru_local = _token_state(("mineru_local_token",))
+
+        status = "LOSS" if required_lost or mineru == "lost" or mineru_local == "lost" else "OK"
+        return {
+            "status": status,
+            "required_kept": required_kept,
+            "required_lost": required_lost,
+            "optional_cleared": optional_cleared,
+            "newly_set": newly_set,
+            "mineru": mineru,
+            "mineru_local": mineru_local,
+            "configured_keys": self._count_configured_api_keys(incoming_secrets or {}),
+        }
+
+    def _log_api_key_save_summary(
+        self,
+        disk_secrets: Optional[Dict[str, Any]],
+        incoming_secrets: Dict[str, Any],
+    ) -> None:
+        """Emit exactly one summary log for API key integrity after a secrets save."""
+        summary = self._build_api_key_save_summary(disk_secrets, incoming_secrets)
+        msg = (
+            f"[SECRETS-KEY-CHECK] status={summary['status']} "
+            f"path={self.secrets_file} "
+            f"configured_keys={summary['configured_keys']} "
+            f"required_kept={len(summary['required_kept'])} "
+            f"required_lost={summary['required_lost']} "
+            f"optional_cleared={summary['optional_cleared']} "
+            f"newly_set={summary['newly_set']} "
+            f"mineru={summary['mineru']} mineru_local={summary['mineru_local']}"
+        )
+        if summary["status"] == "LOSS":
+            logger.warning(LogModule.CONFIG, msg)
+        else:
+            logger.info(LogModule.CONFIG, msg)
+
     def save_secrets(self, secrets: Dict[str, Any]) -> bool:
         """
         Save sensitive configuration to file
@@ -597,8 +693,8 @@ class SecretsManager:
                 )
                 return False
 
-            incoming_keys = self._count_configured_api_keys(secrets or {})
             incoming_map = self._api_keys_map(secrets or {})
+            disk_dict: Optional[Dict[str, Any]] = None
             if self.secrets_file.exists():
                 try:
                     with open(self.secrets_file, "r", encoding="utf-8-sig") as fh:
@@ -624,13 +720,6 @@ class SecretsManager:
                         f"(path={self.secrets_file})",
                     )
                     return False
-                if disk_keys > 0 and incoming_keys < disk_keys:
-                    logger.warning(
-                        LogModule.CONFIG,
-                        f"Saving secrets.json with fewer configured keys: "
-                        f"disk={disk_keys} incoming={incoming_keys} "
-                        f"path={self.secrets_file}",
-                    )
 
             # Ensure directory exists
             self.secrets_file.parent.mkdir(parents=True, exist_ok=True)
@@ -670,12 +759,9 @@ class SecretsManager:
             self._secrets_cache = secrets
             self._load_failed = False
             self._load_failed_reason = None
-            
-            logger.info(
-                LogModule.CONFIG,
-                f"Sensitive configuration saved to: {self.secrets_file} "
-                f"(configured_keys={incoming_keys})",
-            )
+
+            # One summary log: API key integrity (required vs optional platforms)
+            self._log_api_key_save_summary(disk_dict, secrets or {})
             return True
             
         except Exception as e:

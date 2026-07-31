@@ -120,6 +120,63 @@ class SecretsWipeGuardTests(unittest.TestCase):
             self.assertFalse(ok)
             self.assertEqual(secrets_path.read_text(encoding="utf-8"), "{not-json")
 
+    def test_key_check_summary_detects_required_loss(self) -> None:
+        from backend.config.secrets_manager import SecretsManager
+
+        mgr = SecretsManager.__new__(SecretsManager)
+        mgr.secrets_file = Path("secrets.json")
+        disk = {
+            "api_keys": {
+                "deepseek": {"key": "sk-keep", "configured": True},
+                "ollama": {"key": "local", "configured": True},
+            },
+            "translator_mineru_token": {"key": "mt", "configured": True},
+        }
+        incoming = {
+            "api_keys": {
+                "deepseek": {"key": "", "configured": False},
+                "ollama": {"key": "", "configured": False},
+            },
+            "translator_mineru_token": {"key": "mt", "configured": True},
+        }
+        with patch.object(
+            SecretsManager,
+            "_platform_allows_empty_api_key",
+            side_effect=lambda p: p == "ollama",
+        ):
+            summary = mgr._build_api_key_save_summary(disk, incoming)
+        self.assertEqual(summary["status"], "LOSS")
+        self.assertEqual(summary["required_lost"], ["deepseek"])
+        self.assertEqual(summary["optional_cleared"], ["ollama"])
+        self.assertEqual(summary["mineru"], "kept")
+
+    def test_key_check_summary_ok_when_optional_cleared(self) -> None:
+        from backend.config.secrets_manager import SecretsManager
+
+        mgr = SecretsManager.__new__(SecretsManager)
+        mgr.secrets_file = Path("secrets.json")
+        disk = {
+            "api_keys": {
+                "deepseek": {"key": "sk-keep", "configured": True},
+                "ollama": {"key": "local", "configured": True},
+            }
+        }
+        incoming = {
+            "api_keys": {
+                "deepseek": {"key": "sk-keep", "configured": True},
+                "ollama": {"key": "", "configured": False},
+            }
+        }
+        with patch.object(
+            SecretsManager,
+            "_platform_allows_empty_api_key",
+            side_effect=lambda p: p == "ollama",
+        ):
+            summary = mgr._build_api_key_save_summary(disk, incoming)
+        self.assertEqual(summary["status"], "OK")
+        self.assertEqual(summary["required_lost"], [])
+        self.assertEqual(summary["optional_cleared"], ["ollama"])
+
 
 class PlatformsWipeGuardTests(unittest.TestCase):
     def test_refuse_empty_memory_over_disk(self) -> None:
