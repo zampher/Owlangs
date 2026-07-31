@@ -85,6 +85,19 @@ def test_sanitize_diff_command_maps_to_mathrm_d():
     assert r"\diff" not in out
 
 
+def test_sanitize_argmin_argmax_map_to_operatorname():
+    """Regression: mitex 0.2.6 fails \\argmin/\\argmax with unknown variable: argmin."""
+    from layout.pdf_renderer.typst_overlay.emitter import _sanitize_typst_markdown_core
+
+    _sanitize_typst_markdown_core.cache_clear()
+    text = r"$\theta_d' \gets \argmin_{\theta_d} F_d'(\theta_d)$ and $\argmax_x f(x)$"
+    out = sanitize_typst_markdown_for_compile(text)
+    assert r"\argmin" not in out
+    assert r"\argmax" not in out
+    assert r"\operatorname{argmin}" in out
+    assert r"\operatorname{argmax}" in out
+
+
 def test_sanitize_partial_maps_to_unicode_for_mitex():
     """Regression: mitex 0.2.6 fails \\partial with unknown variable: diff."""
     text = r"边际成本，即 ($\partial$ $F_{d}$/$\partial$ $C_{d}$) ，VPP"
