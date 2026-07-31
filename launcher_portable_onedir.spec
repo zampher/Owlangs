@@ -71,7 +71,10 @@ hiddenimports = [
     'backend.utils.language_detection_utils', 'backend.utils.language_detector',
     'backend.utils.latex_formula_checker', 'backend.utils.latex_repair_llm',
     'backend.utils.latex_repair_payload', 'backend.utils.latex_formula_batch_repair',
-    'backend.utils.math_md_normalize', 'backend.utils.docx_md_normalize',
+    'backend.utils.math_md_normalize',
+    # Reflow PDF: merge orphan equation numbers into $$...$$ as \\tag
+    'backend.utils.equation_tag_merge', 'utils.equation_tag_merge',
+    'backend.utils.docx_md_normalize',
     'backend.utils.docx_algorithm_latex_wrap', 'backend.utils.docx_math_fragment_check',
     'backend.utils.docx_math_fragment_llm_repair', 'backend.utils.llm_client',
     'backend.utils.extract_segments_debug', 'backend.utils.bilingual_export_utils',

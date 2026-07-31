@@ -136,6 +136,9 @@ hiddenimports = [
     'backend.utils.latex_repair_payload', 'backend.utils.latex_formula_batch_repair',
     # Pandoc/DOCX math normalize & fragment repair (formula export pipeline)
     'backend.utils.math_md_normalize',
+    # Reflow PDF: merge orphan equation numbers (1)/(2) into $$...$$ as \\tag (markdown_rebuild / normalize)
+    'backend.utils.equation_tag_merge',
+    'utils.equation_tag_merge',
     'backend.utils.docx_md_normalize',
     'backend.utils.docx_algorithm_latex_wrap',
     'backend.utils.docx_math_fragment_check',

@@ -1,5 +1,22 @@
 # Spec文件更新日志
 
+## 2026-07-31 — 重排 PDF 公式编号合并（equation_tag_merge）
+
+未提交改动新增 `backend/utils/equation_tag_merge.py`：MinerU 将公式体与右侧编号 `(1)` 拆成独立片段时，按 bbox / 紧邻段落合并为 `$$...\tag{n}...$$`，供重排 PDF（Pandoc）与 MD 重建。由 `markdown_rebuild.py`、`math_md_normalize.py` lazy import。已在 `lite.spec`、`launcher_portable_onedir.spec`、`macos.spec` 补充：
+
+- `backend.utils.equation_tag_merge` / `utils.equation_tag_merge` — 公式编号合并与 `\tag` 注入
+
+**同批改动无需新增 spec 条目的模块：**
+
+- `backend/utils/math_md_normalize.py` — 已有 hiddenimport；调用 orphan 段落合并、tex fence unwrap
+- `backend/utils/format_convert_utils.py` — 已有 hiddenimport；重排 PDF 保持 `$$...\tag...$$`（不 promote 为 equation，避免 sanitize 加倍反斜杠）
+- `backend/utils/document_rebuild/markdown_rebuild.py` — 已有 `backend.utils.document_rebuild`；layout/text 重建路径合并编号
+- `backend/app/services/download/download_service.py` — 已有下载服务；修订重排 PDF 先走 pandoc 再校验 layout
+- `backend/layout/pdf_renderer/typst_overlay/mitex_math_safety.py` — 已有 hiddenimport；原位 PDF 不走 equation_tag_merge
+- `backend/test_*.py` — 测试，不打包
+
+---
+
 ## 2026-07-17 — 中文原位 PDF 正文首行缩进（cjk_paragraph_indent）
 
 未提交改动新增 `backend/layout/pdf_renderer/typst_overlay/cjk_paragraph_indent.py`，由 `renderer.py` 顶层导入（目标语为中文时为正文设置 `first_line_indent_em=2`；caption/标题等不缩进）。已在 `lite.spec`、`launcher_portable_onedir.spec`、`macos.spec` 补充：

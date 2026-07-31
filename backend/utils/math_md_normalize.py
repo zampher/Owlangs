@@ -18,6 +18,9 @@ from typing import Optional
 
 from logger import unified_logger as logger
 from logger.logger import LogModule
+from layout.pdf_renderer.typst_overlay.math_span_utils import (
+    transform_latex_bracket_delimiters,
+)
 
 # ```tex / ```latex (or ~~~): when body is exactly one $$...$$, unwrap for Pandoc math (PDF/DOCX pipeline).
 TEX_LATEX_FENCE_LANGS = frozenset({"tex", "latex"})
@@ -51,10 +54,28 @@ def extract_display_math_inner_from_tex_fence_body(body: str) -> Optional[str]:
     return inner if inner else None
 
 
-def unwrap_tex_latex_fences_to_display_math(md: str) -> str:
-    """Replace ```tex / ```latex / ~~~ blocks whose body is a single $$...$$ with bare display math.
+def tex_fence_body_contains_markdown_math(body: str) -> bool:
+    """True when fence body has Markdown math that must not stay inside a code fence.
 
-    Pandoc treats fenced blocks as code; $$ inside ```tex is not math until the fence is removed.
+    Covers display $$...$$, inline $...$, and TeX-style \\( \\) / \\[ \\] delimiters.
+    """
+    t = body or ""
+    if "$$" in t or "$" in t:
+        return True
+    if r"\(" in t or r"\[" in t:
+        return True
+    return False
+
+
+def unwrap_tex_latex_fences_to_display_math(md: str) -> str:
+    """Remove ```tex / ```latex fences so Pandoc/preview can treat math as math.
+
+    Cases:
+    - Body is exactly one $$...$$ → emit bare display math (same as before).
+    - Body contains inline/display math (e.g. algorithm with $a_C$) → emit bare body.
+    - Body has no math markers → keep the fence (plain TeX source as code).
+
+    Pandoc treats fenced blocks as code; $ / $$ inside ```tex are not math until fences are removed.
     """
     if not md or ("```" not in md and "~~~" not in md):
         return md
@@ -91,6 +112,17 @@ def unwrap_tex_latex_fences_to_display_math(md: str) -> str:
                 out.append("$$\n")
                 i = j + 1
                 continue
+            if tex_fence_body_contains_markdown_math(body):
+                prev = body.strip()[:120] + ("..." if len(body.strip()) > 120 else "")
+                logger.info(
+                    LogModule.RESTOR,
+                    f"[MD-NORMALIZE] Unwrapped tex/latex fence with inline/mixed math (preview={prev!r})",
+                )
+                out.append(body)
+                if body and not body.endswith("\n"):
+                    out.append("\n")
+                i = j + 1
+                continue
             out.extend(lines[i : j + 1])
             i = j + 1
             continue
@@ -114,16 +146,115 @@ def normalize_md_math_for_pandoc_export(md: str) -> str:
     """
     if not md:
         return md
+    from utils.equation_tag_merge import merge_orphan_equation_number_paragraphs
+
     md = unwrap_tex_latex_fences_to_display_math(md)
+    # MinerU often splits formula and right-side (n) into separate paragraphs.
+    md = merge_orphan_equation_number_paragraphs(md)
     return _normalize_outside_fences(md, _normalize_math_segment_plain)
 
 
 def _normalize_math_segment_plain(text: str) -> str:
     """Normalize one contiguous region outside code fences."""
-    t = _normalize_tag_spacing(text)
+    # Pandoc MD often treats spaced \\( ... \\) as literal parentheses, leaving
+    # \\overline outside math → Missing $ inserted. Convert to $...$ / $$...$$ first.
+    t = transform_latex_bracket_delimiters(text)
+    t = _normalize_tag_spacing(t)
+    t = _tighten_inline_dollar_math(t)
+    t = _collapse_overescaped_commands_in_inline_math(t)
     t = _normalize_display_dollar_blocks(t)
     t = _normalize_bracket_display_blocks(t)
     return t
+
+
+def _collapse_overescaped_commands_in_inline_math(text: str) -> str:
+    """Inside inline $...$, collapse \\\\cmd → \\cmd.
+
+    Row-break ``\\\\`` is invalid in inline math; over-escaped commands like
+    ``\\\\mathbf`` become ``\\\\`` + ``mathbf`` and XeLaTeX errors with
+    ``There's no line here to end``. Display ``$$...$$`` is unchanged (``\\\\``
+    is valid there for matrices/align).
+    """
+    if not text or "$" not in text:
+        return text
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    cmd_re = re.compile(r"\\\\([a-zA-Z]+)")
+
+    while i < n:
+        if text.startswith("$$", i):
+            end = text.find("$$", i + 2)
+            if end < 0:
+                out.append(text[i:])
+                break
+            out.append(text[i : end + 2])
+            i = end + 2
+            continue
+        ch = text[i]
+        if ch == "$" and (i == 0 or text[i - 1] != "\\"):
+            j = i + 1
+            while j < n and text[j] != "$" and text[j] != "\n":
+                j += 1
+            if j < n and text[j] == "$" and not text.startswith("$$", j):
+                body = text[i + 1 : j]
+                fixed = cmd_re.sub(r"\\\1", body)
+                out.append("$")
+                out.append(fixed)
+                out.append("$")
+                i = j + 1
+                continue
+            out.append(ch)
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _tighten_inline_dollar_math(text: str) -> str:
+    """Strip spaces inside inline $...$ so Pandoc treats them as math.
+
+    Pandoc requires a non-space after the opening $ and before the closing $.
+    Spaced forms like ``$ \\\\overline{x} $`` (common in OCR/LLM tables) are
+    emitted as ``\\\\$ \\\\overline{x} \\\\$``, then XeLaTeX fails with
+    ``Missing $ inserted`` because ``\\\\overline`` is outside math mode.
+    Display ``$$...$$`` is left untouched.
+    """
+    if not text or "$" not in text:
+        return text
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    while i < n:
+        if text.startswith("$$", i):
+            end = text.find("$$", i + 2)
+            if end < 0:
+                out.append(text[i:])
+                break
+            out.append(text[i : end + 2])
+            i = end + 2
+            continue
+        ch = text[i]
+        if ch == "$" and (i == 0 or text[i - 1] != "\\"):
+            j = i + 1
+            while j < n and text[j] != "$" and text[j] != "\n":
+                j += 1
+            if j < n and text[j] == "$" and not text.startswith("$$", j):
+                body = text[i + 1 : j]
+                stripped = body.strip()
+                if stripped:
+                    out.append("$")
+                    out.append(stripped)
+                    out.append("$")
+                    i = j + 1
+                    continue
+            out.append(ch)
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
 
 
 def _normalize_tag_spacing(text: str) -> str:

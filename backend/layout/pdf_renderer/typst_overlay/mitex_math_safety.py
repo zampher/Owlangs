@@ -26,19 +26,52 @@ _BARE_NOT_RE = re.compile(r"^\\not\s*$")
 
 
 def strip_math_delimiters(text: str) -> str:
-    """Remove outer $ / $$ / \\(\\) / \\[\\] wrappers when present."""
+    """Remove outer $ / $$ / \\(\\) / \\[\\] wrappers when present.
+
+    Peels repeatedly so nested display wrappers (e.g. ``$$\\n$$ x \\n$$`` from
+    layout text that already includes ``$$`` plus a second wrap) collapse to
+    bare LaTeX. Also drops a leftover leading ``$$`` when the trailing pair was
+    consumed by an earlier peel.
+    """
     body = str(text or "").strip()
     if not body:
         return ""
-    if body.startswith("$$") and body.endswith("$$") and body.count("$$") >= 2:
-        return body[2:-2].strip()
-    if body.startswith(r"\[") and body.endswith(r"\]"):
-        return body[2:-2].strip()
-    if body.startswith(r"\(") and body.endswith(r"\)"):
-        return body[2:-2].strip()
-    if body.startswith("$") and body.endswith("$") and not body.startswith("$$"):
-        return body[1:-1].strip()
+    # Bound iterations so malformed input cannot loop forever.
+    for _ in range(8):
+        prev = body
+        if body.startswith("$$") and body.endswith("$$") and len(body) >= 4 and body.count("$$") >= 2:
+            body = body[2:-2].strip()
+            if body != prev:
+                continue
+        if body.startswith(r"\[") and body.endswith(r"\]") and len(body) >= 4:
+            body = body[2:-2].strip()
+            if body != prev:
+                continue
+        if body.startswith(r"\(") and body.endswith(r"\)") and len(body) >= 4:
+            body = body[2:-2].strip()
+            if body != prev:
+                continue
+        if body.startswith("$") and body.endswith("$") and not body.startswith("$$") and len(body) >= 2:
+            body = body[1:-1].strip()
+            if body != prev:
+                continue
+        # Orphan leading $$ after peeling a nested outer pair.
+        if body.startswith("$$"):
+            rest = body[2:].lstrip()
+            if rest and not rest.startswith("$"):
+                body = rest
+                if body != prev:
+                    continue
+        break
     return body
+
+
+def format_display_math_block(content: str) -> str:
+    """Wrap LaTeX as a markdown display-math block after stripping outer delimiters."""
+    body = strip_math_delimiters(content)
+    if not body:
+        return ""
+    return f"$$\n{body}\n$$"
 
 
 def _brace_depth_balanced(body: str) -> bool:

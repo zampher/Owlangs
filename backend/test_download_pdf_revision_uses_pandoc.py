@@ -5,6 +5,9 @@
 Regression: revision PDF download must not call layout PDFGenerator when
 ENABLE_LAYOUT_PDF_GENERATION is False (default). See download_service.py
 revision branch and _pandoc_pdf_file_response_from_md.
+
+Also: markdown_based revision path must honor renderer_type=pandoc before
+requiring layout_document (reflow PDF without MinerU layout).
 """
 
 import ast
@@ -38,6 +41,38 @@ class TestDownloadPdfRevisionPandocPath(unittest.TestCase):
             "_pandoc_pdf_file_response_from_md",
             names,
             msg="Module-level helper _pandoc_pdf_file_response_from_md must exist.",
+        )
+
+    def test_markdown_revision_pandoc_before_layout_gate(self) -> None:
+        """Reflow PDF with revisions must not 404 when layout_document is missing."""
+        path = (
+            Path(__file__).resolve().parent
+            / "app"
+            / "services"
+            / "download"
+            / "download_service.py"
+        )
+        source = path.read_text(encoding="utf-8")
+        marker = (
+            "Reflow (pandoc) and overlay (typst) first — pandoc does not need layout_document."
+        )
+        start = source.find(marker)
+        self.assertGreater(start, 0, msg="markdown revision reflow/layout order comment missing")
+        region = source[start : start + 4000]
+        pandoc_idx = region.find('renderer_type == "pandoc"')
+        layout_gate_idx = region.find(
+            "PDF file detected but layout_document not available"
+        )
+        self.assertGreater(pandoc_idx, 0, msg="pandoc branch missing after reflow marker")
+        self.assertGreater(
+            layout_gate_idx,
+            0,
+            msg="layout gate missing after reflow marker",
+        )
+        self.assertLess(
+            pandoc_idx,
+            layout_gate_idx,
+            msg="renderer_type=pandoc must be handled before layout_document gate",
         )
 
 

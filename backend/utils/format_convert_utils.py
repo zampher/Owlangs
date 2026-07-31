@@ -1070,11 +1070,17 @@ def _sanitize_md_for_pdf(md_content: str) -> str:
     # $...$ requires at least one \command inside to avoid matching ordinary
     # dollar signs (e.g. price $5, regex end \$) that happen to have another
     # $ somewhere later in the same line.
+    #
+    # Do NOT require a non-letter before opening $ — algorithm text uses
+    # CER$(...), f$(x), etc. Blocking those left \mathbf outside math and
+    # doubled it to \\mathbf → XeLaTeX "There's no line here to end".
+    # Closing $ must not be followed by a digit (Pandoc currency rule).
+    # Optional spaces inside "$ ... $" cover pipe-table cells from OCR/LLM.
     _math_re = re.compile(
-        r'(?<!\\)\$\$[\s\S]*?(?<!\\)\$\$'                              # $$...$$
-        r'|(?<!\w)(?<!\\)\$(?!\s)[^$\n]*?(?:\\[a-zA-Z]+)[^$\n]*?(?<!\s)(?<!\\)\$(?!\w)'  # $...$ with \cmd
-        r'|\\\([^)]*\\\)'                                               # \(...\)
-        r'|\\\[[^\]]*\\\]'                                             # \[...\]
+        r'(?<!\\)\$\$[\s\S]*?(?<!\\)\$\$'  # $$...$$
+        r'|(?<!\\)\$\s*[^$\n]*?(?:\\[a-zA-Z]+)[^$\n]*?\s*(?<!\\)\$(?![0-9])'  # $...$ with \cmd
+        r'|\\\([^)]*\\\)'  # \(...\)
+        r'|\\\[[^\]]*\\\]'  # \[...\]
     )
 
     _parts: list[str] = []
@@ -1263,6 +1269,10 @@ def convert_md_to_pdf(
         logger.debug(LogModule.RESTOR, "[PDF-EXPORT] convert_md_to_pdf: empty md_content, skip")
         return False
     md_content = normalize_md_math_for_pandoc_export(md_content)
+    # Keep tagged formulas as $$...\\tag{n}...$$. Do NOT rewrite to
+    # \\begin{equation}: convert_md_to_pdf uses markdown without raw_tex, and
+    # _sanitize_md_for_pdf only protects $$/$ math — equation envs get
+    # backslash-doubled and XeLaTeX fails with Missing $.
     pandoc_path = _get_pandoc_path()
     if not pandoc_path:
         logger.error(

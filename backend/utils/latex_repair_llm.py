@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from utils.llm_client import LLMMessage, LLMConfig, llm_chat
+from utils.math_md_normalize import unwrap_tex_latex_fences_to_display_math
 
 
 @dataclass
@@ -192,6 +193,7 @@ Task: Return a corrected **LaTeX snippet** that:
 3. Uses proper LaTeX math for formulas (`$...$`, `$$...$$`, `\\(...\\)`, or `\\[...\\]`) and does **not** turn formulas into plain descriptive text.
 4. Uses consistent math delimiters without mixing them incorrectly. **Preserve the existing math delimiter style whenever it is already correct** (e.g. keep `$$...$$` as `$$...$$`; keep `\\[...\\]` as `\\[...\\]`; do not rewrite one correct style into another).
 5. Preserves the original structural style (including algorithm lines, any leading line numbers like `1:`, separators such as `|`, and line breaks) as much as possible. Do **not** add Markdown constructs such as lists, headings, or `**bold**`.
+5b. **CRITICAL — No Markdown code fences**: Never wrap the whole snippet (or algorithm/pseudo-code with inline `$...$`) in Markdown fences such as ```tex or ```latex. Keep `$...$` / `$$...$$` as bare Markdown math so Pandoc and the preview renderer treat them as formulas, not verbatim code.
 6. Do **not** introduce new LaTeX environments that are not already present in the snippet (for example do not wrap the code in `\\begin{{algorithm}}...\\end{{algorithm}}` or other algorithm/align environments if they were not in the input).
 7. If the snippet contains line numbers, normalize them so there is at most **one line number per logical step** and numbering is monotonic. Do not invent new steps.
 8. If the snippet represents pseudo-code, apply consistent indentation based on control-flow structure (if/while/for/else/end). Do not guess a programming language.
@@ -205,7 +207,7 @@ Task: Return a corrected **LaTeX snippet** that:
 
 {extra_guidance}
 
-Output **only** the corrected LaTeX snippet (pure LaTeX/text lines, no Markdown fences, no explanations).
+Output **only** the corrected snippet as plain lines (no ``` fences wrapping the answer, no explanations).
 """
 
     # Append user's custom guidance if provided
@@ -261,6 +263,9 @@ def repair_latex_snippet_with_llm(req: LatexRepairRequest) -> LatexRepairResult:
         fixed = llm_chat(messages, llm_cfg).strip()
         if not fixed:
             fixed = req.original_md_snippet
+        # LLM often wraps answers in ```tex even when told not to; strip so
+        # inline $...$ stays Markdown math (not verbatim code).
+        fixed = unwrap_tex_latex_fences_to_display_math(fixed)
         return LatexRepairResult(
             fixed_md_snippet=fixed,
             notes="LLM repair executed successfully.",

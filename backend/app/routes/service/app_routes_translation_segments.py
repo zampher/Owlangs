@@ -1135,12 +1135,21 @@ async def get_translation_segments_api(
     _enrich_translation_segments_with_detected_reasons(task_id, response_data)
 
     # Attach latex_flags / has_latex so frontend can show PDF-compat check for LaTeX segments.
+    # Also unwrap ```tex fences around mixed algorithm+inline math so preview renders $...$ as math.
+    from utils.math_md_normalize import unwrap_tex_latex_fences_to_display_math
     from utils.segment_latex_flags import attach_latex_flags_to_segment
     segments_list = response_data.get("segments", []) if isinstance(response_data, dict) else []
     for seg in segments_list:
-        if isinstance(seg, dict):
-            text = seg.get("modified_text") or seg.get("target_text") or seg.get("source_text") or ""
-            attach_latex_flags_to_segment(seg, text=text, recompute=True)
+        if not isinstance(seg, dict):
+            continue
+        for _fence_key in ("modified_text", "target_text"):
+            _fence_val = seg.get(_fence_key)
+            if isinstance(_fence_val, str) and ("```" in _fence_val or "~~~" in _fence_val):
+                _unwrapped = unwrap_tex_latex_fences_to_display_math(_fence_val)
+                if _unwrapped != _fence_val:
+                    seg[_fence_key] = _unwrapped
+        text = seg.get("modified_text") or seg.get("target_text") or seg.get("source_text") or ""
+        attach_latex_flags_to_segment(seg, text=text, recompute=True)
 
     # Enrich segments with layout_block_bbox on demand (for segments that have
     # layout_block_indices but lack stored bbox, e.g. from older tasks).

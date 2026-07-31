@@ -4,6 +4,7 @@
 """Tests for mitex math safety heuristics."""
 
 from layout.pdf_renderer.typst_overlay.mitex_math_safety import (
+    format_display_math_block,
     is_mitex_safe_latex,
     mitex_unsafe_reason,
     should_fallback_mitex_equation_to_image,
@@ -14,6 +15,38 @@ from layout.pdf_renderer.typst_overlay.mitex_math_safety import (
 def test_strip_math_delimiters_inline_and_display():
     assert strip_math_delimiters("$x$") == "x"
     assert strip_math_delimiters("$$x = 1$$") == "x = 1"
+
+
+def test_strip_math_delimiters_nested_display_from_layout_ocr():
+    """Layout OCR already embeds $$; rebuild must not leave a leftover leading $$."""
+    nested = "$$\n$$ \\max F_{C}=\\sum_{t=0}^{T_{C}} \\left(\\pi_{G,t}G_{t}\\right) $$\n$$"
+    assert strip_math_delimiters(nested) == (
+        r"\max F_{C}=\sum_{t=0}^{T_{C}} \left(\pi_{G,t}G_{t}\right)"
+    )
+
+
+def test_format_display_math_block_does_not_double_wrap():
+    already_wrapped = "$$ \\max F_{C}=x $$"
+    out = format_display_math_block(already_wrapped)
+    assert out.startswith("$$\n")
+    assert out.endswith("\n$$")
+    assert out.count("$$") == 2
+    assert r"\max F_{C}=x" in out
+
+
+def test_format_display_math_block_nested_layout_content():
+    """Regression: pandoc reflow PDF Missing $ inserted from nested $$ wraps."""
+    nested = (
+        "$$\n"
+        " $$ \\max F_{C}=\\sum_{t=0}^{T_{C}}"
+        "\\left(\\pi_{G,t}G_{t}+\\pi_{R,t}R_{t}+\\pi_{C,t}C_{t}\\right)"
+        "-\\sum_{t=0}^{T_{C}}\\left(b g_{t}\\right) $$ \n"
+        "$$"
+    )
+    out = format_display_math_block(nested)
+    assert out.count("$$") == 2
+    assert "\\emph" not in out
+    assert r"\max F_{C}" in out
 
 
 def test_begin_array_is_unsafe():

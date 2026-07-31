@@ -21,6 +21,7 @@ from layout.layout_group_pair_utils import (
     is_layout_companion_block,
     resolve_layout_group_pairs_for_block,
 )
+from layout.pdf_renderer.typst_overlay.mitex_math_safety import format_display_math_block
 from logger import unified_logger as logger
 from logger.logger import LogModule
 
@@ -1098,9 +1099,10 @@ def _build_layout_markdown(
                     chunks,
                 )
             elif equation_content:
-                # Render as text (LaTeX formula)
-                # Wrap in math block for markdown rendering
-                equation_markdown = f"$$\n{equation_content}\n$$"
+                # Render as text (LaTeX formula). Strip any existing $$ / $ before
+                # wrapping so layout OCR that already embeds delimiters is not
+                # double-wrapped (breaks Pandoc/XeLaTeX reflow PDF).
+                equation_markdown = format_display_math_block(equation_content)
                 logger.info(LogModule.LAYOUT, "[LAYOUT] Interline equation rendered as text: "
                     f"page={block.page_index}, block_index={block_index}, "
                     f"content_preview={equation_content[:120]!r}"

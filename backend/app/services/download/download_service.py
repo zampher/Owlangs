@@ -4815,30 +4815,7 @@ class DownloadService:
                                         detail="PDF file not found. PDF generation may have failed during translation. Please check the task logs."
                                     )
                             
-                            # For PDF files, only use layout-based generation (high-fidelity)
-                            original_filename = task_state.get("original_filename", "")
-                            is_pdf_file = original_filename.lower().endswith('.pdf')
-                        
-                            if is_pdf_file:
-                                # Check if layout_document is available (required for PDF files)
-                                layout_doc = task_state.get("layout_document")
-                                has_layout = False
-                                if layout_doc is not None:
-                                    try:
-                                        from layout.base import LayoutDocument as _LD
-                                        if isinstance(layout_doc, _LD):
-                                            has_layout = True
-                                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Layout document available for PDF generation")
-                                    except Exception:
-                                        pass
-                            
-                                if not has_layout:
-                                    logger.error(LogModule.EXPORT, f"[DOWNLOAD] PDF file detected but layout_document not available. Cannot generate high-fidelity PDF.")
-                                    raise HTTPException(
-                                        status_code=404,
-                                        detail="High-fidelity PDF generation requires layout information, which is not available for this task. Please ensure the file was processed with a layout-aware converter (e.g., MinerU)."
-                                    )
-                        
+                            # Reflow (pandoc) and overlay (typst) first — pandoc does not need layout_document.
                             if renderer_type == "typst_overlay":
                                 return await _typst_overlay_pdf_response(
                                     task_state, task_id, file_stem,
@@ -4867,6 +4844,29 @@ class DownloadService:
                                     equation_format,
                                     table_body_format,
                                 )
+
+                            # High-fidelity / legacy layout path requires layout_document for PDF sources.
+                            original_filename = task_state.get("original_filename", "")
+                            is_pdf_file = original_filename.lower().endswith('.pdf')
+
+                            if is_pdf_file:
+                                layout_doc = task_state.get("layout_document")
+                                has_layout = False
+                                if layout_doc is not None:
+                                    try:
+                                        from layout.base import LayoutDocument as _LD
+                                        if isinstance(layout_doc, _LD):
+                                            has_layout = True
+                                            logger.info(LogModule.EXPORT, f"[DOWNLOAD] Layout document available for PDF generation")
+                                    except Exception:
+                                        pass
+
+                                if not has_layout:
+                                    logger.error(LogModule.EXPORT, f"[DOWNLOAD] PDF file detected but layout_document not available. Cannot generate high-fidelity PDF.")
+                                    raise HTTPException(
+                                        status_code=404,
+                                        detail="High-fidelity PDF generation requires layout information, which is not available for this task. Please ensure the file was processed with a layout-aware converter (e.g., MinerU)."
+                                    )
 
                             # Revision PDF: legacy layout path (ReportLab/HTML) when enabled.
                             # Layout ReportLab/HTML path only runs when ENABLE_LAYOUT_PDF_GENERATION is True (see pdf_generator.py).
@@ -5587,12 +5587,53 @@ class DownloadService:
                         auto_rotation_degrees=auto_rot_degrees,
                     )
 
-                # For PDF files, only use layout-based generation (high-fidelity, no fallback to HTML-to-PDF)
                 original_filename = task_state.get("original_filename", "")
                 is_pdf_file = original_filename.lower().endswith('.pdf')
-            
+
+                # Pandoc reflow PDF does not require layout_document.
+                if is_pdf_file and renderer_type == "pandoc":
+                    rebuilt_md = task_state.pop("_rebuilt_md_for_pdf", None)
+                    if rebuilt_md and rebuilt_md.strip():
+                        return _pandoc_pdf_file_response_from_md(
+                            task_state,
+                            task_id,
+                            rebuilt_md,
+                            equation_format,
+                            table_body_format,
+                        )
+                    try:
+                        rebuilt_doc = rebuild_markdown_document_from_segments(
+                            task_state,
+                            file_stem=task_state.get("original_filename_stem"),
+                            equation_format=equation_format,
+                            table_body_format=table_body_format,
+                            bilingual_export=bilingual_enabled,
+                            target_first=target_first,
+                        )
+                        if rebuilt_doc and getattr(rebuilt_doc, "content", None):
+                            raw = rebuilt_doc.content
+                            md_text = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+                            if md_text.strip():
+                                return _pandoc_pdf_file_response_from_md(
+                                    task_state,
+                                    task_id,
+                                    md_text,
+                                    equation_format,
+                                    table_body_format,
+                                )
+                    except Exception as pdf_seg_err:
+                        logger.error(
+                            LogModule.EXPORT,
+                            f"[DOWNLOAD] PDF on-demand: rebuild+pandoc failed task_id={task_id}: {pdf_seg_err}",
+                            exc_info=True,
+                        )
+                    raise HTTPException(
+                        status_code=500,
+                        detail="PDF export requires rebuilt Markdown from translation segments. Ensure the task has completed translation and try again.",
+                    )
+
                 if is_pdf_file:
-                    # Check if layout_document is available (required for PDF files)
+                    # High-fidelity path: layout_document is required.
                     layout_doc = task_state.get("layout_document")
                     has_layout = False
                     if layout_doc is not None:
@@ -5603,15 +5644,14 @@ class DownloadService:
                                 logger.info(LogModule.EXPORT, f"[DOWNLOAD] Layout document available for high-fidelity PDF generation")
                         except Exception:
                             pass
-                
+
                     if not has_layout:
                         logger.error(LogModule.EXPORT, f"[DOWNLOAD] PDF file detected but layout_document not available. Cannot generate high-fidelity PDF.")
                         raise HTTPException(
                             status_code=404,
                             detail="High-fidelity PDF generation requires layout information, which is not available for this task. Please ensure the file was processed with a layout-aware converter (e.g., MinerU)."
                         )
-                
-                    # No pre-generated PDF: always generate via Pandoc+XeLaTeX so layout/format errors surface for fixing.
+
                     # Prefer pandoc path (MD → XeLaTeX → PDF) when we have rebuilt MD from segments
                     rebuilt_md = task_state.pop("_rebuilt_md_for_pdf", None)
                     if rebuilt_md and rebuilt_md.strip():

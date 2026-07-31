@@ -87,6 +87,82 @@ Para after.
         self.assertIn("$$\n", out)
         self.assertIn("\n$$\n", out)
 
+    def test_tighten_spaced_inline_math_for_pandoc(self):
+        """Pandoc rejects '$ \\\\cmd $'; strip inner spaces so math is recognized."""
+        src = (
+            "| 符号 | 描述 |\n| --- | --- |\n"
+            r"| $ \overline{x}, \underline{x} $ | 上下界 |"
+            "\n"
+            r"其中，$ \pi_{G,t} $ 和 $ \pi_{R,t} $ 分别表示价格。"
+            "\n"
+        )
+        out = normalize_md_math_for_pandoc_export(src)
+        self.assertIn(r"$\overline{x}, \underline{x}$", out)
+        self.assertIn(r"$\pi_{G,t}$", out)
+        self.assertIn(r"$\pi_{R,t}$", out)
+        self.assertNotIn(r"$ \overline", out)
+        self.assertNotIn(r"$ \pi", out)
+
+    def test_tighten_inline_math_preserves_display_blocks(self):
+        src = "before\n$$\n x = 1 \n$$\nafter $ y $"
+        out = normalize_md_math_for_pandoc_export(src)
+        self.assertIn("$$\n x = 1 \n$$", out)
+        self.assertIn("$y$", out)
+
+    def test_collapse_overescaped_command_in_inline_math(self):
+        src = r"CER$(a_C, a_R, a_E, \\mathbf{CR}, F_d)$;"
+        out = normalize_md_math_for_pandoc_export(src)
+        self.assertIn(r"CER$(a_C, a_R, a_E, \mathbf{CR}, F_d)$", out)
+        self.assertNotIn(r"\\mathbf", out)
+
+    def test_collapse_does_not_touch_display_matrix_breaks(self):
+        src = "$$\n\\begin{matrix}a \\\\ b\\end{matrix}\n$$"
+        out = normalize_md_math_for_pandoc_export(src)
+        self.assertIn(r"a \\ b", out)
+
+    def test_spaced_paren_math_converted_to_tight_dollars(self):
+        """Spaced \\( \\cmd \\) becomes Pandoc-safe $\\cmd$ (not literal parentheses)."""
+        src = (
+            "| 符号 | 描述 |\n| --- | --- |\n"
+            r"| \( \overline{x}, \underline{x} \) | 上下界 |"
+            "\n"
+            r"记为 \( R_{m} \) 和 \( R_{d} \)。"
+            "\n"
+        )
+        out = normalize_md_math_for_pandoc_export(src)
+        self.assertIn(r"$\overline{x}, \underline{x}$", out)
+        self.assertIn(r"$R_{m}$", out)
+        self.assertIn(r"$R_{d}$", out)
+        self.assertNotIn(r"\(", out)
+        self.assertNotIn(r"\)", out)
+
+    def test_unwrap_tex_fence_with_algorithm_and_inline_math(self):
+        """DOCX LLM repair sometimes wraps whole algorithm in ```tex; strip fence for $ math."""
+        from utils.math_md_normalize import unwrap_tex_latex_fences_to_display_math
+
+        src = (
+            "```tex\n"
+            "Require: $a_C, a_R, a_E$\n"
+            "1: Initialize $\\theta_d$\n"
+            "```\n"
+        )
+        out = unwrap_tex_latex_fences_to_display_math(src)
+        self.assertNotIn("```", out)
+        self.assertIn("$a_C, a_R, a_E$", out)
+        self.assertIn(r"$\theta_d$", out)
+
+        # Exact display math fence still unwraps to $$ ... $$
+        display = "```latex\n$$\nx^2\n$$\n```\n"
+        out_d = unwrap_tex_latex_fences_to_display_math(display)
+        self.assertIn("$$\n", out_d)
+        self.assertIn("x^2", out_d)
+        self.assertNotIn("```", out_d)
+
+        # Plain TeX source without markdown math stays fenced
+        plain = "```tex\n\\documentclass{article}\n```\n"
+        out_p = unwrap_tex_latex_fences_to_display_math(plain)
+        self.assertIn("```tex", out_p)
+
 
 if __name__ == "__main__":
     unittest.main()

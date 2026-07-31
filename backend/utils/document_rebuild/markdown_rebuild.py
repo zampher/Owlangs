@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any, List, Tuple
 
 from ir.markdown_document import MarkdownDocument
 from layout.block_types import STRUCTURAL_BLOCK_TYPES, TITLE, TABLE_BODY, CHART_BODY
+from layout.pdf_renderer.typst_overlay.mitex_math_safety import format_display_math_block
 from logger import unified_logger as logger
 from logger.logger import LogModule
 from utils.translation_segments import get_translation_segments
@@ -345,12 +346,17 @@ def _rebuild_markdown_from_layout_segments(
     )
 
     # Collect all target texts and separators (use modified_text if available, otherwise use target_text)
+    from utils.math_md_normalize import unwrap_tex_latex_fences_to_display_math
+
     target_texts = []
     separators = []  # separators[i] is the separator between target_texts[i] and target_texts[i+1]
     modified_segments_count = 0
     for i, segment in enumerate(segments):
         # Priority: modified_text > target_text
         target_text = segment.get("modified_text") or segment.get("target_text", "")
+        # Strip mistaken ```tex/```latex fences so inline $...$ renders as math (not code)
+        if isinstance(target_text, str) and target_text:
+            target_text = unwrap_tex_latex_fences_to_display_math(target_text)
         is_modified = segment.get("modified", False) or segment.get("retry_count", 0) > 0
         if is_modified:
             modified_segments_count += 1
@@ -617,15 +623,12 @@ def _rebuild_markdown_from_layout_segments(
                                     # Use image format
                                     filename = eq_image_path.split('/')[-1].split('\\')[-1]
                                     formatted = f"![Equation]({filename})"
-                                elif equation_format == "latex" and eq_content:
-                                    # Use layout LaTeX wrapped for Pandoc/PDF (do not use translated plain text)
-                                    formatted = f"$$\n{eq_content}\n$$"
-                                elif equation_format == "text" and eq_content:
-                                    # For layout equations we trust eq_content as pure LaTeX and
-                                    # keep it as a block formula. Do NOT run mixed_text_to_md here,
-                                    # otherwise commands like \min, \leq, \tag will be split and
-                                    # wrapped with extra '$',破坏原始 LaTeX。
-                                    formatted = f"$$\n{eq_content}\n$$"
+                                elif equation_format in ("latex", "text") and eq_content:
+                                    # Layout OCR often already includes $$...$$; strip before
+                                    # re-wrapping so Pandoc/XeLaTeX does not see nested display
+                                    # math (Missing $ inserted / broken \emph from _).
+                                    # Prefer layout LaTeX over translated prose for equations.
+                                    formatted = format_display_math_block(eq_content)
                                 # If format doesn't match available data, keep original target_text
 
                     # Mixed text + LaTeX in non-equation blocks (text, table_body, etc.)
@@ -710,6 +713,40 @@ def _rebuild_markdown_from_layout_segments(
     formatted_texts = reordered_formatted_texts
     target_idx_to_segment_idx = reordered_target_idx_to_segment_idx
     separators = reordered_separators
+
+    # Merge orphan equation numbers (1)/(2)/… into same-row display math as \\tag{n}
+    # so reflow PDF/DOCX does not put the tag on the next line.
+    from utils.equation_tag_merge import merge_equation_number_tags_for_segments
+
+    segs_for_fmt: List[Optional[Dict[str, Any]]] = []
+    for i in range(len(formatted_texts)):
+        seg_idx = target_idx_to_segment_idx.get(i, -1)
+        matched = None
+        for seg in segments:
+            if seg.get("segment_index") == seg_idx:
+                matched = seg
+                break
+        segs_for_fmt.append(matched)
+    formatted_texts, _eq_tag_merges = merge_equation_number_tags_for_segments(
+        formatted_texts, segs_for_fmt
+    )
+    if _eq_tag_merges:
+        from utils.equation_tag_merge import parse_equation_number_label
+
+        compact_texts: List[str] = []
+        compact_seg_map: Dict[int, int] = {}
+        for i, ft in enumerate(formatted_texts):
+            seg = segs_for_fmt[i] if i < len(segs_for_fmt) else None
+            orig = ""
+            if isinstance(seg, dict):
+                orig = seg.get("modified_text") or seg.get("target_text") or ""
+            if not (ft or "").strip() and parse_equation_number_label(orig):
+                continue
+            compact_seg_map[len(compact_texts)] = target_idx_to_segment_idx.get(i, -1)
+            compact_texts.append(ft)
+        formatted_texts = compact_texts
+        target_idx_to_segment_idx = compact_seg_map
+        separators = ["\n\n"] * max(0, len(formatted_texts) - 1)
     
     # Bilingual export: interleave source and target for text/title blocks, and for
     # table/equation blocks when rendered in text format (HTML/LaTeX). Image-rendered
@@ -897,14 +934,20 @@ def _rebuild_markdown_from_text_segments(
         Rebuilt markdown content string
     """
     from utils.bilingual_export_utils import build_bilingual_segment_text
+    from utils.equation_tag_merge import merge_equation_number_tags_for_segments
+    from utils.math_md_normalize import unwrap_tex_latex_fences_to_display_math
 
     # Collect all target texts and separators (use modified_text if available, otherwise use target_text)
     target_texts = []
     separators = []  # separators[i] is the separator between target_texts[i] and target_texts[i+1]
+    text_segments: List[Optional[Dict[str, Any]]] = []
     modified_segments_count = 0
     for i, segment in enumerate(segments):
         # Priority: modified_text > target_text
         target_text = segment.get("modified_text") or segment.get("target_text", "")
+        # Strip mistaken ```tex/```latex fences so inline $...$ renders as math (not code)
+        if isinstance(target_text, str) and target_text:
+            target_text = unwrap_tex_latex_fences_to_display_math(target_text)
         is_modified = segment.get("modified", False) or segment.get("retry_count", 0) > 0
         if is_modified:
             modified_segments_count += 1
@@ -914,6 +957,7 @@ def _rebuild_markdown_from_text_segments(
         if target_text or is_cleared:
             # Include segment even if target_text is empty (for cleared segments)
             target_texts.append(target_text if not is_cleared else "")
+            text_segments.append(segment)
             # Get separator after this segment (if available)
             # This separator is between current segment and next segment
             if i < len(segments) - 1:  # Not the last segment
@@ -925,6 +969,27 @@ def _rebuild_markdown_from_text_segments(
     if not target_texts:
         logger.warning(LogModule.RESTOR,"No target texts found in segments")
         return ""
+
+    from utils.equation_tag_merge import parse_equation_number_label
+
+    _orig_eq_labels = [
+        parse_equation_number_label(
+            ((s.get("modified_text") or s.get("target_text") or "") if s else "")
+        )
+        for s in text_segments
+    ]
+    target_texts, _eq_merges = merge_equation_number_tags_for_segments(
+        target_texts, text_segments
+    )
+    if _eq_merges:
+        kept_texts: List[str] = []
+        for ti, tt in enumerate(target_texts):
+            # Drop number slots that were folded into \\tag; keep other empties (cleared).
+            if not (tt or "").strip() and _orig_eq_labels[ti]:
+                continue
+            kept_texts.append(tt)
+        target_texts = kept_texts
+        separators = ["\n\n"] * max(0, len(target_texts) - 1)
 
     # Apply bilingual interleaving if requested
     if bilingual_export:

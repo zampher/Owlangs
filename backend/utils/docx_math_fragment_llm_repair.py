@@ -308,6 +308,15 @@ def repair_docx_math_fragments_with_llm(
         fixed = (fixed_raw or "").strip()
         notes = notes or ""
 
+        # Defense in depth: strip ```tex fences that would hide inline/display math
+        # in preview and Pandoc (see unwrap_tex_latex_fences_to_display_math).
+        try:
+            from utils.math_md_normalize import unwrap_tex_latex_fences_to_display_math
+
+            fixed = unwrap_tex_latex_fences_to_display_math(fixed).strip()
+        except Exception:  # noqa: BLE001
+            pass
+
         if not fixed or fixed == (original or "").strip():
             repair_details.append(
                 {
