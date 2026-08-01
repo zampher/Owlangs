@@ -1,6 +1,8 @@
 // Copyright 2025 QinHan
 // SPDX-License-Identifier: MPL-2.0
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -497,7 +499,11 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         // Next / Save & Exit button
         FilledButton(
           onPressed:
-              isLast ? () => _saveAndExit(aiSettings, aiNotifier) : _nextStep,
+              isLast
+                  ? () {
+                      unawaited(_saveAndExit(aiSettings, aiNotifier));
+                    }
+                  : _nextStep,
           child: Text(
               isLast ? l10n.setupWizardSaveAndExit : l10n.setupWizardNextStep,),
         ),
@@ -2743,6 +2749,23 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           result['success'] == 'true' ||
           result['success'] == 1;
       if (!mounted) return;
+      // Persist on success so Quick Settings / translation use the same Key+model.
+      if (success) {
+        final AIPlatformSettings settings =
+            ref.read(aiPlatformSettingsProvider);
+        final AIPlatformInfo? platform =
+            settings.platforms[_selectedPlatformKey!];
+        if (platform != null) {
+          await _saveLlmConfig(
+            settings,
+            notifier,
+            platform,
+            showSnackBar: false,
+          );
+          await notifier.setDefaultPlatform(_selectedPlatformKey!);
+        }
+      }
+      if (!mounted) return;
       setState(() {
         _llmLastTestSuccess = success;
         _llmTestResult = success
@@ -2766,12 +2789,12 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     }
   }
 
-  void _saveLlmConfig(
+  Future<void> _saveLlmConfig(
     AIPlatformSettings settings,
     AIPlatformSettingsNotifier notifier,
     AIPlatformInfo platform, {
     bool showSnackBar = true,
-  }) {
+  }) async {
     if (_selectedPlatformKey == null) return;
     final AIPlatformInfo current =
         settings.platforms[_selectedPlatformKey!] ?? platform;
@@ -2800,7 +2823,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       apiProtocol: _llmApiProtocol,
       requiresApiKey: _llmHasApiKey,
     );
-    notifier.updatePlatformConfig(_selectedPlatformKey!, updated);
+    await notifier.updatePlatformConfig(_selectedPlatformKey!, updated);
     if (showSnackBar && mounted) {
       final String savedMessage = AppLocalizations.of(context)!.aiPlatformSave;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2813,10 +2836,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   }
 
   /// Saves LLM then MinerU config from current form state, then exits wizard.
-  void _saveAndExit(
+  Future<void> _saveAndExit(
     AIPlatformSettings settings,
     AIPlatformSettingsNotifier notifier,
-  ) {
+  ) async {
     if (_selectedPlatformKey != null) {
       // Ensure LLM form reflects the actual platform config before saving.
       // The form is normally synced via addPostFrameCallback when the LLM step
@@ -2829,10 +2852,15 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       final AIPlatformInfo? platform =
           settings.platforms[_selectedPlatformKey!];
       if (platform != null) {
-        _saveLlmConfig(settings, notifier, platform, showSnackBar: false);
+        await _saveLlmConfig(
+          settings,
+          notifier,
+          platform,
+          showSnackBar: false,
+        );
       }
       // Save the selected platform as default
-      notifier.setDefaultPlatform(_selectedPlatformKey!);
+      await notifier.setDefaultPlatform(_selectedPlatformKey!);
     }
     // Save config for the selected parsing platform
     if (_isPaddleParsingPlatform(_selectedParsingPlatform)) {

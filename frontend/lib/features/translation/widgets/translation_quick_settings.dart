@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1477,6 +1479,8 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
           children: <Widget>[
             _buildPrimaryAIPlatform(context, ref),
             const SizedBox(height: 4),
+            const _QuickSettingsLlmModelRow(),
+            const SizedBox(height: 4),
             _buildTemperatureSlider(context, settings, notifier, ref),
           ],
         ),
@@ -1770,7 +1774,8 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
               onChanged: (double value) {
                 final AIPlatformSettingsNotifier aiPlatformNotifier =
                     ref.read(aiPlatformSettingsProvider.notifier);
-                final String currentPlatform = aiPlatformSettings.defaultPlatform;
+                final String currentPlatform =
+                    aiPlatformSettings.defaultPlatform;
                 final AIPlatformInfo? platformInfo =
                     aiPlatformSettings.platforms[currentPlatform];
                 notifier.updateTemperature(
@@ -1781,6 +1786,258 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
                 );
               },
             ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Model name + List button (one row), above temperature in quick settings.
+class _QuickSettingsLlmModelRow extends ConsumerStatefulWidget {
+  const _QuickSettingsLlmModelRow();
+
+  @override
+  ConsumerState<_QuickSettingsLlmModelRow> createState() =>
+      _QuickSettingsLlmModelRowState();
+}
+
+class _QuickSettingsLlmModelRowState
+    extends ConsumerState<_QuickSettingsLlmModelRow> {
+  late final TextEditingController _modelController;
+  late final FocusNode _modelFocusNode;
+  bool _loadingModels = false;
+  String? _syncedPlatformKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _modelController = TextEditingController();
+    _modelFocusNode = FocusNode();
+    _modelFocusNode.addListener(() {
+      if (!_modelFocusNode.hasFocus) {
+        unawaited(_persistModelIfChanged());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _modelFocusNode.dispose();
+    _modelController.dispose();
+    super.dispose();
+  }
+
+  void _syncControllerFromPlatform(AIPlatformSettings settings) {
+    final platformKey = settings.defaultPlatform;
+    final model = settings.platforms[platformKey]?.model ?? '';
+    final platformChanged = _syncedPlatformKey != platformKey;
+    if (platformChanged) {
+      _syncedPlatformKey = platformKey;
+    }
+    // Skip overwrite while editing; still refresh after platform switch or
+    // when provider model arrives asynchronously and the field is idle.
+    if (!platformChanged && _modelFocusNode.hasFocus) {
+      return;
+    }
+    if (_modelController.text != model) {
+      _modelController.text = model;
+    }
+  }
+
+  Future<void> _persistModelIfChanged() async {
+    final settings = ref.read(aiPlatformSettingsProvider);
+    final platformKey = settings.defaultPlatform;
+    final current = settings.platforms[platformKey];
+    if (current == null) {
+      return;
+    }
+    final model = _modelController.text.trim();
+    if (model.isEmpty || model == current.model) {
+      return;
+    }
+    final notifier = ref.read(aiPlatformSettingsProvider.notifier);
+    await notifier.updatePlatformConfig(
+      platformKey,
+      current.copyWith(model: model),
+    );
+  }
+
+  Future<void> _loadModels() async {
+    final l10n = AppLocalizations.of(context)!;
+    final settings = ref.read(aiPlatformSettingsProvider);
+    final platformKey = settings.defaultPlatform;
+    final info = settings.platforms[platformKey];
+    if (info == null) {
+      return;
+    }
+    final baseUrl = info.url.trim();
+    if (baseUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.aiPlatformPleaseEnterApiUrlFirst),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    if (info.requiresApiKey && !info.isConfigured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.aiPlatformPleaseEnterApiKeyFirst),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _loadingModels = true;
+    });
+    try {
+      final result = await ConfigService().listPlatformModels(
+        platformKey,
+        baseUrl,
+        '', // backend uses stored secrets
+        apiProtocol: info.apiProtocol,
+      );
+      if (!mounted) {
+        return;
+      }
+      if (result['success'] == true) {
+        final models = (result['models'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            <String>[];
+        if (models.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(l10n.aiPlatformNoModelsFound),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        } else {
+          await _showModelSelectionDialog(models, l10n);
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result['error']?.toString() ?? l10n.aiPlatformFailedToLoadModels,
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.aiPlatformErrorLoadingModels(e.toString())),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingModels = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showModelSelectionDialog(
+    List<String> models,
+    AppLocalizations l10n,
+  ) async {
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.aiPlatformSelectModel),
+        content: SizedBox(
+          width: 400,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: models.length,
+            itemBuilder: (context, index) {
+              final model = models[index];
+              final isSelected = model == _modelController.text.trim();
+              return ListTile(
+                title: Text(model),
+                selected: isSelected,
+                onTap: () => Navigator.of(dialogContext).pop(model),
+              );
+            },
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(l10n.aiPlatformCancel),
+          ),
+        ],
+      ),
+    );
+    if (selected == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _modelController.text = selected;
+    });
+    await _persistModelIfChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final aiPlatformSettings = ref.watch(aiPlatformSettingsProvider);
+    _syncControllerFromPlatform(aiPlatformSettings);
+    ref.listen<AIPlatformSettings>(aiPlatformSettingsProvider, (prev, next) {
+      if (prev?.defaultPlatform != next.defaultPlatform) {
+        _syncedPlatformKey = null;
+      }
+      _syncControllerFromPlatform(next);
+    });
+
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: TextFormField(
+            controller: _modelController,
+            focusNode: _modelFocusNode,
+            style: const TextStyle(fontSize: 12),
+            decoration: InputDecoration(
+              labelText: l10n.aiPlatformModel,
+              hintText: l10n.aiPlatformModelHint,
+              border: const OutlineInputBorder(),
+              labelStyle: const TextStyle(fontSize: 12),
+              hintStyle: const TextStyle(fontSize: 11),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              isDense: true,
+            ),
+            onFieldSubmitted: (_) {
+              unawaited(_persistModelIfChanged());
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton.icon(
+          onPressed: _loadingModels ? null : _loadModels,
+          icon: _loadingModels
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.search, size: 16),
+          label: Text(l10n.aiPlatformList),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            minimumSize: const Size(0, 36),
+            textStyle: const TextStyle(fontSize: 12),
           ),
         ),
       ],

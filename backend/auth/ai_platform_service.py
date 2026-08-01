@@ -535,86 +535,70 @@ async def test_ai_platform_connectivity(
     if platform in ('paddle', 'paddle_local'):
         return await _test_paddleocr_connectivity(base_url, api_key or '', platform)
 
-    # LLM platforms: use models list API for connectivity test (no token consumption)
+    # LLM platforms: always probe with a minimal generation request using the
+    # configured model (closer to real translation than GET /models alone).
+    model_name = (model_name or "").strip()
+    if not model_name:
+        err = (
+            "Model name is required for LLM connectivity test. "
+            "Set a model in settings (or use List Models) and retry."
+        )
+        return {"success": False, "error": err, "message": err}
+
     result: Dict[str, Any] = {}
 
     try:
         # Disable proxy for local/remote direct connections
         async with httpx.AsyncClient(timeout=float(test_connect_timeout), proxy=None, mounts={'http://': None, 'https://': None}) as client:
             if platform == 'anthropic':
-                # Anthropic: use /v1/models endpoint (beta) or fallback to minimal request
+                # Anthropic Messages API with configured model (minimal tokens).
                 headers = {
                     "Content-Type": "application/json",
                     "x-api-key": api_key,
                     "anthropic-version": "2023-06-01",
                 }
-                # Try models endpoint first (no token consumption)
-                try:
-                    models_resp = await client.get(f"{base_url}/v1/models", headers=headers, timeout=float(test_request_timeout))
-                    if models_resp.status_code == 200:
-                        result["success"] = True
-                        result["message"] = "Anthropic API connection successful (models endpoint)"
-                        return result
-                except Exception:
-                    pass
-                # Fallback: minimal API call with max_tokens=1 to minimize consumption
                 payload = {
                     "model": model_name,
                     "max_tokens": 1,
                     "messages": [{"role": "user", "content": "Hi"}],
                 }
-                resp = await client.post(f"{base_url}/messages", json=payload, headers=headers)
+                logger.info(
+                    LogModule.AUTH,
+                    f"[TEST_AI_PLATFORM] {platform_type} chat probe via /messages model={model_name!r}",
+                )
+                resp = await client.post(
+                    f"{base_url.rstrip('/')}/messages",
+                    json=payload,
+                    headers=headers,
+                    timeout=float(test_request_timeout),
+                )
 
             elif platform == 'google':
-                # Google: use /v1/models endpoint to list available models
+                # Google generateContent with configured model (minimal tokens).
                 headers = {"Content-Type": "application/json"}
-                models_url = f"{base_url}/models?key={api_key}"
-                try:
-                    models_resp = await client.get(models_url, headers=headers, timeout=float(test_request_timeout))
-                    if models_resp.status_code == 200:
-                        result["success"] = True
-                        result["message"] = "Google AI connection successful (models endpoint)"
-                        # Try to detect max tokens if requested
-                        if detect_max_tokens:
-                            try:
-                                detected_max = await detect_max_tokens_limit(platform_type, base_url, model_name, api_key, requires_api_key=requires_api_key)
-                                if detected_max:
-                                    result["max_tokens"] = detected_max
-                                    result["message"] += f" (max_tokens: {detected_max})"
-                            except Exception as e:
-                                logger.debug(LogModule.AUTH, f"[TEST_AI_PLATFORM] Failed to detect max_tokens: {e}")
-                        return result
-                except Exception:
-                    pass
-                # Fallback: minimal request
                 payload = {
                     "contents": [{"parts": [{"text": "Hi"}]}],
                     "generationConfig": {"maxOutputTokens": 1},
                 }
+                logger.info(
+                    LogModule.AUTH,
+                    f"[TEST_AI_PLATFORM] {platform_type} chat probe via generateContent model={model_name!r}",
+                )
                 resp = await client.post(
-                    f"{base_url}/models/{model_name}:generateContent?key={api_key}",
+                    f"{base_url.rstrip('/')}/models/{model_name}:generateContent?key={api_key}",
                     json=payload,
                     headers=headers,
+                    timeout=float(test_request_timeout),
                 )
 
             elif platform == 'ollama':
-                # Ollama: use /api/tags to list local models (no token consumption)
+                # Ollama native chat with configured model (not /api/tags alone).
                 # Strip OpenAI-style path prefixes (/v1, /api/v1) from base_url.
-                # Ollama native API serves /api/tags and /api/chat at the server root.
                 _ollama_base = base_url.rstrip('/')
                 for _suffix in ('/v1', '/api/v1', '/api'):
                     if _ollama_base.endswith(_suffix):
                         _ollama_base = _ollama_base[:-len(_suffix)]
                         break
-                try:
-                    tags_resp = await client.get(f"{_ollama_base}/api/tags", timeout=float(test_request_timeout))
-                    if tags_resp.status_code == 200:
-                        result["success"] = True
-                        result["message"] = "Ollama connection successful (tags endpoint)"
-                        return result
-                except Exception:
-                    pass
-                # Fallback: minimal chat request
                 payload = {
                     "model": model_name,
                     "messages": [{"role": "user", "content": "Hi"}],
@@ -622,107 +606,43 @@ async def test_ai_platform_connectivity(
                     "options": {"num_predict": 1},
                 }
                 headers = {"Content-Type": "application/json"}
-                resp = await client.post(f"{_ollama_base}/api/chat", json=payload, headers=headers)
-
-            elif platform == 'local':
-                # Local (OpenAI-compatible): use /v1/models endpoint
-                headers = {"Content-Type": "application/json"}
-                if requires_api_key and api_key and api_key.strip():
-                    headers["Authorization"] = f"Bearer {api_key}"
-                try:
-                    models_resp = await client.get(f"{base_url}/models", headers=headers, timeout=float(test_request_timeout))
-                    if models_resp.status_code == 200:
-                        result["success"] = True
-                        result["message"] = "Local API connection successful (models endpoint)"
-                        # Try to detect max tokens if requested
-                        if detect_max_tokens:
-                            try:
-                                detected_max = await detect_max_tokens_limit(platform_type, base_url, model_name, api_key, requires_api_key=requires_api_key)
-                                if detected_max:
-                                    result["max_tokens"] = detected_max
-                                    result["message"] += f" (max_tokens: {detected_max})"
-                            except Exception as e:
-                                logger.debug(LogModule.AUTH, f"[TEST_AI_PLATFORM] Failed to detect max_tokens: {e}")
-                        return result
-                except Exception:
-                    pass
-                # Fallback: minimal request with max_tokens=1
-                payload = {
-                    "model": model_name,
-                    "messages": [{"role": "user", "content": "Hi"}],
-                    "max_tokens": 1,
-                    "stream": False,
-                }
-                resp = await client.post(f"{base_url}/chat/completions", json=payload, headers=headers)
+                logger.info(
+                    LogModule.AUTH,
+                    f"[TEST_AI_PLATFORM] {platform_type} chat probe via /api/chat model={model_name!r}",
+                )
+                resp = await client.post(
+                    f"{_ollama_base}/api/chat",
+                    json=payload,
+                    headers=headers,
+                    timeout=float(test_request_timeout),
+                )
 
             else:
-                # Default: OpenAI-compatible cloud (DeepSeek, OpenAI, etc.)
-                # Use /v1/models endpoint (no token consumption)
+                # OpenAI-compatible (DeepSeek, OpenAI, local, OpenRouter, etc.):
+                # Always POST chat/completions with configured model.
+                # Do not treat GET /models success as sufficient — key may work
+                # while the selected model is unavailable/deprecated.
                 headers = {"Content-Type": "application/json"}
                 if requires_api_key and api_key and api_key.strip():
                     headers["Authorization"] = f"Bearer {api_key}"
-                
-                # Special handling for platforms with public /models endpoint (e.g., OpenRouter)
-                # These platforms return model list without authentication, so we need to
-                # verify the API key by making an actual chat request
-                skip_models_endpoint = platform in ("openrouter",)
-                
-                if not skip_models_endpoint:
-                    try:
-                        models_resp = await client.get(f"{base_url}/models", headers=headers, timeout=float(test_request_timeout))
-                        if models_resp.status_code == 200:
-                            # Validate response content - some platforms return 200 with error
-                            try:
-                                models_data = models_resp.json()
-                                # Check for Baidu-style error response
-                                if isinstance(models_data, dict) and models_data.get("error_code"):
-                                    error_msg = models_data.get("error_msg", "Unknown error")
-                                    logger.info(
-                                        LogModule.AUTH,
-                                        f"[TEST_AI_PLATFORM] {platform_type} /models returned error_code={models_data.get('error_code')}: {error_msg}",
-                                    )
-                                    # Don't return success, fall through to chat/completions test
-                                else:
-                                    # Check for valid OpenAI-style model list
-                                    if isinstance(models_data, dict) and "data" in models_data:
-                                        result["success"] = True
-                                        result["message"] = f"{platform_type} connection successful (models endpoint)"
-                                        # Try to detect max tokens if requested
-                                        if detect_max_tokens:
-                                            try:
-                                                detected_max = await detect_max_tokens_limit(platform_type, base_url, model_name, api_key, requires_api_key=requires_api_key)
-                                                if detected_max:
-                                                    result["max_tokens"] = detected_max
-                                                    result["message"] += f" (max_tokens: {detected_max})"
-                                            except Exception as e:
-                                                logger.debug(LogModule.AUTH, f"[TEST_AI_PLATFORM] Failed to detect max_tokens: {e}")
-                                        return result
-                                    else:
-                                        # Response doesn't look like a valid model list
-                                        # Fall through to chat/completions test to verify key
-                                        logger.debug(
-                                            LogModule.AUTH,
-                                            f"[TEST_AI_PLATFORM] {platform_type} /models response doesn't contain 'data' field, falling back to chat test",
-                                        )
-                            except Exception:
-                                # Invalid JSON response, fall through to chat/completions test
-                                pass
-                    except Exception:
-                        pass
-                else:
-                    logger.debug(
-                        LogModule.AUTH,
-                        f"[TEST_AI_PLATFORM] {platform_type} has public /models endpoint, skipping to chat/completions test",
-                    )
-                
-                # Fallback: minimal request with max_tokens=1
                 payload = {
                     "model": model_name,
                     "messages": [{"role": "user", "content": "Hi"}],
                     "max_tokens": 1,
                     "stream": False,
                 }
-                resp = await client.post(f"{base_url}/chat/completions", json=payload, headers=headers)
+                chat_url = f"{base_url.rstrip('/')}/chat/completions"
+                logger.info(
+                    LogModule.AUTH,
+                    f"[TEST_AI_PLATFORM] {platform_type} chat probe via "
+                    f"{chat_url} model={model_name!r}",
+                )
+                resp = await client.post(
+                    chat_url,
+                    json=payload,
+                    headers=headers,
+                    timeout=float(test_request_timeout),
+                )
 
         if resp.status_code == 200:
             # Validate response content - some platforms (e.g., Baidu) return 200 with error_code
@@ -759,7 +679,27 @@ async def test_ai_platform_connectivity(
                 # Not JSON or can't parse, assume success
                 pass
             result["success"] = True
-            result["message"] = result.get("message", "AI platform connection test successful")
+            result["message"] = (
+                f"{platform_type} connection successful "
+                f"(chat probe, model={model_name})"
+            )
+            if detect_max_tokens:
+                try:
+                    detected_max = await detect_max_tokens_limit(
+                        platform_type,
+                        base_url,
+                        model_name,
+                        api_key,
+                        requires_api_key=requires_api_key,
+                    )
+                    if detected_max:
+                        result["max_tokens"] = detected_max
+                        result["message"] += f" (max_tokens: {detected_max})"
+                except Exception as e:
+                    logger.debug(
+                        LogModule.AUTH,
+                        f"[TEST_AI_PLATFORM] Failed to detect max_tokens: {e}",
+                    )
             return result
         else:
             error_text = resp.text
