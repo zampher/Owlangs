@@ -1478,9 +1478,9 @@ class TranslationQuickSettingsWidget extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             _buildPrimaryAIPlatform(context, ref),
-            const SizedBox(height: 4),
+            const SizedBox(height: 10),
             const _QuickSettingsLlmModelRow(),
-            const SizedBox(height: 4),
+            const SizedBox(height: 10),
             _buildTemperatureSlider(context, settings, notifier, ref),
           ],
         ),
@@ -2015,7 +2015,7 @@ class _QuickSettingsLlmModelRowState
               labelStyle: const TextStyle(fontSize: 12),
               hintStyle: const TextStyle(fontSize: 11),
               contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
               isDense: true,
             ),
             onFieldSubmitted: (_) {
