@@ -1,5 +1,18 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.5.5.0
+
+### Bug Fixes
+
+1. **Reflow PDF export failure**: Fixed failures when exporting reflow PDFs after PDF translation.
+2. **Layout-preserving preview/export after MinerU upgrade**: Fixed cases where some PDFs failed layout-preserving preview or export after the MinerU upgrade.
+
+### Optimizations
+
+1. **PDF parser engine test flow**: Improved connectivity/capability checks for PDF parsing engines so a successful test better matches real parse success (avoids “test passed but parsing fails”).
+
+---
+
 ## Owlangs 1.5.4.0
 
 ### Optimizations
