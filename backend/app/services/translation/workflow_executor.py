@@ -273,40 +273,79 @@ class WorkflowExecutor:
         task_id: str
     ):
         """
-        Restore MinerU attachment to workflow if available in task_state.
-        
-        This is needed for PDF files when using cached conversion results.
+        Restore MinerU/Paddle layout ZIP attachment to workflow if available in task_state.
+
+        Needed for PDF files when using cached conversion results so layout_document
+        can be rebuilt for preserve-layout (typst_overlay) preview.
         """
-        # First, check if layout_source_zip exists in task_state (from previous conversion)
+        from ir.document import Document
+
+        layout_engine = str(
+            task_state.get("layout_engine")
+            or task_state.get("convert_engine")
+            or "mineru"
+        ).strip().lower()
+        attachment_key = "paddle" if layout_engine.startswith("paddle") else "mineru"
+
+        # Prefer layout_source_zip (works for both engines)
         layout_source_zip = task_state.get("layout_source_zip")
-        if layout_source_zip and not workflow.attachment.attachment_dict.get("mineru"):
+        if layout_source_zip and not workflow.attachment.attachment_dict.get(attachment_key):
             try:
-                from ir.document import Document
-                mineru_doc = Document.from_bytes(content=layout_source_zip, suffix=".zip", stem="mineru")
-                workflow.attachment.add_document("mineru", mineru_doc)
+                layout_doc = Document.from_bytes(
+                    content=layout_source_zip, suffix=".zip", stem=attachment_key
+                )
+                workflow.attachment.add_document(attachment_key, layout_doc)
                 workflow._layout_source_zip = layout_source_zip
-                logger.info(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Restored MinerU ZIP from layout_source_zip to workflow for task {task_id} (cached conversion)")
+                logger.info(
+                    LogModule.WORKFLOW,
+                    f"[WORKFLOW-EXECUTOR] Restored {attachment_key} ZIP from "
+                    f"layout_source_zip to workflow for task {task_id} (cached conversion)",
+                )
             except Exception as restore_error:
-                logger.debug(LogModule.EXTRACT, f"[WORKFLOW-EXECUTOR] Failed to restore MinerU ZIP from layout_source_zip: {restore_error}")
-        
-        # Also check existing attachments
-        existing_attachments = task_state.get("attachments", {})
-        if "mineru" in existing_attachments and not workflow.attachment.attachment_dict.get("mineru"):
-            mineru_attachment = existing_attachments["mineru"]
+                logger.debug(
+                    LogModule.EXTRACT,
+                    f"[WORKFLOW-EXECUTOR] Failed to restore {attachment_key} ZIP "
+                    f"from layout_source_zip: {restore_error}",
+                )
+
+        # Also restore from task_state.attachments (mineru and/or paddle)
+        existing_attachments = task_state.get("attachments", {}) or {}
+        for key in (attachment_key, "mineru", "paddle"):
+            if key in workflow.attachment.attachment_dict:
+                continue
+            attachment = existing_attachments.get(key)
+            if attachment is None:
+                continue
             try:
-                if hasattr(mineru_attachment, "content") and mineru_attachment.content:
-                    from ir.document import Document
-                    mineru_doc = Document.from_bytes(content=mineru_attachment.content, suffix=".zip", stem="mineru")
-                    workflow.attachment.add_document("mineru", mineru_doc)
-                    workflow._layout_source_zip = mineru_attachment.content
-                    logger.info(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Restored MinerU attachment to workflow from task_state for task {task_id}")
-                elif hasattr(mineru_attachment, "document") and hasattr(mineru_attachment.document, "content"):
-                    workflow.attachment.add_document("mineru", mineru_attachment.document)
-                    workflow._layout_source_zip = mineru_attachment.document.content
-                    logger.info(LogModule.WORKFLOW, f"[WORKFLOW-EXECUTOR] Restored MinerU document to workflow from task_state for task {task_id}")
+                if hasattr(attachment, "content") and attachment.content:
+                    restored = Document.from_bytes(
+                        content=attachment.content, suffix=".zip", stem=key
+                    )
+                    workflow.attachment.add_document(key, restored)
+                    workflow._layout_source_zip = attachment.content
+                    logger.info(
+                        LogModule.WORKFLOW,
+                        f"[WORKFLOW-EXECUTOR] Restored {key} attachment to workflow "
+                        f"from task_state for task {task_id}",
+                    )
+                    break
+                if hasattr(attachment, "document") and hasattr(attachment.document, "content"):
+                    workflow.attachment.add_document(key, attachment.document)
+                    workflow._layout_source_zip = attachment.document.content
+                    logger.info(
+                        LogModule.WORKFLOW,
+                        f"[WORKFLOW-EXECUTOR] Restored {key} document to workflow "
+                        f"from task_state for task {task_id}",
+                    )
+                    break
             except Exception as restore_error:
-                logger.debug(LogModule.EXTRACT, f"[WORKFLOW-EXECUTOR] Failed to restore MinerU attachment from task_state: {restore_error}")
+                logger.debug(
+                    LogModule.EXTRACT,
+                    f"[WORKFLOW-EXECUTOR] Failed to restore {key} attachment "
+                    f"from task_state: {restore_error}",
+                )
     
+
     def _sync_workflow_attachments(
         self,
         task_id: str,
@@ -352,13 +391,17 @@ class WorkflowExecutor:
             
             # Store attachment documents in task_state for downstream usage (e.g., layout images)
             task_state["attachments"] = dict(attachment_dict)
-            # Check for layout ZIP from either MinerU ("mineru") or PaddleOCR ("paddle")
-            _layout_doc = attachment_dict.get("mineru") or attachment_dict.get("paddle")
-            if _layout_doc and hasattr(_layout_doc, "content") and _layout_doc.content:
-                task_state["layout_source_zip"] = _layout_doc.content
-                logger.debug(LogModule.EXTRACT, f"[WORKFLOW-EXECUTOR] Stored layout ZIP bytes for task {task_id} (reason={reason})")
 
-                # Extract MinerU ZIP to task's temp directory for easy access
+            # --- MinerU layout ZIP ---
+            mineru_doc = attachment_dict.get("mineru")
+            if mineru_doc and hasattr(mineru_doc, "content") and mineru_doc.content:
+                task_state["layout_source_zip"] = mineru_doc.content
+                task_state.setdefault("layout_engine", "mineru")
+                logger.debug(
+                    LogModule.EXTRACT,
+                    f"[WORKFLOW-EXECUTOR] Stored MinerU layout ZIP bytes for task {task_id} (reason={reason})",
+                )
+
                 temp_dir = task_state.get("temp_dir")
                 if temp_dir and os.path.isdir(temp_dir):
                     try:
@@ -367,18 +410,15 @@ class WorkflowExecutor:
                         mineru_zip_path = os.path.join(temp_dir, "mineru_layout.zip")
                         mineru_extract_dir = os.path.join(temp_dir, "mineru_extracted")
 
-                        # Save ZIP file to temp directory
                         with open(mineru_zip_path, 'wb') as f:
                             f.write(mineru_doc.content)
                         logger.debug(LogModule.EXTRACT, f"[WORKFLOW-EXECUTOR] Saved MinerU ZIP to {mineru_zip_path}")
 
-                        # Extract ZIP contents to mineru_extracted subdirectory
                         os.makedirs(mineru_extract_dir, exist_ok=True)
                         with zipfile.ZipFile(io.BytesIO(mineru_doc.content), 'r') as zip_ref:
                             zip_ref.extractall(mineru_extract_dir)
                         logger.debug(LogModule.EXTRACT, f"[WORKFLOW-EXECUTOR] Extracted MinerU ZIP to {mineru_extract_dir}")
 
-                        # Store paths in task_state for reference
                         task_state["mineru_zip_path"] = mineru_zip_path
                         task_state["mineru_extract_dir"] = mineru_extract_dir
                     except Exception as extract_error:
@@ -388,7 +428,7 @@ class WorkflowExecutor:
             paddle_doc = attachment_dict.get("paddle")
             if paddle_doc and hasattr(paddle_doc, "content") and paddle_doc.content:
                 task_state["layout_source_zip"] = paddle_doc.content
-                task_state.setdefault("layout_engine", "paddle")
+                task_state["layout_engine"] = "paddle"
                 temp_dir = task_state.get("temp_dir")
                 if temp_dir and os.path.isdir(temp_dir):
                     try:

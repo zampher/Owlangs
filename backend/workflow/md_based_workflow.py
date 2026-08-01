@@ -377,77 +377,100 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
             if self.config.logger:
                 self.config.logger.debug(LogModule.WORKFLOW, "Using cached document")
             
-            # IMPORTANT: When using cache, try to load layout_document from MinerU attachment
-            # This is critical for PDF generation, as layout_document is not cached
-            # Note: When using cache, attachment_dict may be empty, so we need to check
-            # if MinerU attachment exists in attachment_dict first, and if not, try to
-            # load from layout_source_zip if available (from previous conversion)
-            if convert_engine in ("mineru", "mineru_local") and self.layout_document is None:
+            # IMPORTANT: Markdown cache does not store layout_document. For layout-aware
+            # engines (MinerU / Paddle), restore layout from ZIP attachments or
+            # layout_source_zip; otherwise return None so callers re-run conversion.
+            _layout_engines = ("mineru", "mineru_local", "paddle", "paddle_local")
+            if convert_engine in _layout_engines and self.layout_document is None:
                 try:
-                    # First, check if MinerU attachment exists in attachment_dict
-                    mineru_doc = self.attachment.attachment_dict.get("mineru")
+                    _attachment_key = (
+                        "paddle" if convert_engine.startswith("paddle") else "mineru"
+                    )
+                    layout_zip_doc = self.attachment.attachment_dict.get(_attachment_key)
                     zip_bytes = None
-                    
-                    if mineru_doc and hasattr(mineru_doc, "content") and mineru_doc.content:
-                        zip_bytes = mineru_doc.content
+
+                    if (
+                        layout_zip_doc
+                        and hasattr(layout_zip_doc, "content")
+                        and layout_zip_doc.content
+                    ):
+                        zip_bytes = layout_zip_doc.content
                     else:
-                        # Fallback: Try to get from layout_source_zip if available
-                        # This can happen when the same file was converted before
-                        # and the ZIP was saved in task_state
+                        # Same file may have layout_source_zip from a prior convert task
                         if hasattr(self, "_layout_source_zip") and self._layout_source_zip:
                             zip_bytes = self._layout_source_zip
                             if self.config.logger:
                                 self.config.logger.debug(
                                     LogModule.WORKFLOW,
-                                    "[LAYOUT] Using layout_source_zip from workflow instance for cached conversion"
+                                    "[LAYOUT] Using layout_source_zip from workflow instance "
+                                    "for cached conversion",
                                 )
-                    
+                        elif (
+                            hasattr(self, "_task_state")
+                            and self._task_state
+                            and self._task_state.get("layout_source_zip")
+                        ):
+                            zip_bytes = self._task_state["layout_source_zip"]
+                            if self.config.logger:
+                                self.config.logger.debug(
+                                    LogModule.WORKFLOW,
+                                    "[LAYOUT] Using layout_source_zip from task_state "
+                                    "for cached conversion",
+                                )
+
                     if zip_bytes:
                         from layout.registry import load_layout_from_engine_zip
+
                         _layout_engine = convert_engine
                         if _layout_engine.startswith("paddle"):
                             _layout_engine = "paddle"
                         elif _layout_engine.startswith("mineru"):
                             _layout_engine = "mineru"
-                        self.layout_document = load_layout_from_engine_zip(_layout_engine, zip_bytes)
+                        self.layout_document = load_layout_from_engine_zip(
+                            _layout_engine, zip_bytes
+                        )
                         if self.layout_document and self.config.logger:
                             self.config.logger.info(
                                 LogModule.WORKFLOW,
-                                f"[LAYOUT] Loaded layout_document from MinerU attachment (cached): "
+                                f"[LAYOUT] Loaded layout_document from {_attachment_key} "
+                                f"attachment (cached): "
                                 f"{self.layout_document.page_count} pages, "
-                                f"{sum(1 for _ in self.layout_document.iter_blocks())} blocks"
+                                f"{sum(1 for _ in self.layout_document.iter_blocks())} blocks",
                             )
                         elif self.config.logger:
-                            # CRITICAL: For PDF files, layout_document is required for segmentation
-                            # If we cannot load it from cached conversion, this is a fatal error
-                            error_msg = "Failed to parse layout_document from MinerU ZIP (cached conversion). PDF segmentation requires layout information."
-                            self.config.logger.error(LogModule.WORKFLOW, f"[LAYOUT] {error_msg}")
+                            error_msg = (
+                                f"Failed to parse layout_document from {_attachment_key} ZIP "
+                                "(cached conversion). PDF segmentation requires layout information."
+                            )
+                            self.config.logger.error(
+                                LogModule.WORKFLOW, f"[LAYOUT] {error_msg}"
+                            )
                             raise RuntimeError(error_msg)
                     else:
-                        # CRITICAL: For PDF files, layout_document is required for segmentation
-                        # If MinerU attachment is not available in cached conversion, we need to re-run conversion
-                        # to get the layout_document. This can happen when cache is shared across different tasks.
                         if self.config.logger:
                             self.config.logger.warning(
                                 LogModule.WORKFLOW,
-                                "[LAYOUT] MinerU attachment not available for cached conversion. "
-                                "PDF segmentation requires layout information from MinerU ZIP. "
-                                "Will re-run MinerU conversion to get layout_document."
+                                f"[LAYOUT] {_attachment_key} attachment not available for "
+                                f"cached conversion (engine={convert_engine}). "
+                                "PDF preserve-layout preview requires layout information. "
+                                "Will re-run conversion to get layout_document.",
                             )
-                        # Return None to skip cached document and re-run conversion
-                        # This ensures layout_document is available for PDF segmentation
+                        # Skip cached markdown so caller re-runs conversion with layout
                         return None
                 except RuntimeError:
-                    # Re-raise RuntimeError (our own errors)
                     raise
                 except Exception as layout_load_error:
-                    # CRITICAL: For PDF files, layout_document is required for segmentation
-                    # If we cannot load it from cached conversion, this is a fatal error
-                    error_msg = f"Failed to load layout_document from MinerU attachment (cached conversion): {layout_load_error}. PDF segmentation requires layout information."
+                    error_msg = (
+                        f"Failed to load layout_document from {_attachment_key} attachment "
+                        f"(cached conversion): {layout_load_error}. "
+                        "PDF segmentation requires layout information."
+                    )
                     if self.config.logger:
-                        self.config.logger.error(LogModule.WORKFLOW, f"[LAYOUT] {error_msg}")
+                        self.config.logger.error(
+                            LogModule.WORKFLOW, f"[LAYOUT] {error_msg}"
+                        )
                     raise RuntimeError(error_msg) from layout_load_error
-            
+
             return document_cached
 
         # Parse file if not cached and no reused result
@@ -900,6 +923,25 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
         self.document_translated = document_md
         return self
 
+    def _rerun_conversion_without_cache(
+        self,
+        convert_engine: ConvertEngineType,
+        convert_config: X2MarkdownConverterConfig,
+    ) -> MarkdownDocument:
+        """Re-run _get_document_md with skip_cache after a layout-less cache hit."""
+        original_skip_cache = getattr(self.config, "skip_cache", False)
+        self.config.skip_cache = True
+        try:
+            document_md = self._get_document_md(convert_engine, convert_config)
+            if document_md is None:
+                raise RuntimeError(
+                    "Failed to convert document even after re-running without cache. "
+                    "This should not happen."
+                )
+            return document_md
+        finally:
+            self.config.skip_cache = original_skip_cache
+
     def convert_without_translation(self) -> MarkdownDocument:
         """
         Convert source document to Markdown without invoking the translator.
@@ -907,6 +949,16 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
         """
         convert_engine, convert_config, *_ = self._pre_translate(self.document_original)
         document_md = self._get_document_md(convert_engine, convert_config)
+        if document_md is None:
+            if self.config.logger:
+                self.config.logger.warning(
+                    LogModule.WORKFLOW,
+                    "[CONVERT] Cached document skipped due to missing layout_document. "
+                    "Re-running conversion without cache...",
+                )
+            document_md = self._rerun_conversion_without_cache(
+                convert_engine, convert_config
+            )
         self.document_translated = document_md
         return document_md
 
@@ -937,6 +989,33 @@ class MarkdownBasedWorkflow(Workflow[MarkdownBasedWorkflowConfig, Document, Mark
                 "The MinerU service may be unresponsive. "
                 "Please check the MinerU server status and retry." % timeout_s
             )
+        # Cache hit without layout ZIP returns None; re-run so typst_overlay has layout
+        if document_md is None:
+            if self.config.logger:
+                self.config.logger.warning(
+                    LogModule.WORKFLOW,
+                    "[CONVERT] Cached document skipped due to missing layout_document. "
+                    "Re-running conversion without cache...",
+                )
+            try:
+                document_md = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self._rerun_conversion_without_cache,
+                        convert_engine,
+                        convert_config,
+                    ),
+                    timeout=timeout_s,
+                )
+            except asyncio.TimeoutError:
+                self.config.logger.error(
+                    LogModule.WORKFLOW,
+                    "[WORKFLOW] Format re-conversion timed out after %.0f seconds "
+                    "with engine=%s." % (timeout_s, convert_engine),
+                )
+                raise RuntimeError(
+                    "Format conversion timed out after %.0f seconds while "
+                    "re-running without cache." % timeout_s
+                )
         self.document_translated = document_md
         return document_md
 

@@ -490,29 +490,77 @@ def _build_block_table_border_style_map_from_segments(
 
 
 def _resolve_layout_zip_bytes(task_state: Dict[str, Any]) -> Optional[bytes]:
-    """Resolve MinerU layout ZIP bytes for chart/table/image export (matches DOCX path)."""
+    """Resolve MinerU/Paddle layout ZIP bytes for chart/table/image export."""
     zip_bytes = task_state.get("layout_source_zip")
-    if isinstance(zip_bytes, bytes) and zip_bytes:
-        return zip_bytes
+    if isinstance(zip_bytes, (bytes, bytearray)) and zip_bytes:
+        return bytes(zip_bytes)
 
     attachments = task_state.get("attachments") or {}
-    mineru = attachments.get("mineru")
-    if isinstance(mineru, bytes) and mineru:
-        return mineru
-    if mineru is not None and hasattr(mineru, "content"):
-        content = getattr(mineru, "content", None)
-        if isinstance(content, bytes) and content:
-            return content
+    for attachment_key in ("paddle", "mineru"):
+        attachment = attachments.get(attachment_key)
+        if isinstance(attachment, (bytes, bytearray)) and attachment:
+            return bytes(attachment)
+        if attachment is not None and hasattr(attachment, "content"):
+            content = getattr(attachment, "content", None)
+            if isinstance(content, (bytes, bytearray)) and content:
+                return bytes(content)
 
-    zip_path = task_state.get("mineru_zip_path")
-    if zip_path:
-        try:
-            path = Path(zip_path)
-            if path.exists():
-                return path.read_bytes()
-        except Exception:
-            pass
+    for zip_path_key in ("paddle_zip_path", "mineru_zip_path"):
+        zip_path = task_state.get(zip_path_key)
+        if zip_path:
+            try:
+                path = Path(zip_path)
+                if path.exists():
+                    return path.read_bytes()
+            except Exception:
+                pass
     return None
+
+
+def _ensure_layout_document_for_overlay(
+    task_state: Dict[str, Any],
+    task_id: str,
+) -> Optional[Any]:
+    """Return layout_document, reloading from layout ZIP when missing in memory."""
+    layout_doc = task_state.get("layout_document")
+    if layout_doc is not None:
+        return layout_doc
+
+    zip_bytes = _resolve_layout_zip_bytes(task_state)
+    if not zip_bytes:
+        return None
+
+    try:
+        from layout.registry import load_layout_from_engine_zip
+
+        _raw_engine = (
+            task_state.get("layout_engine")
+            or task_state.get("convert_engine")
+            or "mineru"
+        )
+        _layout_engine = str(_raw_engine).strip().lower()
+        if _layout_engine.startswith("paddle"):
+            _layout_engine = "paddle"
+        elif _layout_engine.startswith("mineru"):
+            _layout_engine = "mineru"
+
+        layout_doc = load_layout_from_engine_zip(_layout_engine, zip_bytes)
+        if layout_doc is not None:
+            task_state["layout_document"] = layout_doc
+            logger.info(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Task {task_id}: Reloaded layout_document from "
+                f"{_layout_engine} ZIP for typst_overlay "
+                f"({layout_doc.page_count} pages)",
+            )
+        return layout_doc
+    except Exception as load_error:
+        logger.warning(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Task {task_id}: Failed to reload layout_document "
+            f"from ZIP for typst_overlay: {load_error}",
+        )
+        return None
 
 
 def _resolve_export_format_settings(
@@ -1614,11 +1662,15 @@ async def _typst_overlay_pdf_response(
             detail=f"Typst overlay renderer is not available: {_toe}",
         )
 
-    layout_doc = task_state.get("layout_document")
+    layout_doc = _ensure_layout_document_for_overlay(task_state, task_id)
     if layout_doc is None:
         raise HTTPException(
             status_code=400,
-            detail="Layout document is not available for Typst overlay rendering.",
+            detail=(
+                "Layout document is not available for Typst overlay rendering. "
+                "Re-run format conversion (skip cache) so layout ZIP is produced, "
+                "or use reflow PDF preview instead."
+            ),
         )
 
     source_pdf_path = task_state.get("original_file_path")

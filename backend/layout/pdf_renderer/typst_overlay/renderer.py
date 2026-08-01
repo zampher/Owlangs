@@ -2242,7 +2242,13 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 "[TYPST_OVERLAY] No translatable text blocks found. "
                 "Returning original PDF unchanged."
             )
-            return self._source_pdf_path.read_bytes()
+            # Download path expects output_path to exist after render_layout_pdf();
+            # write source bytes there so callers can stat/serve the file.
+            pdf_bytes = self._source_pdf_path.read_bytes()
+            if self._output_path:
+                self._output_path.parent.mkdir(parents=True, exist_ok=True)
+                self._output_path.write_bytes(pdf_bytes)
+            return pdf_bytes
 
         # ---- Step 1b: Embed chart/table/equation images when format=image ----
         temp_dir = Path(mkdtemp(prefix="owlangs_typst_"))
