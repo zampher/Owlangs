@@ -1,5 +1,13 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.5.6.0
+
+### New Features
+
+1. **Model selection in Quick Settings**: In translation Quick Settings, set or pick the LLM model name via List under the platform dropdown.
+
+---
+
 ## Owlangs 1.5.5.0
 
 ### Bug Fixes

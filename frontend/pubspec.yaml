@@ -1,7 +1,7 @@
 ﻿name: owlangs
 description: Owlangs Flutter Frontend - Cross-platform document translation application
 publish_to: 'none'
-version: 1.5.5+0
+version: 1.5.6+0
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
