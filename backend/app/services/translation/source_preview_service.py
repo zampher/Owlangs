@@ -1917,6 +1917,12 @@ class SourcePreviewService:
                 "total_segments": len(preview_segments),
                 "ready": True,
             }
+            prev_cache = task_state.get("source_chunks_cache") or {}
+            prev_total = prev_cache.get("total_segments")
+            if prev_total is None and isinstance(prev_cache.get("segments"), list):
+                prev_total = len(prev_cache["segments"])
+            prev_hash = prev_cache.get("content_hash")
+
             task_state["source_chunks_cache"] = {
                 "content_hash": content_hash,
                 "chunk_size": chunk_size,
@@ -1968,7 +1974,29 @@ class SourcePreviewService:
                     task_state["segments_metadata"]["separators_after"] = []
                 if "segment_info" not in task_state["segments_metadata"]:
                     task_state["segments_metadata"]["segment_info"] = []
-            
+
+            # When segment space changes, drop stale exclusion indices (keep in-range user_selected only).
+            new_total = len(preview_segments)
+            segment_space_changed = (
+                (prev_total is not None and int(prev_total) != new_total)
+                or (prev_hash is not None and prev_hash != content_hash)
+            )
+            if segment_space_changed:
+                from exclusion.core import ExclusionManager
+
+                pruned = ExclusionManager.prune_stale_excluded_segments(
+                    task_state,
+                    new_total=new_total,
+                    task_id=task_id,
+                )
+                if pruned:
+                    logger.warning(
+                        LogModule.EXCLUSION,
+                        f"[PREVIEW] Task {task_id}: Pruned {pruned} stale excluded_segments after "
+                        f"layout rebuild (prev_total={prev_total}, new_total={new_total}, "
+                        f"hash_changed={prev_hash != content_hash})",
+                    )
+
             # Log preservation of excluded data
             excluded_segments_count = len(task_state["segments_metadata"].get("excluded_segments", {}))
             excluded_indices_count = len(task_state["segments_metadata"].get("excluded_segment_indices", []))

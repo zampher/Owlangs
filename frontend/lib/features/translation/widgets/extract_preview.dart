@@ -3841,11 +3841,13 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
             ref.watch(flowProviderFamily(widget.flowId!));
         currentWorkflowId = flow.context.anonymize.workflowId;
 
-        // Log workflowId status for debugging
-        if (currentWorkflowId != null && currentWorkflowId.isNotEmpty) {
+        // Debug-only: logging every build at info flooded Windows console/message queue.
+        if (kDebugMode &&
+            currentWorkflowId != null &&
+            currentWorkflowId.isNotEmpty) {
           _log(
             '[ExtractPreview] build() watching workflowId: $currentWorkflowId, currentPollingWorkflowId=$currentPollingWorkflowId, prepareTimer=${prepareTimer != null}, isTranslating=$isTranslating',
-            level: LogLevel.info,
+            level: LogLevel.debug,
           );
         }
 

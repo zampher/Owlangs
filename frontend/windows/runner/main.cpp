@@ -34,6 +34,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
+  // Run Dart UI on a separate thread so heavy polling / platform wakeups do not
+  // flood the Win32 message queue ("Failed to post message to main thread").
+  // See https://github.com/flutter/flutter/issues/173843
+  project.set_ui_thread_policy(
+      flutter::UIThreadPolicy::RunOnSeparateThread);
+
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);

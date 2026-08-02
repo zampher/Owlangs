@@ -46,6 +46,7 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
   final Set<String> _selectedTaskIds = <String>{};
   bool _appInForeground = true;
   bool _wasActiveRoute = true;
+  bool _refreshInFlight = false;
 
   @override
   void initState() {
@@ -55,7 +56,9 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _refresh();
     });
-    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => _refresh());
+    // 6s: during large PDF convert, overlapping list+status polls flooded the
+    // Windows message queue when the backend event loop was busy.
+    _pollTimer = Timer.periodic(const Duration(seconds: 6), (_) => _refresh());
   }
 
   @override
@@ -145,19 +148,49 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
   Future<List<Map<String, dynamic>>> _enrichTasks(
     Iterable<Map<String, dynamic>> raw,
   ) async {
-    return Future.wait(raw.map(_enrichTaskRow));
+    // Cap concurrency: parallel getStatus for every task while the backend is
+    // busy with large PDF export saturates the Windows UI message queue.
+    const int maxConcurrent = 3;
+    final List<Map<String, dynamic>> rows = raw.toList();
+    if (rows.isEmpty) {
+      return <Map<String, dynamic>>[];
+    }
+    final List<Map<String, dynamic>?> out =
+        List<Map<String, dynamic>?>.filled(rows.length, null);
+    int next = 0;
+
+    Future<void> worker() async {
+      while (true) {
+        final int i = next;
+        next += 1;
+        if (i >= rows.length) {
+          return;
+        }
+        out[i] = await _enrichTaskRow(rows[i]);
+      }
+    }
+
+    final int workers =
+        rows.length < maxConcurrent ? rows.length : maxConcurrent;
+    await Future.wait(List<Future<void>>.generate(workers, (_) => worker()));
+    return out.map((Map<String, dynamic>? row) => row!).toList();
   }
 
   Future<void> _refresh() async {
-      if (!mounted) return;
+    if (!mounted) return;
     // Skip refresh when app is in background or this screen is not the current route
     if (!_appInForeground) return;
     final route = ModalRoute.of(context);
     if (route != null && !route.isCurrent) return;
+    if (_refreshInFlight) return;
+    _refreshInFlight = true;
+    final bool showLoadingOverlay = _tasks.isEmpty && _batches.isEmpty;
+    if (showLoadingOverlay) {
       setState(() {
-      _loading = true;
-      _loadError = null;
-    });
+        _loading = true;
+        _loadError = null;
+      });
+    }
     try {
       final Map<String, dynamic> batchResp =
           await _svc.listUploadBatches();
@@ -255,6 +288,8 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
         _loading = false;
         _loadError = e.toString();
       });
+    } finally {
+      _refreshInFlight = false;
     }
   }
 

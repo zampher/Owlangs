@@ -149,14 +149,37 @@ def _get_image_layout_for_grouping(
     if not layout_doc or not seg_list:
         logger.debug(LogModule.EXPORT, f"[DOWNLOAD] No layout/segments for image grouping, returning (None, None, None)")
         return (None, None, None)
+
+    # Cache per format combo — stash export calls this for every format (md/html/docx/pdf).
+    # Use a string key (not a tuple): task_state is copied into /service/status JSON, and
+    # json.dumps rejects tuple dict keys (TypeError: keys ... not tuple).
+    cache_key = f"{eq_fmt}|{tbl_fmt}|{chart_fmt}|{id(layout_doc)}|{len(seg_list)}"
+    cache = task_state.setdefault("_image_layout_grouping_cache", {})
+    if not isinstance(cache, dict):
+        cache = {}
+        task_state["_image_layout_grouping_cache"] = cache
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     indices, path_to_block_index = get_image_block_indices_from_layout(
         seg_list, layout_doc,
         equation_format=eq_fmt,
         table_body_format=tbl_fmt,
         chart_body_format=chart_fmt,
     )
-    logger.info(LogModule.EXPORT, f"[DOWNLOAD] image_block_indices from layout: len={len(indices) if indices else 0}, indices={indices[:20] if indices and len(indices) <= 20 else (indices[:20] if indices else [])}, path_mappings={len(path_to_block_index) if path_to_block_index else 0}")
-    return (indices if indices else None, path_to_block_index if path_to_block_index else None, layout_doc)
+    logger.info(
+        LogModule.EXPORT,
+        f"[DOWNLOAD] image_block_indices from layout: len={len(indices) if indices else 0}, "
+        f"path_mappings={len(path_to_block_index) if path_to_block_index else 0}",
+    )
+    result = (
+        indices if indices else None,
+        path_to_block_index if path_to_block_index else None,
+        layout_doc,
+    )
+    cache[cache_key] = result
+    return result
 
 
 def _image_data_map_from_task_state(task_state: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
@@ -1346,7 +1369,11 @@ def _build_stash_export_plan(
         allow_pdf = is_pdf and has_layout and not is_fmt_conv
         from utils.mineru_layout_utils import is_mineru_layout_image, original_image_download_extension
 
-        for ft in ("docx", "html", "md"):
+        # DOCX + HTML + md_zip. Skip stashing single-file embedded MD: with
+        # 1000+ layout images, data-URI embedding blocks the asyncio loop for
+        # minutes (health/status time out; Flutter Windows floods PostMessage).
+        # On-demand GET /download/.../md?embed_images=true still works.
+        for ft in ("docx", "html"):
             plan.append((ft, ft, docx_kwargs if ft == "docx" else {}))
         if allow_pdf:
             plan.append(("pdf", "pdf", {"renderer_type": "typst_overlay"}))
@@ -1355,6 +1382,8 @@ def _build_stash_export_plan(
         if image_ext and has_layout and not is_fmt_conv:
             plan.append((image_ext, image_ext, {}))
         plan.append(("md_zip", "md", {"embed_images": False}))
+        # Keep download button for single-file MD without pre-stashing embeds.
+        plan.append(("md", "md", {"embed_images": True, "_stash_skip": True}))
     elif wt == "txt":
         for ft in ("html", "txt", "md"):
             plan.append((ft, ft, {}))
@@ -1430,9 +1459,13 @@ def completed_task_download_urls(task_id: str, task_state: Dict[str, Any]) -> Di
     out: Dict[str, str] = {}
     for stash_key, download_ft, kwargs in _build_stash_export_plan(task_state):
         base = f"/service/download/{task_id}/{download_ft}"
-        if kwargs:
+        # Internal plan flags must not leak into download query strings.
+        public_kwargs = {
+            k: v for k, v in (kwargs or {}).items() if not str(k).startswith("_")
+        }
+        if public_kwargs:
             flat: Dict[str, Any] = {}
-            for k, v in kwargs.items():
+            for k, v in public_kwargs.items():
                 if isinstance(v, bool):
                     flat[k] = "true" if v else "false"
                 elif v is not None:
@@ -6723,8 +6756,15 @@ class DownloadService:
         total = len(plan)
 
         for index, (stash_key, download_ft, kwargs) in enumerate(plan):
+            # URL-only entries (e.g. embedded md) stay in the download palette but
+            # are not pre-generated into stash during queued auto-export.
+            if (kwargs or {}).get("_stash_skip"):
+                continue
+            download_kwargs = {
+                k: v for k, v in (kwargs or {}).items() if not str(k).startswith("_")
+            }
             if update_progress:
-                label = _stash_export_format_label(stash_key, kwargs)
+                label = _stash_export_format_label(stash_key, download_kwargs)
                 progress = 90 + int((index / max(total, 1)) * 9)
                 # Keep terminal status during stash rebuild so frontend poll loops and
                 # language-detection workers do not treat the task as active again.
@@ -6736,7 +6776,7 @@ class DownloadService:
                     progress_update["status"] = "processing"
                 self.task_manager.update_task(task_id, progress_update)
             try:
-                resp = await self.download_file(task_id, download_ft, **kwargs)
+                resp = await self.download_file(task_id, download_ft, **download_kwargs)
                 path = getattr(resp, "path", None) or getattr(
                     resp, "owlangs_stash_path", None
                 )

@@ -2376,9 +2376,10 @@ def get_image_block_indices_from_layout(
                 filename = os.path.basename(normalized).lower()
                 if filename:
                     path_to_block_index[filename] = bidx
-                    logger.info(
+                    logger.debug(
                         LogModule.RESTOR,
-                        f"[PDF-EXPORT] Mapped image: original={image_path}, placeholder_id={placeholder_id}, normalized_filename={filename}, block_index={bidx}"
+                        f"[PDF-EXPORT] Mapped image: original={image_path}, placeholder_id={placeholder_id}, "
+                        f"normalized_filename={filename}, block_index={bidx}",
                     )
             break
     if not out and segments:
@@ -2387,9 +2388,11 @@ def get_image_block_indices_from_layout(
             f"[PDF-EXPORT] get_image_block_indices_from_layout: 0 image indices (segments={len(segments)}, "
             f"segments_with_layout_block_indices={segs_with_layout}, layout_image_blocks={len(image_blocks)})"
         )
-    logger.debug(
+    logger.info(
         LogModule.RESTOR,
-        f"[PDF-EXPORT] get_image_block_indices_from_layout: {len(out)} image indices, {len(path_to_block_index)} path mappings"
+        f"[PDF-EXPORT] get_image_block_indices_from_layout: {len(out)} image indices, "
+        f"{len(path_to_block_index)} path mappings "
+        f"(segments={len(segments) if segments else 0})",
     )
     return (out, path_to_block_index)
 

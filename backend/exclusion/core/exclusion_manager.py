@@ -22,7 +22,66 @@ __all__ = ["ExclusionManager", "detect_exclusion_reason"]
 
 class ExclusionManager:
     """Unified exclusion management for translation segments."""
-    
+
+    @staticmethod
+    def prune_stale_excluded_segments(
+        task_state: dict,
+        *,
+        new_total: int,
+        task_id: str = "",
+    ) -> int:
+        """Drop out-of-range exclusions; keep in-range user_selected only.
+
+        Used when layout rebuild changes segment count/hash so Translate phase
+        does not inherit invalid Extract-phase indices.
+
+        Returns number of exclusion entries removed.
+        """
+        sm = task_state.get("segments_metadata")
+        if not isinstance(sm, dict):
+            return 0
+        excluded = sm.get("excluded_segments")
+        if not isinstance(excluded, dict) or not excluded:
+            return 0
+
+        kept: Dict[str, object] = {}
+        removed = 0
+        for key, info in excluded.items():
+            try:
+                idx = int(key)
+            except (TypeError, ValueError):
+                removed += 1
+                continue
+            if idx < 0 or idx >= new_total:
+                removed += 1
+                continue
+            reason = None
+            if isinstance(info, dict):
+                reason = info.get("reason")
+            elif isinstance(info, str):
+                reason = info
+            if reason == ExclusionReason.USER_SELECTED.value or reason == "user_selected":
+                kept[str(idx)] = info
+            else:
+                # Auto-detected exclusions are invalid after rebuild; caller re-stores them.
+                removed += 1
+
+        if removed:
+            sm["excluded_segments"] = kept
+            indices = sm.get("excluded_segment_indices")
+            if isinstance(indices, list):
+                sm["excluded_segment_indices"] = [
+                    i
+                    for i in indices
+                    if isinstance(i, int) and 0 <= i < new_total and str(i) in kept
+                ]
+            logger.debug(
+                LogModule.EXCLUSION,
+                f"ExclusionManager.prune_stale_excluded_segments: task={task_id} "
+                f"kept={len(kept)} removed={removed} new_total={new_total}",
+            )
+        return removed
+
     @staticmethod
     def get_excluded_segments(
         task_state: dict,

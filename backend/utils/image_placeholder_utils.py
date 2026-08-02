@@ -20,6 +20,29 @@ HTML_EXTRACTOR_IMAGE_LINE_PATTERN = re.compile(
     re.MULTILINE | re.IGNORECASE,
 )
 
+# Avoid one WARNING per image when embedding thousands of data URIs.
+_large_data_uri_warn_count = 0
+_LARGE_DATA_URI_WARN_LIMIT = 3
+
+
+def _warn_large_data_uri(kind: str, key: str, length: int) -> None:
+    global _large_data_uri_warn_count
+    if length <= 100_000:
+        return
+    _large_data_uri_warn_count += 1
+    if _large_data_uri_warn_count <= _LARGE_DATA_URI_WARN_LIMIT:
+        logger.warning(
+            LogModule.RESTOR,
+            f"Embedding large data URI (length={length}) for {kind} {key}; "
+            "some Markdown viewers may fail to load. Prefer exporting MD with images in folder (ZIP).",
+        )
+    elif _large_data_uri_warn_count == _LARGE_DATA_URI_WARN_LIMIT + 1:
+        logger.warning(
+            LogModule.RESTOR,
+            "Further large data-URI embed warnings suppressed for this process "
+            "(too many images; use MD ZIP export).",
+        )
+
 
 def _replace_placeholders_with_images(
     markdown_content: str, 
@@ -127,12 +150,7 @@ def _replace_placeholders_with_images(
         
         # Fallback: use data URI with markdown syntax
         # Many viewers (e.g. Milkup, some WebViews) limit URL/data-URI length; large images may fail to load
-        if len(data_uri) > 100_000:
-            logger.warning(
-                LogModule.RESTOR,
-                f"Embedding large data URI (length={len(data_uri)}) for placeholder {placeholder_id}; "
-                "some Markdown viewers may fail to load. Prefer exporting MD with images in folder (ZIP)."
-            )
+        _warn_large_data_uri("placeholder", placeholder_id, len(data_uri))
         return f"![{alt_text}]({data_uri})"
 
     # First, replace <ph-xxx> placeholders
@@ -337,11 +355,7 @@ def _replace_placeholders_with_images(
         
         # Fallback: use data URI with markdown syntax
         if len(data_uri) > 100_000:
-            logger.warning(
-                LogModule.RESTOR,
-                f"Embedding large data URI (length={len(data_uri)}) for image ref {image_ref}; "
-                "some Markdown viewers may fail to load. Prefer exporting MD with images in folder (ZIP)."
-            )
+            _warn_large_data_uri("image ref", image_ref, len(data_uri))
         return f"![{alt_text}]({data_uri})"
     
     # Pattern to match markdown image syntax: ![alt](filename.jpg) or ![alt](placeholder_id)

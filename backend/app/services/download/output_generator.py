@@ -2458,7 +2458,10 @@ class OutputGenerator:
                     to_lang = task_state.get("to_lang") or task_state.get("target_language")
                 pdf_file = output_dir / f"{file_stem}_translated.pdf"
                 from app.services.download.download_service import _get_image_layout_for_grouping
-                _img_bidx, _path_to_bidx, _layout = _get_image_layout_for_grouping(task_state)
+                # Offload layout scan — large docs log/scan thousands of image segments.
+                _img_bidx, _path_to_bidx, _layout = await asyncio.to_thread(
+                    _get_image_layout_for_grouping, task_state
+                )
                 try:
                     # Priority 1: HTML->PDF (same pipeline as HTML export so side-by-side images are preserved)
                     if hasattr(workflow, "export_to_html") and hasattr(workflow, "config") and hasattr(workflow.config, "html_exporter_config"):
@@ -2490,7 +2493,8 @@ class OutputGenerator:
                         pass
                     if task_state.get("translation_segments") and task_state.get("translation_segments", {}).get("segments"):
                         try:
-                            rebuilt = rebuild_markdown_document_from_segments(
+                            rebuilt = await asyncio.to_thread(
+                                rebuild_markdown_document_from_segments,
                                 task_state,
                                 file_stem=file_stem,
                                 output_dir=output_dir,
@@ -2504,80 +2508,76 @@ class OutputGenerator:
                         except Exception as rebuild_err:
                             logger.debug(LogModule.EXPORT, f"[PDF-EXPORT] Rebuild for PDF failed: {rebuild_err}, using export_to_markdown")
                     if not md_content:
-                        md_content = workflow.export_to_markdown()
+                        md_content = await asyncio.to_thread(workflow.export_to_markdown)
 
-                    # PRE-CHECK: validate LaTeX-containing segments before full export.
-                    # This catches errors early so users don't wait for the entire document
-                    # to compile only to fail on one bad segment.
+                    # PRE-CHECK + Pandoc PDF: both are CPU/subprocess heavy; keep event loop free.
                     segs = (task_state.get("translation_segments") or {}).get("segments") or []
-                    if isinstance(segs, list) and segs:
-                        try:
-                            from utils.latex_repair_payload import has_latex_content
-                            from utils.latex_formula_checker import check_segment_pdf_compat
 
-                            latex_segs = [
-                                seg for seg in segs
-                                if isinstance(seg, dict)
-                                and has_latex_content(
-                                    seg.get("modified_text") or seg.get("target_text") or ""
-                                )
-                            ]
-                            # Limit pre-check to avoid excessive pandoc calls on very large docs
-                            _precheck_limit = 30
-                            if len(latex_segs) > _precheck_limit:
-                                logger.info(
-                                    LogModule.EXPORT,
-                                    f"[PDF-EXPORT] Pre-check: {len(latex_segs)} LaTeX segments found, "
-                                    f"limiting pre-check to first {_precheck_limit}",
-                                )
-                                latex_segs = latex_segs[:_precheck_limit]
+                    def _precheck_and_convert_md_pdf() -> bool:
+                        if isinstance(segs, list) and segs:
+                            try:
+                                from utils.latex_repair_payload import has_latex_content
+                                from utils.latex_formula_checker import check_segment_pdf_compat
 
-                            for seg in latex_segs:
-                                seg_idx = seg.get("segment_index", -1)
-                                text = seg.get("modified_text") or seg.get("target_text") or ""
-                                pre_result = check_segment_pdf_compat(text, segment_index=seg_idx)
-                                if not pre_result.passed:
-                                    logger.warning(
+                                latex_segs = [
+                                    seg for seg in segs
+                                    if isinstance(seg, dict)
+                                    and has_latex_content(
+                                        seg.get("modified_text") or seg.get("target_text") or ""
+                                    )
+                                ]
+                                _precheck_limit = 30
+                                if len(latex_segs) > _precheck_limit:
+                                    logger.info(
                                         LogModule.EXPORT,
-                                        f"[PDF-EXPORT] Pre-check FAILED for segment {seg_idx}; "
-                                        f"skipping full PDF export to save time. "
-                                        f"Issues: {len(pre_result.issues)}",
+                                        f"[PDF-EXPORT] Pre-check: {len(latex_segs)} LaTeX segments found, "
+                                        f"limiting pre-check to first {_precheck_limit}",
                                     )
-                                    task_state["pdf_export_latex_issue"] = {
-                                        "error_type": "pre_check_failed",
-                                        "segment_index": seg_idx,
-                                        "candidate_segment_indices": [seg_idx],
-                                        "match_basis": "pre_check",
-                                        "message": pre_result.message,
-                                        "stderr_excerpt": (pre_result.stderr or "")[:2000],
-                                    }
-                                    self.task_manager.add_log(
-                                        task_id,
-                                        "warning",
-                                        f"[PDF-EXPORT] Pre-check failed for segment {seg_idx}. "
-                                        f"Please fix this segment before retrying PDF export.",
-                                    )
-                                    ok = False
-                                    raise RuntimeError(
-                                        f"PDF export pre-check failed for segment {seg_idx}. "
-                                        f"Please fix the LaTeX error in this segment and retry."
-                                    )
-                            if latex_segs:
-                                logger.info(
-                                    LogModule.EXPORT,
-                                    f"[PDF-EXPORT] Pre-check passed for {len(latex_segs)} LaTeX segment(s).",
-                                )
-                        except RuntimeError:
-                            raise  # Re-raise our own pre-check failure
-                        except Exception as pre_err:
-                            # Pre-check itself failed (e.g. pandoc not found); log and continue
-                            logger.debug(
-                                LogModule.EXPORT,
-                                f"[PDF-EXPORT] Pre-check encountered an error: {pre_err}; continuing with full export",
-                            )
+                                    latex_segs = latex_segs[:_precheck_limit]
 
-                    try:
-                        ok = bool(md_content) and convert_md_to_pdf(
+                                for seg in latex_segs:
+                                    seg_idx = seg.get("segment_index", -1)
+                                    text = seg.get("modified_text") or seg.get("target_text") or ""
+                                    pre_result = check_segment_pdf_compat(text, segment_index=seg_idx)
+                                    if not pre_result.passed:
+                                        logger.warning(
+                                            LogModule.EXPORT,
+                                            f"[PDF-EXPORT] Pre-check FAILED for segment {seg_idx}; "
+                                            f"skipping full PDF export to save time. "
+                                            f"Issues: {len(pre_result.issues)}",
+                                        )
+                                        task_state["pdf_export_latex_issue"] = {
+                                            "error_type": "pre_check_failed",
+                                            "segment_index": seg_idx,
+                                            "candidate_segment_indices": [seg_idx],
+                                            "match_basis": "pre_check",
+                                            "message": pre_result.message,
+                                            "stderr_excerpt": (pre_result.stderr or "")[:2000],
+                                        }
+                                        self.task_manager.add_log(
+                                            task_id,
+                                            "warning",
+                                            f"[PDF-EXPORT] Pre-check failed for segment {seg_idx}. "
+                                            f"Please fix this segment before retrying PDF export.",
+                                        )
+                                        raise RuntimeError(
+                                            f"PDF export pre-check failed for segment {seg_idx}. "
+                                            f"Please fix the LaTeX error in this segment and retry."
+                                        )
+                                if latex_segs:
+                                    logger.info(
+                                        LogModule.EXPORT,
+                                        f"[PDF-EXPORT] Pre-check passed for {len(latex_segs)} LaTeX segment(s).",
+                                    )
+                            except RuntimeError:
+                                raise
+                            except Exception as pre_err:
+                                logger.debug(
+                                    LogModule.EXPORT,
+                                    f"[PDF-EXPORT] Pre-check encountered an error: {pre_err}; continuing with full export",
+                                )
+
+                        return bool(md_content) and convert_md_to_pdf(
                             md_content,
                             str(pdf_file),
                             output_dir=output_dir,
@@ -2587,6 +2587,9 @@ class OutputGenerator:
                             layout_document=_layout if _path_to_bidx else None,
                             layout_block_bbox=task_state.get("layout_block_bbox"),
                         )
+
+                    try:
+                        ok = await asyncio.to_thread(_precheck_and_convert_md_pdf)
                     except Exception as e:
                         # Surface segment hint for LaTeX compilation errors (no auto-repair).
                         try:

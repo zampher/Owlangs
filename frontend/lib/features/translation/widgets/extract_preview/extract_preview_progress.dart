@@ -89,41 +89,21 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
     prepareTaskType = '';
     prepareErrorMessage = '';
 
-    prepareTimer = Timer.periodic(const Duration(seconds: 1), (t) async {
-      // Don't stop polling if we haven't loaded segments yet, even if initialDataLoaded is true
-      // This allows us to detect when preview becomes ready after conversion completes
+    // 2s interval: PDF parse waits are long; 1s + setState flooded the Windows
+    // message queue ("Failed to post message to main thread").
+    prepareTimer = Timer.periodic(const Duration(seconds: 2), (t) async {
       if (!mounted) {
         prepareTimer?.cancel();
         prepareTimer = null;
         return;
       }
 
-      // Simulate progress: increase by 1% per second up to 90%
-      // This provides visual feedback while waiting for backend response
-      if (simulatedProgressPercent < 90) {
-        simulatedProgressPercent += 1;
-        if (mounted && !prepareInFlight) {
-          // Only update UI if we don't have actual progress from backend yet
-          // or if backend progress is less than simulated progress
-          final currentBackendProgress = (prepareProgress * 100).toInt();
-          if (currentBackendProgress < simulatedProgressPercent) {
-            setState(() {
-              prepareProgress = simulatedProgressPercent / 100.0;
-              prepareStatus =
-                  r'Preparing... ($simulatedProgressPercent%)';
-            });
-          }
-        }
+      // Never stack getStatus calls — slow backend turns 1s ticks into a flood.
+      if (prepareInFlight) {
+        return;
       }
 
-      // Only stop polling if we have both loaded data AND segments are displayed
-      // Check if segments are both loaded and displayed in the UI
-      final hasSegmentsLoaded = allSegments.isNotEmpty;
-      final hasSegmentsDisplayed = paginationController.items.isNotEmpty;
-
       // CRITICAL: Extract polling should STOP when translation starts
-      // Translation has its own independent polling (translationTimer)
-      // Check if translation has started (currentTranslationTaskId is set)
       if (currentTranslationTaskId != null &&
           currentTranslationTaskId!.isNotEmpty) {
         AppLogger.log(
@@ -137,71 +117,33 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
         return;
       }
 
-      // Stop Extract polling if segments are loaded and displayed
-      // Also check status to avoid stopping if translation just started
-      String? currentStatus;
-      try {
-        final svc = TranslationService();
-        final quickStatus = await svc.getStatus(extractWidget.taskId);
-        currentStatus = (quickStatus['status'] ?? '').toString().toLowerCase();
-      } catch (e) {
-        // If status check fails, continue polling
-        AppLogger.log(
-          'ExtractPreview',
-          '_startPreparePolling: Failed to check status: $e',
-        );
+      final hasSegmentsLoaded = allSegments.isNotEmpty;
+      final hasSegmentsDisplayed = paginationController.items.isNotEmpty;
+
+      // Simulate progress while waiting (2% per tick ≈ 1%/sec, capped at 90%).
+      if (simulatedProgressPercent < 90) {
+        simulatedProgressPercent =
+            (simulatedProgressPercent + 2).clamp(0, 90);
+        final currentBackendProgress = (prepareProgress * 100).toInt();
+        if (currentBackendProgress < simulatedProgressPercent && mounted) {
+          setState(() {
+            prepareProgress = simulatedProgressPercent / 100.0;
+            prepareStatus = 'Preparing... ($simulatedProgressPercent%)';
+          });
+        }
       }
 
-      // Stop Extract polling if segments are loaded and displayed AND status is not 'processing'
-      // If status is 'processing', translation polling will handle it
-      if (initialDataLoaded &&
-          hasSegmentsLoaded &&
-          hasSegmentsDisplayed &&
-          currentStatus != 'processing') {
-        if (kDebugMode) {
-          AppLogger.log(
-            'ExtractPreview',
-            '_startPreparePolling: Segments loaded and displayed, completing progress (${allSegments.length} segments), status=$currentStatus',
-          );
-        }
-
-        // Set progress to 100% and complete
-        if (mounted) {
+      if (hasSegmentsLoaded && !hasSegmentsDisplayed && mounted) {
+        final int shown = (prepareProgress * 100).round();
+        if (shown != 90 || prepareStatus != 'Loading segments...') {
           setState(() {
-            prepareProgress = 1.0;
-            prepareStatus = 'Complete';
+            prepareProgress = 0.9;
+            prepareStatus = 'Loading segments...';
             prepareTaskType = '';
           });
         }
-
-        // Wait a brief moment to show 100% progress, then hide it
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            setState(() {
-              isPreparing = false;
-              prepareErrorMessage = '';
-            });
-          }
-        });
-
-        prepareTimer?.cancel();
-        prepareTimer = null;
-        return;
       }
 
-      // If segments are loaded but not yet displayed, update progress to 90%
-      if (hasSegmentsLoaded && !hasSegmentsDisplayed && mounted) {
-        setState(() {
-          prepareProgress = 0.9;
-          prepareStatus = 'Loading segments...';
-          prepareTaskType = '';
-          prepareTaskType = '';
-        });
-      }
-
-      if (prepareInFlight) {
-        return;
-      }
       prepareInFlight = true;
       try {
         final pollStartTime = DateTime.now().millisecondsSinceEpoch;
@@ -223,6 +165,38 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
         final sourcePreview = status['source_preview'] as Map<String, dynamic>?;
         final previewReady = sourcePreview?['ready'] == true;
         final hasSegments = allSegments.isNotEmpty;
+
+        // Stop when segments are already shown and task is not actively processing.
+        if (initialDataLoaded &&
+            hasSegmentsLoaded &&
+            hasSegmentsDisplayed &&
+            statusLower != 'processing') {
+          if (kDebugMode) {
+            AppLogger.log(
+              'ExtractPreview',
+              '_startPreparePolling: Segments loaded and displayed, completing progress (${allSegments.length} segments), status=$statusLower',
+            );
+          }
+          if (mounted) {
+            setState(() {
+              prepareProgress = 1.0;
+              prepareStatus = 'Complete';
+              prepareTaskType = '';
+            });
+          }
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              setState(() {
+                isPreparing = false;
+                prepareErrorMessage = '';
+              });
+            }
+          });
+          prepareTimer?.cancel();
+          prepareTimer = null;
+          prepareInFlight = false;
+          return;
+        }
 
         // Web-only: warn user if the document has too many pages
         // Check on every polling tick so we catch it as soon as backend reports it
@@ -378,78 +352,81 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
         }
         final setStateStartTime = DateTime.now().millisecondsSinceEpoch;
 
-        // Double-check mounted before setState
+        // Double-check mounted before setState; skip if nothing visible changed.
         if (mounted) {
-          setState(() {
-            // Use backend progress if it's >= 90%, otherwise use the higher of backend or simulated progress
-            // Simulated progress increases by 1% per second up to 90%
-            final backendProgressPercent = progress.clamp(0, 100);
+          final backendProgressPercent = progress.clamp(0, 100);
 
-            // Check for PDF split extraction phase
-            final dynamic partCurrentRaw = status['extract_pdf_part_current'];
-            final dynamic partTotalRaw = status['extract_pdf_part_total'];
-            final int? partCurrent = partCurrentRaw is int ? partCurrentRaw : (partCurrentRaw is num ? partCurrentRaw.toInt() : null);
-            final int? partTotal = partTotalRaw is int ? partTotalRaw : (partTotalRaw is num ? partTotalRaw.toInt() : null);
-            final bool isPdfSplitPhase = partCurrent != null &&
-                partTotal != null &&
-                partCurrent > 0 &&
-                partTotal > 0 &&
-                message.toLowerCase().startsWith('extracting pdf');
+          final dynamic partCurrentRaw = status['extract_pdf_part_current'];
+          final dynamic partTotalRaw = status['extract_pdf_part_total'];
+          final int? partCurrent = partCurrentRaw is int
+              ? partCurrentRaw
+              : (partCurrentRaw is num ? partCurrentRaw.toInt() : null);
+          final int? partTotal = partTotalRaw is int
+              ? partTotalRaw
+              : (partTotalRaw is num ? partTotalRaw.toInt() : null);
+          final bool isPdfSplitPhase = partCurrent != null &&
+              partTotal != null &&
+              partCurrent > 0 &&
+              partTotal > 0 &&
+              message.toLowerCase().startsWith('extracting pdf');
 
-            int effectiveProgressPercent;
-            if (isPdfSplitPhase) {
-              // Reset progress when a new PDF part starts
-              if (lastExtractPdfPartCurrent > 0 && partCurrent != lastExtractPdfPartCurrent) {
-                prepareProgress = 0.0;
-                simulatedProgressPercent = 0;
+          int effectiveProgressPercent;
+          int nextPartCurrent = extractPdfPartCurrent;
+          int nextPartTotal = extractPdfPartTotal;
+          if (isPdfSplitPhase) {
+            if (lastExtractPdfPartCurrent > 0 &&
+                partCurrent != lastExtractPdfPartCurrent) {
+              simulatedProgressPercent = 0;
+            }
+            nextPartCurrent = partCurrent;
+            nextPartTotal = partTotal;
+            lastExtractPdfPartCurrent = partCurrent;
+            effectiveProgressPercent = simulatedProgressPercent;
+          } else {
+            nextPartCurrent = 0;
+            nextPartTotal = 0;
+            effectiveProgressPercent = backendProgressPercent >= 90
+                ? backendProgressPercent
+                : (backendProgressPercent > simulatedProgressPercent
+                    ? backendProgressPercent
+                    : simulatedProgressPercent);
+          }
+
+          var extractedTaskType = '';
+          if (message.isNotEmpty) {
+            final int colonIndex = message.indexOf(':');
+            if (colonIndex > 0) {
+              extractedTaskType = message.substring(0, colonIndex).trim();
+            }
+          }
+          final String nextStatus = message.isNotEmpty
+              ? message
+              : 'Preparing... ($effectiveProgressPercent%)';
+          final String nextTaskType =
+              _localizePrepareTaskType(context, extractedTaskType);
+          final double nextProgress = effectiveProgressPercent / 100.0;
+          final bool clearError = prepareErrorMessage.isNotEmpty;
+
+          final bool progressChanged =
+              ((prepareProgress * 100).round() != effectiveProgressPercent) ||
+                  prepareStatus != nextStatus ||
+                  prepareTaskType != nextTaskType ||
+                  extractPdfPartCurrent != nextPartCurrent ||
+                  extractPdfPartTotal != nextPartTotal ||
+                  clearError;
+
+          if (progressChanged) {
+            setState(() {
+              extractPdfPartCurrent = nextPartCurrent;
+              extractPdfPartTotal = nextPartTotal;
+              prepareProgress = nextProgress;
+              prepareStatus = nextStatus;
+              prepareTaskType = nextTaskType;
+              if (clearError) {
+                prepareErrorMessage = '';
               }
-              extractPdfPartCurrent = partCurrent;
-              extractPdfPartTotal = partTotal;
-              lastExtractPdfPartCurrent = partCurrent;
-
-              // Backend only reports overall 0-25% progress at each part boundary,
-              // which maps to nearly 100% for the current part. To give meaningful
-              // per-part feedback, we reset to 0% at part start and rely on
-              // simulated progress (1%/sec up to 90%).
-              effectiveProgressPercent = simulatedProgressPercent;
-            } else {
-              // Not in PDF split phase; clear part markers
-              extractPdfPartCurrent = 0;
-              extractPdfPartTotal = 0;
-              effectiveProgressPercent = backendProgressPercent >= 90
-                  ? backendProgressPercent
-                  : (backendProgressPercent > simulatedProgressPercent
-                      ? backendProgressPercent
-                      : simulatedProgressPercent);
-            }
-
-            prepareProgress = effectiveProgressPercent / 100.0;
-
-            // Extract task type from message (e.g., "Detect Identifier", "Detect Language")
-            var extractedTaskType = '';
-            if (message.isNotEmpty) {
-              // Parse message format: "Detect Identifier: 100/500 segments (20%)"
-              // or "Detect Language: 250/500 segments (50%)"
-              final int colonIndex = message.indexOf(':');
-              if (colonIndex > 0) {
-                extractedTaskType = message.substring(0, colonIndex).trim();
-              }
-            }
-
-            if (message.isNotEmpty) {
-              prepareStatus = message;
-            } else {
-              prepareStatus =
-                  r'Preparing... ($effectiveProgressPercent%)';
-            }
-
-            // Set task type for display (localized for known task types)
-            prepareTaskType =
-                _localizePrepareTaskType(context, extractedTaskType);
-            if (prepareErrorMessage.isNotEmpty) {
-              prepareErrorMessage = '';
-            }
-          });
+            });
+          }
         }
         // Log slow operations only
         if (kDebugMode) {
@@ -654,21 +631,10 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
       });
     }
 
-    // Start polling timer (use 500ms interval for more frequent updates during batch retry)
-    translationTimer = Timer.periodic(const Duration(milliseconds: 500), (t) async {
-      // CRITICAL: Log every timer tick to track execution
-      AppLogger.log(
-        'ExtractPreview',
-        '_startTranslationPolling: TIMER TICK started (tick=${t.tick}, mounted=$mounted, inFlight=$translationInFlight)',
-        level: LogLevel.info,
-      );
-
+    // 1s interval (was 500ms + INFO every tick) — avoids flooding Windows main thread
+    // during long PDF parse / translate waits.
+    translationTimer = Timer.periodic(const Duration(seconds: 1), (t) async {
       if (!mounted) {
-        AppLogger.log(
-          'ExtractPreview',
-          '_startTranslationPolling: TIMER STOP - widget not mounted',
-          level: LogLevel.warn,
-        );
         translationTimer?.cancel();
         translationTimer = null;
         translationInFlight = false;
@@ -676,26 +642,20 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
         return;
       }
 
-      // Prevent concurrent polling
-      // CRITICAL: If translationInFlight is true, check if it's been too long (>10 seconds)
-      // If so, reset it to allow progress updates (handles cases where API call takes a long time)
+      // Prevent concurrent polling. Keep the lock for up to 120s so a slow
+      // getStatus does not spawn overlapping requests (previously reset at 10s).
       if (translationInFlight) {
         final now = DateTime.now().millisecondsSinceEpoch;
         final startTime = translationInFlightStartTime;
-        if (startTime != null && (now - startTime) > 10000) {
-          // Reset stale lock after 10 seconds
+        if (startTime != null && (now - startTime) > 120000) {
           AppLogger.log(
             'ExtractPreview',
-            '_startTranslationPolling timer: translationInFlight has been true for ${now - startTime}ms (>10s), resetting to allow progress updates',
+            '_startTranslationPolling timer: translationInFlight has been true for ${now - startTime}ms (>120s), resetting',
             level: LogLevel.warn,
           );
           translationInFlight = false;
           translationInFlightStartTime = null;
         } else {
-          AppLogger.log(
-            'ExtractPreview',
-            '_startTranslationPolling timer: translationInFlight is true, skipping this tick (previous request still in progress)',
-          );
           return;
         }
       }
@@ -706,12 +666,6 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
       try {
         final pollStartTime = DateTime.now().millisecondsSinceEpoch;
         final svc = TranslationService();
-
-        AppLogger.log(
-          'ExtractPreview',
-          '_startTranslationPolling: Fetching status for taskId=$taskId',
-          level: LogLevel.info,
-        );
 
         // Use the translation taskId (which is the workflowId)
         final status = await svc.getStatus(taskId);
@@ -748,19 +702,23 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
         AppLogger.log(
           'ExtractPreview',
           '_startTranslationPolling: Status check - status=$statusLower, progress=$progress, message="$message", pollDuration=${pollEndTime - pollStartTime}ms, taskId=$taskId',
-          level: LogLevel.info,
+          level: LogLevel.debug,
         );
 
         // Update translation progress (in-flight only; terminal handled below)
         if (statusLower == 'processing') {
           final oldProgress = translationProgress;
           final newProgress = progress.clamp(0, 100) / 100.0;
+          final String nextStatus =
+              message.isNotEmpty ? message : 'Translating...';
+          final bool progressChanged =
+              ((oldProgress * 100).round() != (newProgress * 100).round()) ||
+                  translationStatus != nextStatus;
 
-          if (mounted) {
+          if (mounted && progressChanged) {
             setState(() {
               translationProgress = newProgress;
-              translationStatus =
-                  message.isNotEmpty ? message : 'Translating...';
+              translationStatus = nextStatus;
             });
           }
 

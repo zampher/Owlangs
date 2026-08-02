@@ -1760,14 +1760,8 @@ class TranslationService:
                     f"(preview_segments={preview_segments_count}, cache_segments={cache_segments_count}, workflow_type={workflow_type})"
                 )
         
-        # Queued tasks: pre-generate all export formats (both PDF variants) into stash before completion.
-        if (
-            task_state.get("execution_mode") == "queued"
-            and (task_state.get("status") or "").lower() not in ("failed",)
-        ):
-            await self._auto_export_queued_task_outputs(task_id, task_state)
-
-        # Update final status and message (status may already be completed for immediate mode)
+        # Mark completed before queued auto-export so the UI/API stay responsive while
+        # heavy PDF/DOCX generation runs (export itself must not block the event loop).
         if task_state.get("status") != "completed":
             task_state["status"] = "completed"
         task_state["progress"] = 100
@@ -1782,13 +1776,48 @@ class TranslationService:
                 self.task_manager.add_log(task_id, "info", "Translation completed successfully")
             else:
                 task_state["message"] = f"Translation failed: {task_state['llm_error']}"
-                self.task_manager.add_log(task_id, "error", f"Translation failed due to LLM platform error: {task_state['llm_error']}")
-            
+                self.task_manager.add_log(
+                    task_id,
+                    "error",
+                    f"Translation failed due to LLM platform error: {task_state['llm_error']}",
+                )
+
             current_message = task_state.get("message", "")
             if "timeout" in current_message.lower() and "completed" not in current_message.lower():
                 task_state["message"] = f"Translation completed (with timeout issues). {current_message}"
-        
-        logger.info(LogModule.WORKFLOW, f"[TRANSLATION-SERVICE] Task {task_id} completed. Status: {task_state['status']}")
+
+        logger.info(
+            LogModule.WORKFLOW,
+            f"[TRANSLATION-SERVICE] Task {task_id} completed. Status: {task_state['status']}",
+        )
+
+        if (
+            task_state.get("execution_mode") == "queued"
+            and (task_state.get("status") or "").lower() not in ("failed",)
+        ):
+            # Do not await: heavy layout MD/HTML export must not hold the queue
+            # worker or starve /api/health while the UI is polling.
+            task_state["queued_auto_export_pending"] = True
+            export_task = asyncio.create_task(
+                self._auto_export_queued_task_outputs(task_id, task_state),
+                name=f"owlangs-queued-auto-export-{task_id}",
+            )
+
+            def _clear_export_pending(t: "asyncio.Task[None]") -> None:
+                ts = self.task_manager.get_task(task_id)
+                if isinstance(ts, dict):
+                    ts["queued_auto_export_pending"] = False
+                if t.cancelled():
+                    return
+                exc = t.exception()
+                if exc is not None:
+                    logger.warning(
+                        LogModule.WORKFLOW,
+                        f"[TRANSLATION-SERVICE] Task {task_id}: background auto-export "
+                        f"finished with error: {exc}",
+                    )
+
+            export_task.add_done_callback(_clear_export_pending)
     
     def _sync_workflow_attachments(
         self,

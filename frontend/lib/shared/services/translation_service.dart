@@ -551,14 +551,20 @@ class TranslationService {
     int maxRetries,
     Duration retryDelay,
   ) async {
-    final Dio dio = _buildAuthedDio();
+    // Large PDFs can take minutes to enrich/serialize segments; match source-preview.
+    final Dio dio = _buildAuthedDio(useLongTimeout: true);
 
     int attempt = 0;
     while (true) {
       attempt += 1;
       try {
-        final Response<dynamic> resp =
-            await dio.get('/service/translation-segments/$taskId');
+        final Response<dynamic> resp = await dio.get(
+          '/service/translation-segments/$taskId',
+          options: Options(
+            receiveTimeout: AppConfig.longRequestTimeout,
+            sendTimeout: AppConfig.longRequestTimeout,
+          ),
+        );
         return (resp.data as Map).cast<String, dynamic>();
       } on DioException catch (e, stackTrace) {
         final int? statusCode = e.response?.statusCode;

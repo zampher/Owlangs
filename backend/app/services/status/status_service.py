@@ -263,23 +263,48 @@ class StatusService:
         thread_count = max(1, int(cpu_count * 2 / 3))
         return thread_count
 
+    # Internal task_state caches that must never appear in status JSON.
+    # _image_layout_grouping_cache uses string keys for format combo and
+    # holds layout_document refs — json.dumps rejects non-JSON-safe keys/values.
+    _STATUS_JSON_STRIP_KEYS = (
+        "workflow_instance",
+        "workflow",
+        "layout_document",
+        "payload",
+        "layout_source_zip",
+        "mobi_book",
+        "mobi_items_to_translate",
+        "_image_layout_grouping_cache",
+        "_rebuilt_md_for_pdf",
+    )
+
+    @staticmethod
+    def _json_safe_dict_key(key: Any) -> Any:
+        """Return a JSON-encodable dict key (str/int/float/bool/None)."""
+        if key is None or isinstance(key, (str, int, float, bool)):
+            return key
+        return str(key)
+
     def _sanitize_task_state_for_json(self, task_state: Dict[str, Any], task_id: str) -> None:
         """
         Remove or convert non-JSON-serializable keys from task_state in-place.
         Call this before returning task_state in JSONResponse to avoid TypeError
         (e.g. Object of type EpubWorkflow is not JSON serializable).
         """
-        # Remove complex Python objects that cannot be serialized
-        for key in (
-            "workflow_instance",
-            "workflow",
-            "layout_document",
-            "payload",
-            "layout_source_zip",
-            "mobi_book",
-            "mobi_items_to_translate",
-        ):
+        # Remove complex Python objects / internal caches that cannot be serialized
+        for key in self._STATUS_JSON_STRIP_KEYS:
             if key in task_state:
+                if key == "_image_layout_grouping_cache":
+                    cache = task_state.get(key)
+                    sample_key = None
+                    if isinstance(cache, dict) and cache:
+                        sample_key = next(iter(cache.keys()))
+                    logger.debug(
+                        LogModule.SYSTEM,
+                        f"[STATUS] Task {task_id}: stripping _image_layout_grouping_cache "
+                        f"(entries={len(cache) if isinstance(cache, dict) else 'n/a'}, "
+                        f"sample_key_type={type(sample_key).__name__})",
+                    )
                 del task_state[key]
         # Convert current_task_ref (Task/future) to a string status
         if "current_task_ref" in task_state and task_state["current_task_ref"] is not None:
@@ -337,6 +362,8 @@ class StatusService:
         """
         response: Dict[str, Any] = {}
         for key, value in task_state.items():
+            if key in self._STATUS_JSON_STRIP_KEYS:
+                continue
             if key == "source_chunks_cache" and isinstance(value, dict):
                 response[key] = self._slim_source_chunks_cache(value)
             elif key == "source_preview" and isinstance(value, dict):
@@ -348,13 +375,25 @@ class StatusService:
         return response
 
     def _convert_to_native_json_types(self, obj: Any) -> None:
-        """Convert numpy and other non-JSON-serializable types in-place (dict/list/values)."""
+        """Convert numpy and other non-JSON-serializable types in-place (dict/list/values/keys)."""
         if obj is None:
             return
         if isinstance(obj, dict):
             for k, v in list(obj.items()):
+                safe_k = self._json_safe_dict_key(k)
+                if safe_k is not k:
+                    # Tuple/other keys break json.dumps; move under a string key.
+                    del obj[k]
+                    if safe_k in obj:
+                        # Prefer keeping an existing JSON-safe entry; drop the unsafe duplicate.
+                        continue
+                    obj[safe_k] = v
+                    k = safe_k
                 if isinstance(v, (dict, list)):
                     self._convert_to_native_json_types(v)
+                elif isinstance(v, tuple):
+                    obj[k] = list(v)
+                    self._convert_to_native_json_types(obj[k])
                 elif isinstance(v, (str, int, float, bool)) or v is None:
                     pass
                 elif hasattr(v, "item") and callable(getattr(v, "item", None)):
@@ -377,6 +416,9 @@ class StatusService:
             for i, v in enumerate(obj):
                 if isinstance(v, (dict, list)):
                     self._convert_to_native_json_types(v)
+                elif isinstance(v, tuple):
+                    obj[i] = list(v)
+                    self._convert_to_native_json_types(obj[i])
                 elif isinstance(v, (str, int, float, bool)) or v is None:
                     pass
                 elif hasattr(v, "item") and callable(getattr(v, "item", None)):

@@ -17,6 +17,7 @@ import '../../../core/utils/file_picker_helper.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/services/file_format_service.dart';
 import '../../../shared/services/translation_service.dart';
+import '../../../shared/utils/app_logger.dart';
 import '../../../features/settings/screens/ai_platform_settings.dart'
     show aiPlatformSettingsProvider;
 import '../../translation/widgets/translation_quick_settings.dart'
@@ -834,20 +835,8 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
     final String batchLabel = _batchLabel.trim().isNotEmpty
         ? _batchLabel.trim()
         : '$resolvedSourceType · ${selected.length} files';
-    final Map<String, dynamic> batchResp = await translationService.createUploadBatch(
-      label: batchLabel,
-      sourceType: resolvedSourceType,
-    );
-    final String? batchId =
-        (batchResp['batch'] as Map?)?['batch_id']?.toString();
-    if (batchId == null || batchId.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.translationQueueBatchCreateFailed)),
-      );
-      return;
-    }
 
+    // Show submitting UI before the first network call so Convert is not "stuck".
     setState(() {
       _phase = _DialogPhase.submitting;
       _total = selected.length;
@@ -858,6 +847,40 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
           .map((f) => FileSubmissionStatus(fileName: f.fileName))
           .toList();
     });
+
+    late final Map<String, dynamic> batchResp;
+    try {
+      batchResp = await translationService.createUploadBatch(
+        label: batchLabel,
+        sourceType: resolvedSourceType,
+      );
+    } catch (e) {
+      AppLogger.log(
+        'BatchUpload',
+        'createUploadBatch failed during Convert: $e',
+        level: LogLevel.error,
+      );
+      if (!mounted) return;
+      setState(() {
+        _phase = _DialogPhase.reviewFiles;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.translationQueueBatchCreateFailed)),
+      );
+      return;
+    }
+    final String? batchId =
+        (batchResp['batch'] as Map?)?['batch_id']?.toString();
+    if (batchId == null || batchId.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _phase = _DialogPhase.reviewFiles;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.translationQueueBatchCreateFailed)),
+      );
+      return;
+    }
 
     _progressSub = _submissionService
         .submitBatch(
