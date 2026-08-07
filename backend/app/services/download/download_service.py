@@ -120,6 +120,210 @@ def _get_to_lang_and_docx_font(task_state: Dict[str, Any], payload: Any = None) 
     return (to_lang, docx_font_name)
 
 
+def _candidate_original_pdf_beside_layout_path(
+    layout_path: Any,
+    original_filename: str,
+) -> Optional[Path]:
+    """If layout artifacts live under a convert temp dir, find the sibling original PDF."""
+    if not layout_path or not original_filename:
+        return None
+    try:
+        p = Path(str(layout_path))
+    except Exception:
+        return None
+    name = Path(original_filename).name
+    search_dirs: List[Path] = []
+    if p.is_file():
+        search_dirs.append(p.parent)
+        search_dirs.append(p.parent.parent)
+    elif p.is_dir():
+        search_dirs.append(p)
+        search_dirs.append(p.parent)
+    for d in search_dirs:
+        candidate = d / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _restore_original_pdf_into_temp(
+    task_state: Dict[str, Any],
+    task_id: str,
+    temp_dir: Path,
+    original_filename: str,
+    previous_path: Optional[str],
+) -> Optional[Path]:
+    """Copy original PDF into temp_dir from convert task or layout sibling paths."""
+    dest = temp_dir / Path(original_filename).name
+    sources_tried: List[str] = []
+
+    backup = task_state.get("_convert_original_file_backup")
+    sources_tried.append(f"backup:{backup}")
+    if backup and Path(str(backup)).is_file():
+        shutil.copy2(str(backup), dest)
+        task_state["original_file_path"] = str(dest)
+        logger.warning(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Task {task_id}: restored original PDF from convert backup "
+            f"{backup} -> {dest} (missing={previous_path!r})",
+        )
+        return dest
+
+    convert_id = task_state.get("convert_task_id")
+    if convert_id:
+        try:
+            from backend.app.services.task.task_manager import task_manager
+
+            convert_state = task_manager.get_task(str(convert_id))
+        except Exception as e:
+            convert_state = None
+            sources_tried.append(f"convert:{convert_id}:lookup_error={e}")
+        if isinstance(convert_state, dict):
+            src = convert_state.get("original_file_path")
+            sources_tried.append(f"convert:{convert_id}:{src}")
+            if src and Path(src).is_file():
+                shutil.copy2(src, dest)
+                task_state["original_file_path"] = str(dest)
+                logger.warning(
+                    LogModule.EXPORT,
+                    f"[DOWNLOAD] Task {task_id}: restored original PDF from convert "
+                    f"task {convert_id} -> {dest} (missing={previous_path!r})",
+                )
+                return dest
+
+    for key in ("mineru_zip_path", "mineru_extract_dir", "paddle_zip_path"):
+        sibling = _candidate_original_pdf_beside_layout_path(
+            task_state.get(key), original_filename
+        )
+        sources_tried.append(f"{key}:{sibling}")
+        if sibling is not None and sibling.is_file():
+            shutil.copy2(sibling, dest)
+            task_state["original_file_path"] = str(dest)
+            logger.warning(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Task {task_id}: restored original PDF from {key} "
+                f"sibling {sibling} -> {dest} (missing={previous_path!r})",
+            )
+            return dest
+
+    logger.error(
+        LogModule.EXPORT,
+        f"[DOWNLOAD] Task {task_id}: cannot restore original PDF for export. "
+        f"temp_dir={temp_dir} previous_path={previous_path!r} "
+        f"sources_tried={sources_tried}",
+    )
+    return None
+
+
+def _ensure_task_export_workdir(task_state: Dict[str, Any], task_id: str) -> Path:
+    """Ensure temp_dir/output and original PDF exist before Typst overlay / on-demand export.
+
+    Customer logs show mid-session loss of ``%TEMP%/owlangs_<task>_...`` while task_state
+    still holds the path (no RELEASE for that task). ``mkdir(exist_ok=True)`` then fails
+    with WinError 3 because the parent is gone; Typst overlay reports original PDF missing.
+    """
+    original_filename = (
+        task_state.get("original_filename")
+        or Path(str(task_state.get("original_file_path") or "document.pdf")).name
+    )
+    temp_dir_raw = task_state.get("temp_dir")
+    temp_dir: Optional[Path] = Path(temp_dir_raw) if temp_dir_raw else None
+
+    if temp_dir is None or not temp_dir.is_dir():
+        logger.warning(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Task {task_id}: temp_dir missing or invalid "
+            f"(temp_dir={temp_dir_raw!r}); recreating for export",
+        )
+        if temp_dir is not None and temp_dir.parent.is_dir():
+            temp_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            temp_dir = Path(tempfile.mkdtemp(prefix=f"owlangs_{task_id}_"))
+        task_state["temp_dir"] = str(temp_dir)
+
+    assert temp_dir is not None
+    output_dir = temp_dir / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    original_file_path = task_state.get("original_file_path")
+    if not original_file_path or not Path(str(original_file_path)).is_file():
+        restored = _restore_original_pdf_into_temp(
+            task_state,
+            task_id,
+            temp_dir,
+            str(original_filename),
+            str(original_file_path) if original_file_path else None,
+        )
+        if restored is None and original_file_path:
+            # Keep stale path for error message; caller validates exists().
+            pass
+        elif restored is not None:
+            pass
+        elif not original_file_path:
+            # Point at expected location so error message is actionable.
+            task_state["original_file_path"] = str(temp_dir / Path(str(original_filename)).name)
+
+    return temp_dir
+
+
+def _materialize_path_into_temp(
+    task_state: Dict[str, Any],
+    task_id: str,
+    key: str,
+    temp_dir: str,
+) -> None:
+    """If task_state[key] points outside temp_dir, copy file/dir into temp and retarget."""
+    src_raw = task_state.get(key)
+    if not src_raw or not isinstance(src_raw, str):
+        return
+    try:
+        src = Path(src_raw)
+    except Exception:
+        return
+    if not src.exists():
+        logger.warning(
+            LogModule.TRANS,
+            f"[TRANSLATION-SERVICE] Task {task_id}: inherited {key}={src_raw!r} "
+            "does not exist on disk; left as-is",
+        )
+        return
+    try:
+        if Path(src_raw).resolve().is_relative_to(Path(temp_dir).resolve()):
+            return
+    except Exception:
+        # is_relative_to may fail on older Python edge cases; fall through to copy.
+        pass
+    try:
+        if src.is_file():
+            dest = Path(temp_dir) / src.name
+            if dest.resolve() != src.resolve():
+                shutil.copy2(src, dest)
+                task_state[key] = str(dest)
+                logger.info(
+                    LogModule.TRANS,
+                    f"[TRANSLATION-SERVICE] Task {task_id}: copied inherited {key} "
+                    f"into temp: {src} -> {dest}",
+                )
+        elif src.is_dir():
+            dest = Path(temp_dir) / src.name
+            if dest.resolve() != src.resolve():
+                if dest.exists():
+                    shutil.rmtree(dest, ignore_errors=True)
+                shutil.copytree(src, dest)
+                task_state[key] = str(dest)
+                logger.info(
+                    LogModule.TRANS,
+                    f"[TRANSLATION-SERVICE] Task {task_id}: copied inherited {key} "
+                    f"dir into temp: {src} -> {dest}",
+                )
+    except Exception as e:
+        logger.warning(
+            LogModule.TRANS,
+            f"[TRANSLATION-SERVICE] Task {task_id}: failed to materialize {key} "
+            f"from {src_raw!r}: {e}",
+        )
+
+
 def _get_image_layout_for_grouping(
     task_state: Dict[str, Any],
     equation_format: Optional[str] = None,
@@ -1706,6 +1910,7 @@ async def _typst_overlay_pdf_response(
             ),
         )
 
+    _ensure_task_export_workdir(task_state, task_id)
     source_pdf_path = task_state.get("original_file_path")
     if not source_pdf_path or not Path(source_pdf_path).exists():
         raise HTTPException(
@@ -1904,7 +2109,7 @@ async def _typst_overlay_pdf_response(
     )
 
     output_dir = Path(task_state.get("temp_dir") or tempfile.gettempdir()) / "output"
-    output_dir.mkdir(exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     sfx = _get_output_suffix(task_state)
     pdf_file = output_dir / f"{file_stem}{sfx}.pdf"
     cleaned_source_file = output_dir / f"{file_stem}{sfx}_cleaned_source.pdf"
@@ -3145,8 +3350,9 @@ class DownloadService:
                 else:
                     from app.services.download.output_generator import OutputGenerator
 
-                    output_dir = Path(temp_dir) / "output"
-                    output_dir.mkdir(exist_ok=True)
+                    temp_dir_path = _ensure_task_export_workdir(task_state, task_id)
+                    output_dir = temp_dir_path / "output"
+                    output_dir.mkdir(parents=True, exist_ok=True)
                     file_stem = Path(original_filename).stem
                     is_format_conversion = task_state.get("is_format_conversion", False) or task_state.get("convert_only", False)
 

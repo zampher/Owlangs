@@ -1029,6 +1029,47 @@ class TranslationService:
                             if layout_key not in task_state or task_state.get(layout_key) is None:
                                 task_state[layout_key] = convert_state[layout_key]
                                 copied_keys.append(layout_key)
+                    # Disk paths from convert live under convert's temp_dir; copy into
+                    # this task's temp so RELEASE/OS cleanup of convert temp cannot
+                    # break Typst overlay / layout reuse later.
+                    current_temp = task_state.get("temp_dir")
+                    if current_temp and os.path.isdir(current_temp):
+                        from app.services.download.download_service import (
+                            _materialize_path_into_temp,
+                        )
+
+                        for disk_key in (
+                            "mineru_zip_path",
+                            "mineru_extract_dir",
+                            "paddle_zip_path",
+                        ):
+                            if disk_key in copied_keys or disk_key in task_state:
+                                _materialize_path_into_temp(
+                                    task_state, task_id, disk_key, current_temp
+                                )
+                        # Also keep a durable copy of convert original PDF if ours vanishes later.
+                        convert_pdf = convert_state.get("original_file_path")
+                        own_pdf = task_state.get("original_file_path")
+                        if (
+                            convert_pdf
+                            and os.path.isfile(convert_pdf)
+                            and own_pdf
+                            and os.path.isdir(current_temp)
+                        ):
+                            backup = os.path.join(
+                                current_temp,
+                                f"_convert_source_{Path(convert_pdf).name}",
+                            )
+                            try:
+                                if not os.path.isfile(backup):
+                                    shutil.copy2(convert_pdf, backup)
+                                    task_state["_convert_original_file_backup"] = backup
+                            except Exception as backup_err:
+                                logger.debug(
+                                    LogModule.TRANS,
+                                    f"[TRANSLATION-SERVICE] Task {task_id}: "
+                                    f"convert PDF backup skipped: {backup_err}",
+                                )
                     # Copy ebook_metadata (title, author) so export uses it when generating MOBI/EPUB
                     if "ebook_metadata" in convert_state and convert_state["ebook_metadata"]:
                         task_state["ebook_metadata"] = convert_state["ebook_metadata"].copy()
