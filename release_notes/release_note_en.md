@@ -4,7 +4,12 @@
 
 ### New Features
 
-1. **Model selection in Quick Settings**: In translation Quick Settings, set or pick the LLM model name via List under the platform dropdown.
+1. **Model selection in Quick Settings**: Added model selection in Quick Settings (enter a name or pick via List).
+
+### Bug Fixes
+
+1. **PDF generation failure (Original PDF not found)**: Fixed PDF generation failing with `Original PDF file not found for Typst overlay rendering`.
+2. **False “no API key” error**: Fixed cases where the UI reported a missing API key even though the key was still present in configuration.
 
 ---
 

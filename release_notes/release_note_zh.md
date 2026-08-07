@@ -4,7 +4,12 @@
 
 ### 新功能
 
-1. **快捷设置选择模型**：翻译任务快捷设置中，可在 LLM 平台下方直接填写或通过 List 选择模型名称。
+1. **快捷设置选择模型**：在快捷设置里，增加模型的选择（可填写或通过 List 选择模型名称）。
+
+### 修复
+
+1. **生成 PDF 失败（Original PDF not found）**：修复生成 PDF 失败，报错 `Original PDF file not found for Typst overlay rendering` 的问题。
+2. **误报无 API Key**：修复提示无 API Key，但密钥实际仍存在于配置中的问题。
 
 ---
 
