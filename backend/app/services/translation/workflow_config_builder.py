@@ -303,11 +303,30 @@ class WorkflowConfigBuilder:
         resolved_temperature = self._resolve_temperature(payload, base_url, model_id, platform_key)
         resolved_thinking = self._resolve_thinking(payload, base_url, model_id, platform_key)
 
+        payload_api_key = getattr(payload, 'api_key', '') or ''
+        if isinstance(payload_api_key, str):
+            payload_api_key = payload_api_key.strip()
+        else:
+            payload_api_key = ''
+        # Prefer payload key; otherwise load from secrets (frontend often sends empty).
+        if not payload_api_key and platform_key:
+            try:
+                from backend.config.config_loader import get_unified_config
+
+                payload_api_key = (
+                    get_unified_config().get_platform_api_key(platform_key) or ""
+                ).strip()
+            except Exception as e:
+                logger.debug(
+                    LogModule.CONFIG,
+                    f"[CONFIG-BUILDER] Task {self.task_id}: secrets api_key resolve failed: {e}",
+                )
+
         translator_args = {
             'task_id': self.task_id,  # CRITICAL: Pass task_id so apply_smart_glossary_matching can access task_state
             'skip_translate': getattr(payload, 'skip_translate', False),
             'base_url': base_url,
-            'api_key': getattr(payload, 'api_key', '') or '',
+            'api_key': payload_api_key,
             'model_id': model_id,
             'to_lang': getattr(payload, 'to_lang', 'en'),
             'custom_prompt': synthesized_prompt,

@@ -276,13 +276,43 @@ class TranslationService:
         try:
             from backend.config.config_loader import get_unified_config
             unified_config = get_unified_config()
-            pk = platform_key_for_status or platform_key
+            pk = platform_key_for_status
             if pk:
                 platform_cfg = unified_config.platforms.get_platform_config(pk)
                 if platform_cfg:
                     requires_api_key = getattr(platform_cfg, 'requires_api_key', True)
         except Exception:
             pass
+
+        # Frontend often omits api_key (non-admin / raw-secrets unavailable). Resolve
+        # from secrets.json like Agent does — otherwise chat probe sends no Bearer and
+        # DeepSeek returns 401, which looks like "API key lost".
+        api_key_str = (api_key or "").strip() if isinstance(api_key, str) else ""
+        if not api_key_str:
+            try:
+                from backend.config.config_loader import get_unified_config
+
+                unified_config = get_unified_config()
+                pk = platform_key_for_status
+                if pk:
+                    api_key_str = (unified_config.get_platform_api_key(pk) or "").strip()
+                if not api_key_str:
+                    # Fallback: secrets map by platform key
+                    from backend.config.secrets_manager import get_secrets_manager
+
+                    secrets = get_secrets_manager()
+                    if pk:
+                        api_key_str = (secrets.get_api_key(pk) or "").strip()
+                logger.info(
+                    LogModule.WORKFLOW,
+                    f"[LLM-TEST] Task {task_id}: resolved api_key from secrets "
+                    f"platform={pk!r} len={len(api_key_str)} empty={not bool(api_key_str)}",
+                )
+            except Exception as resolve_err:
+                logger.warning(
+                    LogModule.WORKFLOW,
+                    f"[LLM-TEST] Task {task_id}: failed to resolve api_key from secrets: {resolve_err}",
+                )
 
         # Read connectivity test timeout values from platform config
         test_connect_timeout = 30
@@ -305,7 +335,7 @@ class TranslationService:
                 platform_type=platform_type,
                 base_url=base_url,
                 model_name=model_id,
-                api_key=api_key or "",
+                api_key=api_key_str,
                 detect_max_tokens=False,  # Keep test fast; max_tokens detection is optional
                 requires_api_key=requires_api_key,
                 test_connect_timeout=test_connect_timeout,
