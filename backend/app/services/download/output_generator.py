@@ -2597,141 +2597,17 @@ class OutputGenerator:
 
                             if isinstance(e, PdfExportLatexError):
                                 segs = (task_state.get("translation_segments") or {}).get("segments") or []
-                                segment_index = None
+                                from utils.pdf_export_failure_locator import (
+                                    match_segment_index_for_pdf_failure,
+                                )
+
+                                segment_index, match_basis = match_segment_index_for_pdf_failure(
+                                    error_token=getattr(e, "error_token", "") or "",
+                                    md_snippet=e.md_snippet or "",
+                                    tex_snippet=e.tex_snippet or "",
+                                    segments=segs if isinstance(segs, list) else [],
+                                )
                                 candidates: list[int] = []
-                                match_basis = "unknown"
-
-                                def _best_effort_find_segment_index() -> None:
-                                    nonlocal segment_index, match_basis
-                                    if not isinstance(segs, list) or not segs:
-                                        return
-
-                                    import re as _re
-
-                                    def _seg_text(seg: dict) -> str:
-                                        """Return the best text to search against for a segment."""
-                                        return (
-                                            (seg or {}).get("modified_text")
-                                            or (seg or {}).get("target_text", "")
-                                            or ""
-                                        )
-
-                                    def _strip_line_numbers(snippet: str) -> list[str]:
-                                        """Remove 'N: ' line-number prefixes and filter short lines."""
-                                        out: list[str] = []
-                                        for ln in (snippet or "").splitlines():
-                                            clean = _re.sub(r"^\d+:\s*", "", ln).strip()
-                                            if len(clean) >= 4:
-                                                out.append(clean)
-                                        return out
-
-                                    # 1) MD snippet matches (highest priority)
-                                    md_snippet = (e.md_snippet or "").strip()
-                                    if md_snippet:
-                                        lines = _strip_line_numbers(md_snippet)
-                                        if lines:
-                                            match_basis = "md_snippet"
-                                            for seg in segs:
-                                                t = _seg_text(seg)
-                                                if not t:
-                                                    continue
-                                                for ln in lines[:10]:
-                                                    if ln and ln in t:
-                                                        segment_index = (seg or {}).get("segment_index")
-                                                        return
-
-                                    # 2) Tex snippet content matches (second priority)
-                                    tex_snippet = (e.tex_snippet or "").strip()
-                                    if tex_snippet:
-                                        lines = _strip_line_numbers(tex_snippet)
-                                        if lines:
-                                            match_basis = "tex_snippet"
-                                            for seg in segs:
-                                                t = _seg_text(seg)
-                                                if not t:
-                                                    continue
-                                                for ln in lines[:10]:
-                                                    if ln and ln in t:
-                                                        segment_index = (seg or {}).get("segment_index")
-                                                        return
-
-                                    # 3) Error token exact match (third priority)
-                                    token = (getattr(e, "error_token", "") or "").strip()
-                                    if token:
-                                        match_basis = f"error_token:{token}"
-                                        for seg in segs:
-                                            t = _seg_text(seg)
-                                            if t and token in t:
-                                                segment_index = (seg or {}).get("segment_index")
-                                                return
-
-                                        # 3b) For environment tokens, extract env name and search broadly
-                                        env_match = _re.search(r"\\(begin|end)\{([^}]+)\}", token)
-                                        if env_match:
-                                            env_name = env_match.group(2)
-                                            env_begin = f"\\begin{{{env_name}}}"
-                                            env_end = f"\\end{{{env_name}}}"
-                                            match_basis = f"env_name:{env_name}"
-                                            for seg in segs:
-                                                t = _seg_text(seg)
-                                                if t and (env_begin in t or env_end in t):
-                                                    segment_index = (seg or {}).get("segment_index")
-                                                    return
-
-                                        # 3c) For general commands, try base command without braces/args
-                                        cmd_match = _re.search(r"\\([a-zA-Z]+)", token)
-                                        if cmd_match:
-                                            cmd_base = "\\" + cmd_match.group(1)
-                                            if cmd_base != token:
-                                                match_basis = f"cmd_base:{cmd_base}"
-                                                for seg in segs:
-                                                    t = _seg_text(seg)
-                                                    if t and cmd_base in t:
-                                                        segment_index = (seg or {}).get("segment_index")
-                                                        return
-
-                                    # 4) Error-type heuristics: parse stderr for specific clues
-                                    error_type = getattr(e, "error_type", "") or ""
-                                    stderr = getattr(e, "stderr", "") or ""
-                                    if error_type == "undefined_control_sequence":
-                                        m = _re.search(
-                                            r"Undefined control sequence[.\s]*\\(\w+)",
-                                            stderr,
-                                            _re.IGNORECASE,
-                                        )
-                                        if m:
-                                            undefined_cmd = "\\" + m.group(1)
-                                            match_basis = f"undefined_cmd:{undefined_cmd}"
-                                            for seg in segs:
-                                                t = _seg_text(seg)
-                                                if t and undefined_cmd in t:
-                                                    segment_index = (seg or {}).get("segment_index")
-                                                    return
-
-                                    # 5) Last resort: score segments by how many backslash commands
-                                    # from stderr they contain. Only use if we find >= 2 matches.
-                                    if stderr:
-                                        cmds_in_stderr = set(
-                                            _re.findall(r"\\([a-zA-Z]+)", stderr)
-                                        )
-                                        if cmds_in_stderr:
-                                            best_seg = None
-                                            best_score = 0
-                                            for seg in segs:
-                                                t = _seg_text(seg)
-                                                if not t:
-                                                    continue
-                                                score = sum(
-                                                    1 for cmd in cmds_in_stderr if f"\\{cmd}" in t
-                                                )
-                                                if score > best_score:
-                                                    best_score = score
-                                                    best_seg = seg
-                                            if best_seg and best_score >= 2:
-                                                segment_index = best_seg.get("segment_index")
-                                                match_basis = f"stderr_cmd_score:{best_score}"
-
-                                _best_effort_find_segment_index()
 
                                 # FALLBACK: if best-effort could not locate the bad segment,
                                 # run an automatic per-segment check on all LaTeX-containing
@@ -2846,8 +2722,8 @@ class OutputGenerator:
                                 self.task_manager.add_log(
                                     task_id,
                                     "warning",
-                                    f"[PDF-EXPORT] LaTeX compilation failed. Suggested segment to fix: {segment_index}. "
-                                    "Please use the segment 'Fix formula' action to repair and retry export.",
+                                    f"[PDF-EXPORT] LaTeX/PDF-engine failed. Suspected bad segment: {segment_index}. "
+                                    f"Please inspect segment {segment_index}, fix or exclude it, then retry export.",
                                 )
                                 logger.warning(
                                     LogModule.EXPORT,

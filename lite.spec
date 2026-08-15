@@ -159,6 +159,8 @@ hiddenimports = [
     'backend.utils.epub_html_segments',
     'backend.utils.latex_formula_checker', 'backend.utils.latex_repair_llm',
     'backend.utils.latex_repair_payload', 'backend.utils.latex_formula_batch_repair',
+    # PDF reflow failure → Suspected bad segment (imported by format_convert_utils / download_service)
+    'backend.utils.pdf_export_failure_locator',
     # Pandoc/DOCX math normalize & fragment repair (becc134; imported by format_convert_utils, md2docx_exporter, fragment services)
     'backend.utils.math_md_normalize',
     # Reflow PDF: merge orphan equation numbers (1)/(2) into $$...$$ as \\tag (markdown_rebuild / normalize)

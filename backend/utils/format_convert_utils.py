@@ -19,10 +19,10 @@ from docx import Document
 from docx.oxml.ns import qn
 from logger import unified_logger as logger
 from logger.logger import LogModule
-from utils.latex_repair_payload import extract_latex_error_context
 from utils.docx_algorithm_latex_wrap import wrap_bare_latex_for_docx_algorithms
 from utils.docx_md_normalize import normalize_docx_markdown_sup_sub
 from utils.math_md_normalize import normalize_md_math_for_pandoc_export
+from utils.pdf_export_failure_locator import extract_pdf_export_failure_context
 
 
 def _to_short_path_if_needed(path: Path) -> Path:
@@ -1906,29 +1906,36 @@ def convert_md_to_pdf(
                         f"[PDF-EXPORT] Writing debug LaTeX failed: {tex_err}",
                     )
 
-            if debug_tex_path is not None and debug_tex_path.exists():
-                ctx = extract_latex_error_context(stderr, debug_tex_path, debug_md_path)
-                if ctx is not None and (ctx.md_snippet or ctx.tex_snippet):
-                    logger.warning(
-                        LogModule.RESTOR,
-                        "[PDF-EXPORT] LaTeX compile context (type={etype}, line={line}, token={tok}, debug_tex={tex_path}, debug_md={md_path})",
-                        etype=ctx.error_type,
-                        line=ctx.line_no,
-                        tok=ctx.error_token or "<none>",
-                        tex_path=str(debug_tex_path),
-                        md_path=str(debug_md_path) if debug_md_path else "<none>",
-                    )
-                    raise PdfExportLatexError(
-                        "Pandoc+XeLaTeX failed to compile the generated LaTeX. See error context for details.",
-                        stderr=stderr,
-                        error_type=ctx.error_type or "unknown",
-                        line_no=ctx.line_no,
-                        error_token=ctx.error_token or "",
-                        tex_snippet=ctx.tex_snippet or "",
-                        md_snippet=ctx.md_snippet or "",
-                        debug_tex_path=debug_tex_path,
-                        debug_md_path=debug_md_path,
-                    )
+            ctx = extract_pdf_export_failure_context(
+                stderr,
+                debug_tex_path if debug_tex_path and debug_tex_path.exists() else None,
+                debug_md_path if debug_md_path and debug_md_path.exists() else None,
+            )
+            if ctx is not None and (ctx.md_snippet or ctx.tex_snippet or ctx.error_token):
+                token_preview = (ctx.error_token or "")[:80]
+                logger.warning(
+                    LogModule.RESTOR,
+                    "[PDF-EXPORT] LaTeX/PDF-engine failure context "
+                    "(type={etype}, line={line}, token_len={tok_len}, token_preview={tok}, "
+                    "debug_tex={tex_path}, debug_md={md_path})",
+                    etype=ctx.error_type,
+                    line=ctx.line_no,
+                    tok_len=len(ctx.error_token or ""),
+                    tok=token_preview or "<none>",
+                    tex_path=str(debug_tex_path) if debug_tex_path else "<none>",
+                    md_path=str(debug_md_path) if debug_md_path else "<none>",
+                )
+                raise PdfExportLatexError(
+                    "Pandoc+XeLaTeX failed to compile the generated LaTeX. See error context for details.",
+                    stderr=stderr,
+                    error_type=ctx.error_type or "unknown",
+                    line_no=ctx.line_no,
+                    error_token=ctx.error_token or "",
+                    tex_snippet=ctx.tex_snippet or "",
+                    md_snippet=ctx.md_snippet or "",
+                    debug_tex_path=debug_tex_path,
+                    debug_md_path=debug_md_path,
+                )
         return False
     except subprocess.TimeoutExpired:
         logger.warning(LogModule.RESTOR, "[PDF-EXPORT] convert_md_to_pdf: pandoc timed out")

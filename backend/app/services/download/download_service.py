@@ -2506,36 +2506,18 @@ def _pandoc_pdf_file_response_from_md(
             except Exception as e:
                 if isinstance(e, PdfExportLatexError):
                     segs = (task_state.get("translation_segments") or {}).get("segments") or []
-                    segment_index = None
+                    from utils.pdf_export_failure_locator import (
+                        build_pdf_export_user_detail,
+                        match_segment_index_for_pdf_failure,
+                    )
+
+                    segment_index, match_basis = match_segment_index_for_pdf_failure(
+                        error_token=getattr(e, "error_token", "") or "",
+                        md_snippet=e.md_snippet or "",
+                        tex_snippet=e.tex_snippet or "",
+                        segments=segs if isinstance(segs, list) else [],
+                    )
                     candidates: list[int] = []
-                    match_basis = "unknown"
-
-                    def _best_effort_find_segment_index() -> None:
-                        nonlocal segment_index, match_basis
-                        if not isinstance(segs, list) or not segs:
-                            return
-                        md_snippet = (e.md_snippet or "").strip()
-                        if md_snippet:
-                            match_basis = "md_snippet"
-                            lines = [ln.strip() for ln in md_snippet.splitlines() if len((ln or "").strip()) >= 16]
-                            for seg in segs:
-                                t = (seg or {}).get("target_text", "")
-                                if not t:
-                                    continue
-                                for ln in lines[:10]:
-                                    if ln and ln in t:
-                                        segment_index = (seg or {}).get("segment_index")
-                                        return
-                        token = (getattr(e, "error_token", "") or "").strip()
-                        if token:
-                            match_basis = f"error_token:{token}"
-                            for seg in segs:
-                                t = (seg or {}).get("target_text", "")
-                                if t and token in t:
-                                    segment_index = (seg or {}).get("segment_index")
-                                    return
-
-                    _best_effort_find_segment_index()
                     if isinstance(segment_index, int) and segment_index >= 0:
                         candidates.append(segment_index)
                         for d in (1, 2, 3):
@@ -2547,21 +2529,22 @@ def _pandoc_pdf_file_response_from_md(
                         "segment_index": segment_index,
                         "candidate_segment_indices": candidates,
                         "match_basis": match_basis,
-                        "error_token": getattr(e, "error_token", "") or "",
+                        "error_token": (getattr(e, "error_token", "") or "")[:500],
+                        "error_token_length": len(getattr(e, "error_token", "") or ""),
                         "md_snippet": e.md_snippet,
                         "tex_snippet": e.tex_snippet,
                         "stderr_excerpt": (e.stderr or "")[:2000],
                         "debug_tex_path": str(e.debug_tex_path) if e.debug_tex_path else None,
                         "debug_md_path": str(e.debug_md_path) if e.debug_md_path else None,
                     }
-                    hint = f" Suspected bad segment: {segment_index}." if segment_index is not None else ""
-                    upstream = f" It may be caused by an earlier segment near: {candidates}." if candidates else ""
+                    logger.warning(
+                        LogModule.EXPORT,
+                        f"[DOWNLOAD] PDF export failure mapped to segment_index={segment_index} "
+                        f"match_basis={match_basis} error_type={e.error_type} task_id={task_id}",
+                    )
                     raise HTTPException(
                         status_code=500,
-                        detail="PDF generation failed due to a LaTeX compilation error."
-                        + hint
-                        + upstream
-                        + " Please use the segment 'Fix formula' action and retry export. Check server logs for details.",
+                        detail=build_pdf_export_user_detail(segment_index, e.error_type or ""),
                     )
                 raise
 
@@ -5912,6 +5895,9 @@ class DownloadService:
                                     equation_format,
                                     table_body_format,
                                 )
+                    except HTTPException:
+                        # Preserve PdfExportLatexError → Suspected bad segment detail for the UI.
+                        raise
                     except Exception as pdf_seg_err:
                         logger.error(
                             LogModule.EXPORT,
@@ -5975,6 +5961,9 @@ class DownloadService:
                                     equation_format,
                                     table_body_format,
                                 )
+                    except HTTPException:
+                        # Preserve PdfExportLatexError → Suspected bad segment detail for the UI.
+                        raise
                     except Exception as pdf_seg_err:
                         logger.error(
                             LogModule.EXPORT,
@@ -6999,7 +6988,11 @@ class DownloadService:
                 else:
                     errors.append(f"{stash_key}: missing or invalid output file")
             except Exception as e:
-                err = f"{stash_key}: {e}"
+                if isinstance(e, HTTPException):
+                    detail = e.detail
+                    err = f"{stash_key}: {detail}" if detail else f"{stash_key}: {e}"
+                else:
+                    err = f"{stash_key}: {e}"
                 errors.append(err)
                 logger.warning(
                     LogModule.EXPORT,

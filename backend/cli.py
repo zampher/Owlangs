@@ -60,6 +60,8 @@ if getattr(sys, "frozen", False):
         "latex_repair_llm",
         "latex_repair_payload",
         "latex_formula_batch_repair",
+        # PDF reflow failure → Suspected bad segment
+        "pdf_export_failure_locator",
         "docx_math_fragment_check",
         "docx_math_fragment_llm_repair",
         "llm_client",
