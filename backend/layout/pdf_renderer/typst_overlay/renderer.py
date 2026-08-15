@@ -39,7 +39,7 @@ import time
 import zipfile
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from tempfile import mkdtemp
 
 from layout.base import LayoutDocument
@@ -64,6 +64,8 @@ from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
     apply_user_font_override,
     apply_user_typography_override,
     collect_image_exclusion_layout_block_indices,
+    normalize_user_font_size_pt,
+    segment_has_user_font_size_override,
 )
 from layout.pdf_renderer.typst_overlay.cjk_paragraph_indent import (
     apply_cjk_body_indent_to_block,
@@ -846,7 +848,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
             footnote_text = None
 
         if caption_text and caption_bbox:
-            result.append(RenderBlock(
+            cap_rb = RenderBlock(
                 block_id=f"caption-{parent_index}",
                 page_index=page_index,
                 inner_bbox=caption_bbox,
@@ -863,7 +865,10 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 use_cover_fill=False,
                 opaque_fill=True,
                 rotation=self._block_rotation(parent_index),
-            ))
+            )
+            cap_rb = self._apply_font_size_for_block(cap_rb, parent_index)
+            cap_rb = self._apply_block_typography_overrides(cap_rb, parent_index)
+            result.append(cap_rb)
         elif caption_text:
             # Nested caption bbox missing — render on parent visual bbox.
             unified_logger.info(
@@ -871,7 +876,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 f"[TYPST_OVERLAY] Block {parent_index}: caption text without "
                 "nested bbox, using parent bbox for overlay",
             )
-            result.append(RenderBlock(
+            cap_rb = RenderBlock(
                 block_id=f"caption-{parent_index}",
                 page_index=page_index,
                 inner_bbox=block.bbox,
@@ -888,11 +893,14 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 use_cover_fill=False,
                 opaque_fill=True,
                 rotation=self._block_rotation(parent_index),
-            ))
+            )
+            cap_rb = self._apply_font_size_for_block(cap_rb, parent_index)
+            cap_rb = self._apply_block_typography_overrides(cap_rb, parent_index)
+            result.append(cap_rb)
 
         if footnote_text and footnote_bboxes:
             for i, fn_bbox in enumerate(footnote_bboxes):
-                result.append(RenderBlock(
+                fn_rb = RenderBlock(
                     block_id=f"footnote-{parent_index}-{i}",
                     page_index=page_index,
                     inner_bbox=fn_bbox,
@@ -909,7 +917,10 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     use_cover_fill=False,
                     opaque_fill=True,
                     rotation=self._block_rotation(parent_index),
-                ))
+                )
+                fn_rb = self._apply_font_size_for_block(fn_rb, parent_index)
+                fn_rb = self._apply_block_typography_overrides(fn_rb, parent_index)
+                result.append(fn_rb)
 
         if result:
             unified_logger.debug(
@@ -1165,6 +1176,47 @@ class TypstOverlayRenderer(BasePDFRenderer):
         except (TypeError, ValueError):
             return None
 
+    def _apply_font_size_for_block(
+        self,
+        rb: RenderBlock,
+        block_key: int,
+        *,
+        layout_raw: Optional[Any] = None,
+        page_width_pt: Optional[float] = None,
+        ref_unified_font_pt: Optional[float] = None,
+        ref_unified_leading_em: Optional[float] = None,
+        override_pt: Optional[float] = None,
+        allow_block_fallback: bool = True,
+    ) -> RenderBlock:
+        """Lock user font size when set; otherwise run auto fit.
+
+        Table/chart/equation/free-form paths previously only called
+        ``calculate_fit_params``, so Preview-revision font edits never stuck.
+
+        When ``allow_block_fallback`` is False (per-segment overlays), only the
+        explicit ``override_pt`` is used so sibling deep-split segments do not
+        inherit another segment's font size via the block map.
+        """
+        if override_pt is not None:
+            resolved_override: Optional[float] = override_pt
+        elif allow_block_fallback:
+            resolved_override = self._block_font_override_pt(block_key)
+        else:
+            resolved_override = None
+        if resolved_override is not None:
+            return apply_user_font_override(
+                rb,
+                resolved_override,
+                calculator=self._font_fit,
+            )
+        return self._font_fit.calculate_fit_params(
+            rb,
+            layout_raw=layout_raw,
+            ref_unified_font_pt=ref_unified_font_pt,
+            ref_unified_leading_em=ref_unified_leading_em,
+            page_width_pt=page_width_pt,
+        )
+
     def _block_font_weight_override(self, block_key: int) -> Optional[str]:
         overrides = getattr(self.config, "font_weight_by_block_index", None) or {}
         if not overrides:
@@ -1305,18 +1357,17 @@ class TypstOverlayRenderer(BasePDFRenderer):
             )
             rb.inner_bbox = bbox
             rb.opaque_fill = True
-            override_pt = self._block_font_override_pt(block_key)
-            if override_pt is not None:
-                rb = apply_user_font_override(
-                    rb,
-                    override_pt,
-                    calculator=self._font_fit,
-                )
-            else:
-                rb = self._font_fit.calculate_fit_params(
-                    rb,
-                    page_width_pt=page_width_pt,
-                )
+            # Prefer this segment's own override (deep-split / multi-segment blocks).
+            seg_override_pt = None
+            if segment_has_user_font_size_override(seg):
+                seg_override_pt = normalize_user_font_size_pt(seg.get("font_size_pt"))
+            rb = self._apply_font_size_for_block(
+                rb,
+                block_key,
+                page_width_pt=page_width_pt,
+                override_pt=seg_override_pt,
+                allow_block_fallback=False,
+            )
             rb = self._apply_block_typography_overrides(rb, block_key)
             rb.rotation = self._block_rotation(block_key)
             result.append(rb)
@@ -1712,8 +1763,8 @@ class TypstOverlayRenderer(BasePDFRenderer):
                         bbox_override = self._block_bbox_override(block_key)
                         if bbox_override is not None:
                             eq_rb.inner_bbox = bbox_override
-                        eq_rb = self._font_fit.calculate_fit_params(
-                            eq_rb, page_width_pt=page_width_pt,
+                        eq_rb = self._apply_font_size_for_block(
+                            eq_rb, block_key, page_width_pt=page_width_pt,
                         )
                         eq_rb = self._apply_block_typography_overrides(eq_rb, block_key)
                         eq_rb.rotation = self._block_rotation(block_key)
@@ -1780,8 +1831,8 @@ class TypstOverlayRenderer(BasePDFRenderer):
                             bbox_override = self._block_bbox_override(block_key)
                             if bbox_override is not None:
                                 cb_rb.inner_bbox = bbox_override
-                            cb_rb = self._font_fit.calculate_fit_params(
-                                cb_rb, page_width_pt=page_width_pt,
+                            cb_rb = self._apply_font_size_for_block(
+                                cb_rb, block_key, page_width_pt=page_width_pt,
                             )
                             cb_rb = self._apply_block_typography_overrides(cb_rb, block_key)
                             cb_rb.rotation = self._block_rotation(block_key)
@@ -1819,8 +1870,8 @@ class TypstOverlayRenderer(BasePDFRenderer):
                                 bbox_override = self._block_bbox_override(block_key)
                                 if bbox_override is not None:
                                     free_rb.inner_bbox = bbox_override
-                                free_rb = self._font_fit.calculate_fit_params(
-                                    free_rb, page_width_pt=page_width_pt,
+                                free_rb = self._apply_font_size_for_block(
+                                    free_rb, block_key, page_width_pt=page_width_pt,
                                 )
                                 free_rb = self._apply_block_typography_overrides(
                                     free_rb, block_key,
@@ -1879,8 +1930,8 @@ class TypstOverlayRenderer(BasePDFRenderer):
                             bbox_override = self._block_bbox_override(block_key)
                             if bbox_override is not None:
                                 tb_rb.inner_bbox = bbox_override
-                            tb_rb = self._font_fit.calculate_fit_params(
-                                tb_rb, page_width_pt=page_width_pt,
+                            tb_rb = self._apply_font_size_for_block(
+                                tb_rb, block_key, page_width_pt=page_width_pt,
                             )
                             tb_rb = self._apply_block_typography_overrides(tb_rb, block_key)
                             tb_rb.rotation = self._block_rotation(block_key)
@@ -1923,8 +1974,8 @@ class TypstOverlayRenderer(BasePDFRenderer):
                                 bbox_override = self._block_bbox_override(block_key)
                                 if bbox_override is not None:
                                     free_rb.inner_bbox = bbox_override
-                                free_rb = self._font_fit.calculate_fit_params(
-                                    free_rb, page_width_pt=page_width_pt,
+                                free_rb = self._apply_font_size_for_block(
+                                    free_rb, block_key, page_width_pt=page_width_pt,
                                 )
                                 free_rb = self._apply_block_typography_overrides(
                                     free_rb, block_key,

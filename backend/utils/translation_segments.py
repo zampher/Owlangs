@@ -3783,8 +3783,10 @@ def update_translation_segment(
     if typography_changed:
         from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
             invalidate_pdf_export_cache,
+            invalidate_pdf_preview_cache,
         )
         invalidate_pdf_export_cache(task_state)
+        invalidate_pdf_preview_cache(task_state)
     
     logger.info(LogModule.TRANS, f"Segment {segment_index} update completed for task {task_id}: modified={segment.get('modified', False)}")
     return segment

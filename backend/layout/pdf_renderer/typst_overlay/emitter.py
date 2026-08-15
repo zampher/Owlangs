@@ -1828,8 +1828,18 @@ def _estimate_table_font_pt(
     rows: list,
     block_font_pt: float,
     border_style: str,
+    font_size_locked: bool = False,
 ) -> float:
-    """Estimate a table font size that uses the reading-oriented bbox."""
+    """Estimate a table font size that uses the reading-oriented bbox.
+
+    When ``font_size_locked`` is True, return the user-specified size without
+    clamping against bbox-derived estimates (Preview-revision font edits).
+    """
+    if font_size_locked and block_font_pt > 0:
+        # Do not clamp against TABLE_MAX — that would silently ignore Preview
+        # revision font increases above the auto-fit ceiling.
+        return max(1.0, float(block_font_pt))
+
     total_chars = sum(len(c) for r in rows for c in r)
     avg_chars_per_cell = max(1, total_chars / max(1, row_count * col_count))
     pad = TABLE_CELL_PAD_PT * 2
@@ -1909,6 +1919,7 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
         rows=rows,
         block_font_pt=block.font_size_pt,
         border_style=border_style,
+        font_size_locked=bool(getattr(block, "font_size_locked", False)),
     )
 
     header_font_pt = round(target_font_pt * TABLE_HEADER_FONT_SCALE, 1)
