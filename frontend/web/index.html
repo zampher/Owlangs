@@ -75,16 +75,16 @@
   <title>Owlangs</title>
   <link rel="manifest" href="manifest.json">
   
-  <!-- CSP: Allow Flutter CanvasKit (gstatic), Google Fonts, CDN, and local backend for HTML preview -->
+  <!-- CSP: local assets + backend; no remote CDN required for PDF preview (pdf.js is vendored) -->
   <!-- Note: frame-ancestors must be set via HTTP header, not meta tag -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' http://localhost:8800 http://127.0.0.1:8800 https://www.gstatic.com https://s4.zstatic.net https://cdn.jsdelivr.net;
+    script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' http://localhost:8800 http://127.0.0.1:8800 https://www.gstatic.com https://s4.zstatic.net;
     style-src 'self' 'unsafe-inline' http://localhost:8800 http://127.0.0.1:8800 https://fonts.googleapis.com https://s4.zstatic.net;
     img-src 'self' data: blob:;
     font-src 'self' data: 'unsafe-inline' http://localhost:8800 http://127.0.0.1:8800 https://fonts.gstatic.com;
-    connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* wss: https: https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net;
-    worker-src 'self' blob: https://cdn.jsdelivr.net;
+    connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* wss: https: https://fonts.googleapis.com https://fonts.gstatic.com;
+    worker-src 'self' blob:;
     frame-src 'self' blob:;
     media-src 'self';
     object-src 'none';
@@ -493,14 +493,16 @@
     });
   </script>
   
-  <script src='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs' type='module'></script>
+  <!-- pdf.js vendored under web/pdfjs for offline / air-gapped deployment (no jsDelivr CDN) -->
+  <script src='pdfjs/build/pdf.min.mjs' type='module'></script>
   <script type='module'>
   var { pdfjsLib } = globalThis;
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.mjs';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs/build/pdf.worker.min.mjs';
 
   var pdfRenderOptions = {
-    cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/cmaps/',
+    cMapUrl: 'pdfjs/cmaps/',
     cMapPacked: true,
+    standardFontDataUrl: 'pdfjs/standard_fonts/',
   }
   </script>
   

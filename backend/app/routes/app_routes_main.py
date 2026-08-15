@@ -9,6 +9,7 @@ including the home page, settings, admin, and documentation.
 """
 
 import os
+import re
 from pathlib import Path
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse, Response
@@ -118,6 +119,14 @@ def _serve_flutter_index():
         
         # Fix base href from "/" to "/static/flutter-web/" so resources load correctly
         content = content.replace('<base href="/">', '<base href="/static/flutter-web/">')
+
+        # Offline / air-gapped: never load pdf.js from jsDelivr (pdfx install_web default).
+        # Vendored copy lives under static/flutter-web/pdfjs/ after flutter web build.
+        content = re.sub(
+            r"https://cdn\.jsdelivr\.net/npm/pdfjs-dist@[\d.]+/",
+            "/static/flutter-web/pdfjs/",
+            content,
+        )
         
         # Fix CanvasKit path to use local files (critical for offline/LAN support and mainland China)
         # Replace any Google CDN references with local path
