@@ -1,5 +1,24 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.5.7.0
+
+### New Features
+
+1. **Task-level table border settings in PDF preview revision**: In layout-preserving PDF preview revision, the segment list toolbar can set this task’s table border style and stroke width for all tables; individual segments can still override it (segment settings take priority) or switch back to “Follow task default”.
+
+### Optimizations
+
+1. **Clearer export failure messages**: Improved error localization and messaging for PDF export failures (including Pandoc-related cases) to make troubleshooting easier.
+2. **Hide rotation controls on image segments**: In preview revision, image segments no longer show rotation labels/controls that do not apply.
+
+### Bug Fixes
+
+1. **Font size adjustment failure in preview revision**: Fixed cases where segment font size could not be adjusted correctly in PDF preview revision.
+2. **Auto vs manual font size mismatch**: Fixed inconsistency between auto-estimated and manually set font sizes in the UI/preview so they stay aligned.
+3. **Web PDF preview render failure**: Fixed PDF preview failing to load under local/Web serving when static assets (e.g. `.mjs`) were served with an incorrect MIME type.
+
+---
+
 ## Owlangs 1.5.6.0
 
 ### New Features
