@@ -3893,6 +3893,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get segmentTableBorderNone => '无线';
 
   @override
+  String get segmentTableBorderFollowGlobal => '跟随本任务';
+
+  @override
   String get segmentItemExclude => '排除';
 
   @override
@@ -4096,6 +4099,13 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get translationPreviewBatchFontSizeIncreaseTooltip =>
       '将选中片段字号增大 0.1 pt';
+
+  @override
+  String get translationPreviewBatchTableBorder => '表格线';
+
+  @override
+  String get translationPreviewBatchTableBorderTooltip =>
+      '统一设置本任务预览修订中表格的线条风格与线宽（片段设置优先）';
 
   @override
   String get translationPreviewBatchLeading => '批量行距';

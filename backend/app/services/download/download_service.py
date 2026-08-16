@@ -1942,6 +1942,14 @@ async def _typst_overlay_pdf_response(
     rotation_by_block_index: Dict[int, int] = {}
     table_stroke_pt_by_block_index: Dict[int, float] = {}
     table_border_style_by_block_index: Dict[int, str] = {}
+    from layout.pdf_renderer.typst_overlay.table_border_style import (
+        resolve_task_pdf_table_border_style,
+    )
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        resolve_task_pdf_table_stroke_pt,
+    )
+    default_table_border_style = resolve_task_pdf_table_border_style(task_state)
+    default_table_stroke_pt = resolve_task_pdf_table_stroke_pt(task_state)
     bbox_override_by_block_index: Dict[int, tuple] = {}
     if segments:
         is_deep_split_enabled = bool(task_state.get("deep_split"))
@@ -2029,6 +2037,12 @@ async def _typst_overlay_pdf_response(
                 f"for {len(table_border_style_by_block_index)} block(s): "
                 f"{sorted(table_border_style_by_block_index.items())[:8]}",
             )
+        logger.info(
+            LogModule.EXPORT,
+            f"[TYPST_OVERLAY] Task {task_id}: default table border style="
+            f"{default_table_border_style!r}, default table stroke pt="
+            f"{default_table_stroke_pt}",
+        )
         bbox_override_by_block_index = build_block_bbox_override_map_from_segments(
             segments,
             task_state,
@@ -2074,6 +2088,8 @@ async def _typst_overlay_pdf_response(
         rotation_by_block_index=rotation_by_block_index or None,
         table_stroke_pt_by_block_index=table_stroke_pt_by_block_index or None,
         table_border_style_by_block_index=table_border_style_by_block_index or None,
+        default_table_border_style=default_table_border_style,
+        default_table_stroke_pt=default_table_stroke_pt,
         bbox_override_by_block_index=bbox_override_by_block_index or None,
         auto_rotation_enabled=auto_rotation_enabled,
         auto_rotation_aspect_ratio=auto_rotation_aspect_ratio,
@@ -2246,6 +2262,8 @@ async def _typst_overlay_pdf_response(
                         if table_border_style_by_block_index
                         else None
                     ),
+                    default_table_border_style=default_table_border_style,
+                    default_table_stroke_pt=default_table_stroke_pt,
                     bbox_override_by_block_index=(
                         bbox_override_by_block_index
                         if bbox_override_by_block_index
@@ -2310,6 +2328,8 @@ async def _typst_overlay_pdf_response(
                                 if table_border_style_by_block_index
                                 else None
                             ),
+                            default_table_border_style=default_table_border_style,
+                            default_table_stroke_pt=default_table_stroke_pt,
                             bbox_override_by_block_index=(
                                 bbox_override_by_block_index
                                 if bbox_override_by_block_index
@@ -2398,6 +2418,8 @@ async def _typst_overlay_pdf_response(
                             if table_border_style_by_block_index
                             else None
                         ),
+                        default_table_border_style=default_table_border_style,
+                        default_table_stroke_pt=default_table_stroke_pt,
                         bbox_override_by_block_index=(
                             bbox_override_by_block_index
                             if bbox_override_by_block_index

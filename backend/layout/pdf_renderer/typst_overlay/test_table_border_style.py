@@ -23,12 +23,15 @@ from layout.pdf_renderer.typst_overlay.table_border_style import (
     TABLE_BORDER_STYLE_HORIZONTAL,
     TABLE_BORDER_STYLE_NONE,
     TABLE_BORDER_STYLE_OUTER,
+    TASK_STATE_PDF_TABLE_BORDER_STYLE_KEY,
     booktabs_header_row_count,
     build_block_table_border_style_map_from_segments,
     group_adjacent_equal_row_cells,
     is_booktabs_border_style,
     normalize_table_border_style,
     resolve_table_border_style,
+    resolve_task_pdf_table_border_style,
+    set_task_pdf_table_border_style,
 )
 
 
@@ -96,6 +99,74 @@ class TestTableBorderStyleNormalization(unittest.TestCase):
         ]
         block_map = build_block_table_border_style_map_from_segments(segments, {})
         self.assertEqual(block_map[62], TABLE_BORDER_STYLE_BOOKTABS_2)
+
+    def test_task_level_pdf_table_border_style_default_and_set(self):
+        self.assertEqual(
+            resolve_task_pdf_table_border_style(None),
+            TABLE_BORDER_STYLE_BOOKTABS,
+        )
+        self.assertEqual(
+            resolve_task_pdf_table_border_style({}),
+            TABLE_BORDER_STYLE_BOOKTABS,
+        )
+        task_state: dict = {}
+        applied = set_task_pdf_table_border_style(task_state, "grid")
+        self.assertEqual(applied, TABLE_BORDER_STYLE_GRID)
+        self.assertEqual(
+            task_state[TASK_STATE_PDF_TABLE_BORDER_STYLE_KEY],
+            TABLE_BORDER_STYLE_GRID,
+        )
+        self.assertEqual(
+            resolve_task_pdf_table_border_style(task_state),
+            TABLE_BORDER_STYLE_GRID,
+        )
+        with self.assertRaises(ValueError):
+            set_task_pdf_table_border_style(task_state, "fancy")
+
+    def test_segment_override_map_ignores_task_default(self):
+        """Segment map only includes explicit overrides; task default is separate."""
+        task_state = {TASK_STATE_PDF_TABLE_BORDER_STYLE_KEY: "grid"}
+        segments = [
+            {
+                "segment_index": 1,
+                "layout_block_indices": [10],
+                "table_border_style": "outer",
+            },
+            {
+                "segment_index": 2,
+                "layout_block_indices": [11],
+                # No table_border_style -> follows task default at render time.
+            },
+        ]
+        block_map = build_block_table_border_style_map_from_segments(
+            segments,
+            task_state,
+        )
+        self.assertEqual(block_map, {10: TABLE_BORDER_STYLE_OUTER})
+        self.assertEqual(
+            resolve_task_pdf_table_border_style(task_state),
+            TABLE_BORDER_STYLE_GRID,
+        )
+
+    def test_task_level_pdf_table_stroke_pt(self):
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            DEFAULT_TABLE_STROKE_PT,
+            TASK_STATE_PDF_TABLE_STROKE_PT_KEY,
+            resolve_task_pdf_table_stroke_pt,
+            set_task_pdf_table_stroke_pt,
+        )
+
+        self.assertEqual(
+            resolve_task_pdf_table_stroke_pt(None),
+            DEFAULT_TABLE_STROKE_PT,
+        )
+        task_state: dict = {}
+        applied = set_task_pdf_table_stroke_pt(task_state, 1.5)
+        self.assertEqual(applied, 1.5)
+        self.assertEqual(task_state[TASK_STATE_PDF_TABLE_STROKE_PT_KEY], 1.5)
+        self.assertEqual(resolve_task_pdf_table_stroke_pt(task_state), 1.5)
+        with self.assertRaises(ValueError):
+            set_task_pdf_table_stroke_pt(task_state, -1)
 
     def test_booktabs_header_row_count_helpers(self):
         self.assertTrue(is_booktabs_border_style(TABLE_BORDER_STYLE_BOOKTABS_2))

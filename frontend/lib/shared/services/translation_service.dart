@@ -681,6 +681,7 @@ class TranslationService {
     int? rotation,
     double? tableStrokePt,
     String? tableBorderStyle,
+    bool tableBorderStyleReset = false,
     List<double>? layoutBlockBboxOverride,
     bool layoutBlockBboxReset = false,
     int? layoutBlockIndex,
@@ -695,7 +696,11 @@ class TranslationService {
     if (modifiedBy != null) body['modified_by'] = modifiedBy;
     if (rotation != null) body['rotation'] = rotation;
     if (tableStrokePt != null) body['table_stroke_pt'] = tableStrokePt;
-    if (tableBorderStyle != null) body['table_border_style'] = tableBorderStyle;
+    if (tableBorderStyleReset) {
+      body['table_border_style_reset'] = true;
+    } else if (tableBorderStyle != null) {
+      body['table_border_style'] = tableBorderStyle;
+    }
     if (layoutBlockBboxReset) {
       body['layout_block_bbox_reset'] = true;
       if (layoutBlockIndex != null) {
@@ -742,6 +747,35 @@ class TranslationService {
       data: body,
     );
     // Invalidate cached segments for this task so next read gets fresh data.
+    _segmentsCache.remove(taskId);
+    _segmentsRequests.remove(taskId);
+    return (resp.data as Map).cast<String, dynamic>();
+  }
+
+  /// Set task-level PDF table border style and/or stroke for this translation
+  /// task (segment overrides still win). Not an app-wide preference.
+  Future<Map<String, dynamic>> setPdfTableBorderStyle(
+    String taskId, {
+    String? tableBorderStyle,
+    double? tableStrokePt,
+  }) async {
+    final Map<String, dynamic> data = <String, dynamic>{};
+    if (tableBorderStyle != null) {
+      data['table_border_style'] = tableBorderStyle;
+    }
+    if (tableStrokePt != null) {
+      data['table_stroke_pt'] = tableStrokePt;
+    }
+    if (data.isEmpty) {
+      throw ArgumentError(
+        'Provide tableBorderStyle and/or tableStrokePt.',
+      );
+    }
+    final dio = _buildAuthedDio();
+    final resp = await dio.put(
+      '/service/translation-segments/$taskId/pdf-table-border-style',
+      data: data,
+    );
     _segmentsCache.remove(taskId);
     _segmentsRequests.remove(taskId);
     return (resp.data as Map).cast<String, dynamic>();

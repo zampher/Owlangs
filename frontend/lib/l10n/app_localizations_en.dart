@@ -4075,6 +4075,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get segmentTableBorderNone => 'No lines';
 
   @override
+  String get segmentTableBorderFollowGlobal => 'Follow task default';
+
+  @override
   String get segmentItemExclude => 'Exclude';
 
   @override
@@ -4285,6 +4288,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get translationPreviewBatchFontSizeIncreaseTooltip =>
       'Increase font size by 0.1 pt for selected segments';
+
+  @override
+  String get translationPreviewBatchTableBorder => 'Table lines';
+
+  @override
+  String get translationPreviewBatchTableBorderTooltip =>
+      'Set this task\'s table border style and stroke width for preview revision (segment settings override)';
 
   @override
   String get translationPreviewBatchLeading => 'Batch line spacing';

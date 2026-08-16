@@ -18,6 +18,7 @@ import '../../utils/segment_type_utils.dart';
 import '../../utils/layout_bbox_text_split.dart';
 import 'translation_segment_item.dart';
 import 'segment_pdf_typography_dialog.dart';
+import 'pdf_table_border_stroke_menu.dart';
 
 /// State-based filter keys (mutually exclusive - single select)
 const Set<String> _stateFilterKeys = <String>{
@@ -81,6 +82,10 @@ class TranslationComparisonPanel extends ConsumerWidget {
     this.onBulkInvertSelection,
     this.onBatchFontApply,
     this.onBatchFontSizeStep,
+    this.pdfTaskTableBorderStyle = kPdfDefaultTableBorderStyle,
+    this.pdfTaskTableStrokePt = kPdfDefaultTableStrokePt,
+    this.onPdfTaskTableBorderStyleChanged,
+    this.onPdfTaskTableStrokeChanged,
     this.getFilteredSelectableSegmentIndices,
     this.exclusionFiltersListenable,
     this.pdfRevisionMode = false,
@@ -142,7 +147,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
   })? onFontSizeChanged;
   final void Function(int index, int rotation)? onRotationChanged;
   final void Function(int index, double tableStrokePt)? onTableStrokeChanged;
-  final void Function(int index, String tableBorderStyle)? onTableBorderStyleChanged;
+  final void Function(int index, String? tableBorderStyle)? onTableBorderStyleChanged;
   final bool batchSelectionEnabled;
   final Set<int> selectedSegmentIndices;
   final ValueListenable<Set<int>>? selectedSegmentIndicesListenable;
@@ -151,6 +156,10 @@ class TranslationComparisonPanel extends ConsumerWidget {
   final void Function(Set<int> indices)? onBulkInvertSelection;
   final Future<void> Function()? onBatchFontApply;
   final Future<void> Function(double delta)? onBatchFontSizeStep;
+  final String pdfTaskTableBorderStyle;
+  final double pdfTaskTableStrokePt;
+  final Future<void> Function(String style)? onPdfTaskTableBorderStyleChanged;
+  final Future<void> Function(double strokePt)? onPdfTaskTableStrokeChanged;
   final Set<int> Function()? getFilteredSelectableSegmentIndices;
   final ValueListenable<Set<String>>? exclusionFiltersListenable;
   final bool pdfRevisionMode;
@@ -772,6 +781,9 @@ class TranslationComparisonPanel extends ConsumerWidget {
           _buildBatchFontButton(context, compactStyle, l10n),
         if (onBatchFontSizeStep != null)
           _buildBatchFontSizeStepButtons(context, l10n),
+        if (onPdfTaskTableBorderStyleChanged != null ||
+            onPdfTaskTableStrokeChanged != null)
+          _buildTaskTableBorderStyleButton(context, compactStyle, l10n),
       ],
     );
   }
@@ -863,6 +875,80 @@ class TranslationComparisonPanel extends ConsumerWidget {
       );
     }
     return buildButton(selectedSegmentIndices);
+  }
+
+  Widget _buildTaskTableBorderStyleButton(
+    BuildContext context,
+    ButtonStyle compactStyle,
+    AppLocalizations l10n,
+  ) {
+    final String currentStyle = pdfTaskTableBorderStyle.trim().isEmpty
+        ? kPdfDefaultTableBorderStyle
+        : pdfTaskTableBorderStyle;
+    final double currentStroke = pdfTaskTableStrokePt;
+    return MenuAnchor(
+      style: MenuStyle(
+        visualDensity: VisualDensity.compact,
+        minimumSize: const WidgetStatePropertyAll<Size>(Size(168, 0)),
+      ),
+      builder:
+          (BuildContext context, MenuController controller, Widget? child) {
+        return Tooltip(
+          message: l10n.translationPreviewBatchTableBorderTooltip,
+          child: TextButton(
+            style: compactStyle,
+            onPressed: () {
+              if (controller.isOpen) {
+                controller.close();
+              } else {
+                controller.open();
+              }
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(
+                  pdfTableBorderStyleIcon(currentStyle),
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 4),
+                Text(l10n.translationPreviewBatchTableBorder),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.arrow_drop_down,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      menuChildren: buildPdfTableBorderStrokeMenuChildren(
+        context: context,
+        l10n: l10n,
+        borderStyle: currentStyle,
+        strokePt: currentStroke,
+        showFollowTask: false,
+        onBorderStyleChanged: onPdfTaskTableBorderStyleChanged == null
+            ? null
+            : (String style) {
+                if (style == currentStyle) {
+                  return;
+                }
+                unawaited(onPdfTaskTableBorderStyleChanged!(style));
+              },
+        onStrokePtChanged: onPdfTaskTableStrokeChanged == null
+            ? null
+            : (double pt) {
+                if ((pt - currentStroke).abs() < 0.001) {
+                  return;
+                }
+                unawaited(onPdfTaskTableStrokeChanged!(pt));
+              },
+      ),
+    );
   }
 
   Widget _wrapSegmentScrollView(Widget child) {
@@ -1314,9 +1400,17 @@ class TranslationComparisonPanel extends ConsumerWidget {
               leadingEmSource: metadata['leading_em_source'] as String?,
               rotation: metadata['rotation'] as int? ?? 0,
               onRotationChanged: pair.isImage ? null : onRotationChanged,
-              tableStrokePt: readPdfTableStrokePt(metadata),
+              tableStrokePt: readPdfTableStrokePt(
+                metadata,
+                taskStrokePt: pdfTaskTableStrokePt,
+              ),
               onTableStrokeChanged: onTableStrokeChanged,
-              tableBorderStyle: readPdfTableBorderStyle(metadata),
+              tableBorderStyle: readPdfTableBorderStyle(
+                metadata,
+                taskStyle: pdfTaskTableBorderStyle,
+              ),
+              hasTableBorderStyleOverride:
+                  hasPdfTableBorderStyleOverride(metadata),
               onTableBorderStyleChanged: onTableBorderStyleChanged,
               showTableStroke: isPdfTableSegment(metadata),
               onFontSizeChanged: onFontSizeChanged,
@@ -1559,9 +1653,17 @@ class TranslationComparisonPanel extends ConsumerWidget {
                   leadingEmSource: metadata['leading_em_source'] as String?,
                   rotation: metadata['rotation'] as int? ?? 0,
                   onRotationChanged: isImage ? null : onRotationChanged,
-                  tableStrokePt: readPdfTableStrokePt(metadata),
+                  tableStrokePt: readPdfTableStrokePt(
+                    metadata,
+                    taskStrokePt: pdfTaskTableStrokePt,
+                  ),
                   onTableStrokeChanged: onTableStrokeChanged,
-                  tableBorderStyle: readPdfTableBorderStyle(metadata),
+                  tableBorderStyle: readPdfTableBorderStyle(
+                    metadata,
+                    taskStyle: pdfTaskTableBorderStyle,
+                  ),
+                  hasTableBorderStyleOverride:
+                      hasPdfTableBorderStyleOverride(metadata),
                   onTableBorderStyleChanged: onTableBorderStyleChanged,
                   showTableStroke: isPdfTableSegment(metadata),
                   onFontSizeChanged: onFontSizeChanged,

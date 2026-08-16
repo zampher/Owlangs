@@ -3938,6 +3938,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get segmentTableBorderNone => '선 없음';
 
   @override
+  String get segmentTableBorderFollowGlobal => '작업 기본값 따르기';
+
+  @override
   String get segmentItemExclude => '제외';
 
   @override
@@ -4144,6 +4147,13 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get translationPreviewBatchFontSizeIncreaseTooltip =>
       '선택한 세그먼트 글꼴 크기를 0.1 pt 늘리기';
+
+  @override
+  String get translationPreviewBatchTableBorder => '표 선';
+
+  @override
+  String get translationPreviewBatchTableBorderTooltip =>
+      '이 작업의 미리보기 수정에서 표 선 스타일과 선 두께를 일괄 설정(세그먼트 설정이 우선)';
 
   @override
   String get translationPreviewBatchLeading => '줄 간격 일괄 적용';

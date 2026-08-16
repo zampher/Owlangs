@@ -7166,6 +7166,12 @@ abstract class AppLocalizations {
   /// **'No lines'**
   String get segmentTableBorderNone;
 
+  /// No description provided for @segmentTableBorderFollowGlobal.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow task default'**
+  String get segmentTableBorderFollowGlobal;
+
   /// No description provided for @segmentItemExclude.
   ///
   /// In en, this message translates to:
@@ -7537,6 +7543,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Increase font size by 0.1 pt for selected segments'**
   String get translationPreviewBatchFontSizeIncreaseTooltip;
+
+  /// No description provided for @translationPreviewBatchTableBorder.
+  ///
+  /// In en, this message translates to:
+  /// **'Table lines'**
+  String get translationPreviewBatchTableBorder;
+
+  /// No description provided for @translationPreviewBatchTableBorderTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Set this task\'s table border style and stroke width for preview revision (segment settings override)'**
+  String get translationPreviewBatchTableBorderTooltip;
 
   /// No description provided for @translationPreviewBatchLeading.
   ///

@@ -3376,6 +3376,7 @@ def update_translation_segment(
     rotation: Optional[int] = None,
     table_stroke_pt: Optional[float] = None,
     table_border_style: Optional[str] = None,
+    table_border_style_reset: bool = False,
     layout_block_bbox_override: Optional[list] = None,
     layout_block_bbox_reset: bool = False,
     layout_block_index: Optional[int] = None,
@@ -3544,7 +3545,19 @@ def update_translation_segment(
                 )
                 typography_changed = True
 
-    if table_border_style is not None:
+    if table_border_style_reset:
+        if "table_border_style" in segment:
+            old_style = segment.pop("table_border_style", None)
+            segment["modified"] = True
+            segment["modified_by"] = modified_by or segment.get("modified_by")
+            segment["modified_at"] = time.time()
+            logger.info(
+                LogModule.TRANS,
+                f"Reset table_border_style for segment {segment_index} on task {task_id} "
+                f"(was {old_style!r}; now follows task global)",
+            )
+            typography_changed = True
+    elif table_border_style is not None:
         from layout.pdf_renderer.typst_overlay.table_border_style import (
             DEFAULT_TABLE_BORDER_STYLE,
             normalize_table_border_style,

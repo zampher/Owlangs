@@ -4137,6 +4137,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get segmentTableBorderNone => 'Sin líneas';
 
   @override
+  String get segmentTableBorderFollowGlobal => 'Seguir valor de la tarea';
+
+  @override
   String get segmentItemExclude => 'Excluir';
 
   @override
@@ -4354,6 +4357,13 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get translationPreviewBatchFontSizeIncreaseTooltip =>
       'Aumentar el tamaño de fuente 0.1 pt en los segmentos seleccionados';
+
+  @override
+  String get translationPreviewBatchTableBorder => 'Líneas de tabla';
+
+  @override
+  String get translationPreviewBatchTableBorderTooltip =>
+      'Establecer el estilo de borde y el grosor de línea de tabla de esta tarea en la revisión de vista previa (la configuración del segmento tiene prioridad)';
 
   @override
   String get translationPreviewBatchLeading => 'Interlineado en lote';

@@ -42,6 +42,8 @@ def compute_typst_overlay_content_fingerprint(
     rotation_by_block_index: Optional[Dict[int, int]] = None,
     table_stroke_pt_by_block_index: Optional[Dict[int, float]] = None,
     table_border_style_by_block_index: Optional[Dict[int, str]] = None,
+    default_table_border_style: Optional[str] = None,
+    default_table_stroke_pt: Optional[float] = None,
     bbox_override_by_block_index: Optional[Dict[int, tuple]] = None,
     auto_rotation_enabled: bool = False,
     auto_rotation_aspect_ratio: Optional[float] = None,
@@ -80,6 +82,12 @@ def compute_typst_overlay_content_fingerprint(
         ),
         "table_border_style_by_block_index": _sorted_int_key_map(
             table_border_style_by_block_index,
+        ),
+        "default_table_border_style": default_table_border_style or "booktabs",
+        "default_table_stroke_pt": (
+            default_table_stroke_pt
+            if default_table_stroke_pt is not None
+            else 0.5
         ),
         "bbox_override_by_block_index": _sorted_int_key_map(
             bbox_override_by_block_index,

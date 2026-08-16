@@ -17,6 +17,9 @@ TABLE_BORDER_STYLE_NONE = "none"
 
 DEFAULT_TABLE_BORDER_STYLE = TABLE_BORDER_STYLE_BOOKTABS
 
+# Task-level default for Preview-revision / Typst overlay (segment overrides win).
+TASK_STATE_PDF_TABLE_BORDER_STYLE_KEY = "pdf_table_border_style"
+
 BOOKTABS_BORDER_STYLES = frozenset({
     TABLE_BORDER_STYLE_BOOKTABS,
     TABLE_BORDER_STYLE_BOOKTABS_2,
@@ -92,11 +95,39 @@ def resolve_table_border_style(
     return normalized
 
 
+def resolve_task_pdf_table_border_style(
+    task_state: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Return task-level PDF table border style (falls back to booktabs)."""
+    if not isinstance(task_state, dict):
+        return DEFAULT_TABLE_BORDER_STYLE
+    normalized = normalize_table_border_style(
+        task_state.get(TASK_STATE_PDF_TABLE_BORDER_STYLE_KEY),
+    )
+    return normalized or DEFAULT_TABLE_BORDER_STYLE
+
+
+def set_task_pdf_table_border_style(
+    task_state: Dict[str, Any],
+    style: Optional[str],
+) -> str:
+    """Persist task-level PDF table border style; return the stored value."""
+    normalized = normalize_table_border_style(style)
+    if normalized is None:
+        raise ValueError(f"Invalid table_border_style: {style!r}")
+    task_state[TASK_STATE_PDF_TABLE_BORDER_STYLE_KEY] = normalized
+    return normalized
+
+
 def build_block_table_border_style_map_from_segments(
     segments: List[Dict[str, Any]],
     task_state: Optional[Dict[str, Any]] = None,
 ) -> Dict[int, str]:
-    """Expand segment-level table border style overrides to layout block indices."""
+    """Expand segment-level table border style overrides to layout block indices.
+
+    Only segments that explicitly set ``table_border_style`` appear in the map.
+    Task-level default is applied separately via ``PDFRendererConfig.default_table_border_style``.
+    """
     from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
         resolve_segment_layout_block_indices,
     )

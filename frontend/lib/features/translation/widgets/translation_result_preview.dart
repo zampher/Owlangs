@@ -397,6 +397,11 @@ class _TranslationResultPreviewState
   final Map<int, Map<String, dynamic>> _allSegmentsMetadata =
       <int, Map<String, dynamic>>{};
 
+  /// Task-level PDF table border style (segment overrides win).
+  /// Scoped to the current translation task, not app-wide settings.
+  String _pdfTaskTableBorderStyle = kPdfDefaultTableBorderStyle;
+  double _pdfTaskTableStrokePt = kPdfDefaultTableStrokePt;
+
   Future<void> _checkPdfFormulas(BuildContext context) async {
     if (_apiTaskId() == 'pending') return;
     try {
@@ -2064,6 +2069,30 @@ class _TranslationResultPreviewState
     _overlayBboxReferenceSize = null;
   }
 
+  void _readPdfTaskTableBorderStyle(Map<String, dynamic> metadata) {
+    final dynamic raw = metadata['pdf_table_border_style'];
+    if (raw is String && raw.trim().isNotEmpty) {
+      final String style = raw.trim().toLowerCase();
+      if (kPdfTableBorderStyleOptions.contains(style)) {
+        _pdfTaskTableBorderStyle = style;
+      } else {
+        _pdfTaskTableBorderStyle = kPdfDefaultTableBorderStyle;
+      }
+    } else {
+      _pdfTaskTableBorderStyle = kPdfDefaultTableBorderStyle;
+    }
+
+    final dynamic rawStroke = metadata['pdf_table_stroke_pt'];
+    if (rawStroke is num) {
+      _pdfTaskTableStrokePt = rawStroke.toDouble();
+    } else if (rawStroke is String) {
+      _pdfTaskTableStrokePt =
+          double.tryParse(rawStroke) ?? kPdfDefaultTableStrokePt;
+    } else {
+      _pdfTaskTableStrokePt = kPdfDefaultTableStrokePt;
+    }
+  }
+
   /// Parse global detected exclusion reason counts from a translation-segments
   /// response and update _globalDetectedReasonCounts for Segment Type Filters.
   void _readGlobalDetectedReasonCounts(
@@ -2076,6 +2105,7 @@ class _TranslationResultPreviewState
     if (rawMetadata is Map) {
       final Map<String, dynamic> metadata = rawMetadata.cast<String, dynamic>();
       _readOverlayPreviewMetadata(metadata);
+      _readPdfTaskTableBorderStyle(metadata);
       _translationResultLog(
         '[EXCLUSION_FILTERS] Raw metadata keys from translation-segments: ${metadata.keys.toList()}',
       );
@@ -5419,6 +5449,13 @@ class _TranslationResultPreviewState
         level: withBbox < withIndices ? LogLevel.warn : LogLevel.info,
       );
 
+      final dynamic rawMetadata = segmentsData['metadata'];
+      if (rawMetadata is Map) {
+        _readPdfTaskTableBorderStyle(
+          rawMetadata.cast<String, dynamic>(),
+        );
+      }
+
       _clearFilteredIndicesCache();
       if (mounted) {
         _segmentUiRevisionNotifier.value++;
@@ -5583,6 +5620,10 @@ class _TranslationResultPreviewState
       onBulkInvertSelection: onBulkInvertSelection,
       onBatchFontApply: onBatchFontApply,
       onBatchFontSizeStep: onBatchFontSizeStep,
+      pdfTaskTableBorderStyle: _pdfTaskTableBorderStyle,
+      pdfTaskTableStrokePt: _pdfTaskTableStrokePt,
+      onPdfTaskTableBorderStyleChanged: _handlePdfTaskTableBorderStyleChanged,
+      onPdfTaskTableStrokeChanged: _handlePdfTaskTableStrokeChanged,
       getFilteredSelectableSegmentIndices: getFilteredSelectableSegmentIndices,
       exclusionFiltersListenable: _selectedExclusionFiltersNotifier,
       pdfPageFilterListenable:
@@ -6272,27 +6313,41 @@ class _TranslationResultPreviewState
   }
 
   /// Handle table border style for a PDF table segment.
+  /// Pass [tableBorderStyle] null to clear the segment override (follow task default).
   Future<void> _handleTableBorderStyleChanged(
     int index,
-    String tableBorderStyle,
+    String? tableBorderStyle,
   ) async {
     try {
       final TranslationService svc = TranslationService();
-      await svc.updateTranslationSegment(
-        _apiTaskId(),
-        index,
-        tableBorderStyle: tableBorderStyle,
-      );
-
-      if (_allSegmentsMetadata.containsKey(index)) {
-        _allSegmentsMetadata[index] = <String, dynamic>{
-          ..._allSegmentsMetadata[index]!,
-          'table_border_style': tableBorderStyle,
-        };
+      if (tableBorderStyle == null) {
+        await svc.updateTranslationSegment(
+          _apiTaskId(),
+          index,
+          tableBorderStyleReset: true,
+        );
+        if (_allSegmentsMetadata.containsKey(index)) {
+          final Map<String, dynamic> updated =
+              Map<String, dynamic>.from(_allSegmentsMetadata[index]!);
+          updated.remove('table_border_style');
+          _allSegmentsMetadata[index] = updated;
+        }
       } else {
-        _allSegmentsMetadata[index] = <String, dynamic>{
-          'table_border_style': tableBorderStyle,
-        };
+        await svc.updateTranslationSegment(
+          _apiTaskId(),
+          index,
+          tableBorderStyle: tableBorderStyle,
+        );
+        if (_allSegmentsMetadata.containsKey(index)) {
+          _allSegmentsMetadata[index] = <String, dynamic>{
+            ..._allSegmentsMetadata[index]!,
+            'table_border_style': tableBorderStyle,
+          };
+        } else {
+          _allSegmentsMetadata[index] = <String, dynamic>{
+            'table_border_style': tableBorderStyle,
+          };
+        }
       }
 
       if (mounted && _shouldRefreshOverlayPreviewRevision) {
@@ -6303,6 +6358,87 @@ class _TranslationResultPreviewState
     } catch (e) {
       if (mounted) {
         MessageService.showError(context, 'Failed to update table border style: $e');
+      }
+    }
+  }
+
+  Future<void> _handlePdfTaskTableBorderStyleChanged(String style) async {
+    final String normalized = style.trim().toLowerCase();
+    if (!kPdfTableBorderStyleOptions.contains(normalized)) {
+      return;
+    }
+    if (normalized == _pdfTaskTableBorderStyle) {
+      return;
+    }
+    try {
+      final TranslationService svc = TranslationService();
+      final Map<String, dynamic> response = await svc.setPdfTableBorderStyle(
+        _apiTaskId(),
+        tableBorderStyle: normalized,
+      );
+      final String applied =
+          (response['pdf_table_border_style'] as String?)?.trim().toLowerCase() ??
+              normalized;
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _pdfTaskTableBorderStyle =
+            kPdfTableBorderStyleOptions.contains(applied)
+                ? applied
+                : normalized;
+        final dynamic strokeRaw = response['pdf_table_stroke_pt'];
+        if (strokeRaw is num) {
+          _pdfTaskTableStrokePt = strokeRaw.toDouble();
+        }
+      });
+      if (_shouldRefreshOverlayPreviewRevision) {
+        _notifyPdfPreviewRevisionChanged();
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showError(
+          context,
+          'Failed to update task table border style: $e',
+        );
+      }
+    }
+  }
+
+  Future<void> _handlePdfTaskTableStrokeChanged(double strokePt) async {
+    if ((strokePt - _pdfTaskTableStrokePt).abs() < 0.001) {
+      return;
+    }
+    try {
+      final TranslationService svc = TranslationService();
+      final Map<String, dynamic> response = await svc.setPdfTableBorderStyle(
+        _apiTaskId(),
+        tableStrokePt: strokePt,
+      );
+      final dynamic strokeRaw = response['pdf_table_stroke_pt'];
+      final double applied = strokeRaw is num
+          ? strokeRaw.toDouble()
+          : strokePt;
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _pdfTaskTableStrokePt = applied;
+        final String? style =
+            (response['pdf_table_border_style'] as String?)?.trim().toLowerCase();
+        if (style != null && kPdfTableBorderStyleOptions.contains(style)) {
+          _pdfTaskTableBorderStyle = style;
+        }
+      });
+      if (_shouldRefreshOverlayPreviewRevision) {
+        _notifyPdfPreviewRevisionChanged();
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showError(
+          context,
+          'Failed to update task table stroke: $e',
+        );
       }
     }
   }

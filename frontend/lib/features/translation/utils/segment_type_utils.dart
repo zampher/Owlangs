@@ -231,29 +231,58 @@ bool isPdfTableSegment(Map<String, dynamic> metadata) {
   return isMarkdownTableText(targetText) || isMarkdownTableText(sourceText);
 }
 
-double readPdfTableStrokePt(Map<String, dynamic> metadata) {
-  if (!metadata.containsKey('table_stroke_pt')) {
-    return kPdfDefaultTableStrokePt;
+double readPdfTableStrokePt(
+  Map<String, dynamic> metadata, {
+  double? taskStrokePt,
+}) {
+  if (metadata.containsKey('table_stroke_pt')) {
+    final dynamic raw = metadata['table_stroke_pt'];
+    if (raw is num) {
+      return raw.toDouble();
+    }
+    if (raw is String) {
+      return double.tryParse(raw) ??
+          (taskStrokePt ?? kPdfDefaultTableStrokePt);
+    }
   }
-  final dynamic raw = metadata['table_stroke_pt'];
-  if (raw is num) {
-    return raw.toDouble();
-  }
-  if (raw is String) {
-    return double.tryParse(raw) ?? kPdfDefaultTableStrokePt;
+  if (taskStrokePt != null &&
+      taskStrokePt >= 0 &&
+      taskStrokePt <= 3.0) {
+    return taskStrokePt;
   }
   return kPdfDefaultTableStrokePt;
 }
 
-String readPdfTableBorderStyle(Map<String, dynamic> metadata) {
-  final dynamic raw = metadata['table_border_style'];
-  if (raw is String && raw.trim().isNotEmpty) {
-    final String style = raw.trim().toLowerCase();
-    if (kPdfTableBorderStyleOptions.contains(style)) {
-      return style;
+/// Whether the segment has an explicit table stroke override.
+bool hasPdfTableStrokeOverride(Map<String, dynamic> metadata) {
+  return metadata.containsKey('table_stroke_pt');
+}
+
+String readPdfTableBorderStyle(
+  Map<String, dynamic> metadata, {
+  String? taskStyle,
+}) {
+  if (metadata.containsKey('table_border_style')) {
+    final dynamic raw = metadata['table_border_style'];
+    if (raw is String && raw.trim().isNotEmpty) {
+      final String style = raw.trim().toLowerCase();
+      if (kPdfTableBorderStyleOptions.contains(style)) {
+        return style;
+      }
     }
   }
+  final String? task = taskStyle?.trim().toLowerCase();
+  if (task != null &&
+      task.isNotEmpty &&
+      kPdfTableBorderStyleOptions.contains(task)) {
+    return task;
+  }
   return kPdfDefaultTableBorderStyle;
+}
+
+/// Whether the segment has an explicit table border style override.
+bool hasPdfTableBorderStyleOverride(Map<String, dynamic> metadata) {
+  return metadata.containsKey('table_border_style');
 }
 
 bool isPdfTableBorderStyleSelected(String current, String option) {

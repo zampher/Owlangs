@@ -26,6 +26,8 @@ LEADING_EM_MIN = 0.35
 LEADING_EM_MAX = 3.0
 
 DEFAULT_TABLE_STROKE_PT = 0.5
+# Task-level default for Preview-revision / Typst overlay (segment overrides win).
+TASK_STATE_PDF_TABLE_STROKE_PT_KEY = "pdf_table_stroke_pt"
 LEADING_EM_STEP = 0.05
 LEADING_EM_DEFAULT = DEFAULT_LEADING_EM
 
@@ -2090,11 +2092,40 @@ def normalize_table_stroke_pt(value: Any) -> Optional[float]:
     return round(stroke_pt, 2)
 
 
+def resolve_task_pdf_table_stroke_pt(
+    task_state: Optional[Dict[str, Any]] = None,
+) -> float:
+    """Return task-level PDF table stroke width (falls back to 0.5pt)."""
+    if not isinstance(task_state, dict):
+        return DEFAULT_TABLE_STROKE_PT
+    normalized = normalize_table_stroke_pt(
+        task_state.get(TASK_STATE_PDF_TABLE_STROKE_PT_KEY),
+    )
+    return DEFAULT_TABLE_STROKE_PT if normalized is None else normalized
+
+
+def set_task_pdf_table_stroke_pt(
+    task_state: Dict[str, Any],
+    stroke_pt: Any,
+) -> float:
+    """Persist task-level PDF table stroke width; return the stored value."""
+    normalized = normalize_table_stroke_pt(stroke_pt)
+    if normalized is None:
+        raise ValueError(f"Invalid table_stroke_pt: {stroke_pt!r}")
+    task_state[TASK_STATE_PDF_TABLE_STROKE_PT_KEY] = normalized
+    return normalized
+
+
 def build_block_table_stroke_map_from_segments(
     segments: List[Dict[str, Any]],
     task_state: Optional[Dict[str, Any]] = None,
 ) -> Dict[int, float]:
-    """Expand segment-level table stroke overrides to layout block indices."""
+    """Expand segment-level table stroke overrides to layout block indices.
+
+    Only segments that explicitly set ``table_stroke_pt`` appear in the map.
+    Task-level default is applied separately via
+    ``PDFRendererConfig.default_table_stroke_pt``.
+    """
     block_map: Dict[int, float] = {}
     for seg in segments:
         if not isinstance(seg, dict):

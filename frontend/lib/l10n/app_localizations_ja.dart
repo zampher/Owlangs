@@ -3928,6 +3928,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get segmentTableBorderNone => '線なし';
 
   @override
+  String get segmentTableBorderFollowGlobal => 'タスク設定に従う';
+
+  @override
   String get segmentItemExclude => '除外';
 
   @override
@@ -4133,6 +4136,13 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get translationPreviewBatchFontSizeIncreaseTooltip =>
       '選択したセグメントのフォントサイズを 0.1 pt 拡大';
+
+  @override
+  String get translationPreviewBatchTableBorder => '表罫線';
+
+  @override
+  String get translationPreviewBatchTableBorderTooltip =>
+      'このタスクのプレビュー改訂で表罫線スタイルと線幅を一括設定（セグメント設定が優先）';
 
   @override
   String get translationPreviewBatchLeading => '行間一括';

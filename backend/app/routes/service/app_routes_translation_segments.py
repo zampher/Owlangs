@@ -1220,7 +1220,87 @@ async def get_translation_segments_api(
         if image_data_map:
             response_data["image_data_map"] = image_data_map
 
+    # Expose task-level PDF table border style / stroke for Preview-revision toolbar.
+    from layout.pdf_renderer.typst_overlay.table_border_style import (
+        resolve_task_pdf_table_border_style,
+    )
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        resolve_task_pdf_table_stroke_pt,
+    )
+    if isinstance(response_data, dict):
+        meta = response_data.setdefault("metadata", {})
+        if isinstance(meta, dict):
+            meta["pdf_table_border_style"] = resolve_task_pdf_table_border_style(
+                task_state,
+            )
+            meta["pdf_table_stroke_pt"] = resolve_task_pdf_table_stroke_pt(
+                task_state,
+            )
+
     return JSONResponse(content=response_data)
+
+
+@router.put(
+    "/translation-segments/{task_id}/pdf-table-border-style",
+    summary="Set task-level PDF table border style and/or stroke",
+    description=(
+        "Set this task's default table border style and/or stroke width for "
+        "PDF preview revision. Segment-level overrides still win."
+    ),
+)
+async def set_pdf_table_border_style_api(
+    task_id: str,
+    body: dict = Body(...),
+):
+    task_state = task_manager.get_task(task_id)
+    if task_state is None:
+        raise HTTPException(status_code=404, detail=f"Task ID '{task_id}' not found.")
+
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        invalidate_pdf_export_cache,
+        invalidate_pdf_preview_cache,
+        resolve_task_pdf_table_stroke_pt,
+        set_task_pdf_table_stroke_pt,
+    )
+    from layout.pdf_renderer.typst_overlay.table_border_style import (
+        resolve_task_pdf_table_border_style,
+        set_task_pdf_table_border_style,
+    )
+
+    if "table_border_style" not in body and "table_stroke_pt" not in body:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide table_border_style and/or table_stroke_pt.",
+        )
+
+    style = resolve_task_pdf_table_border_style(task_state)
+    stroke_pt = resolve_task_pdf_table_stroke_pt(task_state)
+    try:
+        if "table_border_style" in body:
+            style = set_task_pdf_table_border_style(
+                task_state,
+                body.get("table_border_style"),
+            )
+        if "table_stroke_pt" in body:
+            stroke_pt = set_task_pdf_table_stroke_pt(
+                task_state,
+                body.get("table_stroke_pt"),
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    invalidate_pdf_export_cache(task_state)
+    invalidate_pdf_preview_cache(task_state)
+    logger.info(
+        LogModule.ROUTE,
+        f"[UPDATE-SEGMENT-API] Task {task_id}: "
+        f"pdf_table_border_style={style!r}, pdf_table_stroke_pt={stroke_pt}",
+    )
+    return {
+        "success": True,
+        "pdf_table_border_style": style,
+        "pdf_table_stroke_pt": stroke_pt,
+    }
 
 
 @router.get(
@@ -1337,6 +1417,7 @@ async def update_segment_api(
     rotation = body.get("rotation")
     table_stroke_pt = body.get("table_stroke_pt")
     table_border_style = body.get("table_border_style")
+    table_border_style_reset = bool(body.get("table_border_style_reset", False))
     layout_block_bbox_override = body.get("layout_block_bbox_override")
     layout_block_bbox_reset = bool(body.get("layout_block_bbox_reset", False))
     layout_block_index = body.get("layout_block_index")
@@ -1364,6 +1445,7 @@ async def update_segment_api(
         rotation=rotation,
         table_stroke_pt=table_stroke_pt,
         table_border_style=table_border_style,
+        table_border_style_reset=table_border_style_reset,
         layout_block_bbox_override=layout_block_bbox_override,
         layout_block_bbox_reset=layout_block_bbox_reset,
         layout_block_index=layout_block_index,

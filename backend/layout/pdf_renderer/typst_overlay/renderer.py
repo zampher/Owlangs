@@ -1413,25 +1413,24 @@ class TypstOverlayRenderer(BasePDFRenderer):
         )
 
     def _block_table_stroke_pt(self, block_key: int) -> float:
-        """Return table grid stroke width for a layout block (default 0.5pt)."""
+        """Return table stroke: segment override > task default > 0.5pt."""
         from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
             DEFAULT_TABLE_STROKE_PT,
+            normalize_table_stroke_pt,
         )
 
         overrides = getattr(self.config, "table_stroke_pt_by_block_index", None) or {}
-        if block_key not in overrides:
-            return DEFAULT_TABLE_STROKE_PT
-        value = overrides.get(block_key)
-        if value is None:
-            return DEFAULT_TABLE_STROKE_PT
-        try:
-            stroke_pt = float(value)
-        except (TypeError, ValueError):
-            return DEFAULT_TABLE_STROKE_PT
-        return max(0.0, stroke_pt)
+        if block_key in overrides:
+            value = normalize_table_stroke_pt(overrides.get(block_key))
+            if value is not None:
+                return value
+        default = normalize_table_stroke_pt(
+            getattr(self.config, "default_table_stroke_pt", None),
+        )
+        return DEFAULT_TABLE_STROKE_PT if default is None else default
 
     def _block_table_border_style(self, block_key: int) -> str:
-        """Return table border style for a layout block (default grid)."""
+        """Return table border style: segment override > task global > default."""
         from layout.pdf_renderer.typst_overlay.table_border_style import (
             DEFAULT_TABLE_BORDER_STYLE,
             normalize_table_border_style,
@@ -1440,10 +1439,14 @@ class TypstOverlayRenderer(BasePDFRenderer):
         overrides = getattr(
             self.config, "table_border_style_by_block_index", None,
         ) or {}
-        if block_key not in overrides:
-            return DEFAULT_TABLE_BORDER_STYLE
-        style = normalize_table_border_style(overrides.get(block_key))
-        return style or DEFAULT_TABLE_BORDER_STYLE
+        if block_key in overrides:
+            style = normalize_table_border_style(overrides.get(block_key))
+            if style:
+                return style
+        default = normalize_table_border_style(
+            getattr(self.config, "default_table_border_style", None),
+        )
+        return default or DEFAULT_TABLE_BORDER_STYLE
 
     def _apply_block_typography_overrides(
         self,
