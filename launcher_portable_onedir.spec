@@ -289,7 +289,7 @@ numpy_essential = [
     f'{_np_core_prefix}.multiarray', f'{_np_core_prefix}.umath',
     f'{_np_core_prefix}._multiarray_umath', f'{_np_core_prefix}.overrides',
 ]
-hiddenimports = list(set(hiddenimports + numpy_essential))
+hiddenimports = list(dict.fromkeys(hiddenimports + numpy_essential))
 
 _excludes = [
     "docling", "backend.converter.x2md.converter_docling",
@@ -322,10 +322,10 @@ a = Analysis(
     pathex=[os.getcwd(), os.path.join(os.getcwd(), 'backend')],
     binaries=binaries,
     datas=datas,
-    hiddenimports=list(set(hiddenimports)),
+    hiddenimports=list(dict.fromkeys(hiddenimports)),
     hookspath=['.'],
     hooksconfig={},
-    runtime_hooks=['hook-numpy-fix.py'],
+    runtime_hooks=['hook-numpy-fix.py', 'hook-utils-alias.py'],
     excludes=_excludes,
     noarchive=False,
     optimize=2,

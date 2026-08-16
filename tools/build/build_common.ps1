@@ -1,4 +1,4 @@
-# 共享构建函数库
+﻿# 共享构建函数库
 # 所有打包脚本都应该导入此模块以确保一致性
 
 # 获取项目根目录
@@ -193,6 +193,38 @@ function Test-CanvasKitConfig {
 }
 
 # 确保虚拟环境
+function Get-OwlangsPipMirrors {
+    @(
+        @{ Index = "https://pypi.tuna.tsinghua.edu.cn/simple"; Host = "pypi.tuna.tsinghua.edu.cn" },
+        @{ Index = "https://mirrors.aliyun.com/pypi/simple"; Host = "mirrors.aliyun.com" },
+        @{ Index = "https://pypi.org/simple"; Host = "pypi.org" }
+    )
+}
+
+function Invoke-PipInstallWithMirrors {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Packages,
+        [switch]$Upgrade,
+        [switch]$Editable
+    )
+
+    $argsBase = @("-m", "pip", "install")
+    if ($Upgrade) { $argsBase += "--upgrade" }
+    if ($Editable) { $argsBase += "-e" }
+    $argsBase += $Packages
+
+    foreach ($mirror in Get-OwlangsPipMirrors) {
+        Write-Host "[env] pip install $($Packages -join ' ') (index=$($mirror.Index))" -ForegroundColor Yellow
+        & python @argsBase -i $mirror.Index --trusted-host $mirror.Host
+        if ($LASTEXITCODE -eq 0) {
+            return $true
+        }
+        Write-Host "[env] WARNING: pip failed with $($mirror.Host) (exit=$LASTEXITCODE), trying next mirror..." -ForegroundColor Yellow
+    }
+    return $false
+}
+
 function Ensure-BuildVenv {
     param([switch]$SkipDependencyCheck = $false)
     
@@ -205,7 +237,9 @@ function Ensure-BuildVenv {
     & ".venv\Scripts\Activate.ps1"
     
     Write-Host "[env] Upgrading pip..." -ForegroundColor Yellow
-    python -m pip install --upgrade pip | Out-Null
+    if (-not (Invoke-PipInstallWithMirrors -Packages @("pip") -Upgrade)) {
+        Write-Host "[env] WARNING: pip upgrade failed on all mirrors; continuing with existing pip" -ForegroundColor Yellow
+    }
     
     # Pin numpy for PyInstaller compatibility
     if (-not $SkipDependencyCheck) {
@@ -217,7 +251,10 @@ function Ensure-BuildVenv {
                 $version = ($versionLine -split ":")[1].Trim()
                 if ($version -ne "1.26.4") {
                     Write-Host "[env] Installing numpy==1.26.4..." -ForegroundColor Yellow
-                    python -m pip install --force-reinstall 'numpy==1.26.4' | Out-Null
+                    if (-not (Invoke-PipInstallWithMirrors -Packages @("numpy==1.26.4"))) {
+                        Write-Host "[env] ERROR: numpy==1.26.4 install failed on all mirrors" -ForegroundColor Red
+                        return $false
+                    }
                 } else {
                     Write-Host "[env] numpy version OK" -ForegroundColor Gray
                 }
@@ -227,8 +264,74 @@ function Ensure-BuildVenv {
     
     # Install PyInstaller
     Write-Host "[env] Installing PyInstaller..." -ForegroundColor Yellow
-    python -m pip install pyinstaller | Out-Null
+    if (-not (Invoke-PipInstallWithMirrors -Packages @("pyinstaller"))) {
+        Write-Host "[env] ERROR: PyInstaller install failed on all mirrors" -ForegroundColor Red
+        return $false
+    }
     
+    return $true
+}
+
+function Ensure-FlutterWindowsNuGetOffline {
+    <#
+    .SYNOPSIS
+      Make permission_handler_windows CppWinRT restore work without api.nuget.org.
+    #>
+    param(
+        [string]$ProjectRoot = $RootDir
+    )
+
+    $ver = "2.0.210806.1"
+    $feedDir = Join-Path $ProjectRoot "tools\build\nuget-packages"
+    $nupkgName = "microsoft.windows.cppwinrt.$ver.nupkg"
+    $nupkgPath = Join-Path $feedDir $nupkgName
+
+    if (-not (Test-Path $feedDir)) {
+        New-Item -ItemType Directory -Force -Path $feedDir | Out-Null
+    }
+
+    if (-not (Test-Path $nupkgPath)) {
+        $cached = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.windows.cppwinrt\$ver\microsoft.windows.cppwinrt.$ver.nupkg"
+        if (Test-Path $cached) {
+            Write-Host "[frontend] Seeding offline NuGet feed from user cache: $nupkgName" -ForegroundColor Yellow
+            Copy-Item $cached $nupkgPath -Force
+        } else {
+            Write-Host "[frontend] ERROR: Missing $nupkgName under tools/build/nuget-packages" -ForegroundColor Red
+            Write-Host "[frontend]   api.nuget.org is often unreachable; vendor the nupkg offline." -ForegroundColor Red
+            Write-Host "[frontend]   Expected cache: $cached" -ForegroundColor Red
+            return $false
+        }
+    }
+
+    $nugetConfig = Join-Path $ProjectRoot "frontend\nuget.config"
+    $configBody = @"
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="owlangs-offline" value="../tools/build/nuget-packages" />
+  </packageSources>
+</configuration>
+"@
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($nugetConfig, $configBody.Trim() + "`r`n", $utf8NoBom)
+    Write-Host "[frontend] Wrote offline nuget.config (CppWinRT $ver)" -ForegroundColor Green
+
+    # Smoke-test restore without contacting nuget.org
+    $nugetCmd = Get-Command nuget -ErrorAction SilentlyContinue
+    if ($nugetCmd) {
+        $probeDir = Join-Path $env:TEMP "owlangs-nuget-probe"
+        if (Test-Path $probeDir) { Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue }
+        New-Item -ItemType Directory -Force -Path $probeDir | Out-Null
+        & nuget install Microsoft.Windows.CppWinRT -Version $ver `
+            -Source $feedDir -OutputDirectory $probeDir -NonInteractive | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[frontend] ERROR: Offline nuget install probe failed for CppWinRT $ver" -ForegroundColor Red
+            return $false
+        }
+        Write-Host "[frontend] Offline NuGet CppWinRT restore OK" -ForegroundColor Green
+    }
+
     return $true
 }
 

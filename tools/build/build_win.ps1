@@ -29,6 +29,13 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RootDir = Split-Path -Parent (Split-Path -Parent $ScriptDir)
 Set-Location $RootDir
 
+$CommonModule = Join-Path $ScriptDir "build_common.ps1"
+if (-not (Test-Path $CommonModule)) {
+    Write-Host "ERROR: build_common.ps1 not found!" -ForegroundColor Red
+    exit 1
+}
+. $CommonModule
+
 # Sync version before building (skip if -Clean)
 if (-not $Clean) {
     Write-Host "Syncing version numbers..." -ForegroundColor Cyan
@@ -242,6 +249,11 @@ function Build-FlutterWindows {
     Push-Location $frontendDir
     
     try {
+        if (-not (Ensure-FlutterWindowsNuGetOffline -ProjectRoot $RootDir)) {
+            Write-Host "[frontend] ERROR: Offline NuGet setup for CppWinRT failed!" -ForegroundColor Red
+            throw "Offline NuGet CppWinRT setup failed"
+        }
+
         # Ensure dependencies are up to date
         Write-Host "[frontend] Running: flutter pub get" -ForegroundColor Yellow
         flutter pub get

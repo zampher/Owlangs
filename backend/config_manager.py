@@ -260,10 +260,19 @@ def _setup_frozen_env(skip_app=False):
         'backend.utils.translation_segments',
         'backend.utils.markdown_splitter',
         'backend.utils.markdown_utils',
+        'backend.utils.http_content_disposition',
+        'backend.utils.output_suffix',
+        'backend.utils.batch_download_zip',
+        'backend.utils.equation_tag_merge',
+        'backend.utils.pdf_export_failure_locator',
+        'backend.utils.format_convert_utils',
     ]
     for mod_name in _submodules:
         try:
             __import__(mod_name)
+            short = mod_name.replace('backend.utils.', 'utils.', 1)
+            if mod_name in sys.modules:
+                sys.modules.setdefault(short, sys.modules[mod_name])
         except Exception:
             pass
 

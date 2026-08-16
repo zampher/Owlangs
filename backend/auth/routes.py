@@ -23,7 +23,7 @@ from backend.config.secrets_manager import get_secrets_manager
 from .local_users import get_local_user_store, LocalUserRole
 from logger import unified_logger as logger
 from logger.logger import LogModule
-from utils.http_content_disposition import (
+from backend.utils.http_content_disposition import (
     bytes_download_response,
     file_download_response,
 )
@@ -74,7 +74,7 @@ auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
 auth_compat_router = APIRouter(tags=["Authentication"])
 
 # Template directory: use resource path resolution, compatible with development and PyInstaller
-from utils.resource_utils import resource_path
+from backend.utils.resource_utils import resource_path
 templates = Jinja2Templates(directory=str(resource_path("template")))
 
 # Global variables (should be injected via dependency injection in actual applications)

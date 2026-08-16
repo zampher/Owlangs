@@ -30,6 +30,11 @@ function Build-FlutterWindows {
         return $false
     }
 
+    if (-not (Ensure-FlutterWindowsNuGetOffline -ProjectRoot $RootDir)) {
+        Write-Host "[frontend] ERROR: Offline NuGet setup for CppWinRT failed!" -ForegroundColor Red
+        return $false
+    }
+
     Push-Location $frontendDir
 
     try {
@@ -171,7 +176,10 @@ Write-Host ""
 
 # Ensure virtual environment
 Write-Host "[env] Setting up build environment..." -ForegroundColor Cyan
-Ensure-BuildVenv
+if (-not (Ensure-BuildVenv)) {
+    Write-Host "[env] ERROR: Build environment setup failed!" -ForegroundColor Red
+    exit 1
+}
 
 # Get version
 $Version = Get-BuildVersion
@@ -212,7 +220,10 @@ if (-not $SkipDesktop) {
 
 # Install project dependencies
 Write-Host "[env] Installing project dependencies..." -ForegroundColor Cyan
-python -m pip install -e . | Out-Null
+if (-not (Invoke-PipInstallWithMirrors -Packages @(".") -Editable)) {
+    Write-Host "[env] ERROR: pip install -e . failed on all mirrors" -ForegroundColor Red
+    exit 1
+}
 Write-Host ""
 
 # ── Step 3: Build backend with PyInstaller onedir ──
