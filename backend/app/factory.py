@@ -23,6 +23,7 @@ try:
 except Exception:  # pragma: no cover - fallback for unusual import contexts
     __version__ = "unknown"  # type: ignore[assignment]
 from utils.resource_utils import resource_path
+from utils.web_static_mime import ensure_web_static_mime_types
 from logger import unified_logger
 from logger.logger import LogModule
 # Delay import of routes to reduce startup time - import only when needed
@@ -638,6 +639,8 @@ def create_app() -> FastAPI:
     )
 
     # Add static files (after main_router so /static/flutter-web and /static/flutter-web/ return index.html)
+    # Windows often maps .mjs → text/plain; browsers reject that for type=module (pdf.js).
+    ensure_web_static_mime_types()
     static_dir = resource_path("static")
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 

@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 
 from backend.runtime_version import get_backend_version_tuple
+from utils.web_static_mime import ensure_web_static_mime_types
 
 __version__, _ = get_backend_version_tuple()
 
@@ -30,6 +31,7 @@ app.add_middleware(
 )
 
 # 添加静态文件
+ensure_web_static_mime_types()
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 

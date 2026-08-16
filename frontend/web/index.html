@@ -497,7 +497,13 @@
   <script src='pdfjs/build/pdf.min.mjs' type='module'></script>
   <script type='module'>
   var { pdfjsLib } = globalThis;
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs/build/pdf.worker.min.mjs';
+  if (!pdfjsLib) {
+    console.error(
+      '[pdf.js] pdfjsLib missing after module load. Check that .mjs is served as text/javascript (not text/plain).'
+    );
+  } else {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs/build/pdf.worker.min.mjs';
+  }
 
   var pdfRenderOptions = {
     cMapUrl: 'pdfjs/cmaps/',
