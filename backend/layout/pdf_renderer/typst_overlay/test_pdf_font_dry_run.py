@@ -100,3 +100,41 @@ def test_pdf_dry_run_user_override_returns_exact_pt():
     block = layout_doc.pages[0].blocks[0]
     render_pt = dry_run_pdf_font_size_pt(block, "Sample text", user_pt=11.3)
     assert render_pt == 11.3
+
+
+def test_pdf_dry_run_short_plain_applies_width_scale_like_emitter():
+    """Short plain auto label must reflect Typst scaled-font, not preferred pt."""
+    text = "制备工艺概述"
+    # Narrow bbox forces width shrink below preferred size.
+    layout_doc = LayoutDocument(
+        pages=[
+            LayoutPage(
+                page_index=0,
+                width=400.0,
+                height=800.0,
+                blocks=[
+                    LayoutBlock(
+                        page_index=0,
+                        bbox=(100.0, 100.0, 140.0, 118.0),
+                        type="text",
+                        index=3,
+                        text=text,
+                    ),
+                ],
+            ),
+        ],
+    )
+    block = layout_doc.pages[0].blocks[0]
+    calc = FontFitCalculator()
+    preferred = compute_block_render_fit_metrics(block, text, calculator=calc)
+    assert preferred is not None
+    preferred_pt = preferred[0]
+    assert preferred_pt >= 8.0
+
+    render_pt = dry_run_pdf_font_size_pt(block, text, calculator=calc)
+    assert render_pt is not None
+    assert render_pt < preferred_pt
+
+    # Locking the auto label must match dry-run (Preview-revision WYSIWYG).
+    locked_pt = dry_run_pdf_font_size_pt(block, text, user_pt=render_pt, calculator=calc)
+    assert locked_pt == render_pt

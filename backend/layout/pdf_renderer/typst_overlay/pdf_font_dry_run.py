@@ -13,7 +13,6 @@ from layout.pdf_renderer.typst_overlay.font_fit import (
     FontFitCalculator,
     LATIN_CHAR_WIDTH_RATIO,
     estimate_horizontal_text_width_pt,
-    preserved_stack_render_height_pt,
 )
 from layout.pdf_renderer.typst_overlay.formula_safety import formula_safety_insets_pt
 from layout.pdf_renderer.typst_overlay.models import RenderBlock, layout_block_to_render_block
@@ -29,6 +28,52 @@ from layout.pdf_renderer.typst_overlay.text_metrics import (
 FIT_SIZE_EPS_PT = 0.08
 FIT_LEADING_EPS_EM = 0.01
 MIN_CONTENT_HEIGHT_PT = 8.0
+# Keep in sync with emitter.PLAIN_LINE_FIT_MAX_CHARS (short plain → Typst scaled-font).
+PLAIN_LINE_FIT_MAX_CHARS = 40
+PRESERVED_LINE_FONT_HEIGHT_RATIO = 0.86
+
+
+def _first_line_indent_pt(rb: RenderBlock, font_size_pt: float) -> float:
+    indent_em = float(getattr(rb, "first_line_indent_em", 0.0) or 0.0)
+    indent_pt = float(getattr(rb, "first_line_indent_pt", 0.0) or 0.0)
+    if indent_em > 0:
+        return max(indent_pt, indent_em * font_size_pt)
+    return max(0.0, indent_pt)
+
+
+def _short_plain_scaled_font_pt(
+    rb: RenderBlock,
+    text: str,
+    layout_width_pt: float,
+) -> float:
+    """Mirror emitter short-plain Typst scaled-font width shrink."""
+    base = float(rb.font_size_pt)
+    if base <= 0:
+        return base
+    measured = estimate_horizontal_text_width_pt(text, base)
+    measured += _first_line_indent_pt(rb, base)
+    if measured > layout_width_pt and measured > 0:
+        base = base * (layout_width_pt / measured)
+    return max(1.0, base)
+
+
+def _preserved_line_effective_font_pt(rb: RenderBlock) -> float:
+    """Mirror emitter unlocked per-line clamp: min(font, line_height * 0.86)."""
+    boxes = getattr(rb, "preserved_line_boxes", None) or []
+    base = float(rb.font_size_pt)
+    if not boxes:
+        return base
+    effective = base
+    for line in boxes:
+        bbox = getattr(line, "bbox", None)
+        if not bbox or len(bbox) < 4:
+            continue
+        try:
+            lh = max(1.0, float(bbox[3]) - float(bbox[1]))
+        except (TypeError, ValueError):
+            continue
+        effective = min(effective, lh * PRESERVED_LINE_FONT_HEIGHT_RATIO)
+    return max(1.0, effective)
 
 
 def _binary_search_max(
@@ -204,7 +249,12 @@ def resolve_pdf_render_font_size_pt(
     *,
     layout_raw: Any = None,
 ) -> Optional[float]:
-    """Resolve fitted font size pt from a prepared RenderBlock."""
+    """Resolve fitted font size pt from a prepared RenderBlock.
+
+    Must stay aligned with emitter production paths (short scaled-font, fit_to_box,
+    preserved-line height clamp). Otherwise Preview-revision UI labels show a larger
+    auto size than the unlocked render, so locking that same number looks bigger.
+    """
     plain = (text or "").strip()
     if not plain:
         return None
@@ -215,24 +265,35 @@ def resolve_pdf_render_font_size_pt(
     x0, y0, _, _ = rb.inner_bbox
     width_pt = max(1.0, x1 - x0)
     height_pt = max(1.0, y1 - y0)
-    content = _content_fit_height_pt(rb, plain, height_pt)
+    rotation = int(getattr(rb, "rotation", 0) or 0)
+    if rotation in {90, 270}:
+        layout_width_pt, layout_height_pt = height_pt, width_pt
+    else:
+        layout_width_pt, layout_height_pt = width_pt, height_pt
+    content = _content_fit_height_pt(rb, plain, layout_height_pt)
 
-    if rb.preserve_line_breaks and "\n" in plain:
-        visual_lines = float(count_visual_lines_from_content(plain, layout_raw))
-        height = preserved_stack_render_height_pt(
-            rb.font_size_pt,
-            visual_lines,
-            rb.leading_em,
-        )
-        if height <= content + 0.1:
-            return round(rb.font_size_pt, 1)
-        return round(rb.font_size_pt, 1)
+    if rb.preserve_line_breaks and (getattr(rb, "preserved_line_boxes", None) or "\n" in plain):
+        return round(_preserved_line_effective_font_pt(rb), 1)
+
+    # emitter._render_plain_block: short text uses Typst scaled-font even when
+    # fit_to_box is False (preferred pt is only an upper bound before width shrink).
+    kind = (getattr(rb, "render_kind", None) or "").strip().lower()
+    if (
+        kind in ("plain", "plain_line")
+        and len(plain) <= PLAIN_LINE_FIT_MAX_CHARS
+        and "\n" not in plain
+    ):
+        return round(_short_plain_scaled_font_pt(rb, plain, layout_width_pt), 1)
 
     if not rb.fit_to_box:
         return round(float(rb.font_size_pt), 1)
 
     if rb.fit_single_line:
-        fit_w = max(width_pt, rb.fit_target_width_pt) if rb.fit_target_width_pt > 0 else width_pt
+        fit_w = (
+            max(layout_width_pt, rb.fit_target_width_pt)
+            if rb.fit_target_width_pt > 0
+            else layout_width_pt
+        )
         fit_h = max(
             MIN_CONTENT_HEIGHT_PT,
             min(content, rb.fit_max_height_pt or content),
@@ -240,8 +301,10 @@ def resolve_pdf_render_font_size_pt(
         return _dry_run_single_line_fit(rb, plain, layout_raw, fit_w, fit_h)
 
     if getattr(rb, "leading_em_locked", False):
-        return _dry_run_markdown_fit_fixed_leading(rb, plain, layout_raw, width_pt, content)
-    return _dry_run_markdown_fit(rb, plain, layout_raw, width_pt, content)
+        return _dry_run_markdown_fit_fixed_leading(
+            rb, plain, layout_raw, layout_width_pt, content,
+        )
+    return _dry_run_markdown_fit(rb, plain, layout_raw, layout_width_pt, content)
 
 
 def dry_run_pdf_font_size_pt(
