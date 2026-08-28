@@ -646,6 +646,22 @@ class TranslationService:
                        f"written_size={file_size_on_disk} bytes, expected_size={len(file_contents)} bytes")
             if file_size_on_disk != len(file_contents):
                 logger.warning(LogModule.WORKFLOW, f"[TRANSLATION-SERVICE] File size mismatch: task_id={task_id}, written={file_size_on_disk}, expected={len(file_contents)}")
+            # Keep a durable copy outside OS TEMP so Typst overlay survives Temp cleanup.
+            if original_filename.lower().endswith(".pdf"):
+                try:
+                    from app.services.download.download_service import (
+                        persist_original_pdf_durable,
+                    )
+
+                    persist_original_pdf_durable(
+                        task_state, task_id, original_file_path
+                    )
+                except Exception as durable_err:
+                    logger.warning(
+                        LogModule.WORKFLOW,
+                        f"[TRANSLATION-SERVICE] Task {task_id}: durable PDF persist "
+                        f"skipped: {durable_err}",
+                    )
             try:
                 from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
                     cache_overlay_source_image_size,
@@ -1094,6 +1110,19 @@ class TranslationService:
                                 if not os.path.isfile(backup):
                                     shutil.copy2(convert_pdf, backup)
                                     task_state["_convert_original_file_backup"] = backup
+                                from app.services.download.download_service import (
+                                    persist_original_pdf_durable,
+                                )
+
+                                # Prefer own PDF when present; else convert PDF.
+                                durable_src = (
+                                    own_pdf
+                                    if own_pdf and os.path.isfile(own_pdf)
+                                    else convert_pdf
+                                )
+                                persist_original_pdf_durable(
+                                    task_state, task_id, durable_src
+                                )
                             except Exception as backup_err:
                                 logger.debug(
                                     LogModule.TRANS,

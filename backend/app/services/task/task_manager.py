@@ -148,6 +148,18 @@ class TaskManager:
                     logger.debug(LogModule.SYSTEM, f"[TASK-MANAGER] Cleaned up temp directory for task {task_id}")
                 except Exception as e:
                     logger.warning(LogModule.SYSTEM, f"[TASK-MANAGER] Error cleaning temp directory for task {task_id}: {e}")
+            try:
+                from app.services.download.download_service import (
+                    cleanup_task_durable_cache,
+                )
+
+                cleanup_task_durable_cache(task_id, task_state)
+            except Exception as durable_err:
+                logger.debug(
+                    LogModule.SYSTEM,
+                    f"[TASK-MANAGER] Durable cache cleanup skipped for {task_id}: "
+                    f"{durable_err}",
+                )
         
         # Remove from all data structures
         self._tasks.pop(task_id, None)

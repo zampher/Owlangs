@@ -2540,11 +2540,32 @@ class OutputGenerator:
                                     text = seg.get("modified_text") or seg.get("target_text") or ""
                                     pre_result = check_segment_pdf_compat(text, segment_index=seg_idx)
                                     if not pre_result.passed:
+                                        issue_summaries = [
+                                            (
+                                                getattr(issue, "message", None)
+                                                or "unknown"
+                                            )
+                                            for issue in (pre_result.issues or [])
+                                        ]
+                                        issue_preview = "; ".join(
+                                            issue_summaries[:3]
+                                        )
+                                        if len(issue_summaries) > 3:
+                                            issue_preview += (
+                                                f"; ...(+{len(issue_summaries) - 3})"
+                                            )
+                                        stderr_preview = (
+                                            (pre_result.stderr or "")
+                                            .replace("\n", " ")
+                                            .strip()
+                                        )[:500]
                                         logger.warning(
                                             LogModule.EXPORT,
-                                            f"[PDF-EXPORT] Pre-check FAILED for segment {seg_idx}; "
-                                            f"skipping full PDF export to save time. "
-                                            f"Issues: {len(pre_result.issues)}",
+                                            f"[PDF-EXPORT] Pre-check FAILED for "
+                                            f"segment {seg_idx}; skipping full PDF "
+                                            f"export. Issues: {len(pre_result.issues)}; "
+                                            f"messages=[{issue_preview}]; "
+                                            f"stderr={stderr_preview!r}",
                                         )
                                         task_state["pdf_export_latex_issue"] = {
                                             "error_type": "pre_check_failed",
@@ -2552,17 +2573,22 @@ class OutputGenerator:
                                             "candidate_segment_indices": [seg_idx],
                                             "match_basis": "pre_check",
                                             "message": pre_result.message,
-                                            "stderr_excerpt": (pre_result.stderr or "")[:2000],
+                                            "issue_messages": issue_summaries[:10],
+                                            "stderr_excerpt": (
+                                                (pre_result.stderr or "")[:2000]
+                                            ),
                                         }
                                         self.task_manager.add_log(
                                             task_id,
                                             "warning",
-                                            f"[PDF-EXPORT] Pre-check failed for segment {seg_idx}. "
-                                            f"Please fix this segment before retrying PDF export.",
+                                            f"[PDF-EXPORT] Pre-check failed for "
+                                            f"segment {seg_idx}: "
+                                            f"{issue_preview or pre_result.message}",
                                         )
                                         raise RuntimeError(
-                                            f"PDF export pre-check failed for segment {seg_idx}. "
-                                            f"Please fix the LaTeX error in this segment and retry."
+                                            f"PDF export pre-check failed for segment "
+                                            f"{seg_idx}. Please fix the LaTeX error in "
+                                            f"this segment and retry."
                                         )
                                 if latex_segs:
                                     logger.info(

@@ -67,6 +67,25 @@ class ConfigManager:
             logs_dir = Path.home() / '.owlangs' / 'logs'
         logs_dir.mkdir(parents=True, exist_ok=True)
         return logs_dir
+
+    @staticmethod
+    def get_task_cache_dir(task_id: str) -> Path:
+        """Persistent per-task cache outside OS TEMP (survives Temp cleanup).
+
+        Used to keep a durable copy of the original PDF for Typst overlay export
+        when ``%TEMP%/owlangs_*`` is deleted mid-session by Windows/antivirus.
+        """
+        safe_id = "".join(
+            c for c in str(task_id or "") if c.isalnum() or c in "-_"
+        )[:64] or "unknown"
+        program_data = os.environ.get("PROGRAMDATA")
+        if program_data:
+            base = Path(program_data) / "Owlangs" / "task_cache"
+        else:
+            base = Path.home() / ".owlangs" / "task_cache"
+        cache_dir = base / safe_id
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
     
     @staticmethod
     def get_models_dir() -> Path:

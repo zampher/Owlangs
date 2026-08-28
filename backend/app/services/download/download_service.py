@@ -146,6 +146,66 @@ def _candidate_original_pdf_beside_layout_path(
     return None
 
 
+TASK_STATE_DURABLE_ORIGINAL_KEY = "original_file_durable_path"
+
+
+def persist_original_pdf_durable(
+    task_state: Dict[str, Any],
+    task_id: str,
+    source_path: Any,
+) -> Optional[Path]:
+    """Copy original PDF into ProgramData/Owlangs/task_cache (outside OS TEMP).
+
+    Customer logs show Windows/antivirus deleting ``%TEMP%/owlangs_*`` while the
+    task is still open; backups that lived inside the same temp dir then vanish
+    together. A durable copy outside TEMP keeps Typst overlay export working.
+    """
+    if not source_path:
+        return None
+    try:
+        src = Path(str(source_path))
+    except Exception:
+        return None
+    if not src.is_file():
+        return None
+    try:
+        from backend.config_manager import ConfigManager
+
+        cache_dir = ConfigManager.get_task_cache_dir(task_id)
+        dest = cache_dir / src.name
+        if dest.resolve() != src.resolve():
+            shutil.copy2(str(src), str(dest))
+        task_state[TASK_STATE_DURABLE_ORIGINAL_KEY] = str(dest)
+        logger.info(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Task {task_id}: durable original PDF at {dest}",
+        )
+        return dest
+    except Exception as e:
+        logger.warning(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Task {task_id}: failed to persist durable original PDF: {e}",
+        )
+        return None
+
+
+def cleanup_task_durable_cache(task_id: str, task_state: Optional[Dict[str, Any]] = None) -> None:
+    """Remove durable task cache directory on task release."""
+    try:
+        from backend.config_manager import ConfigManager
+
+        cache_dir = ConfigManager.get_task_cache_dir(task_id)
+        if cache_dir.is_dir():
+            shutil.rmtree(cache_dir, ignore_errors=True)
+        if isinstance(task_state, dict):
+            task_state.pop(TASK_STATE_DURABLE_ORIGINAL_KEY, None)
+    except Exception as e:
+        logger.debug(
+            LogModule.SYSTEM,
+            f"[TASK-CACHE] Failed to cleanup durable cache for {task_id}: {e}",
+        )
+
+
 def _restore_original_pdf_into_temp(
     task_state: Dict[str, Any],
     task_id: str,
@@ -153,15 +213,62 @@ def _restore_original_pdf_into_temp(
     original_filename: str,
     previous_path: Optional[str],
 ) -> Optional[Path]:
-    """Copy original PDF into temp_dir from convert task or layout sibling paths."""
+    """Copy original PDF into temp_dir from durable cache, convert task, or layout sibling."""
     dest = temp_dir / Path(original_filename).name
     sources_tried: List[str] = []
+
+    durable = task_state.get(TASK_STATE_DURABLE_ORIGINAL_KEY)
+    sources_tried.append(f"durable:{durable}")
+    if durable and Path(str(durable)).is_file():
+        shutil.copy2(str(durable), dest)
+        task_state["original_file_path"] = str(dest)
+        logger.warning(
+            LogModule.EXPORT,
+            f"[DOWNLOAD] Task {task_id}: restored original PDF from durable cache "
+            f"{durable} -> {dest} (missing={previous_path!r})",
+        )
+        return dest
+
+    # Fallback: scan task_cache even if task_state lost the durable key.
+    try:
+        from backend.config_manager import ConfigManager
+
+        cache_dir = ConfigManager.get_task_cache_dir(task_id)
+        name = Path(original_filename).name
+        candidate = cache_dir / name
+        sources_tried.append(f"durable_scan:{candidate}")
+        if candidate.is_file():
+            shutil.copy2(str(candidate), dest)
+            task_state["original_file_path"] = str(dest)
+            task_state[TASK_STATE_DURABLE_ORIGINAL_KEY] = str(candidate)
+            logger.warning(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Task {task_id}: restored original PDF from durable "
+                f"cache scan {candidate} -> {dest} (missing={previous_path!r})",
+            )
+            return dest
+        pdfs = sorted(cache_dir.glob("*.pdf"))
+        if len(pdfs) == 1:
+            sources_tried.append(f"durable_scan_only:{pdfs[0]}")
+            shutil.copy2(str(pdfs[0]), dest)
+            task_state["original_file_path"] = str(dest)
+            task_state[TASK_STATE_DURABLE_ORIGINAL_KEY] = str(pdfs[0])
+            logger.warning(
+                LogModule.EXPORT,
+                f"[DOWNLOAD] Task {task_id}: restored original PDF from sole durable "
+                f"PDF {pdfs[0]} -> {dest} (missing={previous_path!r})",
+            )
+            return dest
+    except Exception as scan_err:
+        sources_tried.append(f"durable_scan_error:{scan_err}")
 
     backup = task_state.get("_convert_original_file_backup")
     sources_tried.append(f"backup:{backup}")
     if backup and Path(str(backup)).is_file():
         shutil.copy2(str(backup), dest)
         task_state["original_file_path"] = str(dest)
+        # Refresh durable copy so the next TEMP wipe still recovers.
+        persist_original_pdf_durable(task_state, task_id, dest)
         logger.warning(
             LogModule.EXPORT,
             f"[DOWNLOAD] Task {task_id}: restored original PDF from convert backup "
@@ -179,17 +286,23 @@ def _restore_original_pdf_into_temp(
             convert_state = None
             sources_tried.append(f"convert:{convert_id}:lookup_error={e}")
         if isinstance(convert_state, dict):
-            src = convert_state.get("original_file_path")
-            sources_tried.append(f"convert:{convert_id}:{src}")
-            if src and Path(src).is_file():
-                shutil.copy2(src, dest)
-                task_state["original_file_path"] = str(dest)
-                logger.warning(
-                    LogModule.EXPORT,
-                    f"[DOWNLOAD] Task {task_id}: restored original PDF from convert "
-                    f"task {convert_id} -> {dest} (missing={previous_path!r})",
-                )
-                return dest
+            for key in (
+                TASK_STATE_DURABLE_ORIGINAL_KEY,
+                "original_file_path",
+                "_convert_original_file_backup",
+            ):
+                src = convert_state.get(key)
+                sources_tried.append(f"convert:{convert_id}:{key}:{src}")
+                if src and Path(str(src)).is_file():
+                    shutil.copy2(str(src), dest)
+                    task_state["original_file_path"] = str(dest)
+                    persist_original_pdf_durable(task_state, task_id, dest)
+                    logger.warning(
+                        LogModule.EXPORT,
+                        f"[DOWNLOAD] Task {task_id}: restored original PDF from convert "
+                        f"task {convert_id} ({key}) -> {dest} (missing={previous_path!r})",
+                    )
+                    return dest
 
     for key in ("mineru_zip_path", "mineru_extract_dir", "paddle_zip_path"):
         sibling = _candidate_original_pdf_beside_layout_path(
@@ -199,6 +312,7 @@ def _restore_original_pdf_into_temp(
         if sibling is not None and sibling.is_file():
             shutil.copy2(sibling, dest)
             task_state["original_file_path"] = str(dest)
+            persist_original_pdf_durable(task_state, task_id, dest)
             logger.warning(
                 LogModule.EXPORT,
                 f"[DOWNLOAD] Task {task_id}: restored original PDF from {key} "
