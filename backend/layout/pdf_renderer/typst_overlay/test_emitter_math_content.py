@@ -211,6 +211,37 @@ def test_render_table_block_inline_math_uses_cmarker_not_raw_content():
     # Raw Typst content injection (no cmarker) caused unknown variable: cdot
     assert "[EDC $" not in src
     assert "#let block_tbl_cell_" in src
+    assert "cmarker.render(" in src and "math: mitex" in src
+
+
+def test_render_table_block_bare_limits_skips_mitex():
+    """Regression: orphan $\\limits$ in a table cell must not use mitex.
+
+    Customer log (TYPST_OVERLAY): mitex 0.2.6 fails with
+    ``missing argument: body`` on cmarker.render(..., math: mitex) for
+    header cells that contain bare \\limits / \\nolimits.
+    """
+    block = RenderBlock(
+        block_id="tbl-limits",
+        page_index=0,
+        inner_bbox=(10.0, 20.0, 200.0, 120.0),
+        markdown_text=(
+            "| $\\limits$ | Amount |\n"
+            "| --- | --- |\n"
+            "| a | 1 |"
+        ),
+        font_size_pt=10.0,
+        render_kind="table",
+        opaque_fill=True,
+        table_border_style="grid",
+    )
+    src = _render_table_block("block-tbl-limits", block)
+    assert "\\\\limits" in src or "\\limits" in src
+    # The unsafe cell must use plain cmarker (no math: mitex).
+    assert "cmarker.render(block_tbl_limits_cell_0)" in src
+    assert "cmarker.render(block_tbl_limits_cell_0, math: mitex)" not in src
+    # Sibling safe cells may still use mitex.
+    assert "cmarker.render(block_tbl_limits_cell_1, math: mitex)" in src
 
 
 def test_render_preserved_lines_fallback_for_invalid_right_text():

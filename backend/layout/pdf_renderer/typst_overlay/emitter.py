@@ -1692,6 +1692,7 @@ def _typst_table_rows_spec(
 def _typst_table_cell_content(
     cell_var: str,
     *,
+    cell_text: str = "",
     row_idx: int,
     font_pt: float,
     header_font_pt: float,
@@ -1700,7 +1701,9 @@ def _typst_table_cell_content(
     is_header_row: bool,
 ) -> str:
     """Build one Typst table cell body expression."""
-    body_expr = _typst_cmarker_render_expr(cell_var)
+    # Table cells previously always forced mitex; bare \\limits / unsafe math
+    # then failed compile with mitex "missing argument: body".
+    body_expr = _typst_cmarker_render_expr_for_markdown(cell_var, cell_text)
     use_header_fill = (
         is_header_row and border_style == TABLE_BORDER_STYLE_GRID
     )
@@ -1721,6 +1724,7 @@ def _typst_table_cell_content(
 def _typst_booktabs_title_cell_expr(
     cell_var: str,
     *,
+    cell_text: str = "",
     row_idx: int,
     colspan: int,
     header_font_pt: float,
@@ -1732,6 +1736,7 @@ def _typst_booktabs_title_cell_expr(
     """Build one booktabs title cell, merging colspan and optional bottom rule."""
     inner_content = _typst_table_cell_content(
         cell_var,
+        cell_text=cell_text,
         row_idx=row_idx,
         font_pt=data_font_pt,
         header_font_pt=header_font_pt,
@@ -1780,6 +1785,7 @@ def _typst_table_booktabs_items(
             header_parts.append(
                 _typst_booktabs_title_cell_expr(
                     cell_var,
+                    cell_text=text,
                     row_idx=row_idx,
                     colspan=colspan,
                     header_font_pt=header_font_pt,
@@ -1803,6 +1809,7 @@ def _typst_table_booktabs_items(
             body_cells.append(
                 _typst_table_cell_content(
                     cell_var,
+                    cell_text=cell,
                     row_idx=row_idx,
                     font_pt=data_font_pt,
                     header_font_pt=header_font_pt,
@@ -1950,6 +1957,7 @@ def _render_table_block(block_id: str, block: RenderBlock) -> str:
                     "  "
                     + _typst_table_cell_content(
                         cell_var,
+                        cell_text=cell,
                         row_idx=row_idx,
                         font_pt=data_font_pt,
                         header_font_pt=header_font_pt,

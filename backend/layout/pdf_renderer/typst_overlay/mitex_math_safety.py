@@ -23,6 +23,13 @@ _LEFT_CEIL_RE = re.compile(r"\\left\\lceil\b")
 _RIGHT_CEIL_RE = re.compile(r"\\right\\rceil\b")
 # Bare \not (no operand) → Typst "missing argument: it" via mitex.
 _BARE_NOT_RE = re.compile(r"^\\not\s*$")
+# Orphan \limits / \nolimits at math start → Typst "missing argument: body"
+# via mitex (limits() with no base). Attached forms like \sum\limits stay OK.
+_BARE_LIMITS_RE = re.compile(r"^\\(?:no)?limits(?![A-Za-z])")
+# Style switch alone → mitex eval fails (empty array / invalid math).
+_BARE_MATH_STYLE_RE = re.compile(
+    r"^\\(?:displaystyle|textstyle|scriptstyle|scriptscriptstyle)\s*$"
+)
 
 
 def strip_math_delimiters(text: str) -> str:
@@ -123,8 +130,13 @@ def mitex_unsafe_reason(math_body: str) -> Optional[str]:
         return "invalid_right_delimiter"
     if _PAREN_DELIM_RE.search(body):
         return "paren_delimiter_artifact"
-    if _BARE_NOT_RE.match(body.strip()):
+    stripped = body.strip()
+    if _BARE_NOT_RE.match(stripped):
         return "bare_not"
+    if _BARE_LIMITS_RE.match(stripped):
+        return "bare_limits"
+    if _BARE_MATH_STYLE_RE.match(stripped):
+        return "bare_math_style"
     # Adjacent $...$$...$ can be scanned as one body containing $$; cmarker
     # still splits them and may emit bare \not.
     if "$$" in body:

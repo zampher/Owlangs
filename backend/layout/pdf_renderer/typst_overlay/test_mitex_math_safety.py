@@ -174,6 +174,34 @@ def test_bare_not_is_unsafe():
     assert not is_mitex_safe_latex(r"\not")
 
 
+def test_bare_limits_is_unsafe():
+    """Orphan \\limits breaks mitex 0.2.6 with missing argument: body."""
+    assert mitex_unsafe_reason(r"\limits") == "bare_limits"
+    assert mitex_unsafe_reason(r"\nolimits") == "bare_limits"
+    assert mitex_unsafe_reason(r"\limits_{i=1}") == "bare_limits"
+    assert not is_mitex_safe_latex(r"$\limits$")
+
+
+def test_attached_sum_limits_is_safe():
+    assert mitex_unsafe_reason(r"\sum\limits_{i=1}^n") is None
+    assert is_mitex_safe_latex(r"\sum\limits_i")
+
+
+def test_bare_math_style_is_unsafe():
+    assert mitex_unsafe_reason(r"\displaystyle") == "bare_math_style"
+    assert mitex_unsafe_reason(r"\scriptstyle") == "bare_math_style"
+    assert mitex_unsafe_reason(r"\displaystyle\sum_i") is None
+
+
+def test_markdown_line_with_bare_limits_is_unsafe():
+    from layout.pdf_renderer.typst_overlay.mitex_math_safety import (
+        markdown_line_safe_for_mitex,
+    )
+
+    assert not markdown_line_safe_for_mitex(r"header $\limits$")
+    assert markdown_line_safe_for_mitex(r"$\sum\limits_i x_i$")
+
+
 def test_not_perp_is_safe():
     assert mitex_unsafe_reason(r"\not\perp") is None
     assert is_mitex_safe_latex(r"\not\perp")
