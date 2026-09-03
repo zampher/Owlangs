@@ -115,47 +115,51 @@ def extract_token_info(response_data: dict) -> tuple[int, int, int, int]:
     Returns:
         tuple: (input_tokens, cached_tokens, output_tokens, reasoning_tokens)
     """
-    if "usage" not in response_data:
+    usage = response_data.get("usage") if isinstance(response_data, dict) else None
+    # vLLM / OpenAI-compatible gateways often emit "usage": null or
+    # "*_tokens_details": null. Treat non-dicts as absent.
+    if not isinstance(usage, dict):
         return 0, 0, 0, 0
 
-    usage = response_data["usage"]
-    input_tokens = usage.get("prompt_tokens", 0)
-    output_tokens = usage.get("completion_tokens", 0)
+    input_tokens = usage.get("prompt_tokens", 0) or 0
+    output_tokens = usage.get("completion_tokens", 0) or 0
 
     # Initialize token detailed statistics
     cached_tokens = 0
     reasoning_tokens = 0
 
+    def _detail_value(container_key: str, value_key: str):
+        nested = usage.get(container_key)
+        if not isinstance(nested, dict):
+            return None
+        if value_key not in nested:
+            return None
+        return nested.get(value_key) or 0
+
     # Try to get cached_tokens from different formats
     # Format 1: input_tokens_details.cached_tokens
-    if (
-            "input_tokens_details" in usage
-            and "cached_tokens" in usage["input_tokens_details"]
-    ):
-        cached_tokens = usage["input_tokens_details"]["cached_tokens"]
-    # Format 2: prompt_tokens_details.cached_tokens
-    elif (
-            "prompt_tokens_details" in usage
-            and "cached_tokens" in usage["prompt_tokens_details"]
-    ):
-        cached_tokens = usage["prompt_tokens_details"]["cached_tokens"]
-    # Format 3: prompt_cache_hit_tokens (directly under usage)
-    elif "prompt_cache_hit_tokens" in usage:
-        cached_tokens = usage["prompt_cache_hit_tokens"]
+    cached = _detail_value("input_tokens_details", "cached_tokens")
+    if cached is not None:
+        cached_tokens = cached
+    else:
+        # Format 2: prompt_tokens_details.cached_tokens
+        cached = _detail_value("prompt_tokens_details", "cached_tokens")
+        if cached is not None:
+            cached_tokens = cached
+        # Format 3: prompt_cache_hit_tokens (directly under usage)
+        elif "prompt_cache_hit_tokens" in usage:
+            cached_tokens = usage.get("prompt_cache_hit_tokens") or 0
 
     # Try to get reasoning_tokens from different formats
     # Format 1: output_tokens_details.reasoning_tokens
-    if (
-            "output_tokens_details" in usage
-            and "reasoning_tokens" in usage["output_tokens_details"]
-    ):
-        reasoning_tokens = usage["output_tokens_details"]["reasoning_tokens"]
-    # Format 2: completion_tokens_details.reasoning_tokens
-    elif (
-            "completion_tokens_details" in usage
-            and "reasoning_tokens" in usage["completion_tokens_details"]
-    ):
-        reasoning_tokens = usage["completion_tokens_details"]["reasoning_tokens"]
+    reasoning = _detail_value("output_tokens_details", "reasoning_tokens")
+    if reasoning is not None:
+        reasoning_tokens = reasoning
+    else:
+        # Format 2: completion_tokens_details.reasoning_tokens
+        reasoning = _detail_value("completion_tokens_details", "reasoning_tokens")
+        if reasoning is not None:
+            reasoning_tokens = reasoning
 
     return input_tokens, cached_tokens, output_tokens, reasoning_tokens
 
@@ -750,15 +754,19 @@ class Agent:
                     if "error" in response_data:
                         error_msg = response_data["error"]
                         raise ValueError(f"Ollama API error: {error_msg}")
-                    if "message" not in response_data or "content" not in response_data.get("message", {}):
+                    message = response_data.get("message")
+                    if not isinstance(message, dict) or "content" not in message:
                         raise ValueError(f"Invalid Ollama API response format: {response_data}")
-                    result = response_data["message"]["content"]
+                    result = message.get("content") or ""
                     finish_reason = response_data.get("done_reason", "unknown")
                 else:
                     if "choices" not in response_data or len(response_data["choices"]) == 0:
                         raise ValueError(f"Invalid API response: missing or empty 'choices' field. Response: {response_data}")
                     choice = response_data["choices"][0]
-                    result = choice["message"]["content"]
+                    message = choice.get("message") if isinstance(choice, dict) else None
+                    if not isinstance(message, dict):
+                        raise ValueError(f"Invalid API response: missing message in choice. Response: {response_data}")
+                    result = message.get("content") or ""
                     finish_reason = choice.get("finish_reason", "unknown")
             chunk_info = f"[Chunk #{chunk_index}] " if chunk_index is not None else ""
             
@@ -1262,13 +1270,18 @@ class Agent:
                     if "error" in response_data:
                         error_msg = response_data["error"]
                         raise ValueError(f"Ollama API error: {error_msg}")
-                    if "message" not in response_data or "content" not in response_data.get("message", {}):
+                    message = response_data.get("message")
+                    if not isinstance(message, dict) or "content" not in message:
                         raise ValueError(f"Invalid Ollama API response format: {response_data}")
-                    result = response_data["message"]["content"]
+                    result = message.get("content") or ""
                 else:
                     if "choices" not in response_data or len(response_data["choices"]) == 0:
                         raise ValueError(f"Invalid API response: missing or empty 'choices' field. Response: {response_data}")
-                    result = response_data["choices"][0]["message"]["content"]
+                    choice = response_data["choices"][0]
+                    message = choice.get("message") if isinstance(choice, dict) else None
+                    if not isinstance(message, dict):
+                        raise ValueError(f"Invalid API response: missing message in choice. Response: {response_data}")
+                    result = message.get("content") or ""
             
             if not result or not isinstance(result, str):
                 chunk_info = f"[Chunk #{chunk_index}] " if chunk_index is not None else ""

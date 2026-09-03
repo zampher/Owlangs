@@ -140,17 +140,23 @@ class OpenAIProtocol(LLMProtocol):
         
         choice = response_data["choices"][0]
         
-        # Extract content
-        if "message" not in choice:
-            raise ValueError(f"Invalid OpenAI response: missing 'message' in choice. Response: {response_data}")
-        
-        content = choice["message"].get("content", "")
-        if not content:
-            # Handle case where content is empty but valid
+        # Extract content. Providers may set "content": null; normalize to "".
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            raise ValueError(
+                f"Invalid OpenAI response: missing 'message' object in choice. "
+                f"Response: {response_data}"
+            )
+
+        content = message.get("content")
+        # Key present with JSON null → .get default is skipped; normalize to "".
+        if content is None:
             content = ""
+        if not isinstance(content, str):
+            content = str(content)
         
         # Extract finish reason
-        finish_reason = choice.get("finish_reason", "unknown")
+        finish_reason = choice.get("finish_reason") or "unknown"
         
         # Extract token usage
         input_tokens, output_tokens = self.extract_usage_tokens(response_data)
@@ -159,17 +165,19 @@ class OpenAIProtocol(LLMProtocol):
     
     def extract_usage_tokens(self, response_data: Dict[str, Any]) -> Tuple[int, int]:
         """Extract token usage from OpenAI response."""
-        usage = response_data.get("usage", {})
+        usage = response_data.get("usage") if isinstance(response_data, dict) else None
+        if not isinstance(usage, dict):
+            return 0, 0
         
         # Standard OpenAI format
-        input_tokens = usage.get("prompt_tokens", 0)
-        output_tokens = usage.get("completion_tokens", 0)
+        input_tokens = usage.get("prompt_tokens", 0) or 0
+        output_tokens = usage.get("completion_tokens", 0) or 0
         
         # Some providers use different field names
         if input_tokens == 0:
-            input_tokens = usage.get("input_tokens", 0)
+            input_tokens = usage.get("input_tokens", 0) or 0
         if output_tokens == 0:
-            output_tokens = usage.get("output_tokens", 0)
+            output_tokens = usage.get("output_tokens", 0) or 0
         
         return input_tokens, output_tokens
     
