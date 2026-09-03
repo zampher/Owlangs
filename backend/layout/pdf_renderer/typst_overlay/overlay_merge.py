@@ -160,6 +160,65 @@ def merge_overlay_pdf_to_file(
     return output_path
 
 
+def overlay_pages_are_index_aligned(
+    source_page_indices: list[int],
+    source_page_count: int,
+) -> bool:
+    """True when overlay page i should land on source page i for every page."""
+    if len(source_page_indices) != source_page_count:
+        return False
+    return source_page_indices == list(range(source_page_count))
+
+
+def merge_overlay_pdf_mapped(
+    source_pdf_bytes: bytes,
+    overlay_pdf_path: Path,
+    source_page_indices: list[int],
+    *,
+    compress: bool = True,
+) -> bytes:
+    """Merge overlay pages onto explicitly mapped source page indices.
+
+    Typst overlay PDFs contain one page per ``RenderPageSpec`` in emission
+    order. Each overlay page must be merged onto ``source_page_indices[i]``,
+    not onto overlay index ``i``, when the source document has more pages
+    than overlay pages or uses non-contiguous page indices.
+    """
+    _check_pymupdf()
+
+    if not source_page_indices:
+        return source_pdf_bytes
+
+    source_doc = fitz.open(stream=source_pdf_bytes, filetype="pdf")
+    try:
+        source_page_count = len(source_doc)
+    finally:
+        source_doc.close()
+
+    if overlay_pages_are_index_aligned(source_page_indices, source_page_count):
+        return merge_overlay_pdf(
+            source_pdf_bytes,
+            overlay_pdf_path,
+            compress=compress,
+            check_page_count=True,
+        )
+
+    unified_logger.info(
+        LogModule.RESTOR,
+        f"[OVERLAY_MERGE] Sparse overlay mapping: overlay_pages={len(source_page_indices)} "
+        f"source_pages={source_page_count} "
+        f"indices={source_page_indices[:12]}"
+        f"{'...' if len(source_page_indices) > 12 else ''}",
+    )
+    return patch_merged_pdf_pages(
+        source_pdf_bytes,
+        source_pdf_bytes,
+        overlay_pdf_path,
+        source_page_indices,
+        compress=compress,
+    )
+
+
 def _save_assembled_pdf(out_doc: "fitz.Document", *, compress: bool) -> bytes:
     """Save an assembled PDF without aggressive GC that can strip shared page assets."""
     buffer = io.BytesIO()
@@ -202,29 +261,30 @@ def patch_merged_pdf_pages(
     merged_doc = fitz.open(stream=merged_pdf_bytes, filetype="pdf")
     cleaned_doc = fitz.open(stream=cleaned_source_bytes, filetype="pdf")
     overlay_doc = fitz.open(overlay_pdf_path)
-    temp_doc = fitz.open()
     replacement_docs: dict[int, "fitz.Document"] = {}
     try:
-        sorted_pages = sorted(set(source_page_indices))
-        for ovl_idx, page_idx in enumerate(sorted_pages):
+        for ovl_idx, page_idx in enumerate(source_page_indices):
             if page_idx < 0 or page_idx >= len(merged_doc):
                 continue
             if page_idx >= len(cleaned_doc) or ovl_idx >= len(overlay_doc):
                 break
 
-            temp_doc.select([])
-            temp_doc.insert_pdf(cleaned_doc, from_page=page_idx, to_page=page_idx)
-            temp_page = temp_doc[0]
-            temp_page.show_pdf_page(
-                temp_page.rect,
-                overlay_doc,
-                ovl_idx,
-                overlay=True,
-            )
+            temp_doc = fitz.open()
+            try:
+                temp_doc.insert_pdf(cleaned_doc, from_page=page_idx, to_page=page_idx)
+                temp_page = temp_doc[0]
+                temp_page.show_pdf_page(
+                    temp_page.rect,
+                    overlay_doc,
+                    ovl_idx,
+                    overlay=True,
+                )
 
-            repl_doc = fitz.open()
-            repl_doc.insert_pdf(temp_doc, from_page=0, to_page=0)
-            replacement_docs[page_idx] = repl_doc
+                repl_doc = fitz.open()
+                repl_doc.insert_pdf(temp_doc, from_page=0, to_page=0)
+                replacement_docs[page_idx] = repl_doc
+            finally:
+                temp_doc.close()
 
         if not replacement_docs:
             return merged_pdf_bytes
@@ -235,15 +295,15 @@ def patch_merged_pdf_pages(
         finally:
             out_doc.close()
 
+        patched_pages = sorted(replacement_docs)
         unified_logger.info(
             LogModule.RESTOR,
-            f"[OVERLAY_MERGE] Patched {len(replacement_docs)} page(s): {sorted_pages}",
+            f"[OVERLAY_MERGE] Patched {len(replacement_docs)} page(s): {patched_pages}",
         )
         return patched
     finally:
         for repl_doc in replacement_docs.values():
             repl_doc.close()
-        temp_doc.close()
         overlay_doc.close()
         cleaned_doc.close()
         merged_doc.close()
@@ -266,8 +326,7 @@ def patch_merged_pdf_pages_from_rendered(
     rendered_doc = fitz.open(stream=rendered_pdf_bytes, filetype="pdf")
     replacement_docs: dict[int, "fitz.Document"] = {}
     try:
-        sorted_pages = sorted(set(source_page_indices))
-        for ovl_idx, page_idx in enumerate(sorted_pages):
+        for ovl_idx, page_idx in enumerate(source_page_indices):
             if page_idx < 0 or page_idx >= len(merged_doc):
                 continue
             if ovl_idx >= len(rendered_doc):
@@ -285,10 +344,11 @@ def patch_merged_pdf_pages_from_rendered(
         finally:
             out_doc.close()
 
+        patched_pages = sorted(replacement_docs)
         unified_logger.info(
             LogModule.RESTOR,
             f"[OVERLAY_MERGE] Patched {len(replacement_docs)} background-embed page(s): "
-            f"{sorted_pages}",
+            f"{patched_pages}",
         )
         return patched
     finally:

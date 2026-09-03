@@ -14,6 +14,8 @@ import pytest
 
 from layout.pdf_renderer.typst_overlay.overlay_merge import (
     merge_overlay_pdf,
+    merge_overlay_pdf_mapped,
+    overlay_pages_are_index_aligned,
     patch_merged_pdf_pages,
     patch_merged_pdf_pages_from_rendered,
 )
@@ -174,6 +176,52 @@ def test_merge_overlay_pdf_preserves_page_dimensions(width, height):
             assert abs(page_h - height) < 0.1, (
                 f"Page {page_idx}: height mismatch expected={height} got={page_h}"
             )
+    finally:
+        merged.close()
+
+
+@pytest.mark.skipif(
+    not hasattr(fitz, "open"),
+    reason="PyMuPDF is required",
+)
+def test_overlay_pages_are_index_aligned():
+    assert overlay_pages_are_index_aligned([0, 1, 2], 3) is True
+    assert overlay_pages_are_index_aligned([0, 2, 3], 3) is False
+    assert overlay_pages_are_index_aligned([0, 1], 5) is False
+
+
+@pytest.mark.skipif(
+    not hasattr(fitz, "open"),
+    reason="PyMuPDF is required",
+)
+def test_merge_overlay_pdf_mapped_places_sparse_pages_correctly():
+    """Overlay page i must merge onto mapped source page, not source page i."""
+    source_bytes = _make_labeled_pdf(
+        ["PAGE-0", "PAGE-1", "PAGE-2", "PAGE-3", "PAGE-4"],
+    )
+    overlay_bytes = _make_labeled_pdf(["OVERLAY-A", "OVERLAY-B"])
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+        f.write(overlay_bytes)
+        overlay_path = f.name
+
+    try:
+        merged_bytes = merge_overlay_pdf_mapped(
+            source_bytes,
+            Path(overlay_path),
+            [1, 4],
+        )
+    finally:
+        Path(overlay_path).unlink(missing_ok=True)
+
+    merged = fitz.open(stream=merged_bytes, filetype="pdf")
+    try:
+        assert len(merged) == 5
+        assert _page_text(merged, 0) == "PAGE-0"
+        assert "OVERLAY-A" in _page_text(merged, 1)
+        assert _page_text(merged, 2) == "PAGE-2"
+        assert _page_text(merged, 3) == "PAGE-3"
+        assert "OVERLAY-B" in _page_text(merged, 4)
     finally:
         merged.close()
 

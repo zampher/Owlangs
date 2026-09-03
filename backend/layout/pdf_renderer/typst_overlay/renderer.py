@@ -76,7 +76,7 @@ from layout.pdf_renderer.typst_overlay.source_cleanup import (
     clean_source_pdf, PYMUPDF_AVAILABLE as _pymupdf_ok,
 )
 from layout.pdf_renderer.typst_overlay.overlay_merge import (
-    merge_overlay_pdf,
+    merge_overlay_pdf_mapped,
     patch_merged_pdf_pages,
     patch_merged_pdf_pages_from_rendered,
 )
@@ -2765,10 +2765,10 @@ class TypstOverlayRenderer(BasePDFRenderer):
                         [spec.page_index for spec in page_specs],
                     )
             else:
-                final_pdf_bytes = merge_overlay_pdf(
+                final_pdf_bytes = merge_overlay_pdf_mapped(
                     cleaned_pdf_bytes,
                     pdf_path,
-                    check_page_count=True,
+                    [spec.page_index for spec in page_specs],
                     compress=True,
                 )
         except Exception as e:
