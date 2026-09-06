@@ -1,5 +1,16 @@
 # Owlangs 版本说明（中文）
 
+## Owlangs 1.5.8.0
+
+### 修复
+
+1. **原位 PDF 图片/公式/图表/表格错页**：修复部分页面无重绘内容时，Typst overlay 按页序号错误叠层，导致图片、公式、图表和表格出现在错误页面的问题。
+2. **翻译报错 `NoneType is not iterable`**：修复部分 OpenAI 兼容网关（如 vLLM）返回 `usage: null` 或 token details 为 null 时，解析 token 用量崩溃的问题。
+3. **原位 PDF 导出失败（mitex）**：修复表格单元格等场景中不安全的裸 `\limits` / 数学样式切换导致 Typst/mitex 编译失败（如 `missing argument: body`）的问题。
+4. **原位 PDF 找不到原始文件**：进一步加固原始 PDF 持久化与恢复（写入 TEMP 外的任务缓存），降低 Windows/杀软清理临时目录后再次导出报 `Original PDF file not found for Typst overlay rendering` 的概率。
+
+---
+
 ## Owlangs 1.5.7.0
 
 ### 新功能

@@ -1,5 +1,16 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.5.8.0
+
+### Bug Fixes
+
+1. **Wrong-page images/formulas/charts/tables in layout-preserving PDF**: Fixed Typst overlay merging by sequential page index when only some pages were redrawn, which placed images, formulas, charts, and tables on the wrong pages.
+2. **Translation crash `NoneType is not iterable`**: Fixed token-usage parsing crashing when OpenAI-compatible gateways (e.g. vLLM) returned `usage: null` or null token-detail objects.
+3. **Layout-preserving PDF export failure (mitex)**: Fixed Typst/mitex compile failures (e.g. `missing argument: body`) caused by unsafe bare `\limits` / math style switches in table cells and similar content.
+4. **Original PDF not found for Typst overlay**: Hardened durable original-PDF persistence/recovery outside OS TEMP to reduce `Original PDF file not found for Typst overlay rendering` after Windows/antivirus temp cleanup.
+
+---
+
 ## Owlangs 1.5.7.0
 
 ### New Features
