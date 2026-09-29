@@ -4,6 +4,8 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import '../../shared/utils/app_logger.dart';
+import '../../shared/utils/backend_image_url.dart';
+import '../../shared/utils/backend_image_url.dart';
 import '../../shared/utils/ebook_image_helper.dart';
 import '../../shared/utils/latex_text_segments.dart';
 
@@ -21,7 +23,7 @@ class MarkdownTextWithImages extends StatelessWidget {
   });
   final String text;
   final Map<String, Map<String, String>>?
-      imageDataMap; // {placeholder_id: {"data": "data:image/...", "alt": "title"}}
+      imageDataMap; // {id: {"url": "/service/task-image/...", "alt": "..."} or legacy "data"}
   final bool enableSelection;
   final TextStyle? style;
   final double? imageMaxWidth;
@@ -696,12 +698,12 @@ class MarkdownTextWithImages extends StatelessWidget {
     );
   }
 
-  /// Render a single image from image_data_map entry.
+  /// Render a single image from image_data_map entry (URL preferred, data URI fallback).
   Widget _buildImageWidget(Map<String, String> imageData) {
-    final base64Data = imageData['data'];
-    final altText = imageData['alt'] ?? '';
+    final String altText = imageData['alt'] ?? '';
+    final String? src = imageSrcFromEntry(imageData);
 
-    if (base64Data == null || !base64Data.startsWith('data:image/')) {
+    if (src == null || src.isEmpty) {
       return Text(
         altText.isNotEmpty ? altText : 'Image',
         style: TextStyle(
@@ -712,86 +714,107 @@ class MarkdownTextWithImages extends StatelessWidget {
       );
     }
 
-    try {
-      final base64String = base64Data.split(',')[1];
-      final imageBytes = base64Decode(base64String);
-      return RepaintBoundary(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: imageMaxWidth ?? double.infinity,
-                    maxHeight: imageMaxHeight ?? double.infinity,
-                  ),
-                  child: Image.memory(
-                    imageBytes,
-                    fit: BoxFit.scaleDown,
-                    gaplessPlayback: true,
-                    frameBuilder: (
-                      context,
-                      child,
-                      frame,
-                      wasSynchronouslyLoaded,
-                    ) =>
-                        child,
-                    errorBuilder: (
-                      context,
-                      error,
-                      stackTrace,
-                    ) {
-                      return Container(
-                        constraints: BoxConstraints(
-                          maxWidth: imageMaxWidth ?? double.infinity,
-                          maxHeight: imageMaxHeight ?? 400,
-                        ),
-                        padding: const EdgeInsets.all(8),
-                        color: Colors.grey.shade200,
-                        child: Center(
-                          child: Text(
-                            altText.isNotEmpty ? altText : 'Image',
-                            style: TextStyle(
-                              fontSize: (style?.fontSize ?? 14) * 0.9,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              if (altText.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    altText,
-                    style: TextStyle(
-                      fontSize: (style?.fontSize ?? 14) * 0.85,
-                      color: Colors.grey.shade600,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ),
-            ],
+    Widget buildErrorPlaceholder() {
+      return Container(
+        constraints: BoxConstraints(
+          maxWidth: imageMaxWidth ?? double.infinity,
+          maxHeight: imageMaxHeight ?? 400,
+        ),
+        padding: const EdgeInsets.all(8),
+        color: Colors.grey.shade200,
+        child: Center(
+          child: Text(
+            altText.isNotEmpty ? altText : 'Image',
+            style: TextStyle(
+              fontSize: (style?.fontSize ?? 14) * 0.9,
+              color: Colors.grey.shade600,
+            ),
           ),
         ),
       );
-    } catch (e) {
-      return Text(
-        altText.isNotEmpty ? altText : 'Image',
-        style: TextStyle(
-          fontSize: style?.fontSize ?? 14,
-          color: Colors.grey.shade600,
-          fontStyle: FontStyle.italic,
-        ),
+    }
+
+    Widget imageChild;
+    if (src.startsWith('data:image/')) {
+      try {
+        final String base64String = src.split(',')[1];
+        final List<int> imageBytes = base64Decode(base64String);
+        imageChild = Image.memory(
+          imageBytes,
+          fit: BoxFit.scaleDown,
+          gaplessPlayback: true,
+          frameBuilder: (
+            BuildContext context,
+            Widget child,
+            int? frame,
+            bool wasSynchronouslyLoaded,
+          ) =>
+              child,
+          errorBuilder: (
+            BuildContext context,
+            Object error,
+            StackTrace? stackTrace,
+          ) =>
+              buildErrorPlaceholder(),
+        );
+      } catch (_) {
+        return Text(
+          altText.isNotEmpty ? altText : 'Image',
+          style: TextStyle(
+            fontSize: style?.fontSize ?? 14,
+            color: Colors.grey.shade600,
+            fontStyle: FontStyle.italic,
+          ),
+        );
+      }
+    } else {
+      imageChild = Image.network(
+        src,
+        headers: backendImageRequestHeaders(),
+        fit: BoxFit.scaleDown,
+        gaplessPlayback: true,
+        errorBuilder: (
+          BuildContext context,
+          Object error,
+          StackTrace? stackTrace,
+        ) =>
+            buildErrorPlaceholder(),
       );
     }
+
+    return RepaintBoundary(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: imageMaxWidth ?? double.infinity,
+                  maxHeight: imageMaxHeight ?? double.infinity,
+                ),
+                child: imageChild,
+              ),
+            ),
+            if (altText.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  altText,
+                  style: TextStyle(
+                    fontSize: (style?.fontSize ?? 14) * 0.85,
+                    color: Colors.grey.shade600,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Build widget with inline and display LaTeX delimiters.

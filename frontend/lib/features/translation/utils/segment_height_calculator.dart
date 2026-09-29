@@ -122,14 +122,12 @@ class SegmentHeightCalculator {
               : null;
           if (imageData != null) {
             final String? imageDataUri = imageData['data'];
-            if (imageDataUri != null &&
-                imageDataUri.startsWith('data:image/')) {
-              // For base64 images, use a reasonable estimate for image height
-              // In a production system, you might want to decode the image
-              // to get actual dimensions, but that's expensive
+            final String? imageUrl = imageData['url'];
+            if ((imageDataUri != null &&
+                    imageDataUri.startsWith('data:image/')) ||
+                (imageUrl != null && imageUrl.isNotEmpty)) {
+              // For images (URL or base64), use a reasonable estimate for height
               const imageMaxHeight = 400;
-              // Estimate: assume images are roughly square or landscape
-              // Use maxHeight as a conservative estimate
               totalHeight += imageMaxHeight.clamp(100.0, 400.0);
             } else {
               totalHeight += 200.0; // Default image height

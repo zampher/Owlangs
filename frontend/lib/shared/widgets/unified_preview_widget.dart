@@ -462,27 +462,28 @@ class _UnifiedPreviewWidgetState extends ConsumerState<UnifiedPreviewWidget> {
             final String key = k.toString();
             if (v is Map) {
               final Map<String, dynamic> valueMap = v.cast<String, dynamic>();
+              final String urlValue = valueMap['url']?.toString() ?? '';
               final String dataValue = valueMap['data']?.toString() ?? '';
               final String altValue = valueMap['alt']?.toString() ?? '';
 
-              // If data is empty, try to preserve existing data from _imageDataMap
+              // Prefer URL refs; preserve legacy data if still present.
+              var finalUrlValue = urlValue;
               var finalDataValue = dataValue;
-              if (dataValue.isEmpty &&
+              if (urlValue.isEmpty &&
+                  dataValue.isEmpty &&
                   _imageDataMap != null &&
                   _imageDataMap!.containsKey(key)) {
-                final String existingData =
-                    _imageDataMap![key]?['data']?.toString() ?? '';
-                if (existingData.isNotEmpty) {
-                  finalDataValue = existingData;
-                }
+                finalUrlValue = _imageDataMap![key]?['url']?.toString() ?? '';
+                finalDataValue = _imageDataMap![key]?['data']?.toString() ?? '';
               }
 
               return MapEntry(key, <String, String>{
-                'data': finalDataValue,
+                if (finalUrlValue.isNotEmpty) 'url': finalUrlValue,
+                if (finalDataValue.isNotEmpty) 'data': finalDataValue,
                 'alt': altValue,
               });
             }
-            return MapEntry(key, <String, String>{'data': '', 'alt': ''});
+            return MapEntry(key, <String, String>{'alt': ''});
           });
           _unifiedPreviewWidgetLog(
             '[Preview] Loaded ${imageMap.length} images from image_data_map',

@@ -184,14 +184,18 @@ class _TranslationPreviewContentWidgetState
             final key = k.toString();
             if (v is Map) {
               final valueMap = v.cast<String, dynamic>();
-              final dataValue = valueMap['data']?.toString() ?? '';
-              final altValue = valueMap['alt']?.toString() ?? '';
-              return MapEntry(key, <String, String>{
-                'data': dataValue,
-                'alt': altValue,
-              });
+              return MapEntry(
+                key,
+                <String, String>{
+                  if (valueMap['url'] != null)
+                    'url': valueMap['url']!.toString(),
+                  if (valueMap['data'] != null)
+                    'data': valueMap['data']!.toString(),
+                  'alt': valueMap['alt']?.toString() ?? '',
+                },
+              );
             }
-            return MapEntry(key, <String, String>{'data': '', 'alt': ''});
+            return MapEntry(key, <String, String>{'alt': ''});
           });
         } else {
           AppLogger.log(

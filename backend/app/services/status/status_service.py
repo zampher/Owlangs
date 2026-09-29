@@ -276,6 +276,10 @@ class StatusService:
         "mobi_items_to_translate",
         "_image_layout_grouping_cache",
         "_rebuilt_md_for_pdf",
+        # Raw base64 maps are huge; slim response replaces them with URL refs below.
+        "image_data_map",
+        "translation_image_data_map",
+        "mobi_image_data_map",
     )
 
     @staticmethod
@@ -372,6 +376,18 @@ class StatusService:
                 response[key] = self._slim_translation_segments(value)
             else:
                 response[key] = value
+
+        # Lightweight URL refs instead of base64 payloads (stripped above).
+        from backend.utils.task_image_refs import build_frontend_image_data_map
+
+        raw_image_map = (
+            task_state.get("translation_image_data_map")
+            or task_state.get("image_data_map")
+            or task_state.get("mobi_image_data_map")
+        )
+        image_refs = build_frontend_image_data_map(task_id, raw_image_map)
+        if image_refs:
+            response["image_data_map"] = image_refs
         return response
 
     def _convert_to_native_json_types(self, obj: Any) -> None:
@@ -2372,8 +2388,6 @@ class StatusService:
         # CRITICAL: For MOBI files, insert image placeholder segments
         # Insert them at their calculated positions (based on HTML structure) or at the end if position cannot be determined
         if workflow_type == "mobi" and mobi_image_segments:
-            image_data_map_raw = st.get("image_data_map", {})
-            
             # Sort image segments by insert_index to ensure correct insertion order
             # Images with same insert_index will be inserted in the order they appear in HTML
             sorted_image_segments = sorted(mobi_image_segments, key=lambda x: (x[0], x[1]))
@@ -2383,12 +2397,6 @@ class StatusService:
             
             for insert_idx, placeholder_id, image_path, context_info in sorted_image_segments:
                 # Create image placeholder segment
-                image_info = image_data_map_raw.get(image_path, {})
-                data_uri = image_info.get("data", "")
-                mime_type = image_info.get("mime", "image/png")
-                import os
-                alt_text = os.path.basename(image_path) or image_path
-                
                 # Create placeholder text (frontend expects <ph-xxx> format)
                 # Use image_path as placeholder_id (e.g., "mobi7/Images/image00044.jpeg")
                 placeholder_text = f"<ph-{placeholder_id}>"
@@ -2403,7 +2411,7 @@ class StatusService:
                     "block_type": "image",
                     "placeholder_id": placeholder_id,
                     "image_path": image_path,
-                    "image_data": data_uri,  # Include image data for frontend preview
+                    # Image bytes are served via /service/task-image (see image_data_map URL refs).
                     "has_latex": False,  # Images never contain LaTeX
                 }
                 
@@ -2908,40 +2916,29 @@ class StatusService:
                 "cached_at": cache_info.get("created_at"),
             }
         
-        # Add image data map for frontend to display images instead of placeholders
-        # CRITICAL: For MOBI files, convert image_data_map to frontend-expected format
-        # Frontend expects: {placeholder_id: {"data": data_uri, "alt": alt_text}}
-        # Backend stores: {image_path: {"data": data_uri, "mime": mime_type, "size": size}}
-        image_data_map_raw = st.get("image_data_map", {})
-        image_data_map_for_frontend = {}
-        if image_data_map_raw:
-            # Check if this is MOBI workflow
-            if workflow_type == "mobi":
-                # For MOBI, convert image_path keys to placeholder_id format
-                # Use image_path as placeholder_id (e.g., "mobi7/Images/image00044.jpeg")
-                for image_path, image_info in image_data_map_raw.items():
-                    if isinstance(image_info, dict):
-                        data_uri = image_info.get("data", "")
-                        mime_type = image_info.get("mime", "image/png")
-                        # Use image_path as placeholder_id, and extract filename for alt text
-                        import os
-                        alt_text = os.path.basename(image_path) or image_path
-                        image_data_map_for_frontend[image_path] = {
-                            "data": data_uri,
-                            "alt": alt_text
-                        }
-                logger.info(
-                    LogModule.WORKFLOW,
-                    f"[PREVIEW-API] Task {task_id}: Converted {len(image_data_map_for_frontend)} MOBI images "
-                    f"to frontend format. Sample keys: {list(image_data_map_for_frontend.keys())[:3]}"
-                    )
-            else:
-                # For other workflows (PDF, DOCX, etc.), use as-is (already in correct format)
-                image_data_map_for_frontend = image_data_map_raw
-        
+        # URL refs only — do not embed base64 data URIs in preview JSON.
+        from backend.utils.task_image_refs import (
+            build_frontend_image_data_map,
+            strip_segment_inline_image_data,
+        )
+
+        image_data_map_raw = (
+            st.get("translation_image_data_map")
+            or st.get("image_data_map")
+            or st.get("mobi_image_data_map")
+            or {}
+        )
+        image_data_map_for_frontend = build_frontend_image_data_map(
+            task_id, image_data_map_raw,
+        )
+        strip_segment_inline_image_data(segments_with_metadata)
         if image_data_map_for_frontend:
             response["image_data_map"] = image_data_map_for_frontend
-            logger.trace(LogModule.WORKFLOW, f"[PREVIEW-API] Task {task_id}: Including {len(image_data_map_for_frontend)} images in response")
+            logger.info(
+                LogModule.WORKFLOW,
+                f"[PREVIEW-API] Task {task_id}: Including {len(image_data_map_for_frontend)} "
+                f"image URL refs (workflow={workflow_type})",
+            )
 
         # Build pdf_compat_summary from cached results for quick frontend overview
         _pdf_compat_results = st.get("pdf_compat_results")
@@ -3626,7 +3623,8 @@ class StatusService:
                 if not placeholder_match and chunk.chunk_type == "image":
                     segment_data["text"] = f"<ph-{placeholder_id}>"
                 
-                # Try to find image data in image_data_by_path
+                # Try to find image data in image_data_by_path (kept in task_state map;
+                # JSON responses use URL refs — do not embed base64 on segments).
                 if image_path:
                     normalized_path = image_path.replace("\\", "/").lstrip("./")
                     image_data = None
@@ -3634,12 +3632,23 @@ class StatusService:
                         if key.endswith(normalized_path) or normalized_path.endswith(key):
                             image_data = value
                             break
-                    
+                    # Persist into task_state image_data_map for /service/task-image lookup.
                     if image_data:
-                        segment_data["image_data"] = image_data
-                    else:
-                        # If image data not found, still include placeholder for frontend to handle
-                        segment_data["image_data"] = None
+                        from utils.mineru_image_data_map import register_image_data_uri
+
+                        register_image_data_uri(
+                            image_data_map,
+                            image_path,
+                            image_data,
+                            alt=os.path.basename(normalized_path) or image_path,
+                        )
+                        if placeholder_id:
+                            register_image_data_uri(
+                                image_data_map,
+                                placeholder_id,
+                                image_data,
+                                alt=os.path.basename(normalized_path) or image_path,
+                            )
             
             all_segments.append(segment_data)
             # Yield to event loop every 200 segments so getStatus/auth requests can be served (avoid connection timeout)
@@ -4270,69 +4279,102 @@ class StatusService:
             except Exception:
                 pass
         
-        # Build image_data_map in format expected by frontend: {placeholder_id: {"data": "...", "alt": "..."}}
-        image_data_map_for_frontend: dict[str, dict[str, str]] = {}
+        # Build image_data_map as URL refs (no base64 in JSON).
+        # Persist full data URIs on task_state so /service/task-image can serve them.
         from utils.mineru_image_data_map import populate_image_data_map_from_data_uri_map
+        from backend.utils.task_image_refs import (
+            build_frontend_image_data_map,
+            strip_segment_inline_image_data,
+            task_image_url,
+        )
 
-        populate_image_data_map_from_data_uri_map(image_data_map_for_frontend, image_data_by_path)
-        
-        # Step 1: Add regular image segments (tables, images, etc.)
+        populate_image_data_map_from_data_uri_map(image_data_map, image_data_by_path)
+
+        # Step 1: Ensure placeholder / equation keys are registered on the server-side map
         for seg in all_segments:
-            if seg.get("is_image") and seg.get("placeholder_id") and seg.get("image_data"):
+            if seg.get("is_image") and seg.get("placeholder_id"):
                 placeholder_id = seg["placeholder_id"]
                 image_path = seg.get("image_path", "Image")
-                image_data_map_for_frontend[placeholder_id] = {
-                    "data": seg["image_data"],
-                    "alt": image_path,
-                }
-        
-        # Step 2: Add equation images from segments containing ![Equation](filename.jpg) format
-        # This handles interline_equation blocks that are rendered as images
+                # Prefer already-registered path data; otherwise leave URL for fuzzy lookup
+                if placeholder_id not in image_data_map:
+                    # Try to copy from a matching path entry
+                    for key, value in list(image_data_map.items()):
+                        if image_path and (
+                            str(key).endswith(str(image_path).replace("\\", "/").split("/")[-1])
+                            or str(image_path).endswith(str(key).replace("\\", "/").split("/")[-1])
+                        ):
+                            image_data_map[placeholder_id] = dict(value)
+                            image_data_map[placeholder_id]["alt"] = image_path
+                            break
+
+        # Step 2: Register equation images referenced as ![Equation](filename.jpg)
         equation_image_pattern = re.compile(r'!\[([^\]]*)\]\(([^\)]+\.(jpg|jpeg|png|gif|webp))\)')
         equation_counter = 0
         for seg in all_segments:
             segment_text = seg.get("text", "")
             if not segment_text:
                 continue
-            
-            # Check if segment text contains equation image references
             matches = equation_image_pattern.findall(segment_text)
             for match in matches:
-                alt_text = match[0] or "Equation"
                 filename = match[1]
-                
-                # Normalize filename (remove ./ prefix and path)
                 normalized_filename = filename.replace("\\", "/").lstrip("./").split("/")[-1]
-                
-                # Try to find image data in image_data_by_path
                 image_data = None
                 for key, value in image_data_by_path.items():
-                    # Match by filename (end of path or exact match)
                     key_normalized = key.replace("\\", "/").lstrip("./").split("/")[-1]
-                    if key_normalized == normalized_filename or key.endswith(normalized_filename) or normalized_filename.endswith(key_normalized):
+                    if (
+                        key_normalized == normalized_filename
+                        or key.endswith(normalized_filename)
+                        or normalized_filename.endswith(key_normalized)
+                    ):
                         image_data = value
                         break
-                
                 if image_data:
-                    # Generate a unique placeholder ID for this equation image
                     equation_counter += 1
                     placeholder_id = f"equation_{equation_counter}_{normalized_filename}"
-                    image_data_map_for_frontend[placeholder_id] = {
-                        "data": image_data,
-                        "alt": filename,  # Use full filename as alt text
-                    }
+                    from utils.mineru_image_data_map import register_image_data_uri
+
+                    register_image_data_uri(
+                        image_data_map,
+                        placeholder_id,
+                        image_data,
+                        alt=filename,
+                    )
+                    register_image_data_uri(
+                        image_data_map,
+                        normalized_filename,
+                        image_data,
+                        alt=filename,
+                    )
                     logger.debug(
                         LogModule.EXTRACT,
-                    f"[LAYOUT-EXTRACT] Task {task_id}: Added equation image to image_data_map: "
-                        f"placeholder={placeholder_id}, filename={filename}, normalized={normalized_filename}"
-                        )
+                        f"[LAYOUT-EXTRACT] Task {task_id}: Added equation image to image_data_map: "
+                        f"placeholder={placeholder_id}, filename={filename}, normalized={normalized_filename}",
+                    )
                 else:
                     logger.warning(
                         LogModule.EXTRACT,
-                    f"[LAYOUT-EXTRACT] Task {task_id}: Equation image not found in image_data_by_path: "
+                        f"[LAYOUT-EXTRACT] Task {task_id}: Equation image not found in image_data_by_path: "
                         f"filename={filename}, normalized={normalized_filename}, "
-                        f"available_keys={list(image_data_by_path.keys())[:5]}"
-                        )
+                        f"available_keys={list(image_data_by_path.keys())[:5]}",
+                    )
+
+        # Persist for later /service/task-image lookups
+        if image_data_map:
+            st["image_data_map"] = image_data_map
+
+        image_data_map_for_frontend = build_frontend_image_data_map(task_id, image_data_map)
+        # Also expose equation/placeholder keys that may only exist as filename aliases
+        for key in list(image_data_map.keys()):
+            if key not in image_data_map_for_frontend and isinstance(image_data_map[key], dict):
+                if image_data_map[key].get("data"):
+                    image_data_map_for_frontend[key] = {
+                        "url": task_image_url(task_id, key),
+                        "alt": image_data_map[key].get("alt")
+                        or os.path.basename(str(key).replace("\\", "/"))
+                        or str(key),
+                    }
+
+        strip_segment_inline_image_data(all_segments)
         
         # Calculate total estimated input tokens for all chunks
         total_estimated_tokens = sum(

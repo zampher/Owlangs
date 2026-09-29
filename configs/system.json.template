@@ -52,16 +52,16 @@
     "module_logging": {
       "enabled_modules": {
         "SYSTEM": "INFO",
-        "EXTRACT": "TRACE",
-        "TRANS": "DEBUG",
-        "CONVERT": "DEBUG",
-        "WORKFLOW": "DEBUG",
-        "EXCLUSION": "TRACE",
-        "EXPORT": "TRACE",
-        "DETECT": "TRACE",
-        "AUTH": "TRACE",
-        "ROUTE": "TRACE",
-        "UPLOAD": "TRACE"
+        "EXTRACT": "INFO",
+        "TRANS": "INFO",
+        "CONVERT": "INFO",
+        "WORKFLOW": "INFO",
+        "EXCLUSION": "INFO",
+        "EXPORT": "INFO",
+        "DETECT": "INFO",
+        "AUTH": "INFO",
+        "ROUTE": "INFO",
+        "UPLOAD": "INFO"
       },
       "disabled_modules": {
         "ANONYMIZ": "TRACE",

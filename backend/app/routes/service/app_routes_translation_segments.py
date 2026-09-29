@@ -1194,31 +1194,19 @@ async def get_translation_segments_api(
                     task_id, task_state, response_data,
                 )
 
-    # Include image data map if available so frontend can render placeholders as images
+    # Include image URL refs (not base64) so frontend can render placeholders.
     # Prefer translation-specific image map (placeholder IDs generated during translation)
     task_state = task_manager.get_task(task_id) or {}
+    from backend.utils.task_image_refs import build_frontend_image_data_map
+
     image_data_map_raw = (
         task_state.get("translation_image_data_map")
         or task_state.get("image_data_map")
+        or task_state.get("mobi_image_data_map")
     )
-    if image_data_map_raw:
-        # Convert image_data_map format to frontend expected format
-        # Backend format: {image_path: {"data": data_uri, "mime": mime_type, "size": size}}
-        # Frontend format: {placeholder_id: {"data": data_uri, "alt": alt_text}}
-        # For MOBI/EPUB, placeholder_id = image_path, so we can use image_path as key
-        image_data_map = {}
-        import os
-        for image_path, image_info in image_data_map_raw.items():
-            if isinstance(image_info, dict):
-                # Use image_path as placeholder_id (matches placeholder format in segments)
-                placeholder_id = image_path
-                alt_text = os.path.basename(image_path) or image_path
-                image_data_map[placeholder_id] = {
-                    "data": image_info.get("data", ""),
-                    "alt": alt_text,
-                }
-        if image_data_map:
-            response_data["image_data_map"] = image_data_map
+    image_data_map = build_frontend_image_data_map(task_id, image_data_map_raw)
+    if image_data_map:
+        response_data["image_data_map"] = image_data_map
 
     # Expose task-level PDF table border style / stroke for Preview-revision toolbar.
     from layout.pdf_renderer.typst_overlay.table_border_style import (

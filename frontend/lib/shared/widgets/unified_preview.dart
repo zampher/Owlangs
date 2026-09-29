@@ -11,6 +11,7 @@ import 'desktop_html_webview.dart';
 import 'markdown_text_with_images.dart';
 import '../providers/settings_provider.dart';
 import '../utils/app_logger.dart';
+import '../utils/backend_image_url.dart';
 import '../utils/dialog_helper.dart';
 import '../../core/constants/app_constants.dart';
 
@@ -771,24 +772,24 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
     var processedMarkdown = markdown;
 
     imageDataMap.forEach((String placeholderId, Map<String, String> imageData) {
-      final String? base64Data = imageData['data'];
+      final String? imageSrc = imageSrcFromEntry(imageData);
       final String altText = imageData['alt'] ?? '';
-      if (base64Data != null && base64Data.startsWith('data:image/')) {
-        // Replace <ph-xxx> placeholders with markdown image syntax using base64 data URI
+      if (imageSrc != null && imageSrc.isNotEmpty) {
+        // Replace <ph-xxx> placeholders with markdown image syntax
         processedMarkdown = processedMarkdown.replaceAll(
           '<ph-$placeholderId>',
-          '![$altText]($base64Data)',
+          '![$altText]($imageSrc)',
         );
         // Handle markdown image syntax with placeholders: ![alt](<ph-xxx>)
         processedMarkdown = processedMarkdown.replaceAllMapped(
           RegExp(r'!\[([^\]]*)\]\(<ph-$placeholderId>\)'),
-          (Match match) => '![${match.group(1) ?? altText}]($base64Data)',
+          (Match match) => '![${match.group(1) ?? altText}]($imageSrc)',
         );
         // Handle markdown image syntax with direct placeholder ID: ![alt](placeholder_id)
         final String escapedPlaceholderId = RegExp.escape(placeholderId);
         processedMarkdown = processedMarkdown.replaceAllMapped(
           RegExp('!\\[([^\\]]*)\\]\\($escapedPlaceholderId\\)'),
-          (Match match) => '![${match.group(1) ?? altText}]($base64Data)',
+          (Match match) => '![${match.group(1) ?? altText}]($imageSrc)',
         );
 
         // Build filename reverse map for equation images
@@ -877,20 +878,20 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
         }
 
         if (imageData != null) {
-          final String? base64Data = imageData['data'];
-          if (base64Data != null && base64Data.startsWith('data:image/')) {
-            // Replace markdown image syntax with base64 data URI
+          final String? imageSrc = imageSrcFromEntry(imageData);
+          if (imageSrc != null && imageSrc.isNotEmpty) {
+            // Replace markdown image syntax with URL or legacy data URI
             processedMarkdown = processedMarkdown.replaceRange(
               match.start,
               match.end,
-              '![$altText]($base64Data)',
+              '![$altText]($imageSrc)',
             );
             _unifiedPreviewLog(
-              'Replaced markdown image reference with base64 data: $filename',
+              'Replaced markdown image reference: $filename',
             );
           } else {
             _unifiedPreviewLog(
-              'Image data found but base64Data is invalid: length=${base64Data?.length ?? 0}',
+              'Image data found but src is invalid for filename=$filename',
               level: LogLevel.warn,
             );
           }
@@ -973,16 +974,16 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
     }
 
     imageDataMap.forEach((String placeholderId, Map<String, String> imageData) {
-      final String? base64Data = imageData['data'];
+      final String? imageSrc = imageSrcFromEntry(imageData);
       final String altText = imageData['alt'] ?? '';
-      if (base64Data != null && base64Data.startsWith('data:image/')) {
+      if (imageSrc != null && imageSrc.isNotEmpty) {
         // Check if placeholder exists before replacement
         final RegExp placeholderPattern =
             RegExp(RegExp.escape('<ph-$placeholderId>'));
         final int placeholderCount = placeholderPattern.allMatches(html).length;
         if (placeholderCount > 0) {
           _unifiedPreviewLog(
-            'Replacing $placeholderCount occurrences of <ph-$placeholderId> with image (alt: $altText, data length: ${base64Data.length})',
+            'Replacing $placeholderCount occurrences of <ph-$placeholderId> with image (alt: $altText)',
           );
         }
 
@@ -990,7 +991,7 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
         final String style = _getImageStyle(altText);
         html = html.replaceAll(
           '<ph-$placeholderId>',
-          '<img src="$base64Data" alt="${altText.replaceAll('"', '&quot;')}" style="$style" />',
+          '<img src="$imageSrc" alt="${altText.replaceAll('"', '&quot;')}" style="$style" />',
         );
 
         // Verify replacement
@@ -1013,7 +1014,7 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
               match.group(1)?.replaceAll('"', '&quot;') ??
                   altText.replaceAll('"', '&quot;');
           final String matchStyle = _getImageStyle(matchAltText);
-          return '<img src="$base64Data" alt="$matchAltText" style="$matchStyle" />';
+          return '<img src="$imageSrc" alt="$matchAltText" style="$matchStyle" />';
         });
         // Handle markdown image syntax with direct placeholder ID: ![alt](placeholder_id)
         final String escapedPlaceholderId = RegExp.escape(placeholderId);
@@ -1024,7 +1025,7 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
               match.group(1)?.replaceAll('"', '&quot;') ??
                   altText.replaceAll('"', '&quot;');
           final String matchStyle = _getImageStyle(matchAltText);
-          return '<img src="$base64Data" alt="$matchAltText" style="$matchStyle" />';
+          return '<img src="$imageSrc" alt="$matchAltText" style="$matchStyle" />';
         });
 
         // Build filename reverse map for equation images
@@ -1078,20 +1079,20 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
         // Check if this placeholder ID exists in imageDataMap
         if (imageDataMap.containsKey(placeholderId)) {
           final Map<String, String> imageData = imageDataMap[placeholderId]!;
-          final String? base64Data = imageData['data'];
-          if (base64Data != null && base64Data.startsWith('data:image/')) {
+          final String? imageSrc = imageSrcFromEntry(imageData);
+          if (imageSrc != null && imageSrc.isNotEmpty) {
             final String style = _getImageStyle(altText);
             html = html.replaceRange(
               match.start,
               match.end,
-              '<img src="$base64Data" alt="${altText.replaceAll('"', '&quot;')}" style="$style" />',
+              '<img src="$imageSrc" alt="${altText.replaceAll('"', '&quot;')}" style="$style" />',
             );
             _unifiedPreviewLog(
               'Replaced placeholder ID reference: ![$altText]($placeholderId)',
             );
           } else {
             _unifiedPreviewLog(
-              'Placeholder ID found but base64Data is invalid: $placeholderId, length=${base64Data?.length ?? 0}',
+              'Placeholder ID found but image src is invalid: $placeholderId',
               level: LogLevel.warn,
             );
           }
@@ -1124,22 +1125,25 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
           continue; // Will be handled by filename pattern below
         }
 
-        // Skip if it's already a data URI
-        if (srcValue.startsWith('data:image/')) {
+        // Skip if it's already a data URI or absolute/relative service URL
+        if (srcValue.startsWith('data:image/') ||
+            srcValue.startsWith('/service/task-image/') ||
+            srcValue.startsWith('http://') ||
+            srcValue.startsWith('https://')) {
           continue;
         }
 
         // Check if this is a placeholder ID in imageDataMap
         if (imageDataMap.containsKey(srcValue)) {
           final Map<String, String> imageData = imageDataMap[srcValue]!;
-          final String? base64Data = imageData['data'];
-          if (base64Data != null && base64Data.startsWith('data:image/')) {
+          final String? imageSrc = imageSrcFromEntry(imageData);
+          if (imageSrc != null && imageSrc.isNotEmpty) {
             final String altText = imageData['alt'] ?? '';
             final String style = _getImageStyle(altText);
             html = html.replaceRange(
               match.start,
               match.end,
-              '<img src="$base64Data" alt="${altText.replaceAll('"', '&quot;')}" style="$style" />',
+              '<img src="$imageSrc" alt="${altText.replaceAll('"', '&quot;')}" style="$style" />',
             );
             placeholderImgCount++;
           }
@@ -1232,19 +1236,19 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
         }
 
         if (imageData != null) {
-          final String? base64Data = imageData['data'];
-          if (base64Data != null && base64Data.startsWith('data:image/')) {
+          final String? imageSrc = imageSrcFromEntry(imageData);
+          if (imageSrc != null && imageSrc.isNotEmpty) {
             // Replace the entire img tag, preserving other attributes
             final String altText = imageData['alt'] ?? '';
             final String style = _getImageStyle(altText);
             html = html.replaceRange(
               match.start,
               match.end,
-              '<img src="$base64Data" alt="${altText.replaceAll('"', '&quot;')}" style="$style" />',
+              '<img src="$imageSrc" alt="${altText.replaceAll('"', '&quot;')}" style="$style" />',
             );
           } else {
             _unifiedPreviewLog(
-              'Image data found but base64Data is invalid: length=${base64Data?.length ?? 0}',
+              'Image data found but src is invalid for filename img tag',
               level: LogLevel.warn,
             );
           }
@@ -1320,16 +1324,16 @@ class _UnifiedPreviewState extends ConsumerState<UnifiedPreview> {
         }
 
         if (imageData != null) {
-          final String? base64Data = imageData['data'];
-          if (base64Data != null && base64Data.startsWith('data:image/')) {
+          final String? imageSrc = imageSrcFromEntry(imageData);
+          if (imageSrc != null && imageSrc.isNotEmpty) {
             final String style = _getImageStyle(altText);
             html = html.replaceAll(
               match.group(0)!,
-              '<img src="$base64Data" alt="${altText.replaceAll('"', '&quot;')}" style="$style" />',
+              '<img src="$imageSrc" alt="${altText.replaceAll('"', '&quot;')}" style="$style" />',
             );
           } else {
             _unifiedPreviewLog(
-              'Image data found but base64Data is invalid: length=${base64Data?.length ?? 0}',
+              'Image data found but src is invalid for filename markdown',
               level: LogLevel.warn,
             );
           }

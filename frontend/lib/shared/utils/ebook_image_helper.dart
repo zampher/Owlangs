@@ -47,11 +47,11 @@ Map<String, String>? lookupImageData(
     return null;
   }
   final direct = imageDataMap[key];
-  if (direct != null && (direct['data'] ?? '').isNotEmpty) {
+  if (direct != null && _hasImagePayload(direct)) {
     return direct;
   }
   for (final entry in imageDataMap.entries) {
-    if ((entry.value['data'] ?? '').isEmpty) {
+    if (!_hasImagePayload(entry.value)) {
       continue;
     }
     if (imagePathsMatch(key, entry.key)) {
@@ -59,4 +59,10 @@ Map<String, String>? lookupImageData(
     }
   }
   return null;
+}
+
+bool _hasImagePayload(Map<String, String> entry) {
+  final String data = entry['data'] ?? '';
+  final String url = entry['url'] ?? '';
+  return data.isNotEmpty || url.isNotEmpty;
 }
