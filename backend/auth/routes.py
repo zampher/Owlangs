@@ -832,6 +832,16 @@ async def get_app_config_api(
         config_dict['translateOutputSuffix'] = config_dict['translator_output_suffix']
     if 'converter_output_suffix' in config_dict:
         config_dict['convertOutputSuffix'] = config_dict['converter_output_suffix']
+    if 'preview_font_size' in config_dict:
+        config_dict['previewFontSize'] = config_dict['preview_font_size']
+    if 'edit_font_size' in config_dict:
+        config_dict['editFontSize'] = config_dict['edit_font_size']
+    if 'show_segment_images' in config_dict:
+        config_dict['showSegmentImages'] = config_dict['show_segment_images']
+    if 'prefer_extracted_pdf_font_size' in config_dict:
+        config_dict['preferExtractedPdfFontSize'] = config_dict[
+            'prefer_extracted_pdf_font_size'
+        ]
     
     # Step 4: Get local configuration (optional, can fail gracefully)
     try:
@@ -3709,6 +3719,9 @@ async def update_single_setting(
             'translator_frequency_penalty', 'translator_presence_penalty',
             'chunk_size', 'chunkSize', 'translationChunkSize', 'concurrent', 'translationConcurrent',
             'timeout', 'translationTimeout', 'retry',
+            'previewFontSize', 'preview_font_size', 'editFontSize', 'edit_font_size',
+            'showSegmentImages', 'show_segment_images',
+            'preferExtractedPdfFontSize', 'prefer_extracted_pdf_font_size',
             'glossary_generate_enable', 'glossary_agent_config_choice', 'glossary_agent_thinking_mode',
             'glossary_agent_platform_type', 'glossary_agent_top_p',
             'glossary_agent_frequency_penalty', 'glossary_agent_presence_penalty', 'glossary_agent_to_lang',

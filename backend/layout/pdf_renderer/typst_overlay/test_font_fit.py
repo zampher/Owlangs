@@ -724,6 +724,52 @@ class TestFontFitCalculator(unittest.TestCase):
         )
         self.assertLess(fitted.leading_em, 1.15)
 
+    def test_locked_ingredient_list_leading_fits_bbox(self):
+        """Extracted 15pt + hard newlines must not clamp leading to 1.5em and overflow."""
+        calc = FontFitCalculator()
+        text = (
+            "3 汤匙切碎的新鲜平叶欧芹  \n"
+            "2 汤匙切碎的新鲜薄荷  \n"
+            "2 汤匙切碎的新鲜莳萝  \n"
+            "1 茶匙干牛至  \n"
+            " 1 / 4  至  1 / 2  茶匙辣椒碎  \n"
+            "3 汤匙番茄膏  \n"
+            "一罐 14 盎司（400 克）碎番茄  \n"
+            " 2^{1/2}  杯（600 毫升）温水  \n"
+            "2 或 3 片月桂叶  \n"
+            "犹太盐和现磨黑胡椒，适量  \n"
+            "带藤樱桃番茄（可选）"
+        )
+        bbox = (72.0, 72.0, 425.0, 273.0)
+        block = RenderBlock(
+            block_id="seg_175",
+            page_index=0,
+            inner_bbox=bbox,
+            plain_text=text,
+            markdown_text=text,
+            font_size_pt=15.0,
+            font_size_locked=True,
+            leading_em=1.25,
+        )
+        fitted = calc.calculate_fit_params(block, layout_raw=None)
+        self.assertTrue(fitted.preserve_line_breaks)
+        bbox_height = bbox[3] - bbox[1]
+        bbox_width = bbox[2] - bbox[0]
+        visual_lines = estimate_preserved_stack_visual_lines(
+            text, bbox_width, fitted.font_size_pt,
+        )
+        self.assertGreaterEqual(visual_lines, 11.0)
+        render_h = preserved_stack_render_height_pt(
+            fitted.font_size_pt, visual_lines, fitted.leading_em,
+        )
+        self.assertLessEqual(
+            render_h,
+            bbox_height + 0.5,
+            f"render {render_h:.2f}pt exceeds bbox {bbox_height:.2f}pt "
+            f"(font={fitted.font_size_pt}, leading={fitted.leading_em})",
+        )
+        self.assertLess(fitted.leading_em, 1.0)
+
     def test_local_mineru_patent_title_mislabel_uses_body_font(self):
         """middle.json tags (56) References Cited as type title — must not use 23pt title sizing."""
         calc = FontFitCalculator()

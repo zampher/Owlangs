@@ -1068,6 +1068,10 @@
   "settingsTranslateOutputSuffixHint": "Appended to translated filenames (leave empty for no suffix)",
   "settingsConvertOutputSuffixTitle": "Conversion Output Suffix",
   "settingsConvertOutputSuffixHint": "Appended to converted filenames (leave empty for no suffix)",
+  "settingsShowSegmentImagesTitle": "セグメント一覧に画像を表示",
+  "settingsShowSegmentImagesSubtitle": "抽出/翻訳セグメント一覧に埋め込み画像を表示します。大きな文書ではオフにするとスクロールが軽くなります。",
+  "settingsPreferExtractedPdfFontSizeTitle": "PDF抽出フォントサイズを優先",
+  "settingsPreferExtractedPdfFontSizeSubtitle": "テキスト層のあるデジタルPDFでは、取得できたフォントサイズを bbox 推定より優先します。",
   "settingsLanguageDialogTitle": "言語を選択",
   "settingsUnitPt": "pt",
   "glossaryGeneratedTabTitle": "生成された用語集",
@@ -1531,5 +1535,24 @@
   "translationPreviewPdfRevisionPageFilterSelectAll": "ページをすべて選択",
   "segmentPdfRevisionFontLabel": "フォント",
   "segmentPdfRevisionEditLabel": "編集",
-  "segmentPdfRevisionClearLabel": "クリア"
+  "segmentPdfRevisionClearLabel": "クリア",
+  "segmentPdfIndentTooltip": "一行目のインデント",
+  "segmentPdfIndentMenuTitle": "一行目のインデント",
+  "segmentPdfIndentNone": "なし",
+  "segmentPdfIndentAuto": "自動 ({value})",
+  "@segmentPdfIndentAuto": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfIndentEm": "{em}em",
+  "@segmentPdfIndentEm": {
+    "placeholders": {
+      "em": {
+        "type": "String"
+      }
+    }
+  }
 }

@@ -157,6 +157,14 @@ class TestTextMetrics(unittest.TestCase):
         self.assertFalse(is_single_line_bbox(101.0, INTRO_MULTI_CITATION_RAW))
         self.assertFalse(is_single_line_bbox(88.0, NLI_CITATION_RAW))
 
+    def test_single_line_at_font_covers_tall_real_font_bbox(self):
+        from layout.pdf_renderer.typst_overlay.text_metrics import is_single_line_at_font
+
+        # Legacy gate alone rejects 34pt, but 18pt real font still fits one line.
+        self.assertFalse(is_single_line_bbox(34.0))
+        self.assertTrue(is_single_line_at_font(34.0, 18.0, leading_em=1.25))
+        self.assertFalse(is_single_line_at_font(50.0, 18.0, leading_em=1.25))
+
     def test_visual_line_count_from_tall_bbox(self):
         self.assertGreaterEqual(estimate_visual_line_count(101.0, INTRO_MULTI_CITATION_RAW), 5.0)
         self.assertGreaterEqual(estimate_visual_line_count(88.0, NLI_CITATION_RAW), 4.0)

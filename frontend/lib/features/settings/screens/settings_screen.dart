@@ -875,6 +875,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                   const SizedBox(height: 16),
                   _buildConvertOutputSuffixField(globalSettings, globalNotifier),
                   const SizedBox(height: 16),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      AppLocalizations.of(context)!
+                          .settingsShowSegmentImagesTitle,
+                    ),
+                    subtitle: Text(
+                      AppLocalizations.of(context)!
+                          .settingsShowSegmentImagesSubtitle,
+                    ),
+                    value: globalSettings.showSegmentImages,
+                    onChanged: (bool value) {
+                      globalNotifier.updateTranslationSettings(
+                        showSegmentImages: value,
+                      );
+                    },
+                    secondary: const Icon(Icons.image_outlined),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      AppLocalizations.of(context)!
+                          .settingsPreferExtractedPdfFontSizeTitle,
+                    ),
+                    subtitle: Text(
+                      AppLocalizations.of(context)!
+                          .settingsPreferExtractedPdfFontSizeSubtitle,
+                    ),
+                    value: globalSettings.preferExtractedPdfFontSize,
+                    onChanged: (bool value) {
+                      globalNotifier.updateTranslationSettings(
+                        preferExtractedPdfFontSize: value,
+                      );
+                    },
+                    secondary: const Icon(Icons.text_fields),
+                  ),
 
                   // Custom Prompt removed: Prompt is now controlled per task in Quick Settings
                 ],

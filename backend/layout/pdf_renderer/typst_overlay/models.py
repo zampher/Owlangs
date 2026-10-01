@@ -78,6 +78,9 @@ class RenderBlock:
     # When True, keep leading_em fixed during fit-to-box; only font size may shrink.
     leading_em_locked: bool = False
 
+    # Single-line horizontal alignment: "left" | "right" (never center).
+    horizontal_align: str = "left"
+
     # -- table rendering (translated markdown table) --
     table_rows: Optional[List[List[str]]] = None  # 2D cell array for Typst #table()
 
@@ -121,6 +124,7 @@ def layout_block_to_render_block(
     font_weight: str = "regular",
     font_style: str = "normal",
     latex_flags: Optional[dict] = None,
+    task_state: Optional[dict] = None,
 ) -> RenderBlock:
     """
     Convert an Owlangs LayoutBlock to a Typst RenderBlock.
@@ -178,19 +182,61 @@ def layout_block_to_render_block(
     if "$" in translated_text and render_kind in ("plain", "plain_line"):
         render_kind = "markdown"
 
-    # Read font info from raw MinerU data if available
+    # Read font info from raw MinerU / extracted PDF data if available
     block_font_size = font_size_pt
     block_font_weight = font_weight
     block_font_style = font_style
+    font_size_locked = False
     if isinstance(raw, dict):
-        # Some MinerU output includes font_size in raw['orig_font_size'] or similar
-        raw_font_size = (
-            raw.get('font_size')
-            or raw.get('orig_font_size')
-            or raw.get('inferred_font_size')
-        )
-        if raw_font_size and isinstance(raw_font_size, (int, float)):
+        # Prefer digital-PDF / MinerU span sizes when present.
+        # Preference gate: annotation writes extracted_font_size only when
+        # prefer_extracted_pdf_font_size is enabled; span.size is treated the
+        # same way when that key is present or when prefer is default-on.
+        prefer_extracted = True
+        try:
+            from layout.pdf_font_extractor import (
+                resolve_prefer_extracted_pdf_font_size,
+            )
+
+            prefer_extracted = resolve_prefer_extracted_pdf_font_size(
+                task_state if isinstance(task_state, dict) else None,
+            )
+        except Exception:
+            prefer_extracted = True
+
+        raw_font_size = None
+        used_extracted_or_span = False
+        if prefer_extracted:
+            extracted = raw.get("extracted_font_size")
+            if isinstance(extracted, (int, float)) and float(extracted) > 0:
+                raw_font_size = float(extracted)
+                used_extracted_or_span = True
+            else:
+                try:
+                    from layout.mineru_layout_model import _get_max_span_font_size
+
+                    span_size = _get_max_span_font_size(raw)
+                    if span_size and float(span_size) > 0:
+                        raw_font_size = float(span_size)
+                        used_extracted_or_span = True
+                except Exception:
+                    pass
+
+        if raw_font_size is None:
+            candidate = (
+                raw.get("font_size")
+                or raw.get("orig_font_size")
+                or raw.get("inferred_font_size")
+            )
+            if candidate and isinstance(candidate, (int, float)):
+                raw_font_size = float(candidate)
+
+        if raw_font_size and raw_font_size > 0:
             block_font_size = float(raw_font_size)
+            # Keep PDF overlay at the extracted/parser size shown in the UI;
+            # do not re-fit per bbox (which made same-pt segments render differently).
+            if used_extracted_or_span:
+                font_size_locked = True
         raw_font_weight = raw.get('font_weight') or raw.get('weight')
         if raw_font_weight:
             block_font_weight = str(raw_font_weight)
@@ -216,6 +262,11 @@ def layout_block_to_render_block(
         leading_em=leading_em,
         font_weight=block_font_weight,
         font_style=block_font_style,
+        font_size_locked=font_size_locked,
+        fit_to_box=False,
+        fit_single_line=False,
+        fit_min_font_size_pt=block_font_size if font_size_locked else 6.0,
+        fit_max_font_size_pt=block_font_size if font_size_locked else 24.0,
         skip_reason="image" if render_kind == "skip" else "",
         use_cover_fill=False,
     )

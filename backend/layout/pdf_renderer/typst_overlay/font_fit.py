@@ -27,6 +27,7 @@ from layout.pdf_renderer.typst_overlay.text_metrics import (
     estimate_visual_line_count,
     estimate_wrap_line_count,
     estimate_wrap_ratio,
+    is_single_line_at_font,
     is_single_line_bbox,
     line_count_for_vertical_edge_margin,
     resolve_embedded_newline_policy,
@@ -65,6 +66,14 @@ REF_TEXT_LINE_METRICS_EM = 0.88
 REF_TEXT_MIN_LEADING_EM = 0.48
 REF_TEXT_MAX_LEADING_EM = 0.72
 REF_TEXT_LEADING_QUANTIZE_STEP_EM = 0.05
+# Body paragraphs: same height model as pdf_font_dry_run._par_block_height_pt.
+BODY_LINE_METRICS_EM = REF_TEXT_LINE_METRICS_EM
+BODY_LEADING_EM_MIN = 0.35
+BODY_LEADING_EM_MAX = 1.50
+BODY_LEADING_QUANTIZE_STEP_EM = 0.05
+# Locked (extracted) multi-line font: if estimated height exceeds bbox by this
+# ratio, treat the extracted size as unreliable (e.g. first-glyph only) and refit.
+LOCKED_MULTILINE_HEIGHT_OVERFLOW_RATIO = 1.10
 # Trigger fit_to_box when estimated line box exceeds this fraction of bbox height.
 SHORT_BBOX_HEIGHT_OVERFLOW_RATIO = 0.85
 
@@ -85,6 +94,9 @@ TITLE_RIGHT_EDGE_TOLERANCE_PT = 18.0
 HORIZONTAL_EXTEND_MAX_CHARS = 4
 # Back-compat alias used in tests/docs.
 TITLE_HORIZONTAL_EXTEND_MAX_CHARS = HORIZONTAL_EXTEND_MAX_CHARS
+# Typst/cmarker glyph width is often wider than the Python CJK/Latin estimate;
+# pad single-line extend targets so redaction covers the painted overflow.
+SINGLE_LINE_WIDTH_ESTIMATE_SLACK = 1.12
 
 
 def _char_width_pt(ch: str, font_size_pt: float) -> float:
@@ -192,45 +204,75 @@ def plan_title_horizontal_extension_pt(
     font_size_pt: float,
     leading_em: float,
     page_width_pt: Optional[float],
+    *,
+    max_overflow_chars: Optional[int] = HORIZONTAL_EXTEND_MAX_CHARS,
 ) -> Optional[float]:
     """
-    Return a widened fit width (pt) for a title/header, or None.
+    Return a widened fit width (pt) for single-line text, or None.
 
-    Prefer horizontal extension over wrapping when the overflow tail is at most
-    ``HORIZONTAL_EXTEND_MAX_CHARS`` characters and the bbox is not on the page
-    right edge.
+    Prefer horizontal extension over wrapping when the overflow tail is within
+    *max_overflow_chars* (``None`` = unlimited) and there is room toward the
+    page right margin. When *page_width_pt* is unknown, extend to the natural
+    text width (still no wrap).
     """
     del leading_em  # reserved for callers; char tail count is the gate.
-    if not page_width_pt or page_width_pt <= 0 or font_size_pt <= 0:
+    if font_size_pt <= 0:
         return None
 
     x0, _y0, x1, _y1 = inner_bbox
     bbox_width = max(1.0, x1 - x0)
 
-    if is_bbox_at_page_right_edge(x1, page_width_pt):
-        return None
-
     text_width = estimate_horizontal_text_width_pt(text, font_size_pt)
+    text_width *= SINGLE_LINE_WIDTH_ESTIMATE_SLACK
     if text_width <= bbox_width + 0.5:
         return None
 
     tail_chars = overflow_tail_char_count(text, bbox_width, font_size_pt)
-    if tail_chars <= 0 or tail_chars > HORIZONTAL_EXTEND_MAX_CHARS:
+    if tail_chars <= 0:
+        return None
+    if max_overflow_chars is not None and tail_chars > max_overflow_chars:
         return None
 
-    max_x1 = page_width_pt - TITLE_PAGE_RIGHT_MARGIN_PT
-    extended_x1 = min(x0 + text_width, max_x1)
-    extended_width = extended_x1 - x0
-    if extended_width <= bbox_width + 0.5:
-        return None
+    if page_width_pt and page_width_pt > 0:
+        if is_bbox_at_page_right_edge(x1, page_width_pt):
+            return None
+        max_x1 = page_width_pt - TITLE_PAGE_RIGHT_MARGIN_PT
+        extended_x1 = min(x0 + text_width, max_x1)
+        extended_width = extended_x1 - x0
+        if extended_width <= bbox_width + 0.5:
+            return None
+        # Title path (limited chars) refuses partial extend; body (unlimited)
+        # still takes whatever room remains toward the margin.
+        if (
+            max_overflow_chars is not None
+            and text_width > extended_width + 1.0
+        ):
+            return None
+        return extended_width
 
-    if text_width > extended_width + 1.0:
-        return None
-
-    return extended_width
+    # No page width: still allow natural single-line width for no-wrap render.
+    return text_width
 
 
 plan_horizontal_extension_pt = plan_title_horizontal_extension_pt
+
+
+def plan_body_single_line_extension_pt(
+    text: str,
+    inner_bbox: Tuple[float, float, float, float],
+    font_size_pt: float,
+    leading_em: float,
+    page_width_pt: Optional[float],
+) -> Optional[float]:
+    """Widen single-line body text to natural width (no char-count cap)."""
+    return plan_horizontal_extension_pt(
+        text,
+        inner_bbox,
+        font_size_pt,
+        leading_em,
+        page_width_pt,
+        max_overflow_chars=None,
+    )
 
 
 def _block_width_overflows(
@@ -411,6 +453,77 @@ def quantize_ref_font_size_pt(
         return round(clamped, 1)
     quantized = math.floor(clamped / step + 1e-9) * step
     return round(max(min_size_pt, min(max_size_pt, quantized)), 1)
+
+
+def quantize_body_leading_em(
+    leading_em: float,
+    *,
+    step: float = BODY_LEADING_QUANTIZE_STEP_EM,
+    min_leading_em: float = BODY_LEADING_EM_MIN,
+    max_leading_em: float = BODY_LEADING_EM_MAX,
+) -> float:
+    """Clamp body leading and round to the nearest step."""
+    clamped = max(min_leading_em, min(max_leading_em, leading_em))
+    if step <= 0:
+        return round(clamped, 2)
+    quantized = round(clamped / step) * step
+    return round(max(min_leading_em, min(max_leading_em, quantized)), 2)
+
+
+def body_visual_line_count(
+    text: str,
+    bbox_width_pt: float,
+    font_size_pt: float,
+    layout_raw: Any = None,
+) -> int:
+    """
+    Visual line count for body height / leading estimates.
+
+    Width-wrap alone under-counts markdown hard breaks and preserved ``\\n``
+    lists (``\\n`` is treated as a thin space in the width heuristic). When
+    embedded newlines remain in *text*, also count per-segment wrap lines.
+    """
+    wrap_lines = estimate_wrap_line_count(
+        text or "", bbox_width_pt, font_size_pt, layout_raw,
+    )
+    visual_lines = max(1, int(math.ceil(float(wrap_lines) - 1e-6)))
+    if count_embedded_newlines(text or "", layout_raw) > 0:
+        hard_lines = estimate_preserved_stack_visual_lines(
+            text or "", bbox_width_pt, font_size_pt,
+        )
+        visual_lines = max(
+            visual_lines,
+            int(math.ceil(float(hard_lines) - 1e-6)),
+        )
+    return visual_lines
+
+
+def estimate_body_content_height_pt(
+    text: str,
+    bbox_width_pt: float,
+    font_size_pt: float,
+    leading_em: float,
+    layout_raw: Any = None,
+) -> float:
+    """
+    Estimated rendered height (pt) for multi-line body text.
+
+    Matches ``pdf_font_dry_run._par_block_height_pt`` /
+    ``estimate_body_leading_em_at_font``::
+
+        height ≈ font × (n × body_em + (n − 1) × leading)
+    """
+    if font_size_pt <= 0:
+        return 0.0
+    visual_lines = body_visual_line_count(
+        text or "", bbox_width_pt, font_size_pt, layout_raw,
+    )
+    if visual_lines <= 1:
+        return font_size_pt * BODY_LINE_METRICS_EM
+    return font_size_pt * (
+        visual_lines * BODY_LINE_METRICS_EM
+        + (visual_lines - 1) * max(leading_em, 0.0)
+    )
 
 
 def quantize_ref_leading_em(
@@ -910,6 +1023,145 @@ class FontFitCalculator:
         else:
             return 1.35
 
+    def estimate_body_leading_em_at_font(
+        self,
+        block: RenderBlock,
+        font_size_pt: float,
+        layout_raw: Any = None,
+    ) -> float:
+        """
+        Derive Typst ``par(leading)`` for multi-line body text at a known font size.
+
+        Uses the same height model as ``pdf_font_dry_run._par_block_height_pt``:
+
+            height ≈ font × (n × body_em + (n − 1) × leading)
+
+        so extracted / locked font sizes keep line spacing matched to the bbox
+        instead of the crude size→bucket table in ``estimate_leading``.
+        """
+        if font_size_pt <= 0:
+            return quantize_body_leading_em(self.default_leading_em)
+
+        _, y0, _, y1 = block.inner_bbox
+        bbox_height = max(1.0, y1 - y0)
+        x0, _, x1, _ = block.inner_bbox
+        bbox_width = max(1.0, x1 - x0)
+        text = block.plain_text or block.markdown_text or ""
+
+        visual_lines = body_visual_line_count(
+            text, bbox_width, font_size_pt, layout_raw,
+        )
+
+        body_per_line = font_size_pt * BODY_LINE_METRICS_EM
+        if visual_lines <= 1:
+            return quantize_body_leading_em(self.estimate_leading(font_size_pt))
+
+        bodies = visual_lines * body_per_line
+        gaps = max(visual_lines - 1, 1)
+        leading = (bbox_height - bodies) / (gaps * max(font_size_pt, 0.1))
+        return quantize_body_leading_em(leading)
+
+    def fit_locked_preserved_stack_font_size_to_bbox(
+        self,
+        block: RenderBlock,
+        *,
+        max_font_pt: float,
+        min_font_pt: Optional[float] = None,
+    ) -> float:
+        """
+        Largest font size ≤ *max_font_pt* for a preserved ``\\n`` stack in bbox.
+
+        Uses Typst ``stack(spacing: leading)`` height model, not paragraph wrap.
+        """
+        x0, y0, x1, y1 = block.inner_bbox
+        bbox_height = max(1.0, y1 - y0)
+        bbox_width = max(1.0, x1 - x0)
+        text = block.plain_text or block.markdown_text or ""
+        lo = max(self.min_size_pt, float(min_font_pt or self.min_size_pt))
+        hi = max(lo, float(max_font_pt))
+
+        def fits(size_pt: float) -> bool:
+            visual_lines = estimate_preserved_stack_visual_lines(
+                text, bbox_width, size_pt,
+            )
+            lead = fit_preserved_stack_leading_em(
+                size_pt,
+                visual_lines,
+                bbox_height,
+                self.estimate_leading(size_pt),
+            )
+            height = preserved_stack_render_height_pt(
+                size_pt, visual_lines, lead,
+            )
+            return height <= bbox_height + 0.5
+
+        if fits(hi):
+            return round(hi, 1)
+
+        best = lo
+        low, high = lo, hi
+        for _ in range(24):
+            if high - low < 0.05:
+                break
+            mid = (low + high) / 2.0
+            if fits(mid):
+                best = mid
+                low = mid
+            else:
+                high = mid
+        if fits(lo) and not fits(best):
+            best = lo
+        return round(max(lo, best), 1)
+
+    def fit_locked_body_font_size_to_bbox(
+        self,
+        block: RenderBlock,
+        *,
+        layout_raw: Any = None,
+        max_font_pt: float,
+        min_font_pt: Optional[float] = None,
+    ) -> float:
+        """
+        Largest font size ≤ *max_font_pt* whose body text fits the block bbox.
+
+        Used when an extracted (often first-glyph) size overflows a multi-line
+        bbox by more than ``LOCKED_MULTILINE_HEIGHT_OVERFLOW_RATIO``.
+        """
+        x0, y0, x1, y1 = block.inner_bbox
+        bbox_height = max(1.0, y1 - y0)
+        bbox_width = max(1.0, x1 - x0)
+        text = block.plain_text or block.markdown_text or ""
+        lo = max(self.min_size_pt, float(min_font_pt or self.min_size_pt))
+        hi = max(lo, float(max_font_pt))
+
+        def fits(size_pt: float) -> bool:
+            lead = self.estimate_body_leading_em_at_font(
+                block, size_pt, layout_raw=layout_raw,
+            )
+            height = estimate_body_content_height_pt(
+                text, bbox_width, size_pt, lead, layout_raw,
+            )
+            return height <= bbox_height + 0.5
+
+        if fits(hi):
+            return round(hi, 1)
+
+        # Binary search the largest size that still fits.
+        best = lo
+        low, high = lo, hi
+        for _ in range(24):
+            if high - low < 0.05:
+                break
+            mid = (low + high) / 2.0
+            if fits(mid):
+                best = mid
+                low = mid
+            else:
+                high = mid
+        if fits(lo) and not fits(best):
+            best = lo
+        return round(max(lo, best), 1)
+
     def estimate_font_weight(self, block: RenderBlock) -> str:
         """Determine font weight based on block type hints."""
         if block.font_weight and block.font_weight != "regular":
@@ -1147,6 +1399,132 @@ class FontFitCalculator:
         font_size = block.font_size_pt
         if use_unified_ref:
             font_size = ref_unified_font_pt
+        elif block.font_size_locked and font_size > 0:
+            # Extracted / user-locked size: keep when it still fits the bbox.
+            leading = block.leading_em
+            leading_locked = bool(getattr(block, "leading_em_locked", False))
+            lead_hint = (
+                leading
+                if leading > 0 and leading != DEFAULT_LEADING_EM
+                else self.estimate_leading(font_size)
+            )
+            # Font-aware single-line: real sizes often yield bboxes > 32pt.
+            short_single_line = is_single_line_at_font(
+                bbox_height,
+                font_size,
+                leading_em=lead_hint,
+                layout_raw=layout_raw,
+            )
+            x0_lock, _, x1_lock, _ = block.inner_bbox
+            bbox_width_lock = max(1.0, x1_lock - x0_lock)
+
+            if leading_locked and leading > 0:
+                # User-specified leading wins.
+                pass
+            elif short_single_line:
+                if leading <= 0 or leading == DEFAULT_LEADING_EM:
+                    leading = self.estimate_leading(font_size)
+            elif (
+                preserve_breaks
+                and count_embedded_newlines(block_text, newline_raw) > 0
+            ):
+                # Ingredient lists / USPC: hard ``\\n`` render as a Typst stack.
+                # Paragraph width-wrap under-counts lines (``\\n`` ≈ thin space)
+                # and then clamps leading to BODY_LEADING_EM_MAX → overflow.
+                visual_lines = estimate_preserved_stack_visual_lines(
+                    block_text, bbox_width_lock, font_size,
+                )
+                content_h = preserved_stack_render_height_pt(
+                    font_size, visual_lines, BODY_LEADING_EM_MIN,
+                )
+                if content_h > bbox_height * LOCKED_MULTILINE_HEIGHT_OVERFLOW_RATIO:
+                    font_size = self.fit_locked_preserved_stack_font_size_to_bbox(
+                        block,
+                        max_font_pt=font_size,
+                    )
+                    visual_lines = estimate_preserved_stack_visual_lines(
+                        block_text, bbox_width_lock, font_size,
+                    )
+                leading = fit_preserved_stack_leading_em(
+                    font_size,
+                    visual_lines,
+                    bbox_height,
+                    self.estimate_leading(font_size),
+                )
+                # Tighten font once more if min leading still overflows.
+                if preserved_stack_render_height_pt(
+                    font_size, visual_lines, leading,
+                ) > bbox_height + 0.5:
+                    font_size = self.fit_locked_preserved_stack_font_size_to_bbox(
+                        block,
+                        max_font_pt=font_size,
+                    )
+                    visual_lines = estimate_preserved_stack_visual_lines(
+                        block_text, bbox_width_lock, font_size,
+                    )
+                    leading = fit_preserved_stack_leading_em(
+                        font_size,
+                        visual_lines,
+                        bbox_height,
+                        self.estimate_leading(font_size),
+                    )
+                leading = round(max(BODY_LEADING_EM_MIN, leading), 2)
+                leading_locked = True
+            else:
+                # Multi-line + real font size: derive leading from bbox height.
+                # Fallback: extracted size often reflects only the first glyph.
+                # If content still overflows the bbox by >10% even at minimum
+                # leading, refit the font size downward.
+                content_h = estimate_body_content_height_pt(
+                    block_text,
+                    bbox_width_lock,
+                    font_size,
+                    BODY_LEADING_EM_MIN,
+                    layout_raw,
+                )
+                if content_h > bbox_height * LOCKED_MULTILINE_HEIGHT_OVERFLOW_RATIO:
+                    font_size = self.fit_locked_body_font_size_to_bbox(
+                        block,
+                        layout_raw=layout_raw,
+                        max_font_pt=font_size,
+                    )
+                leading = self.estimate_body_leading_em_at_font(
+                    block, font_size, layout_raw=layout_raw,
+                )
+                leading_locked = True
+
+            # Single-line locked text: extend horizontally — never auto-wrap.
+            target_w = 0.0
+            if short_single_line and not preserve_breaks:
+                extend_w = plan_body_single_line_extension_pt(
+                    block_text,
+                    block.inner_bbox,
+                    font_size,
+                    leading,
+                    page_width_pt,
+                )
+                if extend_w and extend_w > 0:
+                    target_w = float(extend_w)
+            return RenderBlock(
+                **{
+                    **block.__dict__,
+                    "font_size_pt": font_size,
+                    "leading_em": leading,
+                    "leading_em_locked": leading_locked,
+                    "preserve_line_breaks": bool(
+                        preserve_breaks
+                        or block.preserve_line_breaks
+                    ),
+                    "fit_to_box": False,
+                    "fit_single_line": bool(short_single_line and not preserve_breaks),
+                    "fit_target_width_pt": target_w,
+                    "fit_min_font_size_pt": font_size,
+                    "fit_max_font_size_pt": font_size,
+                    "fit_min_leading_em": leading,
+                    "fit_max_height_pt": max(1.0, bbox_height),
+                    "font_size_locked": True,
+                }
+            )
         elif not preserve_font_size and (
             font_size <= 0
             or font_size == DEFAULT_FONT_SIZE_PT
@@ -1225,7 +1603,13 @@ class FontFitCalculator:
         text = block.plain_text or block.markdown_text or ""
         typo_units = estimate_typographic_units(text, layout_raw)
         has_math = block_needs_math_fit(text, layout_raw)
-        short_single_line = is_single_line_bbox(bbox_height, layout_raw)
+        # Font-aware: extracted sizes often produce single-line bboxes > 32pt.
+        short_single_line = is_single_line_at_font(
+            bbox_height,
+            font_size,
+            leading_em=leading,
+            layout_raw=layout_raw,
+        )
         visual_lines = line_count_for_vertical_edge_margin(
             bbox_height,
             layout_raw,
@@ -1266,19 +1650,75 @@ class FontFitCalculator:
             )
         )
 
+        # Single-line body: extend horizontally (no auto-wrap). Manual ``\\n``
+        # via preserve_line_breaks is the only way to force a line break.
+        if short_single_line and not has_embedded_breaks:
+            extend_width = plan_body_single_line_extension_pt(
+                text,
+                block.inner_bbox,
+                font_size,
+                leading,
+                page_width_pt,
+            )
+            if extend_width and extend_width > bbox_width + 0.5:
+                return RenderBlock(
+                    **{
+                        **block.__dict__,
+                        "font_size_pt": font_size,
+                        "leading_em": leading,
+                        "fit_to_box": True,
+                        "fit_single_line": True,
+                        "fit_target_width_pt": extend_width,
+                        "fit_min_font_size_pt": font_size,
+                        "fit_max_font_size_pt": font_size,
+                        "fit_min_leading_em": max(0.8, leading * 0.7),
+                        "fit_max_height_pt": max(1.0, bbox_height),
+                    }
+                )
+            if will_wrap or width_overflow or has_math or height_overflow:
+                # No room to extend (or math): shrink on one line — still no wrap.
+                return RenderBlock(
+                    **{
+                        **block.__dict__,
+                        "font_size_pt": font_size,
+                        "leading_em": leading,
+                        "fit_to_box": True,
+                        "fit_single_line": True,
+                        "fit_min_font_size_pt": max(self.min_size_pt, font_size * 0.5),
+                        "fit_max_font_size_pt": min(self.max_size_pt, font_size * 1.2),
+                        "fit_min_leading_em": max(0.8, leading * 0.7),
+                        "fit_max_height_pt": max(1.0, bbox_height),
+                    }
+                )
+            # Fits width already: still mark single-line so emitter never soft-wraps.
+            # Keep ref_text / math on the single-line fit path when needed.
+            needs_single_fit = bool(
+                has_math
+                or height_overflow
+                or (is_ref_text and short_single_line)
+            )
+            return RenderBlock(
+                **{
+                    **block.__dict__,
+                    "font_size_pt": font_size,
+                    "leading_em": leading,
+                    "fit_to_box": needs_single_fit,
+                    "fit_single_line": True,
+                    "fit_min_font_size_pt": max(self.min_size_pt, font_size * 0.5),
+                    "fit_max_font_size_pt": min(self.max_size_pt, font_size * 1.2),
+                    "fit_min_leading_em": max(0.8, leading * 0.7),
+                    "fit_max_height_pt": max(1.0, bbox_height),
+                }
+            )
+
         needs_fit = typo_units > 0 and (
             text_width_at_font > bbox_width * 1.2
             or has_math
             or height_overflow
             or (is_ref_text and short_single_line)
-            or (short_single_line and will_wrap)
             or multi_line_needs_fit
         )
-        fit_single_line = (
-            needs_fit
-            and has_math
-            and is_single_line_bbox(bbox_height, layout_raw)
-        )
+        fit_single_line = False
 
         render_kind = block.render_kind
         preserve_line_breaks = bool(block.preserve_line_breaks) or has_embedded_breaks

@@ -3375,6 +3375,22 @@ class AppLocalizationsEs extends AppLocalizations {
       'Appended to converted filenames (leave empty for no suffix)';
 
   @override
+  String get settingsShowSegmentImagesTitle =>
+      'Mostrar imágenes en la lista de segmentos';
+
+  @override
+  String get settingsShowSegmentImagesSubtitle =>
+      'Muestra imágenes incrustadas en las listas de Extract y Translate. Desactívelo para desplazarse más rápido en documentos grandes.';
+
+  @override
+  String get settingsPreferExtractedPdfFontSizeTitle =>
+      'Preferir tamaño de fuente extraído del PDF';
+
+  @override
+  String get settingsPreferExtractedPdfFontSizeSubtitle =>
+      'En PDF digitales con capa de texto, usar tamaños extraídos en lugar de estimaciones por bbox cuando estén disponibles.';
+
+  @override
   String get settingsLanguageDialogTitle => 'Seleccionar Idioma';
 
   @override
@@ -4397,4 +4413,23 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get segmentPdfRevisionClearLabel => 'Borrar';
+
+  @override
+  String get segmentPdfIndentTooltip => 'Sangría de primera línea';
+
+  @override
+  String get segmentPdfIndentMenuTitle => 'Sangría de primera línea';
+
+  @override
+  String get segmentPdfIndentNone => 'Ninguna';
+
+  @override
+  String segmentPdfIndentAuto(String value) {
+    return 'Auto ($value)';
+  }
+
+  @override
+  String segmentPdfIndentEm(String em) {
+    return '${em}em';
+  }
 }

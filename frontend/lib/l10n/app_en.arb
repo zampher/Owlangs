@@ -1171,6 +1171,10 @@
   "settingsTranslateOutputSuffixHint": "Appended to translated filenames (leave empty for no suffix)",
   "settingsConvertOutputSuffixTitle": "Conversion Output Suffix",
   "settingsConvertOutputSuffixHint": "Appended to converted filenames (leave empty for no suffix)",
+  "settingsShowSegmentImagesTitle": "Show images in segment list",
+  "settingsShowSegmentImagesSubtitle": "Display embedded images in Extract and Translate segment lists. Turn off for faster scrolling on large documents.",
+  "settingsPreferExtractedPdfFontSizeTitle": "Prefer extracted PDF font size",
+  "settingsPreferExtractedPdfFontSizeSubtitle": "For digital PDFs with a text layer, use extracted font sizes instead of bbox estimates when available.",
 
   "settingsLanguageDialogTitle": "Select Language",
   "settingsUnitPt": "pt",
@@ -1621,5 +1625,24 @@
   "translationPreviewPdfRevisionPageFilterSelectAll": "Select all pages",
   "segmentPdfRevisionFontLabel": "Font",
   "segmentPdfRevisionEditLabel": "Edit",
-  "segmentPdfRevisionClearLabel": "Clear"
+  "segmentPdfRevisionClearLabel": "Clear",
+  "segmentPdfIndentTooltip": "First-line indent",
+  "segmentPdfIndentMenuTitle": "First-line indent",
+  "segmentPdfIndentNone": "None",
+  "segmentPdfIndentAuto": "Auto ({value})",
+  "@segmentPdfIndentAuto": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfIndentEm": "{em}em",
+  "@segmentPdfIndentEm": {
+    "placeholders": {
+      "em": {
+        "type": "String"
+      }
+    }
+  }
 }

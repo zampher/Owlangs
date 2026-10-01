@@ -72,6 +72,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
     this.showPdfFontSize = false,
     this.onFontSizeChanged,
     this.onRotationChanged,
+    this.onFirstLineIndentChanged,
     this.onTableStrokeChanged,
     this.onTableBorderStyleChanged,
     this.batchSelectionEnabled = false,
@@ -146,6 +147,11 @@ class TranslationComparisonPanel extends ConsumerWidget {
     SegmentPdfTypographyDialogMode scope,
   })? onFontSizeChanged;
   final void Function(int index, int rotation)? onRotationChanged;
+  final void Function(
+    int index, {
+    double? firstLineIndentEm,
+    bool reset,
+  })? onFirstLineIndentChanged;
   final void Function(int index, double tableStrokePt)? onTableStrokeChanged;
   final void Function(int index, String? tableBorderStyle)? onTableBorderStyleChanged;
   final bool batchSelectionEnabled;
@@ -1099,7 +1105,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
                       : Consumer(
                           builder: (context, ref, _) {
                             // Watch globalSettings at outer level to avoid rebuilding all items
-                            // when settings change (e.g., font size)
+                            // when settings change (e.g., font size, showSegmentImages)
                             final GlobalSettings globalSettings =
                                 ref.watch(globalSettingsProvider);
 
@@ -1262,6 +1268,10 @@ class TranslationComparisonPanel extends ConsumerWidget {
               segmentMetadata[pair.index] ?? <String, dynamic>{};
           final isExcluded = metadata['is_excluded'] as bool? ?? false;
           final exclusionReason = metadata['exclusion_reason'] as String?;
+          final Map<String, Map<String, String>> effectiveImageDataMap =
+              globalSettings.showSegmentImages
+                  ? imageDataMap
+                  : const <String, Map<String, String>>{};
 
           // Apply filter: if filters are selected, only show matching segments
           if (selectedExclusionFilters != null &&
@@ -1375,7 +1385,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
               canRedo: canRedo,
               previewFontSize: globalSettings.previewFontSize,
               editFontSize: globalSettings.editFontSize,
-              imageDataMap: imageDataMap,
+              imageDataMap: effectiveImageDataMap,
               taskId: taskId,
               onExclusionUpdated: onExclusionUpdated ??
                   (int index, {String? exclusionReason, bool? isExcluded}) async {
@@ -1388,6 +1398,10 @@ class TranslationComparisonPanel extends ConsumerWidget {
               computedFontSizePt:
                   _readOptionalDouble(metadata['computed_font_size_pt']),
               overlayRenderFontSizePt: _readOverlayRenderFontSizePt(metadata),
+              extractedFontSizePt:
+                  _readOptionalDouble(metadata['extracted_font_size_pt']),
+              extractedFontSizeSource:
+                  metadata['extracted_font_size_source'] as String?,
               fontSizeSource: metadata['font_size_source'] as String?,
               fontWeight: _readFontWeight(metadata),
               computedFontWeight: _readComputedFontWeight(metadata),
@@ -1415,6 +1429,32 @@ class TranslationComparisonPanel extends ConsumerWidget {
               showTableStroke: isPdfTableSegment(metadata),
               onFontSizeChanged: onFontSizeChanged,
               pdfRevisionMode: pdfRevisionMode,
+              showSelectionCheckbox: pdfRevisionMode &&
+                  batchSelectionEnabled &&
+                  onSegmentSelectionToggle != null &&
+                  !pair.isImage,
+              isSelectionChecked:
+                  selectedSegmentIndices.contains(pair.index),
+              onSelectionChanged: pdfRevisionMode &&
+                      batchSelectionEnabled &&
+                      onSegmentSelectionToggle != null &&
+                      !pair.isImage
+                  ? (bool selected) {
+                      onSegmentSelectionToggle!(pair.index, selected);
+                    }
+                  : null,
+              selectionIndicesListenable: pdfRevisionMode
+                  ? selectedSegmentIndicesListenable
+                  : null,
+              firstLineIndentEm:
+                  _readOptionalDouble(metadata['first_line_indent_em']),
+              computedFirstLineIndentEm: _readOptionalDouble(
+                metadata['computed_first_line_indent_em'],
+              ),
+              firstLineIndentEmSource:
+                  metadata['first_line_indent_em_source'] as String?,
+              onFirstLineIndentChanged:
+                  pair.isImage ? null : onFirstLineIndentChanged,
               layoutBlockBboxes: pdfRevisionMode
                   ? readSegmentLayoutBlockBboxes(metadata)
                   : null,
@@ -1451,7 +1491,13 @@ class TranslationComparisonPanel extends ConsumerWidget {
                             onTap: () => onHighlightParagraph(pair.index),
                             previewFontSize: globalSettings.previewFontSize,
                             editFontSize: globalSettings.editFontSize,
-                            imageDataMap: imageDataMap,
+                            imageDataMap: effectiveImageDataMap,
+                            extractedFontSizePt: _readOptionalDouble(
+                              metadata['extracted_font_size_pt'],
+                            ),
+                            extractedFontSizeSource:
+                                metadata['extracted_font_size_source']
+                                    as String?,
                           ),
                         ),
                       ),
@@ -1468,7 +1514,8 @@ class TranslationComparisonPanel extends ConsumerWidget {
 
           final Widget rowContent = batchSelectionEnabled &&
                   onSegmentSelectionToggle != null &&
-                  !pair.isImage
+                  !pair.isImage &&
+                  !pdfRevisionMode
               ? Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
@@ -1538,6 +1585,10 @@ class TranslationComparisonPanel extends ConsumerWidget {
         final isExcluded = metadata['is_excluded'] as bool? ?? false;
         final exclusionReason = metadata['exclusion_reason'] as String?;
         final isCleared = isImage ? false : _isSegmentCleared(metadata);
+        final Map<String, Map<String, String>> effectiveImageDataMap =
+            globalSettings.showSegmentImages
+                ? imageDataMap
+                : const <String, Map<String, String>>{};
 
         // Apply filter: if filters are selected, only show matching segments
         if (selectedExclusionFilters != null &&
@@ -1629,7 +1680,7 @@ class TranslationComparisonPanel extends ConsumerWidget {
                   canRedo: canRedo,
                   previewFontSize: globalSettings.previewFontSize,
                   editFontSize: globalSettings.editFontSize,
-                  imageDataMap: imageDataMap,
+                  imageDataMap: effectiveImageDataMap,
                   taskId: taskId,
                   onExclusionUpdated: onExclusionUpdated ??
                       (int index, {String? exclusionReason, bool? isExcluded}) async {
@@ -1641,6 +1692,10 @@ class TranslationComparisonPanel extends ConsumerWidget {
                   computedFontSizePt:
                       _readOptionalDouble(metadata['computed_font_size_pt']),
                   overlayRenderFontSizePt: _readOverlayRenderFontSizePt(metadata),
+                  extractedFontSizePt:
+                      _readOptionalDouble(metadata['extracted_font_size_pt']),
+                  extractedFontSizeSource:
+                      metadata['extracted_font_size_source'] as String?,
                   fontSizeSource: metadata['font_size_source'] as String?,
                   fontWeight: _readFontWeight(metadata),
                   computedFontWeight: _readComputedFontWeight(metadata),
@@ -1667,6 +1722,50 @@ class TranslationComparisonPanel extends ConsumerWidget {
                   onTableBorderStyleChanged: onTableBorderStyleChanged,
                   showTableStroke: isPdfTableSegment(metadata),
                   onFontSizeChanged: onFontSizeChanged,
+                  pdfRevisionMode: pdfRevisionMode,
+                  showSelectionCheckbox: pdfRevisionMode &&
+                      batchSelectionEnabled &&
+                      onSegmentSelectionToggle != null &&
+                      !isImage,
+                  isSelectionChecked:
+                      selectedSegmentIndices.contains(index),
+                  onSelectionChanged: pdfRevisionMode &&
+                          batchSelectionEnabled &&
+                          onSegmentSelectionToggle != null &&
+                          !isImage
+                      ? (bool selected) {
+                          onSegmentSelectionToggle!(index, selected);
+                        }
+                      : null,
+                  selectionIndicesListenable: pdfRevisionMode
+                      ? selectedSegmentIndicesListenable
+                      : null,
+                  firstLineIndentEm:
+                      _readOptionalDouble(metadata['first_line_indent_em']),
+                  computedFirstLineIndentEm: _readOptionalDouble(
+                    metadata['computed_first_line_indent_em'],
+                  ),
+                  firstLineIndentEmSource:
+                      metadata['first_line_indent_em_source'] as String?,
+                  onFirstLineIndentChanged:
+                      isImage ? null : onFirstLineIndentChanged,
+                  layoutBlockBboxes: pdfRevisionMode
+                      ? readSegmentLayoutBlockBboxes(metadata)
+                      : null,
+                  layoutBlockIndices: pdfRevisionMode
+                      ? parseLayoutBlockIndices(
+                          metadata['layout_block_indices'],
+                        )
+                      : null,
+                  layoutGroupTextParts: pdfRevisionMode &&
+                          metadata['layout_group_text_parts'] is Map
+                      ? Map<String, dynamic>.from(
+                          metadata['layout_group_text_parts'] as Map,
+                        )
+                      : null,
+                  onLayoutGroupPartsEdit: pdfRevisionMode
+                      ? onLayoutGroupPartsEdit
+                      : null,
                 ),
               )
             : Container(
@@ -1699,7 +1798,13 @@ class TranslationComparisonPanel extends ConsumerWidget {
                                 onTap: () => onHighlightParagraph(index),
                                 previewFontSize: globalSettings.previewFontSize,
                                 editFontSize: globalSettings.editFontSize,
-                                imageDataMap: imageDataMap,
+                                imageDataMap: effectiveImageDataMap,
+                                extractedFontSizePt: _readOptionalDouble(
+                                  metadata['extracted_font_size_pt'],
+                                ),
+                                extractedFontSizeSource:
+                                    metadata['extracted_font_size_source']
+                                        as String?,
                               ),
                             )
                           : Container(

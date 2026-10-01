@@ -42,6 +42,23 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
   Map<int, Map<String, dynamic>> segmentTypeInfo =
       <int, Map<String, dynamic>>{};
 
+  /// Extracted digital-PDF / parser font size in pt (index -> pt)
+  Map<int, double> segmentExtractedFontSizes = <int, double>{};
+
+  /// Store [extracted_font_size_pt] from a layout-extract segment payload.
+  void ingestExtractedFontSizeFromSegment(int index, dynamic seg) {
+    if (seg is! Map) {
+      segmentExtractedFontSizes.remove(index);
+      return;
+    }
+    final dynamic raw = seg['extracted_font_size_pt'];
+    if (raw is num && raw.toDouble() > 0) {
+      segmentExtractedFontSizes[index] = raw.toDouble();
+    } else {
+      segmentExtractedFontSizes.remove(index);
+    }
+  }
+
   // ============================================================================
   // Segment Type Indices
   // ============================================================================
@@ -323,6 +340,9 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
   /// Track last refresh trigger to detect refresh requests
   int? lastRefreshTrigger;
 
+  /// Track last showSegmentImages setting to recalculate heights on toggle
+  bool? lastShowSegmentImages;
+
   /// Track if toolbar debug logs have been output for current taskId
   String? lastToolbarLogTaskId;
 
@@ -420,6 +440,7 @@ mixin ExtractPreviewStateMixin<T extends ConsumerStatefulWidget>
     totalEstimatedInputTokens = null;
     lastViewSize = null;
     lastRefreshTrigger = null;
+    lastShowSegmentImages = null;
     lastToolbarLogTaskId = null;
     hasShownMineruSettingsDialog = false;
     hasShownLargeFileWarning = false;

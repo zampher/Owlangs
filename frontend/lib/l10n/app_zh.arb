@@ -1132,6 +1132,10 @@
   "settingsTranslateOutputSuffixHint": "追加到翻译文件名后（留空则不添加后缀）",
   "settingsConvertOutputSuffixTitle": "格式转换输出后缀",
   "settingsConvertOutputSuffixHint": "追加到格式转换文件名后（留空则不添加后缀）",
+  "settingsShowSegmentImagesTitle": "片段列表显示图片",
+  "settingsShowSegmentImagesSubtitle": "在提取/翻译片段列表中显示内嵌图片。关闭可加快大文档滚动。",
+  "settingsPreferExtractedPdfFontSizeTitle": "优先使用 PDF 提取字号",
+  "settingsPreferExtractedPdfFontSizeSubtitle": "对带文本层的数字 PDF，有提取字号时优先使用，而不是只用 bbox 估算。",
   "settingsLanguageDialogTitle": "选择语言",
   "settingsUnitPt": "pt",
   "glossaryGeneratedTabTitle": "生成的术语表",
@@ -1558,5 +1562,24 @@
   "translationPreviewPdfRevisionPageFilterSelectAll": "全选页",
   "segmentPdfRevisionFontLabel": "字体",
   "segmentPdfRevisionEditLabel": "编辑",
-  "segmentPdfRevisionClearLabel": "清除"
+  "segmentPdfRevisionClearLabel": "清除",
+  "segmentPdfIndentTooltip": "首行缩进",
+  "segmentPdfIndentMenuTitle": "首行缩进",
+  "segmentPdfIndentNone": "无",
+  "segmentPdfIndentAuto": "自动 ({value})",
+  "@segmentPdfIndentAuto": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfIndentEm": "{em}em",
+  "@segmentPdfIndentEm": {
+    "placeholders": {
+      "em": {
+        "type": "String"
+      }
+    }
+  }
 }

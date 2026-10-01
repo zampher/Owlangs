@@ -3249,6 +3249,11 @@ class _TranslationResultPreviewState
       if (segment.containsKey('overlay_estimated_font_size_pt'))
         'overlay_estimated_font_size_pt':
             _parseOptionalDouble(segment['overlay_estimated_font_size_pt']),
+      if (segment.containsKey('extracted_font_size_pt'))
+        'extracted_font_size_pt':
+            _parseOptionalDouble(segment['extracted_font_size_pt']),
+      if (segment.containsKey('extracted_font_size_source'))
+        'extracted_font_size_source': segment['extracted_font_size_source'],
       if (segment.containsKey('font_size_source'))
         'font_size_source': segment['font_size_source'],
       if (segment.containsKey('font_weight'))
@@ -3270,6 +3275,19 @@ class _TranslationResultPreviewState
             _parseOptionalDouble(segment['computed_leading_em']),
       if (segment.containsKey('leading_em_source'))
         'leading_em_source': segment['leading_em_source'],
+      // Only copy indent keys when the API actually sent them. Always-emitting
+      // 0.0 made skip-refresh think indent was resolved and left every chip
+      // stuck on "无" until a force refresh returned real values.
+      if (segment.containsKey('first_line_indent_em'))
+        'first_line_indent_em':
+            _parseOptionalDouble(segment['first_line_indent_em']) ?? 0.0,
+      if (segment.containsKey('computed_first_line_indent_em'))
+        'computed_first_line_indent_em':
+            _parseOptionalDouble(segment['computed_first_line_indent_em']) ??
+                0.0,
+      if (segment.containsKey('first_line_indent_em_source'))
+        'first_line_indent_em_source':
+            segment['first_line_indent_em_source'] as String? ?? 'auto',
       if (segment.containsKey('rotation'))
         'rotation': _parseOptionalInt(segment['rotation']) ?? 0,
       if (segment.containsKey('table_stroke_pt'))
@@ -5382,12 +5400,25 @@ class _TranslationResultPreviewState
     if (!forceRefresh &&
         !imageLayoutTask &&
         _allSegmentsMetadata.isNotEmpty) {
+      // Require both font size and first-line indent fields. Older metadata
+      // may have fonts only; skipping then leaves every indent chip as "无".
       final bool allResolved = _allSegmentsMetadata.values.every(
-        (Map<String, dynamic> metadata) =>
-            metadata['overlay_render_font_size_pt'] != null ||
-            metadata['computed_font_size_pt'] != null ||
-            (metadata['font_size_source'] == 'user' &&
-                metadata['font_size_pt'] != null),
+        (Map<String, dynamic> metadata) {
+          final bool fontResolved =
+              metadata['overlay_render_font_size_pt'] != null ||
+                  metadata['computed_font_size_pt'] != null ||
+                  (metadata['font_size_source'] == 'user' &&
+                      metadata['font_size_pt'] != null);
+          if (!fontResolved) {
+            return false;
+          }
+          if (metadata['is_image'] == true) {
+            return true;
+          }
+          // Require computed indent specifically. Stale first_line_indent_em=0
+          // alone used to skip refresh forever and leave every chip as "无".
+          return metadata.containsKey('computed_first_line_indent_em');
+        },
       );
       if (allResolved) {
         _translationResultLog(
@@ -5672,6 +5703,7 @@ class _TranslationResultPreviewState
       showPdfFontSize: true,
       onFontSizeChanged: _handleFontSizeChanged,
       onRotationChanged: _handleRotationChanged,
+      onFirstLineIndentChanged: _handleFirstLineIndentChanged,
       onTableStrokeChanged: _handleTableStrokeChanged,
       onTableBorderStyleChanged: _handleTableBorderStyleChanged,
       showSegmentScrollbar: showSegmentScrollbar,
@@ -6066,6 +6098,61 @@ class _TranslationResultPreviewState
     } catch (e) {
       if (mounted) {
         MessageService.showError(context, 'Failed to update PDF typography: $e');
+      }
+    }
+  }
+
+  /// Handle first-line indent override for a segment (PDF revision).
+  Future<void> _handleFirstLineIndentChanged(
+    int index, {
+    double? firstLineIndentEm,
+    bool reset = false,
+  }) async {
+    try {
+      final TranslationService svc = TranslationService();
+      final Map<String, dynamic> response = await svc.updateTranslationSegment(
+        _apiTaskId(),
+        index,
+        firstLineIndentEm: reset ? null : firstLineIndentEm,
+        firstLineIndentEmReset: reset,
+      );
+      final Map<String, dynamic>? updatedSegment = response['segment'] is Map
+          ? Map<String, dynamic>.from(
+              response['segment'] as Map<dynamic, dynamic>,
+            )
+          : null;
+      final Map<String, dynamic> indentFields = updatedSegment != null
+          ? _pdfFontSizeMetadataFields(updatedSegment)
+          : <String, dynamic>{
+              if (reset) ...<String, dynamic>{
+                'first_line_indent_em_source': 'auto',
+              },
+              if (!reset && firstLineIndentEm != null) ...<String, dynamic>{
+                'first_line_indent_em': firstLineIndentEm,
+                'first_line_indent_em_source': 'user',
+              },
+            };
+
+      if (_allSegmentsMetadata.containsKey(index)) {
+        _allSegmentsMetadata[index] = <String, dynamic>{
+          ..._allSegmentsMetadata[index]!,
+          ...indentFields,
+        };
+      } else {
+        _allSegmentsMetadata[index] = indentFields;
+      }
+
+      if (mounted && _shouldRefreshOverlayPreviewRevision) {
+        _schedulePdfPreviewRevisionChanged(dirtySegmentIndex: index);
+        setState(() {});
+        await _segmentsPaginationController?.refresh();
+      }
+    } catch (e) {
+      if (mounted) {
+        MessageService.showError(
+          context,
+          'Failed to update first-line indent: $e',
+        );
       }
     }
   }
@@ -6690,9 +6777,9 @@ class _TranslationResultPreviewState
     if (baseMode == TranslationPreviewMode.imageOriginalLayout) {
       await _warmImageOverlayTypographyCache();
     }
-    // Do not block revision preview on a full typography refetch; segments
-    // loaded after translation already carry computed fields when available.
-    unawaited(_refreshPdfTypographyMetadata(forceRefresh: false));
+    // Force-refresh so indent fields (computed_first_line_indent_em) are
+    // merged even when font sizes were already resolved from an older load.
+    await _refreshPdfTypographyMetadata(forceRefresh: true);
   }
 
   Future<void> _warmImageOverlayTypographyCache() async {

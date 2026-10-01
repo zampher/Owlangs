@@ -166,9 +166,22 @@ def _mineru_layout_font_size_pt(block: LayoutBlock) -> Optional[float]:
     raw = getattr(block, "raw", None) or {}
     if not isinstance(raw, dict):
         return None
-    span_size = _get_max_span_font_size(raw)
-    if span_size > 0:
-        return span_size
+
+    prefer_extracted = True
+    try:
+        from layout.pdf_font_extractor import resolve_prefer_extracted_pdf_font_size
+
+        prefer_extracted = resolve_prefer_extracted_pdf_font_size()
+    except Exception:
+        prefer_extracted = True
+
+    if prefer_extracted:
+        extracted = raw.get("extracted_font_size")
+        if isinstance(extracted, (int, float)) and float(extracted) > 0:
+            return float(extracted)
+        span_size = _get_max_span_font_size(raw)
+        if span_size > 0:
+            return span_size
     for key in ("font_size", "orig_font_size", "inferred_font_size"):
         value = raw.get(key)
         if isinstance(value, (int, float)) and float(value) > 0:

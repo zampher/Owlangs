@@ -88,6 +88,8 @@ class TranslationSegmentItem extends StatefulWidget {
     this.fontSizePt,
     this.computedFontSizePt,
     this.overlayRenderFontSizePt,
+    this.extractedFontSizePt,
+    this.extractedFontSizeSource,
     this.fontSizeSource,
     this.fontWeight,
     this.computedFontWeight,
@@ -100,6 +102,14 @@ class TranslationSegmentItem extends StatefulWidget {
     this.leadingEmSource,
     this.onFontSizeChanged,
     this.pdfRevisionMode = false,
+    this.showSelectionCheckbox = false,
+    this.isSelectionChecked = false,
+    this.onSelectionChanged,
+    this.selectionIndicesListenable,
+    this.firstLineIndentEm,
+    this.computedFirstLineIndentEm,
+    this.firstLineIndentEmSource,
+    this.onFirstLineIndentChanged,
     this.rotation = 0,
     this.onRotationChanged,
     this.tableStrokePt = 0,
@@ -167,6 +177,9 @@ class TranslationSegmentItem extends StatefulWidget {
   final double? fontSizePt;
   final double? computedFontSizePt;
   final double? overlayRenderFontSizePt;
+  /// Font size from digital PDF text layer or parser spans (read-only hint).
+  final double? extractedFontSizePt;
+  final String? extractedFontSizeSource;
   final String? fontSizeSource;
   final String? fontWeight;
   final String? computedFontWeight;
@@ -187,6 +200,22 @@ class TranslationSegmentItem extends StatefulWidget {
     SegmentPdfTypographyDialogMode scope,
   })? onFontSizeChanged;
   final bool pdfRevisionMode;
+  /// When true (PDF revision batch select), checkbox sits left of the
+  /// text+tags column as one unit.
+  final bool showSelectionCheckbox;
+  final bool isSelectionChecked;
+  final ValueChanged<bool>? onSelectionChanged;
+  final ValueListenable<Set<int>>? selectionIndicesListenable;
+  /// Persisted first-line indent in em (user override or mirrored auto value).
+  final double? firstLineIndentEm;
+  /// Auto-computed first-line indent from CJK body rules.
+  final double? computedFirstLineIndentEm;
+  final String? firstLineIndentEmSource;
+  final void Function(
+    int index, {
+    double? firstLineIndentEm,
+    bool reset,
+  })? onFirstLineIndentChanged;
   final int rotation; // Current rotation value: 0, 90, 180, or 270
   final void Function(int index, int rotation)? onRotationChanged;
   final double tableStrokePt; // Table grid stroke width in pt (0 = hidden)
@@ -345,6 +374,7 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     _textController.removeListener(_onTextChanged);
     _textController.dispose();
     _editFocusNode.dispose();
+    // MenuController has no dispose(); owned field is GC'd with State.
     super.dispose();
   }
 
@@ -666,63 +696,136 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
   }
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-        key: widget.itemKey,
-        behavior: HitTestBehavior.opaque, // Ensure entire area is clickable
-        onTap: (_isEditing || _isLayoutGroupEditing) ? null : widget.onTap,
-        onDoubleTap: widget.isSource ||
-                (widget.onEdit == null && !_canEditLayoutGroupParts())
-            ? null
-            : _handleDoubleTapEdit,
-        child: Container(
-          key: ValueKey(
-            'segment_${widget.index}_editing_${_isEditing}_'
-            'layoutGroup_$_isLayoutGroupEditing',
-          ),
-          margin: const EdgeInsets.only(
-            bottom: 1,
-          ), // Further reduced from 2 to 1 for more compact display
-          padding: const EdgeInsets.all(
-            2,
-          ), // Further reduced from 4 to 2 for more compact display
-          decoration: BoxDecoration(
-            color: widget.isHighlighted
-                ? (Theme.of(context).brightness == Brightness.dark
-                    ? Colors.amber.shade200.withOpacity(
-                        0.22,
-                      ) // Unified highlight color for both Source and Translated Text in dark mode
-                    : Colors.amber.shade50)
-                : Theme.of(context).colorScheme.surface,
-            // Always use 2px border to prevent layout overflow when state changes
-            // Use background color for normal state border (invisible but maintains layout)
-            // Use colored border for highlighted/modified/failed/retry states
-            // Priority: Failed (red) > Retry (orange) > Modified (green) > Highlighted (amber) > Default
-            border: Border.all(
-              color: widget.isFailed
-                  ? Colors.red.shade600
-                  : (widget.needsRetry
-                      ? Colors.orange.shade600
-                      : (widget.isModified
-                          ? Colors.green.shade600
-                          : (widget.isHighlighted
-                              ? (Theme.of(context).brightness == Brightness.dark
-                                  ? Colors.amber
-                                      .shade300 // Unified border color for both Source and Translated Text in dark mode
-                                  : Colors.amber.shade400)
-                              : Theme.of(context)
-                                  .colorScheme
-                                  .surface))), // Same as background for normal state
-              width: 2, // Always 2px to maintain consistent layout
-            ),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: _isEditing
-              ? _buildEditMode()
-              : (_isLayoutGroupEditing
-                  ? _buildLayoutGroupEditMode()
-                  : _buildViewMode()),
+  Widget build(BuildContext context) {
+    // PDF revision hang tags (indent/font/rotation) must sit outside the outer
+    // opaque GestureDetector so MenuAnchor InkWell taps are not stolen and the
+    // menu is not closed by a parent setState from onTap.
+    final bool hangTagsOutsideGesture = widget.pdfRevisionMode &&
+        !_isEditing &&
+        !_isLayoutGroupEditing;
+
+    final Widget card = GestureDetector(
+      key: widget.itemKey,
+      behavior: HitTestBehavior.opaque, // Ensure entire area is clickable
+      onTap: (_isEditing || _isLayoutGroupEditing) ? null : widget.onTap,
+      onDoubleTap: widget.isSource ||
+              (widget.onEdit == null && !_canEditLayoutGroupParts())
+          ? null
+          : _handleDoubleTapEdit,
+      child: Container(
+        key: ValueKey(
+          'segment_${widget.index}_editing_${_isEditing}_'
+          'layoutGroup_$_isLayoutGroupEditing',
         ),
+        margin: const EdgeInsets.only(
+          bottom: 1,
+        ), // Further reduced from 2 to 1 for more compact display
+        padding: const EdgeInsets.all(
+          2,
+        ), // Further reduced from 4 to 2 for more compact display
+        decoration: BoxDecoration(
+          color: widget.isHighlighted
+              ? (Theme.of(context).brightness == Brightness.dark
+                  ? Colors.amber.shade200.withOpacity(
+                      0.22,
+                    ) // Unified highlight color for both Source and Translated Text in dark mode
+                  : Colors.amber.shade50)
+              : Theme.of(context).colorScheme.surface,
+          // Always use 2px border to prevent layout overflow when state changes
+          // Use background color for normal state border (invisible but maintains layout)
+          // Use colored border for highlighted/modified/failed/retry states
+          // Priority: Failed (red) > Retry (orange) > Modified (green) > Highlighted (amber) > Default
+          border: Border.all(
+            color: widget.isFailed
+                ? Colors.red.shade600
+                : (widget.needsRetry
+                    ? Colors.orange.shade600
+                    : (widget.isModified
+                        ? Colors.green.shade600
+                        : (widget.isHighlighted
+                            ? (Theme.of(context).brightness == Brightness.dark
+                                ? Colors.amber
+                                    .shade300 // Unified border color for both Source and Translated Text in dark mode
+                                : Colors.amber.shade400)
+                            : Theme.of(context)
+                                .colorScheme
+                                .surface))), // Same as background for normal state
+            width: 2, // Always 2px to maintain consistent layout
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: _isEditing
+            ? _buildEditMode()
+            : (_isLayoutGroupEditing
+                ? _buildLayoutGroupEditMode()
+                : _buildViewMode(
+                    includeHangTagBar: !hangTagsOutsideGesture,
+                  )),
+      ),
+    );
+
+    if (!hangTagsOutsideGesture) {
+      return card;
+    }
+    // Tags outside opaque GestureDetector; checkbox left of text+tags.
+    final Widget textAndTags = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        card,
+        Padding(
+          padding: const EdgeInsets.only(left: 4, top: 4, bottom: 2),
+          child: _buildSegmentActionTagBar(),
+        ),
+      ],
+    );
+    if (!widget.showSelectionCheckbox) {
+      return textAndTags;
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: _buildSelectionCheckbox(),
+        ),
+        Expanded(child: textAndTags),
+      ],
+    );
+  }
+
+  Widget _buildSelectionCheckbox() {
+    if (widget.selectionIndicesListenable != null) {
+      return ValueListenableBuilder<Set<int>>(
+        valueListenable: widget.selectionIndicesListenable!,
+        builder: (
+          BuildContext context,
+          Set<int> selected,
+          Widget? _,
+        ) {
+          return Checkbox(
+            value: selected.contains(widget.index),
+            onChanged: widget.onSelectionChanged == null
+                ? null
+                : (bool? value) {
+                    widget.onSelectionChanged!(value ?? false);
+                  },
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          );
+        },
       );
+    }
+    return Checkbox(
+      value: widget.isSelectionChecked,
+      onChanged: widget.onSelectionChanged == null
+          ? null
+          : (bool? value) {
+              widget.onSelectionChanged!(value ?? false);
+            },
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
 
   String _pdfFontSizeLabel(AppLocalizations l10n) {
     final bool isUserOverride = _hasPdfTypographyOverride();
@@ -1240,55 +1343,230 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     );
   }
 
+  bool _hasUserFirstLineIndentOverride() {
+    return widget.firstLineIndentEmSource == 'user' &&
+        widget.firstLineIndentEm != null;
+  }
+
+  double _effectiveFirstLineIndentEm() {
+    if (_hasUserFirstLineIndentOverride()) {
+      return widget.firstLineIndentEm!;
+    }
+    return widget.computedFirstLineIndentEm ??
+        widget.firstLineIndentEm ??
+        0.0;
+  }
+
+  String _pdfIndentValueLabel(AppLocalizations l10n, double indentEm) {
+    if (indentEm <= 0) {
+      return l10n.segmentPdfIndentNone;
+    }
+    final String em = indentEm == indentEm.roundToDouble()
+        ? indentEm.toStringAsFixed(0)
+        : indentEm.toStringAsFixed(1);
+    return l10n.segmentPdfIndentEm(em);
+  }
+
+  Widget _buildPdfIndentChip() {
+    final l10n = AppLocalizations.of(context)!;
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final double indentEm = _effectiveFirstLineIndentEm();
+    final bool isUserOverride = _hasUserFirstLineIndentOverride();
+    final bool hasIndent = indentEm > 0.0;
+    final bool canEdit = widget.onFirstLineIndentChanged != null;
+    final String valueLabel = _pdfIndentValueLabel(l10n, indentEm);
+    const List<double> indentOptions = <double>[0.0, 1.0, 2.0];
+
+    final Widget chipBody = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: isUserOverride
+            ? colors.secondaryContainer
+            : (hasIndent
+                ? colors.secondaryContainer.withOpacity(0.65)
+                : colors.surfaceContainerHighest),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: isUserOverride || hasIndent
+              ? colors.secondary
+              : colors.outlineVariant,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(
+            Icons.format_indent_increase,
+            size: 12,
+            color: isUserOverride || hasIndent
+                ? colors.onSecondaryContainer
+                : colors.onSurfaceVariant,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            valueLabel,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: isUserOverride || hasIndent
+                  ? colors.onSecondaryContainer
+                  : colors.onSurfaceVariant,
+            ),
+          ),
+          if (canEdit) ...<Widget>[
+            const SizedBox(width: 2),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 14,
+              color: isUserOverride || hasIndent
+                  ? colors.onSecondaryContainer
+                  : colors.onSurfaceVariant,
+            ),
+          ],
+        ],
+      ),
+    );
+
+    // PopupMenuButton owns its own hit target and is reliable in Wrap /
+    // ListView (MenuAnchor InkWell taps were swallowed despite caret).
+    if (!canEdit) {
+      return Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: chipBody,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: PopupMenuButton<String>(
+        tooltip: l10n.segmentPdfIndentMenuTitle,
+        padding: EdgeInsets.zero,
+        offset: const Offset(0, 28),
+        onSelected: (String value) {
+          if (value == 'auto') {
+            widget.onFirstLineIndentChanged!(widget.index, reset: true);
+            return;
+          }
+          final double? optionEm = double.tryParse(value);
+          if (optionEm == null) {
+            return;
+          }
+          widget.onFirstLineIndentChanged!(
+            widget.index,
+            firstLineIndentEm: optionEm,
+            reset: false,
+          );
+        },
+        itemBuilder: (BuildContext context) {
+          return <PopupMenuEntry<String>>[
+            PopupMenuItem<String>(
+              enabled: false,
+              height: 28,
+              child: Text(
+                l10n.segmentPdfIndentMenuTitle,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+            PopupMenuItem<String>(
+              value: 'auto',
+              child: Row(
+                children: <Widget>[
+                  SizedBox(
+                    width: 18,
+                    child: !isUserOverride
+                        ? Icon(Icons.check, size: 14, color: colors.primary)
+                        : null,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    l10n.segmentPdfIndentAuto(
+                      _pdfIndentValueLabel(
+                        l10n,
+                        widget.computedFirstLineIndentEm ?? 0.0,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ...indentOptions.map((double optionEm) {
+              final bool selected = isUserOverride &&
+                  (widget.firstLineIndentEm ?? -1) == optionEm;
+              return PopupMenuItem<String>(
+                value: optionEm.toStringAsFixed(1),
+                child: Row(
+                  children: <Widget>[
+                    SizedBox(
+                      width: 18,
+                      child: selected
+                          ? Icon(Icons.check, size: 14, color: colors.primary)
+                          : null,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(_pdfIndentValueLabel(l10n, optionEm)),
+                  ],
+                ),
+              );
+            }),
+          ];
+        },
+        child: chipBody,
+      ),
+    );
+  }
+
   Widget _buildPdfFontSizeChip() {
     final l10n = AppLocalizations.of(context)!;
     final bool isUserOverride = _hasPdfTypographyOverride();
     final ColorScheme colors = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(left: 4),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _openFontSizeDialog,
-          borderRadius: BorderRadius.circular(4),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
+    // Wrap already provides spacing; avoid extra left pad so the first tag
+    // sits flush under the text column in PDF revision mode.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _openFontSizeDialog,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: isUserOverride
+                ? colors.secondaryContainer
+                : colors.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
               color: isUserOverride
-                  ? colors.secondaryContainer
-                  : colors.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: isUserOverride
-                    ? colors.secondary
-                    : colors.outlineVariant,
-              ),
+                  ? colors.secondary
+                  : colors.outlineVariant,
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Icon(
-                  Icons.format_size,
-                  size: 12,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(
+                Icons.format_size,
+                size: 12,
+                color: isUserOverride
+                    ? colors.onSecondaryContainer
+                    : colors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                widget.pdfRevisionMode
+                    ? _pdfRevisionFontLabel(l10n)
+                    : _pdfFontSizeLabel(l10n),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
                   color: isUserOverride
                       ? colors.onSecondaryContainer
                       : colors.onSurfaceVariant,
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  widget.pdfRevisionMode
-                      ? _pdfRevisionFontLabel(l10n)
-                      : _pdfFontSizeLabel(l10n),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: isUserOverride
-                        ? colors.onSecondaryContainer
-                        : colors.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1556,7 +1834,587 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
     );
   }
 
-  Widget _buildViewMode() {
+  /// Shared action tag bar (platform / indent / font / exclude / ...).
+  /// Used inline under the text column, or full-width under the main row
+  /// in PDF revision hang mode (clickable MenuAnchor chips).
+  Widget _buildSegmentActionTagBar() {
+    final l10n = AppLocalizations.of(context)!;
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: <Widget>[
+      if (widget.pdfRevisionMode) _buildPdfIndentChip(),
+      if (widget.showPdfFontSize && widget.onFontSizeChanged != null)
+        _buildPdfFontSizeChip(),
+      if (widget.onRotationChanged != null && !widget.isSource)
+        _buildRotationChip(context),
+      if ((widget.onTableStrokeChanged != null ||
+              widget.onTableBorderStyleChanged != null) &&
+          !widget.isSource &&
+          widget.showTableStroke)
+        _buildTableStrokeChip(context),
+      // Platform badge
+      if (!widget.pdfRevisionMode && widget.platformUsed != null)
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 6,
+            vertical: 2,
+          ),
+          decoration: BoxDecoration(
+            color: widget.isFailed
+                ? (Theme.of(context).brightness ==
+                        Brightness.dark
+                    ? Colors.red.shade900.withOpacity(0.3)
+                    : Colors.red.shade100)
+                : (widget.needsRetry
+                    ? (Theme.of(context).brightness ==
+                            Brightness.dark
+                        ? Colors.orange.shade900
+                            .withOpacity(0.3)
+                        : Colors.orange.shade100)
+                    : (Theme.of(context).brightness ==
+                            Brightness.dark
+                        ? Colors.green.shade900.withOpacity(0.3)
+                        : Colors.green.shade100)),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: widget.isFailed
+                  ? (Theme.of(context).brightness ==
+                          Brightness.dark
+                      ? Colors.red.shade700
+                      : Colors.red.shade300)
+                  : (widget.needsRetry
+                      ? (Theme.of(context).brightness ==
+                              Brightness.dark
+                          ? Colors.orange.shade700
+                          : Colors.orange.shade300)
+                      : (Theme.of(context).brightness ==
+                              Brightness.dark
+                          ? Colors.green.shade700
+                          : Colors.green.shade300)),
+            ),
+          ),
+          child: Text(
+            widget.platformUsed!,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: widget.isFailed
+                  ? (Theme.of(context).brightness ==
+                          Brightness.dark
+                      ? Colors.red.shade300
+                      : Colors.red.shade700)
+                  : (widget.needsRetry
+                      ? (Theme.of(context).brightness ==
+                              Brightness.dark
+                          ? Colors.orange.shade300
+                          : Colors.orange.shade700)
+                      : (Theme.of(context).brightness ==
+                              Brightness.dark
+                          ? Colors.green.shade300
+                          : Colors.green.shade700)),
+            ),
+          ),
+        ),
+      // Edit button (trigger inline editing)
+      if (!widget.isSource && widget.onEdit != null && !_isEditing)
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _startEditing,
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: Colors.blue.shade300,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      Icons.edit,
+                      size: 12,
+                      color: Colors.blue.shade700,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      widget.pdfRevisionMode
+                          ? l10n.segmentPdfRevisionEditLabel
+                          : l10n.segmentItemEdit,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      // Retry chips are mutually exclusive to avoid duplicate
+      // "重试" / "已标记重试" labels (esp. in PDF revision mode).
+      // - Run-retry (revision): failed or marked → single "重试"
+      // - Mark-retry: only when run-retry chip is not shown
+      // - Marked badge: only when run-retry chip is not shown
+      if (!_localNeedsRetry &&
+          !_localIsExcluded &&
+          widget.onMarkForRetry != null &&
+          !(widget.pdfRevisionMode &&
+              widget.onRetry != null &&
+              widget.isFailed))
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                // Update local state immediately for instant UI feedback
+                setState(() {
+                  _localNeedsRetry = true;
+                });
+                // Then call the callback (which will update backend)
+                widget.onMarkForRetry!(widget.index);
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: Colors.orange.shade300,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      Icons.flag,
+                      size: 12,
+                      color: Colors.orange.shade700,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      l10n.segmentItemRetry,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.orange.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      // Unmark retry badge — hidden when PDF revision run-retry chip
+      // already covers the same status.
+      if (_localNeedsRetry &&
+          !(widget.pdfRevisionMode && widget.onRetry != null))
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: widget.onUnmarkForRetry != null
+                  ? () {
+                      // Update local state immediately for instant UI feedback
+                      setState(() {
+                        _localNeedsRetry = false;
+                      });
+                      // Then call the callback (which will update backend)
+                      widget.onUnmarkForRetry!(widget.index);
+                    }
+                  : null,
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: Colors.grey.shade300,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      Icons.close,
+                      size: 12,
+                      color: Colors.grey.shade700,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      l10n.segmentItemMarkedRetry,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      // Run retry immediately (PDF revision mode only).
+      // For manually marked segments, include a close control to unmark
+      // without a second "已标记重试" chip.
+      if (widget.pdfRevisionMode &&
+          !widget.isSource &&
+          (widget.isFailed || _localNeedsRetry) &&
+          widget.onRetry != null)
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: Tooltip(
+            message: l10n.translationToolbarRetryTooltip,
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: Colors.orange.shade400,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    InkWell(
+                      onTap: () =>
+                          widget.onRetry!(widget.index),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Icon(
+                            Icons.refresh,
+                            size: 12,
+                            color: Colors.orange.shade800,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            l10n.segmentItemRetry,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.orange.shade800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_localNeedsRetry &&
+                        widget.onUnmarkForRetry != null) ...<
+                        Widget>[
+                      const SizedBox(width: 4),
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            _localNeedsRetry = false;
+                          });
+                          widget.onUnmarkForRetry!(
+                            widget.index,
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(4),
+                        child: Icon(
+                          Icons.close,
+                          size: 12,
+                          color: Colors.orange.shade800,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      // Excluded badge (clickable to edit, with quick unexclude x button)
+      if (_localIsExcluded)
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: _buildExclusionBadge(context),
+        ),
+      // Type switcher for formula/table/chart/image — shown even
+      // before the segment is excluded so users can pick Image directly.
+      if (!_localIsExcluded && _shouldShowExclusionTypeSwitcher)
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: _buildExclusionTypeSwitcher(context),
+        ),
+      // Exclude button (if not excluded and not source)
+      if (!_localIsExcluded &&
+          !widget.isSource &&
+          widget.onExclude != null)
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                // Update local state immediately for instant UI feedback
+                setState(() {
+                  _localIsExcluded = true;
+                  _localNeedsRetry =
+                      false; // Clear retry when excluding
+                });
+                // Then call the callback (which will update backend)
+                widget.onExclude!(widget.index);
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: Colors.orange.shade300,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      Icons.block_outlined,
+                      size: 12,
+                      color: Colors.orange.shade700,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      l10n.segmentItemExclude,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.orange.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      // Cleared badge (clickable to unclear)
+      if (_localIsCleared)
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: widget.onUnclear != null
+                  ? () {
+                      // Update local state immediately for instant UI feedback
+                      setState(() {
+                        _localIsCleared = false;
+                      });
+                      // Then call the callback (which will update backend)
+                      widget.onUnclear!(widget.index);
+                    }
+                  : null,
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.purple.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: Colors.purple.shade300,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      Icons.clear,
+                      size: 12,
+                      color: Colors.purple.shade700,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      l10n.segmentItemCleared,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.purple.shade700,
+                      ),
+                    ),
+                    if (widget.onUnclear != null) ...<Widget>[
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.close,
+                        size: 10,
+                        color: Theme.of(context).brightness ==
+                                Brightness.dark
+                            ? Colors.purple.shade400
+                            : Colors.purple.shade600,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      // Clear button (if not cleared and text is not empty and not source)
+      if (!_localIsCleared &&
+          !widget.isSource &&
+          widget.text.isNotEmpty &&
+          widget.onClear != null)
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                // Update local state immediately for instant UI feedback
+                setState(() {
+                  _localIsCleared = true;
+                });
+                // Then call the callback (which will update backend)
+                widget.onClear!(widget.index);
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.purple.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: Colors.purple.shade300,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      Icons.clear,
+                      size: 12,
+                      color: Colors.purple.shade700,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      widget.pdfRevisionMode
+                          ? l10n.segmentPdfRevisionClearLabel
+                          : l10n.segmentItemClear,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.purple.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      // Formula fix button (LLM repair for this segment)
+      if (!widget.pdfRevisionMode &&
+          !_localIsCleared &&
+          !widget.isSource &&
+          widget.text.isNotEmpty &&
+          widget.onFormulaFix != null)
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                // Delegate to parent via onEdit callback after LLM repair in parent.
+                if (widget.onFormulaFix != null) {
+                  widget.onFormulaFix!(widget.index);
+                }
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: Colors.blue.shade300,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      Icons.functions,
+                      size: 12,
+                      color: Colors.blue.shade700,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      l10n.segmentItemFix,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      // Failure reason tooltip (question mark icon) - placed after Clear / Fix buttons
+      if (widget.isFailed && widget.failureReason != null)
+        Padding(
+          padding: const EdgeInsets.only(left: 4),
+          child: Tooltip(
+            message: widget.failureReason,
+            child: Icon(
+              Icons.help_outline,
+              size: 14,
+              color: Colors.orange.shade700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildViewMode({bool includeHangTagBar = true}) {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -1586,10 +2444,19 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                         ? theme.colorScheme.onPrimaryContainer
                         : Colors.green.shade700))));
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final bool hideExtractedPtUnderNumber =
+        widget.pdfRevisionMode || widget.showPdfFontSize;
+    // When hang tags are rendered by build() outside the opaque GestureDetector
+    // (PDF revision), do not nest another tag bar here.
+    final bool hangTagBarFullWidth =
+        includeHangTagBar && widget.pdfRevisionMode;
+    // Hang tags under text column; keep a few px from the edge.
+    const double kTagBarLeftMargin = 4.0;
+
+    final Widget numberBadge = Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        // Segment number badge (same style as Extract page)
         Stack(
           clipBehavior: Clip.none,
           children: <Widget>[
@@ -1671,6 +2538,37 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
               ),
           ],
         ),
+        if (!hideExtractedPtUnderNumber &&
+            widget.extractedFontSizePt != null &&
+            widget.extractedFontSizePt! > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              '${widget.extractedFontSizePt!.toStringAsFixed(
+                widget.extractedFontSizePt! ==
+                        widget.extractedFontSizePt!.roundToDouble()
+                    ? 0
+                    : 1,
+              )}pt',
+              style: TextStyle(
+                fontSize: 9,
+                height: 1.1,
+                color: theme.colorScheme.onSurfaceVariant.withOpacity(0.75),
+                fontFeatures: const <FontFeature>[
+                  FontFeature.tabularFigures(),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+
+    final Widget mainRow = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        // Segment number badge (same style as Extract page) + optional
+        // extracted/parser font-size hint beside it.
+        numberBadge,
         const SizedBox(width: 4),
         // Text content (clickable via outer GestureDetector)
         // Use Listener to detect text selection vs segment selection
@@ -1733,9 +2631,14 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                   ),
                 ),
               ),
-              // Platform badge, retry button, exclude button, and clear button row
-              if (!widget.isSource &&
-                  (widget.platformUsed != null ||
+              // Platform badge, retry button, exclude button, and clear button row.
+              // Non-hang path only: hang mode renders the tag bar as a Column
+              // sibling under the main row (avoids Expanded Transform hit-test clip).
+              if (includeHangTagBar &&
+                  !hangTagBarFullWidth &&
+                  !widget.isSource &&
+                  (widget.pdfRevisionMode ||
+                      widget.platformUsed != null ||
                       widget.isFailed ||
                       widget.needsRetry ||
                       _localNeedsRetry ||
@@ -1756,582 +2659,39 @@ class _TranslationSegmentItemState extends State<TranslationSegmentItem> {
                       (widget.onEdit != null && !_isEditing)))
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: Wrap(
-                    spacing: 4,
-                    runSpacing: 4,
-                    children: <Widget>[
-                      if (widget.showPdfFontSize && widget.onFontSizeChanged != null)
-                        _buildPdfFontSizeChip(),
-                      if (widget.onRotationChanged != null && !widget.isSource)
-                        _buildRotationChip(context),
-                      if ((widget.onTableStrokeChanged != null ||
-                              widget.onTableBorderStyleChanged != null) &&
-                          !widget.isSource &&
-                          widget.showTableStroke)
-                        _buildTableStrokeChip(context),
-                      // Platform badge
-                      if (!widget.pdfRevisionMode && widget.platformUsed != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: widget.isFailed
-                                ? (Theme.of(context).brightness ==
-                                        Brightness.dark
-                                    ? Colors.red.shade900.withOpacity(0.3)
-                                    : Colors.red.shade100)
-                                : (widget.needsRetry
-                                    ? (Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.orange.shade900
-                                            .withOpacity(0.3)
-                                        : Colors.orange.shade100)
-                                    : (Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.green.shade900.withOpacity(0.3)
-                                        : Colors.green.shade100)),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: widget.isFailed
-                                  ? (Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.red.shade700
-                                      : Colors.red.shade300)
-                                  : (widget.needsRetry
-                                      ? (Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? Colors.orange.shade700
-                                          : Colors.orange.shade300)
-                                      : (Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? Colors.green.shade700
-                                          : Colors.green.shade300)),
-                            ),
-                          ),
-                          child: Text(
-                            widget.platformUsed!,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: widget.isFailed
-                                  ? (Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.red.shade300
-                                      : Colors.red.shade700)
-                                  : (widget.needsRetry
-                                      ? (Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? Colors.orange.shade300
-                                          : Colors.orange.shade700)
-                                      : (Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? Colors.green.shade300
-                                          : Colors.green.shade700)),
-                            ),
-                          ),
-                        ),
-                      // Edit button (trigger inline editing)
-                      if (!widget.isSource && widget.onEdit != null && !_isEditing)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: _startEditing,
-                              borderRadius: BorderRadius.circular(4),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: Colors.blue.shade300,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[
-                                    Icon(
-                                      Icons.edit,
-                                      size: 12,
-                                      color: Colors.blue.shade700,
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      widget.pdfRevisionMode
-                                          ? l10n.segmentPdfRevisionEditLabel
-                                          : l10n.segmentItemEdit,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.blue.shade700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      // Retry chips are mutually exclusive to avoid duplicate
-                      // "重试" / "已标记重试" labels (esp. in PDF revision mode).
-                      // - Run-retry (revision): failed or marked → single "重试"
-                      // - Mark-retry: only when run-retry chip is not shown
-                      // - Marked badge: only when run-retry chip is not shown
-                      if (!_localNeedsRetry &&
-                          !_localIsExcluded &&
-                          widget.onMarkForRetry != null &&
-                          !(widget.pdfRevisionMode &&
-                              widget.onRetry != null &&
-                              widget.isFailed))
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: () {
-                                // Update local state immediately for instant UI feedback
-                                setState(() {
-                                  _localNeedsRetry = true;
-                                });
-                                // Then call the callback (which will update backend)
-                                widget.onMarkForRetry!(widget.index);
-                              },
-                              borderRadius: BorderRadius.circular(4),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.shade50,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: Colors.orange.shade300,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[
-                                    Icon(
-                                      Icons.flag,
-                                      size: 12,
-                                      color: Colors.orange.shade700,
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      l10n.segmentItemRetry,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.orange.shade700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      // Unmark retry badge — hidden when PDF revision run-retry chip
-                      // already covers the same status.
-                      if (_localNeedsRetry &&
-                          !(widget.pdfRevisionMode && widget.onRetry != null))
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: widget.onUnmarkForRetry != null
-                                  ? () {
-                                      // Update local state immediately for instant UI feedback
-                                      setState(() {
-                                        _localNeedsRetry = false;
-                                      });
-                                      // Then call the callback (which will update backend)
-                                      widget.onUnmarkForRetry!(widget.index);
-                                    }
-                                  : null,
-                              borderRadius: BorderRadius.circular(4),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: Colors.grey.shade300,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[
-                                    Icon(
-                                      Icons.close,
-                                      size: 12,
-                                      color: Colors.grey.shade700,
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      l10n.segmentItemMarkedRetry,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.grey.shade700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      // Run retry immediately (PDF revision mode only).
-                      // For manually marked segments, include a close control to unmark
-                      // without a second "已标记重试" chip.
-                      if (widget.pdfRevisionMode &&
-                          !widget.isSource &&
-                          (widget.isFailed || _localNeedsRetry) &&
-                          widget.onRetry != null)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Tooltip(
-                            message: l10n.translationToolbarRetryTooltip,
-                            child: Material(
-                              color: Colors.transparent,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.shade50,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: Colors.orange.shade400,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[
-                                    InkWell(
-                                      onTap: () =>
-                                          widget.onRetry!(widget.index),
-                                      borderRadius: BorderRadius.circular(4),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: <Widget>[
-                                          Icon(
-                                            Icons.refresh,
-                                            size: 12,
-                                            color: Colors.orange.shade800,
-                                          ),
-                                          const SizedBox(width: 2),
-                                          Text(
-                                            l10n.segmentItemRetry,
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w500,
-                                              color: Colors.orange.shade800,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    if (_localNeedsRetry &&
-                                        widget.onUnmarkForRetry != null) ...<
-                                        Widget>[
-                                      const SizedBox(width: 4),
-                                      InkWell(
-                                        onTap: () {
-                                          setState(() {
-                                            _localNeedsRetry = false;
-                                          });
-                                          widget.onUnmarkForRetry!(
-                                            widget.index,
-                                          );
-                                        },
-                                        borderRadius: BorderRadius.circular(4),
-                                        child: Icon(
-                                          Icons.close,
-                                          size: 12,
-                                          color: Colors.orange.shade800,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      // Excluded badge (clickable to edit, with quick unexclude x button)
-                      if (_localIsExcluded)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: _buildExclusionBadge(context),
-                        ),
-                      // Type switcher for formula/table/chart/image — shown even
-                      // before the segment is excluded so users can pick Image directly.
-                      if (!_localIsExcluded && _shouldShowExclusionTypeSwitcher)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: _buildExclusionTypeSwitcher(context),
-                        ),
-                      // Exclude button (if not excluded and not source)
-                      if (!_localIsExcluded &&
-                          !widget.isSource &&
-                          widget.onExclude != null)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: () {
-                                // Update local state immediately for instant UI feedback
-                                setState(() {
-                                  _localIsExcluded = true;
-                                  _localNeedsRetry =
-                                      false; // Clear retry when excluding
-                                });
-                                // Then call the callback (which will update backend)
-                                widget.onExclude!(widget.index);
-                              },
-                              borderRadius: BorderRadius.circular(4),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.shade50,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: Colors.orange.shade300,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[
-                                    Icon(
-                                      Icons.block_outlined,
-                                      size: 12,
-                                      color: Colors.orange.shade700,
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      l10n.segmentItemExclude,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.orange.shade700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      // Cleared badge (clickable to unclear)
-                      if (_localIsCleared)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: widget.onUnclear != null
-                                  ? () {
-                                      // Update local state immediately for instant UI feedback
-                                      setState(() {
-                                        _localIsCleared = false;
-                                      });
-                                      // Then call the callback (which will update backend)
-                                      widget.onUnclear!(widget.index);
-                                    }
-                                  : null,
-                              borderRadius: BorderRadius.circular(4),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.purple.shade50,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: Colors.purple.shade300,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[
-                                    Icon(
-                                      Icons.clear,
-                                      size: 12,
-                                      color: Colors.purple.shade700,
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      l10n.segmentItemCleared,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.purple.shade700,
-                                      ),
-                                    ),
-                                    if (widget.onUnclear != null) ...<Widget>[
-                                      const SizedBox(width: 4),
-                                      Icon(
-                                        Icons.close,
-                                        size: 10,
-                                        color: Theme.of(context).brightness ==
-                                                Brightness.dark
-                                            ? Colors.purple.shade400
-                                            : Colors.purple.shade600,
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      // Clear button (if not cleared and text is not empty and not source)
-                      if (!_localIsCleared &&
-                          !widget.isSource &&
-                          widget.text.isNotEmpty &&
-                          widget.onClear != null)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: () {
-                                // Update local state immediately for instant UI feedback
-                                setState(() {
-                                  _localIsCleared = true;
-                                });
-                                // Then call the callback (which will update backend)
-                                widget.onClear!(widget.index);
-                              },
-                              borderRadius: BorderRadius.circular(4),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.purple.shade50,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: Colors.purple.shade300,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[
-                                    Icon(
-                                      Icons.clear,
-                                      size: 12,
-                                      color: Colors.purple.shade700,
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      widget.pdfRevisionMode
-                                          ? l10n.segmentPdfRevisionClearLabel
-                                          : l10n.segmentItemClear,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.purple.shade700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      // Formula fix button (LLM repair for this segment)
-                      if (!widget.pdfRevisionMode &&
-                          !_localIsCleared &&
-                          !widget.isSource &&
-                          widget.text.isNotEmpty &&
-                          widget.onFormulaFix != null)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: () {
-                                // Delegate to parent via onEdit callback after LLM repair in parent.
-                                if (widget.onFormulaFix != null) {
-                                  widget.onFormulaFix!(widget.index);
-                                }
-                              },
-                              borderRadius: BorderRadius.circular(4),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: Colors.blue.shade300,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[
-                                    Icon(
-                                      Icons.functions,
-                                      size: 12,
-                                      color: Colors.blue.shade700,
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      l10n.segmentItemFix,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.blue.shade700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      // Failure reason tooltip (question mark icon) - placed after Clear / Fix buttons
-                      if (widget.isFailed && widget.failureReason != null)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Tooltip(
-                            message: widget.failureReason,
-                            child: Icon(
-                              Icons.help_outline,
-                              size: 14,
-                              color: Colors.orange.shade700,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                  child: _buildSegmentActionTagBar(),
                 ),
             ],
           ),
         ),
+      ],
+    );
+
+    if (!hangTagBarFullWidth) {
+      return mainRow;
+    }
+    // Hang tag bar under text; checkbox left of text+tags as one unit.
+    final Widget textAndTags = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        mainRow,
+        Padding(
+          padding: const EdgeInsets.only(left: kTagBarLeftMargin, top: 4),
+          child: _buildSegmentActionTagBar(),
+        ),
+      ],
+    );
+    if (!widget.showSelectionCheckbox) {
+      return textAndTags;
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: _buildSelectionCheckbox(),
+        ),
+        Expanded(child: textAndTags),
       ],
     );
   }

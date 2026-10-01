@@ -480,20 +480,77 @@ def _block_markdown_fit_call(
     )
 
 
+def _typst_horizontal_align(block: RenderBlock) -> str:
+    """Typst alignment token for single-line text (left/right, never center)."""
+    raw = (getattr(block, "horizontal_align", None) or "left").strip().lower()
+    return "right" if raw == "right" else "left"
+
+
+def _effective_single_line_layout_width(block: RenderBlock, layout_width: float) -> float:
+    """Prefer fit_target_width_pt when single-line text extends past the bbox."""
+    target = float(getattr(block, "fit_target_width_pt", 0.0) or 0.0)
+    if target > layout_width + 0.5:
+        return target
+    return layout_width
+
+
+def _typst_nowrap_box(inner: str) -> str:
+    """Wrap *inner* so Typst cannot soft-wrap it onto a second line."""
+    return f"box(inset: 0pt, clip: false)[#{{ {inner} }}]"
+
+
+def _block_wants_single_line_nowrap(block: RenderBlock) -> bool:
+    """True when this block must stay on one visual line (extend, never wrap)."""
+    if getattr(block, "fit_single_line", False):
+        return True
+    if float(getattr(block, "fit_target_width_pt", 0.0) or 0.0) > 0:
+        return True
+    return False
+
+
+def _typst_emit_single_line_natural_box(
+    var_name: str,
+    body_expr: str,
+    *,
+    min_width_pt: float,
+    min_height_pt: float,
+    block_fill: str = "",
+) -> str:
+    """
+    Emit a box sized to the natural single-line text width.
+
+    Python width estimates (especially mixed CJK/Latin) often undershoot Typst's
+    real glyph width; a fixed ``block(width: estimate)`` then soft-wraps onto a
+    second line. Measuring in Typst and expanding the box prevents that.
+    """
+    return (
+        f"#let {var_name} = context {{\n"
+        f"  let __sl_body = box(inset: 0pt, clip: false)[#{{ {body_expr} }}]\n"
+        f"  let __sl_m = measure(__sl_body)\n"
+        f"  let __sl_w = calc.max({round(float(min_width_pt), 1)}pt, __sl_m.width)\n"
+        f"  let __sl_h = calc.max({round(float(min_height_pt), 1)}pt, __sl_m.height)\n"
+        f"  box(width: __sl_w, height: __sl_h, inset: 0pt, clip: false"
+        f"{block_fill})[#__sl_body]\n"
+        f"}}\n"
+    )
+
+
 def _typst_single_line_fit_call(md_name: str, max_font_pt: float,
                                 min_font_pt: float, width_pt: float,
                                 height_pt: float, font_weight: str,
                                 font_style: str, justify_text: str,
                                 *,
-                                use_mitex: bool = True) -> str:
+                                use_mitex: bool = True,
+                                horizontal_align: str = "left") -> str:
     """Generate a pdftr_fit_single_line_markdown(...) call expression."""
     style_arg = f', style: "{font_style or "normal"}"'
     mitex_arg = ", use_mitex: true" if use_mitex else ", use_mitex: false"
+    align = "right" if horizontal_align == "right" else "left"
     return (
         f"pdftr_fit_single_line_markdown({md_name}, max_size: {max_font_pt}pt, "
         f"min_size: {min_font_pt}pt, fit_width: {width_pt}pt, "
         f"fit_height: {height_pt}pt, weight: \"{font_weight}\"{style_arg}, "
-        f"justify: {justify_text}{mitex_arg})"
+        f"justify: {justify_text}, h_align: {align}{mitex_arg})"
     )
 
 
@@ -968,8 +1025,74 @@ def _render_plain_block(block_id: str, block: RenderBlock,
         sanitized = sanitize_typst_markdown_for_compile(text)
         justify = _typst_bool(block.justify_text)
         first_indent = _typst_first_line_indent_length(block)
+        content_w = layout_width
+        nowrap = _block_wants_single_line_nowrap(block)
 
-        if block.fit_to_box and not block.font_size_locked:
+        if nowrap:
+            content_w = _effective_single_line_layout_width(block, layout_width)
+            if block.fit_to_box and not block.font_size_locked:
+                max_font_pt = max(
+                    block.font_size_pt,
+                    block.fit_max_font_size_pt or block.font_size_pt,
+                )
+                min_font_pt = max(
+                    1.0,
+                    min(
+                        block.fit_min_font_size_pt or block.font_size_pt,
+                        block.font_size_pt,
+                    ),
+                )
+                fit_h = max(
+                    MIN_BLOCK_SIZE_PT,
+                    min(content_fit_height, block.fit_max_height_pt or content_fit_height),
+                )
+                fit_call = _typst_single_line_fit_call(
+                    text_var, max_font_pt, min_font_pt, content_w, fit_h,
+                    block.font_weight, font_style, justify,
+                    use_mitex=markdown_line_safe_for_mitex(sanitized),
+                    horizontal_align=_typst_horizontal_align(block),
+                )
+                body_expr = f"set text(fill: {text_fill}); {fit_call}"
+                parts = [
+                    f"#let {text_var} = \"{_escape_sanitized_text_for_typst(sanitized)}\"",
+                    _typst_markdown_block(
+                        body_var, content_w, layout_height, block_fill, body_expr,
+                        content_top_inset_pt=content_top,
+                        content_bottom_inset_pt=content_bottom),
+                    _typst_place_flow_block(
+                        x0, y0, width, height, body_var, var_prefix, rotation,
+                        fill_arg=block_fill if rotation in {90, 180, 270} else "",
+                    ).rstrip(),
+                ]
+                return "\n".join(parts) + "\n"
+            render_expr = _typst_cmarker_render_expr_for_markdown(
+                text_var, sanitized,
+            )
+            indent_prefix = _typst_first_line_indent_h_stmt(first_indent)
+            h_align = _typst_horizontal_align(block)
+            body_inner = (
+                f"{{ {_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; "
+                f"{indent_prefix}{render_expr} }}"
+            )
+            body_inner = _typst_nowrap_box(body_inner)
+            body_expr = f"align({h_align} + horizon)[#{{ {body_inner} }}]"
+            body_expr = _typst_pad_vertical_expr(body_expr, content_top, content_bottom)
+            parts = [
+                f"#let {text_var} = \"{_escape_sanitized_text_for_typst(sanitized)}\"",
+                _typst_emit_single_line_natural_box(
+                    body_var,
+                    body_expr,
+                    min_width_pt=content_w,
+                    min_height_pt=layout_height,
+                    block_fill=block_fill,
+                ).rstrip(),
+                _typst_place_flow_block(
+                    x0, y0, width, height, body_var, var_prefix, rotation,
+                    fill_arg=block_fill if rotation in {90, 180, 270} else "",
+                ).rstrip(),
+            ]
+            return "\n".join(parts) + "\n"
+        elif block.fit_to_box and not block.font_size_locked:
             fit_call = _block_markdown_fit_call(
                 block,
                 text_var,
@@ -990,7 +1113,7 @@ def _render_plain_block(block_id: str, block: RenderBlock,
         parts = [
             f"#let {text_var} = \"{_escape_sanitized_text_for_typst(sanitized)}\"",
             _typst_markdown_block(
-                body_var, layout_width, layout_height, block_fill, body_expr,
+                body_var, content_w, layout_height, block_fill, body_expr,
                 content_top_inset_pt=content_top,
                 content_bottom_inset_pt=content_bottom),
             _typst_place_flow_block(
@@ -1009,15 +1132,112 @@ def _render_plain_block(block_id: str, block: RenderBlock,
         indent_prefix = _typst_first_line_indent_h_stmt(
             _typst_first_line_indent_length(block),
         )
+        h_align = _typst_horizontal_align(block)
+        nowrap = _block_wants_single_line_nowrap(block)
+        content_w = (
+            _effective_single_line_layout_width(block, layout_width)
+            if nowrap
+            else layout_width
+        )
         body_inner = (
             f"{{ {_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; "
             f"{indent_prefix}{render_expr} }}"
         )
+        if nowrap:
+            body_inner = _typst_nowrap_box(body_inner)
+        body_inner = f"align({h_align} + horizon)[#{{ {body_inner} }}]"
         body_expr = _typst_pad_vertical_expr(body_inner, content_top, content_bottom)
         lines = [
             f"#let {text_var} = \"{_escape_sanitized_text_for_typst(sanitized_locked)}\"",
-            f"#let {box_var} = block(width: {layout_width}pt, height: {layout_height}pt{block_fill})"
-            f"[#{{ {body_expr} }}]",
+        ]
+        if nowrap:
+            lines.append(
+                _typst_emit_single_line_natural_box(
+                    box_var,
+                    body_expr,
+                    min_width_pt=content_w,
+                    min_height_pt=layout_height,
+                    block_fill=block_fill,
+                ).rstrip()
+            )
+        else:
+            lines.append(
+                f"#let {box_var} = block(width: {content_w}pt, height: {layout_height}pt{block_fill})"
+                f"[#{{ {body_expr} }}]"
+            )
+        lines.append(
+            _typst_place_flow_block(
+                x0, y0, width, height, box_var, var_prefix, rotation,
+                fill_arg=block_fill if rotation in {90, 180, 270} else "",
+            ).rstrip(),
+        )
+        return "\n".join(lines) + "\n"
+
+    # Single-line overflow: extend horizontally (never soft-wrap onto line 2).
+    if _block_wants_single_line_nowrap(block):
+        text_var = f"{var_prefix}_txt"
+        box_var = f"{var_prefix}_box"
+        body_var = f"{var_prefix}_body"
+        sanitized_sl = sanitize_typst_markdown_for_compile(text)
+        content_w = _effective_single_line_layout_width(block, layout_width)
+        h_align = _typst_horizontal_align(block)
+        if block.fit_to_box and not block.font_size_locked:
+            max_font_pt = max(
+                block.font_size_pt,
+                block.fit_max_font_size_pt or block.font_size_pt,
+            )
+            min_font_pt = max(
+                1.0,
+                min(
+                    block.fit_min_font_size_pt or block.font_size_pt,
+                    block.font_size_pt,
+                ),
+            )
+            fit_h = max(
+                MIN_BLOCK_SIZE_PT,
+                min(content_fit_height, block.fit_max_height_pt or content_fit_height),
+            )
+            fit_call = _typst_single_line_fit_call(
+                text_var, max_font_pt, min_font_pt, content_w, fit_h,
+                block.font_weight, font_style, _typst_bool(block.justify_text),
+                use_mitex=markdown_line_safe_for_mitex(sanitized_sl),
+                horizontal_align=h_align,
+            )
+            parts = [
+                f"#let {text_var} = \"{_escape_sanitized_text_for_typst(sanitized_sl)}\"",
+                _typst_markdown_block(
+                    body_var, content_w, layout_height, block_fill,
+                    f"set text(fill: {text_fill}); {fit_call}",
+                    content_top_inset_pt=content_top,
+                    content_bottom_inset_pt=content_bottom,
+                ),
+                _typst_place_flow_block(
+                    x0, y0, width, height, body_var, var_prefix, rotation,
+                    fill_arg=block_fill if rotation in {90, 180, 270} else "",
+                ).rstrip(),
+            ]
+            return "\n".join(parts) + "\n"
+
+        render_expr = _typst_cmarker_render_expr_for_markdown(text_var, sanitized_sl)
+        indent_prefix = _typst_first_line_indent_h_stmt(
+            _typst_first_line_indent_length(block),
+        )
+        body_inner = (
+            f"{{ {_typst_set_text_attrs(block.font_size_pt, block.font_weight, font_style, text_fill)}; "
+            f"{indent_prefix}{render_expr} }}"
+        )
+        body_inner = _typst_nowrap_box(body_inner)
+        body_inner = f"align({h_align} + horizon)[#{{ {body_inner} }}]"
+        body_expr = _typst_pad_vertical_expr(body_inner, content_top, content_bottom)
+        lines = [
+            f"#let {text_var} = \"{_escape_sanitized_text_for_typst(sanitized_sl)}\"",
+            _typst_emit_single_line_natural_box(
+                box_var,
+                body_expr,
+                min_width_pt=content_w,
+                min_height_pt=layout_height,
+                block_fill=block_fill,
+            ).rstrip(),
             _typst_place_flow_block(
                 x0, y0, width, height, box_var, var_prefix, rotation,
                 fill_arg=block_fill if rotation in {90, 180, 270} else "",
@@ -1036,11 +1256,13 @@ def _render_plain_block(block_id: str, block: RenderBlock,
     indent_prefix = _typst_first_line_indent_h_stmt(
         _typst_first_line_indent_length(block),
     )
+    h_align = _typst_horizontal_align(block)
     short_body_inner = (
         "set text(size: scaled-font, weight: "
         f"\"{block.font_weight}\"{_typst_font_style_clause(font_style)}, fill: {text_fill}); "
         f"{indent_prefix}{render_expr}"
     )
+    short_body_inner = f"align({h_align} + horizon)[#{{ {short_body_inner} }}]"
     short_body_expr = _typst_pad_vertical_expr(
         short_body_inner, content_top, content_bottom,
     )
@@ -1136,7 +1358,7 @@ def _render_preserved_line_boxes(block_id: str, block: RenderBlock,
             _typst_markdown_block(
                 body_name, lw, lh, block_fill,
                 f"set text(fill: {text_fill}); "
-                f"{_typst_single_line_fit_call(line_name, max_font_pt, min_font_pt, lw, lh, font_weight, font_style, 'false', use_mitex=markdown_line_safe_for_mitex(line_md))}").rstrip(),
+                f"{_typst_single_line_fit_call(line_name, max_font_pt, min_font_pt, lw, lh, font_weight, font_style, 'false', use_mitex=markdown_line_safe_for_mitex(line_md), horizontal_align=_typst_horizontal_align(block))}").rstrip(),
         ])
         if rotation in {90, 180, 270}:
             line_placements.append(
@@ -1237,6 +1459,7 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
                 md_var, max_font_pt, min_font_pt, fit_w, fit_h,
                 block.font_weight, font_style, justify,
                 use_mitex=markdown_line_safe_for_mitex(text),
+                horizontal_align=_typst_horizontal_align(block),
             )
             parts = [
                 f"#let {md_var} = \"{_escape_sanitized_text_for_typst(text)}\"",
@@ -1282,10 +1505,36 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
             block.font_weight, font_style, text_fill, first_indent, justify,
             markdown=text,
         )
+        content_w = layout_width
+        nowrap = _block_wants_single_line_nowrap(block)
+        # Single-line: LTR left / RTL right, extend width, never soft-wrap.
+        if nowrap or layout_height <= 28.0:
+            h_align = _typst_horizontal_align(block)
+            if nowrap:
+                content_w = _effective_single_line_layout_width(block, layout_width)
+                body_expr = _typst_nowrap_box(body_expr)
+            body_expr = f"align({h_align} + horizon)[#{{ {body_expr} }}]"
+        if nowrap:
+            body_expr = _typst_pad_vertical_expr(body_expr, content_top, content_bottom)
+            parts = [
+                f"#let {md_var} = \"{_escape_sanitized_text_for_typst(text)}\"",
+                _typst_emit_single_line_natural_box(
+                    body_var,
+                    body_expr,
+                    min_width_pt=content_w,
+                    min_height_pt=layout_height,
+                    block_fill=block_fill,
+                ).rstrip(),
+                _typst_place_flow_block(
+                    x0, y0, width, height, body_var, var_prefix, rotation,
+                    fill_arg=rotate_fill,
+                ).rstrip(),
+            ]
+            return "\n".join(parts) + "\n"
         parts = [
             f"#let {md_var} = \"{_escape_sanitized_text_for_typst(text)}\"",
             _typst_markdown_block(
-                body_var, layout_width, layout_height, block_fill, body_expr,
+                body_var, content_w, layout_height, block_fill, body_expr,
                 content_top_inset_pt=content_top,
                 content_bottom_inset_pt=content_bottom),
             _typst_place_flow_block(
@@ -2146,11 +2395,12 @@ FIT_FLOOR_LEADING_FN = '''
 '''
 
 FIT_SINGLE_LINE_FN = '''
-#let pdftr_fit_single_line_markdown(markdown, max_size: 10pt, min_size: 9pt, fit_width: none, fit_height: none, weight: "regular", style: "normal", justify: false, eps: 0.08pt, use_mitex: true) = {
+#let pdftr_fit_single_line_markdown(markdown, max_size: 10pt, min_size: 9pt, fit_width: none, fit_height: none, weight: "regular", style: "normal", justify: false, h_align: left, eps: 0.08pt, use_mitex: true) = {
   layout(size => {
     let render-md() = if use_mitex { cmarker.render(markdown, math: mitex) } else { cmarker.render(markdown) }
     let allowed-width = if fit_width == none { size.width } else { calc.min(size.width, fit_width) }
     let allowed-height = if fit_height == none { size.height } else { calc.min(size.height, fit_height) }
+    // Unconstrained box so measure() sees natural single-line width (no soft wrap).
     let render(text_size) = box(inset: 0pt, clip: false)[#{
       set text(size: text_size, weight: weight, style: style)
       set par(leading: 1em, justify: justify)
@@ -2165,11 +2415,19 @@ FIT_SINGLE_LINE_FN = '''
     } else {
       pdftr_fit_size(min_size, max_size, eps, size_pt => fits(size_pt))
     }
-    box(width: allowed-width, height: allowed-height, inset: 0pt, clip: false)[#{
+    // Size the final box to the natural glyph width so locked/underestimated
+    // widths never soft-wrap onto a second line (horizontal extend instead).
+    let content = box(inset: 0pt, clip: false)[#{
       set text(size: chosen-size, weight: weight, style: style)
       set par(leading: 1em, justify: justify)
       render-md()
     }]
+    let natural = measure(content)
+    let out-w = calc.max(allowed-width, natural.width)
+    let out-h = calc.max(allowed-height, natural.height)
+    box(width: out-w, height: out-h, inset: 0pt, clip: false)[
+      #align(h_align + horizon)[#content]
+    ]
   })
 }
 '''

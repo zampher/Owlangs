@@ -25,6 +25,10 @@ FONT_SIZE_PT_STEP = 0.1
 LEADING_EM_MIN = 0.35
 LEADING_EM_MAX = 3.0
 
+FIRST_LINE_INDENT_EM_MIN = 0.0
+FIRST_LINE_INDENT_EM_MAX = 4.0
+FIRST_LINE_INDENT_EM_STEP = 0.5
+
 DEFAULT_TABLE_STROKE_PT = 0.5
 # Task-level default for Preview-revision / Typst overlay (segment overrides win).
 TASK_STATE_PDF_TABLE_STROKE_PT_KEY = "pdf_table_stroke_pt"
@@ -333,6 +337,66 @@ def segment_leading_em_source(segment: Dict[str, Any]) -> str:
     return "auto"
 
 
+def clamp_first_line_indent_em(value: float) -> float:
+    """Clamp first-line indent (em) to supported UI/export range."""
+    clamped = max(
+        FIRST_LINE_INDENT_EM_MIN,
+        min(FIRST_LINE_INDENT_EM_MAX, float(value)),
+    )
+    steps = round(clamped / FIRST_LINE_INDENT_EM_STEP)
+    return round(steps * FIRST_LINE_INDENT_EM_STEP, 1)
+
+
+def normalize_user_first_line_indent_em(value: Any) -> Optional[float]:
+    """Parse and validate a user first-line indent (em); return None when invalid."""
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < FIRST_LINE_INDENT_EM_MIN or parsed > FIRST_LINE_INDENT_EM_MAX:
+        return None
+    return clamp_first_line_indent_em(parsed)
+
+
+def segment_has_user_first_line_indent_override(segment: Dict[str, Any]) -> bool:
+    """True when segment stores an explicit user first-line indent override."""
+    source = segment.get("first_line_indent_em_source")
+    if source is not None and str(source).strip().lower() == "auto":
+        return False
+    if source is not None and str(source).strip().lower() == "user":
+        return normalize_user_first_line_indent_em(
+            segment.get("first_line_indent_em"),
+        ) is not None
+    # Legacy: only treat as user override when source is explicitly user.
+    return False
+
+
+def segment_first_line_indent_em_source(segment: Dict[str, Any]) -> str:
+    if segment_has_user_first_line_indent_override(segment):
+        return "user"
+    return "auto"
+
+
+def effective_segment_first_line_indent_em(segment: Dict[str, Any]) -> float:
+    """Effective indent for UI labels: user override, else computed auto."""
+    if segment_has_user_first_line_indent_override(segment):
+        normalized = normalize_user_first_line_indent_em(
+            segment.get("first_line_indent_em"),
+        )
+        if normalized is not None:
+            return normalized
+    for key in ("computed_first_line_indent_em", "first_line_indent_em"):
+        try:
+            if segment.get(key) is None:
+                continue
+            return clamp_first_line_indent_em(float(segment.get(key)))
+        except (TypeError, ValueError):
+            continue
+    return 0.0
+
+
 def compute_block_font_weight_from_layout(block: LayoutBlock) -> str:
     """Infer font weight from MinerU layout metadata."""
     raw = getattr(block, "raw", None) or {}
@@ -528,6 +592,171 @@ def build_layout_block_maps(
     return block_map, type_map
 
 
+def attach_segment_first_line_indent_em(
+    segment: Dict[str, Any],
+    block: LayoutBlock,
+    *,
+    block_type: str,
+    block_idx: int,
+    task_state: Optional[Dict[str, Any]] = None,
+    layout_doc: Any = None,
+) -> None:
+    """
+    Attach first-line indent fields matching Typst CJK body rules.
+
+    - ``computed_first_line_indent_em``: auto value used for export/UI when
+      the user has not overridden indent.
+    - ``first_line_indent_em``: persisted user override (kept when source=user).
+    - ``first_line_indent_em_source``: ``user`` or ``auto``.
+
+    Prefer the segment's effective layout bbox (override / layout_block_bbox)
+    over ``block.bbox`` so single-line detection matches Typst overlay after
+    bbox enrichment / user overrides.
+    """
+    from types import SimpleNamespace
+
+    from layout.pdf_renderer.typst_overlay.cjk_paragraph_indent import (
+        apply_cjk_body_indent_to_block,
+        is_single_line_for_cjk_indent,
+        resolve_target_language,
+    )
+
+    def _as_float(value: Any, default: float = 0.0) -> float:
+        try:
+            if value is None:
+                return default
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    # Single-line CJK indent uses font_size × leading vs bbox height.
+    #
+    # Dry-run ``computed_font_size_pt`` often fills the bbox height (≈
+    # height/leading). Feeding that size into ``is_single_line_for_cjk_indent``
+    # makes nearly every body look "single-line" → computed indent 0 while
+    # Typst export (post multi-line fit, often ~8–10pt) still indents.
+    # Exclude fill-fit-sized candidates, then take the min of remaining sizes.
+    # If the gate still looks single-line, try typical body sizes down to 8pt
+    # (export post-fit range) — never force indent onto glyph-tight lines that
+    # stay single-line even at 8pt.
+    leading = DEFAULT_LEADING_EM
+    for key in ("computed_leading_em", "leading_em"):
+        if segment.get(key) is not None:
+            leading = _as_float(segment.get(key), DEFAULT_LEADING_EM) or DEFAULT_LEADING_EM
+            break
+
+    preferred = _read_segment_layout_bbox(
+        segment,
+        task_state,
+        layout_doc,
+        block_key=int(block_idx),
+    )
+    if preferred is not None:
+        inner_bbox = preferred
+    else:
+        bbox = getattr(block, "bbox", None) or (0.0, 0.0, 0.0, 0.0)
+        try:
+            inner_bbox = (
+                float(bbox[0]),
+                float(bbox[1]),
+                float(bbox[2]),
+                float(bbox[3]),
+            )
+        except (TypeError, ValueError, IndexError):
+            inner_bbox = (0.0, 0.0, 0.0, 0.0)
+
+    try:
+        bbox_h = max(0.0, float(inner_bbox[3]) - float(inner_bbox[1]))
+    except (TypeError, ValueError, IndexError):
+        bbox_h = 0.0
+
+    def _is_fill_fit_size(size: float) -> bool:
+        """Dry-run fill-fit ≈ bbox_h / leading; don't use it for indent gate."""
+        if size <= 0.0 or bbox_h <= 0.0:
+            return False
+        expected = bbox_h / max(leading, 0.5)
+        if expected <= 0.0:
+            return False
+        # Within 25% of height/leading, or at least 85% of that fill size.
+        return size >= expected * 0.85
+
+    font_candidates: list[float] = []
+    for key in (
+        "computed_font_size_pt",
+        "font_size_pt",
+        "extracted_font_size_pt",
+    ):
+        if segment.get(key) is None:
+            continue
+        size = _as_float(segment.get(key), 0.0)
+        if size > 0.0 and not _is_fill_fit_size(size):
+            font_candidates.append(size)
+    # Fall back to any positive size if every candidate looked fill-fit.
+    if not font_candidates:
+        for key in (
+            "extracted_font_size_pt",
+            "font_size_pt",
+            "computed_font_size_pt",
+        ):
+            if segment.get(key) is None:
+                continue
+            size = _as_float(segment.get(key), 0.0)
+            if size > 0.0:
+                font_candidates.append(size)
+                break
+    font_size = min(font_candidates) if font_candidates else 0.0
+
+    # Progressive typical-body fallbacks: 12pt alone still treats medium
+    # recipe-style boxes (h≈18–22pt) as single-line; export often fits to ~8pt.
+    _body_fallbacks_pt = (12.0, 10.0, 8.0)
+    if bbox_h > 0.0 and (
+        font_size <= 0.0
+        or is_single_line_for_cjk_indent(
+            bbox_h, font_size, leading_em=leading,
+        )
+    ):
+        for candidate_pt in _body_fallbacks_pt:
+            if not is_single_line_for_cjk_indent(
+                bbox_h, candidate_pt, leading_em=leading,
+            ):
+                font_size = candidate_pt
+                break
+
+    # Do NOT pass per-segment to_lang as config_lang: language detection may
+    # leave stale ``en`` on segments while payload/export target is ``zh``.
+    # Match Typst export: resolve from payload / task_state only.
+    target_lang = resolve_target_language(None, task_state)
+    # Ignore segment ``fit_single_line`` — dry-run does not persist that flag
+    # onto segments, and a stale True would zero every indent chip. Gate only
+    # by bbox × font like export after font fit.
+    rb = SimpleNamespace(
+        block_id=f"block-{int(block_idx)}",
+        render_kind="text",
+        font_size_pt=font_size,
+        leading_em=leading,
+        inner_bbox=inner_bbox,
+        fit_single_line=False,
+        first_line_indent_em=0.0,
+        first_line_indent_pt=0.0,
+    )
+    computed = float(
+        apply_cjk_body_indent_to_block(
+            rb,
+            target_language=target_lang,
+            layout_block_type=block_type,
+        )
+        or 0.0
+    )
+    segment["computed_first_line_indent_em"] = computed
+    segment["first_line_indent_em_source"] = segment_first_line_indent_em_source(
+        segment,
+    )
+    # Ensure the persisted property exists for UI binding. Auto mode mirrors
+    # the computed value; user overrides keep their stored first_line_indent_em.
+    if not segment_has_user_first_line_indent_override(segment):
+        segment["first_line_indent_em"] = computed
+
+
 def enrich_segment_font_fields(
     segment: Dict[str, Any],
     layout_doc: Optional[LayoutDocument],
@@ -543,6 +772,9 @@ def enrich_segment_font_fields(
     segment["font_weight_source"] = segment_font_weight_source(segment)
     segment["font_style_source"] = segment_font_style_source(segment)
     segment["leading_em_source"] = segment_leading_em_source(segment)
+    segment["first_line_indent_em_source"] = segment_first_line_indent_em_source(
+        segment,
+    )
 
     if layout_doc is None:
         segment.pop("computed_font_size_pt", None)
@@ -550,6 +782,10 @@ def enrich_segment_font_fields(
         segment.pop("computed_font_style", None)
         segment.pop("computed_leading_em", None)
         segment.pop("pdf_page_number", None)
+        segment["computed_first_line_indent_em"] = 0.0
+        if not segment_has_user_first_line_indent_override(segment):
+            segment["first_line_indent_em"] = 0.0
+            segment["first_line_indent_em_source"] = "auto"
         return
 
     if block_map is None or type_map is None:
@@ -576,6 +812,10 @@ def enrich_segment_font_fields(
         segment.pop("computed_font_style", None)
         segment.pop("computed_leading_em", None)
         segment.pop("pdf_page_number", None)
+        segment["computed_first_line_indent_em"] = 0.0
+        if not segment_has_user_first_line_indent_override(segment):
+            segment["first_line_indent_em"] = 0.0
+            segment["first_line_indent_em_source"] = "auto"
         return
 
     block = block_map[block_idx]
@@ -587,6 +827,33 @@ def enrich_segment_font_fields(
             segment.pop("pdf_page_number", None)
     else:
         segment.pop("pdf_page_number", None)
+
+    # Surface extracted digital-PDF / MinerU span font size when available.
+    try:
+        raw = getattr(block, "raw", None) or {}
+        extracted = None
+        if isinstance(raw, dict):
+            value = raw.get("extracted_font_size")
+            if isinstance(value, (int, float)) and float(value) > 0:
+                extracted = float(value)
+            else:
+                from layout.mineru_layout_model import _get_max_span_font_size
+
+                span_size = _get_max_span_font_size(raw)
+                if span_size and float(span_size) > 0:
+                    extracted = float(span_size)
+        if extracted is not None:
+            segment["extracted_font_size_pt"] = round(extracted, 1)
+            if isinstance(raw, dict) and raw.get("extracted_font_size_source"):
+                segment["extracted_font_size_source"] = raw.get(
+                    "extracted_font_size_source",
+                )
+        else:
+            segment.pop("extracted_font_size_pt", None)
+            segment.pop("extracted_font_size_source", None)
+    except Exception:
+        segment.pop("extracted_font_size_pt", None)
+        segment.pop("extracted_font_size_source", None)
 
     content = text
     if content is None:
@@ -640,6 +907,14 @@ def enrich_segment_font_fields(
             segment.pop("computed_leading_em", None)
         segment.pop("computed_font_weight", None)
         segment.pop("computed_font_style", None)
+        attach_segment_first_line_indent_em(
+            segment,
+            block,
+            block_type=block_type,
+            block_idx=block_idx,
+            task_state=task_state,
+            layout_doc=layout_doc,
+        )
         return
 
     segment["computed_font_weight"] = compute_block_font_weight_from_layout(block)
@@ -707,6 +982,15 @@ def enrich_segment_font_fields(
         overlay_image_size,
         task_state=task_state,
         font_weight=block_font_weight,
+    )
+
+    attach_segment_first_line_indent_em(
+        segment,
+        block,
+        block_type=block_type,
+        block_idx=block_idx,
+        task_state=task_state,
+        layout_doc=layout_doc,
     )
 
 
@@ -800,6 +1084,29 @@ def enrich_segments_font_fields(
     """Enrich all segments with computed font metadata."""
     if not segments:
         return
+
+    # Prefer digital-PDF extracted sizes when the setting is enabled.
+    try:
+        from layout.pdf_font_extractor import (
+            ensure_layout_extracted_font_sizes,
+            resolve_prefer_extracted_pdf_font_size,
+        )
+
+        prefer = resolve_prefer_extracted_pdf_font_size(task_state)
+        pdf_path = None
+        if isinstance(task_state, dict):
+            pdf_path = (
+                task_state.get("original_file_path")
+                or task_state.get("source_pdf_path")
+            )
+        ensure_layout_extracted_font_sizes(
+            layout_doc,
+            str(pdf_path) if pdf_path else None,
+            enabled=prefer,
+        )
+    except Exception:
+        pass
+
     calc = FontFitCalculator(min_size_pt=FONT_SIZE_PT_MIN)
     block_map: Optional[Dict[int, LayoutBlock]] = None
     type_map: Optional[Dict[int, str]] = None
@@ -893,6 +1200,27 @@ def build_block_font_map_from_segments(
             continue
         for idx in resolve_segment_layout_block_indices(seg, task_state):
             block_map[idx] = font_pt
+    return block_map
+
+
+def build_block_first_line_indent_map_from_segments(
+    segments: List[Dict[str, Any]],
+    task_state: Optional[Dict[str, Any]] = None,
+) -> Dict[int, float]:
+    """Expand segment-level user first-line indent overrides to layout blocks."""
+    block_map: Dict[int, float] = {}
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        if not segment_has_user_first_line_indent_override(seg):
+            continue
+        indent_em = normalize_user_first_line_indent_em(
+            seg.get("first_line_indent_em"),
+        )
+        if indent_em is None:
+            continue
+        for idx in resolve_segment_layout_block_indices(seg, task_state):
+            block_map[idx] = indent_em
     return block_map
 
 

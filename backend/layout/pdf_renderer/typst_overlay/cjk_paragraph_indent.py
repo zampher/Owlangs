@@ -59,6 +59,29 @@ _CJK_LANG_ALIASES = frozenset(
     }
 )
 
+_RTL_LANG_ALIASES = frozenset(
+    {
+        "ar",
+        "arabic",
+        "he",
+        "iw",
+        "hebrew",
+        "fa",
+        "persian",
+        "farsi",
+        "ur",
+        "urdu",
+        "yi",
+        "yiddish",
+        "ps",
+        "pashto",
+        "ku",
+        "kurdish",
+        "sd",
+        "sindhi",
+    }
+)
+
 
 def is_cjk_target_language(lang: Optional[str]) -> bool:
     """Return True when *lang* denotes Chinese (simplified or traditional)."""
@@ -73,6 +96,27 @@ def is_cjk_target_language(lang: Optional[str]) -> bool:
     if key.startswith("zh-") or key.startswith("zh_"):
         return True
     return False
+
+
+def is_rtl_target_language(lang: Optional[str]) -> bool:
+    """Return True when *lang* denotes a right-to-left writing system."""
+    if not lang or not isinstance(lang, str):
+        return False
+    key = lang.strip().lower().replace(" ", "_")
+    if not key:
+        return False
+    if key in _RTL_LANG_ALIASES:
+        return True
+    # ar-SA / he-IL style tags
+    for prefix in ("ar-", "ar_", "he-", "he_", "fa-", "fa_", "ur-", "ur_"):
+        if key.startswith(prefix):
+            return True
+    return False
+
+
+def resolve_single_line_horizontal_align(lang: Optional[str]) -> str:
+    """Left for LTR languages, right for RTL — never center."""
+    return "right" if is_rtl_target_language(lang) else "left"
 
 
 # Two CJK character widths as Typst em (tracks fitted/scaled font size).
@@ -118,19 +162,85 @@ def should_apply_cjk_body_indent(
     return False
 
 
+def is_single_line_for_cjk_indent(
+    bbox_height_pt: float,
+    font_size_pt: float,
+    *,
+    leading_em: float = 1.25,
+) -> bool:
+    """
+    True when the bbox height fits about one line at *font_size_pt*.
+
+    MinerU single-line text bboxes hug the glyphs and do **not** include
+    paragraph first-line indent space, so CJK 2-em indent must be skipped.
+    """
+    try:
+        height = float(bbox_height_pt)
+        size = float(font_size_pt)
+    except (TypeError, ValueError):
+        return False
+    if height <= 0 or size <= 0:
+        return False
+    leading = float(leading_em) if leading_em and leading_em > 0 else 1.25
+    # One line ≈ font×leading; allow modest padding but stay below two lines.
+    max_single_line_h = size * max(leading, 1.0) * 1.65
+    return height <= max_single_line_h
+
+
+def _render_block_bbox_height_pt(rb: Any) -> float:
+    bbox = getattr(rb, "inner_bbox", None)
+    if not bbox or len(bbox) < 4:
+        return 0.0
+    try:
+        return max(0.0, float(bbox[3]) - float(bbox[1]))
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def resolve_target_language(
     config_lang: Optional[str] = None,
     task_state: Optional[Mapping[str, Any]] = None,
 ) -> Optional[str]:
-    """Prefer config.target_language, then task_state to_lang / target_language."""
+    """Prefer config, then payload (export source of truth), then task_state / metadata.
+
+    PDF export sets ``config.target_language`` from ``payload.to_lang``. Stale
+    top-level ``task_state.to_lang`` can hold the user's default UI language
+    (e.g. English) while the active translation target is Chinese on payload —
+    preferring task_state first made segment indent attach compute 0 while
+    Typst export still indented CJK body blocks.
+    """
     if config_lang and str(config_lang).strip():
         return str(config_lang).strip()
     if not task_state:
         return None
+    # Translation tasks keep the active target on payload (same as export).
+    payload = task_state.get("payload")
+    if isinstance(payload, Mapping):
+        for key in ("to_lang", "target_language", "target_lang"):
+            val = payload.get(key)
+            if val and str(val).strip():
+                return str(val).strip()
+    elif payload is not None:
+        for attr in ("to_lang", "target_language", "target_lang"):
+            val = getattr(payload, attr, None)
+            if val and str(val).strip():
+                return str(val).strip()
     for key in ("to_lang", "target_language", "target_lang"):
         val = task_state.get(key)
         if val and str(val).strip():
             return str(val).strip()
+    # Extract/Translate UI often stores the selected target only here.
+    segments_meta = task_state.get("segments_metadata")
+    if isinstance(segments_meta, Mapping):
+        for key in (
+            "last_target_lang_for_language_match",
+            "to_lang",
+            "target_language",
+            "target_lang",
+        ):
+            val = segments_meta.get(key)
+            if val and str(val).strip():
+                return str(val).strip()
     return None
 
 
@@ -169,6 +279,9 @@ def apply_cjk_body_indent_to_block(
     Em units track the rendered (possibly fitted/scaled) font size so the
     visual indent stays ≈ two CJK characters. Absolute pt is cleared.
 
+    Single-line bboxes (judged by font size × leading vs bbox height) skip
+    indent: their boxes already exclude paragraph indent space.
+
     Returns the em indent applied (0.0 when skipped).
     """
     if not is_cjk_target_language(target_language):
@@ -181,6 +294,20 @@ def apply_cjk_body_indent_to_block(
         block_type=layout_block_type,
         render_kind=getattr(rb, "render_kind", None),
     ):
+        rb.first_line_indent_em = 0.0
+        rb.first_line_indent_pt = 0.0
+        return 0.0
+
+    # Single-line text: bbox is glyph-tight without indent; do not reserve 2em.
+    if getattr(rb, "fit_single_line", False):
+        rb.first_line_indent_em = 0.0
+        rb.first_line_indent_pt = 0.0
+        return 0.0
+
+    font_size = float(getattr(rb, "font_size_pt", 0.0) or 0.0)
+    leading = float(getattr(rb, "leading_em", 0.0) or 0.0) or 1.25
+    bbox_h = _render_block_bbox_height_pt(rb)
+    if is_single_line_for_cjk_indent(bbox_h, font_size, leading_em=leading):
         rb.first_line_indent_em = 0.0
         rb.first_line_indent_pt = 0.0
         return 0.0

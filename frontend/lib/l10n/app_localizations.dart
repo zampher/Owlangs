@@ -5864,6 +5864,30 @@ abstract class AppLocalizations {
   /// **'Appended to converted filenames (leave empty for no suffix)'**
   String get settingsConvertOutputSuffixHint;
 
+  /// No description provided for @settingsShowSegmentImagesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Show images in segment list'**
+  String get settingsShowSegmentImagesTitle;
+
+  /// No description provided for @settingsShowSegmentImagesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Display embedded images in Extract and Translate segment lists. Turn off for faster scrolling on large documents.'**
+  String get settingsShowSegmentImagesSubtitle;
+
+  /// No description provided for @settingsPreferExtractedPdfFontSizeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Prefer extracted PDF font size'**
+  String get settingsPreferExtractedPdfFontSizeTitle;
+
+  /// No description provided for @settingsPreferExtractedPdfFontSizeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'For digital PDFs with a text layer, use extracted font sizes instead of bbox estimates when available.'**
+  String get settingsPreferExtractedPdfFontSizeSubtitle;
+
   /// No description provided for @settingsLanguageDialogTitle.
   ///
   /// In en, this message translates to:
@@ -7615,6 +7639,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear'**
   String get segmentPdfRevisionClearLabel;
+
+  /// No description provided for @segmentPdfIndentTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'First-line indent'**
+  String get segmentPdfIndentTooltip;
+
+  /// No description provided for @segmentPdfIndentMenuTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'First-line indent'**
+  String get segmentPdfIndentMenuTitle;
+
+  /// No description provided for @segmentPdfIndentNone.
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get segmentPdfIndentNone;
+
+  /// No description provided for @segmentPdfIndentAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto ({value})'**
+  String segmentPdfIndentAuto(String value);
+
+  /// No description provided for @segmentPdfIndentEm.
+  ///
+  /// In en, this message translates to:
+  /// **'{em}em'**
+  String segmentPdfIndentEm(String em);
 }
 
 class _AppLocalizationsDelegate

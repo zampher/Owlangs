@@ -28,6 +28,7 @@ class SegmentNumberedItem extends StatefulWidget {
     this.badgeColor,
     this.badgeTextColor,
     this.fontSize,
+    this.extractedFontSizePt,
     this.enableSelection = true,
     this.imageDataMap,
     this.isExcluded = false,
@@ -46,6 +47,8 @@ class SegmentNumberedItem extends StatefulWidget {
   final Color? badgeColor;
   final Color? badgeTextColor;
   final double? fontSize;
+  /// Extracted digital-PDF / parser font size in points (shown under #index).
+  final double? extractedFontSizePt;
   final bool enableSelection; // Whether text is selectable
   final Map<String, Map<String, String>>?
       imageDataMap; // {placeholder_id: {"data": "data:image/...", "alt": "title"}}
@@ -119,22 +122,50 @@ class _SegmentNumberedItemState extends State<SegmentNumberedItem> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              // Segment number badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: badgeColor,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: badgeColor.withOpacity(0.3)),
-                ),
-                child: Text(
-                  '#$displayIndex',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: badgeTextColor,
+              // Segment number badge (+ optional extracted font size under it)
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: badgeColor,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: badgeColor.withOpacity(0.3)),
+                    ),
+                    child: Text(
+                      '#$displayIndex',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: badgeTextColor,
+                      ),
+                    ),
                   ),
-                ),
+                  if (widget.extractedFontSizePt != null &&
+                      widget.extractedFontSizePt! > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        '${widget.extractedFontSizePt!.toStringAsFixed(
+                          widget.extractedFontSizePt! ==
+                                  widget.extractedFontSizePt!.roundToDouble()
+                              ? 0
+                              : 1,
+                        )}pt',
+                        style: TextStyle(
+                          fontSize: 9,
+                          height: 1.1,
+                          color: theme.colorScheme.onSurfaceVariant
+                              .withOpacity(0.75),
+                          fontFeatures: const <FontFeature>[
+                            FontFeature.tabularFigures(),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(width: 12),
               // Segment content - may contain text and/or images

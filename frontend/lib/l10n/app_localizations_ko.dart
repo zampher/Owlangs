@@ -3215,6 +3215,20 @@ class AppLocalizationsKo extends AppLocalizations {
       'Appended to converted filenames (leave empty for no suffix)';
 
   @override
+  String get settingsShowSegmentImagesTitle => '세그먼트 목록에 이미지 표시';
+
+  @override
+  String get settingsShowSegmentImagesSubtitle =>
+      '추출/번역 세그먼트 목록에 임베디드 이미지를 표시합니다. 큰 문서에서는 끄면 스크롤이 더 빨라집니다.';
+
+  @override
+  String get settingsPreferExtractedPdfFontSizeTitle => '추출된 PDF 글꼴 크기 우선';
+
+  @override
+  String get settingsPreferExtractedPdfFontSizeSubtitle =>
+      '텍스트 레이어가 있는 디지털 PDF에서는 bbox 추정 대신 추출된 글꼴 크기를 우선 사용합니다.';
+
+  @override
   String get settingsLanguageDialogTitle => '언어 선택';
 
   @override
@@ -4184,4 +4198,23 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get segmentPdfRevisionClearLabel => '지우기';
+
+  @override
+  String get segmentPdfIndentTooltip => '첫 줄 들여쓰기';
+
+  @override
+  String get segmentPdfIndentMenuTitle => '첫 줄 들여쓰기';
+
+  @override
+  String get segmentPdfIndentNone => '없음';
+
+  @override
+  String segmentPdfIndentAuto(String value) {
+    return '자동 ($value)';
+  }
+
+  @override
+  String segmentPdfIndentEm(String em) {
+    return '${em}em';
+  }
 }

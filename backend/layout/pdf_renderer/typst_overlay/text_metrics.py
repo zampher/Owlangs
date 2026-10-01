@@ -526,6 +526,35 @@ def is_single_line_bbox(bbox_height_pt: float, layout_raw: Any = None) -> bool:
     return bbox_height_pt <= SINGLE_LINE_BBOX_HEIGHT_PT
 
 
+def is_single_line_at_font(
+    bbox_height_pt: float,
+    font_size_pt: Optional[float] = None,
+    *,
+    leading_em: float = 1.25,
+    layout_raw: Any = None,
+) -> bool:
+    """
+    True when the bbox is one visual line.
+
+    Combines the legacy fixed-height gate (``≤ 32pt``) with a font-aware check:
+    at a known size, one line is roughly ``font × leading × 1.65``. Extracted
+    (real) font sizes often produce single-line bboxes taller than 32pt; those
+    must still use horizontal extend / no-wrap, not multi-line wrap.
+    """
+    if is_single_line_bbox(bbox_height_pt, layout_raw):
+        return True
+    try:
+        height = float(bbox_height_pt)
+        size = float(font_size_pt) if font_size_pt is not None else 0.0
+    except (TypeError, ValueError):
+        return False
+    if height <= 0 or size <= 0:
+        return False
+    leading = float(leading_em) if leading_em and leading_em > 0 else 1.25
+    max_single_line_h = size * max(leading, 1.0) * 1.65
+    return height <= max_single_line_h
+
+
 _LATEX_CMD_RE = re.compile(r"\\[a-zA-Z]+\*?")
 
 

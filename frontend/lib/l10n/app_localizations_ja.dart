@@ -3206,6 +3206,20 @@ class AppLocalizationsJa extends AppLocalizations {
       'Appended to converted filenames (leave empty for no suffix)';
 
   @override
+  String get settingsShowSegmentImagesTitle => 'セグメント一覧に画像を表示';
+
+  @override
+  String get settingsShowSegmentImagesSubtitle =>
+      '抽出/翻訳セグメント一覧に埋め込み画像を表示します。大きな文書ではオフにするとスクロールが軽くなります。';
+
+  @override
+  String get settingsPreferExtractedPdfFontSizeTitle => 'PDF抽出フォントサイズを優先';
+
+  @override
+  String get settingsPreferExtractedPdfFontSizeSubtitle =>
+      'テキスト層のあるデジタルPDFでは、取得できたフォントサイズを bbox 推定より優先します。';
+
+  @override
   String get settingsLanguageDialogTitle => '言語を選択';
 
   @override
@@ -4173,4 +4187,23 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get segmentPdfRevisionClearLabel => 'クリア';
+
+  @override
+  String get segmentPdfIndentTooltip => '一行目のインデント';
+
+  @override
+  String get segmentPdfIndentMenuTitle => '一行目のインデント';
+
+  @override
+  String get segmentPdfIndentNone => 'なし';
+
+  @override
+  String segmentPdfIndentAuto(String value) {
+    return '自動 ($value)';
+  }
+
+  @override
+  String segmentPdfIndentEm(String em) {
+    return '${em}em';
+  }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/utils/app_logger.dart';
+import '../../../../shared/providers/settings_provider.dart';
 import '../../providers/excluded_segments_provider.dart';
 import '../../utils/segment_height_calculator.dart';
 import '../extract_preview.dart';
@@ -152,10 +153,14 @@ mixin ExtractPreviewPaginationMixin<T extends ConsumerStatefulWidget>
       excludedSegmentsProviderFamily(providerKey),
     );
 
-    // Create height calculator
+    // Create height calculator (respect showSegmentImages setting)
+    final bool showSegmentImages =
+        ref.read(globalSettingsProvider).showSegmentImages;
     final SegmentHeightCalculator calculator = SegmentHeightCalculator(
       availableWidth: availableWidth,
-      imageDataMap: imageDataMap,
+      imageDataMap: showSegmentImages
+          ? imageDataMap
+          : const <String, Map<String, String>>{},
     );
 
     // For large segment counts, batch calculation across frames to avoid

@@ -718,13 +718,27 @@ def _enrich_segments_table_fields(
             seg["chunk_type"] = chunk_type
 
 
+# Bump when _TYPOGRAPHY_CACHE_FIELDS schema changes so stale caches are ignored.
+# v11: resolve_target_language prefers payload.to_lang over stale top-level
+# task_state.to_lang (match export); invalidate sticky v10 English→0 caches.
+# v13: attach single-line gate uses min font + fill-fit cap (UI was all "无").
+# v14: exclude fill-fit candidates; body fallbacks 12→10→8pt; ignore segment
+# fit_single_line (align medium-box indent with Typst export post-fit).
+_TYPOGRAPHY_CACHE_SCHEMA = "v14-indent-export-align"
+
+
 def _compute_segments_typography_fingerprint(
     segments_list: List[Dict[str, Any]],
     *,
     text_field: str,
+    to_lang: Optional[str] = None,
 ) -> str:
     """Fingerprint segment texts and typography overrides for cache lookup."""
-    parts: List[str] = []
+    # Include to_lang: CJK first-line indent depends on target language.
+    parts: List[str] = [
+        _TYPOGRAPHY_CACHE_SCHEMA,
+        f"to_lang={str(to_lang or '').strip().lower()}",
+    ]
     for seg in segments_list:
         if not isinstance(seg, dict):
             continue
@@ -736,9 +750,39 @@ def _compute_segments_typography_fingerprint(
             or seg.get("text")
             or ""
         )
+        # Only user indent overrides affect the fingerprint. Auto mode mirrors
+        # computed_first_line_indent_em onto first_line_indent_em after enrich;
+        # hashing that value invalidated the cache on every subsequent request.
+        indent_fp = (
+            f"user:{seg.get('first_line_indent_em')}"
+            if seg.get("first_line_indent_em_source") == "user"
+            else "auto"
+        )
+        # Indent single-line detection uses effective bbox; include a compact
+        # fingerprint so bbox overrides / enriched layout_block_bbox refresh
+        # computed_first_line_indent_em.
+        bbox_fp = "none"
+        for bbox_key in ("layout_block_bbox_override", "layout_block_bbox"):
+            raw_bbox = seg.get(bbox_key)
+            if raw_bbox is None:
+                continue
+            try:
+                if isinstance(raw_bbox, (list, tuple)) and raw_bbox:
+                    first = raw_bbox[0]
+                    vals = (
+                        first[:4]
+                        if isinstance(first, (list, tuple)) and len(first) >= 4
+                        else raw_bbox[:4]
+                    )
+                    if len(vals) >= 4:
+                        bbox_fp = ",".join(f"{float(v):.1f}" for v in vals[:4])
+                        break
+            except (TypeError, ValueError):
+                continue
         parts.append(
             f"{idx}|{text}|{seg.get('font_size_pt')}|{seg.get('font_weight')}|"
             f"{seg.get('font_style')}|{seg.get('leading_em')}|"
+            f"{indent_fp}|{bbox_fp}|"
             f"{seg.get('table_stroke_pt')}|{seg.get('table_border_style')}"
         )
     payload = "\n".join(parts)
@@ -752,11 +796,16 @@ _TYPOGRAPHY_CACHE_FIELDS = (
     "computed_leading_em",
     "overlay_render_font_size_pt",
     "overlay_estimated_font_size_pt",
+    "extracted_font_size_pt",
+    "extracted_font_size_source",
     "pdf_page_number",
     "font_size_source",
     "font_weight_source",
     "font_style_source",
     "leading_em_source",
+    "computed_first_line_indent_em",
+    "first_line_indent_em",
+    "first_line_indent_em_source",
 )
 
 
@@ -764,6 +813,10 @@ def _apply_cached_segment_typography(
     segments_list: List[Dict[str, Any]],
     cached_by_index: Dict[str, Dict[str, Any]],
 ) -> None:
+    from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+        segment_has_user_first_line_indent_override,
+    )
+
     for seg in segments_list:
         if not isinstance(seg, dict):
             continue
@@ -778,6 +831,15 @@ def _apply_cached_segment_typography(
                 seg[key] = cached[key]
             else:
                 seg.pop(key, None)
+        # Keep the persisted indent property bound for UI: auto mode mirrors
+        # computed; user overrides keep their stored first_line_indent_em.
+        if not segment_has_user_first_line_indent_override(seg):
+            computed = seg.get("computed_first_line_indent_em")
+            if computed is not None:
+                seg["first_line_indent_em"] = computed
+            else:
+                seg.setdefault("first_line_indent_em", 0.0)
+            seg["first_line_indent_em_source"] = "auto"
 
 
 def _snapshot_segment_typography_cache(
@@ -852,6 +914,11 @@ def _enrich_segments_pdf_typography(
                 seg.pop("computed_leading_em", None)
                 seg.pop("overlay_render_font_size_pt", None)
                 seg.pop("overlay_estimated_font_size_pt", None)
+                # Always emit computed indent (0) so UI can bind the chip.
+                seg["computed_first_line_indent_em"] = 0.0
+                if seg.get("first_line_indent_em_source") != "user":
+                    seg["first_line_indent_em"] = 0.0
+                    seg["first_line_indent_em_source"] = "auto"
         return
 
     for seg in segments_list:
@@ -862,8 +929,28 @@ def _enrich_segments_pdf_typography(
             seg.pop("computed_leading_em", None)
             seg.pop("overlay_render_font_size_pt", None)
             seg.pop("overlay_estimated_font_size_pt", None)
+            seg.pop("computed_first_line_indent_em", None)
 
     _ensure_segment_layout_block_indices(segments_list, task_state)
+
+    # Seed top-level to_lang from payload so CJK indent + cache fingerprint match export.
+    # Always overwrite when resolved differs: stale task_state.to_lang may be the
+    # user's default UI language (e.g. English) while payload.to_lang is zh.
+    from layout.pdf_renderer.typst_overlay.cjk_paragraph_indent import (
+        resolve_target_language,
+    )
+
+    resolved_to_lang = resolve_target_language(None, task_state)
+    if resolved_to_lang:
+        existing = (
+            task_state.get("to_lang")
+            or task_state.get("target_language")
+            or task_state.get("target_lang")
+        )
+        if not existing or str(existing).strip().lower() != str(
+            resolved_to_lang,
+        ).strip().lower():
+            task_state["to_lang"] = resolved_to_lang
 
     text_field = "modified_text"
     if not any(
@@ -875,6 +962,7 @@ def _enrich_segments_pdf_typography(
     fingerprint = _compute_segments_typography_fingerprint(
         segments_list,
         text_field=text_field,
+        to_lang=resolved_to_lang,
     )
     cache_eligible = _typography_cache_eligible(task_state, segments_list)
     cache = task_state.get("pdf_typography_cache") if cache_eligible else None
@@ -964,8 +1052,9 @@ def _run_heavy_segment_enrichment_for_api(
     )
     _enrich_image_overlay_preview_metadata(task_id, task_state, response_data)
     _enrich_segments_table_fields(task_state, segments_list)
-    _enrich_segments_pdf_typography(task_id, task_state, segments_list)
 
+    # Expand group bboxes before typography so CJK first-line indent uses the
+    # effective (possibly taller) segment bbox, matching Typst overlay.
     layout_doc = _resolve_layout_document(task_id, task_state)
     if layout_doc is not None:
         from utils.format_convert_utils import normalize_layout_block_bbox_map
@@ -980,6 +1069,7 @@ def _run_heavy_segment_enrichment_for_api(
             ),
         )
 
+    _enrich_segments_pdf_typography(task_id, task_state, segments_list)
     _write_translation_segments_debug(task_id, task_state, response_data)
 
 
@@ -1174,9 +1264,6 @@ async def get_translation_segments_api(
                     task_id, task_state, response_data,
                 )
                 _enrich_segments_table_fields(task_state, segments_list)
-                _enrich_segments_pdf_typography(
-                    task_id, task_state, segments_list,
-                )
                 layout_doc = _resolve_layout_document(task_id, task_state)
                 if layout_doc is not None:
                     from utils.format_convert_utils import normalize_layout_block_bbox_map
@@ -1190,6 +1277,9 @@ async def get_translation_segments_api(
                             task_state.get("layout_block_bbox"),
                         ),
                     )
+                _enrich_segments_pdf_typography(
+                    task_id, task_state, segments_list,
+                )
                 _write_translation_segments_debug(
                     task_id, task_state, response_data,
                 )
@@ -1401,6 +1491,10 @@ async def update_segment_api(
     font_style_reset = bool(body.get("font_style_reset", False))
     leading_em = body.get("leading_em")
     leading_em_reset = bool(body.get("leading_em_reset", False))
+    first_line_indent_em = body.get("first_line_indent_em")
+    first_line_indent_em_reset = bool(
+        body.get("first_line_indent_em_reset", False)
+    )
     pdf_font_reset = bool(body.get("pdf_font_reset", False))
     rotation = body.get("rotation")
     table_stroke_pt = body.get("table_stroke_pt")
@@ -1429,6 +1523,8 @@ async def update_segment_api(
         font_style_reset=font_style_reset,
         leading_em=leading_em,
         leading_em_reset=leading_em_reset,
+        first_line_indent_em=first_line_indent_em,
+        first_line_indent_em_reset=first_line_indent_em_reset,
         pdf_font_reset=pdf_font_reset,
         rotation=rotation,
         table_stroke_pt=table_stroke_pt,
@@ -1459,7 +1555,6 @@ async def update_segment_api(
     task_state = task_manager.get_task(task_id) or {}
     task_state.pop("pdf_typography_cache", None)
     if isinstance(segment, dict):
-        _enrich_segments_pdf_typography(task_id, task_state, [segment])
         layout_doc = _resolve_layout_document(task_id, task_state)
         if layout_doc is not None:
             from utils.format_convert_utils import normalize_layout_block_bbox_map
@@ -1471,6 +1566,7 @@ async def update_segment_api(
                 layout_doc,
                 normalize_layout_block_bbox_map(task_state.get("layout_block_bbox")),
             )
+        _enrich_segments_pdf_typography(task_id, task_state, [segment])
 
     return JSONResponse(content={
         "success": True,

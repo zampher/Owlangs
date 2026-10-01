@@ -3,8 +3,8 @@
 
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:typed_data';
 import '../../shared/utils/app_logger.dart';
-import '../../shared/utils/backend_image_url.dart';
 import '../../shared/utils/backend_image_url.dart';
 import '../../shared/utils/ebook_image_helper.dart';
 import '../../shared/utils/latex_text_segments.dart';
@@ -738,7 +738,7 @@ class MarkdownTextWithImages extends StatelessWidget {
     if (src.startsWith('data:image/')) {
       try {
         final String base64String = src.split(',')[1];
-        final List<int> imageBytes = base64Decode(base64String);
+        final Uint8List imageBytes = base64Decode(base64String);
         imageChild = Image.memory(
           imageBytes,
           fit: BoxFit.scaleDown,

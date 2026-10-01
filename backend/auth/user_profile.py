@@ -82,6 +82,10 @@ class UserProfile:
     # UI font settings
     preview_font_size: float = 14.0  # Font size for preview text (source/target)
     edit_font_size: float = 16.0     # Font size for editing translated segments
+    # Whether to show images inline in Extract/Translate segment lists
+    show_segment_images: bool = True
+    # Prefer font sizes extracted from digital PDF text layers / MinerU spans
+    prefer_extracted_pdf_font_size: bool = True
     
     # Metadata
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
@@ -197,6 +201,8 @@ class UserProfile:
                 'translationTimeout': 'timeout',
                 'previewFontSize': 'preview_font_size',
                 'editFontSize': 'edit_font_size',
+                'showSegmentImages': 'show_segment_images',
+                'preferExtractedPdfFontSize': 'prefer_extracted_pdf_font_size',
                 'ocrLanguage': 'translator_ocr_language',
                 'targetLanguage': 'translator_target_language',
                 'translateOutputSuffix': 'translator_output_suffix',
@@ -220,6 +226,14 @@ class UserProfile:
                     elif not isinstance(value, int):
                         logger.warning(LogModule.AUTH, f"Unexpected type for {mapped_key}: {type(value)}, converting to int")
                         value = int(value) if value else 0
+                elif mapped_key in (
+                    'show_segment_images',
+                    'prefer_extracted_pdf_font_size',
+                ):
+                    if isinstance(value, str):
+                        value = value.strip().lower() in ('1', 'true', 'yes', 'on')
+                    else:
+                        value = bool(value)
                 elif mapped_key in ['preview_font_size', 'edit_font_size']:
                     # Convert to float if needed
                     if isinstance(value, str):
@@ -347,7 +361,12 @@ class UserProfileManager:
             else:
                 logger.warning(LogModule.AUTH, f"update_setting returned False for key: {key}, value: {value} (type: {type(value)})")
                 # Debug: Check if field exists
-                mapped_key = {'previewFontSize': 'preview_font_size', 'editFontSize': 'edit_font_size'}.get(key, key)
+                mapped_key = {
+                    'previewFontSize': 'preview_font_size',
+                    'editFontSize': 'edit_font_size',
+                    'showSegmentImages': 'show_segment_images',
+                    'preferExtractedPdfFontSize': 'prefer_extracted_pdf_font_size',
+                }.get(key, key)
                 if hasattr(profile, mapped_key):
                     logger.warning(LogModule.AUTH, f"Mapped key '{mapped_key}' exists but update_setting failed. Current value: {getattr(profile, mapped_key)}")
                 elif hasattr(profile, key):

@@ -301,6 +301,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
       allSegments = <String>[];
       allChunks = <String>[];
       allSeparators = <String>[];
+      segmentExtractedFontSizes.clear();
       initialDataLoaded = false;
     });
     if (kDebugMode) {
@@ -418,6 +419,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
             final List<dynamic> segmentsData =
                 updatedLayoutData['segments'] as List<dynamic>? ?? <dynamic>[];
             segmentExclusionReasons.clear(); // Clear old exclusion reasons
+            segmentExtractedFontSizes.clear();
             updatedSegments = segmentsData.asMap().entries.map((entry) {
               final int index = entry.key;
               final seg = entry.value;
@@ -438,8 +440,10 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                   segmentExclusionReasons.remove(index);
                   segmentExclusionMetadata.remove(index);
                 }
+                ingestExtractedFontSizeFromSegment(index, seg);
                 return seg['text'] as String? ?? '';
               }
+              ingestExtractedFontSizeFromSegment(index, seg);
               return seg.toString();
             }).toList();
 
@@ -817,6 +821,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                     segmentExclusionReasons.remove(index);
                   }
                 }
+                ingestExtractedFontSizeFromSegment(index, seg);
               }
             });
             updatedSegments = segmentsData.map((seg) {
@@ -1025,6 +1030,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                     segmentExclusionReasons.remove(index);
                   }
                 }
+                ingestExtractedFontSizeFromSegment(index, seg);
               }
             });
             updatedSegments = segmentsData.map((seg) {
@@ -1259,6 +1265,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
           allSegments = <String>[];
           allChunks = <String>[];
           allSeparators = <String>[];
+          segmentExtractedFontSizes.clear();
           initialDataLoaded = false;
         });
       }
@@ -1539,6 +1546,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                 layoutData['segments'] as List<dynamic>? ?? <dynamic>[];
             segmentExclusionReasons.clear(); // Clear old exclusion reasons
             segmentTypeInfo.clear(); // Clear old type info
+            segmentExtractedFontSizes.clear();
             // Store segment exclusion status from backend for checkbox state calculation
             final Map<int, bool> segmentExcludedStatus = <int, bool>{};
 
@@ -1589,8 +1597,10 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                   );
                 }
 
+                ingestExtractedFontSizeFromSegment(index, seg);
                 return seg['text'] as String? ?? '';
               }
+              ingestExtractedFontSizeFromSegment(index, seg);
               return seg.toString();
             }).toList();
 
@@ -2451,6 +2461,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
             final List<dynamic> segmentsList = allSegmentsList;
             segmentTypeInfo.clear(); // Clear old type info
             segmentExclusionReasons.clear(); // Clear old exclusion reasons
+            segmentExtractedFontSizes.clear();
 
             // Track formula, chart, identifier, language_match, and user_selected segments
             formulaSegmentIndices.clear();
@@ -2554,11 +2565,14 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                   }
                 }
 
+                ingestExtractedFontSizeFromSegment(index, seg);
+
                 // Extract text from object (API returns 'text' or 'source_text')
                 return (seg['text'] as String?) ??
                     (seg['source_text'] as String?) ??
                     '';
               }
+              ingestExtractedFontSizeFromSegment(index, seg);
               return seg.toString();
             }).toList();
 
@@ -3809,6 +3823,24 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
 
     // Watch refresh trigger to detect resplit completion
     final int refreshTrigger = ref.watch(extractRefreshProvider);
+    // Watch segment-list image visibility so Settings changes refresh the list
+    final bool showSegmentImages = ref.watch(
+      globalSettingsProvider.select((GlobalSettings s) => s.showSegmentImages),
+    );
+    final Map<String, Map<String, String>> displayImageDataMap =
+        showSegmentImages
+            ? imageDataMap
+            : const <String, Map<String, String>>{};
+    if (lastShowSegmentImages != null &&
+        lastShowSegmentImages != showSegmentImages) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          precalculateAllHeights();
+        }
+      });
+    }
+    lastShowSegmentImages = showSegmentImages;
+
     if (lastRefreshTrigger != null && lastRefreshTrigger != refreshTrigger) {
       if (kDebugMode) {
         _log(
@@ -4321,8 +4353,11 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                                                               badgeTextColor:
                                                                   Colors.blue
                                                                       .shade700,
-                                                              imageDataMap:
-                                                                  imageDataMap,
+                                                              extractedFontSizePt:
+                                                                  segmentExtractedFontSizes[
+                                                                      globalIndex],
+                              imageDataMap:
+                                                                  displayImageDataMap,
                                                               isExcluded:
                                                                   isExcluded,
                                                               exclusionReason:
@@ -4508,6 +4543,8 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                                                                               .clear();
                                                                           segmentExclusionMetadata
                                                                               .clear();
+                                                                          segmentExtractedFontSizes
+                                                                              .clear();
                                                                           for (var i = 0;
                                                                               i < segmentsData.length;
                                                                               i++) {
@@ -4531,8 +4568,10 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                                                                               if (exclusionMetadata != null) {
                                                                                 segmentExclusionMetadata[i] = exclusionMetadata;
                                                                               }
+                                                                              ingestExtractedFontSizeFromSegment(i, seg);
                                                                             } else {
                                                                               updatedSegments.add('');
+                                                                              ingestExtractedFontSizeFromSegment(i, seg);
                                                                             }
                                                                           }
 
@@ -4739,6 +4778,7 @@ class _ExtractPreviewState extends ConsumerState<ExtractPreview>
                                                                                 segmentExclusionReasons.remove(i);
                                                                                 segmentExclusionMetadata.remove(i);
                                                                               }
+                                                                              ingestExtractedFontSizeFromSegment(i, seg);
                                                                             }
                                                                           }
 

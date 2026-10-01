@@ -165,6 +165,9 @@ def write_translation_segments_debug_json(
             "computed_leading_em",
             "overlay_render_font_size_pt",
             "overlay_estimated_font_size_pt",
+            "computed_first_line_indent_em",
+            "first_line_indent_em",
+            "first_line_indent_em_source",
         )
         objs = []
         for seg in segments:

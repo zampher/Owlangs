@@ -71,6 +71,8 @@ class SettingsService {
     'convertOutputSuffix': 'user',
     'previewFontSize': 'user',
     'editFontSize': 'user',
+    'showSegmentImages': 'user',
+    'preferExtractedPdfFontSize': 'user',
     'ui_language': 'user',
 
     // Exclusion defaults (global, admin only)

@@ -3175,6 +3175,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsConvertOutputSuffixHint => '追加到格式转换文件名后（留空则不添加后缀）';
 
   @override
+  String get settingsShowSegmentImagesTitle => '片段列表显示图片';
+
+  @override
+  String get settingsShowSegmentImagesSubtitle =>
+      '在提取/翻译片段列表中显示内嵌图片。关闭可加快大文档滚动。';
+
+  @override
+  String get settingsPreferExtractedPdfFontSizeTitle => '优先使用 PDF 提取字号';
+
+  @override
+  String get settingsPreferExtractedPdfFontSizeSubtitle =>
+      '对带文本层的数字 PDF，有提取字号时优先使用，而不是只用 bbox 估算。';
+
+  @override
   String get settingsLanguageDialogTitle => '选择语言';
 
   @override
@@ -4136,4 +4150,23 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get segmentPdfRevisionClearLabel => '清除';
+
+  @override
+  String get segmentPdfIndentTooltip => '首行缩进';
+
+  @override
+  String get segmentPdfIndentMenuTitle => '首行缩进';
+
+  @override
+  String get segmentPdfIndentNone => '无';
+
+  @override
+  String segmentPdfIndentAuto(String value) {
+    return '自动 ($value)';
+  }
+
+  @override
+  String segmentPdfIndentEm(String em) {
+    return '${em}em';
+  }
 }

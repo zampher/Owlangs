@@ -75,6 +75,8 @@ class GlobalSettings {
     this.targetLanguage = 'en',
     this.translateOutputSuffix = '_translated',
     this.convertOutputSuffix = '_converted',
+    this.showSegmentImages = true,
+    this.preferExtractedPdfFontSize = true,
 
     // Detailed Translation Parameters
     this.temperature = 0.3,
@@ -171,6 +173,12 @@ class GlobalSettings {
           'convertOutputSuffix',
           'converter_output_suffix',
         ),
+        showSegmentImages: json['showSegmentImages'] ??
+            json['show_segment_images'] ??
+            true,
+        preferExtractedPdfFontSize: json['preferExtractedPdfFontSize'] ??
+            json['prefer_extracted_pdf_font_size'] ??
+            true,
         temperature: (json['temperature'] ?? 0.3).toDouble(),
         retry: json['retry'] ?? 3,
         segmentAutoRetryRounds: json['segment_auto_retry_rounds'] ?? 3,
@@ -243,6 +251,10 @@ class GlobalSettings {
   final String targetLanguage;
   final String translateOutputSuffix;
   final String convertOutputSuffix;
+  /// Whether to render images inline in Extract/Translate segment lists.
+  final bool showSegmentImages;
+  /// Prefer font sizes from digital PDF text layers / MinerU spans when available.
+  final bool preferExtractedPdfFontSize;
 
   // Detailed Translation Parameters (新任务生效)
   final double temperature;
@@ -315,6 +327,8 @@ class GlobalSettings {
     String? targetLanguage,
     String? translateOutputSuffix,
     String? convertOutputSuffix,
+    bool? showSegmentImages,
+    bool? preferExtractedPdfFontSize,
     double? temperature,
     int? retry,
     int? segmentAutoRetryRounds,
@@ -382,6 +396,9 @@ class GlobalSettings {
             translateOutputSuffix ?? this.translateOutputSuffix,
         convertOutputSuffix:
             convertOutputSuffix ?? this.convertOutputSuffix,
+        showSegmentImages: showSegmentImages ?? this.showSegmentImages,
+        preferExtractedPdfFontSize:
+            preferExtractedPdfFontSize ?? this.preferExtractedPdfFontSize,
 
         // Detailed Translation Parameters
         temperature: temperature ?? this.temperature,
@@ -437,6 +454,8 @@ class GlobalSettings {
         'targetLanguage': targetLanguage,
         'translateOutputSuffix': translateOutputSuffix,
         'convertOutputSuffix': convertOutputSuffix,
+        'showSegmentImages': showSegmentImages,
+        'preferExtractedPdfFontSize': preferExtractedPdfFontSize,
         'temperature': temperature,
         'retry': retry,
         'segment_auto_retry_rounds': segmentAutoRetryRounds,
@@ -575,6 +594,24 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
               'convertOutputSuffix',
               'converter_output_suffix',
             );
+          }
+
+          // Map show-segment-images preference (camelCase or snake_case)
+          if (appConfig.containsKey('showSegmentImages') ||
+              appConfig.containsKey('show_segment_images')) {
+            backendSettings['showSegmentImages'] =
+                appConfig['showSegmentImages'] ??
+                    appConfig['show_segment_images'] ??
+                    true;
+          }
+
+          // Prefer extracted digital-PDF font sizes
+          if (appConfig.containsKey('preferExtractedPdfFontSize') ||
+              appConfig.containsKey('prefer_extracted_pdf_font_size')) {
+            backendSettings['preferExtractedPdfFontSize'] =
+                appConfig['preferExtractedPdfFontSize'] ??
+                    appConfig['prefer_extracted_pdf_font_size'] ??
+                    true;
           }
 
           // Restore UI language from backend or system locale on first run
@@ -828,6 +865,8 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
     String? targetLanguage,
     String? translateOutputSuffix,
     String? convertOutputSuffix,
+    bool? showSegmentImages,
+    bool? preferExtractedPdfFontSize,
   }) async {
     // 1. Immediately update local state (for fast UI response)
     state = state.copyWith(
@@ -843,6 +882,8 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
       targetLanguage: targetLanguage,
       translateOutputSuffix: translateOutputSuffix,
       convertOutputSuffix: convertOutputSuffix,
+      showSegmentImages: showSegmentImages,
+      preferExtractedPdfFontSize: preferExtractedPdfFontSize,
     );
 
     // 2. Save entire state to local cache (for app restart recovery)
@@ -909,6 +950,20 @@ class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
         '',
         'convertOutputSuffix',
         convertOutputSuffix,
+      );
+    }
+    if (showSegmentImages != null) {
+      await _settingsService.saveSetting(
+        '',
+        'showSegmentImages',
+        showSegmentImages,
+      );
+    }
+    if (preferExtractedPdfFontSize != null) {
+      await _settingsService.saveSetting(
+        '',
+        'preferExtractedPdfFontSize',
+        preferExtractedPdfFontSize,
       );
     }
   }

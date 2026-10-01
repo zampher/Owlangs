@@ -37,5 +37,9 @@
   "glossary_agent_to_lang": "English",
   "glossary_agent_chunk_size": 4000,
   "glossary_agent_concurrent": 3,
-  "theme": "auto"
+  "theme": "auto",
+  "preview_font_size": 14.0,
+  "edit_font_size": 16.0,
+  "show_segment_images": true,
+  "prefer_extracted_pdf_font_size": true
 }

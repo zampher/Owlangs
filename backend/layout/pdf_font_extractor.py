@@ -12,7 +12,7 @@ MinerU title blocks by bounding box position.
 """
 
 import re
-from typing import Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional
 from dataclasses import dataclass
 
 from layout.base import LayoutDocument, LayoutBlock
@@ -26,6 +26,258 @@ class _TextSpan:
     bbox: Tuple[float, float, float, float]
     size: float
     text: str
+
+
+def pdf_has_text_layer(
+    pdf_path: str,
+    *,
+    sample_pages: int = 5,
+    min_chars_per_page: int = 40,
+) -> bool:
+    """
+    Detect whether *pdf_path* is a digital PDF with a usable text layer.
+
+    Samples up to *sample_pages* pages and returns True when the average
+    extracted character count is at least *min_chars_per_page*. Scanned /
+    image-only PDFs typically yield near-zero text.
+    """
+    try:
+        import fitz
+    except ImportError:
+        logger.warning(
+            LogModule.LAYOUT,
+            "PyMuPDF not available, assuming no text layer",
+        )
+        return False
+
+    try:
+        pdf_doc = fitz.open(pdf_path)
+    except Exception as exc:
+        logger.warning(
+            LogModule.LAYOUT,
+            f"Failed to open PDF for text-layer detection: {exc}",
+        )
+        return False
+
+    try:
+        page_count = len(pdf_doc)
+        if page_count <= 0:
+            return False
+        indices = list(range(min(page_count, max(1, sample_pages))))
+        total_chars = 0
+        for idx in indices:
+            try:
+                text = pdf_doc[idx].get_text("text") or ""
+            except Exception:
+                text = ""
+            total_chars += len("".join(text.split()))
+        avg_chars = total_chars / max(len(indices), 1)
+        has_layer = avg_chars >= float(min_chars_per_page)
+        logger.info(
+            LogModule.LAYOUT,
+            f"PDF text-layer detection: path={pdf_path}, "
+            f"sampled={len(indices)}/{page_count}, avg_chars={avg_chars:.1f}, "
+            f"has_text_layer={has_layer}",
+        )
+        return has_layer
+    finally:
+        pdf_doc.close()
+
+
+def _block_mineru_span_font_size(block: LayoutBlock) -> float:
+    """Return MinerU span.size for *block*, or 0 when unavailable."""
+    raw = block.raw if isinstance(block.raw, dict) else {}
+    if not raw:
+        return 0.0
+    try:
+        from layout.mineru_layout_model import _get_max_span_font_size
+
+        return float(_get_max_span_font_size(raw) or 0.0)
+    except Exception:
+        return 0.0
+
+
+_TEXT_LIKE_BLOCK_TYPES = frozenset({
+    "text",
+    "title",
+    "header",
+    "footer",
+    "list",
+    "list_item",
+    "ref_text",
+    "footnote",
+    "caption",
+    "code",
+    "table_caption",
+    "image_caption",
+    "figure_caption",
+})
+
+
+def annotate_layout_extracted_font_sizes(
+    doc: LayoutDocument,
+    pdf_path: str,
+    *,
+    force: bool = False,
+) -> Dict[str, Any]:
+    """
+    Annotate layout blocks with extracted font sizes for digital PDFs.
+
+    Priority per block:
+      1. MinerU ``span.size`` (when present in block.raw)
+      2. PyMuPDF text-layer span size matched by bbox overlap
+
+    Writes ``extracted_font_size`` onto ``block.raw`` and records
+    ``has_text_layer`` / annotation stats in ``doc.metadata``.
+    """
+    stats: Dict[str, Any] = {
+        "has_text_layer": False,
+        "annotated": 0,
+        "from_mineru_span": 0,
+        "from_pdf_text_layer": 0,
+        "skipped": 0,
+    }
+
+    if not force and doc.metadata.get("extracted_font_sizes_applied"):
+        stats["has_text_layer"] = bool(doc.metadata.get("has_text_layer"))
+        stats["annotated"] = int(doc.metadata.get("extracted_font_sizes_count") or 0)
+        return stats
+
+    has_layer = pdf_has_text_layer(pdf_path)
+    doc.metadata["has_text_layer"] = has_layer
+    stats["has_text_layer"] = has_layer
+
+    if not has_layer:
+        doc.metadata["extracted_font_sizes_applied"] = True
+        doc.metadata["extracted_font_sizes_count"] = 0
+        logger.info(
+            LogModule.LAYOUT,
+            "Skipping extracted font-size annotation: scanned/image PDF "
+            f"(no usable text layer): {pdf_path}",
+        )
+        return stats
+
+    try:
+        import fitz
+    except ImportError:
+        logger.warning(
+            LogModule.LAYOUT,
+            "PyMuPDF not available, cannot annotate extracted font sizes",
+        )
+        return stats
+
+    try:
+        pdf_doc = fitz.open(pdf_path)
+    except Exception as exc:
+        logger.warning(
+            LogModule.LAYOUT,
+            f"Failed to open PDF for font-size annotation: {exc}",
+        )
+        return stats
+
+    try:
+        for page in doc.pages:
+            if page.page_index >= len(pdf_doc):
+                continue
+            text_spans = _extract_text_spans(pdf_doc[page.page_index])
+            for block in page.blocks:
+                block_type = (block.type or "").lower()
+                if block_type and block_type not in _TEXT_LIKE_BLOCK_TYPES:
+                    # Still allow blocks with text content even if type is unusual
+                    if not block.has_text():
+                        stats["skipped"] += 1
+                        continue
+
+                if not isinstance(block.raw, dict):
+                    block.raw = {}
+
+                existing = block.raw.get("extracted_font_size")
+                if isinstance(existing, (int, float)) and float(existing) > 0:
+                    stats["annotated"] += 1
+                    continue
+
+                span_size = _block_mineru_span_font_size(block)
+                source = "mineru_span"
+                size = span_size
+                if size <= 0 and text_spans:
+                    size = _match_max_font_size(block.bbox, text_spans)
+                    source = "pdf_text_layer"
+
+                if size <= 0:
+                    stats["skipped"] += 1
+                    continue
+
+                block.raw["extracted_font_size"] = round(float(size), 2)
+                block.raw["extracted_font_size_source"] = source
+                stats["annotated"] += 1
+                if source == "mineru_span":
+                    stats["from_mineru_span"] += 1
+                else:
+                    stats["from_pdf_text_layer"] += 1
+    finally:
+        pdf_doc.close()
+
+    doc.metadata["extracted_font_sizes_applied"] = True
+    doc.metadata["extracted_font_sizes_count"] = stats["annotated"]
+    logger.info(
+        LogModule.LAYOUT,
+        "Annotated extracted font sizes: "
+        f"annotated={stats['annotated']} "
+        f"(mineru={stats['from_mineru_span']}, "
+        f"pdf={stats['from_pdf_text_layer']}), "
+        f"skipped={stats['skipped']}, pdf={pdf_path}",
+    )
+    return stats
+
+
+def ensure_layout_extracted_font_sizes(
+    doc: Optional[LayoutDocument],
+    pdf_path: Optional[str],
+    *,
+    enabled: bool = True,
+) -> Dict[str, Any]:
+    """Run annotation when *enabled* and inputs are valid; no-op otherwise."""
+    if not enabled or doc is None or not pdf_path:
+        return {
+            "has_text_layer": False,
+            "annotated": 0,
+            "skipped_reason": "disabled_or_missing_inputs",
+        }
+    return annotate_layout_extracted_font_sizes(doc, str(pdf_path))
+
+
+def resolve_prefer_extracted_pdf_font_size(
+    task_state: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """
+    Read the user preference for preferring extracted digital-PDF font sizes.
+
+    Defaults to True when unset / unreadable.
+    """
+    ctx = task_state or {}
+    raw = ctx.get("prefer_extracted_pdf_font_size")
+    if raw is None:
+        raw = ctx.get("preferExtractedPdfFontSize")
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)):
+        return bool(raw)
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip().lower() in ("1", "true", "yes", "on")
+
+    owner = (ctx.get("owner_username") or "local").strip() or "local"
+    try:
+        from auth.user_profile import get_user_profile_manager
+
+        profile = get_user_profile_manager().get_user_profile(owner)
+        value = getattr(profile, "prefer_extracted_pdf_font_size", True)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in ("1", "true", "yes", "on")
+        return bool(value)
+    except Exception:
+        return True
 
 
 def infer_heading_levels_from_pdf(

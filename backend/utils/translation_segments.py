@@ -3083,6 +3083,8 @@ def _apply_pdf_typography_to_segment(
     font_style_reset: bool = False,
     leading_em: Optional[float] = None,
     leading_em_reset: bool = False,
+    first_line_indent_em: Optional[float] = None,
+    first_line_indent_em_reset: bool = False,
     pdf_font_reset: bool = False,
     log_changes: bool = True,
 ) -> bool:
@@ -3206,6 +3208,37 @@ def _apply_pdf_typography_to_segment(
                 logger.info(
                     LogModule.TRANS,
                     f"Set leading_em={normalized_leading} for segment {segment_index} on task {task_id}",
+                )
+
+    if first_line_indent_em_reset or pdf_font_reset:
+        segment.pop("first_line_indent_em", None)
+        segment["first_line_indent_em_source"] = "auto"
+        _mark_modified()
+        if log_changes:
+            logger.info(
+                LogModule.TRANS,
+                f"Reset first_line_indent_em for segment {segment_index} on task {task_id}",
+            )
+    elif first_line_indent_em is not None:
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            normalize_user_first_line_indent_em,
+        )
+        normalized_indent = normalize_user_first_line_indent_em(first_line_indent_em)
+        if normalized_indent is None:
+            logger.warning(
+                LogModule.TRANS,
+                f"Invalid first_line_indent_em={first_line_indent_em} for segment "
+                f"{segment_index} task {task_id}",
+            )
+        else:
+            segment["first_line_indent_em"] = normalized_indent
+            segment["first_line_indent_em_source"] = "user"
+            _mark_modified()
+            if log_changes:
+                logger.info(
+                    LogModule.TRANS,
+                    f"Set first_line_indent_em={normalized_indent} for segment "
+                    f"{segment_index} on task {task_id}",
                 )
 
     return changed
@@ -3372,6 +3405,8 @@ def update_translation_segment(
     font_style_reset: bool = False,
     leading_em: Optional[float] = None,
     leading_em_reset: bool = False,
+    first_line_indent_em: Optional[float] = None,
+    first_line_indent_em_reset: bool = False,
     pdf_font_reset: bool = False,
     rotation: Optional[int] = None,
     table_stroke_pt: Optional[float] = None,
@@ -3484,6 +3519,8 @@ def update_translation_segment(
         font_style_reset=font_style_reset,
         leading_em=leading_em,
         leading_em_reset=leading_em_reset,
+        first_line_indent_em=first_line_indent_em,
+        first_line_indent_em_reset=first_line_indent_em_reset,
         pdf_font_reset=pdf_font_reset,
         log_changes=True,
     )

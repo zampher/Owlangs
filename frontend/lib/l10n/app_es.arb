@@ -1146,6 +1146,10 @@
   "settingsTranslateOutputSuffixHint": "Appended to translated filenames (leave empty for no suffix)",
   "settingsConvertOutputSuffixTitle": "Conversion Output Suffix",
   "settingsConvertOutputSuffixHint": "Appended to converted filenames (leave empty for no suffix)",
+  "settingsShowSegmentImagesTitle": "Mostrar imágenes en la lista de segmentos",
+  "settingsShowSegmentImagesSubtitle": "Muestra imágenes incrustadas en las listas de Extract y Translate. Desactívelo para desplazarse más rápido en documentos grandes.",
+  "settingsPreferExtractedPdfFontSizeTitle": "Preferir tamaño de fuente extraído del PDF",
+  "settingsPreferExtractedPdfFontSizeSubtitle": "En PDF digitales con capa de texto, usar tamaños extraídos en lugar de estimaciones por bbox cuando estén disponibles.",
   "settingsLanguageDialogTitle": "Seleccionar Idioma",
   "settingsUnitPt": "pt",
   "glossaryGeneratedTabTitle": "Glosario Generado",
@@ -1607,5 +1611,24 @@
   "translationPreviewPdfRevisionPageFilterSelectAll": "Seleccionar todas las páginas",
   "segmentPdfRevisionFontLabel": "Fuente",
   "segmentPdfRevisionEditLabel": "Editar",
-  "segmentPdfRevisionClearLabel": "Borrar"
+  "segmentPdfRevisionClearLabel": "Borrar",
+  "segmentPdfIndentTooltip": "Sangría de primera línea",
+  "segmentPdfIndentMenuTitle": "Sangría de primera línea",
+  "segmentPdfIndentNone": "Ninguna",
+  "segmentPdfIndentAuto": "Auto ({value})",
+  "@segmentPdfIndentAuto": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "segmentPdfIndentEm": "{em}em",
+  "@segmentPdfIndentEm": {
+    "placeholders": {
+      "em": {
+        "type": "String"
+      }
+    }
+  }
 }

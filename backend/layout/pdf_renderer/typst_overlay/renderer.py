@@ -70,6 +70,7 @@ from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
 from layout.pdf_renderer.typst_overlay.cjk_paragraph_indent import (
     apply_cjk_body_indent_to_block,
     infer_layout_block_type,
+    resolve_single_line_horizontal_align,
     resolve_target_language,
 )
 from layout.pdf_renderer.typst_overlay.source_cleanup import (
@@ -670,13 +671,24 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     gp_override_pt,
                     calculator=self._font_fit,
                 )
-            elif ref_unified is None:
+            elif ref_unified is None and not getattr(ref_rb, "font_size_locked", False):
                 gp_estimate = self._font_fit.estimate_font_size(gp_block, layout_raw=None)
                 gp_font_size = min(ref_rb.font_size_pt, gp_estimate)
                 gp_block = RenderBlock(
                     **{
                         **gp_block.__dict__,
                         "font_size_pt": gp_font_size,
+                    }
+                )
+            elif getattr(ref_rb, "font_size_locked", False):
+                gp_block = RenderBlock(
+                    **{
+                        **gp_block.__dict__,
+                        "font_size_pt": ref_rb.font_size_pt,
+                        "font_size_locked": True,
+                        "fit_to_box": False,
+                        "fit_min_font_size_pt": ref_rb.font_size_pt,
+                        "fit_max_font_size_pt": ref_rb.font_size_pt,
                     }
                 )
             if gp_override_pt is None:
@@ -691,6 +703,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
             if (
                 gp_override_pt is None
                 and ref_unified is None
+                and not gp_block.font_size_locked
                 and not gp_block.fit_to_box
             ):
                 gp_block = RenderBlock(
@@ -938,10 +951,16 @@ class TypstOverlayRenderer(BasePDFRenderer):
         render_blocks_by_page: Dict[int, List[RenderBlock]],
     ) -> None:
         """Assign Chinese body first-line indent on RenderBlocks (≈ two CJK chars)."""
+        from layout.pdf_renderer.typst_overlay.segment_font_metrics import (
+            build_block_first_line_indent_map_from_segments,
+        )
+
+        task_state = getattr(self.config, "overlay_task_state", None) or {}
         target_lang = resolve_target_language(
             getattr(self.config, "target_language", None),
-            getattr(self.config, "overlay_task_state", None) or {},
+            task_state,
         )
+        h_align = resolve_single_line_horizontal_align(target_lang)
         type_by_index: Dict[int, str] = {}
         for page in layout_doc.pages:
             for block in page.blocks:
@@ -956,6 +975,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
         indented = 0
         for page_blocks in render_blocks_by_page.values():
             for rb in page_blocks:
+                rb.horizontal_align = h_align
                 layout_type = infer_layout_block_type(rb.block_id, type_by_index)
                 if apply_cjk_body_indent_to_block(
                     rb,
@@ -964,11 +984,47 @@ class TypstOverlayRenderer(BasePDFRenderer):
                 ) > 0:
                     indented += 1
 
-        if indented:
+        # User overrides from preview-revision segment edits win over auto CJK.
+        segments = []
+        ts = task_state.get("translation_segments") if isinstance(task_state, dict) else None
+        if isinstance(ts, dict):
+            raw_segments = ts.get("segments")
+            if isinstance(raw_segments, list):
+                segments = [s for s in raw_segments if isinstance(s, dict)]
+        override_map = build_block_first_line_indent_map_from_segments(
+            segments,
+            task_state if isinstance(task_state, dict) else None,
+        )
+        overridden = 0
+        if override_map:
+            import re
+
+            block_id_re = re.compile(r"^block-(\d+)", re.IGNORECASE)
+            for page_blocks in render_blocks_by_page.values():
+                for rb in page_blocks:
+                    match = block_id_re.match(str(getattr(rb, "block_id", "") or ""))
+                    if not match:
+                        continue
+                    try:
+                        block_idx = int(match.group(1))
+                    except ValueError:
+                        continue
+                    if block_idx not in override_map:
+                        continue
+                    rb.first_line_indent_em = float(override_map[block_idx])
+                    rb.first_line_indent_pt = 0.0
+                    overridden += 1
+
+        if indented or overridden:
             unified_logger.info(
                 LogModule.RESTOR,
                 f"[TYPST_OVERLAY] Applied CJK body first-line indent to "
-                f"{indented} block(s) (lang={target_lang!r})",
+                f"{indented} block(s) (lang={target_lang!r})"
+                + (
+                    f"; user override on {overridden} block(s)"
+                    if overridden
+                    else ""
+                ),
             )
 
     def _load_image_data_map(self, layout_doc: LayoutDocument) -> Dict[str, bytes]:
@@ -1555,6 +1611,26 @@ class TypstOverlayRenderer(BasePDFRenderer):
             LogModule.RESTOR,
             "[TYPST_OVERLAY] Ensured layout group pair metadata before render",
         )
+
+        # Prefer extracted digital-PDF font sizes when the setting allows it.
+        try:
+            from layout.pdf_font_extractor import (
+                ensure_layout_extracted_font_sizes,
+                resolve_prefer_extracted_pdf_font_size,
+            )
+
+            overlay_task_state = getattr(self.config, "overlay_task_state", None) or {}
+            prefer = resolve_prefer_extracted_pdf_font_size(overlay_task_state)
+            ensure_layout_extracted_font_sizes(
+                layout_doc,
+                str(self._source_pdf_path) if self._source_pdf_path else None,
+                enabled=prefer,
+            )
+        except Exception as exc:
+            unified_logger.warning(
+                LogModule.RESTOR,
+                f"[TYPST_OVERLAY] Extracted font-size annotation skipped: {exc}",
+            )
 
         # ---- Step 1: Build RenderBlocks from LayoutDocument ----
         build_started = time.perf_counter()
@@ -2202,7 +2278,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                             override_pt,
                             calculator=self._font_fit,
                         )
-                    elif ref_unified is None:
+                    elif ref_unified is None and not getattr(rb, "font_size_locked", False):
                         cp_estimate = self._font_fit.estimate_font_size(
                             cp_block, layout_raw=cp_layout_raw,
                         )
@@ -2211,6 +2287,17 @@ class TypstOverlayRenderer(BasePDFRenderer):
                             **{
                                 **cp_block.__dict__,
                                 "font_size_pt": cp_font_size,
+                            }
+                        )
+                    elif getattr(rb, "font_size_locked", False):
+                        cp_block = RenderBlock(
+                            **{
+                                **cp_block.__dict__,
+                                "font_size_pt": rb.font_size_pt,
+                                "font_size_locked": True,
+                                "fit_to_box": False,
+                                "fit_min_font_size_pt": rb.font_size_pt,
+                                "fit_max_font_size_pt": rb.font_size_pt,
                             }
                         )
                     if override_pt is None:
@@ -2227,6 +2314,7 @@ class TypstOverlayRenderer(BasePDFRenderer):
                     if (
                         override_pt is None
                         and ref_unified is None
+                        and not cp_block.font_size_locked
                         and not cp_block.fit_to_box
                     ):
                         cp_block = RenderBlock(

@@ -677,6 +677,8 @@ class TranslationService {
     bool fontStyleReset = false,
     double? leadingEm,
     bool leadingEmReset = false,
+    double? firstLineIndentEm,
+    bool firstLineIndentEmReset = false,
     bool pdfFontReset = false,
     int? rotation,
     double? tableStrokePt,
@@ -739,6 +741,11 @@ class TranslationService {
         body['leading_em_reset'] = true;
       } else if (leadingEm != null) {
         body['leading_em'] = leadingEm;
+      }
+      if (firstLineIndentEmReset) {
+        body['first_line_indent_em_reset'] = true;
+      } else if (firstLineIndentEm != null) {
+        body['first_line_indent_em'] = firstLineIndentEm;
       }
     }
 
