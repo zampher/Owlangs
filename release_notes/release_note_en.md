@@ -1,5 +1,19 @@
 # Owlangs Release Notes (English)
 
+## Owlangs 1.5.9.0
+
+### New Features
+
+1. **Prefer extracted PDF font size**: For digital PDFs with a text layer, enable “Prefer extracted PDF font size” in settings so layout-preserving export uses sizes from the source PDF when available, instead of bbox-only estimates.
+2. **Preview revision: per-segment font size and leading**: Layout-preserving PDF preview revision can view/adjust font size and line spacing per segment (including batch leading) and apply those settings on export.
+
+### Optimizations
+
+1. **Image URL placeholders instead of embedded base64**: Extraction/translation image maps now use per-task image URL refs, avoiding large base64 payloads in JSON and improving preview performance on large documents.
+2. **Leading refit with locked font size**: Layout-preserving PDF refits leading from measured wrap lines when the font size is locked; font size shrinks only if height overflow exceeds about 10% of the font size, reducing over-spaced or overflowing multi-line paragraphs. User-locked leading is not overwritten automatically.
+
+---
+
 ## Owlangs 1.5.8.0
 
 ### Bug Fixes
