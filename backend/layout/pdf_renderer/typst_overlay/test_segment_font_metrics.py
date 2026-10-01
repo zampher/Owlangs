@@ -327,6 +327,7 @@ def test_apply_user_typography_override():
     assert styled.leading_em == 1.25
     assert styled.fit_min_leading_em == 1.25
     assert styled.leading_em_locked is True
+    assert styled.leading_em_user_locked is True
     assert styled.fit_to_box is False
 
 

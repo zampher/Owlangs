@@ -77,6 +77,9 @@ class RenderBlock:
     font_size_locked: bool = False
     # When True, keep leading_em fixed during fit-to-box; only font size may shrink.
     leading_em_locked: bool = False
+    # When True, leading_em was chosen by the user and must not be recomputed
+    # from Typst's measured line count.
+    leading_em_user_locked: bool = False
 
     # Single-line horizontal alignment: "left" | "right" (never center).
     horizontal_align: str = "left"

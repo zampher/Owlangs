@@ -84,3 +84,62 @@ def test_typst_overlay_source_includes_fixed_leading_helper():
     page = RenderPageSpec(page_index=0, page_width_pt=595.0, page_height_pt=842.0, blocks=[])
     src = build_typst_overlay_source([page])
     assert "pdftr_fit_markdown_fixed_leading" in src
+    assert "pdftr_refit_locked_leading" in src
+
+
+def test_locked_multiline_refits_leading_from_measured_lines():
+    """Auto leading on a locked font is recomputed when Typst's wrap overflows."""
+    text = "用韭葱烹饪时，选择幼嫩、细长的茎秆，它们最多汁、风味最足。" * 2
+    block = RenderBlock(
+        block_id="b-leek",
+        page_index=0,
+        inner_bbox=(118.5, 353.0, 492.0, 478.0),
+        markdown_text=text,
+        font_size_pt=15.0,
+        leading_em=1.5,
+        leading_em_locked=True,
+        font_size_locked=True,
+        fit_to_box=False,
+        first_line_indent_em=2.0,
+    )
+    src = _render_markdown_block("block-leek", block)
+    assert "pdftr_refit_locked_leading" in src
+    assert "text_size: 15.0pt" in src
+    assert "leading: 1.5em" in src
+    assert "first_line_indent: 2.0em" in src
+    assert "set par(leading: 1.5em" not in src
+
+
+def test_user_locked_leading_stays_static():
+    text = "用韭葱烹饪时，选择幼嫩、细长的茎秆，它们最多汁、风味最足。" * 2
+    block = RenderBlock(
+        block_id="b-user-lead",
+        page_index=0,
+        inner_bbox=(118.5, 353.0, 492.0, 478.0),
+        markdown_text=text,
+        font_size_pt=15.0,
+        leading_em=1.5,
+        leading_em_locked=True,
+        leading_em_user_locked=True,
+        font_size_locked=True,
+        fit_to_box=False,
+    )
+    src = _render_markdown_block("block-user-lead", block)
+    assert "pdftr_refit_locked_leading" not in src
+    assert "set par(leading: 1.5em" in src
+
+
+def test_locked_single_line_does_not_refit_leading():
+    block = RenderBlock(
+        block_id="b-one",
+        page_index=0,
+        inner_bbox=(10.0, 20.0, 400.0, 160.0),
+        markdown_text="一行标题不会按段落重算行距。",
+        font_size_pt=15.0,
+        leading_em=1.2,
+        font_size_locked=True,
+        fit_single_line=True,
+        fit_target_width_pt=420.0,
+    )
+    src = _render_markdown_block("block-one", block)
+    assert "pdftr_refit_locked_leading" not in src

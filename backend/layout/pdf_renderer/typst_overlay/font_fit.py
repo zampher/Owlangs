@@ -71,9 +71,10 @@ BODY_LINE_METRICS_EM = REF_TEXT_LINE_METRICS_EM
 BODY_LEADING_EM_MIN = 0.35
 BODY_LEADING_EM_MAX = 1.50
 BODY_LEADING_QUANTIZE_STEP_EM = 0.05
-# Locked (extracted) multi-line font: if estimated height exceeds bbox by this
-# ratio, treat the extracted size as unreliable (e.g. first-glyph only) and refit.
-LOCKED_MULTILINE_HEIGHT_OVERFLOW_RATIO = 1.10
+# Locked (extracted) multi-line font: if estimated height exceeds the bbox by
+# more than this fraction of the font size (10pt → 1pt), treat the extracted
+# size as unreliable (e.g. first-glyph only) and refit.
+LOCKED_MULTILINE_HEIGHT_OVERFLOW_FONT_RATIO = 0.10
 # Trigger fit_to_box when estimated line box exceeds this fraction of bbox height.
 SHORT_BBOX_HEIGHT_OVERFLOW_RATIO = 0.85
 
@@ -496,6 +497,15 @@ def body_visual_line_count(
             int(math.ceil(float(hard_lines) - 1e-6)),
         )
     return visual_lines
+
+
+def locked_multiline_height_limit_pt(
+    bbox_height_pt: float,
+    font_size_pt: float,
+) -> float:
+    """Bbox height plus an overflow allowance of 10% of the font size."""
+    allowance = max(0.0, float(font_size_pt)) * LOCKED_MULTILINE_HEIGHT_OVERFLOW_FONT_RATIO
+    return float(bbox_height_pt) + allowance
 
 
 def estimate_body_content_height_pt(
@@ -1125,7 +1135,8 @@ class FontFitCalculator:
         Largest font size ≤ *max_font_pt* whose body text fits the block bbox.
 
         Used when an extracted (often first-glyph) size overflows a multi-line
-        bbox by more than ``LOCKED_MULTILINE_HEIGHT_OVERFLOW_RATIO``.
+        bbox by more than ``LOCKED_MULTILINE_HEIGHT_OVERFLOW_FONT_RATIO`` of
+        the font size.
         """
         x0, y0, x1, y1 = block.inner_bbox
         bbox_height = max(1.0, y1 - y0)
@@ -1437,7 +1448,7 @@ class FontFitCalculator:
                 content_h = preserved_stack_render_height_pt(
                     font_size, visual_lines, BODY_LEADING_EM_MIN,
                 )
-                if content_h > bbox_height * LOCKED_MULTILINE_HEIGHT_OVERFLOW_RATIO:
+                if content_h > locked_multiline_height_limit_pt(bbox_height, font_size):
                     font_size = self.fit_locked_preserved_stack_font_size_to_bbox(
                         block,
                         max_font_pt=font_size,
@@ -1473,8 +1484,8 @@ class FontFitCalculator:
             else:
                 # Multi-line + real font size: derive leading from bbox height.
                 # Fallback: extracted size often reflects only the first glyph.
-                # If content still overflows the bbox by >10% even at minimum
-                # leading, refit the font size downward.
+                # If content still overflows the bbox by more than 10% of the
+                # font size even at minimum leading, refit the font downward.
                 content_h = estimate_body_content_height_pt(
                     block_text,
                     bbox_width_lock,
@@ -1482,7 +1493,7 @@ class FontFitCalculator:
                     BODY_LEADING_EM_MIN,
                     layout_raw,
                 )
-                if content_h > bbox_height * LOCKED_MULTILINE_HEIGHT_OVERFLOW_RATIO:
+                if content_h > locked_multiline_height_limit_pt(bbox_height, font_size):
                     font_size = self.fit_locked_body_font_size_to_bbox(
                         block,
                         layout_raw=layout_raw,

@@ -2563,6 +2563,7 @@ def apply_user_typography_override(
         updates["fit_min_leading_em"] = normalized_leading
         # Lock user leading during fit-to-box; font size may still shrink to fit bbox.
         updates["leading_em_locked"] = True
+        updates["leading_em_user_locked"] = True
         # Keep font size fixed for leading-only edits so line spacing changes are visible.
         # Auto fit-to-box often already uses ~0.875em leading; shrinking font there can
         # mask a user change to 0.9em when only max font was capped before.

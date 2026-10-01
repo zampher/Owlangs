@@ -114,11 +114,11 @@ def test_locked_multiline_leading_uses_real_font_and_bbox():
 
 
 def test_locked_multiline_refits_font_when_overflow_exceeds_10_percent():
-    """First-glyph-sized lock that overflows multi-line bbox by >10% must shrink."""
+    """First-glyph lock that overflows the bbox by more than 10% of the font must shrink."""
     from layout.pdf_renderer.typst_overlay.font_fit import (
         BODY_LEADING_EM_MIN,
-        LOCKED_MULTILINE_HEIGHT_OVERFLOW_RATIO,
         estimate_body_content_height_pt,
+        locked_multiline_height_limit_pt,
     )
 
     # Clearly multi-line vs font-aware gate (12pt × 1.25 × 1.65 ≈ 24.8),
@@ -144,7 +144,7 @@ def test_locked_multiline_refits_font_when_overflow_exceeds_10_percent():
     overflow_h = estimate_body_content_height_pt(
         text, bbox[2] - bbox[0], locked_pt, BODY_LEADING_EM_MIN, layout_raw,
     )
-    assert overflow_h > (bbox[3] - bbox[1]) * LOCKED_MULTILINE_HEIGHT_OVERFLOW_RATIO
+    assert overflow_h > locked_multiline_height_limit_pt(bbox[3] - bbox[1], locked_pt)
 
     fitted = calc.calculate_fit_params(
         block, layout_raw=layout_raw, page_width_pt=612.0,
@@ -158,7 +158,7 @@ def test_locked_multiline_refits_font_when_overflow_exceeds_10_percent():
     fitted_h = estimate_body_content_height_pt(
         text, x1 - x0, fitted.font_size_pt, fitted.leading_em, layout_raw,
     )
-    assert fitted_h <= (y1 - y0) * LOCKED_MULTILINE_HEIGHT_OVERFLOW_RATIO + 0.5
+    assert fitted_h <= locked_multiline_height_limit_pt(y1 - y0, fitted.font_size_pt) + 0.5
 
 
 def test_locked_multiline_keeps_font_when_within_overflow_budget():

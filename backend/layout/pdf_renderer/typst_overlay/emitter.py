@@ -427,6 +427,30 @@ def _typst_markdown_fit_fixed_leading_call(
     )
 
 
+def _typst_refit_locked_leading_call(
+    md_name: str,
+    font_size_pt: float,
+    leading_em: float,
+    fit_height_pt: float,
+    font_weight: str,
+    font_style: str,
+    first_line_indent: str,
+    justify_text: str,
+    *,
+    use_mitex: bool = True,
+) -> str:
+    """Generate pdftr_refit_locked_leading(...) — font stays, leading may shrink."""
+    indent = _typst_first_line_indent_arg(first_line_indent)
+    style_arg = f', style: "{font_style or "normal"}"'
+    mitex_arg = ", use_mitex: true" if use_mitex else ", use_mitex: false"
+    return (
+        f"pdftr_refit_locked_leading({md_name}, text_size: {font_size_pt}pt, "
+        f"leading: {leading_em}em, fit_height: {fit_height_pt}pt, "
+        f"weight: \"{font_weight}\"{style_arg}{indent}, justify: {justify_text}"
+        f"{mitex_arg})"
+    )
+
+
 def _block_markdown_fit_call(
     block: RenderBlock,
     md_name: str,
@@ -506,6 +530,22 @@ def _block_wants_single_line_nowrap(block: RenderBlock) -> bool:
     if float(getattr(block, "fit_target_width_pt", 0.0) or 0.0) > 0:
         return True
     return False
+
+
+def _should_refit_auto_leading(block: RenderBlock) -> bool:
+    """Recompute leading in Typst when the Python wrap estimate can disagree.
+
+    Extracted multi-line leading is solved from an estimated line count. Typst's
+    real wrap can be longer, so that static leading then overflows the bbox.
+    User-specified leading stays fixed. Single-line blocks never wrap.
+    """
+    if not getattr(block, "font_size_locked", False):
+        return False
+    if getattr(block, "leading_em_user_locked", False):
+        return False
+    if _block_wants_single_line_nowrap(block):
+        return False
+    return True
 
 
 def _typst_emit_single_line_natural_box(
@@ -1103,6 +1143,13 @@ def _render_plain_block(block_id: str, block: RenderBlock,
                 markdown=sanitized,
             )
             body_expr = f"set text(fill: {text_fill}); {fit_call}"
+        elif _should_refit_auto_leading(block):
+            # Python wrap count can be short of Typst. Keep the locked font and
+            # recompute leading from the measured line count when the box overflows.
+            body_expr = (
+                f"set text(fill: {text_fill}); "
+                f"{_typst_refit_locked_leading_call(text_var, block.font_size_pt, block.leading_em, content_fit_height, block.font_weight, font_style, first_indent, justify, use_mitex=markdown_line_safe_for_mitex(sanitized))}"
+            )
         else:
             body_expr = _typst_plain_text_expr(
                 text_var, block.font_size_pt, block.leading_em,
@@ -1499,14 +1546,26 @@ def _render_markdown_block(block_id: str, block: RenderBlock,
         ]
         return "\n".join(parts) + "\n"
     else:
-        # Static rendering with leading (_typst_plain_markdown_expr)
-        body_expr = _typst_plain_markdown_expr(
-            md_var, block.font_size_pt, block.leading_em,
-            block.font_weight, font_style, text_fill, first_indent, justify,
-            markdown=text,
-        )
+        # Static rendering with leading (_typst_plain_markdown_expr).
+        # Locked auto leading may be recomputed from Typst's real line count.
         content_w = layout_width
         nowrap = _block_wants_single_line_nowrap(block)
+        refit_leading = (
+            _should_refit_auto_leading(block)
+            and not nowrap
+            and layout_height > 28.0
+        )
+        if refit_leading:
+            body_expr = (
+                f"set text(fill: {text_fill}); "
+                f"{_typst_refit_locked_leading_call(md_var, block.font_size_pt, block.leading_em, content_fit_height, block.font_weight, font_style, first_indent, justify, use_mitex=markdown_line_safe_for_mitex(text))}"
+            )
+        else:
+            body_expr = _typst_plain_markdown_expr(
+                md_var, block.font_size_pt, block.leading_em,
+                block.font_weight, font_style, text_fill, first_indent, justify,
+                markdown=text,
+            )
         # Single-line: LTR left / RTL right, extend width, never soft-wrap.
         if nowrap or layout_height <= 28.0:
             h_align = _typst_horizontal_align(block)
@@ -2504,6 +2563,58 @@ FIT_MARKDOWN_FIXED_LEADING_FN = '''
 }
 '''
 
+# Locked font size, auto leading. If the Python wrap count is short of Typst,
+# the static leading overflows the bbox. Measure the real line count and solve
+# leading again. Font size is unchanged. A fitting proposed leading is kept.
+REFIT_LOCKED_LEADING_FN = '''
+#let pdftr_refit_locked_leading(markdown, text_size: 10pt, leading: 1.25em, fit_height: none, weight: "regular", style: "normal", first_line_indent: 0pt, justify: false, use_mitex: true) = {
+  layout(size => {
+    let render-md() = if use_mitex { cmarker.render(markdown, math: mitex) } else { cmarker.render(markdown) }
+    let allowed = if fit_height == none { size.height } else { calc.min(size.height, fit_height) }
+    // Resolve em against the locked font size, not the page default.
+    let proposed = measure[
+      #set text(size: text_size)
+      #box(width: leading, height: 1pt)
+    ].width
+    let render(lead) = block(width: size.width)[#{
+      set text(size: text_size, weight: weight, style: style)
+      set par(leading: lead, justify: justify)
+      if first_line_indent > 0pt { h(first_line_indent) }
+      render-md()
+    }]
+    let fits(lead) = measure(width: size.width, render(lead)).height <= allowed + 1pt
+    if fits(proposed) {
+      render(proposed)
+    } else {
+      // Height at zero leading is about n line boxes. Recompute the extra gap
+      // from that count, then search for the largest leading that still fits.
+      let packed = measure(width: size.width, render(0pt)).height
+      let line-box = measure(block(width: size.width)[
+        #set text(size: text_size, weight: weight, style: style)
+        #set par(leading: 0pt)
+        Ag
+      ]).height
+      let line-h = calc.max(line-box, 0.5pt)
+      let n = calc.max(1, calc.round(packed / line-h))
+      let candidate = if n <= 1 {
+        0pt
+      } else {
+        let solved = calc.max(0pt, (allowed - packed) / (n - 1))
+        calc.min(proposed, solved)
+      }
+      let chosen = if not fits(0pt) {
+        0pt
+      } else if fits(candidate) {
+        pdftr_fit_leading(candidate, proposed, 0.2pt, lead => fits(lead))
+      } else {
+        pdftr_fit_leading(0pt, candidate, 0.2pt, lead => fits(lead))
+      }
+      render(chosen)
+    }
+  })
+}
+'''
+
 
 def build_typst_overlay_source(
     page_specs: List[RenderPageSpec],
@@ -2535,6 +2646,7 @@ def build_typst_overlay_source(
     lines.append(FIT_SINGLE_LINE_FN)
     lines.append(FIT_MARKDOWN_FN)
     lines.append(FIT_MARKDOWN_FIXED_LEADING_FN)
+    lines.append(REFIT_LOCKED_LEADING_FN)
     lines.append("")
 
     total_pages = len(page_specs)
@@ -2633,6 +2745,7 @@ def build_typst_background_source(
     lines.append(FIT_SINGLE_LINE_FN)
     lines.append(FIT_MARKDOWN_FN)
     lines.append(FIT_MARKDOWN_FIXED_LEADING_FN)
+    lines.append(REFIT_LOCKED_LEADING_FN)
     lines.append("")
 
     total_pages = len(page_specs)
