@@ -81,26 +81,33 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
   void initState() {
     super.initState();
     if (widget.initialSource != null) {
-      // Skip the source-selection phase entirely when auto-picking
+      // Keep chooseSource until a pick succeeds. Jumping straight to an empty
+      // review page after a failed Windows auto-pick looks like "cannot import".
       _sourceType = widget.initialSource;
-      _phase = _DialogPhase.reviewFiles;
       _scheduleInitialSourcePick();
     }
   }
 
   /// Native file/directory dialogs must not run inside a frame callback on
-  /// Windows — defer until the scheduler is idle after the first frame.
+  /// Windows — wait for the route transition / prior dialog dismiss to settle.
   void _scheduleInitialSourcePick() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future<void>.delayed(Duration.zero, () async {
+      Future<void>.delayed(const Duration(milliseconds: 350), () async {
         if (!mounted) return;
-        switch (widget.initialSource) {
-          case 'folder':
-            await _pickFolder();
-          case 'zip':
-            await _pickZip();
-          case 'single':
-            await _pickSingleFile();
+        try {
+          switch (widget.initialSource) {
+            case 'folder':
+              await _pickFolder();
+            case 'zip':
+              await _pickZip();
+            case 'single':
+              await _pickSingleFile();
+          }
+        } catch (e, st) {
+          debugPrint('[BatchUpload] initial source pick failed: $e\n$st');
+        }
+        if (mounted && _files.isEmpty && _phase != _DialogPhase.chooseSource) {
+          setState(() => _phase = _DialogPhase.chooseSource);
         }
       });
     });
@@ -146,7 +153,17 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
         ],
       ),
     );
-    if (source == null || !mounted) return;
+    if (source == null || !mounted) {
+      _isAppending = false;
+      return;
+    }
+    // Windows: native pickers called immediately after another dialog closes
+    // often return null; wait for the parent window to regain focus.
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    if (!mounted) {
+      _isAppending = false;
+      return;
+    }
     switch (source) {
       case 'folder':
         await _pickFolder();
@@ -154,6 +171,9 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
         await _pickZip();
       case 'single':
         await _pickSingleFile();
+    }
+    if (_isAppending) {
+      _isAppending = false;
     }
   }
 
@@ -291,6 +311,7 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
       allowedExtensions: ['zip'],
       type: FileType.custom,
       dialogTitle: l10n.batchUploadZipPickerTitle,
+      lockParentWindow: !kIsWeb,
     );
     if (result == null || result.files.isEmpty || !mounted) return;
     final pf = result.files.first;
@@ -313,6 +334,7 @@ class _BatchUploadPageBodyState extends ConsumerState<BatchUploadPageBody> {
     final l10n = AppLocalizations.of(context)!;
     final result = await FilePickerHelper.pickFiles(
       dialogTitle: l10n.batchUploadSelectSingleFile,
+      lockParentWindow: !kIsWeb,
     );
     if (result == null || result.files.isEmpty || !mounted) return;
 

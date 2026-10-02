@@ -435,52 +435,10 @@ class _WorkspaceScreenState extends ConsumerState<WorkspaceScreen> {
   }
 
   void _showSourceTypeDialog(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    showDialog<void>(
-      context: context,
-      builder: (BuildContext ctx) => AlertDialog(
-        title: Text(l10n.translationQueueNewQueuedTask),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            ListTile(
-              leading: const Icon(Icons.upload_file),
-              title: Text(l10n.batchUploadSelectSingleFile),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                context.push(
-                  '${AppRouter.batchUploadRoute}?source=single',
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.folder_open),
-              title: Text(l10n.batchUploadSelectFolder),
-              subtitle: Text(l10n.batchUploadFolderDescription),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                context.push('${AppRouter.batchUploadRoute}?source=folder');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.folder_zip_outlined),
-              title: Text(l10n.batchUploadSelectZip),
-              subtitle: Text(l10n.batchUploadZipDescription),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                context.push('${AppRouter.batchUploadRoute}?source=zip');
-              },
-            ),
-          ],
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(l10n.commonCancel),
-          ),
-        ],
-      ),
-    );
+    // Open the batch-upload page directly. An intermediate AlertDialog that
+    // auto-launches the native picker after pop+push often returns null on
+    // Windows; the page's source cards keep the user gesture for the picker.
+    context.push(AppRouter.batchUploadRoute);
   }
 
   Future<void> _createFlowWithProtection(TaskFlow flowType) async {

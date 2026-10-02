@@ -293,55 +293,13 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     }
   }
 
-  /// Show "New queue task" dialog with three upload options (Single File / Folder / ZIP),
-  /// same as the workspace screen's queued translation entry.
+  /// Show batch-upload page for a new queued task.
+  ///
+  /// Do not auto-open the native picker via `?source=` after an AlertDialog —
+  /// on Windows that pop+push sequence often returns null and leaves an empty
+  /// review page that looks like import is broken.
   void _showNewTaskDialog() {
-    final l10n = AppLocalizations.of(context)!;
-    showDialog<void>(
-      context: context,
-      builder: (BuildContext ctx) => AlertDialog(
-        title: Text(l10n.translationQueueNewQueuedTask),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            ListTile(
-              leading: const Icon(Icons.upload_file),
-              title: Text(l10n.batchUploadSelectSingleFile),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                context.push(
-                  '${AppRouter.batchUploadRoute}?source=single',
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.folder_open),
-              title: Text(l10n.batchUploadSelectFolder),
-              subtitle: Text(l10n.batchUploadFolderDescription),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                context.push('${AppRouter.batchUploadRoute}?source=folder');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.folder_zip_outlined),
-              title: Text(l10n.batchUploadSelectZip),
-              subtitle: Text(l10n.batchUploadZipDescription),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                context.push('${AppRouter.batchUploadRoute}?source=zip');
-              },
-            ),
-          ],
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(l10n.commonCancel),
-          ),
-        ],
-      ),
-    );
+    context.push(AppRouter.batchUploadRoute);
   }
 
   Future<void> _cancel(String taskId) async {

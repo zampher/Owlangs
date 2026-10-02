@@ -211,8 +211,24 @@ async def _test_cloud_connectivity(base_url: str, mineru_token: Optional[str]) -
                 if quota_data.get('code') == 0:
                     # Quota query successful - connection is working
                     left_quota = quota_data.get('data', {}).get('user_left_quota', 'unknown')
+                    total_left = quota_data.get('data', {}).get('total_left_quota', left_quota)
                     version = extract_version_from_payload(quota_data)
-                    result: Dict[str, Any] = {
+                    numeric_left = [
+                        v for v in (left_quota, total_left)
+                        if isinstance(v, (int, float))
+                    ]
+                    if numeric_left and min(numeric_left) <= 0:
+                        result: Dict[str, Any] = {
+                            "success": False,
+                            "message": (
+                                "Cloud MinerU connected, but remaining quota is 0. "
+                                "PDF parsing will stay pending until you top up at "
+                                "mineru.net, or switch to MinerU Local / PaddleOCR."
+                            ),
+                            "quota": quota_data.get('data'),
+                        }
+                        return _attach_version_to_result(result, version)
+                    result = {
                         "success": True,
                         "message": f"Cloud MinerU connection successful (quota: {left_quota})",
                         "quota": quota_data.get('data'),

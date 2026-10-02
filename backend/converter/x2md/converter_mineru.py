@@ -306,6 +306,109 @@ class MinerUCloudBackend(MinerUBackend):
     def _get_result_endpoint(self, batch_id: str) -> str:
         endpoint = self.api_endpoints.get('result', '/extract-results/batch/{batch_id}')
         return f"{self.base_url}{endpoint.format(batch_id=batch_id)}"
+
+    def _get_quota_endpoint(self) -> str:
+        endpoint = self.api_endpoints.get('quota', '/quota')
+        return f"{self.base_url}{endpoint}"
+
+    @staticmethod
+    def _quota_exhausted_message(quota_data: Optional[Dict[str, Any]] = None) -> str:
+        left = None
+        if isinstance(quota_data, dict):
+            left = quota_data.get('user_left_quota', quota_data.get('total_left_quota'))
+        suffix = f" (remaining quota: {left})" if left is not None else ""
+        return (
+            "MinerU Cloud remaining quota is 0"
+            f"{suffix}. Parsing jobs stay pending forever until quota is topped up. "
+            "Please recharge at mineru.net, or switch the PDF parser to MinerU Local / PaddleOCR."
+        )
+
+    def _fetch_quota_data(self) -> Optional[Dict[str, Any]]:
+        """Return MinerU Cloud quota payload, or None if the endpoint is unavailable."""
+        try:
+            response = self._make_request_with_retry('GET', self._get_quota_endpoint())
+            result = response.json()
+            if result.get('code') != 0:
+                return None
+            data = result.get('data')
+            return data if isinstance(data, dict) else None
+        except Exception as e:
+            logger.warning(
+                LogModule.CONVERT,
+                f"[MINERU Cloud] Quota check failed (continuing): {e}",
+            )
+            return None
+
+    async def _fetch_quota_data_async(self) -> Optional[Dict[str, Any]]:
+        """Async variant of [_fetch_quota_data]."""
+        try:
+            response = await self._make_request_with_retry_async(
+                'GET', self._get_quota_endpoint()
+            )
+            result = response.json()
+            if result.get('code') != 0:
+                return None
+            data = result.get('data')
+            return data if isinstance(data, dict) else None
+        except Exception as e:
+            logger.warning(
+                LogModule.CONVERT,
+                f"[MINERU Cloud] Async quota check failed (continuing): {e}",
+            )
+            return None
+
+    def _ensure_cloud_quota_available(
+        self,
+        quota_data: Optional[Dict[str, Any]] = None,
+        *,
+        when: str = "before upload",
+    ) -> None:
+        """Raise when cloud quota is explicitly exhausted."""
+        data = quota_data if quota_data is not None else self._fetch_quota_data()
+        if not isinstance(data, dict):
+            return
+        left_values = [
+            data.get('user_left_quota'),
+            data.get('total_left_quota'),
+        ]
+        numeric = [v for v in left_values if isinstance(v, (int, float))]
+        if not numeric:
+            return
+        if min(numeric) > 0:
+            return
+        logger.error(
+            LogModule.CONVERT,
+            f"[MINERU Cloud] Quota exhausted {when}: {data}",
+        )
+        raise Exception(self._quota_exhausted_message(data))
+
+    async def _ensure_cloud_quota_available_async(
+        self,
+        quota_data: Optional[Dict[str, Any]] = None,
+        *,
+        when: str = "before upload",
+    ) -> None:
+        data = (
+            quota_data
+            if quota_data is not None
+            else await self._fetch_quota_data_async()
+        )
+        if not isinstance(data, dict):
+            return
+        left_values = [
+            data.get('user_left_quota'),
+            data.get('total_left_quota'),
+        ]
+        numeric = [v for v in left_values if isinstance(v, (int, float))]
+        if not numeric:
+            return
+        if min(numeric) > 0:
+            return
+        logger.error(
+            LogModule.CONVERT,
+            f"[MINERU Cloud] Quota exhausted {when}: {data}",
+        )
+        raise Exception(self._quota_exhausted_message(data))
     
     def _build_upload_payload(self, document: Document) -> Dict:
         """Build upload request payload for cloud API."""
@@ -406,6 +509,7 @@ class MinerUCloudBackend(MinerUBackend):
     
     def upload(self, document: Document) -> str:
         """Upload document to cloud MinerU."""
+        self._ensure_cloud_quota_available(when="before upload")
         url = self._get_upload_url_endpoint()
         payload = self._build_upload_payload(document)
 
@@ -452,6 +556,7 @@ class MinerUCloudBackend(MinerUBackend):
     
     async def upload_async(self, document: Document) -> str:
         """Async upload document to cloud MinerU."""
+        await self._ensure_cloud_quota_available_async(when="before upload")
         url = self._get_upload_url_endpoint()
         payload = self._build_upload_payload(document)
 
@@ -532,6 +637,11 @@ class MinerUCloudBackend(MinerUBackend):
                     f"MinerU Cloud processing failed: {fileinfo.get('msg', 'Unknown error')}"
                 )
             else:
+                # Quota=0 uploads can stay "pending" forever; fail fast after a short wait.
+                if state == "pending" and elapsed >= 45:
+                    self._ensure_cloud_quota_available(
+                        when=f"while polling pending batch {batch_id}"
+                    )
                 # Adaptive polling interval: faster at start, slower for long-running tasks
                 if elapsed < 60:
                     sleep_interval = 3
@@ -581,6 +691,10 @@ class MinerUCloudBackend(MinerUBackend):
                     f"MinerU Cloud processing failed: {fileinfo.get('msg', 'Unknown error')}"
                 )
             else:
+                if state == "pending" and elapsed >= 45:
+                    await self._ensure_cloud_quota_available_async(
+                        when=f"while polling pending batch {batch_id}"
+                    )
                 # Adaptive polling interval: faster at start, slower for long-running tasks
                 if elapsed < 60:
                     sleep_interval = 3
