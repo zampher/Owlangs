@@ -560,6 +560,24 @@ abstract class AppLocalizations {
   /// **'Translation Completed'**
   String get translationStatusCompleted;
 
+  /// No description provided for @translationExportGenerating.
+  ///
+  /// In en, this message translates to:
+  /// **'Generating: {format}'**
+  String translationExportGenerating(String format);
+
+  /// No description provided for @translationExportPreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing export files…'**
+  String get translationExportPreparing;
+
+  /// No description provided for @translationQueueExportingBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Exporting'**
+  String get translationQueueExportingBadge;
+
   /// No description provided for @translationStatusRetry.
   ///
   /// In en, this message translates to:

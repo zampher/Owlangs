@@ -248,6 +248,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get translationStatusCompleted => '翻译完成';
 
   @override
+  String translationExportGenerating(String format) {
+    return '正在生成：$format';
+  }
+
+  @override
+  String get translationExportPreparing => '正在准备导出文件…';
+
+  @override
+  String get translationQueueExportingBadge => '导出中';
+
+  @override
   String get translationStatusRetry => '翻译重试';
 
   @override

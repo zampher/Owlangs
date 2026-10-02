@@ -88,6 +88,16 @@
   "translationToolbarSwitchToText": "Enter Text",
 
   "translationStatusCompleted": "Translation Completed",
+  "translationExportGenerating": "Generating: {format}",
+  "@translationExportGenerating": {
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "translationExportPreparing": "Preparing export files…",
+  "translationQueueExportingBadge": "Exporting",
   "translationStatusRetry": "Translation Retry",
   "translationStatusFailed": "Translation Failed",
   "translationStatusCancelled": "Translation Cancelled",

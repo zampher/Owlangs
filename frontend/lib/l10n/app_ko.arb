@@ -84,6 +84,16 @@
   "translationToolbarSwitchToFile": "파일로 전환",
   "translationToolbarSwitchToText": "텍스트 입력",
   "translationStatusCompleted": "번역 완료",
+  "translationExportGenerating": "생성 중: {format}",
+  "@translationExportGenerating": {
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "translationExportPreparing": "내보내기 파일 준비 중…",
+  "translationQueueExportingBadge": "내보내기 중",
   "translationStatusRetry": "번역 재시도",
   "translationStatusFailed": "번역 실패",
   "translationStatusCancelled": "번역 취소됨",

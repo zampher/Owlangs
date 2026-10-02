@@ -84,6 +84,16 @@
   "translationToolbarSwitchToFile": "切换到文件",
   "translationToolbarSwitchToText": "输入文本",
   "translationStatusCompleted": "翻译完成",
+  "translationExportGenerating": "正在生成：{format}",
+  "@translationExportGenerating": {
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "translationExportPreparing": "正在准备导出文件…",
+  "translationQueueExportingBadge": "导出中",
   "translationStatusRetry": "翻译重试",
   "translationStatusFailed": "翻译失败",
   "translationStatusCancelled": "翻译已取消",

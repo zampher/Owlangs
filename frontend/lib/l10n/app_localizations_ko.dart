@@ -250,6 +250,17 @@ class AppLocalizationsKo extends AppLocalizations {
   String get translationStatusCompleted => '번역 완료';
 
   @override
+  String translationExportGenerating(String format) {
+    return '생성 중: $format';
+  }
+
+  @override
+  String get translationExportPreparing => '내보내기 파일 준비 중…';
+
+  @override
+  String get translationQueueExportingBadge => '내보내기 중';
+
+  @override
   String get translationStatusRetry => '번역 재시도';
 
   @override

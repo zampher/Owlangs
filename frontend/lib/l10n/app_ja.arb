@@ -84,6 +84,16 @@
   "translationToolbarSwitchToFile": "ファイルに切り替え",
   "translationToolbarSwitchToText": "テキストを入力",
   "translationStatusCompleted": "翻訳完了",
+  "translationExportGenerating": "生成中：{format}",
+  "@translationExportGenerating": {
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "translationExportPreparing": "エクスポート準備中…",
+  "translationQueueExportingBadge": "出力中",
   "translationStatusRetry": "翻訳再試行",
   "translationStatusFailed": "翻訳失敗",
   "translationStatusCancelled": "翻訳キャンセル",

@@ -117,12 +117,16 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
           final Map<String, dynamic> st = await _svc.getStatus(id);
           row['status'] = st['status'] ?? row['status'];
           row['progress'] = st['progress'] ?? row['progress'];
-          if (row['status']?.toString().toLowerCase() == 'completed') {
-            row['progress'] = 100;
-          }
           row['message'] = st['message'] ?? row['message'];
+          row['queued_auto_export_pending'] =
+              st['queued_auto_export_pending'] == true;
           row['message_level'] = st['message_level'] ?? row['message_level'];
           row['error'] = st['error'] ?? row['error'];
+          // Keep backend progress (90–99) while post-translation exports run.
+          if (row['status']?.toString().toLowerCase() == 'completed' &&
+              !_isExportingOutputs(row)) {
+            row['progress'] = 100;
+          }
           if (st['translation_stats'] is Map) {
             row['translation_stats'] = Map<String, dynamic>.from(
               st['translation_stats'] as Map<dynamic, dynamic>,
@@ -143,6 +147,36 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
           _mergeDownloadsFromStashMeta(row);
         }
         return row;
+  }
+
+  bool _isExportingOutputs(Map<String, dynamic> row) {
+    if (row['queued_auto_export_pending'] == true) {
+      return true;
+    }
+    final String message = row['message']?.toString().trim() ?? '';
+    return message.startsWith('Generating ');
+  }
+
+  /// Human-readable export progress line for queue / toolbar.
+  String? _exportProgressDisplayMessage(
+    Map<String, dynamic> row,
+    AppLocalizations l10n,
+  ) {
+    if (!_isExportingOutputs(row)) {
+      return null;
+    }
+    final String message = row['message']?.toString().trim() ?? '';
+    if (message.startsWith('Generating ') && message.endsWith('...')) {
+      final String format = message
+          .substring('Generating '.length, message.length - 3)
+          .trim();
+      // Generic "export files" / empty label -> preparing copy.
+      if (format.isNotEmpty &&
+          format.toLowerCase() != 'export files') {
+        return l10n.translationExportGenerating(format);
+      }
+    }
+    return l10n.translationExportPreparing;
   }
 
   Future<List<Map<String, dynamic>>> _enrichTasks(
@@ -594,8 +628,15 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
     );
   }
 
-  /// Progress/status line for in-flight tasks (replaces hover Tooltip on filename).
-  String? _inlineTaskStatusMessage(Map<String, dynamic> row) {
+  /// Progress/status line for in-flight tasks (export progress is shown near the bar).
+  String? _inlineTaskStatusMessage(
+    Map<String, dynamic> row,
+    AppLocalizations l10n,
+  ) {
+    // Export format hint is rendered next to the progress bar instead.
+    if (_isExportingOutputs(row)) {
+      return null;
+    }
     final String status = (row['status']?.toString() ?? '').toLowerCase();
     if (status == 'failed' ||
         status == 'completed' ||
@@ -828,7 +869,8 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                             height: 1.3,
                           ),
                         ),
-                        if (_inlineTaskStatusMessage(row) case final String statusMsg)
+                        if (_inlineTaskStatusMessage(row, l10n)
+                            case final String statusMsg)
                           Text(
                             statusMsg,
                             maxLines: 1,
@@ -842,9 +884,17 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                       ],
                     ),
                   ),
-                  if (status == 'completed') _buildInlineStats(row, cs),
+                  if (status == 'completed' && !_isExportingOutputs(row))
+                    _buildInlineStats(row, cs),
                   const SizedBox(width: 8),
-                  _StatusBadge(status, progress, cs),
+                  _StatusBadge(
+                    _isExportingOutputs(row)
+                        ? l10n.translationQueueExportingBadge
+                        : status,
+                    progress,
+                    cs,
+                    exporting: _isExportingOutputs(row),
+                  ),
                   if (row['is_format_conversion'] == true)
                     Padding(
                       padding: const EdgeInsets.only(left: 4),
@@ -879,6 +929,33 @@ class _TranslationQueueScreenState extends ConsumerState<TranslationQueueScreen>
                     ),
                 ],
               ),
+              if (_isExportingOutputs(row)) ...<Widget>[
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: progress > 0 && progress < 100
+                        ? progress / 100.0
+                        : null,
+                    minHeight: 3,
+                    backgroundColor: cs.surfaceContainerHighest,
+                  ),
+                ),
+                if (_exportProgressDisplayMessage(row, l10n)
+                    case final String exportHint)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      exportHint,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.primary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+              ],
               const SizedBox(height: 6),
               if (status.toLowerCase() == 'failed')
                 _buildFailedMessage(row, cs, theme),
@@ -2184,15 +2261,25 @@ class _StatusBadge extends StatelessWidget {
   final String status;
   final int progress;
   final ColorScheme cs;
+  final bool exporting;
 
-  const _StatusBadge(this.status, this.progress, this.cs);
+  const _StatusBadge(
+    this.status,
+    this.progress,
+    this.cs, {
+    this.exporting = false,
+  });
 
   Color get _dotColor {
+    if (exporting) {
+      return Colors.orange;
+    }
     switch (status.toLowerCase()) {
       case 'completed':
         return Colors.green;
       case 'processing':
       case 'running':
+      case 'exporting':
         return Colors.orange;
       case 'queued':
       case 'pending':

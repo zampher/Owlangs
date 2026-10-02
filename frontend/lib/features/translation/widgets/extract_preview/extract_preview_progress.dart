@@ -729,11 +729,16 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
           if (flowId != null && context.mounted) {
             final translationNotifier =
                 ref.read(translationStateProviderFamily(flowId).notifier);
-            // Do not re-enable the progress bar for post-completion stash rebuild or
-            // background language detection (backend may briefly report processing).
-            final bool isBackgroundPostWork = message.startsWith('Generating ') ||
+            // Language detection should not re-open the main translate progress bar.
+            // Export generation SHOULD update the status text near the progress bar.
+            final bool isLanguageDetectWork =
                 message.startsWith('Detect Language:');
-            if (!isBackgroundPostWork) {
+            final bool isExportGenerating =
+                message.startsWith('Generating ');
+            if (isExportGenerating) {
+              translationNotifier.setProgress(progress.clamp(0, 100));
+              translationNotifier.setStatusText(message);
+            } else if (!isLanguageDetectWork) {
               translationNotifier.setTranslating(true);
               translationNotifier.setProgress(progress.clamp(0, 100));
               if (message.isNotEmpty) {
@@ -760,11 +765,35 @@ mixin ExtractPreviewProgressMixin<T extends ConsumerStatefulWidget>
         final bool isCompletionMessage = message.startsWith('Translation completed') ||
             message.startsWith('Retranslation completed') ||
             message.startsWith('Translated outputs available');
-        final isCompletedState = statusLower == 'completed' ||
-            (statusLower == 'processing' && progress >= 100 && isCompletionMessage);
+        final bool isExportGenerating = message.startsWith('Generating ') ||
+            status['queued_auto_export_pending'] == true;
+        // Keep polling while post-translation export formats are still building.
+        final isCompletedState = !isExportGenerating &&
+            (statusLower == 'completed' ||
+                (statusLower == 'processing' &&
+                    progress >= 100 &&
+                    isCompletionMessage));
         final isFailedState = statusLower == 'failed';
         final isCancelledState = statusLower == 'cancelled';
 
+        if (isExportGenerating && mounted) {
+          setState(() {
+            translationProgress = progress.clamp(0, 100) / 100.0;
+            translationStatus = message.isNotEmpty
+                ? message
+                : 'Generating exports...';
+          });
+          final extractWidget = widget as ExtractPreview;
+          final flowId = extractWidget.flowId;
+          if (flowId != null && context.mounted) {
+            final translationNotifier =
+                ref.read(translationStateProviderFamily(flowId).notifier);
+            translationNotifier.setProgress(progress.clamp(0, 100));
+            translationNotifier.setStatusText(
+              message.isNotEmpty ? message : 'Generating exports...',
+            );
+          }
+        }
         if (isCompletedState || isFailedState || isCancelledState) {
           // Stop timer immediately so ref/context failures cannot leave polling alive.
           translationTimer?.cancel();

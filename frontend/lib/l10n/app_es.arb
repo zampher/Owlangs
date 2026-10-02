@@ -83,6 +83,16 @@
   "translationToolbarSwitchToFile": "Cambiar a Archivo",
   "translationToolbarSwitchToText": "Ingresar Texto",
   "translationStatusCompleted": "Traducción Completada",
+  "translationExportGenerating": "Generando: {format}",
+  "@translationExportGenerating": {
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "translationExportPreparing": "Preparando archivos de exportación…",
+  "translationQueueExportingBadge": "Exportando",
   "translationStatusRetry": "Reintento de Traducción",
   "translationStatusFailed": "Traducción Fallida",
   "translationStatusCancelled": "Traducción Cancelada",

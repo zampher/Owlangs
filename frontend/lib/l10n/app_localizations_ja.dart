@@ -249,6 +249,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get translationStatusCompleted => '翻訳完了';
 
   @override
+  String translationExportGenerating(String format) {
+    return '生成中：$format';
+  }
+
+  @override
+  String get translationExportPreparing => 'エクスポート準備中…';
+
+  @override
+  String get translationQueueExportingBadge => '出力中';
+
+  @override
   String get translationStatusRetry => '翻訳再試行';
 
   @override

@@ -103,14 +103,16 @@ class TranslationResultToolbar extends ConsumerWidget {
     final currentOperation =
         translationState?.currentOperation ?? TranslationOperation.none;
     final statusLower = statusText.toLowerCase();
+    final bool isExportGenerating = statusText.startsWith('Generating ');
     final hasDownloads = downloads != null && downloads!.isNotEmpty;
     // Treat status='processing' with 100% progress as a completed state.
     // Also treat completion messages (statusText often mirrors backend message, not status field).
-    final isCompletedLike = statusLower == 'completed' ||
-        (statusLower == 'processing' && progress >= 100) ||
-        statusLower.startsWith('translation completed') ||
-        statusLower.startsWith('retranslation completed') ||
-        statusLower.startsWith('translated outputs available');
+    final isCompletedLike = !isExportGenerating &&
+        (statusLower == 'completed' ||
+            (statusLower == 'processing' && progress >= 100) ||
+            statusLower.startsWith('translation completed') ||
+            statusLower.startsWith('retranslation completed') ||
+            statusLower.startsWith('translated outputs available'));
     // Consider task completed when:
     // - backend explicitly reports completed/processing+100, OR
     // - translation is no longer running, no active operation, and progress>=100, OR
@@ -119,20 +121,23 @@ class TranslationResultToolbar extends ConsumerWidget {
     // because format conversion may leave downloads before translation starts.
     final isCompletedByArtifacts = isCompletedLike ||
         (!isTranslating &&
+            !isExportGenerating &&
             ((currentOperation == TranslationOperation.none &&
                     progress >= 100) ||
                 hasDownloads));
-    // Show progress bar only when actively translating (not after completion)
+    // Active translation/retranslation (cancel button applies). Export generation
+    // uses the progress bar without treating the whole task as "translating".
     final isActive = !isCompletedByArtifacts &&
+        !isExportGenerating &&
         (isTranslating ||
             currentOperation == TranslationOperation.translating ||
             currentOperation == TranslationOperation.retranslating ||
             statusLower == 'processing');
-    // Hide progress bar when translation is completed (including processing+100%)
     final isCompleted = isCompletedByArtifacts ||
         statusLower == 'failed' ||
         statusLower == 'cancelled';
-    final showProgressBar = isActive && !isCompleted;
+    final showProgressBar =
+        (isActive && !isCompleted) || isExportGenerating;
     // Block entering reading mode during translation; allow switching back to segment view.
     final bool mergedViewEnabled =
         onToggleMergedView != null && (!isActive || isMergedView);
@@ -154,89 +159,86 @@ class TranslationResultToolbar extends ConsumerWidget {
       ),
       child: Row(
         children: <Widget>[
-          // Progress bar (shown only during active translation, hidden after completion)
-          // Progress bar should expand to fill available space
+          // Progress bar (translation in flight, or post-translation export generation)
           if (showProgressBar) ...<Widget>[
             Expanded(
               child: Row(
                 children: <Widget>[
-                  const SizedBox(width: 6), // Further reduced spacing
+                  const SizedBox(width: 6),
                   Expanded(
                     child: SizedBox(
-                      height: 4, // Reduced from 6 to 4
+                      height: 4,
                       child: LinearProgressIndicator(
-                        value: progress / 100.0,
+                        value: progress > 0 && progress < 100
+                            ? progress / 100.0
+                            : (isExportGenerating ? null : progress / 100.0),
                         backgroundColor: Colors.grey.shade300,
                         valueColor: AlwaysStoppedAnimation<Color>(
                           _getStatusColor(statusText),
                         ),
-                        minHeight: 4, // Reduced from 6 to 4
+                        minHeight: 4,
                       ),
                     ),
                   ),
-                  // Cancel button and status text (progress% included here to avoid empty width flicker)
                   if (isActive) ...<Widget>[
-                    const SizedBox(width: 4), // Further reduced spacing
-                    // Cancel button placed before status text so its position never shifts
+                    const SizedBox(width: 4),
                     TextButton.icon(
                       onPressed: onCancelTranslation,
                       icon: const Icon(
                         Icons.cancel,
                         size: 12,
-                      ), // Further reduced from 14 to 12
+                      ),
                       label: Text(
                         l10n.translationToolbarCancelButton,
                         style: const TextStyle(fontSize: 10),
-                      ), // Further reduced font size
+                      ),
                       style: TextButton.styleFrom(
                         foregroundColor: Colors.red,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 4, // Further reduced from 6
-                          vertical: 2, // Further reduced from 4
+                          horizontal: 4,
+                          vertical: 2,
                         ),
-                        minimumSize:
-                            const Size(0, 28), // Increased button height
-                      ),
-                    ),
-                    const SizedBox(width: 4), // Further reduced spacing
-                    Icon(
-                      _getStatusIcon(statusText),
-                      size: 14, // Further reduced from 16 to 14
-                      color: _getStatusColor(statusText),
-                    ),
-                    const SizedBox(width: 4), // Further reduced spacing
-                    SizedBox(
-                      width: 12, // Further reduced from 14 to 12
-                      height: 12, // Further reduced from 14 to 12
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          _getStatusColor(statusText),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4), // Further reduced spacing
-                    Flexible(
-                      child: Text(
-                        () {
-                          final msg = _getStatusDisplayText(l10n, statusText);
-                          return msg.isNotEmpty ? msg : '$progress%';
-                        }(),
-                        style: TextStyle(
-                          fontSize: 10, // Further reduced from 11 to 10
-                          fontWeight: FontWeight.w600,
-                          color: _getStatusColor(statusText),
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
+                        minimumSize: const Size(0, 28),
                       ),
                     ),
                   ],
+                  const SizedBox(width: 4),
+                  Icon(
+                    _getStatusIcon(statusText),
+                    size: 14,
+                    color: _getStatusColor(statusText),
+                  ),
+                  const SizedBox(width: 4),
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        _getStatusColor(statusText),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      () {
+                        final msg = _getStatusDisplayText(l10n, statusText);
+                        return msg.isNotEmpty ? msg : '$progress%';
+                      }(),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: _getStatusColor(statusText),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
                 ],
               ),
             ),
-          ],
-          // Left group: segment/text display operations (shown after translation)
+          ],          // Left group: segment/text display operations (shown after translation)
           if (!showProgressBar) ...<Widget>[
             // Exclusion panel toggle button
             if (onToggleExclusionPanel != null) ...<Widget>[
@@ -666,6 +668,15 @@ class TranslationResultToolbar extends ConsumerWidget {
   }
 
   String _getStatusDisplayText(AppLocalizations l10n, String status) {
+    if (status.startsWith('Generating ')) {
+      final String raw = status.endsWith('...')
+          ? status.substring('Generating '.length, status.length - 3).trim()
+          : status.substring('Generating '.length).trim();
+      if (raw.isNotEmpty && raw.toLowerCase() != 'export files') {
+        return l10n.translationExportGenerating(raw);
+      }
+      return l10n.translationExportPreparing;
+    }
     final lower = status.toLowerCase();
     switch (lower) {
       case 'completed':

@@ -12,6 +12,11 @@
 1. **Image URL placeholders instead of embedded base64**: Extraction/translation image maps now use per-task image URL refs, avoiding large base64 payloads in JSON and improving preview performance on large documents.
 2. **Leading refit with locked font size**: Layout-preserving PDF refits leading from measured wrap lines when the font size is locked; font size shrinks only if height overflow exceeds about 10% of the font size, reducing over-spaced or overflowing multi-line paragraphs. User-locked leading is not overwritten automatically.
 
+### Bug Fixes
+
+1. **Queued task / task queue could not import files**: Fixed Windows cases where closing the source dialog, navigating, then auto-opening the system file picker often returned null and left an empty review page. Import now starts from the batch-upload page under a direct user gesture.
+2. **MinerU Cloud zero quota left PDF parsing stuck**: Fixed uploads that stayed `pending` forever when remaining MinerU Cloud quota was 0, which looked like parsing produced no result. Quota is checked before upload and while polling; zero quota fails immediately with a clear message, and the connectivity test reports the shortfall.
+
 ---
 
 ## Owlangs 1.5.8.0

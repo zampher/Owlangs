@@ -1898,6 +1898,8 @@ class TranslationService:
             # Do not await: heavy layout MD/HTML export must not hold the queue
             # worker or starve /api/health while the UI is polling.
             task_state["queued_auto_export_pending"] = True
+            task_state["progress"] = 90
+            task_state["message"] = "Generating export files..."
             export_task = asyncio.create_task(
                 self._auto_export_queued_task_outputs(task_id, task_state),
                 name=f"owlangs-queued-auto-export-{task_id}",

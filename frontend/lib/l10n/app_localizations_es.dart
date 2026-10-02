@@ -268,6 +268,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get translationStatusCompleted => 'Traducción Completada';
 
   @override
+  String translationExportGenerating(String format) {
+    return 'Generando: $format';
+  }
+
+  @override
+  String get translationExportPreparing =>
+      'Preparando archivos de exportación…';
+
+  @override
+  String get translationQueueExportingBadge => 'Exportando';
+
+  @override
   String get translationStatusRetry => 'Reintento de Traducción';
 
   @override
