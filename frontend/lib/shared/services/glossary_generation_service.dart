@@ -215,7 +215,7 @@ class GlossaryGenerationService {
   Map<String, dynamic> _getDefaultParams() => <String, dynamic>{
         'base_url': 'https://api.deepseek.com/v1',
         'api_key': 'sk-dd06eed4dbee4cbbbab1b7b0e920a079',
-        'model_id': 'deepseek-chat',
+        'model_id': 'deepseek-flash',
         'temperature': 0.3,
         'thinking': 'disable',
         'timeout': 120,

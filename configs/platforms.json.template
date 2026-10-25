@@ -180,7 +180,7 @@
     "deepseek": {
       "name": "DeepSeek",
       "url": "https://api.deepseek.com/v1",
-      "model": "deepseek-chat",
+      "model": "deepseek-flash",
       "max_tokens": 8192,
       "temperature": 1.3,
       "temperature_min": 0.0,
